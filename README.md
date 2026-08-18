@@ -150,4 +150,5 @@ is what the converter's `extraTabs` capture is for.
 | [Formulas & trackers](docs/formulas-and-trackers.md) | The sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
 | [Embedding](docs/embedding.md) | The `<character-sheet>` custom element: attributes, events, theming through custom properties, and the audit API. |
 | [Extensions](docs/extensions.md) | Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage. |
+| [To do](docs/todo.md) | Agreed but not built: a picker for option menus, reading menu pages, the names still hard-coded in the engine. |
 | [Importing & saving](docs/importing-and-saving.md) | How the converters read a workbook (defined names, label-anchored scans, reconciliation), the four ways a character comes in, Export all, and saving, snapshots, checkpoints and the schema. |

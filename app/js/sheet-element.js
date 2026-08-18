@@ -48,7 +48,7 @@ import {
   MATERIAL_CASTING_PER_MONTH,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
-import { applyBlock, BLOCK_KINDS, looksLikeExtension } from './extensions.js';
+import { applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype } from './extensions.js';
 import { SHEET_CSS } from './styles.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
@@ -1631,7 +1631,10 @@ export class CharacterSheetElement extends HTMLElement {
           <td class="mid">${this.#itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
           <td class="mid">${this.#itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
           <td class="num">${this.#itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
-          <td>${this.#itemText('classes', i, 'archetypes', x.archetypes)}</td>
+          <td>${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
+            <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
+              ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
+            </span>`).join('')}</span>` : ''}${this.#itemText('classes', i, 'archetypes', x.archetypes)}</td>
           ${this.#rowTools('classes', i)}
         </tr>`).join('')}</tbody>
       </table></div>
@@ -2700,22 +2703,38 @@ export class CharacterSheetElement extends HTMLElement {
         case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
         case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
         case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
+        case 'archetype': {
+          const rep = [...new Set(b.features.flatMap((f) => f.replaces))];
+          const alt = [...new Set(b.features.flatMap((f) => f.alters))];
+          return [`for ${b.class || 'its class'}`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : '',
+            b.stacksWith.length ? `combines with ${b.stacksWith.join(', ')}` : ''].filter(Boolean).join(' · ');
+        }
         default: return '';
       }
     };
+    // An archetype's button says whether it can go on right now, and why not.
+    const gate = (b) => {
+      if (b.kind !== 'archetype') return { on: true, why: '' };
+      const s = archetypeStatus(this.#model, b);
+      if (s.ok) return { on: true, why: '' };
+      if (s.reason === 'applied') return { on: false, why: 'on the sheet' };
+      if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
+      return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
+    };
     const rows = [...byPack.entries()].map(([id, p]) => `
       <h4 class="ext-pack">${esc(p.name)}</h4>
-      ${p.blocks.map((b) => `<div class="item statline">
+      ${p.blocks.map((b) => { const g = gate(b); return `<div class="item statline">
         <span class="label pair" style="flex:1">
           <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
           <strong>${esc(b.name || '(unnamed)')}</strong>
           <span class="hint" style="margin:0">${esc(detail(b))}</span>
         </span>
         <span class="value pair">
-          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}"
+          ${g.why ? `<span class="hint ${/^blocked/.test(g.why) ? 'warn' : ''}" style="margin:0">${esc(g.why)}</span>` : ''}
+          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
             title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
         </span>
-      </div>`).join('')}`).join('');
+      </div>`; }).join('')}`).join('');
 
     return `<section class="panel span2">
       <h3>Extensions — building blocks</h3>
@@ -3618,6 +3637,10 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
           <span class="bigroll" title="Attack including {{…}} tokens">${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</span>
           <span class="bigroll dmg" title="Damage including [[…]] tokens">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
+          ${w.proficient === false ? `<span class="badge err nonprof"
+            title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
+    : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
+            title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
           <button class="danger" data-remove="equipment.weapons|${i}" aria-label="Remove weapon">×</button>
         </div>
         <div class="weapongrid">
@@ -3637,10 +3660,6 @@ export class CharacterSheetElement extends HTMLElement {
               error: w.diceError,
               title: w.useUnarmedDice ? 'Overridden by the unarmed calculator'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
-          ${w.proficient === false ? `<span class="badge err nonprof"
-            title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
-    : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
-            title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
             })}
             <label class="chk" title="Use the unarmed practitioner dice from Spheres & Magic">
               ${this.#itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
@@ -3667,6 +3686,18 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('Ammo', this.#itemText('equipment.weapons', i, 'ammunition', w.ammunition))}
           ${this.#field('Wt', this.#itemNum('equipment.weapons', i, 'weight', w.weight))}
           ${this.#field('Price', this.#itemNum('equipment.weapons', i, 'price', w.price))}
+          <span class="wsep"></span>
+          ${this.#field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
+            data-kind="text" placeholder="katana" style="width:6.5rem"
+            title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
+          ${this.#field('Proficient', `<select data-item="equipment.weapons|${i}|proficiency" data-kind="text"
+            title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}">
+            <option value=""${!w.proficiency ? ' selected' : ''}>Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}</option>
+            <option value="yes"${w.proficiency === 'yes' ? ' selected' : ''}>Yes</option>
+            <option value="no"${w.proficiency === 'no' ? ' selected' : ''}>No</option></select>`)}
+          ${w.proficiency ? this.#field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
+            data-kind="text" placeholder="Custom Training" style="width:8rem"
+            title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
         </div>
         <label class="fld" style="margin-top:6px"><span>Special properties
           <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, or both ("[[2d6 + con.mod]]")</span></span>
@@ -3686,18 +3717,6 @@ export class CharacterSheetElement extends HTMLElement {
             dmg <strong>${esc(w.calc.totalDmgStr)}</strong>
             <span class="avg">avg ${w.calc.totalAvg}</span>
             <span class="crit">crit ${esc(w.calc.critStr)}
-          <span class="wsep"></span>
-          ${this.#field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
-            data-kind="text" placeholder="katana" style="width:6.5rem"
-            title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
-          ${this.#field('Proficient', `<select data-item="equipment.weapons|${i}|proficiency" data-kind="text"
-            title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}">
-            <option value=""${!w.proficiency ? ' selected' : ''}>Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}</option>
-            <option value="yes"${w.proficiency === 'yes' ? ' selected' : ''}>Yes</option>
-            <option value="no"${w.proficiency === 'no' ? ' selected' : ''}>No</option></select>`)}
-          ${w.proficiency ? this.#field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
-            data-kind="text" placeholder="Custom Training" style="width:8rem"
-            title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
               ${w.calc.critAtk.flat || Object.keys(w.calc.critAtk.dice).length ? `confirm ${esc(w.calc.confirmStr)} ·` : ''}
               <span class="avg">avg ${w.calc.critAvg}</span></span></div>` : ''}
           ${w.calc.errors.length ? `<div class="hint" style="color:var(--cs-bad)">
@@ -8985,6 +9004,16 @@ export class CharacterSheetElement extends HTMLElement {
         this.#extFilter = button?.dataset.kind || '';
         this.#render();
         break;
+      case 'arch-remove': {
+        // Take an archetype off its class; its record restores what it replaced.
+        this.#historyNote = removeArchetype(this.#model, button?.dataset.class, button?.dataset.name);
+        this.#render();
+        break;
+      }
+      case 'prof-toggle':
+        this.#model.toggleProficiency(button?.dataset.list, button?.dataset.value);
+        this.#render();
+        break;
       case 'add-system-column': {
         const tab = this.#model.data.sheetTabs?.[Number(button?.dataset.index)];
         if (tab) {
@@ -9004,10 +9033,6 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-track':
-      case 'prof-toggle':
-        this.#model.toggleProficiency(button?.dataset.list, button?.dataset.value);
-        this.#render();
-        break;
         this.#model.addProgressionTrack();
         this.#render();
         break;

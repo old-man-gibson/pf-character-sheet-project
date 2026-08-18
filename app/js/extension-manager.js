@@ -262,6 +262,7 @@ Hit Die: d12.
     const { result, keep, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
+    const archs = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'archetype' && !b.single && keep[i]);
     const detail = (b) => {
       switch (b.kind) {
         case 'class': return `d${b.hd} · ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'} BAB · good ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no'} save · ${b.skillRanks} ranks · ${b.classSkills.length} class skills · ${b.features.length} features (${b.features.filter((f) => f.text).length} with text)`;
@@ -269,6 +270,7 @@ Hit Die: d12.
         case 'trait': return `${b.replaces.length ? `replaces ${b.replaces.join(', ')} · ` : ''}${b.text.slice(0, 90)}${b.text.length > 90 ? '…' : ''}`;
         case 'feature': case 'note': return `${b.text.slice(0, 110)}${b.text.length > 110 ? '…' : ''}`;
         case 'veil': return `${b.slot || 'no slot'}${b.descriptor ? ` · ${b.descriptor}` : ''} · ${b.text.slice(0, 80)}…`;
+        case 'archetype': { const rep = [...new Set(b.features.flatMap((f) => f.replaces))]; const alt = [...new Set(b.features.flatMap((f) => f.alters))]; return [`for ${b.class || '?'}`, `${b.features.length} feature(s)`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : ''].filter(Boolean).join(' · '); }
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
         default: return '';
       }
@@ -276,6 +278,7 @@ Hit Die: d12.
     const choicesFor = (l) => {
       const opts = [['skip', 'Leave it out']];
       for (const [c, i] of classes) opts.push([`class:${i}`, `Feature of ${c.name} (added with the class)`]);
+      for (const [a, i] of archs) opts.push([`arch:${i}`, `Feature of the ${a.name} archetype`]);
       for (const [r, i] of races) opts.push([`race:${i}`, `Standard trait of ${r.name} (comes with the race)`]);
       opts.push(['trait', 'Alternate / optional race trait (its own block)'], ['feature', 'A feature block (in a group)'], ['note', 'A note']);
       return opts;
@@ -310,7 +313,7 @@ Hit Die: d12.
   }).join('')}
 
       <div class="actions">
-        <button class="primary" data-action="paste-apply">Add ${keep.filter(Boolean).length + tags.filter((t) => t.choice !== 'skip' && !/^(class|race):/.test(t.choice)).length} block(s) to the pack</button>
+        <button class="primary" data-action="paste-apply">Add ${keep.filter(Boolean).length + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length} block(s) to the pack</button>
         <button data-action="paste-back">Back to the text</button>
         <button data-action="paste-cancel">Cancel</button>
       </div>`;
@@ -321,6 +324,7 @@ Hit Die: d12.
     const result = parsePaste(paste.text);
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'class');
     const races = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'race');
+    const archs = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'archetype' && !b.single);
     const nearest = (l, kind, list) => {
       if (!list.length) return null;
       const hit = l.near && l.near.kind === kind ? list.find(([b]) => b.name === l.near.name) : null;
@@ -328,7 +332,11 @@ Hit Die: d12.
     };
     const tags = result.leftovers.map((l) => {
       let choice = l.suggest;
-      if (choice === 'feature') { const i = nearest(l, 'class', classes); choice = i !== null ? `class:${i}` : 'feature'; }
+      if (choice === 'feature') {
+        const ai = l.near?.kind === 'archetype' ? nearest(l, 'archetype', archs) : null;
+        const i = ai !== null ? null : nearest(l, 'class', classes);
+        choice = ai !== null ? `arch:${ai}` : i !== null ? `class:${i}` : 'feature';
+      }
       if (choice === 'trait') {
         // "This racial trait replaces hardy" is an alternate: its own block,
         // not something every member of the race gets.
@@ -355,11 +363,12 @@ Hit Die: d12.
       if (tag.choice === 'skip') return;
       const split = splitChunk(l.text);
       const name = (tag.name ?? split.name).trim() || split.name;
-      const m = tag.choice.match(/^(class|race):(\d+)$/);
+      const m = tag.choice.match(/^(class|race|arch):(\d+)$/);
       if (m) {
         const target = taken[Number(m[2])];
         if (!target || !keep[Number(m[2])]) return;
         if (m[1] === 'class') target.features.push({ level: 1, name, text: split.text });
+        else if (m[1] === 'arch') target.features.push({ name, type: split.type, text: split.text });
         else target.traits.push({ name, text: split.text });
         return;
       }
@@ -482,6 +491,17 @@ Hit Die: d12.
           ${F(i, 'descriptor', 'Descriptor', b.descriptor, { ph: 'Enhanced (katana), Aura…' })}
           ${A(i, 'text', 'Text (shaping, Essence, Chakra Bind)', b.text, 8, 'What the veil does; {name = expr} formulas resolve on the card')}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
+        </div>`;
+      case 'archetype':
+        return `<div class="fields">
+          ${F(i, 'name', 'Archetype name', b.name)}
+          ${F(i, 'class', 'Class it applies to', b.class, { ph: 'Legendary Samurai' })}
+          ${F(i, 'stacksWith', 'Can be combined with', b.stacksWith.join(', '), { wide: true, ph: 'names of archetypes it may overlap with (read from the text if blank)' })}
+          ${A(i, 'features', 'Features', b.features.map((f) => `${f.name}${f.type ? ` (${f.type})` : ''}: ${f.text.replace(/\n+/g, ' ')}`).join('\n'), 10,
+    'one per line, "Name (Ex): text" — end the text with what it does, e.g. "This ability replaces challenge and kiai arts." or "This ability alters resolve."', false)}
+          ${A(i, 'text', 'Description', b.text, 2)}
+          ${F(i, 'source', 'Source', b.source, { wide: true })}
+          <p class="hint" style="grid-column:1/-1;margin:0">Read from the features: ${esc([...new Set(b.features.flatMap((f) => f.replaces))].map((k) => `replaces ${k}`).concat([...new Set(b.features.flatMap((f) => f.alters))].map((k) => `alters ${k}`)).join(' · ') || 'nothing yet')}.</p>
         </div>`;
       case 'note':
         return `<div class="fields">
@@ -642,8 +662,14 @@ Hit Die: d12.
       case 'goodFort': case 'goodRef': case 'goodWill': b[key] = !!value; return;
       case 'type': b.type = value || null; return;
       case 'minFormula': b.minFormula = value === '' ? null : value; return;
-      case 'classSkills': case 'languages': case 'replaces': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'classSkills': case 'languages': case 'replaces': case 'stacksWith': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
       case 'features':
+        if (b.kind === 'archetype') {
+          // re-normalise so each feature's replaces/alters/level are read off its new text
+          const fresh = normalizeBlock({ ...b, features: parseGroupFeatures(value) });
+          b.features = fresh.features;
+          return;
+        }
         b.features = b.kind === 'class' ? parseClassFeatures(value) : parseGroupFeatures(value);
         return;
       case 'traits': b.traits = parseNamedLines(value); return;
