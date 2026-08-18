@@ -1,0 +1,530 @@
+# Using the sheet: Overview, wealth, hit points, stats, skills
+
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. How the sheet is edited and what its core tabs compute — the Overview and its panels, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar._
+
+---
+
+## Using it as a sheet
+
+Everything is editable. There is no separate "edit mode" — click a field and change it,
+and anything downstream recalculates immediately.
+
+**Play tracking**
+- Hit points as a meter that carries everything at once — what is left, the temporary
+  points stacked past the maximum, and how much of what is left is nonlethal — with
+  Damage, Nonlethal, Heal and Rest buttons. Damage spends temporary hit points first;
+  Rest restores everything and zeroes every tracker. Unconscious, dying and dead are
+  flagged automatically, and below zero the bar itself goes red and glows, harder the
+  closer the character gets to dying. See *Hit points* below.
+- Conditions are switches (negative levels a count) that show what they cost — tick
+  one and every number it moves reads out its conditioned value beside the base.
+  See *The Overview* below.
+- Hero points, and resource trackers with click-to-spend pips — add, edit, restyle
+  and delete any of them (Mythic Power excepted; every character keeps that one).
+- The built-in meters — hit points, essence, power points — take that same styling:
+  pips, bar or squares, colours, gradients and zones. See *The built-in meters take
+  the same style*.
+
+**Editable everywhere**
+- *Overview* — name, race, level, size, alignment, deity, portrait, **character
+  colour**, speeds (add/remove, bonus as a formula), hit points, hero points, defenses
+  and save bonuses, DR/SR/immunities/resistances, carrying capacity, conditions,
+  character traits and race traits.
+- *Stats* — the full ability build (see below).
+- *Skills* — ranks, class-skill flag, key ability, misc bonus, notes, and the variant
+  of an Artistry/Craft/Lore/Profession/Perform; add and remove skills. Unused skills are
+  hidden behind a **Show all** toggle.
+- *Combat & Magic* — the sphere, talent, veil and maneuver grids, cell by cell, with
+  rows addable and removable.
+- *Feats & Mythic* — granted feats (drawback, specialty, oaths, attunement) and the
+  feats you chose, by group, plus add, rename, reorder and delete groups;
+  classes with hit die, saves and skill ranks; mythic path, tier and abilities.
+- *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
+  total against your light load.
+- *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
+  with the Discord posts generated from them.
+- *Progression* — the level-by-level planner.
+- *Extras & Notes* — free-form notes to jot on (add, retitle, delete), the workbook's
+  **Approvals** table (what was applied for, who approved it, the link), and whatever
+  else the ExtrasNotes worksheet held, as an editable grid. On import each of the
+  sheet's *Range* columns becomes one note and its Approvals rows become rows; the
+  template's own hint lines ("This sheet is not referenced anywhere.", "Go ham.") are
+  dropped, and the raw grid is retired.
+- *Lore* — every background section.
+
+**Ability-stat selectors.** AC, each save, and each attack mode let you pick which
+ability drives them, because these characters do not use the defaults — Angou's AC keys
+off Strength and his alt CMB off Wisdom. Change the selector and the total moves.
+
+**Weapons and attacks** is a new section rather than an import: the source sheets keep
+this as prose. Add a weapon and its attack bonus and iteratives follow your BAB, ability
+scores and size automatically.
+
+Rows can be reordered with ↑ / ↓ and removed with ×. Every change is saved as you make
+it, and **Save** marks the version the sheet opens on — see
+[Saving, and going back](importing-and-saving.md#saving-and-going-back). **Reset** returns the character to the
+converted sheet, **Export JSON** downloads the current state and **Import JSON** brings
+one back (see [Getting characters in](importing-and-saving.md#getting-characters-in)).
+
+> Editing a value that nothing else depends on — a note, a planner cell, a sphere talent
+> — updates the model without re-rendering the panel. The largest grids run to several
+> thousand inputs, and rebuilding those on every keystroke was plainly laggy (143 ms per
+> edit, now 4 ms).
+
+---
+
+## The tab bar and the ⚙ manager
+
+A sheet opens with nine tabs across the top — **Overview, Stats, Lore, Skills, Progression,
+Feats & Mythic, Primordia, Trackers, Equipment** — and everything else waits in the
+**⚙** manager at the end of the bar. That order is a preference, not a rule: drag a
+tab along the bar (or a row in the manager's *Tab bar* list) to move it, **Hide** it
+to send it back to the manager, or **reset** to the default nine. The bar is saved
+with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
+export.
+
+The manager lists what is off the bar **alphabetically**, in three groups:
+
+- **Hidden tabs** — the rest of the built-in tabs (Spheres & Magic, Crafting,
+  Extras & Notes), the modelled sub-systems (Akashic, Maneuvers, Vancian, Psionics,
+  Template, and the three companions), and the workbook's own worksheets. A
+  sub-system that already holds the character's data is badged *in use*, so a
+  character with veils sees which waiting tab has them; **Show** puts a tab at the
+  end of the bar.
+- **Extra — weird systems** — the odd machinery kept out of the way unless a
+  character runs on it: **Cardcasting**, the **Technique List** and **AutoTechnique**
+  pair, and **Auto-Cooking**.
+- **Worksheets** — add a free grid tab of your own for a spellbook, a mount, or a
+  homebrew system.
+
+Every remaining worksheet of the workbook — the character-specific tabs like a
+Technique List or an Auto-Cooking sheet — is its own tab, fully editable: **rename**
+inline (in the manager or from the tab's own header), **delete** with a confirm, grow
+it with rows and columns. Cells accept inline `{name = expr}` formulas, so a custom
+tab can define character-wide values too. The big Spheres & Magic panels can be
+minimized; all of this persists per character.
+
+> The `#ERROR!` cells in the exports sat in Animal Companion (16 per workbook) and
+> Eidolon on **all five** workbooks. (Item Crafting, Akashic, Maneuvers and Vancian
+> Magic had them too.) None of those is a grid any more — see *Item crafting*,
+> *Akashic, Maneuvers and Vancian* and *Companions* above — so no raw tab shows an
+> error cell now. The casting-number differences on Nico/Narockro/Saburo come from template
+> revisions, not broken formulas; Saburo's cached CL 4, for instance, is his
+> Advanced Magic Training flag, which the app now reproduces.
+
+---
+
+## The Overview
+
+Top to bottom, the Overview reads: **At a glance** (the eight numbers a table asks
+for), **Details** (what the player writes about the character) beside the ability
+scores, **Specialty** beside **Languages**, then two supergroups — **Defenses** (hit points, armor class, saving throws)
+and **Offenses** (attack, speed) — then conditions beside carrying capacity, the
+Classes table, and traits.
+
+**Conditions** are switches, not number boxes: all of them are on or off except
+negative levels, which count. Each chip says what the condition costs
+(*−2 atk, −2 saves…*), and ticking one changes nothing in the sheet's own totals —
+those stay reconciled to the workbook — but every stat it moves grows a second
+reading, **now +N**, under the base: attacks, AC, touch, flat-footed, CMD, the three
+saves, initiative, hit points, speed, and the temporary ability scores and modifiers. Ability penalties are
+applied to the score and the modifier taken again (entangled's −4 Dex is −2 to the
+modifier; paralysis sets Dex to 0, which is −5 whatever it was), and *loses Dex to AC*
+drops the ability bonus from AC and CMD, though a negative modifier stays. The two
+ladders do not stack — shaken → frightened → panicked and fatigued → exhausted — the
+worse one counts and the lesser is struck through. Anything a number cannot say
+(*must flee*, *no attacks of opportunity*) is listed under **In effect**. Conditions
+the sheet did not carry (flat-footed, staggered, nauseated, dazed, confused,
+unconscious) can be added from a picker and removed again with **×**.
+
+> The shared template ships with Helpless and Paralyzed set to 1 in every workbook,
+> with nothing else on. That exact fingerprint is a leftover rather than a state, so
+> the converter and the model both clear it; anything else ticked is the player's.
+
+**Specialty** — the background, its feat (the same field as the Specialty row under
+Granted feats) and its perks, as a list you can add to. **Languages** — native
+languages are free; slots are one per point of Int bonus plus one per Linguistics
+rank, plus **Extra** for whatever a race or trait adds, as a number or a formula
+(`floor(level / 2)`). The known list is chips you add and remove, counted against
+the slots; the workbook's comma- and pipe-separated cells are split into it on import.
+
+**Speed** takes its bonus as a formula, because that is where class features land:
+a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up
+with the level. The Final column is the model's and moves the moment either field
+does; formula bonuses appear in the Formula audit like every other player formula.
+
+**Race traits** have a table of their own under *Traits & drawbacks*, next to the
+character traits — a race hands out anywhere from three to ten, so rows are added and
+removed freely. The workbook's *"Darkvision: sees in the dark for 60 feet"* sentences
+are split into name and effect on import.
+
+---
+
+## Wealth — the wallet in mana
+
+The campaign's currency is mana, and the workbook's wallet block (Character Info, beside
+the mythic path) is what the Overview's **Wealth** panel and its **Mana** stat in *At a
+glance* read: the balance recorded after the last Oath of Offerings, whether the
+character keeps the Oath and casts materially, when the last offering was made, the mana
+earned a day and the mana earned in sessions since ("Sessions" on the sheet is that
+sum, not a count), and the current balance. Both converters extract it
+(`wealth`); a sheet with only the *Wallet* label, or none, starts an empty wallet.
+
+What the next offering comes to is the most recent sheet's formula (Saburo's), with the
+two switches the earlier one (Narockro's) had:
+
+| | |
+|---|---|
+| OoO / day | Mana/Day ÷ 2 |
+| owed under the Oath | days since the last offering × OoO/day + ⌊session mana ÷ 2⌋ — half of everything earned |
+| owed for material casting | whole months since the last offering × 30 |
+| **Mana after** | current − (the parts whose switch is on) |
+
+Days and months are counted the way `TODAY() − date` and `DATEDIF(…, "M")` count them,
+so the figure moves with the calendar exactly as the sheet's does. Formulas can read
+`mana.current`, `mana.expected` and `mana.after`.
+
+The panel is also the hook for what comes later: a **ledger**. Every reward, spend and
+offering is a dated line with a label and an amount, and the wallet moves with it — a
+*session* line is session income, so under the oath half of it is owed at the next
+offering, a *spend* comes off,
+and × on a line undoes it. **Record** writes one by hand; `addWealthEntry()` on the model
+is what a session-reward automation will call. **Make offering** pays what is owed
+today: the balance after it becomes the new baseline, today the last offering, and the
+session mana starts over — with the payment on the ledger.
+
+> Narockro's older sheet halved the gains since the baseline instead of counting days;
+> under the current rule his 52 days at 140 a day come to a much larger offering than
+> the 340 his own cell showed. The baseline is still kept (and *gains since baseline*
+> computed) so that reading is one line away if the table wants it back.
+
+---
+
+## Hit points
+
+The hit point meter carries three things on one track, because at the table they are
+one question — *how much is left?*
+
+**Temporary hit points are extra track**, not a fuller bar: they sit past the maximum,
+hatched, so the bar can read over full without lying about what the maximum is. Damage
+still spends them first, and they show as `+N` beside the current / max reading.
+
+**Nonlethal is a marker**, not a subtraction. It is struck across the top of the fill
+and eats downwards: when the marked stretch reaches the bottom, nonlethal has caught up
+with what is left and the character is unconscious — which is exactly the rule, drawn.
+
+**Below zero the bar has nothing to fill**, so the track itself carries the warning: it
+goes red and glows, scaled by how far past zero the character is, reaching full at the
+threshold where they die. One point under zero looks nothing like one point from death.
+
+```
+death threshold = −(Con + death threshold bonus)
+```
+
+Death at negative Constitution is the rule; the **death threshold +** field is the room
+some characters buy past it — Death's Door, a mythic tier, a GM's ruling. It is a bonus
+rather than an absolute, so the threshold still moves when Con does, including a
+temporary Con from a rage or a potion. The panel states where death is, and how many
+points away it is while dying.
+
+---
+
+## The Stats tab
+
+Ability scores are not typed in — they are **built**, the same way the Google Sheet
+builds them. The Overview shows the resulting scores read-only; the Stats tab is where
+they are constructed.
+
+```
+enhancement = min(6, abp + gear)          <- ABP and gear stack, capped at +6
+total       = pointBuy + race + enhancement + attunement + inherent
+            + array + level4 + mythic + size + untyped
+tempTotal   = total + alchemical + circumstance + morale
+            + tempEnhancement + tempSize
+```
+
+**Permanent bonuses** — point buy, race, enhancement (ABP + gear), attunement,
+inherent, array, Level/4, mythic, size, untyped.
+
+**Temporary bonuses** — alchemical, circumstance, morale, enhancement, size. These
+feed the Temp Score that every derived stat reads; the permanent Total is untouched.
+
+The two tables sit side by side wherever the sheet is at least ~1385 px wide — a 1080p
+screen — and stack below that. **Inherent** is no longer handed out by the server, so
+the column is hidden unless the character actually has one; the button in the panel
+header shows or hides it either way, remembered per character.
+
+### Point buy
+
+Costs come from the sheet's own table (`dataSheet!K21:L33`):
+
+| Score | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Cost | −4 | −2 | −1 | 0 | 1 | 2 | 3 | 5 | 7 | 10 | 13 | 17 |
+
+The total spend is calculated live and shown against the budget (30), turning red if
+you go over. All five characters import at exactly 30/30.
+
+### The +6 enhancement cap
+
+ABP and gear are not two bonuses — they are both *enhancement*, which is why they stack
+with each other and then stop at a combined **+6**. The table says so: they share one
+banded **Enhancement (max +6)** group, closed by a **Used** column holding what the pair
+actually contributes. Anything past the cap is wasted — Narockro's Charisma has ABP 4
+plus gear 4, of which only 6 counts, which is exactly why her Charisma totals 30 rather
+than 32. Over-cap abilities are called out in red, in the Used column and underneath.
+
+### Save & AC bonuses
+
+The sheet's Stats tab breaks both down by bonus type — one column per type with a Total
+beside them — and that breakdown is the only place a flat save or AC bonus is written.
+It is here too, as two tables under the ability build:
+
+```
+Saves   Total  ABP (Resist)  Resist.  Template  Alch.  Circum.  Compet.  Enhan.
+        Insight  Luck  Trait  Morale  Profane  Racial  Sacred  Untyped  Sheet
+AC      Total  ABP Deflect  Deflect.  ABP Nat  E. Nat  Natural  Enhan.  Dodge
+        Circ.  Insight  Luck  Morale  Sacred  Profane  Untyped  Size  Template  Sheet
+```
+
+**Every cell takes a number or a formula**, in the same sandbox as the trackers, so a
+conditional bonus can be written as the rule it actually is. Force Redirection Technique
+— Strength in place of Dexterity, up to 3 + half BAB — is
+`min(str.mod - dex.mod, 3 + floor(bab / 2))`, and it keeps up when BAB moves where a
+typed-in number would quietly go stale. Formulas read abilities, level, BAB and any name
+defined in prose, resolve in place (click to see the source), flag unknown names in red,
+contribute 0 rather than breaking the sheet when broken, and appear in the Formula Audit.
+
+**The type decides which defence it reaches.** Natural-armour and enhancement bonuses do
+not count against touch attacks — the sheet's own "AC No Nat" row — and dodge is lost
+while flat-footed. So one set of AC bonuses drives AC, touch and flat-footed together
+instead of three numbers being nudged separately.
+
+**ABP is read, not typed.** The three Automatic Bonus Progression columns — resistance
+on the saves, deflection and toughening (natural armour) on AC — follow the character's
+level along the progression's own ladder from the workbook's `dataSheet` (resistance +1
+at 3rd, +2 at 8th, +3 at 10th, +4 at 13th, +5 at 14th; deflection +1 at 5th, +2 at 10th,
++3 at 16th, +4 at 17th, +5 at 18th; toughening +1 at 8th, +2 at 13th, +3 at 16th, +4 at
+17th, +5 at 18th). They show as yellow read-only cells, each grouped with the typed
+bonus of the same kind beside it (*Resist.*, *Deflect.*, *E. Nat*), and the pair adds up
+to at most +5 — unless the typed side is past +5 on its own, in which case it stands
+alone, the way a +6 item would. All five characters' imported ABP values sit exactly on
+the ladder, so nothing moved. On the Overview, the flat-footed row's *Misc* is a
+read-only mirror of the AC row's, since misc AC is armour-side and flat-footed keeps it.
+
+The columns come in from the workbook's own defined names: `ABPFort`/`ABPRef`/`ABPWill`
+and `ABPDef`/`ABPNat` seed the ABP columns (which the ladder then owns), and `FortBonuses`/`RefBonuses`/`WillBonuses`
+and `ACStatsTotal` say what each row came to. Whatever the difference is lands in
+**Sheet**, so the row still adds up to what the character sheet says while every part
+stays visible and editable — and on a character built here it stays 0. Reconciliation
+covers the remainder exactly as before, which is why every save and AC still imports to
+the number the source sheet had.
+
+> The full per-type split is in the workbook but not yet in the converter, so the columns
+> between ABP and Sheet import as 0 and Sheet carries their sum. Narockro's Fortitude, for
+> instance, is really ABP 3 + Resist 3 in the sheet and arrives here as ABP 3 + Sheet 2 —
+> the same total, split coarsely. Teaching `convert.js`/`convert.py` to read
+> `Stats!C11:Q14` and `Stats!C16:R17` would fill the rest in.
+
+### Selectable progression picks
+
+Four of the columns are **not typed in** — they are filled from pick selectors and
+shown highlighted and read-only:
+
+| Column | Picked at | Worth | Source |
+|---|---|---|---|
+| ABP | Mental Prowess 6/11/13/15/17/18/19/20, Physical 7/12/13/16/17/18/19/20 | +2 each | `Planner!AN7:AO21` |
+| Array | four picks at 8, three at 12 and 16 | +2 each | `Planner!AP9:AS17` |
+| Level/4 | levels 4 / 8 / 12 / 16 / 20 | +1 each | Planner `Level/4` |
+| Mythic | even tiers 2 / 4 / 6 / 8 / 10 | +2 each | the mythic ladder |
+
+Mental Prowess only offers Int/Wis/Cha and Physical Prowess only Str/Dex/Con, matching
+the ABP rules.
+
+The two prowess tracks advance on **different levels**, and the array grants four picks
+at level 8 but only three at 12 and 16. Where a track or slot does not exist, the table
+leaves the cell blank rather than showing a control that cannot be used — so every
+dropdown on the Stats tab is a real, usable choice. Both shapes are identical across the
+source sheets, and `tests/model.test.mjs` asserts the imported data never falls outside
+them.
+
+Level/4 and mythic are the same shape — one ability at each of five milestones — so they
+share one panel, greyed independently: a level you have not reached and a tier you have
+not reached are different things.
+
+The **optional array** is not part of levelling. It is bought separately with Primordia
+shards, and the panel says so above the picks.
+
+**Levels 11 and 12 are not fresh choices.** The level 11 mental increase raises whatever
+was picked at 6, and the level 12 physical increase raises the level 7 pick. They still
+grant their own +2 — they just cannot point at a different ability. Those rows show the
+inherited choice locked, labelled with where it came from, and changing the level 6 or 7
+selector moves both increments at once.
+
+Because the Planner holds a **full 20-level plan**, picks above the character's current
+level are shown greyed and do not count yet. Level a character up and the banked
+increases apply automatically. (This is why Nico, at 15, counts 3 of his 5 planned
+Level/4 increases.)
+
+> The Prowess and Array columns sit at different spreadsheet positions in different
+> characters' Planners (AN/AO/AP for Angou and Nico, AL/AM/AN for the others), so the
+> converter locates them by header text rather than column index.
+
+### Attunement
+
+A **single checkbox worth +2**, and **locked below level 20** — the boxes are disabled
+and the model refuses the write, so it cannot be set indirectly either. Only Angou is
+currently eligible.
+
+### Verification
+
+`tests/model.test.mjs` asserts that for all five characters, every one of the six
+abilities rebuilds to the exact score in the source sheet, that point buy totals 30,
+that the +6 cap engages where the sheet says it does, and that picks fold correctly
+with the level filter applied.
+
+---
+
+## Classes (gestalt) & traits
+
+The Classes table lives on the Overview. Levels per class are counted from the
+Planner up to the current level (with a manual override for sparse Planners; a class
+the Planner never names is assumed to run all levels). From it the app derives,
+following gestalt rules (best progression among the classes present each level):
+
+- **Save bases** — good saves +2 once and +½/level, poor +⅓/level — written straight
+  into the Saves panel.
+- **HP/level** (best HD) and **skill ranks/level** (best class).
+
+Traits & drawbacks are structured slots: Traits 1–3 always; Drawback 1 unlocks
+Trait 4, Drawback 2 unlocks Trait 5, and a Major Drawback buys a Drawback Feat —
+locked slots grey out until their drawback is filled. Categories cover the standard
+list (Campaign, Combat, Cosmic, Equipment, Faith, Family, Magic, Mount, Race,
+Regional, Religion, Social) plus any the player adds (Akashic, Mythic, Psionic…).
+Race traits sit beside them in their own list — see [The Overview](#the-overview).
+
+---
+
+## Granted feats
+
+Some feats are not picked at a level — something hands them over — and those live in
+one panel on Feats & Mythic, **source first and the feat second**, because that is the
+order they are read in: you know what granted it and are answering with which feat you
+took.
+
+| Source | Feat |
+|---|---|
+| Drawback | the feat a Major Drawback buys — the row appears only once one is taken |
+| Specialty | mandatory, so always there |
+| Oath 2, Attunement, … | source named per row |
+
+The workbooks scattered these. The Drawback column ran `[feat, "Specialty", feat]` —
+a header row masquerading as a feat, with each entry's source only implied by its
+position — while Oaths and Attunement were columns of their own. The import folds all
+of them into this one list and drops the header row, so Nico's reads *Drawback:
+Harrowed Capability* and *Specialty: Genius Vigilante* rather than three feats, one of
+which is the word "Specialty". Level Up, Class and Other/Flex stay as they were: those
+are feats you chose.
+
+---
+
+## Skills
+
+Total ranks follow the sheet's real formula:
+
+```
+totalRanks = min(level, bought + (specialty + gear + other) × level + sphereRanks)
+```
+
+**Specialty skills** are three picks — one Knowledge/Lore, one background skill
+(Unchained list), one free — each granting full ranks; they're seeded from the
+imported Specialty flags and marked ★. **Gear** (headband et al) and **Other**
+(class features, templates) are per-skill checkboxes worth full ranks. **Spheres**
+is computed from training. All five characters' imported ranks and totals reproduce
+exactly.
+
+**Hiding a skill.** The list is the template's, in the template's order: rows are not
+reordered or deleted. The eye at the end of each row hides a skill instead; hidden skills
+come back under **Show all**, dimmed with the eye closed, to be reopened. On a character
+with no ranks anywhere the unused-skill filter is off, so a new sheet shows the whole
+list.
+
+### Variants
+
+A skill is one name, variant included — there is no separate Spec. column, just
+**Craft ( Weapons and Armor )** with the parentheses drawn around the part you fill in.
+
+Most skills are one fixed thing, and their names are labels rather than fields: the
+Pathfinder list is what it is, and a row imported from the sheet is not something to
+rename. **Artistry**, **Craft**, **Lore** and **Profession** are open slots the
+character names themselves, and **Perform** is open to nine categories and no others:
+
+| | |
+|---|---|
+| Act | comedy, drama, pantomime |
+| Comedy | buffoonery, limericks, joke-telling |
+| Dance | ballet, waltz, jig |
+| Keyboard instruments | harpsichord, piano, pipe organ |
+| Oratory | epic, ode, storytelling |
+| Percussion instruments | bells, chimes, drums, gong |
+| String instruments | fiddle, harp, lute, mandolin |
+| Wind instruments | flute, pan pipes, recorder, trumpet |
+| Sing | ballad, chant, melody |
+
+Only those slots are editable — Artistry, Craft, Lore and Profession as text, Perform
+as a dropdown of the nine — and they are highlighted, dashed while empty and filled
+once named. Every other skill is just its name.
+
+Whatever is typed is stored as the variant alone and displayed as `Skill (variant)`,
+so **Craft (Weapons and Armor)** and **Weapons and Armor** both land the same way —
+the skill's own name, a `:` or `-` separator and wrapping parentheses all come off,
+while inner parentheses (*Bows (composite) and Arrows*) and words that merely start
+the same (*Craftsmanship*) are left alone. Changing a skill or its variant carries its
+specialty pick along, so a ★ never detaches from the row it was granted to. The sheets
+abbreviate a couple of the Perform categories — Narockro's `String` for *String
+instruments* — and those import as the real category; anything vaguer is kept as written
+and marked `… *` rather than guessed at.
+
+**Add skill** is the exception that names itself: a row the player adds has no name
+yet, so that one is a field. It is also how a further Craft or a new Lore gets made —
+name it `Craft` and the variant slot appears — and how anything the sheet never had
+gets onto the character.
+
+**Bought ranks accept formulas**: an integer, or a level-derived expression like
+`level` or `floor(level - 2)`, evaluated in the same sandbox as trackers (rank
+formulas may only read `level`) and shown in the Formula Audit for GMs.
+
+**Misc bonuses accept formulas too** — an integer (negatives fine), an ability
+modifier (`int.mod`), arithmetic (`floor(level/2)`), or a value defined in prose
+(`skill_familiarity`, for the vigilante social talent written as
+`{skill_familiarity = 4 + floor(level/5)}` in a class feature). Formulas follow their
+inputs live, flag unknown names in red, and appear in the Formula Audit. Misc formulas
+may read abilities, level and inline names but not other skills' totals — and inline
+names may not read skills — so no cycle can form between the two.
+
+Both cells show the **resolved value in place** rather than the source text with the
+answer parked beside it: the column reads as numbers, and clicking or tabbing into a
+cell swaps the source in without moving anything. The same field is used for crafting
+amounts and a weapon's Dice, so `{kinetic.fist}` reads as **4d8** until you edit it.
+A formula that does not resolve keeps its source showing, in red.
+
+**Rank budget**: available points = (best class ranks/level + Int bonus/level +
+bonus points/level) × level, checked against the ranks bought — a red error when
+over-assigned, a note when points are unspent. The Int and bonus metrics are the
+sheet's own rows under the skills table (no longer imported as skills). Angou:
+8/level × 20 = 160 available, 140 spent, 20 left — matching his sheet's own tally.
+
+---
+
+## Character colour
+
+The Details panel carries a **character colour** — the sixteen swatches, a hex box and
+the system colour picker, or blank for the theme's own gold. It is applied as the
+sheet's accent, which is the one colour everything unstyled already reads: panel
+headings, tracker pips, the underline on a computed value, the edge that marks a field
+as accepting formulas. So one choice colours the character throughout, and a tracker
+with no colour of its own is drawn in it.
+
+It is stored as `identity.color` and travels with the character's JSON. Embedders can
+still override it per instance with `--cs-accent`, since the character's own colour is
+set on the element rather than in the stylesheet.
