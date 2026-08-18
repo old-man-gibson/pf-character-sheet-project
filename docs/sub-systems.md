@@ -263,7 +263,8 @@ in it, so you **pick the discipline from a dropdown** and every maneuver and sta
 it grants appears underneath to be readied. Each discipline is a narrow column — the
 useful width is a name and a tick box — and collapses on its own.
 
-The maneuvers themselves come from `data/maneuvers.json`, built by
+The maneuvers themselves come from the Path of War disciplines extension pack
+(`data/extensions/path-of-war-disciplines.json`, see [Extensions](extensions.md)), built by
 `tools/maneuvers_ref.py` from the workbook's own **maneuversRef** tab. That tab is
 byte-identical in every workbook (30 disciplines, 1,033 maneuvers), so it is
 extracted once into a file every character shares instead of being copied into each
@@ -340,7 +341,7 @@ derive from it is worked out on load and never saved:
 | casting ability | casting modifier; **opening hand** = 1 + modifier, at least 2 |
 | the ladder — Cooldown, Mana Pool, Mana Graveyard — and the ten modifications (Bleeding Hand ×1/×2, Colored Mana 3/5, Deckout, Exposed Grip, Gradual Ramp, Lifebound Deck, Singleton, Stagnant Pool, Strikable Assets, Tight Hand) | what the drawback **counts as for boons** (1, +1 for Cooldown or Mana Pool, +1 for both, +1 for Mana Graveyard, +1 per modification, +2 for five-colour Colored Mana — Nico's is 7); prerequisites flagged (Deckout needs Cooldown, Stagnant Pool cannot sit with Mana Graveyard…) |
 | the cards — name, effect, spell point cost and its **colour**, sphere, tags, the **mana** a fused card carries (`UB`), copies, an art link, and suit/alignment on a Harrow deck | deck size; effect / mana / fused counts; distinct effects and copies of each; the **identical-effect spread** against the casting modifier; **colour balance** under Colored Mana (every colour has an effect, none over half or a quarter); Singleton duplicates; the minimum of 20; d100 **draw ranges** per card; suit, alignment, sphere and colour tallies |
-| deck manipulations by group, with a count and the note beside each pick; the number available (blank = automatic, or a number or formula) | one manipulation per **deck feat** (any feat or bought-off drawback tagged `[Deck]`) plus one for Card Shark — Nico's 10 + 1 = 11; each pick's rule text and prerequisites (Cooldown, Mana Pool, Colored Mana, Singleton…) from the catalogue in `data/cardcasting.json`, read off the wiki's [Card and Deck Feats](http://spheresofpower.wikidot.com/card-and-deck-feats) page; taken vs. left |
+| deck manipulations by group, with a count and the note beside each pick; the number available (blank = automatic, or a number or formula) | one manipulation per **deck feat** (any feat or bought-off drawback tagged `[Deck]`) plus one for Card Shark — Nico's 10 + 1 = 11; each pick's rule text and prerequisites (Cooldown, Mana Pool, Colored Mana, Singleton…) from the catalogue in the deck-manipulations extension pack, read off the wiki's [Card and Deck Feats](http://spheresofpower.wikidot.com/card-and-deck-feats) page; taken vs. left |
 | **Rainbow Efficiency** (seen among the deck feats) | a card may cost two colours — three to five with *Improved* — and the colour balance loosens to ¾ / ½ |
 | land-attuned spheres per colour, and which are attuned | cards in the deck per sphere |
 | Lifebound Deck / Tight Hand | Lifebound value = ⌊HP ÷ 3 ÷ deck size⌋ (min 1); hand limit = 3 + Loaded Hand picks |
@@ -514,7 +515,7 @@ entree adds to the Strength that Apples grant, Rice counts the recipe as three l
 higher, a Sweet flavor sharpens Ginger. Duration is ⌊level ÷ 3⌋ + 1 hours.
 
 The ingredient list and every effect's formula are shared rules, not character data,
-so they live in `data/cooking.json` — each effect a template whose `{expr}` holes are
+so they live in the Iron Chef extension pack (`data/extensions/iron-chef-ingredients.json`) — each effect a template whose `{expr}` holes are
 evaluated in the app's own formula sandbox with `level` and the count of each
 ingredient in the dish (`rice`, `sweet`, `redMeat`, …), exactly the COUNTIFs the
 workbook's cells read. Any character can show **Auto-Cooking** from the ⚙ manager's

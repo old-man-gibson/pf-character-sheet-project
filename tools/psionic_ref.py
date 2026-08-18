@@ -1,6 +1,6 @@
 """Build the shared power-point table from a workbook's psionicRef tab.
 
-    python tools/psionic_ref.py <workbook.xlsx> [-o data/psionics.json]
+    python tools/psionic_ref.py <workbook.xlsx> [-o data/extensions/psionic-manifesting-tables.json]
 
 The tab is a reference table, not character data, and it is the same in every
 workbook, so it is extracted once into a file every character shares.
@@ -26,10 +26,12 @@ Layout:
     A23:A32            Talent, 1st..9th -- the power-level dropdown's options
 """
 import argparse
-import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from extension_pack import write_pack  # noqa: E402
 
 try:
     import openpyxl
@@ -108,17 +110,17 @@ def read_tables(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workbook", help="any workbook built on the campaign template")
-    parser.add_argument("-o", "--out", default="data/psionics.json")
+    parser.add_argument("-o", "--out", default="data/extensions/psionic-manifesting-tables.json")
     args = parser.parse_args()
 
     curves, classes, power_levels = read_tables(args.workbook)
     if not curves:
         sys.exit("no power-point curves found in B1:F21")
 
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"powerLevels": power_levels, "curves": curves, "classes": classes},
-                  f, separators=(",", ":"), ensure_ascii=False)
+    write_pack(args.out, "psionic-manifesting-tables", "psionics",
+               {"powerLevels": power_levels, "curves": curves, "classes": classes},
+               name="Psionic manifesting tables",
+               description="Power-point curves by manifester level, and which curve each manifesting class runs on.")
 
     size = os.path.getsize(args.out)
     print(f"{len(curves)} curves, {len(classes)} classes -> {args.out} ({size:,} b)")

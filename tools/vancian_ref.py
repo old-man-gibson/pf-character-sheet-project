@@ -1,6 +1,6 @@
 """Build the shared casting table from a workbook's vancianRef tab.
 
-    python tools/vancian_ref.py <workbook.xlsx> [-o data/vancian.json]
+    python tools/vancian_ref.py <workbook.xlsx> [-o data/extensions/vancian-casting-tables.json]
 
 The tab is a reference table, not character data: it is the same in every
 workbook of a given template revision, so it is extracted once into a file every
@@ -27,10 +27,12 @@ domain slots and Legendary Medium's), and the sheet writes them by concatenating
 a suffix onto the slot count -- "4 +1". They are kept as their own number here.
 """
 import argparse
-import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from extension_pack import write_pack  # noqa: E402
 
 try:
     import openpyxl
@@ -176,14 +178,14 @@ def reachability(grid, classes, columns, dropdown, lookup):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workbook", help="any workbook built on the campaign template")
-    parser.add_argument("-o", "--out", default="data/vancian.json")
+    parser.add_argument("-o", "--out", default="data/extensions/vancian-casting-tables.json")
     args = parser.parse_args()
 
     classes, reach = read_tables(args.workbook)
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"spellLevels": SPELL_LEVEL_LABELS, "classes": classes},
-                  f, separators=(",", ":"), ensure_ascii=False)
+    write_pack(args.out, "vancian-casting-tables", "vancian",
+               {"spellLevels": SPELL_LEVEL_LABELS, "classes": classes},
+               name="Vancian casting tables",
+               description="Spells per day and spells known by class level.")
 
     size = os.path.getsize(args.out)
     print(f"{len(classes)} classes -> {args.out} ({size:,} b)")

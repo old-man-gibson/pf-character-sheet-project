@@ -24,6 +24,9 @@
  * Events
  *   character-change  {detail:{character, diff}}  fired on any edit
  *   tracker-change    {detail:{tracker}}
+ *   character-import  {detail:{character, summary, warnings}}  a document came in through Import
+ *   extension-import  {detail:{extension}}  an extension pack came in through Import;
+ *                     preventDefault() to say a host page took it (see extension-manager.js)
  *
  * State is kept in three places, and `history.js` explains why each is where it
  * is: the working sheet in localStorage, the canonical saved version and the
@@ -35,15 +38,17 @@
  */
 
 import {
-  Character, inspectDocument, setManeuverCatalogue, maneuverCatalogue, TEMPLATE_TYPES,
-  setVancianTables, castingTableNames,
-  setPsionicTables, psionicTables, psionicCurveTotals,
-  CARD_COLORS, CARD_MODIFICATIONS, setCardcastingTables, deckManipulationCatalogue, deckManipulation,
+  Character, inspectDocument, maneuverCatalogue, TEMPLATE_TYPES,
+  castingTableNames,
+  psionicTables, psionicCurveTotals,
+  CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
-  COOKING_COURSES, setCookingTables, cookingTables, cookingDish, normalizeDish, emptyDish,
+  COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_MONTH,
 } from './model.js';
+import { runtime as extensionRuntime } from './extension-runtime.js';
+import { applyBlock, BLOCK_KINDS, looksLikeExtension } from './extensions.js';
 import { SHEET_CSS } from './styles.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
@@ -159,30 +164,19 @@ const NEW_TEMPLATE_TABLE = () => ({
 });
 
 /**
- * Fetch the shared reference tables once: the discipline catalogue and the
- * casting table.
+ * Register the shared reference tables once: the discipline catalogue, the
+ * casting and manifesting tables, deck manipulations, cooking ingredients.
  *
- * Every character reads the same two files and neither changes, so the promise
- * is kept rather than the requests repeated. Neither failure is fatal: without
- * the catalogue a discipline still lists what the character knows and simply has
- * no maneuvers to offer, and without the casting table a casting class keeps its
- * own numbers instead of deriving them. Both beat refusing to load at all.
+ * None of them ship with the engine. They come from extension packs -- the
+ * ones a deployment bundles under data/extensions/ and the ones this browser
+ * holds locally -- merged by the extension runtime, which every character on
+ * the page shares. A missing pack is not fatal: without the catalogue a
+ * discipline still lists what the character knows and simply has no maneuvers
+ * to offer, and without a casting table a casting class keeps its own numbers.
+ * Both beat refusing to load at all.
  */
-let sharedTablesLoad = null;
 function loadSharedTables() {
-  if (!sharedTablesLoad) {
-    const read = (name) => fetch(new URL(`../../data/${name}`, import.meta.url))
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-    sharedTablesLoad = Promise.all([
-      read('maneuvers.json').then((doc) => { if (doc) setManeuverCatalogue(doc); }),
-      read('vancian.json').then((doc) => { if (doc) setVancianTables(doc); }),
-      read('psionics.json').then((doc) => { if (doc) setPsionicTables(doc); }),
-      read('cardcasting.json').then((doc) => { if (doc) setCardcastingTables(doc); }),
-      read('cooking.json').then((doc) => { if (doc) setCookingTables(doc); }),
-    ]);
-  }
-  return sharedTablesLoad;
+  return extensionRuntime.load(new URL('../../', import.meta.url));
 }
 
 const val = (v) => (v === null || v === undefined || v === '' ? '—' : esc(v));
@@ -424,17 +418,35 @@ export class CharacterSheetElement extends HTMLElement {
   #deckView = 'table';
   /** Cards peeked at with Read the Cards, by id, until the next action. */
   #peek = [];
+  /** Which kind of extension block the ⚙ manager's list is narrowed to ('' = all). */
+  #extFilter = '';
 
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
   }
 
+  /**
+   * A pack switched on or off in the page's extension manager changes what a
+   * discipline offers and which blocks the ⚙ manager lists, so the sheet
+   * recomputes and redraws -- the model's data is untouched.
+   */
+  #onExtensionsChange = () => {
+    if (!this.#model) return;
+    this.#model.recompute();
+    this.#render();
+  };
+
   connectedCallback() {
     if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
     this.#renderShell();
+    extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
+  }
+
+  disconnectedCallback() {
+    extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -825,6 +837,17 @@ export class CharacterSheetElement extends HTMLElement {
       doc = JSON.parse(await file.text());
     } catch (err) {
       return fail(`${name} is not valid JSON — ${err.message}`);
+    }
+    // An extension pack is not a character. The sheet cannot store one, but a
+    // host page with an extension manager can, so it is handed up rather than
+    // refused; without a listener the player is told what the file was.
+    if (looksLikeExtension(doc)) {
+      const event = new CustomEvent('extension-import', {
+        detail: { extension: doc }, bubbles: true, composed: true, cancelable: true,
+      });
+      this.dispatchEvent(event);
+      if (event.defaultPrevented) return { ok: true, error: null, summary: null, warnings: [], extension: true };
+      return fail(`${name} is an extension pack, not a character. Open the page's Extensions manager to bring it in.`);
     }
     return this.importDocument(doc);
   }
@@ -2580,7 +2603,70 @@ export class CharacterSheetElement extends HTMLElement {
         Delete “${esc(all[this.#confirmDelete]?.tab.name)}” and all its rows?
         <button class="danger" data-action="delete-system-confirm">Delete</button>
         <button data-action="delete-system-cancel">Keep</button></p>` : ''}
-    </section></div>`;
+    </section>
+    ${this.#extensionBlocksPanel()}</div>`;
+  }
+
+  /**
+   * The building blocks the enabled extension packs offer -- a class, a race,
+   * a feature, a tracker -- each with a button that copies it into this
+   * character. The packs themselves are managed by the host page; this is
+   * only the shelf.
+   */
+  #extensionBlocksPanel() {
+    const packs = extensionRuntime.active();
+    const blocks = extensionRuntime.blocks();
+    const kinds = [...new Set(blocks.map((b) => b.kind))];
+    const filter = kinds.includes(this.#extFilter) ? this.#extFilter : '';
+    const shown = filter ? blocks.filter((b) => b.kind === filter) : blocks;
+    const byPack = new Map();
+    for (const b of shown) {
+      if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
+      byPack.get(b.extId).blocks.push(b);
+    }
+    const detail = (b) => {
+      switch (b.kind) {
+        case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
+        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
+        case 'template': return `${b.features.length} feature(s)`;
+        case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
+        case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
+        case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
+        default: return '';
+      }
+    };
+    const rows = [...byPack.entries()].map(([id, p]) => `
+      <h4 class="ext-pack">${esc(p.name)}</h4>
+      ${p.blocks.map((b) => `<div class="item statline">
+        <span class="label pair" style="flex:1">
+          <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
+          <strong>${esc(b.name || '(unnamed)')}</strong>
+          <span class="hint" style="margin:0">${esc(detail(b))}</span>
+        </span>
+        <span class="value pair">
+          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}"
+            title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
+        </span>
+      </div>`).join('')}`).join('');
+
+    return `<section class="panel span2">
+      <h3>Extensions — building blocks</h3>
+      <p class="hint">
+        What the enabled extension packs offer this character: ${packs.length
+    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
+    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet — a class into
+        the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
+        onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
+        from the page's <em>Extensions</em> button.
+      </p>
+      ${kinds.length > 1 ? `<p class="pair" style="margin:0 0 6px">
+        <button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}
+      </p>` : ''}
+      <div class="rowlist">
+        ${rows || `<p class="empty">${packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
+      </div>
+    </section>`;
   }
 
   /* ----- training class blocks with per-level talent slots ----- */
@@ -8796,6 +8882,23 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'delete-system-cancel':
         this.#confirmDelete = null;
+        this.#render();
+        break;
+      case 'ext-add-block': {
+        // Copy a block out of an enabled extension pack into this character.
+        const block = extensionRuntime.blocks()
+          .find((b) => b.extId === button?.dataset.ext && b.index === Number(button?.dataset.index));
+        if (!block) break;
+        try {
+          this.#historyNote = applyBlock(this.#model, block);
+        } catch (err) {
+          this.#historyNote = `Could not add ${block.name || 'that block'} — ${err.message}`;
+        }
+        this.#render();
+        break;
+      }
+      case 'ext-filter':
+        this.#extFilter = button?.dataset.kind || '';
         this.#render();
         break;
       case 'add-system-column': {
