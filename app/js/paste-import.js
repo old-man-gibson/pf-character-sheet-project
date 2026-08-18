@@ -27,10 +27,23 @@ import { normalizeBlock } from './extensions.js';
 
 /* ---------------- text helpers ---------------- */
 
+/**
+ * Normalise a paste. Besides the odd characters a web page hands over, some
+ * sites (d20pfsrd, or a "copy as markdown" extension) come out as markdown:
+ * bullets, `[text](url)` links, `**bold**`, `## headings`. The text underneath
+ * is the same, so the markup goes and the line shapes the reader keys on
+ * are back.
+ */
 const clean = (s) => String(s ?? '')
   .replace(/ /g, ' ')                       // no-break spaces off a web page
   .replace(/−/g, '-')                       // minus sign
-  .replace(/[ \t]+$/g, '');
+  .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')   // [[Source](url)] -> [Source]
+  .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')  // [text](url) -> text
+  .replace(/^[ \t]*[*\-•]\s+(?=\S)/gm, '')          // "* item" -> "item"
+  .replace(/^#{1,6}\s+/gm, '')                      // "## Heading" -> "Heading"
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1')              // **bold**
+  .replace(/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:])/g, '$1$2') // _italic_
+  .replace(/[ \t]+$/gm, '');
 const lower = (s) => String(s || '').trim().toLowerCase();
 const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
 const isBlank = (line) => !line || !line.trim();
@@ -512,7 +525,10 @@ function readFavoredClass(lines) {
     if (/^Favored Class Options$/i.test(t)) { inFcb = true; used.add(i); continue; }
     if (!inFcb) continue;
     if (!t) { if (entries.length && isBlank(lines[i + 1] || '')) break; continue; }   // a double blank ends the list
-    if (/^(Archetypes|Related|FAQ|Racial Subtypes)$/i.test(t)) break;
+    // A FAQ dropped into the middle of the list is an interlude, not the end:
+    // its Q/A lines are consumed and the list carries on after it.
+    if (/^FAQ$/i.test(t) || /^[QA]:\s/.test(t)) { used.add(i); continue; }
+    if (/^(Archetypes|Related|Racial Subtypes)$/i.test(t)) break;
     if (/^Race\tOption\tSource$/i.test(t)) { used.add(i); continue; }
     if (/^(?:PFS Legal )?[A-Z][\w' -]+(?: \([^)]*\))?:\s+\S/.test(t) || /^Any [\w ]+:/i.test(t)) { entries.push(t.replace(/^PFS Legal /, '')); used.add(i); continue; }
     if (/^[A-Z][\w' -]+$/.test(t) && words(t) <= 3) { entries.push(t); used.add(i); continue; }
@@ -550,18 +566,20 @@ export function readRace(lines) {
     const sec = t.match(RACE_SECTIONS);
     if (sec) {
       const s = lower(sec[1]);
+      // A FAQ is an interlude: its Q/A lines are consumed and the section it
+      // interrupted resumes with the next line that is not one of them.
+      if (/^faq/.test(s)) { used.add(i); return; }
       section = /^alternate/.test(s) ? 'alternate'
         : /racial traits$/.test(s) ? 'standard'
           : /^racial subtypes/.test(s) ? 'subtypes'
             : /^favored/.test(s) ? 'fcb'
-              : /^faq/.test(s) ? 'faq'
-                : /^(physical|society|relations|alignment|adventurers|names?)/.test(s) ? 'preamble'
-                  : 'tables';
+              : /^(physical|society|relations|alignment|adventurers|names?)/.test(s) ? 'preamble'
+                : 'tables';
       used.add(i);
       return;
     }
+    if (/^[QA]:\s/.test(t)) { used.add(i); return; }
     if (section === 'tables') { used.add(i); tables++; return; }
-    if (section === 'faq') return;
     const fm = t.match(RACE_FIELD);
     if (fm && section !== 'alternate' && section !== 'fcb') {
       used.add(i);
@@ -584,6 +602,10 @@ export function readRace(lines) {
     const nm = t.match(/^([A-Z][^:\n]{1,50}?)\s*(?:\((?:[^)]*)\))?\s*:\s+(\S.*)$/);
     if (section === 'standard' && nm) { traits.push({ name: nm[1].trim(), text: nm[2].trim() }); used.add(i); return; }
     if (section === 'alternate' && nm) { alternates.push({ name: nm[1].trim(), text: nm[2].trim() }); used.add(i); return; }
+    // A trait whose page dropped the colon -- "Wanderer You gain Endurance…":
+    // a short run of capitalised words, then a sentence opener.
+    const nc = section === 'alternate' && t.match(/^((?:[A-Z][\w'’-]*\s){1,4}?)(?=(?:You|A|An|The|These|Those|Some|Characters|Members|Gain|Select|Add|Increase|Whenever|While|When|Once|Instead|Rather|[A-Z][a-z]+ (?:with this racial trait|gain|have|are|receive|treat|can|who))\b)(.{20,})$/);
+    if (nc && !/^(?:This|The|A|An)\s/.test(nc[1])) { alternates.push({ name: nc[1].trim(), text: nc[2].trim() }); used.add(i); return; }
     if (section === 'alternate' && /^[A-Z][^:]{1,50}$/.test(t) && words(t) <= 6) { alternates.push({ name: t, text: '' }); used.add(i); return; }
     if (section === 'alternate' && alternates.length && !alternates[alternates.length - 1].text) { alternates[alternates.length - 1].text = t; used.add(i); return; }
     if (section === 'alternate' && words(t) > 12 && !alternates.length) { used.add(i); return; }   // the section's hint sentence
@@ -604,8 +626,11 @@ export function readRace(lines) {
   }));
   report.push(`Race ${name}: ${Object.entries(abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' ') || 'no ability modifiers found'}, ${fields.size || 'size ?'}, ${fields.speed ? `${fields.speed} ft` : 'speed ?'}, ${traits.length} standard trait(s)${tables ? '; age/height tables dropped' : ''}.`);
 
-  for (const a of alternates) blocks.push(normalizeBlock({ kind: 'trait', name: a.name, text: a.text, source: sourceTag(a.text) }));
-  if (alternates.length) report.push(`${alternates.length} alternate racial trait(s) as trait blocks (each says what it replaces).`);
+  for (const a of alternates) blocks.push(normalizeBlock({ kind: 'trait', name: a.name, text: a.text, source: sourceTag(a.text), race: name }));
+  if (alternates.length) {
+    const known = blocks.filter((b) => b.kind === 'trait' && b.replaces.length).length;
+    report.push(`${alternates.length} alternate racial trait(s) as trait blocks; ${known} say what they replace, and swap it out when added.`);
+  }
   if (subtypes.length) {
     blocks.push(normalizeBlock({ kind: 'note', name: `${name} — racial subtypes`, text: subtypes.join('\n') }));
     report.push(`${subtypes.length} racial subtype(s) as a note.`);
@@ -644,72 +669,95 @@ export function singular(w) {
 
 /* ---------------- veils ---------------- */
 
-const VEIL_CHROME = /^(?:Namespaces.*|Page ?Discussion|Page actions|Read|View source.*|History|Purge|Retold|Veils|Information|Descriptors?|Enhanced|Classes Available|Chakra Slots?:?|Saving Throw|Veil Sets|Sources)$/i;
-/** After the binds, the wiki appends footnotes and its navigation; this is where the veil ends. */
-const VEIL_TAIL = /^(?:Bind Level|Related|See Also|Archetypes|Classes|Class Options|Navigation|Categories)$/i;
-const CHAKRA = /^(Hands|Feet|Head|Headband|Neck|Shoulders|Chest|Body|Belt|Wrists|Ring|Blood|Storm|Black|Interface|Feet \(.*\)|Hands \(.*\))$/i;
+/** The site's own furniture, above and around a veil article. */
+const VEIL_CHROME = /^(?:Anonymous|Log in|Library of Metzofitz|Search.*|Namespaces.*|Page ?Discussion|Page actions|Read|View source.*|History|Purge|Retold|Veils|Information)$/i;
+/** The headings of the information box, in the order the wiki lays them out. */
+const VEIL_INFO = /^(Descriptors?|Classes Available|Chakra Slots?|Saving Throw|Veil Sets|Variants|Sources?)$/i;
+/** After the binds, footnotes and navigation; this is where the veil ends. */
+const VEIL_TAIL = /^(?:Bind Level|Notes|Related|See Also|Archetypes|Classes|Class Options|Navigation|Categories)$/i;
+const CHAKRA = /^(Hands|Feet|Head|Headband|Neck|Shoulders|Chest|Body|Belt|Wrists|Ring|Blood|Storm|Black|Interface)(?: \(.*\))?$/i;
 
 /**
  * A veil, as the wiki lays it out: a title, an information box (Descriptor,
- * Classes Available, Chakra Slots, Saving Throw, Sources), the shaping text,
- * then "Essence:" and "Chakra Bind (Slot):" paragraphs. One template block,
- * the paragraphs as its features. Everything in the segment is used.
+ * Classes Available, Chakra Slots, Saving Throw, Veil Sets, Sources), the
+ * shaping text, then "Essence:" and "Chakra Bind (Slot):" paragraphs, then
+ * bind-level footnotes and the site's navigation. One `veil` block: the
+ * text is the shaping text and the Essence / Chakra Bind paragraphs under
+ * their headings (plus the saving throw and the bind-level lines, which a
+ * player wants at the table); the info box goes to the block's fields, not
+ * its text; the navigation and the "this veil was added to…" notes are
+ * dropped. Everything in the segment is used.
  */
 export function readVeil(lines) {
   const used = new Set();
-  const kept = [];
-  lines.forEach((raw, i) => {
-    const l = raw.trim();
-    used.add(i);
-    if (!l || VEIL_CHROME.test(l) || /^The version of this content updated/i.test(l)) return;
-    kept.push(l);
-  });
-  const name = kept.find((l) => words(l) <= 5 && /^[A-Z]/.test(l) && !/[.:]$/.test(l)) || 'Veil';
-  const info = [];
-  const features = [];
-  const desc = [];
-  let i = 0;
-  for (; i < kept.length; i++) {
-    const l = kept[i];
-    if (l === name) continue;
-    if (/^Chakra Bind\b/i.test(l) || /^Essence:/i.test(l)) break;
-    if (words(l) >= 12 || /\.$/.test(l)) desc.push(l);
-    else if (!info.includes(l)) info.push(l);
+  const all = [];
+  lines.forEach((raw, i) => { used.add(i); const l = raw.trim(); if (l) all.push(l); });
+
+  // Title: the line above "Namespaces", else the line after the "Veils"
+  // breadcrumb, else the first short capitalised line that is not chrome.
+  let name = '';
+  const nsAt = all.findIndex((l) => /^Namespaces/i.test(l));
+  if (nsAt > 0) name = all[nsAt - 1];
+  if (!name || VEIL_CHROME.test(name)) {
+    const vAt = all.findIndex((l) => /^Veils$/i.test(l));
+    if (vAt >= 0 && all[vAt + 1] && !/^Information$/i.test(all[vAt + 1])) name = all[vAt + 1];
   }
+  if (!name || VEIL_CHROME.test(name)) name = all.find((l) => !VEIL_CHROME.test(l) && !VEIL_INFO.test(l) && words(l) <= 5 && /^[A-Z]/.test(l) && !/[.:]$/.test(l)) || 'Veil';
+
+  // The information box: heading -> values, until the first sentence.
+  // Reading starts at the title, so a previous page's navigation that the
+  // segment reached back over is skipped.
+  const info = {};
+  let i = Math.max(0, all.indexOf(name));
+  let heading = null;
+  const isSentence = (l) => words(l) >= 12 || /[.!?]$/.test(l);
+  const hasInfoBox = all.some((l) => VEIL_INFO.test(l));
+  for (; i < all.length; i++) {
+    const l = all[i];
+    if (l === name && !heading) continue;
+    if (VEIL_CHROME.test(l)) continue;
+    const h = l.match(VEIL_INFO);
+    if (h) { heading = lower(h[1]).replace(/s$/, ''); info[heading] ||= []; continue; }
+    // A notice above the box ("The version of this content updated for…")
+    // is not the article; the article starts after the box, if there is one.
+    if (!heading && hasInfoBox) continue;
+    if (isSentence(l) || /^Essence:/i.test(l) || /^Chakra Bind\b/i.test(l)) break;
+    if (heading) info[heading].push(l);
+  }
+  const chakras = (info['chakra slot'] || []).filter((l) => CHAKRA.test(l));
+  const descriptor = (info.descriptor || []).find((l) => /\(/.test(l)) || (info.descriptor || [])[0] || '';
+  const save = (info['saving throw'] || []).filter((l) => !/^none$/i.test(l)).join('; ');
+  const source = (info.source || []).join('; ');
+
+  // The article: shaping text, then Essence and Chakra Bind paragraphs.
+  const desc = [];
+  const features = [];
   const footnotes = [];
   let inTail = false;
-  for (; i < kept.length; i++) {
-    const l = kept[i];
+  for (; i < all.length; i++) {
+    const l = all[i];
     if (VEIL_TAIL.test(l)) { inTail = true; continue; }
     if (inTail) {
-      // Footnotes worth keeping ("↑ Bind Level: Daevic 10, …", "This veil was
-      // added to…"); the navigation lists are not.
-      if (/^↑/.test(l) || /^This veil/i.test(l)) footnotes.push(l.replace(/^↑\s*/, ''));
-      continue;
+      if (/^↑/.test(l)) footnotes.push(l.replace(/^↑\s*/, ''));   // "Bind Level: Daevic 10, …"
+      continue;                                                    // "This veil was added to…", navigation
     }
     const m = l.match(/^(Essence|Chakra Bind\s*\([^)]*\))\s*:\s*(.*)$/i);
     if (m) {
       const bind = m[1].match(/^Chakra Bind\s*\(([^)]*)\)/i);
       const level = m[2].match(/^\[Bind Level (\d+)\]\s*/i);
-      features.push({ name: bind ? `Chakra Bind (${bind[1]})${level ? ` — bind level ${level[1]}` : ''}` : 'Essence', type: 'Su', text: level ? m[2].slice(level[0].length) : m[2] });
+      features.push({ name: bind ? `Chakra Bind (${bind[1]})${level ? ` — bind level ${level[1]}` : ''}` : 'Essence', text: level ? m[2].slice(level[0].length) : m[2] });
     } else if (features.length) features[features.length - 1].text += `\n${l}`;
     else desc.push(l);
   }
-  // A veil may name more than one chakra it can be shaped in; all are kept,
-  // the first is where it lands unless that slot is taken.
-  const chakras = info.filter((l) => CHAKRA.test(l));
-  const rest = info.filter((l) => !chakras.includes(l));
-  const descriptor = rest.find((l) => /^(Enhanced|Aura|Deflection|Weapon|Armor|Shield|Natural|Sacred|Profane|Insight|Luck)\b/i.test(l)) || '';
-  const infoRest = rest.filter((l) => l !== descriptor);
-  // One veil block, its rules text as the description the Akashic board shows:
-  // the shaping text, then the Essence and Chakra Bind paragraphs under their
-  // own headings, so the whole entry reads on the card.
   const text = [
     ...desc,
     ...features.map((f) => `${f.name}: ${f.text}`),
-    footnotes.length ? footnotes.join('\n') : '',
-    infoRest.length ? `(${infoRest.join(' · ')})` : '',
+    save ? `Saving throw: ${save}` : '',
+    footnotes.join('\n'),
   ].filter(Boolean).join('\n\n');
-  const block = normalizeBlock({ kind: 'veil', name, slot: chakras.join(', '), descriptor, text });
-  return { name, blocks: [block], used, report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}.`] };
+  const block = normalizeBlock({ kind: 'veil', name, slot: chakras.join(', '), descriptor, text, source });
+  return {
+    name, blocks: [block], used,
+    report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
+  };
 }

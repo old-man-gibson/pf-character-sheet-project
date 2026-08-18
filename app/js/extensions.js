@@ -100,8 +100,12 @@ export function normalizeBlock(block) {
         traits: arr(b.traits).map((t) => ({ name: str(t?.name).trim(), text: str(t?.text) })).filter((t) => t.name),
         languages: arr(b.languages).map(str).filter(Boolean),
       };
-    case 'trait':
-      return base;
+    case 'trait': {
+      // What an alternate racial trait replaces: given outright, else read
+      // off its own text ("This racial trait replaces hatred and greed.").
+      const given = arr(b.replaces).map((s) => str(s).trim()).filter(Boolean);
+      return { ...base, race: str(b.race).trim(), replaces: given.length ? given : parseReplaces(base.text) };
+    }
     case 'feature':
       return { ...base, type: featureType(b.type), group: str(b.group).trim() };
     case 'template':
@@ -126,6 +130,30 @@ export function normalizeBlock(block) {
     default:
       return null;
   }
+}
+
+/**
+ * The traits an alternate racial trait replaces, read off its text:
+ *   "This racial trait replaces hatred."
+ *   "This replaces defensive training and hatred."
+ *   "This racial trait replaces greed, hatred, stonecunning, and weapon familiarity."
+ *   "Dwarves can take this trait in place of stonecunning."
+ *   "This racial trait replaces the hatred racial trait."
+ * Names come back as written, lower-cased, without "the" or "racial trait".
+ */
+export function parseReplaces(text) {
+  const out = [];
+  const re = /\b(?:replace[sd]?|in place of)\s+(?:the\s+)?([^.;]+?)(?:\s+racial traits?)?(?=[.;]|$)/gi;
+  for (const m of str(text).matchAll(re)) {
+    const list = m[1]
+      .replace(/\s+racial traits?/gi, '')
+      .replace(/\s*,?\s+(?:and|or)\s+/gi, ', ')
+      .split(/,\s*/)
+      .map((s) => s.trim().replace(/^the\s+/i, ''))
+      .filter((s) => s && s.length < 60);
+    for (const s of list) if (!out.includes(s.toLowerCase())) out.push(s.toLowerCase());
+  }
+  return out;
 }
 
 /** 'Full' / '3/4' / 'medium' / '1/2' -> the number the Classes table stores. */
@@ -540,8 +568,7 @@ export function applyBlock(model, rawBlock) {
         + `${added ? `, ${added} race trait(s) added` : ''}.`;
     }
     case 'trait':
-      addRaceTrait(model, { name: block.name, text: block.text });
-      return `Added race trait ${block.name}.`;
+      return applyAlternateTrait(model, block);
     case 'feature': {
       const groupName = block.group || block.extName || 'Extensions';
       const templates = model.list('templates');
@@ -602,14 +629,69 @@ export function applyBlock(model, rawBlock) {
 }
 
 /** A race trait fills an empty slot before it appends, since a blank sheet ships three. */
-function addRaceTrait(model, { name, text }) {
+function addRaceTrait(model, { name, text, replaced = null }) {
   const traits = model.list('raceTraits');
   const empty = traits.findIndex((t) => !str(t?.name).trim() && !str(t?.text).trim());
-  if (empty === -1) model.listAdd('raceTraits', { name, text });
+  const row = replaced && replaced.length ? { name, text, replaced } : { name, text };
+  if (empty === -1) model.listAdd('raceTraits', row);
   else {
     model.setItem('raceTraits', empty, 'name', name);
     model.setItem('raceTraits', empty, 'text', text);
+    if (row.replaced) traits[empty].replaced = row.replaced;
+    else delete traits[empty].replaced;
+    model.recompute();
   }
+}
+
+/**
+ * An alternate racial trait takes the place of what it replaces.
+ *
+ * The rows it names are removed and remembered on the new row (`replaced`),
+ * so a later alternate that overlaps can undo exactly the right amount: if
+ * X replaced A and B, and N (an alternate to A) is then added, N displaces X,
+ * takes A into its own history, and B -- which N does not replace -- comes
+ * back as the standard trait it was. A trait that names nothing on the sheet
+ * is simply added, and the message says what was not found.
+ */
+export function applyAlternateTrait(model, block) {
+  const rows = model.list('raceTraits');
+  if (rows.some((r) => lower(r.name) === lower(block.name))) return `${block.name} is already on the sheet.`;
+  const wanted = new Set(block.replaces.map(lower));
+  const found = new Set();
+  const taken = [];       // standard traits this one now holds
+  const restored = [];    // standard traits an overlapping alternate had held, given back
+  const displaced = [];   // alternates removed because this one overlaps them
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    const nm = lower(row.name);
+    if (!nm) continue;
+    if (wanted.has(nm)) {
+      found.add(nm);
+      taken.unshift({ name: row.name, text: row.text });
+      model.listRemove('raceTraits', i);
+      continue;
+    }
+    const held = Array.isArray(row.replaced) ? row.replaced : [];
+    if (held.some((h) => wanted.has(lower(h.name)))) {
+      const t = [];
+      const r = [];
+      for (const h of held) {
+        if (wanted.has(lower(h.name))) { found.add(lower(h.name)); t.push(h); } else r.push(h);
+      }
+      taken.unshift(...t);
+      restored.unshift(...r);
+      displaced.unshift(row.name);
+      model.listRemove('raceTraits', i);
+    }
+  }
+  for (const h of restored) addRaceTrait(model, h);
+  addRaceTrait(model, { name: block.name, text: block.text, replaced: taken });
+  const missing = block.replaces.filter((n) => !found.has(lower(n)));
+  const parts = [`Added ${block.name}`];
+  if (taken.length) parts.push(`replacing ${taken.map((t) => t.name).join(' and ')}`);
+  if (displaced.length) parts.push(`displacing ${displaced.join(' and ')}${restored.length ? ` (${restored.map((t) => t.name).join(' and ')} restored)` : ''}`);
+  if (missing.length) parts.push(`(${missing.join(', ')} not on the sheet)`);
+  return `${parts.join(', ')}.`;
 }
 
 /* ---------------- packing a character's own content ---------------- */
