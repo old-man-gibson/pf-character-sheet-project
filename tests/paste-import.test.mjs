@@ -500,6 +500,161 @@ Privacy policyAbout Library of MetzofitzDisclaimersTerms of UseDonate to Mirahez
   check('archetypes: names with flavour, none for the one without, publisher lines skipped', r.blocks[2].text.split('\n').map((l) => l.split(':')[0]), ['Ancestral Inheritor', 'Legendary Samurai Alternate Class Features', 'Ronin']);
 }
 
+console.log('archetype pages -- a whole archetype, and the alternate-class-features page split into options');
+{
+  const pages = `Anonymous
+Library of Metzofitz
+Search
+Search Library of Metzofitz
+Oni Warrior
+NamespacesPageDiscussionPage actionsReadView sourceHistoryPurge
+Legendary Samurai archetypes
+Oni Warrior
+Information
+Classes Available
+Legendary Samurai (class)
+Sources
+Legendary Samurai, pg. 18
+The path of the legendary samurai often draws those with less civilized tactics. Oni warriors are those who feed on the thrill of combat, embracing the battlefield with an unbound vigor.
+
+Weapon Proficiencies: An oni warrior is proficient simple and martial weapons as well as all two-handed melee bludgeoning weapons.
+
+This ability alters the legendary samurai's weapon proficiencies.
+
+Rage (Ex): At 1st level, an oni warrior gains the rage class feature as though they were a barbarian of their class level, and a rage power of their choice.
+
+This ability replaces challenge and sheathe control.
+
+Spirit Weapon (Su): At 1st level, the oni receives a weapon of their choice, which houses the soul of their ancestors. A spirit weapon is an intelligent weapon and has the following traits:
+
+Intelligence: This is the intelligence score of the spirit weapon. It starts at 9 and increases by 1 for every two levels of the legendary samurai.
+Ego: A spirit weapon starts with an ego of 3, and that ego increases as the spiritual weapon becomes more powerful.
+This ability replaces advanced blade.
+
+Greater Rage (Ex): At 10th level, an oni warrior gains the greater rage class feature.
+
+This ability replaces iaijutsu master.
+
+Related
+Archetypes
+Ronin
+Classes
+Barbarian
+
+
+Legendary Samurai (class)
+Class Options
+Barbarian Rage Power
+
+Navigation
+Main page
+Recent changes
+Categories
+Legendary Samurai (class) archetypes
+This page was last edited on 18 August 2026, at 02:11.
+
+
+Anonymous
+Library of Metzofitz
+Search
+Search Library of Metzofitz
+Legendary Samurai Alternate Class Features
+NamespacesPageDiscussionPage actionsReadView sourceHistoryPurge
+
+Notice
+The following content has been errata'd by its original author(s) and may not match the original sourcetext. For the errata log, see Here.
+Legendary Samurai archetypes
+Legendary Samurai Alternate Class Features
+Information
+Classes Available
+Legendary Samurai (class)
+Systems
+Spheres of Might
+Sources
+Legendary Samurai, pgs. 11–13
+Alternate class features are small, modular archetypes. They swap out a single class feature (or a few related class features) for new abilities, and a player is able to build the legendary samurai that best fits their ideas.
+
+
+Contents
+1\tLegendary Samurai
+1.1\tChallenge
+1.2\tIaijutsu Strike
+2\tRelated
+Legendary Samurai
+Challenge
+The following options alter or replace the legendary samurai's challenge. If the legendary samurai gains ranks in another class with these abilities, those class levels stack for the purpose of advancing those abilities.
+
+Favored Enemy (Ex): At 1st level, a legendary selects a creature type from the ranger favored enemies table, gaining a +2 bonus on Bluff, Knowledge, Perception, Sense Motive, and Survival checks against creatures of their selected type.
+
+This ability replaces challenge.
+
+Weapon Training (Ex): At 1st level, a legendary samurai chooses a one-handed slashing weapon, receiving Weapon Focus as a bonus feat for their chosen weapon.
+
+This ability replaces challenge.
+
+Iaijutsu Strike
+The following options alter or replace the legendary samurai's iaijutsu strike or iaijutsu techniques.
+
+Samurai's Finesse (Ex): At 1st level, a legendary samurai gains Weapon Finesse as a bonus feat and can use it with all one-handed slashing and piercing weapons with which they are proficient.
+
+This ability alters iaijutsu strike. This alternative class feature can be combined with either the Yumi Sniper archetype or the Skirmisher's Strike alternative class feature (but not both), in which case both alterations to iaijutsu strike apply.
+
+Related
+Archetypes
+Classes
+Bard
+
+Navigation
+Main page
+Recent changes
+This page was last edited on 24 February 2026, at 00:04.
+`;
+  const r = parsePaste(pages);
+  check('one archetype block, then one block per alternate class feature', r.blocks.map((b) => `${b.kind}:${b.name}${b.single ? '*' : ''}`),
+    ['archetype:Oni Warrior', 'archetype:Favored Enemy*', 'archetype:Weapon Training*', "archetype:Samurai's Finesse*"]);
+  check('nothing left over -- chrome, notice, contents, section headings and intros all consumed', r.leftovers.length, 0);
+  const oni = r.blocks[0];
+  check('class and source from the info box', [oni.class, oni.source], ['Legendary Samurai', 'Legendary Samurai, pg. 18']);
+  ok('flavour is the description', /less civilized tactics/.test(oni.text));
+  check('features with what each does, sub-entries folded into Spirit Weapon', oni.features.map((f) => [f.name, f.level, f.replaces, f.alters]), [
+    ['Weapon Proficiencies', 1, [], ['weapon and armor proficiency']],
+    ['Rage', 1, ['challenge', 'sheath control'], []],
+    ['Spirit Weapon', 1, ['advanced blade'], []],
+    ['Greater Rage', 10, ['iaijutsu master'], []],
+  ]);
+  ok('the sub-entries and the "replaces" sentence are inside Spirit Weapon', /Intelligence: This is the intelligence/.test(oni.features[2].text) && /Ego: A spirit weapon/.test(oni.features[2].text) && /This ability replaces advanced blade\./.test(oni.features[2].text));
+  const acf = r.blocks.slice(1);
+  check('each option is a single-feature archetype for the class, sectioned', acf.map((b) => [b.class, b.features.length, b.text]),
+    [['Legendary Samurai', 1, 'Alternate class feature (Challenge) for the Legendary Samurai.'], ['Legendary Samurai', 1, 'Alternate class feature (Challenge) for the Legendary Samurai.'], ['Legendary Samurai', 1, 'Alternate class feature (Iaijutsu Strike) for the Legendary Samurai.']]);
+  check('their swaps', acf.map((b) => [b.features[0].replaces, b.features[0].alters]), [[['challenge'], []], [['challenge'], []], [[], ['iaijutsu strike']]]);
+  check('the combination note is read', acf[2].stacksWith, ['Yumi Sniper', "Skirmisher's Strike"]);
+  ok('the report says so', /Archetype Oni Warrior for Legendary Samurai: 4 feature\(s\); replaces challenge, sheath control, advanced blade, iaijutsu master; alters weapon and armor proficiency\./.test(r.report[0]) && /3 alternate class feature\(s\)/.test(r.report[1]));
+}
+
+console.log('a plain homebrew archetype document -- no info box, title features with colons, free-form swap sentences');
+{
+  const doc = "Isougiri\nDescription\nThe Isougiri swung his sword, sheathed it, and drew it again, thousands of times every day. Sweat built up on his brow, his arms and legs burning from the exertion of perfecting the same motion.\nThe tree before him fell. \nThe boulder behind it slid apart. \nBy understanding this motion, he began to learn how to cleave all of space… and, soon after, refute the Gods themselves.\nClass Features\nScholar’s Education\nThis archetype is only available to Isougiri with the Scholarly Samurai feat. If they retrain or permanently lose the feat, they also lose access to this archetype.\nTopological Theory (Ex)\nAt 1st level, An Isougiri gains access to Theory, using it to focus his attacks. An Isougiri begins the day with no Theory, but can gain Theory in the following ways (An Isougiri cannot gain Theory from each of these more than once per round and must be in combat to gain Theory):\nOpening Theorem: Whenever the Isougiri rolls initiative, he gains 1 Theory.\nProven Lemma: Whenever the Isougiri successfully damages a creature using Topological Draw, he gains 1 Theory.\nHis Theory goes up or down throughout the day, but usually cannot go higher than his Intelligence modifier (minimum 1), though some feats, abilities, and magic items may affect this maximum.\nThis feature alters Spirit and counts as such for items, class features, and feats. Opening Theorem, Proven Lemma, and Observed Contradiction count as Spirited Initiative, Samurai Strike, and Warrior's Guard respectively.\nBounded Domain (Ex)\nBounded Domain defines the range of the Isougiri's Topological Draw and Topological Iaijutsu Techniques and is centered on the Isougiri himself at all times. Other attacks are not subject to Bounded Domain or affected by it.\nThe domain has a range of 20 feet at level 1 and increases by 5 feet at level 4 and every three levels thereafter, to a maximum of 50 feet at level 19.\nTopological Draw (Ex)\nAt 1st level, An Isougiri can strike in the blink of an eye, cutting down foes with his unique talents. \nThe Isougiri can make an attack action with a non-thrown melee weapon the Isougiri is proficient with, as long as it is sheathed before the attack.\nThis alters Iaijutsu Strike\nTopological Iaijutsu Techniques\nAt 1st level and every four levels afterwards, An Isougiri gains the ability to alter their iaijutsu strike, gaining a topological iaijutsu technique of their choice (See end of document).\nTopological Draw alters Iaijutsu Techniques. Topological Draw counts as Iaijutsu Techniques for items, feats, and class features.\nTopological Precision (Ex)\nAt 7th level, the save DC of all Topological Iaijutsu Techniques used against a target increases by ½ the target’s Mapped counters, rounded up.\nThis replaces Sheathe Block.\nTopological Step: Projection (Ex)\nAt 8th level, the Isougiri can spend 1 Theory as a swift action to project himself partially into the complex plane.\nLevel 12: The Isougiri gains a +2 bonus to his Reflex saves for the duration of Topological Step: Projection. This bonus increases by 1 at levels 16 and 20.\nTopological Step: Projection replaces Dragon Defense.\nSpatial Discontinuity (Su)\nAt 11th level, the Isougiri can spend 1 Theory to select one or more edges between two squares within his Bounded Domain as boundaries.\nThis replaces the 10th and 14th level Warrior’s grace.\n\nAxiomatic Corollary: Empty Set ∅ (Su)\nAt level 20, the Isougiri proves the ultimate corollary: by severing his own topological form, he becomes the primitive empty set ∅ that is part of every set.\n\nTopological Iaijutsu Techniques\n\nCuts\nMapped: A creature gains Mapped 1 for a number of rounds equal to the Isougiri’s intelligence modifier. Additional applications increase its counter by 1.\n\nZero-Point Thrust (Ex)\nThe Isougiri makes a melee attack against a target or space within his Bounded Domain. If the target is flanked, flat-footed, or otherwise loses its Dexterity bonus to AC, it gains Mapped before the attack resolves.\nLevel 6: On a failed Fortitude save, the target also loses natural armor bonuses to AC equal to its Mapped counter for the duration.\nThis replaces the Ranged Cut and Armor Rending Slash Iaijutsu Techniques.\n\nSlashes\n\nVolumetric Slash (Ex)\nThe Isougiri makes a melee attack against a Mapped creature within his Bounded Domain. Large or larger creatures take additional damage equal to 2d6 per 3 class levels.\nAn Isougiri must be at least 5th level to select this technique.\n";
+  const r = parsePaste(doc);
+  check('one archetype, nothing left over', [r.blocks.map((b) => `${b.kind}:${b.name}`), r.leftovers.length], [['archetype:Isougiri'], 0]);
+  const a = r.blocks[0];
+  check('class not named, description is the flavour', [a.class, /swung his sword/.test(a.text), /The tree before him fell/.test(a.text)], ['', true, true]);
+  check('features, with colons in titles and untyped title features kept; the technique menu is not features', a.features.map((f) => f.name), ['Scholar’s Education', 'Topological Theory', 'Bounded Domain', 'Topological Draw', 'Topological Iaijutsu Techniques', 'Topological Precision', 'Topological Step: Projection', 'Spatial Discontinuity', 'Axiomatic Corollary: Empty Set ∅']);
+  const menu = a.features.find((x) => x.name === 'Topological Iaijutsu Techniques');
+  check('the menu is the feature\x27s options, by category, with a minimum level where the text says so', menu.options.map((o) => [o.category, o.name, o.type, o.minLevel]), [['Cuts', 'Zero-Point Thrust', 'Ex', null], ['Slashes', 'Volumetric Slash', 'Ex', 5]]);
+  ok('"Mapped:" is the menu\x27s information, not an option', /^Mapped: A creature gains Mapped 1/.test(menu.optionsInfo) && !menu.options.some((o) => o.name === 'Mapped'));
+  ok('an option carries its own replaces sentence as its text; the feature\x27s alters is read off it', /replaces the Ranged Cut/.test(menu.options[0].text));
+  const f = (n) => a.features.find((x) => x.name.startsWith(n));
+  check('"This feature alters Spirit and counts as such…" -> alters spirit only', [f('Topological Theory').replaces, f('Topological Theory').alters], [[], ['spirit']]);
+  check('"This alters Iaijutsu Strike" with no full stop', f('Topological Draw').alters, ['iaijutsu strike']);
+  check('"Topological Draw alters Iaijutsu Techniques." -- a named subject', f('Topological Iaijutsu').alters, ['iaijutsu technique']);
+  check('"This replaces Sheathe Block." at 7th', [f('Topological Precision').level, f('Topological Precision').replaces], [7, ['sheath block']]);
+  check('"Topological Step: Projection replaces Dragon Defense." -- subject with a colon', [f('Topological Step').level, f('Topological Step').replaces], [8, ['dragon defense']]);
+  check('"replaces the 10th and 14th level Warrior’s grace" -> altered, not gone', [f('Spatial').replaces, f('Spatial').alters], [[], ['warriors grace']]);
+  check('"At level 20"', f('Axiomatic').level, 20);
+  ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
+  ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
+}
+
 console.log('splitChunk -- a leftover as name and text for tagging');
 check('label line', splitChunk("Editor's Note: Discipline Exchanges\nMore text here."), { name: "Editor's Note", type: null, text: 'Discipline Exchanges\nMore text here.' });
 check('typed label', splitChunk('Rage (Ex): A barbarian can rage.'), { name: 'Rage', type: 'Ex', text: 'A barbarian can rage.' });

@@ -79,8 +79,8 @@ function markWikiChrome(lines, used) {
       // the breadcrumb ("Classes" / "Veils" / "Races") and the repeated title below
       let k = i + 1;
       while (k < t.length && (!t[k] || used[k] || CHROME_NOTICE.test(t[k]))) k++;
-      if (k < t.length && /^(?:Classes|Veils|Races|Feats|Spells|Archetypes|Prestige Classes|Talents|Powers|Traits)$/i.test(t[k])) { used[k] = true; k++; }
-      if (k < t.length && j >= 0 && t[k] === t[i - 1]) used[k] = true;
+      if (k < t.length && /^(?:Classes|Veils|Races|Feats|Spells|Archetypes|Prestige Classes|Talents|Powers|Traits|.+ archetypes)$/i.test(t[k])) { used[k] = true; k++; }
+      if (k < t.length && i - 1 >= 0 && t[k] === t[i - 1]) used[k] = true;
     }
     if (/^Navigation$/i.test(l) && /^Main page$/i.test(t[i + 1] || '')) {
       // the navigation column and footer run to the end of the page's copy
@@ -118,7 +118,7 @@ export function parsePaste(text) {
     const slice = lines.slice(seg.start, seg.end);
     const pre = new Set();
     for (let i = seg.start; i < seg.end; i++) if (used[i]) pre.add(i - seg.start);
-    const reader = { class: readClass, race: readRace, veil: readVeil }[seg.kind];
+    const reader = { class: readClass, race: readRace, veil: readVeil, archetype: readArchetype }[seg.kind];
     const out = reader(slice, pre);
     for (const i of out.used) used[seg.start + i] = true;
     for (let i = seg.start; i < seg.end; i++) nearOf[i] = { kind: seg.kind, name: out.name };
@@ -201,6 +201,27 @@ export function findSegments(lines, pre = []) {
     } else if (/^Standard Racial Traits$/i.test(t) || /^Ability Score Modifiers?:/i.test(t)) {
       if (!anchors.some((a) => a.kind === 'race' && i - a.at < 40)) anchors.push({ kind: 'race', at: i });
     } else if (/^Chakra Slots?:?$/i.test(t)) anchors.push({ kind: 'veil', at: i });
+    else if (/^Classes Available$/i.test(t) && /\(class\)$/i.test(nextText(i))) {
+      // an archetype page: its info box names the class it is for (a veil's
+      // names "(Veil List)" entries and anchors on its chakra slot instead)
+      anchors.push({ kind: 'archetype', at: i });
+    } else if (SWAP_SENTENCE.test(t)) {
+      // a plain archetype document -- homebrew in a text file, say -- has no
+      // info box, but its features each say what they replace or alter. The
+      // first such sentence since the last boundary anchors it; a class page
+      // never has one, and a wiki archetype page has anchored on its box.
+      const last = anchors[anchors.length - 1];
+      const sinceLast = last ? lines.slice(last.at, i) : lines.slice(0, i);
+      const doubleBlank = sinceLast.some((l, k) => k > 1 && isBlank(l) && isBlank(sinceLast[k - 1]));
+      const newPage = sinceLast.some((l) => /^Namespaces/i.test(l.trim()));
+      // A wiki page's own box anchor precedes any of its sentences, so this
+      // is another thing only past a page head; a plain document is another
+      // thing past a double blank; a class's sentences are its own.
+      const isNew = !last
+        || (last.kind === 'archetype' && (last.loose ? doubleBlank || newPage : newPage))
+        || (last.kind !== 'archetype' && (doubleBlank || newPage));
+      if (isNew) anchors.push({ kind: 'archetype', at: i, loose: true });
+    }
   });
   const segments = [];
   let floor = 0;
@@ -217,6 +238,8 @@ export function findSegments(lines, pre = []) {
   return segments;
 }
 
+/** A feature saying what it does to its class: "This ability replaces challenge and kiai arts.", "This alters Iaijutsu Strike", "Topological Draw alters Iaijutsu Techniques." */
+const SWAP_SENTENCE = /(?:^|\.\s+)(?:This (?:ability|feature|alteration|alternative class feature|option)?\s*(?:replaces|alters|modifies)\s+\S|[A-Z][^.\n:]{0,50}?(?::\s+[A-Z][^.\n]{0,40}?)?\s+(?:replaces|alters)\s+(?:the\s+)?[A-Z0-9])/;
 const TAIL_LINE = /^(?:PFS Legal )?[A-Z][\w' -]+ \([^)]*pg\.\s*\d+[^)]*\):|^Favored Class (?:Options|Bonuses)$|^Alternate Capstones$|^Racial Subtypes$|^Archetypes$|^Related$|^FAQ$|^Contents$/;
 const isTableRow = (line) => /^\d{1,2}(?:st|nd|rd|th)\t/.test(line) || /^\d{1,2}(?:st|nd|rd|th)\s+\+\d+/.test(line.trim());
 const doubleBlankAbove = (lines, i) => i - 1 >= 0 && isBlank(lines[i]) && isBlank(lines[i - 1]);
@@ -241,8 +264,9 @@ function backReach(lines, anchor, floor, pre = []) {
       i--; continue;
     }
     if (TAIL_LINE.test(t) || isTableRow(lines[i])) break;
-    if (anchor.kind === 'veil') {
-      if (words(t) <= 5 && /^[A-Z]/.test(t) && !/[.:]$/.test(t)) start = i;
+    if (anchor.kind === 'veil' || anchor.kind === 'archetype') {
+      // the title is a short line above the box; the reach ends at the boundary rules above
+      if (words(t) <= 6 && /^[A-Z]/.test(t) && !/[.:]$/.test(t)) start = i;
       i--; continue;
     }
     start = i;
@@ -646,11 +670,18 @@ export function readClassTable(lines) {
  * A feature runs until the next feature, a heading, or the favored-class /
  * archetype tail. Returns [{name, type, text, title, source, level, from, to}].
  */
-export function readFeatureProse(lines, { skipLabels = new Set(), startAt = 0, tableKeys = new Set(), mark = () => {}, pre = new Set() } = {}) {
+export function readFeatureProse(lines, { skipLabels = new Set(), startAt = 0, tableKeys = new Set(), mark = () => {}, pre = new Set(), mode = 'class' } = {}) {
   const out = [];
   const inline = /^([A-Z][^:\n]{1,60}?)\s*(?:\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\))?\s*:\s+(.{12,})$/;
-  const titleRe = /^([A-Z][^:\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
-  const levelOf = (t) => Number(String(t).match(/(?:At|Starting at|At the|Beginning at)\s+(\d{1,2})(?:st|nd|rd|th) level/i)?.[1]) || null;
+  const titleRe = /^([A-Z][^\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
+  // a short capitalised line with no closing punctuation -- but not a swap sentence that lost its full stop ("This alters Iaijutsu Strike")
+  const titleLike = (l) => l && words(l) <= 8 && /^[A-Z]/.test(l) && !/[.:;,]$/.test(l) && !inline.test(l) && !titleRe.test(l) && !/^This\b/.test(l) && !SWAP_SENTENCE.test(l);
+  const nextNonBlank = (k) => { let j = k + 1; while (j < lines.length && (!lines[j].trim() || pre.has(j))) j++; return (lines[j] || '').trim(); };
+  const SECTION = /^(?:Description|Class Features|Cuts|Slashes|Techniques|Boosts|Counters|Stances|Talents|Deeds|Notes|Related)$/i;
+  // the level a feature arrives at: "At 3rd level, …" opening a sentence, or "of 9th level or higher"
+  const levelOf = (t) => Number(String(t).match(/(?:^|[.:;]\s+|\n)(?:At|Starting at|At the|Beginning at)\s+(\d{1,2})(?:st|nd|rd|th) level/i)?.[1]
+    || String(t).match(/(?:^|[.:;]\s+|\n)At level (\d{1,2})\b/i)?.[1]
+    || String(t).match(/\bof (\d{1,2})(?:st|nd|rd|th) level or higher/i)?.[1]) || null;
   const type1 = (t) => (t ? t.split(' ')[0] : null);
   let cur = null;          // the feature being built
   let afterHeading = false; // a heading's own intro paragraph is not a feature's
@@ -658,20 +689,38 @@ export function readFeatureProse(lines, { skipLabels = new Set(), startAt = 0, t
 
   const start = (name, type, text, i, extra = {}) => {
     cur = { name: name.trim(), type: type1(type), text: text.trim(), title: false, source: '', level: levelOf(text), from: i, to: i, ...extra };
+    if (optionSection && !cur.optionOf && !cur.infoOf) {
+      // typed entries are the options; an untyped "Name: text" is information about them
+      if (cur.type || cur.title) { cur.optionOf = optionSection; cur.category = optionCategory; }
+      else cur.infoOf = optionSection;
+    }
     out.push(cur);
     afterHeading = false;
   };
   const append = (t, i, sep = '\n\n') => { if (!cur) return false; cur.text += (cur.text ? sep : '') + t; cur.to = i; return true; };
 
+  let prevText = '';        // the last non-blank line seen
+  let blankBefore = true;   // was the line before this one blank?
+  // An options section: a heading such as "Topological Iaijutsu Techniques"
+  // or "Rogue Talents" over a menu the player picks from, with sub-headings
+  // ("Cuts", "Slashes") as categories. Typed entries under it are options of
+  // the feature it names, untyped "Name: text" entries its information.
+  const OPTIONS_HEAD = /(?:techniques?|talents?|options?|arts?|powers?|deeds?|exploits?|discoveries|hexes|arcana|evolutions?|infusions?|stances?|maneuvers?|tricks?|secrets?|mysteries|revelations?|inspirations?)$/i;
+  let optionSection = null;
+  let optionCategory = '';
   for (let i = Math.max(0, startAt); i < lines.length; i++) {
     const t = lines[i].trim();
-    if (!t || pre.has(i)) continue;
+    if (!t) { blankBefore = true; continue; }
+    if (pre.has(i)) continue;
+    const startsParagraph = blankBefore && !/:$/.test(prevText);
+    blankBefore = false;
+    const remember = () => { prevText = t; };
     if (WIKI_CHROME.test(t)) continue;
-    if (FCB_HEADING.test(t) || /^Archetypes$/i.test(t) || /^Navigation$/.test(t)) { inTail = true; cur = null; continue; }
+    if (FCB_HEADING.test(t) || /^Archetypes$/i.test(t) || /^Navigation$/.test(t) || (mode === 'archetype' && /^(?:Related|Notes)$/i.test(t))) { inTail = true; cur = null; optionSection = null; remember(); continue; }
     if (inTail) continue;
-    if (TAIL_LINE.test(t) || CLASS_HEADINGS.test(t)) { mark(i); cur = null; afterHeading = true; continue; }
-    if (afterHeading && !cur && /^Source\b/.test(t)) { mark(i); continue; }      // a section's own source line
-    if (BOILERPLATE.test(t)) { mark(i); continue; }
+    if (TAIL_LINE.test(t) || CLASS_HEADINGS.test(t)) { mark(i); cur = null; afterHeading = true; remember(); continue; }
+    if (afterHeading && !cur && /^Source\b/.test(t)) { mark(i); remember(); continue; }      // a section's own source line
+    if (BOILERPLATE.test(t)) { mark(i); remember(); continue; }
 
     let m = t.match(titleRe);
     if (m) {
@@ -682,26 +731,48 @@ export function readFeatureProse(lines, { skipLabels = new Set(), startAt = 0, t
       if (j < lines.length && /^Source\b/.test(lines[j].trim())) { source = lines[j].trim().replace(/^Source:?\s*/, ''); }
       start(m[1], m[2], '', i, { title: true, source });
       if (source) { cur.to = j; i = j; }
+      remember();
       continue;
     }
     m = t.match(inline);
     if (m && words(m[1]) <= 7 && !skipLabels.has(lower(m[1])) && !/^(?:PFS Legal|Q|A|See)$/.test(m[1])) {
       const key = featureKey(m[1]);
       const typed = !!m[2];
-      if (typed || tableKeys.has(key) || KNOWN_UNTYPED.test(m[1]) || !cur) { start(m[1], m[2], m[3], i); continue; }
-      // untyped, not on the table, under a feature: a sub-entry of it
+      // An untyped "Name: text" is a feature when the table names it, when it
+      // is one of the known ones, or -- on an archetype page, which has no
+      // table -- when it opens a paragraph of its own rather than following a
+      // line that introduced a list ("…in the following ways:"). Otherwise it
+      // is a sub-entry of the feature above.
+      const own = mode === 'archetype' ? startsParagraph : false;
+      if (typed || tableKeys.has(key) || KNOWN_UNTYPED.test(m[1]) || own || !cur) { start(m[1], m[2], m[3], i); remember(); continue; }
       append(t, i);
+      remember();
       continue;
     }
-    if (/^See:\s/i.test(t)) { append(t, i, '\n'); continue; }
-    if (afterHeading && !cur) { if (words(t) > 12) mark(i); continue; }   // a heading's intro paragraph
-    if (!cur) continue;
+    if (/^See:\s/i.test(t)) { append(t, i, '\n'); remember(); continue; }
+    if (mode === 'archetype' && titleLike(t)) {
+      const n = nextNonBlank(i);
+      // a section heading over more headings or feature lines ("Class Features", "Cuts")
+      if (SECTION.test(t) || titleLike(n) || titleRe.test(n) || inline.test(n) || !n) {
+        const namesFeature = out.some((p) => featureKey(p.name) === featureKey(t));
+        if (!SECTION.test(t) && (OPTIONS_HEAD.test(t) || namesFeature) && words(t) >= 2) { optionSection = t; optionCategory = ''; }
+        else if (optionSection && words(t) <= 3) optionCategory = t;      // "Cuts", "Slashes"
+        mark(i); cur = null; afterHeading = SECTION.test(t); remember(); continue;
+      }
+      // a feature with no type over its paragraph ("Scholar's Education", "Topological Iaijutsu Techniques")
+      if (words(n) > 12 && (words(t) >= 2 || !cur)) { start(t, null, '', i, { title: true }); remember(); continue; }
+    }
+    if (afterHeading && !cur) { if (words(t) > 12) mark(i); remember(); continue; }   // a heading's intro paragraph
+    if (!cur) { remember(); continue; }
     // a sidebar heading over a paragraph, a list line, or a continuation paragraph
     const nextLong = words(lines[i + 1] || '') > 12;
-    if (words(t) <= 8 && /^[A-Z]/.test(t) && !/[.:;,]$/.test(t) && nextLong) { append(t, i); continue; }
+    if (words(t) <= 8 && /^[A-Z]/.test(t) && !/[.:;,]$/.test(t) && nextLong) { append(t, i); remember(); continue; }
     append(t, i, /^[-–•]|^\d+\.\s|^[A-Z][^.]{0,60}$/.test(t) ? '\n' : '\n\n');
     if (cur.title && cur.level === null) cur.level = levelOf(t);
+    remember();
   }
+  // "Description" is the flavour, not a feature: the block reader takes it
+  for (const p of out) if (p.title && /^Description$/i.test(p.name)) p.flavour = true;
   return out;
 }
 
@@ -951,4 +1022,156 @@ export function readVeil(lines, pre = new Set()) {
     name, blocks: [block], used,
     report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
   };
+}
+
+/* ---------------- archetypes ---------------- */
+
+const ARCH_INFO = /^(Classes Available|Systems?|Sources?|Requirements?|Prerequisites?)$/i;
+const ACF_INTRO = /\bAlternate class features are small, modular archetypes\b/i;
+const SECTION_INTRO = /^The following options? (?:alter|replace|modify|change)/i;
+
+/**
+ * An archetype page, as the wiki lays it out: a title, an information box
+ * (Classes Available, Systems, Sources), a flavour paragraph, then the
+ * features -- each "Name (Ex): text" or "Name: text" with its own "This
+ * ability replaces X" / "alters Y" sentence -- and a Related list. One
+ * `archetype` block: what each feature replaces and alters is read off its
+ * text by the block normaliser.
+ *
+ * An "Alternate Class Features" page is the same shape with section
+ * headings ("Challenge", then "The following options alter or replace…")
+ * over independent options; each option there is its own single-feature
+ * archetype, since a player takes them one at a time.
+ */
+export function readArchetype(lines, pre = new Set()) {
+  const used = new Set(pre);
+  const mark = (i) => { if (i >= 0 && i < lines.length) used.add(i); };
+  const t = lines.map((l) => l.trim());
+
+  // Title: the line above "Namespaces", else the line before "Information".
+  let name = '';
+  const nsAt = t.findIndex((l) => /^Namespaces/i.test(l));
+  if (nsAt > 0) name = t[nsAt - 1];
+  const infoAt = t.findIndex((l) => /^Information$/i.test(l));
+  if (!name && infoAt > 0) { let j = infoAt - 1; while (j >= 0 && !t[j]) j--; name = t[j] || ''; }
+  // A plain document: the first short line that is not a heading.
+  const HEADING = /^(?:Description|Class Features|Cuts|Slashes|Techniques|Notes|Related|Contents)$/i;
+  if (!name) name = t.find((l, k) => l && !pre.has(k) && words(l) <= 6 && /^[A-Z]/.test(l) && !/[.:;,]$/.test(l) && !HEADING.test(l) && !WIKI_CHROME.test(l)) || '';
+  name = name || 'Archetype';
+
+  // The information box.
+  let className = '';
+  let system = '';
+  const sources = [];
+  let i = infoAt >= 0 ? infoAt + 1 : 0;
+  let heading = null;
+  for (; i < t.length; i++) {
+    const l = t[i];
+    if (!l) continue;
+    if (pre.has(i)) continue;
+    if (l === name && !heading) { mark(i); continue; }
+    if (lower(l) === `${lower(name)} (class)` || /\barchetypes$/i.test(l) && words(l) <= 4) { mark(i); continue; }
+    const h = l.match(ARCH_INFO);
+    if (h) { heading = lower(h[1]).replace(/s$/, ''); mark(i); continue; }
+    if (words(l) >= 12 || /[.!?]$/.test(l)) break;
+    if (!heading) { if (infoAt >= 0) { mark(i); continue; } break; }
+    mark(i);
+    if (heading === 'classes available' || heading === 'classes availabl') { if (!className) className = l.replace(/\s*\(class\)$/i, ''); }
+    else if (heading === 'system') system = system ? `${system}; ${l}` : l;
+    else if (heading === 'source') sources.push(l);
+  }
+  const bodyStart = i;
+
+  // The Alternate Class Features page: section headings over an intro line.
+  const acf = t.some((l) => ACF_INTRO.test(l)) || /alternate class features/i.test(name);
+  const sectionOf = new Array(t.length).fill('');
+  if (acf) {
+    let section = '';
+    for (let k = bodyStart; k < t.length; k++) {
+      if (pre.has(k)) continue;
+      if (SECTION_INTRO.test(t[k])) {
+        // the heading is the short line above
+        let j = k - 1;
+        while (j > bodyStart && !t[j]) j--;
+        if (j > bodyStart && words(t[j]) <= 6 && !used.has(j)) { section = t[j]; mark(j); }
+        mark(k);
+      }
+      sectionOf[k] = section;
+      // the page's own intro and its table of contents
+      if (ACF_INTRO.test(t[k]) || /^\d+(?:\.\d+)*\t\S/.test(t[k]) || /^Contents$/i.test(t[k]) || lower(t[k]) === lower(className)) mark(k);
+    }
+  }
+
+  // Flavour: the paragraph(s) before the first feature -- or, in a plain
+  // document, everything under a "Description" heading up to "Class Features".
+  const flavour = [];
+  const inline = /^([A-Z][^:\n]{1,60}?)\s*(?:\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\))?\s*:\s+(.{12,})$/;
+  const titleRe = /^([A-Z][^\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
+  const descAt = t.findIndex((l, k) => k >= bodyStart && /^Description$/i.test(l));
+  if (descAt !== -1) {
+    mark(descAt);
+    for (let k = descAt + 1; k < t.length; k++) {
+      if (!t[k]) continue;
+      if (/^Class Features$/i.test(t[k]) || inline.test(t[k]) || titleRe.test(t[k])) break;
+      flavour.push(t[k]); mark(k);
+    }
+  } else {
+    for (let k = bodyStart; k < t.length; k++) {
+      if (!t[k] || pre.has(k) || used.has(k)) continue;
+      if (lower(t[k]) === lower(name)) { mark(k); continue; }
+      if (inline.test(t[k]) || titleRe.test(t[k]) || /^(?:Related|Notes|Class Features)$/i.test(t[k])) break;
+      if (words(t[k]) > 12) { flavour.push(t[k]); mark(k); }
+    }
+  }
+  t.forEach((l, k) => { if (k >= bodyStart && /^Class Features$/i.test(l)) mark(k); });
+
+  const read = readFeatureProse(lines, { startAt: bodyStart, mark, pre: used, mode: 'archetype' }).filter((p) => !p.flavour && lower(p.name) !== lower(name));
+  for (const p of read) for (let k = p.from; k <= p.to; k++) mark(k);
+  // A menu of options ("Topological Iaijutsu Techniques" → Cuts / Slashes) belongs
+  // to the feature it names, as its options; the information entries under it
+  // (a "Mapped:" condition) as its notes. A menu naming no feature gets one.
+  const prose = read.filter((p) => !p.optionOf && !p.infoOf);
+  const minLevel = (t) => Number(String(t).match(/must be (?:at least |of )?(?:level )?(\d{1,2})(?:st|nd|rd|th)?(?: level)?(?: or higher)? to select/i)?.[1]) || null;
+  for (const p of read) {
+    if (!p.optionOf && !p.infoOf) continue;
+    const section = p.optionOf || p.infoOf;
+    let owner = prose.find((q) => featureKey(q.name) === featureKey(section));
+    if (!owner) { owner = { name: section, type: null, text: '', title: true, source: '', level: null, from: p.from, to: p.to }; prose.push(owner); }
+    if (p.optionOf) {
+      owner.options ||= [];
+      owner.options.push({ name: p.name, type: p.type, category: p.category || '', text: p.text, minLevel: minLevel(p.text) });
+    } else {
+      owner.optionsInfo = [owner.optionsInfo, `${p.name}: ${p.text}`].filter(Boolean).join('\n\n');
+    }
+  }
+  // "Related" and everything under it is the site's cross-links
+  const relAt = t.findIndex((l, k) => k >= bodyStart && /^Related$/i.test(l));
+  if (relAt !== -1) for (let k = relAt; k < t.length; k++) if (t[k] && words(t[k]) <= 6) mark(k);
+  // "Notes" holds errata about the page; a leftover for the player to judge
+  const source = sources.join('; ');
+  const blocks = [];
+  const report = [];
+  if (acf) {
+    for (const p of prose) {
+      const section = sectionOf[p.from] || '';
+      const block = normalizeBlock({
+        kind: 'archetype', name: p.name, class: className, source, single: true,
+        text: section ? `Alternate class feature (${section}) for the ${className || 'class'}.` : `Alternate class feature for the ${className || 'class'}.`,
+        features: [{ name: p.name, type: p.type, level: p.level, text: p.text }],
+      });
+      blocks.push(block);
+    }
+    report.push(`${prose.length} alternate class feature(s) for ${className || 'the class'}, each its own archetype block: ${prose.map((p) => p.name).join(', ')}.`);
+    return { name: name || className, blocks, report, used };
+  }
+  const block = normalizeBlock({
+    kind: 'archetype', name, class: className, source, text: [flavour.join('\n\n'), system && `System: ${system}`].filter(Boolean).join('\n\n'),
+    features: prose.map((p) => ({ name: p.name, type: p.type, level: p.level, text: p.text, options: p.options || [], optionsInfo: p.optionsInfo || '' })),
+  });
+  blocks.push(block);
+  const rep = new Set(block.features.flatMap((f) => f.replaces));
+  const alt = new Set(block.features.flatMap((f) => f.alters));
+  const menus = block.features.filter((x) => x.options.length);
+  report.push(`Archetype ${name} for ${className || 'a class the text does not name — set it in the block form'}: ${block.features.length} feature(s)${menus.length ? ` (${menus.map((x) => `${x.name}: ${x.options.length} options`).join('; ')})` : ''}${rep.size ? `; replaces ${[...rep].join(', ')}` : ''}${alt.size ? `; alters ${[...alt].join(', ')}` : ''}${block.stacksWith.length ? `; combines with ${block.stacksWith.join(', ')}` : ''}.`);
+  return { name, blocks, report, used };
 }

@@ -42,6 +42,7 @@ export const BLOCK_KINDS = {
   template: { label: 'Feature group', lands: 'A template with its features (Template tab)' },
   tracker: { label: 'Tracker', lands: 'Trackers tab' },
   veil: { label: 'Veil', lands: 'Its chakra slot on the Akashic tab (shaped, essence 0)' },
+  archetype: { label: 'Archetype', lands: 'Its class on the sheet: replaced features leave the Progression ladder and Template group, the new ones go in; a pill on the class row removes it and restores them' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 
@@ -125,6 +126,36 @@ export function normalizeBlock(block) {
       };
     case 'veil':
       return { ...base, slot: str(b.slot ?? b.chakra).trim(), descriptor: str(b.descriptor).trim() };
+    case 'archetype': {
+      const className = str(b.class ?? b.className).trim();
+      const features = arr(b.features).map((f) => {
+        const text = str(f?.text);
+        const swaps = parseSwaps(text, className);
+        const given = (k) => arr(f?.[k]).map((s) => swapKey(s, className)).filter(Boolean);
+        return {
+          name: str(f?.name).trim(),
+          type: featureType(f?.type),
+          level: f?.level === null || f?.level === undefined || f?.level === '' ? levelInText(text) : Math.max(1, Math.min(20, num(f.level, 1))),
+          text,
+          replaces: given('replaces').length ? given('replaces') : swaps.replaces,
+          alters: given('alters').length ? given('alters') : swaps.alters,
+          // a menu the player picks from (talents, techniques…), and its notes
+          options: arr(f?.options).map((o) => ({
+            name: str(o?.name).trim(), type: featureType(o?.type), category: str(o?.category).trim(), text: str(o?.text),
+            minLevel: o?.minLevel === null || o?.minLevel === undefined || o?.minLevel === '' ? null : Math.max(1, Math.min(20, num(o.minLevel, 1))),
+          })).filter((o) => o.name),
+          optionsInfo: str(f?.optionsInfo),
+        };
+      }).filter((f) => f.name);
+      const stacks = arr(b.stacksWith).map((s) => str(s).trim()).filter(Boolean);
+      return {
+        ...base,
+        class: className,
+        single: bool(b.single),
+        features,
+        stacksWith: stacks.length ? stacks : parseStacksWith(features.map((f) => f.text).join('\n')),
+      };
+    }
     case 'note':
       return { ...base, name: base.name || str(b.title).trim(), text: base.text || str(b.body) };
     default:
@@ -154,6 +185,103 @@ export function parseReplaces(text) {
     for (const s of list) if (!out.includes(s.toLowerCase())) out.push(s.toLowerCase());
   }
   return out;
+}
+
+/* ---------------- archetypes: what a feature swaps ---------------- */
+
+/**
+ * The key a class feature is matched by, across the ways a page names it:
+ * "Trap sense +1" / "Trap Sense (Ex)" / "kiai art" / "Kiai Arts" are one key;
+ * "the legendary samurai's weapon proficiencies", "armor proficiencies" and
+ * "proficiencies" are all the one proficiency feature; "iaijutsu master" and
+ * "iaijutsu mastery" meet on their stem.
+ */
+export function swapKey(s, className = '') {
+  let k = lower(s).replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '').replace(/sheathe/g, 'sheath').trim();
+  if (/proficienc/.test(k)) return 'weapon and armor proficiency';
+  const cls = lower(className);
+  if (cls) k = k.replace(new RegExp(`^(?:the\\s+|a\\s+|an\\s+)?${cls.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['’]s\\s+(?:normal\\s+)?`), '');
+  k = k
+    .replace(/^(?:the|a|an)\s+/, '')
+    .replace(/^normal\s+/, '')
+    .replace(/\s+class features?$/, '')
+    .replace(/\s+abilit(?:y|ies)$/, '')
+    .replace(/\s*[+\-–]\s*\d+(?:\/[+\-–—]|\/-)?\s*$/, '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  k = k.replace(/(\w{3,})s$/, '$1');                          // plural-insensitive on the last word
+  k = k.replace(/(\w{5,})y$/, '$1');                          // "iaijutsu mastery" / "iaijutsu master"
+  return k;
+}
+
+/**
+ * What an archetype feature does to the class, read off its own text:
+ *   "This ability replaces challenge and kiai arts."
+ *   "This ability alters resolve."   "This modifies proficiencies."
+ *   "This alters a legendary samurai's normal weapon and armor proficiencies."
+ *   "This ability replaces the determined ability of the resolve class feature."
+ *   "This ability replaces the duty's call kiai art."
+ * A sub-ability being replaced ("the determined ability of resolve", "the
+ * duty's call kiai art") means the parent feature is altered, not gone.
+ */
+export function parseSwaps(text, className = '') {
+  const replaces = [];
+  const alters = [];
+  const push = (list, k) => { if (k && k.length <= 50 && !list.includes(k)) list.push(k); };
+  // "This ability replaces X." / "This alters X" (a line with no full stop) /
+  // "Topological Draw alters Iaijutsu Techniques." / "Topological Step: Projection replaces Dragon Defense."
+  const re = /(?:^|[.\n]\s*)(?:This (?:ability |alteration |feature |alternative class feature |option )?|[A-Z][^.\n:]{0,40}?(?::\s+[A-Z][^.\n]{0,40}?)?\s+)(replaces|alters|modifies|changes)\s+([^.\n]+?)(?:\.|\n|$)/g;
+  // a named sub-ability -- "the duty's call kiai art", "the Ranged Cut and Armor Rending Slash Iaijutsu Techniques":
+  // definite ("the …"), so not "challenge and kiai arts"
+  const SUB = /^the\s+.+?\s+(kiai art|iaijutsu technique|rage power|deed|talent|discovery|hex|revelation|exploit)s?$/i;
+  const BARE = /^(?:the\s+)?(?:kiai arts?|iaijutsu techniques?|rage powers?|deeds?|talents?|discover(?:y|ies)|hexe?s?|revelations?|exploits?)$/i;
+  for (const m of str(text).matchAll(re)) {
+    const verb = m[1].toLowerCase();
+    let list = m[2].trim()
+      // "…alters Spirit and counts as such for items, class features, and feats"
+      .replace(/\s+and\s+counts?\s+as\s+.*$/i, '')
+      .replace(/\s+for (?:the purposes? of|items|feats)\b.*$/i, '');
+    // "the X ability of the Y class feature" -> Y, altered
+    const sub = list.match(/^(?:the\s+)?(.+?)\s+abilit(?:y|ies)\s+of\s+(?:the\s+)?(.+?)\s+class features?$/i);
+    if (sub) { push(alters, swapKey(sub[2], className)); continue; }
+    // "the 10th and 14th level Warrior's grace" -> some of a feature's instances: altered
+    const partial = list.match(/^(?:the\s+)?\d+(?:st|nd|rd|th)(?:\s*(?:,|and)\s*\d+(?:st|nd|rd|th))*[- ]level\s+(.+)$/i);
+    if (partial) { push(alters, swapKey(partial[1], className)); continue; }
+    // "the duty's call, charm kiai art" -> kiai art, altered: one named sub-ability, commas and all
+    const named = list.match(SUB);
+    if (named && verb === 'replaces' && !BARE.test(list)) { push(alters, swapKey(named[1], className)); continue; }
+    // "weapon and armor proficiencies" is one thing, whatever the "and"
+    if (/proficienc/i.test(list) && !/,/.test(list)) { push(verb === 'replaces' ? replaces : alters, 'weapon and armor proficiency'); continue; }
+    const parts = list.replace(/\s*,?\s+(?:and|or)\s+/gi, ', ').split(/,\s*/).map((x) => x.trim()).filter(Boolean);
+    for (const p of parts) push(verb === 'replaces' ? replaces : alters, swapKey(p, className));
+  }
+  return { replaces, alters };
+}
+
+/** "…can be combined with either the Yumi Sniper archetype or the Skirmisher's Strike alternative class feature" -> those names. */
+export function parseStacksWith(text) {
+  const out = [];
+  for (const m of str(text).matchAll(/can be combined with (?:either )?(?:the )?([^.]+?)(?:,? in which case|\.|$)/gi)) {
+    for (const p of m[1].split(/\s*(?:,|\bor\b|\band\b)\s*/)) {
+      const n = p.replace(/\s*\(but not both\)\s*/i, ' ').trim().replace(/^(?:either|the)\s+/i, '')
+        .replace(/\s+(?:archetype|alternative class feature|alternate class feature|option)$/i, '').trim();
+      if (n && !/^both$/i.test(n) && !out.includes(n)) out.push(n);
+    }
+  }
+  return out;
+}
+
+const levelInText = (t) => Number(str(t).match(/(?:^|[.:;]\s+|\n)(?:At|Starting at|At the|Beginning at)\s+(\d{1,2})(?:st|nd|rd|th) level/i)?.[1]
+  || str(t).match(/(?:^|[.:;]\s+|\n)At level (\d{1,2})\b/i)?.[1]
+  || str(t).match(/\bof (\d{1,2})(?:st|nd|rd|th) level or higher/i)?.[1]) || 1;
+
+/** Every feature key an archetype touches -- what it replaces and what it alters. */
+export function archetypeTouches(block) {
+  const set = new Set();
+  for (const f of arr(block?.features)) { for (const k of f.replaces || []) set.add(k); for (const k of f.alters || []) set.add(k); }
+  return set;
 }
 
 /** 'Full' / '3/4' / 'medium' / '1/2' -> the number the Classes table stores. */
@@ -620,6 +748,8 @@ export function applyBlock(model, rawBlock) {
       model.listAdd(`akashic.slots.${si}.veils`, { name: block.name, desc: block.text, essence: 0 });
       return `Shaped ${block.name} ${where} ${slotName} slot on the Akashic tab (essence 0).`;
     }
+    case 'archetype':
+      return applyArchetype(model, block);
     case 'note':
       model.listAdd('notes', { title: block.name, body: block.text });
       return `Added note ${block.name || '(untitled)'}.`;
@@ -692,6 +822,223 @@ export function applyAlternateTrait(model, block) {
   if (displaced.length) parts.push(`displacing ${displaced.join(' and ')}${restored.length ? ` (${restored.map((t) => t.name).join(' and ')} restored)` : ''}`);
   if (missing.length) parts.push(`(${missing.join(', ')} not on the sheet)`);
   return `${parts.join(', ')}.`;
+}
+
+/* ---------------- archetypes on a character ---------------- */
+
+/**
+ * The class row an archetype applies to: the one named, or the only class
+ * on the sheet when the block names none. Returns [index, row] or [-1, null].
+ */
+function classRowFor(model, className) {
+  const classes = model.list('classes');
+  if (className) {
+    const i = classes.findIndex((c) => lower(c.name) === lower(className));
+    if (i !== -1) return [i, classes[i]];
+    // "Legendary Samurai" on the block, "Legendary Samurai (Ronin)" or a typo on the sheet
+    const j = classes.findIndex((c) => lower(c.name).startsWith(lower(className)) || lower(className).startsWith(lower(c.name)));
+    if (j !== -1) return [j, classes[j]];
+    return [-1, null];
+  }
+  const named = classes.map((c, i) => [i, c]).filter(([, c]) => str(c.name).trim());
+  return named.length === 1 ? named[0] : [-1, null];
+}
+
+/**
+ * Where an archetype stands against a character before it is applied:
+ *   { ok: true }                          -- can be added
+ *   { ok: false, reason: 'applied' }      -- already on the class
+ *   { ok: false, reason: 'no-class', … }  -- its class is not on the sheet
+ *   { ok: false, reason: 'conflict', with: 'Oni Warrior', shared: ['challenge'] }
+ * Two archetypes conflict when they touch the same feature -- replace or
+ * alter -- unless one of them says it can be combined with the other.
+ */
+export function archetypeStatus(model, block) {
+  const b = normalizeBlock(block);      // idempotent, and a raw block gets its swaps read
+  const [, row] = classRowFor(model, b.class);
+  if (!row) return { ok: false, reason: 'no-class', className: b.class || '(a single class)' };
+  const stack = Array.isArray(row.archetypeStack) ? row.archetypeStack : [];
+  if (stack.some((e) => lower(e.name) === lower(b.name))) return { ok: false, reason: 'applied' };
+  const mine = archetypeTouches(b);
+  const allowed = (a, c) => arr(a.stacksWith).some((n) => lower(n) === lower(c.name) || lower(c.name).startsWith(lower(n)) || lower(n).startsWith(lower(c.name)));
+  for (const e of stack) {
+    if (allowed(b, e) || allowed(e, b)) continue;
+    const shared = arr(e.touches).filter((k) => mine.has(k));
+    if (shared.length) return { ok: false, reason: 'conflict', with: e.name, shared };
+  }
+  return { ok: true, className: row.name };
+}
+
+/** The names in a Progression "Special" cell; null when the cell is a rule-group map this must not touch. */
+function cellNames(cell) {
+  if (cell === undefined || cell === null || cell === '') return [];
+  if (typeof cell !== 'string') return null;
+  return cell.split(/,\s*(?![^()]*\))/).map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Apply an archetype to its class on a character.
+ *
+ * For each of its features: the class features it replaces leave every
+ * Progression cell they sit in and the class's Template group (recorded), the
+ * new feature goes into the cell at its own level and into the group with its
+ * text; a feature that only alters keeps the original beside it. Everything
+ * done is written to the class row's `archetypeStack` so `removeArchetype`
+ * can put it back exactly, and the row's free-text `archetypes` field names
+ * it for the header line.
+ */
+export function applyArchetype(model, block) {
+  const b = normalizeBlock(block);      // idempotent, and a raw block gets its swaps read
+  const status = archetypeStatus(model, b);
+  if (!status.ok) {
+    if (status.reason === 'applied') return `${b.name} is already on ${b.class || 'the class'}.`;
+    if (status.reason === 'no-class') return `${b.name} needs ${status.className} on the Classes table first.`;
+    return `${b.name} cannot be added: it and ${status.with} both change ${status.shared.join(', ')}.`;
+  }
+  const [ci, row] = classRowFor(model, b.class);
+  const className = row.name;
+  const d = model.data;
+  const group = d.progression?.classFeatures?.[className] || null;
+  const templates = model.list('templates');
+  let ti = templates.findIndex((t) => lower(t.name) === lower(className));
+
+  const entry = {
+    name: b.name, class: className, touches: [...archetypeTouches(b)], stacksWith: [...(b.stacksWith || [])],
+    removedCells: [],      // {level, name} taken out of Progression cells
+    addedCells: [],        // {level, name} written into Progression cells
+    removedTemplate: [],   // {name, type, text} taken out of the Template group
+    addedTemplate: [],     // names written into the Template group
+    notFound: [],
+  };
+  const removeKey = (key) => {
+    let hit = false;
+    if (group) {
+      for (const [level, cells] of Object.entries(group.byLevel || {})) {
+        const names = cellNames(cells?.Special);
+        if (!names) continue;
+        const keep = names.filter((n) => swapKey(n, className) !== key);
+        if (keep.length !== names.length) {
+          hit = true;
+          for (const n of names) if (swapKey(n, className) === key) entry.removedCells.push({ level: Number(level), name: n });
+          model.setClassFeature(className, Number(level), 'Special', keep.join(', '));
+        }
+      }
+    }
+    if (ti !== -1) {
+      const feats = templates[ti].features || [];
+      for (let i = feats.length - 1; i >= 0; i--) {
+        if (swapKey(feats[i].name, className) === key) {
+          hit = true;
+          entry.removedTemplate.push({ name: feats[i].name, type: feats[i].type ?? null, text: feats[i].text || '' });
+          model.listRemove(`templates.${ti}.features`, i);
+        }
+      }
+    }
+    return hit;
+  };
+  const addCell = (level, name) => {
+    if (!group && !d.progression) return;
+    const names = cellNames(d.progression?.classFeatures?.[className]?.byLevel?.[level]?.Special);
+    if (names === null) return;
+    if (names.some((n) => lower(n) === lower(name))) return;
+    model.setClassFeature(className, level, 'Special', [...names, name].join(', '));
+    entry.addedCells.push({ level, name });
+  };
+  const addTemplate = (f) => {
+    if (ti === -1) {
+      model.listAdd('templates', { tab: null, name: className, link: null, approvalLink: null, features: [] });
+      ti = templates.length - 1;
+    }
+    if ((templates[ti].features || []).some((x) => lower(x.name) === lower(f.name))) return;
+    model.listAdd(`templates.${ti}.features`, { name: f.name, type: f.type, text: f.text, tables: [], children: [] });
+    entry.addedTemplate.push(f.name);
+  };
+
+  entry.addedGroups = [];    // Template groups made for a feature's options menu
+  for (const f of b.features) {
+    for (const key of f.replaces) { if (!removeKey(key) && !entry.notFound.includes(key)) entry.notFound.push(key); }
+    addCell(f.level || 1, f.name);
+    addTemplate(f);
+    // A menu of options -- talents, techniques -- is its own group on the
+    // Template tab, "<Class> — <feature>", one entry per option under its
+    // category, with the menu's information (a condition it uses) first.
+    if (f.options && f.options.length) {
+      const groupName = `${className} — ${f.name}`;
+      if (!templates.some((t) => lower(t.name) === lower(groupName))) {
+        model.listAdd('templates', { tab: null, name: groupName, link: null, approvalLink: null, features: [] });
+        const gi = templates.length - 1;
+        if (f.optionsInfo) model.listAdd(`templates.${gi}.features`, { name: 'About these options', type: null, text: f.optionsInfo, tables: [], children: [] });
+        for (const o of f.options) {
+          const cat = o.category.replace(/(sh|ch|x|ss)es$/i, '$1').replace(/ies$/i, 'y').replace(/s$/i, '');
+          const label = cat ? `${cat}: ${o.name}` : o.name;
+          const text = o.minLevel ? `(Level ${o.minLevel}+) ${o.text}` : o.text;
+          model.listAdd(`templates.${gi}.features`, { name: label, type: o.type, text, tables: [], children: [] });
+        }
+        entry.addedGroups.push(groupName);
+      }
+    }
+  }
+  const stack = Array.isArray(row.archetypeStack) ? row.archetypeStack : [];
+  row.archetypeStack = [...stack, entry];
+  const tag = str(row.archetypes).trim();
+  const tags = tag ? tag.split(/,\s*/) : [];
+  if (!tags.some((t) => lower(t) === lower(b.name))) model.setItem('classes', ci, 'archetypes', [...tags, b.name].join(', '));
+  model.recompute();
+  const parts = [`Added ${b.name} to ${className}`];
+  if (entry.removedCells.length) parts.push(`replacing ${[...new Set(entry.removedCells.map((c) => c.name))].join(', ')}`);
+  const altered = [...new Set(b.features.flatMap((f) => f.alters))];
+  if (altered.length) parts.push(`altering ${altered.join(', ')}`);
+  if (entry.notFound.length) parts.push(`(${entry.notFound.join(', ')} not on the sheet)`);
+  return `${parts.join(', ')}.`;
+}
+
+/** Take an archetype off its class again, restoring what it replaced from its own record. */
+export function removeArchetype(model, className, name) {
+  const [ci, row] = classRowFor(model, className);
+  if (!row) return `${className} is not on the Classes table.`;
+  const stack = Array.isArray(row.archetypeStack) ? row.archetypeStack : [];
+  const at = stack.findIndex((e) => lower(e.name) === lower(name));
+  if (at === -1) return `${name} is not on ${row.name}.`;
+  const e = stack[at];
+  const cls = row.name;
+  const d = model.data;
+  const templates = model.list('templates');
+  const ti = templates.findIndex((t) => lower(t.name) === lower(cls));
+  // its own additions go
+  for (const { level, name: n } of e.addedCells) {
+    const names = cellNames(d.progression?.classFeatures?.[cls]?.byLevel?.[level]?.Special);
+    if (!names) continue;
+    model.setClassFeature(cls, level, 'Special', names.filter((x) => lower(x) !== lower(n)).join(', '));
+  }
+  if (ti !== -1) {
+    const feats = templates[ti].features || [];
+    for (let i = feats.length - 1; i >= 0; i--) if (e.addedTemplate.some((n) => lower(n) === lower(feats[i].name))) model.listRemove(`templates.${ti}.features`, i);
+  }
+  // what it took comes back
+  for (const { level, name: n } of e.removedCells) {
+    const names = cellNames(d.progression?.classFeatures?.[cls]?.byLevel?.[level]?.Special) || [];
+    if (!names.some((x) => lower(x) === lower(n))) model.setClassFeature(cls, level, 'Special', [...names, n].join(', '));
+  }
+  if (e.removedTemplate.length) {
+    let tj = ti;
+    if (tj === -1) { model.listAdd('templates', { tab: null, name: cls, link: null, approvalLink: null, features: [] }); tj = templates.length - 1; }
+    for (const f of e.removedTemplate) {
+      if (!(templates[tj].features || []).some((x) => lower(x.name) === lower(f.name))) {
+        model.listAdd(`templates.${tj}.features`, { name: f.name, type: f.type, text: f.text, tables: [], children: [] });
+      }
+    }
+  }
+  // …and the option menus it made go last, so no index above moved under us
+  for (const gname of e.addedGroups || []) {
+    const gi = templates.findIndex((t) => lower(t.name) === lower(gname));
+    if (gi !== -1) model.listRemove('templates', gi);
+  }
+  row.archetypeStack = stack.filter((_, i) => i !== at);
+  if (!row.archetypeStack.length) delete row.archetypeStack;
+  const tags = str(row.archetypes).split(/,\s*/).map((t) => t.trim()).filter((t) => t && lower(t) !== lower(name));
+  model.setItem('classes', ci, 'archetypes', tags.join(', '));
+  model.recompute();
+  return `Removed ${e.name} from ${cls}${e.removedCells.length ? `; ${[...new Set(e.removedCells.map((c) => c.name))].join(', ')} restored` : ''}.`;
 }
 
 /* ---------------- packing a character's own content ---------------- */

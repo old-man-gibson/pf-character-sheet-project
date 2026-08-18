@@ -6,6 +6,7 @@ import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
 } from '../app/js/extensions.js';
 import { parseClassFeatures, parseGroupFeatures, parseNamedLines } from '../app/js/extension-manager.js';
 import { Character, setManeuverCatalogue, disciplineEntries } from '../app/js/model.js';
@@ -234,6 +235,57 @@ console.log('apply -- blocks land on a blank character through the model');
   const back2 = new Character(JSON.parse(JSON.stringify(c2.toJSON())));
   check('replaced history round-trips', back2.data.raceTraits.find((t) => t.name === 'Ancient Enmity').replaced, [{ name: 'Hatred', text: 'ht' }]);
   check('rows without history stay plain', 'replaced' in back2.data.raceTraits.find((t) => t.name === 'Greed'), false);
+
+  // archetypes: swap keys and the sentences that name what a feature does
+  const LS = 'Legendary Samurai';
+  check('swapKey', ['Iaijutsu Mastery', 'iaijutsu master', 'Kiai Arts', 'kiai art', 'sheathe block', 'Sheath Block', "the legendary samurai's weapon proficiencies", 'armor proficiencies', 'Trap Sense +1'].map((s) => swapKey(s, LS)),
+    ['iaijutsu master', 'iaijutsu master', 'kiai art', 'kiai art', 'sheath block', 'sheath block', 'weapon and armor proficiency', 'weapon and armor proficiency', 'trap sense']);
+  check('parseSwaps: replaces list', parseSwaps('x. This ability replaces challenge and kiai arts.', LS), { replaces: ['challenge', 'kiai art'], alters: [] });
+  check('parseSwaps: alters', parseSwaps('x. This ability alters resolve.', LS), { replaces: [], alters: ['resolve'] });
+  check('parseSwaps: modifies proficiencies', parseSwaps('x. This modifies proficiencies.', LS), { replaces: [], alters: ['weapon and armor proficiency'] });
+  check('parseSwaps: "normal weapon and armor proficiencies" is one thing', parseSwaps("x. This alters a legendary samurai's normal weapon and armor proficiencies.", LS), { replaces: [], alters: ['weapon and armor proficiency'] });
+  check('parseSwaps: a sub-ability replaced alters its parent', parseSwaps('x. This ability replaces the determined ability of the resolve class feature.', LS), { replaces: [], alters: ['resolve'] });
+  check('parseSwaps: a named kiai art replaced alters kiai arts', parseSwaps("x. This ability replaces the duty's call, charm kiai art.", LS), { replaces: [], alters: ['kiai art'] });
+  check('parseSwaps: oxford list', parseSwaps('x. This replaces challenge, iaijutsu techniques, and kiai arts.', LS), { replaces: ['challenge', 'iaijutsu technique', 'kiai art'], alters: [] });
+  check('parseStacksWith', parseStacksWith("This alters iaijutsu strike. This alternative class feature can be combined with either the Yumi Sniper archetype or the Skirmisher's Strike alternative class feature (but not both), in which case both alterations apply."), ['Yumi Sniper', "Skirmisher's Strike"]);
+  check('archetype block reads swaps and levels off its features', normalizeBlock({ kind: 'archetype', name: 'A', class: LS, features: [{ name: 'Gun Fusion', type: 'Ex', text: 'At 10th level, x. This ability replaces iaijutsu master.' }, { name: 'Bullet Control', text: 'y. This ability alters sheathe control.' }] }).features.map((f) => [f.name, f.level, f.replaces, f.alters]),
+    [['Gun Fusion', 10, ['iaijutsu master'], []], ['Bullet Control', 1, [], ['sheath control']]]);
+
+  // …and on a character: apply, stack, block, remove-restores
+  const c3 = new Character(blankDocument({ name: 'Kaito', level: 10 }));
+  applyBlock(c3, { kind: 'class', name: LS, hd: 10, bab: 1, goodFort: true, goodWill: true, skillRanks: 4,
+    features: [{ level: 1, name: 'Challenge', text: 'ch' }, { level: 1, name: 'sheath control', text: 'sc' }, { level: 2, name: 'Resolve', text: 'r' }, { level: 4, name: 'Banner', text: 'b' }, { level: 9, name: 'Greater resolve', text: 'gr' }, { level: 10, name: 'iaijutsu master', text: 'im' }] });
+  const gun = { kind: 'archetype', name: 'Gunblade Duelist', class: LS, features: [
+    { name: 'Bullet Control', type: 'Ex', text: 'x. This ability alters sheathe control.' },
+    { name: 'Perfect Craftsmanship', type: 'Ex', text: 'At 2nd level, y. This ability replaces resolve and greater resolve.' },
+    { name: 'Gun Fusion', type: 'Ex', text: 'At 10th level, z. This ability replaces iaijutsu master.' }] };
+  const oni = { kind: 'archetype', name: 'Oni Warrior', class: LS, features: [{ name: 'Rage', type: 'Ex', text: 'At 1st level, r. This ability replaces challenge and sheathe control.' }] };
+  const yoj = { kind: 'archetype', name: 'Yojimbo', class: LS, features: [{ name: 'Bonded Challenge', text: 'b. This ability alters challenge.' }, { name: "Guardian's Toughness", type: 'Ex', text: 'At 4th level, g. This ability replaces banner.' }] };
+  const other = { kind: 'archetype', name: 'Nobody', class: 'Wizard', features: [{ name: 'X', text: 'x. This ability replaces spells.' }] };
+  const cell = (lvl) => c3.data.progression.classFeatures[LS].byLevel[lvl]?.Special || '';
+  const tplNames = () => (c3.data.templates.find((t) => t.name === LS)?.features || []).map((f) => f.name);
+  check('needs its class', archetypeStatus(c3, other), { ok: false, reason: 'no-class', className: 'Wizard' });
+  ok('gunblade goes on', /Added Gunblade Duelist to Legendary Samurai, replacing Resolve, Greater resolve, iaijutsu master, altering sheath control\./.test(applyBlock(c3, gun)));
+  check('replaced features leave their cells, new ones arrive at their levels', [cell(2), cell(9), cell(10)], ['Perfect Craftsmanship', '', 'Gun Fusion']);
+  ok('template group swapped too', !tplNames().includes('Resolve') && tplNames().includes('Gun Fusion') && tplNames().includes('Bullet Control'));
+  check('the class row names it', [c3.data.classes[0].archetypes, c3.data.classes[0].archetypeStack.map((e) => e.name)], ['Gunblade Duelist', ['Gunblade Duelist']]);
+  check('oni conflicts on sheath control', archetypeStatus(c3, oni), { ok: false, reason: 'conflict', with: 'Gunblade Duelist', shared: ['sheath control'] });
+  ok('and is refused with a reason', /cannot be added: it and Gunblade Duelist both change sheath control\./.test(applyBlock(c3, oni)));
+  ok('yojimbo touches nothing gunblade touches, so it stacks', /Added Yojimbo/.test(applyBlock(c3, yoj)) && c3.data.classes[0].archetypeStack.length === 2);
+  check('banner replaced, challenge kept beside its alteration', [cell(4), cell(1)], ["Guardian's Toughness", 'Challenge, sheath control, Bullet Control, Bonded Challenge']);
+  check('applied twice is refused', archetypeStatus(c3, yoj).reason, 'applied');
+  ok('removing gunblade restores exactly its features', /Removed Gunblade Duelist from Legendary Samurai; Resolve, Greater resolve, iaijutsu master restored\./.test(removeArchetype(c3, LS, 'Gunblade Duelist')));
+  check('cells back, yojimbo untouched', [cell(2), cell(9), cell(10), cell(4)], ['Resolve', 'Greater resolve', 'iaijutsu master', "Guardian's Toughness"]);
+  ok('template group restored', tplNames().includes('Resolve') && !tplNames().includes('Gun Fusion') && tplNames().includes("Guardian's Toughness"));
+  check('row names only yojimbo now', [c3.data.classes[0].archetypes, c3.data.classes[0].archetypeStack.map((e) => e.name)], ['Yojimbo', ['Yojimbo']]);
+  check('oni now conflicts with yojimbo on challenge', archetypeStatus(c3, oni), { ok: false, reason: 'conflict', with: 'Yojimbo', shared: ['challenge'] });
+  // "can be combined with" lets an overlap through
+  const finesse = { kind: 'archetype', name: "Samurai's Finesse", class: LS, single: true, features: [{ name: "Samurai's Finesse", text: 'x. This ability alters iaijutsu strike. This alternative class feature can be combined with the Yumi Sniper archetype.' }] };
+  const yumi = { kind: 'archetype', name: 'Yumi Sniper', class: LS, features: [{ name: "Archer's Technique", text: 'y. This ability alters iaijutsu strike.' }] };
+  applyBlock(c3, finesse);
+  check('a declared combination overrides the overlap', archetypeStatus(c3, yumi).ok, true);
+  const back3 = new Character(JSON.parse(JSON.stringify(c3.toJSON())));
+  check('the stack round-trips', back3.data.classes[0].archetypeStack.map((e) => e.name), ['Yojimbo', "Samurai's Finesse"]);
 
   // veils go onto the Akashic board, into their chakra slot
   const v1 = applyBlock(c, { kind: 'veil', name: 'Unyielding', slot: 'Body', text: 'stands firm' });

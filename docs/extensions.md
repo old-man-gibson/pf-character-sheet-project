@@ -86,6 +86,34 @@ they were. A trait that names something not on the sheet is added and says what 
 not find; the same trait twice is refused. Removing an alternate's row by hand does not
 put its traits back — add them again from the race's pack.
 
+**Archetypes swap class features, stack when they can, and come off again.** An
+`archetype` block names its class and carries its features, each with what it *replaces*
+and what it *alters* — read off the feature's own sentence ("This ability replaces
+challenge and kiai arts", "alters resolve", "modifies proficiencies"; "replaces the
+determined ability of the resolve class feature" and "replaces the duty's call kiai art"
+mean the parent is altered, not gone; anything "…proficiencies" is the one proficiency
+feature) — and any "can be combined with…" note. It applies only when its class is on
+the Classes table. **Adding** it takes the replaced features out of every Progression cell
+they sit in and out of the class's Template group, puts the archetype's features in at
+their own levels, and leaves altered features standing beside their new text; the class
+row gets a **pill** with the archetype's name, and its free-text *Archetypes* field names
+it too. Two archetypes **stack** when the sets of features they touch (replaced or altered
+— proficiencies count) do not overlap; when they do, the second is **blocked**, the ⚙
+shelf says which archetype and which features, unless one of them says it can be
+combined with the other. The pill's **×** removes the archetype and puts back exactly what
+it took, from its own record; what other archetypes did stays. The *Alternate Class
+Features* page reads as one single-feature archetype per option, so those swap and stack
+by the same rules. A feature that comes with a **menu** — talents, techniques, arts: a
+heading naming the feature over typed entries, with sub-headings (*Cuts*, *Slashes*) as
+categories — keeps the menu as its `options`; untyped "Name: text" entries under the
+heading (a *Mapped:* condition) are the menu's information. On the sheet the menu becomes
+its own Template group, *Class — Feature*, with an *About these options* entry first and
+one entry per option under its category (and a *(Level N+)* mark where the text says who
+may select it); the feature itself keeps its schedule on the ladder. The sheet has no
+picker for such menus yet — rogue talents and the like are typed into a Progression column
+under its level rule — so the group is where the text lives to pick from. Removing the
+archetype removes the group.
+
 Switching a
 pack on or off in the dialog redraws every sheet on the page at once. `app/js/extensions.js`
 is the pure module (format, store, merge, attach), `extension-runtime.js` the page's one
@@ -128,7 +156,14 @@ is the point:
    replaces, colon or no colon), subtypes and favored-class options as notes, and the age and
    height tables are dropped and said so. A veil becomes a `veil` block: title, chakra
    slot(s), descriptor and source from the info box; shaping text, *Essence*, *Chakra Bind*,
-   saving throw and bind levels as its text.
+   saving throw and bind levels as its text. An archetype page (its info box names the
+   class it is for) becomes an `archetype` block — flavour, source, and its features with
+   what each replaces or alters; the *Alternate Class Features* page becomes one
+   single-feature archetype per option, sectioned. A plain archetype document — homebrew in a
+   text file, with no info box — anchors on its first "This ability replaces…" / "X alters Y"
+   sentence instead: the first short line is its name, a *Description* section its flavour,
+   `Name (Ex)` title lines (colons allowed) and untyped headings over a paragraph its
+   features; the class is left blank for the form (or resolves to the sheet's only class).
 2. **Review.** The panel shows what was read — one line per block, each with a tick to
    drop it — and then **everything the reader did not use**, as stretches of the original
    text with a tag menu on each: *feature of* the class it sat under, *race trait of* the

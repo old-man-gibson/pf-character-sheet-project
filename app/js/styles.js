@@ -1382,6 +1382,12 @@ input[type="color"] {
 .rowlist .item:last-child { border-bottom: 0; }
 .rowlist .item .t { font-size: 0.85rem; font-weight: 600; }
 .rowlist .item .d { font-size: 0.78rem; color: var(--cs-muted); }
+/* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
+.pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
+.pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
+  border: 1px solid var(--cs-accent); color: var(--cs-accent); background: rgba(212,162,74,0.10); white-space: nowrap; }
+.pill button { font: inherit; font-size: 0.8rem; line-height: 1; padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; opacity: 0.7; }
+.pill button:hover { opacity: 1; color: #e0635f; }
 /* The extension shelf on the manager: one heading per pack above its blocks. */
 .rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
 
@@ -1416,18 +1422,18 @@ input[type="color"] {
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
   align-items: start;
 }
-/* Two panels that read as one row: the wide one takes what is left after
-   the narrow one has its measure. Details beside the ability scores, and the
-   conditions beside carrying capacity. Narrow screens stack them. */
-.pairrow {
-  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
-  grid-template-columns: minmax(0, 1fr);
 /* Attack and speed side by side (or stacked, narrow) above the full-width
    proficiencies panel, so a third track never sits empty beside them. */
 .offense-pair {
   grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
 }
+/* Two panels that read as one row: the wide one takes what is left after
+   the narrow one has its measure. Details beside the ability scores, and the
+   conditions beside carrying capacity. Narrow screens stack them. */
+.pairrow {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: minmax(0, 1fr);
 }
 @container (min-width: 900px) {
   .pairrow { grid-template-columns: minmax(0, 1fr) minmax(320px, 24rem); }
@@ -1446,12 +1452,6 @@ input[type="color"] {
   padding: 2px 3px 2px 4px;
 }
 .lang input[type="text"] { width: 9rem; min-width: 6rem; padding: 2px 5px; }
-table.perks td:first-child { width: 100%; }
-label.fld .xf { width: 100%; }
-.pairrow > .panel.details .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-
-/* The conditioned reading, under a base that a ticked condition has moved. */
-.now {
 
 /* Proficiencies: rows of toggle chips, weapons on the left, armor and shields
    on the right, and the specific weapons as a chip list like the languages. */
@@ -1470,6 +1470,12 @@ button.chip-toggle { padding: 2px 8px; font-size: 0.76rem; border-radius: 999px;
 .proflist { margin-top: 0; }
 .proflist .lang input[type="text"] { width: 8rem; }
 .weaponhead .badge.nonprof { white-space: nowrap; }
+table.perks td:first-child { width: 100%; }
+label.fld .xf { width: 100%; }
+.pairrow > .panel.details .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* The conditioned reading, under a base that a ticked condition has moved. */
+.now {
   display: block; font-size: 0.68rem; font-weight: 640; color: var(--cs-bad);
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em; margin-top: 1px;
 }
