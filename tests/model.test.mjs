@@ -15,6 +15,7 @@ import {
   setCookingTables, cookingDish, emptyDish,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_MONTH,
+  parseProficiencyText, normalizeProficiencies, weaponProficient,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -4133,6 +4134,106 @@ console.log('languages -- slots from Int and Linguistics, plus a rule; the list 
   const messy = new Character({ ...load('nico'), identity: { ...load('nico').identity, languages: undefined } });
   check('the pipe-separated cells still split', messy.data.identity.languages.includes('Ignan'), true);
   check('and what does not parse is kept as a row to tidy', messy.data.identity.languages.includes('+9 languages'), true);
+}
+
+console.log('proficiencies -- the workbook sentences become lists the sheet can read');
+{
+  const sab = new Character(load('saburo')).data.identity.proficiencies;
+  check('"all simple and …" is the simple familiarity', sab.familiarities, ['Simple']);
+  check('and the rest of the sentence is the weapons, one by one',
+    sab.weapons.slice(0, 3).concat(sab.weapons.slice(-1)), ['double-chained kama', 'double walking stick katana', 'dual blade', 'wakizashi']);
+  check('"double" in a weapon name is not the Double group', sab.groups, []);
+  check('nothing on armor is an empty list, not a note', [sab.armor, sab.notes], [[], '']);
+
+  const nar = new Character(load('narockro')).data.identity.proficiencies;
+  check('"light and medium armor" is the two weights', nar.armor, ['Light', 'Medium']);
+  check('"none" on shields is None', nar.shields, ['None']);
+  check('an instrument in parentheses stays one entry', nar.weapons[0], 'instruments (as the rockstar gonzo class)');
+  check('the trailing "and whip" is a weapon', nar.weapons.at(-1), 'whip');
+
+  const nico = new Character(load('nico')).data.identity.proficiencies;
+  check('"simple and martial weapons" is two familiarities and no weapons', [nico.familiarities, nico.weapons], [['Simple', 'Martial'], []]);
+  check('a document with all three null starts blank', new Character(load('bryva')).data.identity.proficiencies,
+    { familiarities: [], handedness: [], groups: [], weapons: [], armor: [], shields: [], notes: '' });
+
+  const barb = parseProficiencyText({
+    weapons: 'all simple and martial weapons, light armor, medium armor, and shields (except tower shields)',
+    armor: 'light armor, medium armor', shield: 'shields (except tower shields)',
+  });
+  check('a bare "shields" is the three Shield Proficiency covers', barb.shields, ['Buckler', 'Light', 'Heavy']);
+  check('and "except tower" keeps tower off', barb.shields.includes('Tower'), false);
+  const sam = parseProficiencyText({ weapons: 'all simple and martial weapons, plus the tetsubo and all one-handed slashing weapons' });
+  check('a qualified handedness is not the handedness chip', sam.handedness, []);
+  check('but stays whole as a weapon entry, with the tetsubo', sam.weapons, ['tetsubo', 'one-handed slashing weapons']);
+  const grp = parseProficiencyText({ weapons: 'all light weapons, the heavy blades group and all bows', armor: 'all armor', shield: 'bucklers and tower shields' });
+  check('"all light weapons" is the Light handedness', grp.handedness, ['Light']);
+  check('groups need "group" or "all" in front', grp.groups, ['Bows', 'Heavy Blades']);
+  check('"all armor" is the three weights', grp.armor, ['Light', 'Medium', 'Heavy']);
+  check('bucklers and tower shields, named', grp.shields, ['Buckler', 'Tower']);
+  const odd = parseProficiencyText({ armor: 'whatever the GM allows', shield: 'see notes' });
+  check('what the lists cannot say is kept as a note', odd.notes, 'Armor: whatever the GM allows\nShields: see notes');
+
+  check('lists already saved are tidied, not reparsed',
+    normalizeProficiencies({ familiarities: ['simple', 'Simple', 'bogus'], weapons: ['Katana', ''], shields: ['tower'], notes: 'x' }),
+    { familiarities: ['Simple'], handedness: [], groups: [], weapons: ['Katana'], armor: [], shields: ['Tower'], notes: 'x' });
+
+  const c = new Character(load('narockro'));
+  c.toggleProficiency('shields', 'Buckler');
+  check('ticking a shield kind clears None', c.data.identity.proficiencies.shields, ['Buckler']);
+  c.toggleProficiency('shields', 'Heavy');
+  c.toggleProficiency('shields', 'None');
+  check('and None clears the kinds', c.data.identity.proficiencies.shields, ['None']);
+  c.toggleProficiency('familiarities', 'Martial');
+  c.toggleProficiency('groups', 'Axes');
+  check('a familiarity and a group tick on', [c.data.identity.proficiencies.familiarities, c.data.identity.proficiencies.groups], [['Simple', 'Martial'], ['Axes']]);
+  c.toggleProficiency('familiarities', 'Martial');
+  check('and off again', c.data.identity.proficiencies.familiarities, ['Simple']);
+  c.toggleProficiency('groups', 'Not A Group');
+  check('an unknown value is refused', c.data.identity.proficiencies.groups, ['Axes']);
+  check('the lists save as lists', JSON.parse(JSON.stringify(c.toJSON())).identity.proficiencies.groups, ['Axes']);
+  c.set('identity.primordiaTechnique', 'Armored Discipline');
+  check('and the primordia armor check reads the list', c.data.primordia.calc.prereq.state, 'met');
+  c.toggleProficiency('armor', 'Medium');
+  check('and turns unmet with only light armor', c.data.primordia.calc.prereq.state, 'unmet');
+  c.toggleProficiency('armor', 'Light');
+  check('and unknown with none recorded', c.data.primordia.calc.prereq.state, 'unknown');
+}
+
+console.log('proficiencies -- a weapon on Gear is read against them');
+{
+  const prof = { familiarities: ['Simple'], handedness: [], groups: ['Axes'], weapons: ['guitar axe', 'katana', 'Brand'], armor: [], shields: [], notes: '' };
+  const wp = (w, p = prof) => weaponProficient(p, w).state;
+  check('a matching familiarity is proficient', wp({ name: 'Club', familiarity: 'Simple' }), true);
+  check('a matching group is', wp({ name: 'Battleaxe', familiarity: 'Martial', groups: ['Axes'] }), true);
+  check('a named weapon is, whatever its category', wp({ name: 'Guitar Axe +1', familiarity: 'Exotic' }), true);
+  check('a specific entry also covers a group the fixed list does not know', wp({ name: 'Bloodvine Embrace', familiarity: 'Exotic', groups: ['Brand'] }), true);
+  check('a described weapon nothing covers is not', wp({ name: 'Longsword', familiarity: 'Martial', groups: ['Heavy Blades'] }), false);
+  check('handedness alone is not enough to refuse', wp({ name: 'Mic & Cord', handedness: 'Two-Handed' }), null);
+  check('nor a row with no category', wp({ name: 'Thing' }), null);
+  check('and nothing recorded judges nothing', wp({ name: 'Longsword', familiarity: 'Martial' }, { familiarities: [], groups: [], weapons: [], notes: '' }), null);
+  // The base weapon: a named blade that is a katana.
+  check('"As" reads against the specific list', wp({ name: 'Enpitsu to Keshi', familiarity: 'Exotic', baseWeapon: 'katana' }), true);
+  check('and a base weapon nothing covers refuses on its own', wp({ name: 'Thing', baseWeapon: 'nodachi' }), false);
+  check('and says why', weaponProficient(prof, { name: 'Enpitsu to Keshi', baseWeapon: 'Katana' }).why, 'katana on the Overview');
+  // The [Enhanced] veil rule: a veilweaver is always proficient with what a veil creates.
+  const veil = weaponProficient(prof, { name: 'Bloodburst Blade', familiarity: 'Exotic', groups: ['Veil', 'Heavy Blades'] });
+  check('a weapon in the Veil group is proficient by the [Enhanced] rule', [veil.state, veil.source], [true, 'veil']);
+  check('and so is one that names [Enhanced], with no list consulted', weaponProficient(null, { name: 'Sword [Enhanced (longsword)]', familiarity: 'Martial' }).state, true);
+  // The row's own field beats everything.
+  const yes = weaponProficient(prof, { name: 'Falcata', familiarity: 'Exotic', proficiency: 'yes', proficiencyNote: 'Custom Training' });
+  check('Yes on the row is proficient, via its note', [yes.state, yes.source, yes.why], [true, 'override', 'proficient via Custom Training']);
+  check('No on the row refuses even a veil weapon', weaponProficient(prof, { name: 'Brand', groups: ['Veil'], proficiency: 'no' }).state, false);
+  const nar = new Character(load('narockro'));
+  check("narockro's guitar axe is martial and unlisted, so it is flagged", nar.data.equipment.weapons[0].proficient, false);
+  nar.listAdd('identity.proficiencies.weapons', 'guitar axe');
+  check('until it is written in', nar.data.equipment.weapons[0].proficient, true);
+  check("bryva's sheet recorded nothing, so her weapons are not judged", new Character(load('bryva')).data.equipment.weapons.every((w) => w.proficient === null), true);
+  const sab = new Character(load('saburo'));
+  check("saburo's veil blade is proficient by the veil rule, not refused", sab.data.equipment.weapons.map((w) => [w.proficient, w.proficiencySource]), [[true, 'veil'], [true, 'veil'], [true, 'veil']]);
+  check('rows carry the three fields, blank', [sab.data.equipment.weapons[0].proficiency, sab.data.equipment.weapons[0].baseWeapon, sab.data.equipment.weapons[0].proficiencyNote], ['', '', '']);
+  sab.set('equipment.weapons.0.proficiency', 'no');
+  check('and the row can still say No', sab.data.equipment.weapons[0].proficient, false);
+  check('which saves', JSON.parse(JSON.stringify(sab.toJSON())).equipment.weapons[0].proficiency, 'no');
 }
 
 console.log('specialty -- feat has one home, perks are a list');

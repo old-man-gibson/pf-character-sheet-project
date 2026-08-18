@@ -38,6 +38,7 @@ import {
   TALENTED_KNUCKLE_TALENTS, BRAWLERS_VEST_TALENTS, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL,
   UNORTHODOX_FEAT, UNORTHODOX_SPHERES_PER_FEAT,
   TRAIT_SLOTS, gestaltSaveBase,
+  WEAPON_GROUPS, WEAPON_HANDEDNESS, WEAPON_FAMILIARITY, ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
   parseLevelRule, levelRuleGrants, parseGroupText,
   tierAtLevel, MYTHIC_STAT_TIERS, MYTHIC_STAT_BONUS, MYTHIC_TIERS,
   CRAFT_BASE_COSTS, CRAFT_BASE_SPEED, CRAFT_SPEED_MULTIPLIER, CRAFT_DC_PER_BYPASS,
@@ -95,6 +96,200 @@ export const DEFAULT_TAB_ORDER = [
  * position, which is stable as long as it stays the only one.
  */
 export const featureGroupKey = (group, index) => (group?.name || `#${index}`);
+
+/* ------------------------------------------------------------------ *
+ * Weapon and armor proficiencies.
+ *
+ * The workbook kept these as three sentences on Character Info ("all simple
+ * and double-chained kama, katana…", "light and medium armor", "none"). The
+ * sheet keeps them as lists it can reason about, in the same terms the
+ * weapon rows on Gear already use: familiarity (simple / martial / exotic),
+ * handedness, fighter weapon group, and the specific weapon by name -- plus
+ * the armor weights and the shield kinds. Anything the lists cannot say is
+ * kept as a note rather than dropped.
+ * ------------------------------------------------------------------ */
+
+const PROFICIENCY_LISTS = {
+  familiarities: WEAPON_FAMILIARITY,
+  handedness: WEAPON_HANDEDNESS,
+  groups: WEAPON_GROUPS,
+  weapons: null,
+  armor: ARMOR_PROFICIENCIES,
+  shields: SHIELD_PROFICIENCIES,
+};
+
+export const blankProficiencies = () => ({
+  familiarities: [], handedness: [], groups: [], weapons: [], armor: [], shields: [], notes: '',
+});
+
+/**
+ * Read the workbook's three proficiency sentences into the lists.
+ *
+ * Familiarities are single words ("simple", "martial", "exotic"); handedness
+ * only when it stands on its own before "weapons" ("all light weapons",
+ * "one-handed martial weapons") -- a "light hammer" is a weapon, not a
+ * category. Weapon groups need the word "group" or an "all" in front, since
+ * "double" and "close" are ordinary words in a list of weapon names. Whatever
+ * is left after those are taken out, split on commas and "and", is a specific
+ * weapon. Armor is its weights; a shield sentence is read for each kind, with
+ * a bare "shields" meaning the three a Shield Proficiency covers and "tower"
+ * counting only when it is not being excepted.
+ */
+export function parseProficiencyText({ weapons, armor, shield } = {}) {
+  const p = blankProficiencies();
+  const notes = [];
+  const has = (list, v) => list.some((x) => x.toLowerCase() === v.toLowerCase());
+  const add = (list, v) => { if (!has(list, v)) list.push(v); };
+
+  const wtext = String(weapons || '').trim();
+  if (wtext) {
+    const low = wtext.toLowerCase();
+    for (const f of WEAPON_FAMILIARITY) {
+      if (new RegExp(`\\b${f.toLowerCase()}\\b`).test(low)) add(p.familiarities, f);
+    }
+    const handRe = (h) => new RegExp(`\\b(?:all )?${h.toLowerCase()}(?: (?:simple|martial|exotic))? weapons?\\b`);
+    for (const h of WEAPON_HANDEDNESS) if (handRe(h).test(low)) add(p.handedness, h);
+    const groupRe = (g) => new RegExp(`\\b(?:${g.toLowerCase()}(?: weapons?)? group|all ${g.toLowerCase()}(?: weapons)?)\\b`);
+    for (const g of WEAPON_GROUPS) if (groupRe(g).test(low)) add(p.groups, g);
+
+    const known = new Set([
+      ...WEAPON_FAMILIARITY, ...WEAPON_HANDEDNESS, ...WEAPON_GROUPS,
+      ...WEAPON_HANDEDNESS.flatMap((h) => WEAPON_FAMILIARITY.map((f) => `${h} ${f}`)),
+    ].map((x) => x.toLowerCase()));
+    for (const part of wtext.split(/,|;|\n|\band\b|\bplus\b/i)) {
+      let token = part.trim().replace(/^(?:all|the|any)\s+/i, '').replace(/[.]+$/, '').trim();
+      if (!token) continue;
+      const bare = token.replace(/\s+(?:weapons?|(?:weapon )?group)$/i, '').toLowerCase();
+      if (known.has(bare) || /^weapons?$/i.test(token)) continue;
+      // "all simple weapons" was consumed above; "one-handed slashing
+      // weapons" was not, and stays whole as something to read.
+      add(p.weapons, token);
+    }
+  }
+
+  const atext = String(armor || '').trim();
+  if (atext) {
+    const low = atext.toLowerCase();
+    if (/\ball (?:types of |kinds of )?armou?r\b/.test(low)) ['Light', 'Medium', 'Heavy'].forEach((a) => add(p.armor, a));
+    if (/\bunarmou?red\b/.test(low)) add(p.armor, 'Unarmored');
+    if (/\blight\b/.test(low)) add(p.armor, 'Light');
+    if (/\bmedium\b/.test(low)) add(p.armor, 'Medium');
+    if (/\bheavy\b/.test(low)) add(p.armor, 'Heavy');
+    if (!p.armor.length && !/^(?:none|no armou?r|-+|—)$/i.test(atext)) notes.push(`Armor: ${atext}`);
+  }
+
+  const stext = String(shield || '').trim();
+  if (stext) {
+    const low = stext.toLowerCase();
+    if (/^(?:none|no shields?|-+|—)\b/.test(low)) add(p.shields, 'None');
+    if (/\bbucklers?\b/.test(low)) add(p.shields, 'Buckler');
+    if (/\blight shields?\b/.test(low)) add(p.shields, 'Light');
+    if (/\bheavy shields?\b/.test(low)) add(p.shields, 'Heavy');
+    const towerOut = /\b(?:except|excluding|but not|not|no|other than|save)\b[^,;)]*\btower\b/.test(low);
+    if (/\btower\b/.test(low) && !towerOut) add(p.shields, 'Tower');
+    // "shields", "all shields", "shields (except tower shields)": the three
+    // that Shield Proficiency itself covers.
+    if (/\bshields?\b/.test(low) && !/\b(?:light|heavy|tower) shields?\b/.test(low.replace(/\(.*?\)/g, ''))
+      && !p.shields.includes('None')) {
+      ['Buckler', 'Light', 'Heavy'].forEach((s) => add(p.shields, s));
+    }
+    if (!p.shields.length) notes.push(`Shields: ${stext}`);
+  }
+
+  p.notes = notes.join('\n');
+  return p;
+}
+
+/**
+ * Bring a proficiencies block to the list shape, whatever it was saved as:
+ * absent, the workbook's sentences, or already lists (which are then only
+ * tidied -- strings, no duplicates, the fixed lists' own spelling).
+ */
+export function normalizeProficiencies(raw) {
+  // The workbook shape is three strings (or nulls) and no list anywhere.
+  const legacy = raw && typeof raw === 'object'
+    && !Object.keys(PROFICIENCY_LISTS).some((k) => Array.isArray(raw[k]));
+  if (!raw || typeof raw !== 'object' || legacy) return parseProficiencyText(raw || {});
+
+  const p = blankProficiencies();
+  for (const [key, fixed] of Object.entries(PROFICIENCY_LISTS)) {
+    const src = Array.isArray(raw[key]) ? raw[key] : [];
+    for (const v of src) {
+      const s = String(v ?? '').trim();
+      if (!s) continue;
+      const canon = fixed ? fixed.find((x) => x.toLowerCase() === s.toLowerCase()) : s;
+      if (!canon) continue;
+      if (!p[key].some((x) => x.toLowerCase() === canon.toLowerCase())) p[key].push(canon);
+    }
+  }
+  p.notes = String(raw.notes ?? '');
+  return p;
+}
+
+/**
+ * Whether the character is proficient with a weapon row, and why.
+ *
+ * Returns `{ state, why, source }`: `state` is `true` on any match, `false`
+ * when the row is described (a familiarity, group or base weapon is set) and
+ * nothing covers it, and `null` when there is nothing to judge by. `source`
+ * says where the answer came from -- `override` (the row's own Proficient
+ * field), `veil` (the [Enhanced] veil rule), `overview` (the Proficiencies
+ * panel) -- so the sheet can show the ones that are not the plain reading.
+ *
+ * Read in this order:
+ *  - the row's own Proficient field, Yes or No, with its note (Custom
+ *    Training, a class feature, anything the lists cannot say);
+ *  - the [Enhanced] veil rule: a veilweaver is always proficient with the
+ *    weapon a veil creates, so a row in the Veil group, or naming [Enhanced],
+ *    is proficient with no list consulted;
+ *  - the Overview's specific weapons, against the row's name and its base
+ *    weapon ("As: katana") -- and against a group the fixed list does not know;
+ *  - the row's familiarity, handedness and groups against the chips.
+ * Handedness alone does not describe a weapon well enough to refuse it.
+ */
+export function weaponProficient(prof, w) {
+  const none = { state: null, why: '', source: null };
+  if (!w) return none;
+  const eq = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const note = String(w.proficiencyNote || '').trim();
+  if (w.proficiency === 'yes') return { state: true, why: note ? `proficient via ${note}` : 'marked proficient on the row', source: 'override' };
+  if (w.proficiency === 'no') return { state: false, why: note ? `not proficient — ${note}` : 'marked not proficient on the row', source: 'override' };
+
+  const groups = (w.groups || []).filter(Boolean);
+  const text = `${w.name || ''} ${w.special || ''}`;
+  if (groups.some((g) => eq(g, 'Veil')) || /\[\s*enhanced\b|\benhanced\s*\]|\benhanced veil\b/i.test(text)) {
+    return {
+      state: true, source: 'veil',
+      why: 'a veil weapon — a veilweaver is always proficient with the armor, shield or weapon an [Enhanced] veil creates',
+    };
+  }
+
+  if (!prof) return none;
+  const recorded = ['familiarities', 'handedness', 'groups', 'weapons', 'armor', 'shields']
+    .some((k) => (prof[k] || []).length) || String(prof.notes || '').trim();
+  if (!recorded) return none;
+  const name = String(w.name || '').trim().toLowerCase();
+  const base = String(w.baseWeapon || '').trim().toLowerCase();
+  const hit = (prof.weapons || []).find((x) => {
+    const n = String(x).trim().toLowerCase();
+    if (!n) return false;
+    if (base && (n === base || base.includes(n) || n.includes(base))) return true;
+    if (name && (n === name || name.includes(n) || n.includes(name))) return true;
+    return groups.some((g) => eq(g, n));
+  });
+  if (hit) return { state: true, why: `${hit} on the Overview`, source: 'overview' };
+  if (w.familiarity && (prof.familiarities || []).some((f) => eq(f, w.familiarity))) {
+    return { state: true, why: `${w.familiarity.toLowerCase()} weapons on the Overview`, source: 'overview' };
+  }
+  if (w.handedness && (prof.handedness || []).some((h) => eq(h, w.handedness))) {
+    return { state: true, why: `${w.handedness.toLowerCase()} weapons on the Overview`, source: 'overview' };
+  }
+  const g = groups.find((x) => (prof.groups || []).some((y) => eq(x, y)));
+  if (g) return { state: true, why: `the ${g} group on the Overview`, source: 'overview' };
+  return (w.familiarity || groups.length || base)
+    ? { state: false, why: 'nothing on the Overview\'s Proficiencies covers this weapon\'s familiarity, handedness, group, name or base weapon', source: 'overview' }
+    : none;
+}
 
 /**
  * Vet a document offered for import, without loading it.
@@ -3477,6 +3672,10 @@ export class Character {
         const sheetUnarmed = d.training?.combat?.unarmed?.sheetDice;
         w.useUnarmedDice = !!sheetUnarmed && w.dice === sheetUnarmed;
       }
+      // Proficiency on the row: '' reads it (Auto), 'yes' / 'no' overrides.
+      if (!['yes', 'no'].includes(w.proficiency)) w.proficiency = '';
+      w.proficiencyNote = String(w.proficiencyNote ?? '');
+      w.baseWeapon = String(w.baseWeapon ?? '');
     }
     // Legacy user-added simple weapons.
     if (Array.isArray(d.weapons) && d.weapons.length) {
@@ -3503,6 +3702,9 @@ export class Character {
       // movement), so only a real number is coerced to one.
       if (typeof sp.bonus !== 'string') sp.bonus = Number(sp.bonus) || 0;
     }
+    // Weapon and armor proficiencies: the workbook's three sentences become
+    // lists (see parseProficiencyText); lists already saved are only tidied.
+    d.identity.proficiencies = normalizeProficiencies(d.identity.proficiencies);
 
     /*
      * Race traits: what the race hands you, which the sheets keep as a column
@@ -4505,6 +4707,32 @@ export class Character {
    * from the shared catalogue and its position there is not the character's
    * to depend on.
    */
+  /**
+   * Tick or untick one proficiency on one of the fixed lists (familiarities,
+   * handedness, groups, armor, shields). "None" on the shields list is a
+   * statement rather than a kind, so it clears the others and they clear it.
+   */
+  toggleProficiency(list, value) {
+    const fixed = PROFICIENCY_LISTS[list];
+    if (!fixed) return this;
+    const canon = fixed.find((x) => x.toLowerCase() === String(value || '').toLowerCase());
+    if (!canon) return this;
+    const p = this.data.identity.proficiencies || (this.data.identity.proficiencies = blankProficiencies());
+    const cur = p[list] || (p[list] = []);
+    if (cur.includes(canon)) {
+      p[list] = cur.filter((x) => x !== canon);
+    } else if (list === 'shields' && canon === 'None') {
+      p[list] = ['None'];
+    } else {
+      p[list] = [...cur.filter((x) => !(list === 'shields' && x === 'None')), canon];
+    }
+    // Keep the fixed list's own order, so the chips read the same way every time.
+    p[list].sort((a, b) => fixed.indexOf(a) - fixed.indexOf(b));
+    this.recompute();
+    this.#emit({ type: 'set', path: `identity.proficiencies.${list}`, value: p[list] });
+    return this;
+  }
+
   toggleManeuver(path, name, ready) {
     const d = getPath(this.data, path);
     if (!d) return this;
@@ -5145,8 +5373,16 @@ export class Character {
     const unarmedDiceNow = c.training?.combat?.unarmed?.dice;
     const scope = this.scope();
     const evalFormula = (src) => evaluateFormula(src, scope);
+    const prof = c.identity?.proficiencies;
 
     for (const w of e.weapons) {
+      // Read against the row's own Proficient field, the [Enhanced] veil rule
+      // and the Overview's proficiencies; a `false` is shown, not applied --
+      // the -4 is the player's to write, as it always was.
+      const pr = weaponProficient(prof, w);
+      w.proficient = pr.state;
+      w.proficiencyWhy = pr.why;
+      w.proficiencySource = pr.source;
       // The Dice field may reference an inline name or hold a formula:
       //   "12d8"                 literal
       //   "{kinetic.fist}"       a {name = …} defined in prose (may be dice text
@@ -6921,9 +7157,15 @@ export class Character {
         : unmet('No casting class on the Vancian tab.');
     }
     if (key === 'armor') {
-      const prof = String(c.identity?.proficiencies?.armor || '').trim();
-      if (!prof) return unknown('Armor proficiency is blank on the Overview.');
-      return /medium|heavy/i.test(prof) ? met(prof) : unmet(prof);
+      const p = c.identity?.proficiencies || {};
+      const armor = p.armor || [];
+      if (!armor.length) {
+        return /armor/i.test(p.notes || '')
+          ? unknown(`Armor proficiency on the Overview is only a note: ${p.notes}`)
+          : unknown('Armor proficiency is blank on the Overview.');
+      }
+      const label = `${armor.join(', ')} armor`;
+      return armor.some((a) => /^(?:medium|heavy)$/i.test(a)) ? met(label) : unmet(label);
     }
     if (key === 'psionics') {
       return unknown('Psionics is a plain worksheet here, so manifesting is not something '

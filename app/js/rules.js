@@ -1253,9 +1253,15 @@ export const WEAPON_ATTACK_TYPES = ['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged'
 /** Fighter weapon groups (plus the ones these sheets actually use). */
 export const WEAPON_GROUPS = ['Axes', 'Bows', 'Close', 'Crossbows', 'Double', 'Firearms',
   'Flails', 'Hammers', 'Heavy Blades', 'Light Blades', 'Monk', 'Natural', 'Polearms',
-  'Siege Engines', 'Spears', 'Thrown', 'Tribal'];
+  'Siege Engines', 'Spears', 'Thrown', 'Tribal',
+  // Not a fighter group: the weapon an akashic veil creates, which the sheets
+  // file here and which the [Enhanced] rule makes its wielder proficient with.
+  'Veil'];
 export const WEAPON_HANDEDNESS = ['Light', 'One-Handed', 'Two-Handed'];
 export const WEAPON_FAMILIARITY = ['Simple', 'Martial', 'Exotic'];
+/** What a class hands out under "Weapon and Armor Proficiency", as the Overview lists it. */
+export const ARMOR_PROFICIENCIES = ['Unarmored', 'Light', 'Medium', 'Heavy'];
+export const SHIELD_PROFICIENCIES = ['None', 'Buckler', 'Light', 'Heavy', 'Tower'];
 export const WEAPON_CRIT_MULTS = ['x2', 'x3', 'x4'];
 export const WEAPON_ABILITY_MULTS = ['0.5', '1', '1.5', '2'];
 
