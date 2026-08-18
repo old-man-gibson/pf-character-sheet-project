@@ -666,6 +666,47 @@ def extract_resources(bk):
     return out
 
 
+def extract_wealth(bk):
+    """The wallet: mana on hand, the Oath of Offerings and Material Casting
+    flags, the last offering's date, mana a day and sessions since. Null on a
+    sheet without the block; the model starts one empty. Mirrors extractWealth
+    in app/js/convert.js."""
+    CI = "Character Info"
+    g = bk.grids.get(CI)
+    if not g:
+        return None
+    wallet = None
+    for i, row in enumerate(g):
+        for j, v in enumerate(row):
+            if isinstance(v, str) and v.startswith("Wallet"):
+                wallet = (i + 1, j + 1)
+                break
+        if wallet:
+            break
+    if not wallet:
+        return None
+
+    def beside(label):
+        pos = bk.find_label(CI, label)
+        if not pos:
+            return None
+        for n in range(1, 4):
+            v = bk.cell(CI, pos[0], pos[1] + n)
+            if v is not None:
+                return v
+        return None
+
+    return {
+        "baseline": bk.cell(CI, wallet[0] + 1, wallet[1]),
+        "current": beside("Current Mana"),
+        "oathOfOfferings": beside("Oath of Offerings") is True,
+        "materialCasting": beside("Material Casting") is True,
+        "lastOffering": beside("Last Offering"),
+        "manaPerDay": beside("Mana/Day"),
+        "sessions": beside("Sessions"),
+    }
+
+
 def extract_hp(bk):
     CI = "Character Info"
     return {
@@ -1272,6 +1313,7 @@ def convert(path, key, title, file_id):
         "skillBudget": extract_skill_budget(bk),
         "carry": extract_carry(bk),
         "resources": extract_resources(bk),
+        "wealth": extract_wealth(bk),
         "planner": extract_planner(bk),
         "feats": extract_feats(bk),
         "mythic": extract_mythic(bk),

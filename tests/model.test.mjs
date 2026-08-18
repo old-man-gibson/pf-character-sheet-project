@@ -14,6 +14,7 @@ import {
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
   setCookingTables, cookingDish, emptyDish,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
+  wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_MONTH,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -2030,6 +2031,65 @@ console.log('auto-cooking -- the iron chef dish maker, read from Bryva and cooke
   check('Fetid with Sour says the immunity is off', /\(bonus applied\)\.$/.test(cookingDish({ ...emptyDish(), aroma: ['Fetid'], flavors: ['Sour', '', ''] }, { level: 5 }).effects[1].text), true);
   const back = new Character(JSON.parse(JSON.stringify(s.toJSON())));
   check('round-trips through JSON', back.data.cooking.sides, ['Carrots', 'Bread']);
+}
+
+console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
+{
+  const c = new Character(load('saburo'));
+  const w = c.data.wealth;
+  check('read off the workbook', [w.baseline, w.current, w.oathOfOfferings, w.materialCasting, w.lastOffering, w.manaPerDay, w.sessionMana],
+    [16198, 16198, true, true, '2026-08-02', 190, 0]);
+  const today = new Date(2026, 7, 17);
+  const v = c.wealthView(today);
+  check('OoO/day is half the mana a day', v.offeringPerDay, 95);
+  check('15 days since the last offering', v.days, 15);
+  check('oath: days x OoO/day + floor(session mana / 2)', v.expected.oath, 1425);
+  check('casting: no whole month yet', v.expected.casting, 0);
+  check('mana after', v.after, 16198 - 1425);
+  check('the workbook cached 13 days on the day it was exported', c.wealthView(new Date(2026, 7, 15)).expected.total, 1235);
+  // Session mana and the month roll over.
+  c.set('wealth.sessionMana', 301);
+  check('half the session mana is owed, rounded down', c.wealthView(today).expected.oath, 1425 + 150);
+  check('a whole month adds 30 for casting', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_MONTH);
+  check('and the day before it does not', c.wealthView(new Date(2026, 8, 1)).expected.casting, 0);
+  c.set('wealth.sessionMana', 0);
+  // The switches.
+  c.set('wealth.oathOfOfferings', false);
+  check('no oath, no oath part', c.wealthView(today).expected.oath, 0);
+  c.set('wealth.materialCasting', false);
+  check('nothing due at all', [c.wealthView(today).due, c.wealthView(today).expected.total], [false, 0]);
+  c.set('wealth.oathOfOfferings', true); c.set('wealth.materialCasting', true);
+
+  // Narockro's older block reads too; his own sheet halved the gains since the baseline instead.
+  const n = new Character(load('narockro'));
+  check('Narockro: baseline, current, 280 a day, no sessions cell', [n.data.wealth.baseline, n.data.wealth.current, n.data.wealth.manaPerDay, n.data.wealth.sessionMana], [38159, 38779, 280, 0]);
+  check('gains since baseline', n.wealthView(today).gains, 620);
+  // A wallet label with no figure, and no wallet at all.
+  check('Angou: label only -> empty wallet', new Character(load('angou')).data.wealth, emptyWealth());
+  check('Bryva: no block -> empty wallet', new Character(load('bryva')).data.wealth, emptyWealth());
+
+  // The ledger, and the hooks.
+  const e = c.addWealthEntry({ amount: 500, label: 'Session 12', kind: 'session', date: today });
+  check('a session line', e, { date: '2026-08-17', label: 'Session 12', amount: 500, kind: 'session' });
+  check('the wallet and the session mana move', [c.data.wealth.current, c.data.wealth.sessionMana], [16698, 500]);
+  check('and half the reward is now owed', c.wealthView(today).expected.oath, 1425 + 250);
+  c.addWealthEntry({ amount: 200, kind: 'spend', label: 'Potions', date: today });
+  check('a spend comes off', c.data.wealth.current, 16498);
+  check('a spend typed positive is stored negative', c.data.wealth.ledger.at(-1).amount, -200);
+  const paid = c.makeOffering(today);
+  check('the offering pays what is owed today', paid.amount, -(1425 + 250));
+  check('after: balance = mana after, baseline follows, session mana restarts', [c.data.wealth.current, c.data.wealth.baseline, c.data.wealth.lastOffering, c.data.wealth.sessionMana],
+    [16498 - 1675, 16498 - 1675, '2026-08-17', 0]);
+  check('nothing owed the same day', c.wealthView(today).expected.total, 0);
+  check('the ledger has all three lines', c.data.wealth.ledger.map((l) => l.kind), ['session', 'spend', 'offering']);
+  c.removeWealthEntry(0);
+  check('removing the session line undoes it', [c.data.wealth.current, c.data.wealth.ledger.length], [16498 - 1675 - 500, 2]);
+  check('a document saved with the old "sessions" count still reads', new Character({ ...load('saburo'), wealth: { current: 10, sessions: 40 } }).data.wealth.sessionMana, 40);
+  check('formulas can read the wallet', c.scope().mana.current, c.data.wealth.current);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('round-trips through JSON', back.data.wealth.ledger.length, 2);
+  check('isoDay reads the workbook stamp and a Date alike', [isoDay('2026-08-02T00:00:00'), isoDay(new Date(2026, 7, 2, 23, 30))], ['2026-08-02', '2026-08-02']);
+  check('wealthView on nothing', wealthView(null, today).expected.total, 0);
 }
 
 console.log('the tab bar -- an ordered preference, saved with the character');

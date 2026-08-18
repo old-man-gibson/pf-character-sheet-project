@@ -214,6 +214,22 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 .dishref td.ingname { font-weight: 600; white-space: nowrap; }
 .dishref th { vertical-align: top; text-align: left; color: var(--cs-muted); font-size: 0.74rem; padding-right: 8px; }
 
+/* ---------- wealth ---------- */
+.wealthgrid { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
+.wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.wealthnums .bigstat .v.neg { color: var(--cs-bad); }
+.wealthfields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+.wealthactions .pair input, .wealthactions .pair select { width: auto; }
+table.ledger { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-top: 6px; }
+table.ledger th { text-align: left; font-weight: 600; color: var(--cs-muted); font-size: 0.72rem; padding: 2px 6px; border-bottom: 1px solid var(--cs-line); }
+table.ledger td { padding: 3px 6px; border-bottom: 1px solid var(--cs-line); }
+table.ledger td.num, table.ledger th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.ledger td.pos { color: var(--cs-good); }
+table.ledger td.neg { color: var(--cs-bad); }
+table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
+
 /* ---------- tabs ---------- */
 .tabs {
   display: flex; gap: 3px; flex-wrap: wrap;
