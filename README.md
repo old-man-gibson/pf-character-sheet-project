@@ -51,6 +51,9 @@ To pre-load a roster on a deployment of your own, drop each character's JSON int
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
 does both when it converts a workbook (below). Anything listed there is public to
 whoever can reach the site, which is why the repository's own list is empty.
+Content packs work the same way under `data/extensions/` (see [Extensions](docs/extensions.md));
+a deployment that ships that index empty ships the engine alone, with no catalogue or
+class names in it, and its visitors bring their own packs.
 
 ---
 
@@ -59,12 +62,14 @@ whoever can reach the site, which is why the repository's own list is empty.
 ```
 index.html              forwards to app/ (so a host serving the repo root lands on the app)
 data/characters/        bundled character JSON + index.json -- empty in the repository
-data/maneuvers.json     shared discipline catalogue (every character reads it)
-data/cooking.json       the iron chef's ingredient list, effect formulas as templates
+data/extensions/        bundled extension packs + index.json (see docs/extensions.md): the campaign's
+                        shared tables -- disciplines, casting/manifesting tables, deck
+                        manipulations, cooking ingredients -- ship here as packs
 tools/convert.py        xlsx -> JSON converter (Python, needs openpyxl)
 tools/convert.mjs       the same converter as a Node CLI, no dependencies
 tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
-tools/maneuvers_ref.py  build data/maneuvers.json from a workbook's maneuversRef tab
+tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
+tools/extension_pack.py what the *_ref tools use to write a table as a pack
 app/index.html          local host page (character picker)
 app/embed-example.html  embedding demo
 app/js/xlsx.js          dependency-free .xlsx reader (ZIP + OOXML)
@@ -74,6 +79,10 @@ app/js/formula.js       sandboxed expression language
 app/js/rules.js         Pathfinder tables + derived-stat definitions
 app/js/model.js         live character model
 app/js/history.js       saved versions, snapshots and checkpoints (IndexedDB)
+app/js/extensions.js    extension packs: format, local store, table merge, attaching blocks
+app/js/extension-runtime.js  the page's one set of active packs, registered with the model
+app/js/extension-manager.js  the Extensions dialog a host page mounts
+app/js/paste-import.js  rules text off a page -> extension blocks + leftovers to tag
 app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry
 app/js/sheet-element.js the <character-sheet> custom element
@@ -87,7 +96,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs
+node tests/formula.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs
 ```
 
 `model.test` and `convert.test` check the model and the converter against real
@@ -140,4 +149,5 @@ is what the converter's `extraTabs` capture is for.
 | [Sub-systems](docs/sub-systems.md) | The modelled sub-systems, each read once off its worksheet: Spheres & Magic training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions. |
 | [Formulas & trackers](docs/formulas-and-trackers.md) | The sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
 | [Embedding](docs/embedding.md) | The `<character-sheet>` custom element: attributes, events, theming through custom properties, and the audit API. |
+| [Extensions](docs/extensions.md) | Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage. |
 | [Importing & saving](docs/importing-and-saving.md) | How the converters read a workbook (defined names, label-anchored scans, reconciliation), the four ways a character comes in, Export all, and saving, snapshots, checkpoints and the schema. |

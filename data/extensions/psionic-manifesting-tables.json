@@ -1,0 +1,15 @@
+{
+ "format": "character-sheet-extension",
+ "formatVersion": 1,
+ "id": "psionic-manifesting-tables",
+ "name": "Psionic manifesting tables",
+ "author": "Campaign",
+ "description": "Power-point curves by manifester level, and which curve each manifesting class runs on. Built by tools/psionic_ref.py.",
+ "source": "",
+ "license": "",
+ "revision": 1,
+ "createdAt": "2026-08-18T00:00:00",
+ "updatedAt": "2026-08-18T00:00:00",
+ "provides": {"psionics":{"powerLevels":["Talent","1st","2nd","3rd","4th","5th","6th","7th","8th","9th"],"curves":[{"total":0,"points":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},{"total":52,"points":[0,0,0,1,2,3,5,7,9,11,14,17,20,24,28,32,37,42,47,52]},{"total":70,"points":[1,2,3,5,7,9,11,14,17,20,24,28,32,37,42,47,52,58,64,70]},{"total":128,"points":[1,2,4,6,8,12,16,20,24,28,36,44,52,60,68,80,92,104,116,128]},{"total":343,"points":[2,6,11,17,25,35,46,58,72,88,106,126,147,170,195,221,250,280,311,343]}],"classes":[{"name":"Aegis","total":70},{"name":"Cryptic","total":128},{"name":"Dread","total":128},{"name":"Highlord","total":128},{"name":"Marksman","total":70},{"name":"Psion","total":343},{"name":"Psychic Warrior","total":128},{"name":"Soulknife","total":52},{"name":"Tactician","total":343},{"name":"Vitalist","total":343},{"name":"Voyager","total":128},{"name":"Wilder","total":343},{"name":"Zealot","total":70}]}},
+ "blocks": []
+}

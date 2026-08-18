@@ -560,7 +560,7 @@ const isPlaceholder = (v) => v === null || v === undefined
  * Knowing a discipline grants every maneuver in it, so a character records
  * which disciplines they know and which maneuvers they have readied -- not a
  * copy of the discipline's contents. The names and types come from
- * `data/maneuvers.json`, built from the workbook's own maneuversRef tab by
+ * the Path of War disciplines extension pack (`data/extensions/path-of-war-disciplines.json`), built from the workbook's own maneuversRef tab by
  * tools/maneuvers_ref.py; it is identical in every workbook, so one shared
  * file replaces up to 20 KB of catalogue per character.
  *
@@ -679,7 +679,7 @@ export function closestName(name, candidates) {
  *
  * A casting block records which class's table it draws from, not a copy of the
  * table: 34 classes of slots per day and spells known, for class levels 1-20
- * across spell levels 0-9, live in `data/vancian.json`, built from the
+ * across spell levels 0-9, live in the casting-tables extension pack (`data/extensions/vancian-casting-tables.json`), built from the
  * workbook's own vancianRef tab by tools/vancian_ref.py.
  *
  * The workbook reached those same numbers through a named range that was never
@@ -726,7 +726,7 @@ export function castingTable(name) {
 /* ------------------------------------------------------------------ *
  * The shared power-point table.
  *
- * Five curves of power points per manifester level, from `data/psionics.json`
+ * Five curves of power points per manifester level, from the manifesting-tables extension pack (`data/extensions/psionic-manifesting-tables.json`)
  * (tools/psionic_ref.py). A manifesting class does not name a row here: it names
  * the **total it reaches at level 20**, which is what the workbook's PP@20
  * dropdown offered and what its HLOOKUP searched for. The thirteen class names
@@ -1632,7 +1632,7 @@ function splitBracketNote(raw) {
  *
  * "For every deck feat a character possesses, they may also select a special
  * deck manipulation" -- the list is on the wiki's Card and Deck Feats page and
- * lives in `data/cardcasting.json`: name, group, what it needs, and the rule.
+ * lives in the deck-manipulations extension pack (`data/extensions/deck-manipulations.json`): name, group, what it needs, and the rule.
  * Registered once at startup; without it a manipulation is still a name and a
  * count, it simply has no rule text to show.
  * ------------------------------------------------------------------ */
@@ -2633,7 +2633,7 @@ export function techniqueExport(t, stats, { characterName = '' } = {}) {
  * scale with the chef's level, and some strengthen each other (a Red Meat
  * entree adds to the Strength a side of Apples grants; Rice makes the recipe
  * count as three levels higher). The ingredient list and every effect's
- * formula live in `data/cooking.json` -- shared rules, not character data --
+ * formula live in the Iron Chef extension pack (`data/extensions/iron-chef-ingredients.json`) -- shared rules, not character data --
  * so any character can show the tab and cook with a chef's level typed in.
  * The character's own tab keeps the dish it last built.
  *

@@ -25,6 +25,7 @@ import {
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
+import { mergeTables, registerTables } from '../app/js/extensions.js';
 
 let pass = 0;
 let fail = 0;
@@ -36,26 +37,18 @@ const check = (label, actual, expected) => {
   }
 };
 
-// The discipline catalogue is shared by every character and is what a
-// discipline's maneuvers are read from, so it is registered before any of them
-// are constructed -- exactly as the app does on load.
-const catalogue = JSON.parse(readFileSync('data/maneuvers.json', 'utf8'));
-setManeuverCatalogue(catalogue);
-
-// The casting table is shared the same way and is what a casting class's slots
-// per day and spells known are derived from, so it is registered here too.
-const castingTables = JSON.parse(readFileSync('data/vancian.json', 'utf8'));
-setVancianTables(castingTables);
-
-// And the power-point curves, which is what a manifesting class's pool comes from.
-const psionicTableDoc = JSON.parse(readFileSync('data/psionics.json', 'utf8'));
-setPsionicTables(psionicTableDoc);
-
-// And the deck manipulation list a card caster picks from.
-setCardcastingTables(JSON.parse(readFileSync('data/cardcasting.json', 'utf8')));
-
-// And the iron chef's ingredient list, which is what a dish's effects come from.
-setCookingTables(JSON.parse(readFileSync('data/cooking.json', 'utf8')));
+// The shared tables -- the discipline catalogue, the casting and manifesting
+// tables, the deck manipulations, the iron chef's ingredients -- are what a
+// character's disciplines, slots, pools and dishes are read from, so they are
+// registered before any character is constructed, exactly as the app does on
+// load: every bundled extension pack, merged, through the same registrars.
+const packIndex = JSON.parse(readFileSync('data/extensions/index.json', 'utf8'));
+const packs = packIndex.extensions.map((e) => JSON.parse(readFileSync(`data/extensions/${e.file}`, 'utf8')));
+const merged = mergeTables(packs);
+registerTables(merged, { setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables });
+const catalogue = merged.maneuvers;
+const castingTables = merged.vancian;
+const psionicTableDoc = merged.psionics;
 
 requireFixtures(['angou', 'bryva', 'narockro', 'nico', 'saburo'], 'model.test');
 const load = loadCharacter;

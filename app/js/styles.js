@@ -1382,6 +1382,8 @@ input[type="color"] {
 .rowlist .item:last-child { border-bottom: 0; }
 .rowlist .item .t { font-size: 0.85rem; font-weight: 600; }
 .rowlist .item .d { font-size: 0.78rem; color: var(--cs-muted); }
+/* The extension shelf on the manager: one heading per pack above its blocks. */
+.rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
 
 @container (max-width: 560px) {
   /* Narrower than a single crafting column: one panel per row, tables scroll. */

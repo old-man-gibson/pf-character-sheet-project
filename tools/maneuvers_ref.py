@@ -1,6 +1,6 @@
 """Build the shared discipline catalogue from a workbook's maneuversRef tab.
 
-    python tools/maneuvers_ref.py <workbook.xlsx> [-o data/maneuvers.json]
+    python tools/maneuvers_ref.py <workbook.xlsx> [-o data/extensions/path-of-war-disciplines.json]
 
 The tab is a reference table, not character data: it is byte-identical in every
 workbook (38 disciplines, 3,873 cells), so it is extracted once into a file every
@@ -17,10 +17,12 @@ Layout, the same shape the Maneuvers tab uses:
               until the next one appears
 """
 import argparse
-import json
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from extension_pack import write_pack  # noqa: E402
 
 try:
     import openpyxl
@@ -94,14 +96,13 @@ def read_catalogue(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workbook", help="any workbook built on the campaign template")
-    parser.add_argument("-o", "--out", default="data/maneuvers.json")
+    parser.add_argument("-o", "--out", default="data/extensions/path-of-war-disciplines.json")
     args = parser.parse_args()
 
     disciplines = read_catalogue(args.workbook)
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"disciplines": disciplines}, f,
-                  separators=(",", ":"), ensure_ascii=False)
+    write_pack(args.out, "path-of-war-disciplines", "maneuvers", {"disciplines": disciplines},
+               name="Path of War disciplines",
+               description="The discipline catalogue: every maneuver and stance each discipline grants, by level.")
 
     total = sum(len(d["entries"]) for d in disciplines)
     size = os.path.getsize(args.out)

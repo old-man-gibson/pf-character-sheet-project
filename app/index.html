@@ -98,6 +98,15 @@
     border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
   }
   dialog#newDialog button.primary { border-color: var(--accent); color: var(--accent); }
+  dialog#extDialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  dialog#extDialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog#extDialog h2 { color: var(--accent); }
+  button.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; }
+  button.ext:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -106,6 +115,7 @@
   <h1>Character Sheets</h1>
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
+  <button type="button" class="ext" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
   <label class="role">
     <input type="checkbox" id="adminToggle"> GM / inspector view
   </label>
@@ -130,6 +140,8 @@
 </main>
 
 <input type="file" id="importFile" accept="application/json,.json,.xlsx,.xlsm" hidden>
+
+<dialog id="extDialog"></dialog>
 
 <dialog id="newDialog">
   <form id="newForm" method="dialog">
@@ -180,6 +192,8 @@
   import { inspectDocument } from './js/model.js';
   import { historyFor, forget } from './js/history.js';
   import { zip, safeName } from './js/zip.js';
+  import { runtime as extensions } from './js/extension-runtime.js';
+  import { mountExtensionManager, looksLikeExtension } from './js/extension-manager.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -449,6 +463,13 @@
    * is say up front that a workbook will take a moment, and report a refusal.
    */
   async function addFromFile(file) {
+    // A .json can be a character or an extension pack; the pack says so in its
+    // first line, so it is sniffed before the character importer gets it.
+    if (/\.json$/i.test(file.name || '')) {
+      let doc = null;
+      try { doc = JSON.parse(await file.text()); } catch { /* the sheet's importer will say why */ }
+      if (looksLikeExtension(doc)) { extManager.importDoc(doc); return; }
+    }
     if (/\.xls[xm]$/i.test(file.name || '')) {
       say('info', `Converting ${file.name} — this runs in your browser; the workbook is not uploaded anywhere.`);
       // Let the banner paint before the parse takes over the main thread.
@@ -467,6 +488,8 @@
   // The sheet's own Import button loads into the element; the library picks it
   // up here so it survives a reload and joins the picker.
   sheet.addEventListener('character-import', (e) => add(e.detail.character, e.detail.warnings));
+  // …and an extension pack handed to the sheet's Import goes to the manager.
+  sheet.addEventListener('extension-import', (e) => { e.preventDefault(); extManager.importDoc(e.detail.extension); });
 
   // Drop a file anywhere on the page.
   document.addEventListener('dragover', (e) => {
@@ -487,6 +510,18 @@
   adminToggle.addEventListener('change', () => {
     sheet.setAttribute('role', adminToggle.checked ? 'admin' : 'player');
   });
+
+  /*
+   * Extensions: the packs this browser holds, managed in a dialog. The runtime
+   * is loaded here as well as by the sheet (both keep the one promise), so the
+   * dialog can list the bundled packs before any character has opened.
+   */
+  const extManager = mountExtensionManager(document.getElementById('extDialog'), {
+    say,
+    currentCharacter: () => (sheet.hidden ? null : sheet.character),
+  });
+  extensions.load(new URL('../', document.baseURI));
+  document.getElementById('extBtn').addEventListener('click', () => extManager.open());
 
   draw();
   select();

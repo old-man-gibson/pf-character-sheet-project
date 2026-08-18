@@ -1,0 +1,29 @@
+{
+  "extensions": [
+    {
+      "id": "path-of-war-disciplines",
+      "name": "Path of War disciplines",
+      "file": "path-of-war-disciplines.json"
+    },
+    {
+      "id": "vancian-casting-tables",
+      "name": "Vancian casting tables",
+      "file": "vancian-casting-tables.json"
+    },
+    {
+      "id": "psionic-manifesting-tables",
+      "name": "Psionic manifesting tables",
+      "file": "psionic-manifesting-tables.json"
+    },
+    {
+      "id": "deck-manipulations",
+      "name": "Deck manipulations",
+      "file": "deck-manipulations.json"
+    },
+    {
+      "id": "iron-chef-ingredients",
+      "name": "Iron Chef ingredients",
+      "file": "iron-chef-ingredients.json"
+    }
+  ]
+}
