@@ -42,6 +42,7 @@ import {
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, setCookingTables, cookingTables, cookingDish, normalizeDish, emptyDish,
+  MATERIAL_CASTING_PER_MONTH,
 } from './model.js';
 import { SHEET_CSS } from './styles.js';
 import {
@@ -365,7 +366,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages))/;
 
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
@@ -1123,6 +1124,14 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#bigStat('Ref', fmt(s.reflex.total), s.reflex.stat1 || '', now('reflex'))}
           ${this.#bigStat('Will', fmt(s.will.total), s.will.stat1 || '', now('will'))}
           ${this.#bigStat('BAB', fmt(c.attack.bab), c.attack.iterative || '')}
+          ${(() => {
+    // The wallet, beside the numbers a table asks for: what is on hand, and
+    // what is left once the offering owed today is paid.
+    const w = this.#model.wealthView();
+    const n = (x) => Number(x || 0).toLocaleString('en-US');
+    return this.#bigStat(esc(w.currency), n(w.current), w.due && w.expected.total
+      ? `after offering ${n(w.after)}` : (w.due ? 'nothing owed' : 'on hand'));
+  })()}
         </div>
       </section>
 
@@ -1156,6 +1165,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#conditionsPanel()}
         ${this.#carryPanel()}
       </div>
+      ${this.#collapsible('wealth', this.#wealthPanel())}
       ${this.#classesPanel()}
       ${this.#traitsPanel()}
     </div>`;
@@ -6772,6 +6782,79 @@ export class CharacterSheetElement extends HTMLElement {
     </section>`;
   }
 
+  /* ---------------- wealth ---------------- */
+
+  /**
+   * The wallet on the Overview: current mana, the offering owed under the Oath
+   * of Offerings and for material casting (the workbook's own sums), what is
+   * left after it, and the ledger every reward, spend and offering is written
+   * to. "Record" is the hook a session-reward automation will call; "Make
+   * offering" pays what is owed and starts the count over.
+   */
+  #wealthPanel() {
+    const v = this.#model.wealthView();
+    const n = (x) => Number(x || 0).toLocaleString('en-US');
+    const draft = { amount: this.#draft.wealthAmount ?? '', label: this.#draft.wealthLabel ?? '', kind: this.#draft.wealthKind || 'session' };
+    const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
+    const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
+    return `<section class="panel span2 wealth">
+      <h3>Wealth
+        <span class="badge">${esc(v.currency)}</span>
+        ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="What the next offering comes to today">owed ${n(v.expected.total)}</span>` : ''}
+      </h3>
+      <div class="wealthgrid">
+        <div class="wealthnums">
+          <div class="bigstat"><div class="k">On hand</div><div class="v">${n(v.current)}</div><div class="sub">${esc(v.currency)}</div></div>
+          <div class="bigstat"><div class="k">Owed</div><div class="v">${n(v.expected.total)}</div>
+            <div class="sub">${v.due ? [
+    v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
+    v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
+  ].filter(Boolean).join(' · ') : 'no oath, no upkeep'}</div></div>
+          <div class="bigstat"><div class="k">After offering</div><div class="v ${v.after < 0 ? 'neg' : ''}">${n(v.after)}</div>
+            <div class="sub">${v.lastOffering ? `${v.days} day${v.days === 1 ? '' : 's'} since ${esc(v.lastOffering)}` : 'no offering recorded'}</div></div>
+        </div>
+        <div class="fieldgrid wealthfields">
+          ${this.#field('Current mana', this.#num('wealth.current', v.current))}
+          ${this.#field('Baseline after last offering', `<input type="number" value="${v.baseline === null ? '' : v.baseline}" data-set="wealth.baseline" data-kind="number-or-null" placeholder="—" title="The balance recorded after the last offering">`)}
+          ${this.#field('Mana / day', this.#num('wealth.manaPerDay', v.manaPerDay))}
+          ${this.#field('OoO / day', this.#roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
+          ${this.#field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text">`)}
+          ${this.#field('Session mana since', this.#num('wealth.sessionMana', v.sessionMana, 'min="0" title="Mana earned in sessions since the last offering; the oath takes half"'))}
+          <label class="fld"><span>Oath of Offerings</span>${this.#check('wealth.oathOfOfferings', v.oathOfOfferings, 'days × OoO/day + ⌊session mana ÷ 2⌋')}</label>
+          <label class="fld"><span>Material Casting</span>${this.#check('wealth.materialCasting', v.materialCasting, `${MATERIAL_CASTING_PER_MONTH} a month`)}</label>
+        </div>
+      </div>
+      <div class="wealthactions">
+        <span class="pair">
+          <select data-draft="wealthKind" aria-label="Kind">
+            ${['session', 'reward', 'spend', 'adjust'].map((k) => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${kindLabel[k]}</option>`).join('')}
+          </select>
+          <input type="number" data-draft="wealthAmount" value="${esc(draft.amount)}" placeholder="amount" style="width:6.5rem" aria-label="Amount">
+          <input type="text" data-draft="wealthLabel" value="${esc(draft.label)}" placeholder="label (e.g. Session 12 reward)" style="width:15rem" aria-label="Label">
+          <button class="primary" data-action="wealth-record" title="Write it to the ledger and move the wallet">Record</button>
+        </span>
+        <span class="pair" style="margin-left:auto">
+          <button data-action="wealth-offering" ${v.due && v.expected.total > 0 ? '' : 'disabled'}
+            title="Pay ${n(v.expected.total)}: the balance after it becomes the new baseline, today the last offering, session mana back to 0">Make offering (${n(v.expected.total)})</button>
+        </span>
+      </div>
+      <p class="hint">
+        A <em>session</em> line is session income: it goes on the wallet and, under the oath,
+        half of it is owed at the next offering; a <em>spend</em> is taken off the wallet. Formulas can read <code>mana.current</code>,
+        <code>mana.expected</code> and <code>mana.after</code>.
+      </p>
+      ${ledger.length ? `<div class="tablewrap"><table class="ledger">
+        <thead><tr><th>Date</th><th>What</th><th class="num">Amount</th><th></th></tr></thead>
+        <tbody>${ledger.slice(0, 12).map((l) => `<tr>
+          <td>${esc(l.date)}</td>
+          <td>${esc(l.label)} <span class="badge">${kindLabel[l.kind] || l.kind}</span></td>
+          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${l.amount > 0 ? '+' : ''}${n(l.amount)}</td>
+          <td class="tools"><button class="danger" data-action="wealth-remove" data-index="${l.i}" title="Remove this line and undo it" aria-label="Remove">×</button></td>
+        </tr>`).join('')}</tbody>
+      </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? '' : 's'} kept.</p>` : ''}</div>` : ''}
+    </section>`;
+  }
+
   /* ---------------- techniques: Technique List and AutoTechnique ---------------- */
 
   /**
@@ -8643,6 +8726,29 @@ export class CharacterSheetElement extends HTMLElement {
       case 'tech-remove': {
         const name = button?.dataset.name;
         if (name) { this.#model.removeTechnique(name); this.#render(); }
+        break;
+      }
+      case 'wealth-record': {
+        const amount = Number(this.#draft.wealthAmount);
+        if (!Number.isFinite(amount) || amount === 0) {
+          this.#historyNote = 'Give the ledger line an amount.';
+          this.#render();
+          break;
+        }
+        this.#model.addWealthEntry({ amount, label: this.#draft.wealthLabel, kind: this.#draft.wealthKind || 'session' });
+        this.#draft.wealthAmount = '';
+        this.#draft.wealthLabel = '';
+        this.#render();
+        break;
+      }
+      case 'wealth-remove':
+        this.#model.removeWealthEntry(Number(button?.dataset.index));
+        this.#render();
+        break;
+      case 'wealth-offering': {
+        const paid = this.#model.makeOffering();
+        if (paid) this.#historyNote = `Offering made: ${Math.abs(paid.amount).toLocaleString('en-US')} paid; the count starts over from today.`;
+        this.#render();
         break;
       }
       case 'cook-clear':

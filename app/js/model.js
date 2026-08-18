@@ -2154,6 +2154,123 @@ function temporaryTemplateGroup(rows) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Wealth: the wallet, in mana.
+ *
+ * The campaign's currency is mana. The workbook's wallet block (Character
+ * Info, beside the mythic path) records the balance after the last Oath of
+ * Offerings, whether the character keeps the Oath and casts materially, when
+ * the last offering was made, the mana earned a day and the mana earned in
+ * sessions since ("Sessions" on the sheet is that sum, not a count),
+ * and the current balance -- and derives what the next offering will come to
+ * and what is left after it. That derivation, from the most recent sheet
+ * (Saburo's), with the two switches the earlier one (Narockro's) had:
+ *
+ *   OoO/Day          = Mana/Day / 2
+ *   expected, oath   = days since the last offering x OoO/Day + floor(session mana / 2)
+ *                      -- half of everything earned, the daily income and the rewards alike
+ *   expected, casting = whole months since the last offering x 30
+ *   expected         = the parts whose switch is on
+ *   Mana After       = current - expected
+ *
+ * `ledger` is the hook for what comes later: every reward, spend and offering
+ * is a line with a date, a label and an amount, and `current` moves with it.
+ * A session reward is a line of kind "session" that also adds to the session
+ * mana the oath takes half of.
+ * ------------------------------------------------------------------ */
+
+export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
+export const MATERIAL_CASTING_PER_MONTH = 30;
+
+const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
+/** "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''. */
+export function isoDay(v) {
+  if (v === null || v === undefined || v === '') return '';
+  // Local calendar day, not UTC: an offering made at eleven at night is made
+  // that day, and the day count reads the same clock.
+  const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : local(v);
+  const s = String(v).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '' : local(d);
+}
+
+export function emptyWealth() {
+  return {
+    currency: 'Mana', baseline: null, current: 0,
+    oathOfOfferings: false, materialCasting: false,
+    lastOffering: '', manaPerDay: 0, sessionMana: 0, ledger: [],
+  };
+}
+
+export function normalizeWealth(w) {
+  const src = w && typeof w === 'object' ? w : {};
+  const e = emptyWealth();
+  const ledger = (Array.isArray(src.ledger) ? src.ledger : []).map((l) => ({
+    date: isoDay(l?.date), label: String(l?.label ?? '').trim(),
+    amount: Number(l?.amount) || 0,
+    kind: WEALTH_KINDS.includes(l?.kind) ? l.kind : 'adjust',
+  }));
+  return {
+    ...e,
+    currency: String(src.currency || 'Mana'),
+    baseline: numOrNull(src.baseline),
+    // A workbook with a wallet label and no figure (Angou's) has a wallet at 0.
+    current: numOrNull(src.current) ?? 0,
+    oathOfOfferings: !!src.oathOfOfferings,
+    materialCasting: !!src.materialCasting,
+    lastOffering: isoDay(src.lastOffering),
+    manaPerDay: numOrNull(src.manaPerDay) ?? 0,
+    // Read as `sessions` off the sheet and in documents saved before the rename.
+    sessionMana: Math.max(0, numOrNull(src.sessionMana) ?? numOrNull(src.sessions) ?? 0),
+    ledger,
+  };
+}
+
+/** Whole days from `from` (YYYY-MM-DD) to `to`, as TODAY() - date counts them; 0 if unknown or in the future. */
+function daysBetween(from, to) {
+  if (!from) return 0;
+  const a = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10));
+  const b = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+/** Complete months from `from` to `to`, as DATEDIF(..., "M") counts them. */
+function monthsBetween(from, to) {
+  if (!from) return 0;
+  const y = +from.slice(0, 4);
+  const m = +from.slice(5, 7) - 1;
+  const d = +from.slice(8, 10);
+  let months = (to.getFullYear() - y) * 12 + (to.getMonth() - m);
+  if (to.getDate() < d) months -= 1;
+  return Math.max(0, months);
+}
+
+/**
+ * The wallet as it stands today: what the next offering will cost, part by
+ * part, and what is left after it. `today` is injectable so a test does not
+ * move with the calendar.
+ */
+export function wealthView(w, today = new Date()) {
+  const v = normalizeWealth(w);
+  const offeringPerDay = v.manaPerDay / 2;
+  const days = daysBetween(v.lastOffering, today);
+  const months = monthsBetween(v.lastOffering, today);
+  const oath = v.oathOfOfferings ? days * offeringPerDay + Math.floor(v.sessionMana / 2) : 0;
+  const casting = v.materialCasting ? months * MATERIAL_CASTING_PER_MONTH : 0;
+  const expected = oath + casting;
+  return {
+    ...v,
+    offeringPerDay, days, months,
+    expected: { oath, casting, total: expected },
+    after: v.current - expected,
+    gains: v.baseline === null ? null : v.current - v.baseline,
+    due: v.oathOfOfferings || v.materialCasting,
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * Primordia techniques: the Technique List and AutoTechnique tabs.
  *
  * A technique is a recipe of spheres, talents and "other" features; its
@@ -3003,6 +3120,9 @@ export class Character {
       if (!d.cooking) d.cooking = importCooking(cookTab);
       d.cooking = normalizeDish(d.cooking);
     }
+
+    // The wallet: the converter's block when the workbook had one, else empty.
+    d.wealth = normalizeWealth(d.wealth);
 
     // A document saved before the catalogue existed carries every maneuver its
     // disciplines grant. Reduce each one to the picks the character made.
@@ -4635,6 +4755,67 @@ export class Character {
     const target = Math.max(0, Math.min(order.length, to > from ? to - 1 : to));
     order.splice(target, 0, key);
     return this.setTabOrder(order);
+  }
+
+  /* ---------------- wealth ---------------- */
+
+  /** The wallet today: current mana, the offering owed part by part, and what is left after it. */
+  wealthView(today = new Date()) {
+    return wealthView(this.data.wealth, today);
+  }
+
+  /**
+   * A line in the ledger, and the wallet moves with it. `kind` is one of
+   * WEALTH_KINDS; a "session" line also adds to the session mana the next
+   * offering takes half of. This is the hook a session-reward automation calls.
+   */
+  addWealthEntry({ amount, label = '', kind = 'reward', date = null } = {}) {
+    const w = this.data.wealth = normalizeWealth(this.data.wealth);
+    const n = Number(amount) || 0;
+    const entry = {
+      date: isoDay(date) || isoDay(new Date()),
+      label: String(label || '').trim() || (kind === 'session' ? 'Session reward' : kind === 'spend' ? 'Spent' : 'Adjustment'),
+      amount: kind === 'spend' && n > 0 ? -n : n,
+      kind: WEALTH_KINDS.includes(kind) ? kind : 'adjust',
+    };
+    w.ledger.push(entry);
+    w.current += entry.amount;
+    if (entry.kind === 'session') w.sessionMana = Math.max(0, w.sessionMana + entry.amount);
+    this.recompute();
+    this.#emit({ type: 'wealth', entry, current: w.current });
+    return entry;
+  }
+
+  removeWealthEntry(index) {
+    const w = this.data.wealth = normalizeWealth(this.data.wealth);
+    const [gone] = w.ledger.splice(index, 1);
+    if (!gone) return this;
+    // Undoing the line undoes what it did to the wallet.
+    w.current -= gone.amount;
+    if (gone.kind === 'session') w.sessionMana = Math.max(0, w.sessionMana - gone.amount);
+    this.recompute();
+    this.#emit({ type: 'wealth', removed: gone, current: w.current });
+    return this;
+  }
+
+  /**
+   * Pay the offering: what the sheet's "Mana After" shows becomes the balance,
+   * that balance is the new baseline, today is the last offering, and the
+   * session mana starts over -- with the payment written to the ledger.
+   */
+  makeOffering(today = new Date()) {
+    const view = this.wealthView(today);
+    if (!view.due) return null;
+    const w = this.data.wealth;
+    const entry = { date: isoDay(today), label: 'Oath of Offerings' + (view.expected.casting ? ' & material casting' : ''), amount: -view.expected.total, kind: 'offering' };
+    w.ledger.push(entry);
+    w.current = view.after;
+    w.baseline = view.after;
+    w.lastOffering = isoDay(today);
+    w.sessionMana = 0;
+    this.recompute();
+    this.#emit({ type: 'wealth', entry, current: w.current });
+    return entry;
   }
 
   /* ---------------- techniques and cooking ---------------- */
@@ -7865,6 +8046,8 @@ export class Character {
         ranged: c.attack.totalRanged,
         cmb: c.attack.totalCmb,
       },
+      // The wallet: what is on hand, what the next offering costs, what is left after it.
+      mana: (() => { const w = wealthView(c.wealth); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
       caster: {
         level: Number(c.training?.magic?.globalCL ?? c.identity.level) || 0,
         dc: Number(c.training?.magic?.globalDC) || 0,

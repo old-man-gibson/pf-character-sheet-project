@@ -695,6 +695,49 @@ function extractResources(bk) {
   return out;
 }
 
+/**
+ * The wallet: the campaign's currency is mana, and the block beside the
+ * mythic path on Character Info tracks it -- the balance recorded after the
+ * last Oath of Offerings ("Wallet (Baseline after OoO)"), whether the
+ * character keeps the Oath and casts materially, when the last offering was
+ * made, the mana earned a day, sessions since, and the current balance. The
+ * expected offering and the balance after it are formulas, recomputed by the
+ * model. Older sheets carry only the "Wallet" label (Angou) or none at all
+ * (Bryva, Nico): the block is null then and the model starts one empty.
+ */
+function extractWealth(bk) {
+  const CI = 'Character Info';
+  const g = bk.grids.get(CI);
+  if (!g) return null;
+  let wallet = null;
+  for (let i = 0; i < g.length && !wallet; i++) {
+    for (let j = 0; j < g[i].length; j++) {
+      if (typeof g[i][j] === 'string' && g[i][j].startsWith('Wallet')) { wallet = [i + 1, j + 1]; break; }
+    }
+  }
+  if (!wallet) return null;
+  // The value beside a label, skipping the blank a merged cell leaves.
+  const beside = (label) => {
+    const p = bk.findLabel(CI, label);
+    if (!p) return null;
+    for (let n = 1; n <= 3; n++) {
+      const v = bk.cell(CI, p[0], p[1] + n);
+      if (v !== null && v !== undefined) return v;
+    }
+    return null;
+  };
+  const bool = (v) => v === true;
+  return {
+    baseline: bk.cell(CI, wallet[0] + 1, wallet[1]),
+    current: beside('Current Mana'),
+    oathOfOfferings: bool(beside('Oath of Offerings')),
+    materialCasting: bool(beside('Material Casting')),
+    lastOffering: beside('Last Offering'),
+    manaPerDay: beside('Mana/Day'),
+    sessions: beside('Sessions'),
+  };
+}
+
 function extractHp(bk) {
   const CI = 'Character Info';
   return {
@@ -1328,6 +1371,7 @@ function build(bk, key, title, fileId, convertedAt) {
     skillBudget: extractSkillBudget(bk),
     carry: extractCarry(bk),
     resources: extractResources(bk),
+    wealth: extractWealth(bk),
     planner: extractPlanner(bk),
     feats: extractFeats(bk),
     mythic: extractMythic(bk),
