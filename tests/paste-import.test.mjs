@@ -184,7 +184,7 @@ console.log('class table -- three shapes');
 
 console.log('feature prose -- inline and title shapes');
 {
-  const p = readFeatureProse(BARBARIAN.split('\n'), { skipLabels: new Set(['role', 'alignment', 'source', 'starting wealth']) });
+  const p = readFeatureProse(BARBARIAN.split('\n'), { skipLabels: new Set(['role', 'alignment', 'source', 'starting wealth', 'skill points at each level', 'hit die']) });
   check('names in order', p.map((x) => x.name), ['Weapon and Armor Proficiency', 'Rage', 'Trap Sense', 'Damage Reduction', 'Unstoppable']);
   check('types', p.map((x) => x.type), [null, 'Ex', 'Ex', 'Ex', 'Ex']);
   check('level read off the text', p.map((x) => x.level), [null, null, 3, 7, 20]);
@@ -251,8 +251,8 @@ console.log('parsePaste -- the whole thing');
 
   // leftovers: what the review stage offers
   const left = r.leftovers.map((l) => [l.suggest, l.near?.name, l.text.split('\n')[0].slice(0, 30)]);
-  ok('the capstone intro is left over near the barbarian', left.some(([s, n, t]) => n === 'Barbarian' && t.startsWith('Alternate Capstones')));
-  ok('the editor\'s note is left over near the warlord as a feature candidate', left.some(([s, n, t]) => n === 'Warlord' && s === 'feature' && t.startsWith("Editor's Note")));
+  ok('the capstone intro is a section\'s own words, consumed', !left.some(([, , t]) => t.startsWith('Alternate Capstones')));
+  ok('the editor\'s note is folded into Maneuvers, not left over', !left.some(([, , t]) => t.startsWith("Editor's Note")) && war.features.some((x) => /Editor's Note: Discipline Exchanges/.test(x.text)));
   ok('the wiki chrome is the veil\x27s, not left over', !left.some(([, , t]) => /Namespaces/.test(t)));
   ok('nothing used twice: no leftover repeats a trait or table row', !left.some(([, , t]) => /^Hardy:|^1st\t/.test(t)));
   ok('the report reads', r.report.length >= 8 && /Class Barbarian: d12, full BAB/.test(r.report[0]));
@@ -357,6 +357,147 @@ A: Yes, they should both apply only when elemental overflow applies, like the [e
   // and the same interlude inside a class's list
   const cls = parsePaste('Hit Die: d10\nThe warlord\'s class skills are Climb (Str).\nFavored Class Options\nHuman: Gain 1/6 of a new combat feat.\nFAQ\nQ: Does it stack?\nA: No.\nElf: Gain 1/5 of a new combat feat.\n');
   check('class list carries on past a FAQ', cls.blocks.find((b) => /Favored/.test(b.name)).text.split('\n').length, 2);
+}
+
+console.log('a wiki class page, whole-page copy -- chrome, info box, sub-entries, sidebars, name drift, archetypes');
+{
+  const page = `Anonymous
+Library of Metzofitz
+Search
+Search Library of Metzofitz
+Legendary Samurai (class)
+NamespacesPageDiscussionPage actionsReadView sourceHistoryPurge
+
+Notice
+The following content has been errata'd by its original author(s) and may not match the original sourcetext. For the errata log, see Here.
+Classes
+Legendary Samurai (class)
+Information
+Alignment
+Any
+Hit Die
+d10
+Skill Points each Level
+4 + Int modifier
+BAB\tFort
+Save\tRef
+Save\tWill
+Save
+1\tGood\tPoor\tGood
+Sources
+Legendary Samurai, pgs. 2–10
+Few warriors are more dedicated to honor and the code of the warrior than the samurai, trained from an early age in the art of war and sworn to the service of a lord.
+
+Role: Masters of the blade, legendary samurai specialize in the art of swordsmanship and draw upon internal energies to enhance themselves.
+
+Legendary Class: Unlike other legendary classes, the legendary samurai marks a large departure from the base class in order to create a class that is more in keeping with the fantasy of samurai.
+
+JAPANESE CLASSES AND WESTERN FANTASY
+One of the things that many players will hear upon asking to play a legendary samurai is that this is a western game and samurai do not exist, which is a disheartening statement and it is not necessary.
+
+Alignment: Any
+
+Hit Die: d10
+
+Class Skills: The legendary samurai's class skills are Bluff (Cha), Climb (Str), Knowledge (local) (Int) Knowledge (nobility) (Int), Perception (Wis), and Swim (Str).
+
+Skill Ranks Per Level: 4 + Int modifier
+
+Class Features
+Table: Legendary Samurai
+Level\tBase Attack Bonus\tFort Save\tRef Save\tWill Save\tSpecial
+1st\t+1\t+2\t+0\t+2\tChallenge, iaijutsu technique, spirit
+2nd\t+2\t+3\t+0\t+3\tResolve
+3rd\t+3\t+3\t+1\t+3\tKiai art
+8th\t+8/+3\t+6\t+2\t+6\tOpportune strike
+20th\t+20/+15/+10/+5\t+12\t+6\t+12\tLast stand
+The following are the class features of the legendary samurai.
+
+Weapon and Armor Proficiencies: Samurai are proficient with all simple and martial weapons, plus the tetsubo and all one-handed slashing weapons.
+
+Spirit (Su): At 1st level, a legendary samurai gains access to spirit, using it to focus their attacks, and can gain spirit in the following ways:
+
+Spirited Initiative: Whenever the legendary samurai rolls initiative, they gain 1 spirit.
+Samurai Strike: Whenever the legendary samurai successfully damages a creature with an iaijutsu strike, they gain 1 spirit.
+Their spirit goes up or down throughout the day, but usually cannot go higher than their Charisma modifier (minimum 1), though some feats and magic items may affect this maximum.
+
+Grit, Panache, and Spirit
+Grit, panache, and spirit represent three different means by which heroes can gain access to the same heroic pool, using it to accomplish fantastic feats and pooling the three resources together.
+Challenge (Ex): As a swift action, the legendary samurai can spend 1 spirit to choose one target within their sight to challenge; the samurai can only have a single creature challenged at a time.
+
+Challenging a foe requires much of the legendary samurai's concentration. The legendary samurai takes a –2 penalty to his Armor Class, except against attacks made by the target of his challenge.
+
+Iaijutsu Techniques (Ex or Su): At 1st level and every four levels afterwards, a legendary samurai gains the ability to alter their iaijutsu strike, gaining an iaijutsu technique of their choice.
+
+See: Legendary Samurai Iaijutsu Technique
+Resolve (Ex): Starting at 2nd level, a legendary samurai gains resolve that they can call upon to endure even the most devastating wounds and afflictions.
+
+Determined: As a standard action, the legendary samurai can remove the fatigued, shaken, or sickened condition, or at 8th level the exhausted, frightened, nauseated, or staggered condition.
+Kiai Arts (Su): At 3rd level and every four levels after, a legendary samurai gains new ways to channel their fighting spirit into shouts called kiai arts, and at each listed level gains all listed kiai arts for that level.
+
+Opportune Slash (Ex): At 8th level, once per round, a legendary samurai can treat an attack of opportunity as an iaijutsu strike, drawing and sheathing the weapon as part of the attack.
+
+Last Stand (Su): At 20th level, a legendary samurai can spend 1 spirit as a move action to declare a last stand, taking minimum damage from all sources for one round and becoming immune to death effects.
+
+Once the last stand ends, the legendary gains 1 negative level. The negative level cannot be removed by normal means but heals when the legendary samurai completes an 8-hour rest.
+
+Favored Class Bonuses
+The following favored class bonuses are open to all characters, regardless of race or ancestry:
+
+Any: Add +1/3 on critical hit confirmation rolls made with iaijutsu strikes (maximum bonus of +5). This bonus does not stack with Critical Focus.
+Any: Gain 1/6 of a new iaijutsu technique.
+Archetypes
+Name\tArchetype of\tSystem\tFlavor\tSource
+Publication\tPublisher
+Ancestral Inheritor
+Legendary Samurai (class)
+Blessed by the spirits of their heritage, some legendary samurai share an incredible bond to their history, forming a powerful spiritual guardian which fights alongside them.
+Legendary Samurai
+Legendary Games
+Legendary Samurai Alternate Class Features
+Legendary Samurai (class)
+Spheres of Might
+Legendary Samurai
+Legendary Games
+Ronin
+Legendary Samurai (class)
+The path of honor is common for legendary samurai, and yet others care to tread different ground, lacking a master or a path in life and wandering in search of meaning.
+Legendary Samurai
+Legendary Games
+
+Navigation
+Main page
+Recent changes
+Random page
+Special pages
+Categories
+Legendary Samurai classes
+Legendary Games classes
+Legendary Samurai (class)
+Hosted by MirahezeCreative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)Powered by MediaWiki
+This page was last edited on 23 February 2026, at 23:24.
+Content is available under Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0) unless otherwise noted.
+Privacy policyAbout Library of MetzofitzDisclaimersTerms of UseDonate to MirahezeMobile view
+`;
+  const r = parsePaste(page);
+  check('one class, an fcb note, an archetype note; nothing left over', [r.blocks.map((b) => `${b.kind}:${b.name}`), r.leftovers.length],
+    [['class:Legendary Samurai', 'note:Favored class options — Legendary Samurai', 'note:Legendary Samurai — archetypes'], 0]);
+  const c = r.blocks[0];
+  check('numbers, with the source from the info box', [c.hd, c.bab, c.goodFort, c.goodRef, c.goodWill, c.skillRanks, c.source], [10, 1, true, false, true, 4, 'Legendary Samurai, pgs. 2–10']);
+  check('the missing comma between two Knowledge skills is healed', c.classSkills, ['Bluff', 'Climb', 'Knowledge (local)', 'Knowledge (nobility)', 'Perception', 'Swim']);
+  ok('description carries the flavour, Role, Legendary Class and the sidebar', /^Role: Masters/.test(c.text) && /Few warriors/.test(c.text) && /Legendary Class: Unlike/.test(c.text) && /JAPANESE CLASSES AND WESTERN FANTASY\n\nOne of the things/.test(c.text));
+  const f = (n) => c.features.find((x) => x.name.toLowerCase() === n);
+  ok('sub-entries and the continuation paragraph belong to Spirit', /Spirited Initiative: Whenever/.test(f('spirit').text) && /Samurai Strike:/.test(f('spirit').text) && /Their spirit goes up/.test(f('spirit').text));
+  ok('a sidebar is folded in under its heading', /\n\nGrit, Panache, and Spirit\n\nGrit, panache, and spirit represent/.test(f('spirit').text));
+  ok('a continuation paragraph belongs to Challenge', /Challenging a foe requires/.test(f('challenge').text));
+  ok('table singular matches prose plural, "(Ex or Su)" read, "See:" pointer kept', /every four levels/.test(f('iaijutsu technique').text) && /See: Legendary Samurai Iaijutsu Technique/.test(f('iaijutsu technique').text));
+  ok('Determined is a sub-entry of Resolve, not a feature', /Determined: As a standard action/.test(f('resolve').text) && !c.features.some((x) => x.name === 'Determined'));
+  ok('kiai art / Kiai Arts paired', /shouts called kiai arts/.test(f('kiai art').text));
+  ok('opportune strike takes Opportune Slash by level and first word', /attack of opportunity as an iaijutsu strike/.test(f('opportune strike').text));
+  ok('last stand keeps its second paragraph', /Once the last stand ends/.test(f('last stand').text));
+  check('no sub-entry or sidebar became a feature; proficiencies did', c.features.filter((x) => !new Set(['challenge', 'iaijutsu technique', 'spirit', 'resolve', 'kiai art', 'opportune strike', 'last stand']).has(x.name.toLowerCase())).map((x) => x.name), ['Weapon and Armor Proficiencies']);
+  check('favored class bonuses (not options) read', r.blocks[1].text.split('\n').length, 2);
+  check('archetypes: names with flavour, none for the one without, publisher lines skipped', r.blocks[2].text.split('\n').map((l) => l.split(':')[0]), ['Ancestral Inheritor', 'Legendary Samurai Alternate Class Features', 'Ronin']);
 }
 
 console.log('splitChunk -- a leftover as name and text for tagging');

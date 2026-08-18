@@ -104,17 +104,31 @@ is the point:
    lines every page uses — *Hit Die* for a class, *Standard Racial Traits* / *Ability Score
    Modifiers* for a race, *Chakra Slots* for a veil — reaches back for each thing's preamble
    and forward to the next thing, with two blank lines in a row (what a paste of several
-   pages has between them) as a hard boundary. A class yields its progression table (tab-
-   separated rows, space-separated, or one cell per line), hit die, BAB and good saves read
-   off the 20th row, skill ranks, class skills with the `(Dex)` tags stripped, and features
-   by level with their prose matched by name — *Trap sense +1* on the table finds *Trap Sense
-   (Ex)* in the text; extra table columns (Known / Readied / Stances) fold into one entry per
-   level; *Ex-Barbarians* and the proficiency line are features too; alternate capstones
-   become features in their own group and the favored-class list a note. A race yields its
-   ability modifiers, size, speed, languages and standard traits, its alternate traits as
-   `trait` blocks (each says what it replaces), subtypes and favored-class options as
-   notes, and the age and height tables are dropped and said so. A veil becomes a feature
-   group: description, *Essence*, *Chakra Bind*.
+   pages has between them) as a hard boundary. A wiki page's chrome — the sign-in and
+   search lines over the title, the tab strip, the errata *Notice*, the breadcrumb, and the
+   whole navigation column and footer — is recognised first and stays transparent: never
+   content, never a boundary, never a leftover. Markdown copies (bullets, `[text](url)`
+   links) are flattened before reading, and a *FAQ* in the middle of a list is an interlude
+   the list carries on past. A class yields its progression table (tab-separated rows,
+   space-separated, or one cell per line), hit die, BAB and good saves read off the 20th row
+   (or the wiki's info box), skill ranks, source, class skills with the `(Dex)` tags stripped
+   (a missing comma between two skills is healed), a description made of the flavour, the
+   *Role:* and other labelled lines and any sidebar above the table, and features by level
+   with their prose matched by name — *Trap sense +1* on the table finds *Trap Sense (Ex)*
+   below, singular finds plural (*kiai art* / *Kiai Arts*), and where a page's table and prose
+   disagree (*opportune strike* / *Opportune Slash*) the same level and first word pair them.
+   A feature's prose runs on: continuation paragraphs, list lines, untyped sub-entries
+   (*Spirited Initiative: …* under *Spirit*), a *See:* pointer and any sidebar (*Sheathed*,
+   *Grit, Panache, and Spirit*) stay inside the feature they sit under; extra table columns
+   (Known / Readied / Stances) fold into one entry per level; *Ex-Barbarians* and the
+   proficiency line are features too; alternate capstones become features in their own
+   group; the favored-class list (*Options* or *Bonuses*) and the archetype table (name and
+   one-line flavour) become notes. A race yields its ability modifiers, size, speed,
+   languages and standard traits, its alternate traits as `trait` blocks (each says what it
+   replaces, colon or no colon), subtypes and favored-class options as notes, and the age and
+   height tables are dropped and said so. A veil becomes a `veil` block: title, chakra
+   slot(s), descriptor and source from the info box; shaping text, *Essence*, *Chakra Bind*,
+   saving throw and bind levels as its text.
 2. **Review.** The panel shows what was read — one line per block, each with a tick to
    drop it — and then **everything the reader did not use**, as stretches of the original
    text with a tag menu on each: *feature of* the class it sat under, *race trait of* the
