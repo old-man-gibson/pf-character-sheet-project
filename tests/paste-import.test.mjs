@@ -266,6 +266,99 @@ console.log('parsePaste -- nothing recognisable');
   check('empty text', parsePaste('').blocks, []);
 }
 
+console.log('veils -- a whole-page copy: chrome above the title, info box to fields, notes and navigation dropped');
+{
+  const page = `Anonymous
+Library of Metzofitz
+Search
+Angelic Wings
+Namespaces
+PageDiscussion
+Veils
+Angelic Wings
+Information
+Descriptors
+Good
+Classes Available
+Daevic (Veil List)
+Chakra Slots
+Shoulders
+Saving Throw
+Fortitude; see text
+Veil Sets
+Angelic Armaments
+Variants
+Death God's Wings
+Sources
+City of Seven Seraphs: Akashic Trinity, pg. 20
+
+Brilliant white wings of gleaming energy sprout from your shoulders and settle around you like a fine cloak.
+
+Essence: When you have a least 1 point of essence invested in this veil you gain a fly speed of 10 ft. with clumsy maneuverability.
+
+Chakra Bind (Shoulders):[Bind Level 1] Binding this veil to your Shoulders chakra fills your wings with potent protective capabilities.
+
+Bind Level
+↑ Bind Level: Daevic 10, Eclipse 15, Helmsman 11
+Notes
+This veil was added to the Helmsman Veil List in Arcforge: Technology Expanded on pgs. 42-44.
+Related
+Archetypes
+Classes
+Class Options
+Protection Dominion
+Add comment
+Categories: Good veilsAngelic Armaments set veils
+This page was last edited on 13 August 2026, at 01:13.
+`;
+  const r = parsePaste(`${page}\n\n${page.replace(/Angelic Wings/g, 'Second Veil')}`);
+  check('two whole pages, two veils, nothing left over', [r.blocks.map((b) => [b.kind, b.name]), r.leftovers.length], [[['veil', 'Angelic Wings'], ['veil', 'Second Veil']], 0]);
+  const v = r.blocks[0];
+  check('info box to fields', [v.slot, v.descriptor, v.source], ['Shoulders', 'Good', 'City of Seven Seraphs: Akashic Trinity, pg. 20']);
+  ok('text: shaping, essence, bind, saving throw, bind level -- no notes, no navigation, no info box',
+    /^Brilliant white wings/.test(v.text) && /\nEssence: When/.test(v.text) && /Chakra Bind \(Shoulders\) — bind level 1: Binding/.test(v.text)
+    && /Saving throw: Fortitude; see text/.test(v.text) && /Bind Level: Daevic 10/.test(v.text)
+    && !/was added to/.test(v.text) && !/Library of Metzofitz|Anonymous|Veil List|Categories|Protection Dominion|Death God/.test(v.text));
+}
+
+console.log('races -- an alternate trait whose page dropped the colon');
+{
+  const r = parsePaste('Standard Racial Traits\nAbility Score Modifiers: Dwarves gain +2 Constitution.\nHardy: Dwarves gain a +2 racial bonus on saving throws against poison.\nAlternate Racial Traits\nAncient Enmity: Dwarves have long been in conflict with elves. This racial trait replaces hatred.\nWanderer You gain Endurance as a bonus feat, and Climb and Swim are class skills for them. This racial trait replaces hardy. Source PZO9480\nWyrmscourged: Dwarves with this racial trait gain a +1 bonus on attack rolls. This racial trait replaces defensive training.\n');
+  check('Wanderer read as its own alternate trait', r.blocks.map((b) => [b.kind, b.name]), [['race', 'Dwarf'], ['trait', 'Ancient Enmity'], ['trait', 'Wanderer'], ['trait', 'Wyrmscourged']]);
+  check('its text starts at the sentence, source tagged', [r.blocks[2].text.startsWith('You gain Endurance'), r.blocks[2].source], [true, 'PZO9480']);
+  check('nothing left over', r.leftovers.length, 0);
+}
+
+console.log('markdown paste with a FAQ interlude -- links and bullets stripped, the list carries on');
+{
+  const md = `Standard Racial Traits
+Ability Score Modifiers: Dwarves are both tough and wise. They gain +2 [Constitution](https://www.d20pfsrd.com/x), +2 Wisdom, and –2 Charisma.
+Hardy: Dwarves gain a +2 racial bonus on saving throws against [poison](https://x).
+Favored Class Options
+The following favored class options are available to all characters of this race who have the listed favored class, and unless otherwise stated, the bonus applies each time you select the favored class reward.
+
+* Alchemist: Add +1/4 to the [alchemist’s](https://www.d20pfsrd.com/classes/base-classes/alchemist) [natural armor bonus](https://x) when using his mutagen.
+* Investigator: Gain a +1/4 bonus on [Perception](https://x) checks when underground. Source [PZO1129](http://x)
+
+FAQ
+Q: The elf favored class bonus for kineticists mentions it applies when elemental overflow applies. Should they also apply only when elemental overflow applies?
+A: Yes, they should both apply only when elemental overflow applies, like the [elf](https://x) favored class bonus. [[Source](http://paizo.com/x)]
+
+* Kineticist: [see errata at right] Add 1/3 point of damage to earth element blasts that deal damage. Source [PZO1132](http://x)
+* Wizard: Add 1/3 to the effective [caster level](https://x) of wizard spells. Source [PZO1135](http://amzn.to/2chJpnf)
+`;
+  const r = parsePaste(md);
+  check('modifiers read through the links', r.blocks[0].abilityMods, { con: 2, wis: 2, cha: -2 });
+  check('trait text has no link markup', r.blocks[0].traits[0].text, 'Dwarves gain a +2 racial bonus on saving throws against poison.');
+  const fcb = r.blocks.find((b) => /Favored/.test(b.name));
+  check('all four options, past the FAQ, bullets and links gone', fcb.text.split('\n').map((l) => l.split(':')[0]), ['Alchemist', 'Investigator', 'Kineticist', 'Wizard']);
+  ok('a source stays as its tag', /Source PZO1132$/m.test(fcb.text));
+  check('the FAQ itself is consumed, not left over', r.leftovers.length, 0);
+  // and the same interlude inside a class's list
+  const cls = parsePaste('Hit Die: d10\nThe warlord\'s class skills are Climb (Str).\nFavored Class Options\nHuman: Gain 1/6 of a new combat feat.\nFAQ\nQ: Does it stack?\nA: No.\nElf: Gain 1/5 of a new combat feat.\n');
+  check('class list carries on past a FAQ', cls.blocks.find((b) => /Favored/.test(b.name)).text.split('\n').length, 2);
+}
+
 console.log('splitChunk -- a leftover as name and text for tagging');
 check('label line', splitChunk("Editor's Note: Discipline Exchanges\nMore text here."), { name: "Editor's Note", type: null, text: 'Discipline Exchanges\nMore text here.' });
 check('typed label', splitChunk('Rage (Ex): A barbarian can rage.'), { name: 'Rage', type: 'Ex', text: 'A barbarian can rage.' });

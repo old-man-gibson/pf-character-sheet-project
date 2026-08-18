@@ -70,7 +70,23 @@ a bundled pack's id.
 the enabled packs offer, filterable by kind, each with **+ Add**. A class lands as a
 Classes-table row, its feature names on the Progression tab by level, and the features
 that carry rules text as a group on the Template tab; its class skills are ticked. A race
-sets the race, size and racial ability modifiers, and fills the race-trait rows. Switching a
+sets the race, size and racial ability modifiers, and fills the race-trait rows. A veil is
+shaped in its chakra slot on the Akashic board (essence 0), the first listed slot with room.
+
+**Alternate racial traits swap, and remember.** A `trait` block carries `replaces` — read
+off its own text ("This racial trait replaces defensive training and hatred", "in place of
+stonecunning") unless the pack says otherwise — and the shelf shows it. Adding the trait
+removes those rows from the character and keeps them on the new row as its history
+(`replaced`, an **alt** badge on the Overview). A later alternate that overlaps undoes
+exactly the right amount: if *Sky Sentinel* replaced defensive training, hatred and
+stonecunning, and *Ancient Enmity* (which replaces hatred) is then added, Sky Sentinel is
+displaced, hatred moves into Ancient Enmity's history, and defensive training and
+stonecunning — which Ancient Enmity does not replace — come back as the standard traits
+they were. A trait that names something not on the sheet is added and says what it did
+not find; the same trait twice is refused. Removing an alternate's row by hand does not
+put its traits back — add them again from the race's pack.
+
+Switching a
 pack on or off in the dialog redraws every sheet on the page at once. `app/js/extensions.js`
 is the pure module (format, store, merge, attach), `extension-runtime.js` the page's one
 set of active packs registered with the model, `extension-manager.js` the dialog; a host

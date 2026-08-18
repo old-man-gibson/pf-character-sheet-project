@@ -3519,7 +3519,18 @@ export class Character {
       // A row that is already an object is the app's own -- an empty one is a
       // slot still to fill (a blank character starts with three), and stays.
       if (t && typeof t === 'object') {
-        return { name: String(t.name ?? '').trim(), text: String(t.text ?? '').trim() };
+        const row = { name: String(t.name ?? '').trim(), text: String(t.text ?? '').trim() };
+        // An alternate racial trait added from an extension remembers the
+        // standard traits it displaced, so a later alternate that overlaps
+        // it can put back the ones it does not itself replace.
+        if (Array.isArray(t.replaced) && t.replaced.length) {
+          row.replaced = t.replaced
+            .filter((r) => r && typeof r === 'object')
+            .map((r) => ({ name: String(r.name ?? '').trim(), text: String(r.text ?? '').trim() }))
+            .filter((r) => r.name);
+          if (!row.replaced.length) delete row.replaced;
+        }
+        return row;
       }
       const raw = String(t ?? '').trim();
       if (!raw) return null;

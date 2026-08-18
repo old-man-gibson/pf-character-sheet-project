@@ -1822,7 +1822,8 @@ export class CharacterSheetElement extends HTMLElement {
           <div class="tablewrap"><table class="racetraits">
             <thead><tr><th>Trait</th><th>Effect</th><th></th></tr></thead>
             <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="A race-trait slot still to fill"'}>
-              <td>${this.#itemText('raceTraits', i, 'name', t.name, 'Darkvision')}</td>
+              <td>${this.#itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
+    ? ` <span class="badge player" title="${esc(`Alternate racial trait — took the place of ${t.replaced.map((r) => r.name).join(' and ')}. Removing this row does not put them back; add them again from the race's pack if you need them.`)}">alt</span>` : ''}</td>
               <td>${this.#prose(`data-item="raceTraits|${i}|text"`, t.text, 1, 'grow')}</td>
               ${this.#rowTools('raceTraits', i)}
             </tr>`).join('')}
@@ -2632,6 +2633,7 @@ export class CharacterSheetElement extends HTMLElement {
         case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
         case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
         case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
+        case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
         default: return '';
       }
     };

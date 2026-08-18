@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
-  blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions,
+  blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
 } from '../app/js/extensions.js';
 import { parseClassFeatures, parseGroupFeatures, parseNamedLines } from '../app/js/extension-manager.js';
 import { Character, setManeuverCatalogue, disciplineEntries } from '../app/js/model.js';
@@ -73,6 +73,14 @@ check('looksLikeExtension', [looksLikeExtension({ format: EXTENSION_FORMAT }), l
   check('feature type normalised', f.type, 'Ex');
   check('unknown kind is null', normalizeBlock({ kind: 'spell' }), null);
 }
+check('parseReplaces: one', parseReplaces('Text. This racial trait replaces hatred.'), ['hatred']);
+check('parseReplaces: and', parseReplaces('This replaces defensive training and hatred.'), ['defensive training', 'hatred']);
+check('parseReplaces: oxford list', parseReplaces('This racial trait replaces greed, hatred, stonecunning, and weapon familiarity.'), ['greed', 'hatred', 'stonecunning', 'weapon familiarity']);
+check('parseReplaces: in place of', parseReplaces('Dwarves can take this trait in place of stonecunning. Source PZO9466'), ['stonecunning']);
+check('parseReplaces: the … racial trait', parseReplaces('This racial trait replaces the hatred racial trait.'), ['hatred']);
+check('parseReplaces: typo "replaced"', parseReplaces('This racial trait replaced stonecunning.'), ['stonecunning']);
+check('parseReplaces: nothing', parseReplaces('Dwarves gain a +2 bonus.'), []);
+check('trait block reads replaces off its text', normalizeBlock({ kind: 'trait', name: 'X', text: 'This replaces hatred and greed.' }).replaces, ['hatred', 'greed']);
 check('describeSummary', describeSummary({ tables: { maneuvers: 30, vancian: 1 }, blocks: { class: 2, race: 1 } }), '30 disciplines · 1 casting table · 2 classes · 1 race');
 check('describeSummary empty', describeSummary({ tables: {}, blocks: {} }), 'empty');
 
@@ -202,6 +210,30 @@ console.log('apply -- blocks land on a blank character through the model');
   check('a template block is its own group', c.data.templates.map((tp) => tp.name), ['Barbarian', 'Bloodburst Blade']);
   applyBlock(c, { kind: 'note', name: 'House rule', text: 'body' });
   check('note', c.data.notes.at(-1), { title: 'House rule', body: 'body' });
+
+  // alternate racial traits swap out what they replace, and remember it
+  const c2 = new Character(blankDocument({ name: 'Rusilka', level: 3 }));
+  c2.data.raceTraits = [];
+  applyBlock(c2, { kind: 'race', name: 'Dwarf', traits: [{ name: 'Defensive Training', text: 'dt' }, { name: 'Hardy', text: 'h' }, { name: 'Hatred', text: 'ht' }, { name: 'Stonecunning', text: 'sc' }, { name: 'Greed', text: 'g' }] });
+  const names = () => c2.data.raceTraits.map((t) => t.name);
+  // X replaces A and B
+  let msg = applyBlock(c2, { kind: 'trait', name: 'Sky Sentinel', text: 'ss. This racial trait replaces defensive training, hatred, and stonecunning.' });
+  check('X replaces the three it names', names(), ['Hardy', 'Greed', 'Sky Sentinel']);
+  ok('and says so', /Added Sky Sentinel, replacing Defensive Training and Hatred and Stonecunning\./.test(msg));
+  check('X remembers what it took', c2.data.raceTraits.at(-1).replaced.map((r) => r.name), ['Defensive Training', 'Hatred', 'Stonecunning']);
+  // N (an alternate to hatred) displaces X; the two X held that N does not replace come back
+  msg = applyBlock(c2, { kind: 'trait', name: 'Ancient Enmity', text: 'ae. This racial trait replaces hatred.' });
+  check('N displaces X, restores the rest, keeps only what it replaces', names(), ['Hardy', 'Greed', 'Defensive Training', 'Stonecunning', 'Ancient Enmity']);
+  ok('message names the swap', /Added Ancient Enmity, replacing Hatred, displacing Sky Sentinel \(Defensive Training and Stonecunning restored\)\./.test(msg));
+  check('N holds only hatred', c2.data.raceTraits.at(-1).replaced, [{ name: 'Hatred', text: 'ht' }]);
+  // a trait naming something not on the sheet is added and says so
+  msg = applyBlock(c2, { kind: 'trait', name: 'Stubborn', text: 's. This racial trait replaces hardy.', replaces: ['hardy', 'nonesuch'] });
+  ok('explicit replaces list wins, missing name reported', /replacing Hardy, \(nonesuch not on the sheet\)/.test(msg) && !names().includes('Hardy'));
+  check('twice is refused', applyBlock(c2, { kind: 'trait', name: 'Stubborn', text: 's' }), 'Stubborn is already on the sheet.');
+  // and it survives a round trip through the model
+  const back2 = new Character(JSON.parse(JSON.stringify(c2.toJSON())));
+  check('replaced history round-trips', back2.data.raceTraits.find((t) => t.name === 'Ancient Enmity').replaced, [{ name: 'Hatred', text: 'ht' }]);
+  check('rows without history stay plain', 'replaced' in back2.data.raceTraits.find((t) => t.name === 'Greed'), false);
 
   // veils go onto the Akashic board, into their chakra slot
   const v1 = applyBlock(c, { kind: 'veil', name: 'Unyielding', slot: 'Body', text: 'stands firm' });

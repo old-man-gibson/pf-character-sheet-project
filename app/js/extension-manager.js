@@ -266,7 +266,8 @@ Hit Die: d12.
       switch (b.kind) {
         case 'class': return `d${b.hd} · ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'} BAB · good ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no'} save · ${b.skillRanks} ranks · ${b.classSkills.length} class skills · ${b.features.length} features (${b.features.filter((f) => f.text).length} with text)`;
         case 'race': return [b.size, b.speed && `${b.speed} ft`, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), `${b.traits.length} traits`, b.languages.length && b.languages.join(', ')].filter(Boolean).join(' · ');
-        case 'trait': case 'feature': case 'note': return `${b.text.slice(0, 110)}${b.text.length > 110 ? '…' : ''}`;
+        case 'trait': return `${b.replaces.length ? `replaces ${b.replaces.join(', ')} · ` : ''}${b.text.slice(0, 90)}${b.text.length > 90 ? '…' : ''}`;
+        case 'feature': case 'note': return `${b.text.slice(0, 110)}${b.text.length > 110 ? '…' : ''}`;
         case 'veil': return `${b.slot || 'no slot'}${b.descriptor ? ` · ${b.descriptor}` : ''} · ${b.text.slice(0, 80)}…`;
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
         default: return '';
@@ -274,9 +275,9 @@ Hit Die: d12.
     };
     const choicesFor = (l) => {
       const opts = [['skip', 'Leave it out']];
-      for (const [c, i] of classes) opts.push([`class:${i}`, `Feature of ${c.name}`]);
-      for (const [r, i] of races) opts.push([`race:${i}`, `Race trait of ${r.name}`]);
-      opts.push(['trait', 'A race trait block'], ['feature', 'A feature block (in a group)'], ['note', 'A note']);
+      for (const [c, i] of classes) opts.push([`class:${i}`, `Feature of ${c.name} (added with the class)`]);
+      for (const [r, i] of races) opts.push([`race:${i}`, `Standard trait of ${r.name} (comes with the race)`]);
+      opts.push(['trait', 'Alternate / optional race trait (its own block)'], ['feature', 'A feature block (in a group)'], ['note', 'A note']);
       return opts;
     };
     return `
@@ -328,7 +329,13 @@ Hit Die: d12.
     const tags = result.leftovers.map((l) => {
       let choice = l.suggest;
       if (choice === 'feature') { const i = nearest(l, 'class', classes); choice = i !== null ? `class:${i}` : 'feature'; }
-      if (choice === 'trait') { const i = nearest(l, 'race', races); choice = i !== null ? `race:${i}` : 'trait'; }
+      if (choice === 'trait') {
+        // "This racial trait replaces hardy" is an alternate: its own block,
+        // not something every member of the race gets.
+        const alternate = /\breplaces?\b/i.test(l.text) || /alternate racial trait/i.test(l.text);
+        const i = alternate ? null : nearest(l, 'race', races);
+        choice = i !== null ? `race:${i}` : 'trait';
+      }
       return { choice, name: null, group: null };
     });
     paste = { stage: 'review', text: paste.text, result, keep: result.blocks.map(() => true), tags };
@@ -435,6 +442,8 @@ Hit Die: d12.
       case 'trait':
         return `<div class="fields">
           ${F(i, 'name', 'Trait name', b.name)}
+          ${F(i, 'race', 'Race', b.race, { ph: 'Dwarf' })}
+          ${F(i, 'replaces', 'Replaces', b.replaces.join(', '), { wide: true, ph: 'hatred, stonecunning — the standard traits it swaps out when added (read from the text if blank)' })}
           ${A(i, 'text', 'Text', b.text, 3)}
           ${F(i, 'source', 'Source', b.source, { wide: true })}
         </div>`;
@@ -633,7 +642,7 @@ Hit Die: d12.
       case 'goodFort': case 'goodRef': case 'goodWill': b[key] = !!value; return;
       case 'type': b.type = value || null; return;
       case 'minFormula': b.minFormula = value === '' ? null : value; return;
-      case 'classSkills': case 'languages': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
+      case 'classSkills': case 'languages': case 'replaces': b[key] = String(value).split(',').map((s) => s.trim()).filter(Boolean); return;
       case 'features':
         b.features = b.kind === 'class' ? parseClassFeatures(value) : parseGroupFeatures(value);
         return;
