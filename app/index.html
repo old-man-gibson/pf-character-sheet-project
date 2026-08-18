@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pathfinder Character Sheets</title>
+<style>
+  :root {
+    --bg: #0f1116; --panel: #1c1f27; --line: #333949;
+    --text: #e6e8ef; --muted: #9aa2b8; --accent: #d4a24a;
+    /* This page is dark, so the browser's own widgets should be too. */
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header.app {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 18px; border-bottom: 1px solid var(--line); background: #14161c;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header.app h1 {
+    margin: 0; font-size: 1rem; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .picker { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .picker button {
+    font: inherit; font-size: 0.85rem; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
+  }
+  .picker button:hover { border-color: var(--accent); }
+  .picker button[aria-pressed="true"] {
+    background: rgba(212,162,74,0.16); border-color: var(--accent); color: var(--accent);
+  }
+  /* Imported characters live in this browser only, so they say so and can go. */
+  .chip { display: inline-flex; align-items: center; }
+  .chip.local button.pick { border-style: dashed; border-radius: 20px 0 0 20px; padding-right: 9px; }
+  .chip.local button.drop {
+    border-left: 0; border-radius: 0 20px 20px 0; padding: 5px 9px; color: var(--muted);
+  }
+  .chip.local button.drop:hover { color: #e0635f; border-color: #e0635f; }
+  .picker .local-tag { font-size: 0.68rem; opacity: 0.55; margin-left: 5px; }
+  .picker button.import { border-style: dashed; color: var(--muted); }
+  .picker button.import:hover { color: var(--accent); }
+  .picker button.exportall { color: var(--muted); }
+  .picker button.exportall:hover { color: var(--accent); }
+  .picker button:disabled { opacity: 0.5; cursor: default; }
+  .picker.dragging button.import { border-color: var(--accent); color: var(--accent); }
+  .banner {
+    max-width: 1500px; margin: 12px auto 0; padding: 8px 12px; border-radius: 6px;
+    font-size: 0.85rem; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner.err { color: #e0635f; background: rgba(224,99,95,0.10); border: 1px solid #e0635f; }
+  .banner.ok { color: #6bbf7b; background: rgba(107,191,123,0.10); border: 1px solid #6bbf7b; }
+  .banner.info { color: var(--muted); background: rgba(154,162,184,0.10); border: 1px solid var(--line); }
+  .banner button { margin-left: auto; font: inherit; background: none; border: 0; color: inherit; cursor: pointer; }
+  .spacer { flex: 1; }
+  label.role {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.82rem; color: var(--muted); cursor: pointer;
+  }
+  main { padding: 18px; max-width: 1500px; margin: 0 auto; }
+  character-sheet { border: 1px solid var(--line); }
+  character-sheet[hidden], .welcome[hidden] { display: none; }
+  .welcome {
+    max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 12px;
+  }
+  .welcome h2 { margin: 0 0 10px; font-size: 1.15rem; color: var(--accent); }
+  .welcome p { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+  .welcome p.hint { margin: 14px 0 0; font-size: 0.8rem; opacity: 0.8; }
+  .welcome code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
+  .welcome .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .welcome button {
+    font: inherit; font-size: 0.9rem; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 20px; padding: 7px 18px; cursor: pointer;
+  }
+  .welcome button:hover, .welcome button.primary { border-color: var(--accent); color: var(--accent); }
+  .note { color: var(--muted); font-size: 0.8rem; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
+  .note code { background: var(--panel); padding: 1px 5px; border-radius: 3px; }
+  dialog#newDialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; min-width: min(22rem, 90vw);
+  }
+  dialog#newDialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog#newDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
+  dialog#newDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
+  dialog#newDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
+  dialog#newDialog label input {
+    flex: 1; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  }
+  dialog#newDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  dialog#newDialog button {
+    font: inherit; font-size: 0.85rem; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
+  }
+  dialog#newDialog button.primary { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <h1>Character Sheets</h1>
+  <nav class="picker" id="picker"></nav>
+  <span class="spacer"></span>
+  <label class="role">
+    <input type="checkbox" id="adminToggle"> GM / inspector view
+  </label>
+</header>
+
+<div id="banner"></div>
+
+<main>
+  <section id="welcome" class="welcome" hidden>
+    <h2>No characters yet</h2>
+    <p>Start one from a blank sheet, or bring in a workbook exported from Google Sheets
+      (<em>File → Download → Microsoft Excel (.xlsx)</em>) — or a <code>.json</code> this
+      app exported. Files are read here in your browser and never uploaded; everything you
+      make is saved to this browser only.</p>
+    <div class="actions">
+      <button type="button" id="welcomeNew" class="primary">+ New character</button>
+      <button type="button" id="welcomeImport">+ Import a workbook or JSON</button>
+    </div>
+    <p class="hint">You can also drop a file anywhere on this page.</p>
+  </section>
+  <character-sheet id="sheet" theme="dark" hidden></character-sheet>
+</main>
+
+<input type="file" id="importFile" accept="application/json,.json,.xlsx,.xlsm" hidden>
+
+<dialog id="newDialog">
+  <form id="newForm" method="dialog">
+    <h2>New character</h2>
+    <p class="hint">A blank sheet: 10 in every score, the standard skill list, 6 hit points a
+      level to start, and slots waiting for traits, race traits and perks. Classes, level
+      plan, gear and everything else are yours to enter. Characters start at 3rd or higher.</p>
+    <label>Name <input name="name" type="text" required maxlength="80" placeholder="Character name" autocomplete="off"></label>
+    <label>Player <input name="player" type="text" maxlength="80" autocomplete="off"></label>
+    <label>Level <input name="level" type="number" min="3" max="20" value="3"></label>
+    <div class="actions">
+      <button type="button" id="newCancel">Cancel</button>
+      <button type="submit" class="primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<p class="note">
+  <strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
+  name and a level, and you get a blank sheet with 10 in every score and the standard
+  skill list; it is saved in this browser exactly like an import.
+  <br><br>
+  <strong>Add your own character:</strong> in Google Sheets choose
+  <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
+  — or drop the file anywhere on this page. The workbook is read here in your browser
+  and thrown away once it has been transcribed; it is never uploaded. A
+  <code>.json</code> this app exported can be dropped back the same way.
+  <br><br>
+  Everything is saved to this browser only — nobody else sees it, and clearing your
+  browser data clears it.
+  <br><br>
+  <strong>Saving and going back:</strong> your edits are kept as you make them, so a
+  closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
+  and anything edited after it is offered back to you next time rather than assumed.
+  A snapshot is taken automatically every 20 changes and the last 5 are kept; a
+  <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
+  <strong>History</strong> lists all of them. “Reset” goes back to the character as
+  imported and keeps your named checkpoints.
+  <br><br>
+  <strong>Export JSON</strong> downloads one character, which is how you send a build to
+  someone else; <strong>Export all</strong> downloads every character in the picker as a
+  <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
+  reveal the Formula Audit tab, which lists every player-authored formula as plain text.
+</p>
+
+<script type="module">
+  import './js/sheet-element.js';
+  import { inspectDocument } from './js/model.js';
+  import { historyFor, forget } from './js/history.js';
+  import { zip, safeName } from './js/zip.js';
+
+  const sheet = document.getElementById('sheet');
+  const picker = document.getElementById('picker');
+  const adminToggle = document.getElementById('adminToggle');
+  const banner = document.getElementById('banner');
+  const importFile = document.getElementById('importFile');
+  const newDialog = document.getElementById('newDialog');
+  const newForm = document.getElementById('newForm');
+  const welcome = document.getElementById('welcome');
+  document.getElementById('newCancel').addEventListener('click', () => newDialog.close());
+  document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
+  document.getElementById('welcomeImport').addEventListener('click', () => importFile.click());
+
+  /*
+   * Two kinds of character can sit in the picker.
+   *
+   * Bundled ones are static files under data/characters/, listed by index.json
+   * -- the published app ships none, so the roster there is empty, but a
+   * deployment that wants to pre-load characters drops their JSON in and lists
+   * them. Imported ones exist only in this browser: the page cannot write to
+   * data/, so an imported document lives in localStorage and the library index
+   * below is what makes it show up again after a reload.
+   */
+  const LIBRARY_KEY = 'character-sheet:library';
+  const docKey = (id) => `character-sheet:doc:${id}`;
+  const editsKey = (id) => `character-sheet:${id}`;
+
+  let bundled = [];
+  try {
+    const index = await (await fetch('../data/characters/index.json')).json();
+    bundled = (index.characters || []).map((c) => ({ ...c, local: false }));
+  } catch { /* no roster file at all reads the same as an empty one */ }
+
+  function readLibrary() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{}');
+      return (raw.characters || []).map((c) => ({ ...c, local: true }));
+    } catch { return []; }
+  }
+  function writeLibrary(list) {
+    localStorage.setItem(LIBRARY_KEY,
+      JSON.stringify({ characters: list.map(({ local, ...c }) => c) }));
+  }
+
+  let library = readLibrary();
+  const all = () => [...bundled, ...library];
+  let current = all()[0]?.id;
+
+  function say(kind, text) {
+    banner.innerHTML = `<div class="banner ${kind}"><span></span><button>Dismiss</button></div>`;
+    banner.querySelector('span').textContent = text;
+    banner.querySelector('button').addEventListener('click', () => { banner.innerHTML = ''; });
+  }
+
+  // Names and ids in an imported file are arbitrary text, so nothing reaches
+  // the picker's markup unescaped.
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+  function draw() {
+    picker.innerHTML = `${all().map((c) => (c.local
+      ? `<span class="chip local">
+           <button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}">
+             ${esc(c.name)} <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
+           </button>
+           <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
+             aria-label="Remove ${esc(c.name)}">×</button>
+         </span>`
+      : `<span class="chip"><button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}">
+           ${esc(c.name)} <span style="opacity:.6">L${esc(c.level)}</span>
+         </button></span>`)).join('')}
+      <button class="import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+      <button class="import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
+      <button class="exportall" id="exportAllBtn"
+        title="Download every character in this picker as one .zip">Export all</button>`;
+
+    picker.querySelectorAll('button.pick').forEach((b) => {
+      b.addEventListener('click', () => { current = b.dataset.id; select(); draw(); });
+    });
+    picker.querySelectorAll('button.drop').forEach((b) => {
+      b.addEventListener('click', () => remove(b.dataset.drop));
+    });
+    picker.querySelector('#newBtn').addEventListener('click', () => newDialog.showModal());
+    picker.querySelector('#importBtn').addEventListener('click', () => importFile.click());
+    picker.querySelector('#exportAllBtn').addEventListener('click', exportAll);
+  }
+
+  /*
+   * A character from nothing. `blankDocument` is the converter's own output for
+   * a template with every cell empty, with a name and level filled in -- so it
+   * takes exactly the path an imported document takes from here on: vetted by
+   * inspectDocument, stored in localStorage, listed in the library.
+   */
+  newForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { blankDocument } = await import('./js/convert.js');
+    const doc = blankDocument({
+      name: newForm.elements.name.value,
+      level: newForm.elements.level.value,
+      player: newForm.elements.player.value,
+    });
+    newDialog.close();
+    newForm.reset();
+    add(doc, [], 'blank');
+  });
+
+  /*
+   * Export all: every character in the picker, as one .zip.
+   *
+   * The point is a backup that can be put back. Each entry is a plain document
+   * of exactly the kind Export JSON writes, so any one of them drops straight
+   * back in through Import -- there is no bundle format to explain, and nothing
+   * that only this page can read. A ZIP because five characters are ~620 KB of
+   * JSON and ~100 KB compressed.
+   *
+   * Which version of a character gets packed is the same question the sheet
+   * answers when it opens one, and the answer has to match: the version the
+   * player last saved, or where they last left off if they have not saved, or
+   * the converted document if they have never touched it.
+   */
+  async function exportAll() {
+    const button = picker.querySelector('#exportAllBtn');
+    const entries = all();
+    button.disabled = true;
+    button.textContent = 'Packing…';
+    say('info', `Collecting ${entries.length} character${entries.length === 1 ? '' : 's'}…`);
+
+    const files = [];
+    const missing = [];
+    const taken = new Set();
+    try {
+      for (const entry of entries) {
+        const doc = await currentDocument(entry);
+        if (!doc) { missing.push(entry.name); continue; }
+        // Two characters may share a display name, and a ZIP with two identical
+        // entry names is a ZIP that loses one of them.
+        let name = safeName(doc.identity?.name || entry.name || entry.id, entry.id);
+        if (taken.has(name.toLowerCase())) name = `${name} (${entry.id})`;
+        taken.add(name.toLowerCase());
+        files.push({ name: `${name}.json`, data: JSON.stringify(doc, null, 1) });
+      }
+
+      if (!files.length) { say('err', 'There was nothing to export.'); return; }
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([await zip(files)], { type: 'application/zip' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `character-sheets-${stamp}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+
+      const size = (blob.size / 1024).toFixed(0);
+      say(missing.length ? 'info' : 'ok',
+        `Exported ${files.length} character${files.length === 1 ? '' : 's'} (${size} KB).`
+        + (missing.length ? ` Could not read ${missing.join(', ')}.` : ''));
+    } catch (err) {
+      say('err', `Could not build the archive — ${err.message}`);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Export all';
+    }
+  }
+
+  /** The version of a character that opening it in the sheet would show. */
+  async function currentDocument(entry) {
+    const store = historyFor(entry.id);
+    const saved = await store.readSaved();
+    if (saved?.data) return saved.data;
+    const working = store.readWorking();
+    if (working?.data) return working.data;
+    if (entry.local) {
+      const raw = localStorage.getItem(docKey(entry.id));
+      return raw ? JSON.parse(raw) : null;
+    }
+    try {
+      const res = await fetch(`../data/characters/${entry.file || `${entry.id}.json`}`);
+      return res.ok ? await res.json() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function select() {
+    const entry = all().find((c) => c.id === current);
+    // Nothing in the picker at all: a fresh visitor, or the last character
+    // removed. Show the welcome instead of a sheet stuck on "Loading…".
+    welcome.hidden = Boolean(entry);
+    sheet.hidden = !entry;
+    if (!entry) return;
+    if (!entry.local) {
+      sheet.setAttribute('src', `../data/characters/${entry.file || `${entry.id}.json`}`);
+      return;
+    }
+    // An imported character has no URL to fetch: hand the document over
+    // directly, and drop any src so the element does not re-fetch over it.
+    const raw = localStorage.getItem(docKey(entry.id));
+    if (!raw) { say('err', `${entry.name} is listed but its data is missing.`); return; }
+    sheet.removeAttribute('src');
+    sheet.character = JSON.parse(raw);
+  }
+
+  /** A character already in the picker keeps its id; a clash gets the next free one. */
+  function freeId(wanted) {
+    const taken = new Set(all().map((c) => c.id));
+    if (!taken.has(wanted)) return wanted;
+    let n = 2;
+    while (taken.has(`${wanted}-${n}`)) n += 1;
+    return `${wanted}-${n}`;
+  }
+
+  /** `origin` is 'import' for a file, 'blank' for a character started here. */
+  function add(doc, warnings = [], origin = 'import') {
+    const verdict = inspectDocument(doc);
+    if (!verdict.ok) { say('err', verdict.error); return null; }
+
+    const id = freeId(verdict.summary.id);
+    const stored = { ...doc, id };
+    try {
+      localStorage.setItem(docKey(id), JSON.stringify(stored));
+    } catch (err) {
+      say('err', `Could not store ${verdict.summary.name} — ${err.name === 'QuotaExceededError'
+        ? 'this browser is out of space. Remove an imported character and try again.'
+        : err.message}`);
+      return null;
+    }
+    library = [...library, { ...verdict.summary, id, origin, local: true }];
+    writeLibrary(library);
+    current = id;
+    draw();
+    select();
+    // Warnings mean the workbook converted but did not look like the campaign
+    // template, so the sheet will be thin in places. Better said than
+    // discovered.
+    say(warnings.length ? 'info' : 'ok',
+      `${origin === 'blank' ? 'Created' : 'Imported'} ${verdict.summary.name} (level ${verdict.summary.level})`
+      + `${id === verdict.summary.id ? '' : ` as “${id}”, because “${verdict.summary.id}” was taken`}.`
+      + (warnings.length ? ` Note — ${warnings.join('; ')}.` : '')
+      + (origin === 'blank' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
+    return id;
+  }
+
+  async function remove(id) {
+    const entry = library.find((c) => c.id === id);
+    if (!entry) return;
+    library = library.filter((c) => c.id !== id);
+    writeLibrary(library);
+    localStorage.removeItem(docKey(id));
+    // Its edits go with it, and so do its saved version and its whole history --
+    // including the named checkpoints, which a Reset would have kept. The
+    // character itself is going, so there is nothing left for them to be
+    // checkpoints of, and leaving them would hand them to the next import that
+    // happened to take the same id.
+    await forget(id, { storageKey: editsKey(id) });
+    if (current === id) current = all()[0]?.id;
+    draw();
+    select();
+    say('ok', `Removed ${entry.name} from this browser, with its saved version and history.`);
+  }
+
+  /*
+   * Both ways in land here: the + Import chip and a file dropped on the page.
+   *
+   * The sheet element does the work — parsing an exported document, or
+   * transcribing a workbook — and announces a good one with `character-import`,
+   * which the listener below turns into a library entry. So all this has to do
+   * is say up front that a workbook will take a moment, and report a refusal.
+   */
+  async function addFromFile(file) {
+    if (/\.xls[xm]$/i.test(file.name || '')) {
+      say('info', `Converting ${file.name} — this runs in your browser; the workbook is not uploaded anywhere.`);
+      // Let the banner paint before the parse takes over the main thread.
+      await new Promise(requestAnimationFrame);
+    }
+    const verdict = await sheet.importFile(file);
+    if (!verdict.ok) say('err', verdict.error);
+  }
+
+  importFile.addEventListener('change', () => {
+    const file = importFile.files?.[0];
+    importFile.value = '';               // so the same file can be picked twice
+    if (file) addFromFile(file);
+  });
+
+  // The sheet's own Import button loads into the element; the library picks it
+  // up here so it survives a reload and joins the picker.
+  sheet.addEventListener('character-import', (e) => add(e.detail.character, e.detail.warnings));
+
+  // Drop a file anywhere on the page.
+  document.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer?.types.includes('Files')) return;
+    e.preventDefault();
+    picker.classList.add('dragging');
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget === null) picker.classList.remove('dragging');
+  });
+  document.addEventListener('drop', (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    picker.classList.remove('dragging');
+    addFromFile(e.dataTransfer.files[0]);
+  });
+
+  adminToggle.addEventListener('change', () => {
+    sheet.setAttribute('role', adminToggle.checked ? 'admin' : 'player');
+  });
+
+  draw();
+  select();
+</script>
+
+</body>
+</html>

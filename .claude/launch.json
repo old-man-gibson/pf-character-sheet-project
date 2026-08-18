@@ -1,0 +1,41 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sheets",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8777"
+      ],
+      "port": 8777
+    },
+    {
+      "name": "sheets-alt",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8778"
+      ],
+      "port": 8778
+    },
+    {
+      "name": "sheets-3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8779"
+      ],
+      "port": 8779
+    },
+    {
+      "name": "sheets-any",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs"
+      ],
+      "port": 8790,
+      "autoPort": true
+    }
+  ]
+}

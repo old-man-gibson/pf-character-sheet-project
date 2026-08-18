@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embedding example</title>
+<style>
+  /* Deliberately aggressive host-page styles, to show that none of them leak
+     into the sheet: the component renders inside a shadow root. */
+  body {
+    font-family: Georgia, serif; background: #fbf7ef; color: #33291c;
+    margin: 0; padding: 30px; line-height: 1.7;
+  }
+  table { border: 4px dashed hotpink !important; }
+  button { background: lime !important; font-size: 28px !important; }
+  input { border: 3px solid red !important; }
+  .page { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; }
+  pre {
+    background: #efe8da; padding: 12px 14px; border-radius: 6px;
+    overflow-x: auto; font-size: 0.85rem; line-height: 1.5;
+  }
+  .site-nav { border-bottom: 2px solid #d8cdb6; padding-bottom: 10px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="site-nav"><strong>Some Existing Campaign Site</strong> — Home · Wiki · Characters</nav>
+
+  <h1>Embedding a character sheet</h1>
+
+  <p>
+    This page uses serif type, a cream background, and some intentionally awful
+    global rules (pink dashed tables, lime buttons, red input borders). The sheet
+    below is unaffected — everything renders inside a shadow root, so host styles
+    and sheet styles cannot collide in either direction.
+  </p>
+
+  <pre>&lt;script type="module" src="/app/js/sheet-element.js"&gt;&lt;/script&gt;
+
+&lt;character-sheet
+    src="/data/characters/your-character.json"
+    role="player"
+    theme="light"
+    storage-key="campaign:your-character"&gt;&lt;/character-sheet&gt;</pre>
+
+  <p>
+    A <code>src</code> URL is the usual way in; a host that already holds the document can
+    set the <code>character</code> property instead. This demo does the latter, with a
+    blank character built on the spot, so it works with nothing bundled.
+  </p>
+
+  <p>
+    Theming is done with custom properties, which <em>do</em> cross the shadow
+    boundary — that is the supported way to restyle an embedded sheet:
+  </p>
+
+  <pre>character-sheet { --cs-accent: #7b3f9d; --cs-radius: 14px; }</pre>
+
+  <script type="module" src="./js/sheet-element.js"></script>
+
+  <character-sheet
+    id="embedded"
+    role="player"
+    theme="light"
+    storage-key="embed-demo:sample"
+    style="--cs-accent:#7b3f9d; --cs-radius:14px;"></character-sheet>
+
+  <h2>Host page integration</h2>
+  <p>
+    The element emits events so the surrounding site can persist changes
+    server-side, and exposes <code>audit()</code> so a GM tool can pull every
+    player-authored formula as plain data.
+  </p>
+  <pre id="log">(edit something above — change events will appear here)</pre>
+
+  <script type="module">
+    import { blankDocument } from './js/convert.js';
+    const sheet = document.getElementById('embedded');
+    const log = document.getElementById('log');
+    let n = 0;
+
+    // The same blank sheet "+ New" makes in the app.
+    sheet.character = blankDocument({ name: 'Sample Adventurer', level: 5, player: 'you' });
+
+    sheet.addEventListener('character-change', (e) => {
+      const diff = e.detail.diff;
+      log.textContent =
+        `change #${++n}\n` +
+        (diff.length
+          ? diff.map((d) => `  ${d.label}: ${d.was} -> ${d.now}`).join('\n')
+          : '  (no derived stats differ from the source sheet)') +
+        `\n\nformulas on this character:\n` +
+        (sheet.audit().map((a) => `  ${a.name} = ${a.formula}  [${a.status}]`).join('\n') || '  none');
+    });
+
+    sheet.addEventListener('tracker-change', (e) => {
+      console.log('tracker changed:', e.detail.tracker.name, e.detail.tracker.current);
+    });
+  </script>
+
+</div>
+</body>
+</html>

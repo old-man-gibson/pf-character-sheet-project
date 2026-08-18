@@ -1,0 +1,13 @@
+# Real characters and the workbooks they were converted from. These belong to
+# the players, not the repository: the app ships with an empty roster and each
+# visitor adds their own (kept in their browser only). The test suites read
+# their fixtures from here when it is present and skip those checks when it is
+# not.
+private/
+
+# Editor and OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+node_modules/

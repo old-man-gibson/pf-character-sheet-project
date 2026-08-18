@@ -1,0 +1,7 @@
+# Normalise line endings in the repository; checkouts get LF too, so a
+# JS file edited on Windows and one edited on Linux diff by content only.
+* text=auto eol=lf
+*.xlsx binary
+*.xlsm binary
+*.png binary
+*.jpg binary
