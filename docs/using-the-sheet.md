@@ -119,7 +119,7 @@ minimized; all of this persists per character.
 Top to bottom, the Overview reads: **At a glance** (the eight numbers a table asks
 for), **Details** (what the player writes about the character) beside the ability
 scores, **Specialty** beside **Languages**, then two supergroups — **Defenses** (hit points, armor class, saving throws)
-and **Offenses** (attack, speed) — then conditions beside carrying capacity, the
+and **Offenses** (attack, speed, proficiencies) — then conditions beside carrying capacity, the
 Classes table, and traits.
 
 **Conditions** are switches, not number boxes: all of them are on or off except
@@ -152,6 +152,22 @@ the slots; the workbook's comma- and pipe-separated cells are split into it on i
 a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up
 with the level. The Final column is the model's and moves the moment either field
 does; formula bonuses appear in the Formula audit like every other player formula.
+
+**Proficiencies** are lists rather than the workbook's three sentences, in the same
+terms the weapon rows on Equipment carry: **familiarities** (simple, martial, exotic),
+**handedness** (light, one-handed, two-handed — for the classes and traits that grant
+"all light weapons"), the fighter **weapon groups**, and **specific weapons** typed in
+one by one like languages. **Armor** is unarmored, light, medium and heavy; **shields**
+are none, buckler, light, heavy and tower, where *None* is a statement — ticking it clears
+the kinds and a kind clears it. A **Notes** field takes whatever the lists cannot say.
+On import the sentences are read into the lists — *"all simple and double-chained kama,
+katana…"* becomes the Simple chip and a weapon list, *"light and medium armor"* two
+chips, *"shields (except tower shields)"* the three Shield Proficiency covers — and
+what does not parse lands in Notes. A weapon on Equipment whose familiarity or group
+is set is read against these and shows **not proficient** in its heading when nothing
+covers it (a specific entry covers a weapon named like it, and a group the fixed list
+does not know, such as *Veil*); the −4 is not applied — it stays the player's to write.
+The Armored Discipline prerequisite on Primordia reads the armor list.
 
 **Race traits** have a table of their own under *Traits & drawbacks*, next to the
 character traits — a race hands out anywhere from three to ten, so rows are added and

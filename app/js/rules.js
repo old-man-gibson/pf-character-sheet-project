@@ -1256,6 +1256,9 @@ export const WEAPON_GROUPS = ['Axes', 'Bows', 'Close', 'Crossbows', 'Double', 'F
   'Siege Engines', 'Spears', 'Thrown', 'Tribal'];
 export const WEAPON_HANDEDNESS = ['Light', 'One-Handed', 'Two-Handed'];
 export const WEAPON_FAMILIARITY = ['Simple', 'Martial', 'Exotic'];
+/** What a class hands out under "Weapon and Armor Proficiency", as the Overview lists it. */
+export const ARMOR_PROFICIENCIES = ['Unarmored', 'Light', 'Medium', 'Heavy'];
+export const SHIELD_PROFICIENCIES = ['None', 'Buckler', 'Light', 'Heavy', 'Tower'];
 export const WEAPON_CRIT_MULTS = ['x2', 'x3', 'x4'];
 export const WEAPON_ABILITY_MULTS = ['0.5', '1', '1.5', '2'];
 

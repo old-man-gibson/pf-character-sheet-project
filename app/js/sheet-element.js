@@ -65,6 +65,7 @@ import {
   MYTHIC_TIER_LEVEL, mythicTierGrant,
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
+  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -360,7 +361,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
@@ -1179,8 +1180,11 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="supergroup span2" aria-label="Offenses">
         <div class="supergroup-title">Offenses</div>
         <div class="supergroup-body">
-          ${this.#attackPanel()}
-          ${this.#speedPanel()}
+          <div class="offense-pair">
+            ${this.#attackPanel()}
+            ${this.#speedPanel()}
+          </div>
+          ${this.#proficienciesPanel()}
         </div>
       </div>
 
@@ -1517,6 +1521,66 @@ export class CharacterSheetElement extends HTMLElement {
       <div style="margin-top:8px">${this.#addButton('identity.speeds', 'Add movement', { type: '', base: 30, bonus: 0 })}</div>
       <p class="hint">Bonus takes a formula, so fast movement can be written as the rule
         it is — <code>floor(level / 3) * 10</code> — and keep up with the level.</p>
+    </section>`;
+  }
+
+  /**
+   * Weapon and armor proficiencies, as the lists a class hands them out in.
+   *
+   * The weapon side is the same four terms the Gear weapon rows carry --
+   * familiarity, handedness, weapon group, and the weapon itself -- so a row
+   * there can be read against this and say when it is not covered. Armor is
+   * its weights and shields their kinds; the chips are toggles, and specific
+   * weapons are typed in like languages.
+   */
+  #proficienciesPanel() {
+    const p = this.#model.data.identity.proficiencies || {};
+    const chips = (list, options, title = '') => `<div class="chips" role="group"${title ? ` aria-label="${esc(title)}"` : ''}>
+      ${options.map((o) => `<button class="chip-toggle" data-action="prof-toggle" data-list="${list}"
+        data-value="${esc(o)}" aria-pressed="${(p[list] || []).includes(o)}">${esc(o)}</button>`).join('')}
+    </div>`;
+    const row = (label, body, hint = '') => `<div class="profrow">
+      <span class="tlabel"${hint ? ` title="${esc(hint)}"` : ''}>${esc(label)}</span>${body}</div>`;
+    const weapons = p.weapons || [];
+    const summary = [
+      ...(p.familiarities || []).map((f) => `${f.toLowerCase()} weapons`),
+      ...(p.handedness || []).map((h) => `${h.toLowerCase()} weapons`),
+      ...(p.groups || []).map((g) => `${g.toLowerCase()} group`),
+      ...weapons.filter((w) => String(w).trim()),
+    ];
+    return `<section class="panel span2 proficiencies">
+      <h3>Proficiencies</h3>
+      <div class="profgrid">
+        <div class="profcol">
+          <h4>Weapons</h4>
+          ${row('Familiarities', chips('familiarities', WEAPON_FAMILIARITY, 'Weapon familiarities'), 'Simple, martial and exotic — the categories a class grants whole')}
+          ${row('Handedness', chips('handedness', WEAPON_HANDEDNESS, 'Weapon handedness'), '"All light weapons", "all one-handed weapons" — as some classes and traits grant them')}
+          ${row('Weapon groups', chips('groups', WEAPON_GROUPS, 'Weapon groups'), 'The fighter weapon groups')}
+          <div class="profrow">
+            <span class="tlabel" title="Weapons named one by one — a race's or a class's list">Specific weapons</span>
+            <div class="langlist proflist">
+              ${weapons.map((w, i) => `<span class="lang">
+                ${this.#itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
+                <button class="danger tiny" data-remove="identity.proficiencies.weapons|${i}" aria-label="Remove">×</button>
+              </span>`).join('')}
+              ${this.#addButton('identity.proficiencies.weapons', 'Add weapon', '')}
+            </div>
+          </div>
+        </div>
+        <div class="profcol">
+          <h4>Armor</h4>
+          ${row('Armor', chips('armor', ARMOR_PROFICIENCIES, 'Armor proficiencies'), 'Unarmored is its own proficiency in some systems; light, medium and heavy are the weights')}
+          <h4>Shields</h4>
+          ${row('Shields', chips('shields', SHIELD_PROFICIENCIES, 'Shield proficiencies'), '"None" is a statement — ticking it clears the kinds, and a kind clears it')}
+          <label class="fld" style="margin-top:8px"><span>Notes
+            <span class="hint">— anything the lists cannot say</span></span>
+            ${this.#area('identity.proficiencies.notes', p.notes, 2)}</label>
+        </div>
+      </div>
+      <p class="hint">${summary.length
+    ? `Proficient with ${esc(summary.join(', '))}. `
+    : 'No weapon proficiencies recorded. '}A weapon on Gear whose familiarity, handedness or
+        group is set is read against these and marked when nothing covers it; the −4 stays yours to write.</p>
     </section>`;
   }
 
@@ -3571,6 +3635,8 @@ export class CharacterSheetElement extends HTMLElement {
               error: w.diceError,
               title: w.useUnarmedDice ? 'Overridden by the unarmed calculator'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
+          ${w.proficient === false ? `<span class="badge err nonprof"
+            title="Nothing on the Overview's Proficiencies covers this weapon's familiarity, handedness, group or name — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>` : ''}
             })}
             <label class="chk" title="Use the unarmed practitioner dice from Spheres & Magic">
               ${this.#itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
@@ -8922,6 +8988,10 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-track':
+      case 'prof-toggle':
+        this.#model.toggleProficiency(button?.dataset.list, button?.dataset.value);
+        this.#render();
+        break;
         this.#model.addProgressionTrack();
         this.#render();
         break;

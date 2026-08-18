@@ -1422,6 +1422,12 @@ input[type="color"] {
 .pairrow {
   grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
   grid-template-columns: minmax(0, 1fr);
+/* Attack and speed side by side (or stacked, narrow) above the full-width
+   proficiencies panel, so a third track never sits empty beside them. */
+.offense-pair {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+}
 }
 @container (min-width: 900px) {
   .pairrow { grid-template-columns: minmax(0, 1fr) minmax(320px, 24rem); }
@@ -1446,6 +1452,24 @@ label.fld .xf { width: 100%; }
 
 /* The conditioned reading, under a base that a ticked condition has moved. */
 .now {
+
+/* Proficiencies: rows of toggle chips, weapons on the left, armor and shields
+   on the right, and the specific weapons as a chip list like the languages. */
+.profgrid { display: grid; gap: 4px 20px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
+@container (max-width: 700px) { .profgrid { grid-template-columns: 1fr; } }
+.profcol h4 {
+  margin: 6px 0 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--cs-muted); font-weight: 700;
+}
+.profcol h4 + h4 { margin-top: 10px; }
+.profrow { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; border-bottom: 1px solid var(--cs-line); }
+.profrow:last-child { border-bottom: 0; }
+.profrow .tlabel { padding-top: 4px; flex: 0 0 6.2rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+button.chip-toggle { padding: 2px 8px; font-size: 0.76rem; border-radius: 999px; }
+.proflist { margin-top: 0; }
+.proflist .lang input[type="text"] { width: 8rem; }
+.weaponhead .badge.nonprof { white-space: nowrap; }
   display: block; font-size: 0.68rem; font-weight: 640; color: var(--cs-bad);
   font-variant-numeric: tabular-nums; letter-spacing: 0.02em; margin-top: 1px;
 }
