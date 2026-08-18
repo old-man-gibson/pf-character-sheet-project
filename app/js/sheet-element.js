@@ -1555,7 +1555,7 @@ export class CharacterSheetElement extends HTMLElement {
           <h4>Weapons</h4>
           ${row('Familiarities', chips('familiarities', WEAPON_FAMILIARITY, 'Weapon familiarities'), 'Simple, martial and exotic — the categories a class grants whole')}
           ${row('Handedness', chips('handedness', WEAPON_HANDEDNESS, 'Weapon handedness'), '"All light weapons", "all one-handed weapons" — as some classes and traits grant them')}
-          ${row('Weapon groups', chips('groups', WEAPON_GROUPS, 'Weapon groups'), 'The fighter weapon groups')}
+          ${row('Weapon groups', chips('groups', WEAPON_GROUPS.filter((g) => g !== 'Veil'), 'Weapon groups'), 'The fighter weapon groups')}
           <div class="profrow">
             <span class="tlabel" title="Weapons named one by one — a race's or a class's list">Specific weapons</span>
             <div class="langlist proflist">
@@ -1579,8 +1579,10 @@ export class CharacterSheetElement extends HTMLElement {
       </div>
       <p class="hint">${summary.length
     ? `Proficient with ${esc(summary.join(', '))}. `
-    : 'No weapon proficiencies recorded. '}A weapon on Gear whose familiarity, handedness or
-        group is set is read against these and marked when nothing covers it; the −4 stays yours to write.</p>
+    : 'No weapon proficiencies recorded. '}A weapon on Equipment is read against these — by its
+        familiarity, handedness, group, name and <strong>As</strong> (the base weapon it is) — and marked
+        when nothing covers it; a veil weapon is proficient by the [Enhanced] rule, and a row's own
+        <strong>Proficient</strong> field overrides all of it for Custom Training and the like. The −4 stays yours to write.</p>
     </section>`;
   }
 
@@ -3636,7 +3638,9 @@ export class CharacterSheetElement extends HTMLElement {
               title: w.useUnarmedDice ? 'Overridden by the unarmed calculator'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
           ${w.proficient === false ? `<span class="badge err nonprof"
-            title="Nothing on the Overview's Proficiencies covers this weapon's familiarity, handedness, group or name — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>` : ''}
+            title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
+    : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
+            title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
             })}
             <label class="chk" title="Use the unarmed practitioner dice from Spheres & Magic">
               ${this.#itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
@@ -3682,6 +3686,18 @@ export class CharacterSheetElement extends HTMLElement {
             dmg <strong>${esc(w.calc.totalDmgStr)}</strong>
             <span class="avg">avg ${w.calc.totalAvg}</span>
             <span class="crit">crit ${esc(w.calc.critStr)}
+          <span class="wsep"></span>
+          ${this.#field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
+            data-kind="text" placeholder="katana" style="width:6.5rem"
+            title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
+          ${this.#field('Proficient', `<select data-item="equipment.weapons|${i}|proficiency" data-kind="text"
+            title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}">
+            <option value=""${!w.proficiency ? ' selected' : ''}>Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}</option>
+            <option value="yes"${w.proficiency === 'yes' ? ' selected' : ''}>Yes</option>
+            <option value="no"${w.proficiency === 'no' ? ' selected' : ''}>No</option></select>`)}
+          ${w.proficiency ? this.#field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
+            data-kind="text" placeholder="Custom Training" style="width:8rem"
+            title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
               ${w.calc.critAtk.flat || Object.keys(w.calc.critAtk.dice).length ? `confirm ${esc(w.calc.confirmStr)} ·` : ''}
               <span class="avg">avg ${w.calc.critAvg}</span></span></div>` : ''}
           ${w.calc.errors.length ? `<div class="hint" style="color:var(--cs-bad)">

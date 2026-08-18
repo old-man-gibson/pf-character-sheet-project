@@ -227,33 +227,68 @@ export function normalizeProficiencies(raw) {
 }
 
 /**
- * Whether the character is proficient with a weapon row, from what the row
- * says about itself. `true` on any match, `false` when the row is described
- * (a familiarity, handedness or group is set) and nothing covers it, and
- * `null` when there is nothing to judge by -- no proficiencies recorded at
- * all, or a row with no category and no matching name.
+ * Whether the character is proficient with a weapon row, and why.
+ *
+ * Returns `{ state, why, source }`: `state` is `true` on any match, `false`
+ * when the row is described (a familiarity, group or base weapon is set) and
+ * nothing covers it, and `null` when there is nothing to judge by. `source`
+ * says where the answer came from -- `override` (the row's own Proficient
+ * field), `veil` (the [Enhanced] veil rule), `overview` (the Proficiencies
+ * panel) -- so the sheet can show the ones that are not the plain reading.
+ *
+ * Read in this order:
+ *  - the row's own Proficient field, Yes or No, with its note (Custom
+ *    Training, a class feature, anything the lists cannot say);
+ *  - the [Enhanced] veil rule: a veilweaver is always proficient with the
+ *    weapon a veil creates, so a row in the Veil group, or naming [Enhanced],
+ *    is proficient with no list consulted;
+ *  - the Overview's specific weapons, against the row's name and its base
+ *    weapon ("As: katana") -- and against a group the fixed list does not know;
+ *  - the row's familiarity, handedness and groups against the chips.
+ * Handedness alone does not describe a weapon well enough to refuse it.
  */
 export function weaponProficient(prof, w) {
-  if (!prof || !w) return null;
+  const none = { state: null, why: '', source: null };
+  if (!w) return none;
+  const eq = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const note = String(w.proficiencyNote || '').trim();
+  if (w.proficiency === 'yes') return { state: true, why: note ? `proficient via ${note}` : 'marked proficient on the row', source: 'override' };
+  if (w.proficiency === 'no') return { state: false, why: note ? `not proficient — ${note}` : 'marked not proficient on the row', source: 'override' };
+
+  const groups = (w.groups || []).filter(Boolean);
+  const text = `${w.name || ''} ${w.special || ''}`;
+  if (groups.some((g) => eq(g, 'Veil')) || /\[\s*enhanced\b|\benhanced\s*\]|\benhanced veil\b/i.test(text)) {
+    return {
+      state: true, source: 'veil',
+      why: 'a veil weapon — a veilweaver is always proficient with the armor, shield or weapon an [Enhanced] veil creates',
+    };
+  }
+
+  if (!prof) return none;
   const recorded = ['familiarities', 'handedness', 'groups', 'weapons', 'armor', 'shields']
     .some((k) => (prof[k] || []).length) || String(prof.notes || '').trim();
-  if (!recorded) return null;
-  const eq = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  if (!recorded) return none;
   const name = String(w.name || '').trim().toLowerCase();
-  const groups = (w.groups || []).filter(Boolean);
-  // A specific entry covers a weapon named like it, and also a group the row
-  // names that the fixed list does not know ("Veil" for a veil weapon).
-  if ((prof.weapons || []).some((x) => {
+  const base = String(w.baseWeapon || '').trim().toLowerCase();
+  const hit = (prof.weapons || []).find((x) => {
     const n = String(x).trim().toLowerCase();
     if (!n) return false;
+    if (base && (n === base || base.includes(n) || n.includes(base))) return true;
     if (name && (n === name || name.includes(n) || n.includes(name))) return true;
     return groups.some((g) => eq(g, n));
-  })) return true;
-  if (w.familiarity && (prof.familiarities || []).some((f) => eq(f, w.familiarity))) return true;
-  if (w.handedness && (prof.handedness || []).some((h) => eq(h, w.handedness))) return true;
-  if (groups.some((g) => (prof.groups || []).some((x) => eq(x, g)))) return true;
-  // Handedness alone does not describe a weapon well enough to refuse it.
-  return (w.familiarity || groups.length) ? false : null;
+  });
+  if (hit) return { state: true, why: `${hit} on the Overview`, source: 'overview' };
+  if (w.familiarity && (prof.familiarities || []).some((f) => eq(f, w.familiarity))) {
+    return { state: true, why: `${w.familiarity.toLowerCase()} weapons on the Overview`, source: 'overview' };
+  }
+  if (w.handedness && (prof.handedness || []).some((h) => eq(h, w.handedness))) {
+    return { state: true, why: `${w.handedness.toLowerCase()} weapons on the Overview`, source: 'overview' };
+  }
+  const g = groups.find((x) => (prof.groups || []).some((y) => eq(x, y)));
+  if (g) return { state: true, why: `the ${g} group on the Overview`, source: 'overview' };
+  return (w.familiarity || groups.length || base)
+    ? { state: false, why: 'nothing on the Overview\'s Proficiencies covers this weapon\'s familiarity, handedness, group, name or base weapon', source: 'overview' }
+    : none;
 }
 
 /**
@@ -3637,6 +3672,10 @@ export class Character {
         const sheetUnarmed = d.training?.combat?.unarmed?.sheetDice;
         w.useUnarmedDice = !!sheetUnarmed && w.dice === sheetUnarmed;
       }
+      // Proficiency on the row: '' reads it (Auto), 'yes' / 'no' overrides.
+      if (!['yes', 'no'].includes(w.proficiency)) w.proficiency = '';
+      w.proficiencyNote = String(w.proficiencyNote ?? '');
+      w.baseWeapon = String(w.baseWeapon ?? '');
     }
     // Legacy user-added simple weapons.
     if (Array.isArray(d.weapons) && d.weapons.length) {
@@ -5337,9 +5376,13 @@ export class Character {
     const prof = c.identity?.proficiencies;
 
     for (const w of e.weapons) {
-      // Read against the Overview's proficiencies; a `false` is shown, not
-      // applied -- the -4 is the player's to write, as it always was.
-      w.proficient = weaponProficient(prof, w);
+      // Read against the row's own Proficient field, the [Enhanced] veil rule
+      // and the Overview's proficiencies; a `false` is shown, not applied --
+      // the -4 is the player's to write, as it always was.
+      const pr = weaponProficient(prof, w);
+      w.proficient = pr.state;
+      w.proficiencyWhy = pr.why;
+      w.proficiencySource = pr.source;
       // The Dice field may reference an inline name or hold a formula:
       //   "12d8"                 literal
       //   "{kinetic.fist}"       a {name = …} defined in prose (may be dice text

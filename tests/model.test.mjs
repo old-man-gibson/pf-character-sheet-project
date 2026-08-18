@@ -4201,20 +4201,39 @@ console.log('proficiencies -- the workbook sentences become lists the sheet can 
 
 console.log('proficiencies -- a weapon on Gear is read against them');
 {
-  const prof = { familiarities: ['Simple'], handedness: [], groups: ['Axes'], weapons: ['guitar axe', 'Veil'], armor: [], shields: [], notes: '' };
-  check('a matching familiarity is proficient', weaponProficient(prof, { name: 'Club', familiarity: 'Simple' }), true);
-  check('a matching group is', weaponProficient(prof, { name: 'Battleaxe', familiarity: 'Martial', groups: ['Axes'] }), true);
-  check('a named weapon is, whatever its category', weaponProficient(prof, { name: 'Guitar Axe +1', familiarity: 'Exotic' }), true);
-  check('a specific entry also covers a group the fixed list does not know', weaponProficient(prof, { name: 'Bloodburst Blade', familiarity: 'Exotic', groups: ['Veil'] }), true);
-  check('a described weapon nothing covers is not', weaponProficient(prof, { name: 'Longsword', familiarity: 'Martial', groups: ['Heavy Blades'] }), false);
-  check('handedness alone is not enough to refuse', weaponProficient(prof, { name: 'Mic & Cord', handedness: 'Two-Handed' }), null);
-  check('nor a row with no category', weaponProficient(prof, { name: 'Thing' }), null);
-  check('and nothing recorded judges nothing', weaponProficient({ familiarities: [], groups: [], weapons: [], notes: '' }, { name: 'Longsword', familiarity: 'Martial' }), null);
+  const prof = { familiarities: ['Simple'], handedness: [], groups: ['Axes'], weapons: ['guitar axe', 'katana', 'Brand'], armor: [], shields: [], notes: '' };
+  const wp = (w, p = prof) => weaponProficient(p, w).state;
+  check('a matching familiarity is proficient', wp({ name: 'Club', familiarity: 'Simple' }), true);
+  check('a matching group is', wp({ name: 'Battleaxe', familiarity: 'Martial', groups: ['Axes'] }), true);
+  check('a named weapon is, whatever its category', wp({ name: 'Guitar Axe +1', familiarity: 'Exotic' }), true);
+  check('a specific entry also covers a group the fixed list does not know', wp({ name: 'Bloodvine Embrace', familiarity: 'Exotic', groups: ['Brand'] }), true);
+  check('a described weapon nothing covers is not', wp({ name: 'Longsword', familiarity: 'Martial', groups: ['Heavy Blades'] }), false);
+  check('handedness alone is not enough to refuse', wp({ name: 'Mic & Cord', handedness: 'Two-Handed' }), null);
+  check('nor a row with no category', wp({ name: 'Thing' }), null);
+  check('and nothing recorded judges nothing', wp({ name: 'Longsword', familiarity: 'Martial' }, { familiarities: [], groups: [], weapons: [], notes: '' }), null);
+  // The base weapon: a named blade that is a katana.
+  check('"As" reads against the specific list', wp({ name: 'Enpitsu to Keshi', familiarity: 'Exotic', baseWeapon: 'katana' }), true);
+  check('and a base weapon nothing covers refuses on its own', wp({ name: 'Thing', baseWeapon: 'nodachi' }), false);
+  check('and says why', weaponProficient(prof, { name: 'Enpitsu to Keshi', baseWeapon: 'Katana' }).why, 'katana on the Overview');
+  // The [Enhanced] veil rule: a veilweaver is always proficient with what a veil creates.
+  const veil = weaponProficient(prof, { name: 'Bloodburst Blade', familiarity: 'Exotic', groups: ['Veil', 'Heavy Blades'] });
+  check('a weapon in the Veil group is proficient by the [Enhanced] rule', [veil.state, veil.source], [true, 'veil']);
+  check('and so is one that names [Enhanced], with no list consulted', weaponProficient(null, { name: 'Sword [Enhanced (longsword)]', familiarity: 'Martial' }).state, true);
+  // The row's own field beats everything.
+  const yes = weaponProficient(prof, { name: 'Falcata', familiarity: 'Exotic', proficiency: 'yes', proficiencyNote: 'Custom Training' });
+  check('Yes on the row is proficient, via its note', [yes.state, yes.source, yes.why], [true, 'override', 'proficient via Custom Training']);
+  check('No on the row refuses even a veil weapon', weaponProficient(prof, { name: 'Brand', groups: ['Veil'], proficiency: 'no' }).state, false);
   const nar = new Character(load('narockro'));
   check("narockro's guitar axe is martial and unlisted, so it is flagged", nar.data.equipment.weapons[0].proficient, false);
   nar.listAdd('identity.proficiencies.weapons', 'guitar axe');
   check('until it is written in', nar.data.equipment.weapons[0].proficient, true);
   check("bryva's sheet recorded nothing, so her weapons are not judged", new Character(load('bryva')).data.equipment.weapons.every((w) => w.proficient === null), true);
+  const sab = new Character(load('saburo'));
+  check("saburo's veil blade is proficient by the veil rule, not refused", sab.data.equipment.weapons.map((w) => [w.proficient, w.proficiencySource]), [[true, 'veil'], [true, 'veil'], [true, 'veil']]);
+  check('rows carry the three fields, blank', [sab.data.equipment.weapons[0].proficiency, sab.data.equipment.weapons[0].baseWeapon, sab.data.equipment.weapons[0].proficiencyNote], ['', '', '']);
+  sab.set('equipment.weapons.0.proficiency', 'no');
+  check('and the row can still say No', sab.data.equipment.weapons[0].proficient, false);
+  check('which saves', JSON.parse(JSON.stringify(sab.toJSON())).equipment.weapons[0].proficiency, 'no');
 }
 
 console.log('specialty -- feat has one home, perks are a list');

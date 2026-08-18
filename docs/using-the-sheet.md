@@ -163,11 +163,16 @@ the kinds and a kind clears it. A **Notes** field takes whatever the lists canno
 On import the sentences are read into the lists — *"all simple and double-chained kama,
 katana…"* becomes the Simple chip and a weapon list, *"light and medium armor"* two
 chips, *"shields (except tower shields)"* the three Shield Proficiency covers — and
-what does not parse lands in Notes. A weapon on Equipment whose familiarity or group
-is set is read against these and shows **not proficient** in its heading when nothing
-covers it (a specific entry covers a weapon named like it, and a group the fixed list
-does not know, such as *Veil*); the −4 is not applied — it stays the player's to write.
-The Armored Discipline prerequisite on Primordia reads the armor list.
+what does not parse lands in Notes. A weapon on Equipment is read against these — by its
+familiarity, handedness, groups, name, and **As**, the base weapon it is (*Bloodburst
+Blade* as *katana*) — and shows **not proficient** in its heading when nothing covers it.
+Two things sit above the lists: a weapon in the *Veil* group, or naming *[Enhanced]*, is
+proficient by the Enhanced-veil rule (a veilweaver is always proficient with what a veil
+creates), and the row's own **Proficient** field — Auto / Yes / No, with a *via* note for
+Custom Training, a class feature, whatever the lists cannot say — overrides all of it. The
+heading shows *proficient · veil* or *proficient · Custom Training* when the answer came
+from one of those rather than the Overview. The −4 is not applied — it stays the player's
+to write. The Armored Discipline prerequisite on Primordia reads the armor list.
 
 **Race traits** have a table of their own under *Traits & drawbacks*, next to the
 character traits — a race hands out anywhere from three to ten, so rows are added and
