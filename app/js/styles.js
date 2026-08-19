@@ -22,6 +22,14 @@ export const SHEET_CSS = `
   --cs-good: #6bbf7b;
   --cs-bad: #e0635f;
   --cs-edit: #6ea8fe;
+  /* Formula source, wherever it is shown. A name is the same gold a computed
+     value wears, so one colour keeps meaning "a value the character supplies";
+     the rest only have to be told apart from it and from each other. */
+  --fx-name: var(--cs-accent);
+  --fx-fn: var(--cs-edit);
+  --fx-number: #8fcf9d;
+  --fx-string: #c9a3e0;
+  --fx-op: var(--cs-muted);
   --cs-radius: 8px;
   --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -52,6 +60,8 @@ export const SHEET_CSS = `
   --cs-formula: rgba(154, 107, 18, 0.38);
   --cs-formula-strong: rgba(154, 107, 18, 0.80);
   --cs-edit: #2563c9;
+  --fx-number: #1f7a43;
+  --fx-string: #6b3fa0;
 }
 
 * { box-sizing: border-box; }
@@ -1760,4 +1770,207 @@ ul.tablelog li:first-child { color: var(--cs-text); }
 .spheres .pair { gap: 3px; }
 .spheres input[type="text"] { width: 8rem; }
 .spheres button.primary { flex: none; width: auto; }
+
+/* ---------- formula source, wherever it is shown ----------
+   One set of colours for formula text everywhere: the Formulas tab, a
+   tracker's max under its row, the audit. A name wears the same gold a
+   computed value does, so the colour keeps its one meaning across the sheet.
+   fx-unknown is a name or a function the character cannot supply, marked
+   where it is written rather than only in an error message underneath. */
+.fx-code {
+  font-family: var(--cs-mono); font-size: 0.78rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.fx-name { color: var(--fx-name); }
+.fx-fn { color: var(--fx-fn); }
+.fx-number { color: var(--fx-number); font-variant-numeric: tabular-nums; }
+.fx-string { color: var(--fx-string); }
+.fx-op { color: var(--fx-op); }
+.fx-bracket { color: var(--cs-text); opacity: 0.75; }
+.fx-bad, .fx-unknown {
+  color: var(--cs-bad); text-decoration: underline wavy var(--cs-bad);
+  text-underline-offset: 3px; cursor: help;
+}
+
+/* ---------- the Formulas tab ---------- */
+.fx-intro .hint { max-width: 78ch; font-size: 0.78rem; }
+.fx-search, .fx-try {
+  width: 100%; margin-top: 8px; font-family: var(--cs-mono); font-size: 0.82rem;
+}
+.fx-try { box-shadow: inset -2px 0 0 var(--cs-formula-strong); }
+
+/* The working: what was written, what it becomes, what it comes to. Rows of
+   label and code, so the eye runs down the substitution rather than across. */
+.fx-working {
+  margin-top: 9px; border: 1px solid var(--cs-line); border-radius: 6px;
+  background: var(--cs-bg); padding: 7px 9px;
+}
+.fx-step {
+  display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px;
+  align-items: baseline; padding: 3px 0;
+}
+.fx-step + .fx-step { border-top: 1px dashed var(--cs-line); }
+.fx-label {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted); text-align: right;
+}
+.fx-step.out .fx-answer {
+  color: var(--cs-accent); font-weight: 700; font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.fx-step.bad .fx-code { color: var(--cs-bad); }
+.fx-reads {
+  margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--cs-line);
+  font-size: 0.7rem; color: var(--cs-muted);
+}
+button.fx-pick { cursor: pointer; color: var(--cs-text); }
+button.fx-pick:hover { border-color: var(--cs-accent); }
+button.fx-pick .fx-val {
+  margin-left: 5px; color: var(--cs-accent); font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+button.fx-pick.fx-unknown { color: var(--cs-bad); border-color: var(--cs-bad); text-decoration: none; }
+
+.fx-starters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+button.fx-starter {
+  font-family: var(--cs-mono); font-size: 0.74rem; padding: 4px 8px;
+  background: var(--cs-bg); border: 1px dashed var(--cs-line); cursor: pointer;
+}
+button.fx-starter:hover { border-color: var(--cs-accent); border-style: solid; }
+
+/* The index of readable names: one family per fold, values beside the names. */
+.fx-group { margin-bottom: 4px; }
+.fx-group > summary { cursor: pointer; font-size: 0.8rem; padding: 3px 0; }
+.fx-group > summary .hint { font-size: 0.7rem; }
+.fx-names {
+  display: grid; gap: 4px; margin: 6px 0 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+button.fx-name-chip {
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+  font-family: var(--cs-mono); font-size: 0.72rem; text-align: left;
+  padding: 3px 7px; background: var(--cs-bg); border: 1px solid var(--cs-line); cursor: pointer;
+}
+button.fx-name-chip:hover { border-color: var(--cs-accent); }
+button.fx-name-chip .n { color: var(--fx-name); overflow: hidden; text-overflow: ellipsis; }
+button.fx-name-chip .v {
+  color: var(--cs-text); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Formulas already on the character. */
+.fx-row {
+  border: 1px solid var(--cs-line); border-radius: 6px; background: var(--cs-panel-2);
+  padding: 7px 9px; margin-bottom: 6px;
+}
+.fx-row.bad { border-color: var(--cs-bad); }
+.fx-rowhead { display: flex; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+.fx-rowval {
+  margin-left: auto; color: var(--cs-accent); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+code.fx-rowsrc {
+  display: block; margin-top: 4px; padding: 4px 7px; border-radius: 4px;
+  background: var(--cs-bg); cursor: pointer;
+}
+code.fx-rowsrc:hover { outline: 1px solid var(--cs-accent); }
+.fx-err { margin-top: 4px; font-size: 0.72rem; color: var(--cs-bad); }
+
+/* The reference, folded away under the working parts of the tab. */
+.fx-ref > details > summary { cursor: pointer; list-style-position: outside; }
+.fx-ref summary h3 {
+  margin: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--cs-accent); font-weight: 650;
+}
+.fx-forms { display: grid; gap: 9px; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.fx-form { border: 1px solid var(--cs-line); border-radius: 6px; padding: 8px 9px; background: var(--cs-panel-2); }
+.fx-form .hint { margin: 4px 0; }
+code.fx-formcode { display: block; color: var(--cs-accent); font-weight: 650; font-size: 0.85rem; }
+.fx-formname { font-size: 0.78rem; font-weight: 650; margin-top: 2px; }
+code.fx-formeg { display: block; color: var(--cs-muted); }
+.fx-walk { display: grid; gap: 8px; margin-top: 10px; }
+.fx-walkstep { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: 8px; font-size: 0.82rem; }
+.fx-walkstep .fx-stepno {
+  width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--cs-accent-soft); color: var(--cs-accent); font-size: 0.72rem; font-weight: 700;
+}
+.fx-walkstep .hint { margin: 3px 0 0; }
+.fx-walkstep code.fx-code { display: inline-block; background: var(--cs-bg); padding: 1px 5px; border-radius: 3px; }
+.fx-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.fx-table td { padding: 5px 6px; border-top: 1px solid var(--cs-line); vertical-align: top; }
+.fx-table tr:first-child td { border-top: 0; }
+.fx-op-cell, .fx-fam { white-space: nowrap; }
+.fx-op-cell code, .fx-fam code { color: var(--cs-accent); }
+.fx-fam { max-width: 15rem; white-space: normal; }
+.fx-fngroup { margin-bottom: 10px; }
+.fx-fngroup h4 {
+  margin: 0 0 5px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted);
+}
+.fx-fn-row {
+  display: grid; gap: 3px 12px; padding: 6px 0; border-top: 1px solid var(--cs-line);
+  grid-template-columns: minmax(11rem, 1fr) minmax(0, 2.2fr) minmax(9rem, 1fr);
+  align-items: baseline;
+}
+code.fx-sig { color: var(--fx-fn); font-weight: 650; }
+.fx-fn-what { font-size: 0.78rem; }
+code.fx-eg {
+  display: inline-block; background: var(--cs-bg); border: 1px solid var(--cs-line);
+  border-radius: 4px; padding: 2px 6px; cursor: pointer;
+}
+code.fx-eg:hover { border-color: var(--cs-accent); }
+.fx-eg-val {
+  margin-left: 7px; padding-left: 7px; border-left: 1px solid var(--cs-line);
+  color: var(--cs-accent); font-weight: 650; font-variant-numeric: tabular-nums;
+}
+
+
+/* ---------- what needs attention ----------
+   Sits above the formulas, and only when there is something in it. A cycle,
+   a duplicate, a taken name and an orphan are each one entry naming every
+   place involved, rather than each place complaining on its own. */
+.fx-problems { border-color: var(--cs-bad); }
+.fx-problem {
+  border: 1px solid var(--cs-line); border-left: 3px solid var(--cs-bad);
+  border-radius: 6px; background: var(--cs-panel-2); padding: 7px 10px; margin-bottom: 7px;
+}
+.fx-problemhead { display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap; }
+.fx-problemhead .badge { margin-left: 0; }
+code.fx-problemname { color: var(--cs-accent); font-weight: 650; font-size: 0.82rem; }
+.fx-problem .hint { margin: 4px 0 6px; }
+.fx-places { display: grid; gap: 3px; }
+.fx-place {
+  display: grid; grid-template-columns: 5.5rem minmax(6rem, 1fr) minmax(0, 2fr) auto;
+  gap: 8px; align-items: baseline; font-size: 0.76rem;
+  padding: 3px 6px; border-radius: 4px; background: var(--cs-bg);
+}
+.fx-place.inforce { outline: 1px solid var(--cs-accent); }
+.fx-placelabel {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted);
+}
+.fx-place.inforce .fx-placelabel { color: var(--cs-accent); }
+.fx-placewhere { color: var(--cs-text); }
+.fx-place code.fx-code { cursor: pointer; }
+.fx-place code.fx-code:hover { outline: 1px solid var(--cs-accent); border-radius: 3px; }
+.fx-placeval {
+  color: var(--cs-accent); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right;
+}
+
+@container (max-width: 560px) {
+  .fx-place { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* A tracker's own formulas, under its row. */
+.tmeta code.fx-code { font-size: 0.72rem; }
+/* A button that reads as part of the sentence it sits in. */
+button.linkish {
+  display: inline; padding: 0; border: 0; background: none; font: inherit;
+  color: var(--cs-accent); text-decoration: underline dotted; cursor: pointer;
+}
+button.linkish:hover { text-decoration-style: solid; }
+
+@container (max-width: 560px) {
+  .fx-step { grid-template-columns: 1fr; gap: 2px; }
+  .fx-label { text-align: left; }
+  .fx-fn-row { grid-template-columns: 1fr; }
+}
 `;

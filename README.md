@@ -1,10 +1,10 @@
 # Pathfinder Character Sheet Program
 
-A self-contained web app for Pathfinder characters built on our campaign's Google
-Sheets template: bring a workbook (or start from a blank sheet), and get a live sheet
-with full recalculation and a player-authored, GM-inspectable custom tracker system.
-Everything runs in the browser — nothing is uploaded, nothing is installed, and what
-you make is stored in your browser only.
+A self-contained web app for Pathfinder characters built on the Google Sheets
+template I made for our campaign: bring a workbook (or start from a blank sheet), and
+get a live sheet with full recalculation and a player-authored, GM-inspectable
+custom tracker system. Everything runs in the browser — nothing is uploaded, nothing
+is installed, and what you make is stored in your browser only.
 
 It is a static site, so it runs from any file host (GitHub Pages included) or from a
 local folder; the sheet itself is a standard custom element, so it drops into an
@@ -15,6 +15,24 @@ built and tested against belong to their players and stay off the repository (se
 Everything past the basics — how each tab computes, the sub-systems, formulas and
 trackers, embedding, conversion — is in [docs/](docs/); the index is at the end of
 this page.
+
+---
+
+## Why this exists
+
+Our table played on Myth-Weavers, and the characters outgrew it. Everyone ran a
+gestalt track, mythic was in play, and between Spheres of Power, Spheres of Might,
+Path of War and the then-new Akashic classes a single character carried four
+sub-systems at once — several of them with a companion underneath. A fixed form has a
+fixed number of slots and does no arithmetic; ours needed both to give.
+
+So I built the sheet from scratch in Google Sheets: not for one character but for the
+whole group, auto-calculating, with room for whatever a player brought to it. Nothing
+free did that job at the time.
+
+This app is that sheet, ported — the same calculation and the same layout, in
+something that loads in a browser and keeps its rules in swappable packs instead of
+baked into the cells.
 
 ---
 
@@ -76,6 +94,8 @@ app/js/xlsx.js          dependency-free .xlsx reader (ZIP + OOXML)
 app/js/zip.js           dependency-free .zip writer, for Export all
 app/js/convert.js       xlsx -> JSON converter, shared by the browser and Node
 app/js/formula.js       sandboxed expression language
+app/js/formula-format.js  formula display: highlighting, re-spacing, showing the working
+app/js/formula-guide.js   the Formulas tab: problems, scratchpad, value index, in-app guide
 app/js/rules.js         Pathfinder tables + derived-stat definitions
 app/js/model.js         live character model
 app/js/history.js       saved versions, snapshots and checkpoints (IndexedDB)
@@ -96,7 +116,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs
 ```
 
 `model.test` and `convert.test` check the model and the converter against real
@@ -147,7 +167,7 @@ is what the converter's `extraTabs` capture is for.
 | [Using the sheet](docs/using-the-sheet.md) | How the sheet is edited and what its core tabs compute — the Overview and its panels, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar. |
 | [Equipment & progression](docs/equipment-and-progression.md) | The gear list and what it feeds, the Item Crafting calculator, mythic tiers and paths, the Progression tab (column rule groups, schedules, owed slots), and templates. |
 | [Sub-systems](docs/sub-systems.md) | The modelled sub-systems, each read once off its worksheet: Spheres & Magic training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions. |
-| [Formulas & trackers](docs/formulas-and-trackers.md) | The sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
+| [Formulas & trackers](docs/formulas-and-trackers.md) | The **ƒx Formulas** tab (scratchpad, value index, in-app guide), the sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
 | [Embedding](docs/embedding.md) | The `<character-sheet>` custom element: attributes, events, theming through custom properties, and the audit API. |
 | [Extensions](docs/extensions.md) | Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage. |
 | [To do](docs/todo.md) | Agreed but not built: a picker for option menus, reading menu pages, the names still hard-coded in the engine. |

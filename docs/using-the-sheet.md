@@ -83,6 +83,14 @@ to send it back to the manager, or **reset** to the default nine. The bar is sav
 with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
 export.
 
+Two tabs are not part of that arrangement and sit after it: **ƒx Formulas** — the
+formula guide, scratchpad and value index, on every character, described in
+[Formulas & trackers](formulas-and-trackers.md#ƒx-formulas-tab) — and **Formula
+Audit**, which only appears under `role="admin"`. Neither can be hidden or dragged,
+because help you cannot find is not help; the header's **ƒx** button opens the
+Formulas tab from wherever you are, and wears a count when something on the character
+is not working.
+
 The manager lists what is off the bar **alphabetically**, in three groups:
 
 - **Hidden tabs** — the rest of the built-in tabs (Spheres & Magic, Crafting,

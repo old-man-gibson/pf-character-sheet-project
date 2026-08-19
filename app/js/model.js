@@ -53,8 +53,10 @@ import {
   COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion, computeCompanion,
   companionScope,
 } from './companions.js';
-import { evaluateFormula, analyse } from './formula.js';
-import { collectDefinitions, resolveDefinitions, renderTokens, hasTokens } from './inline.js';
+import { evaluateFormula, analyse, resolvePath } from './formula.js';
+import {
+  collectDefinitions, collectUses, resolveDefinitions, renderTokens, hasTokens,
+} from './inline.js';
 import {
   normalizeStyle, resolveZones, isDefaultStyle, normalizeHex, FEATURE_GROUP_COLORS, zoneAt,
   METERS, meterDefaultStyle, isDefaultMeterStyle, dyingFraction,
@@ -5303,17 +5305,193 @@ export class Character {
    * tokens through the formula scope.
    */
   #resolveInlineNames() {
-    const defs = collectDefinitions(this.proseSources());
+    const sources = this.proseSources();
+    const defs = collectDefinitions(sources);
     // Base scope excludes inline names (they are being computed) and skill
     // totals (skills may read names, so names must not read skills — that
     // rules out cycles between the two).
     this.inlineNames = {};
     const base = this.scope();
+    // What the sheet works out for itself, captured before `skill` is emptied
+    // so that a definition cannot take a skill's name either.
+    const builtin = new Set(flatNames(base));
     base.skill = {};
-    const { values, errors } = resolveDefinitions(defs, base);
+    const { values, errors, duplicates } = resolveDefinitions(defs, base);
+
+    // A definition may not take a name the sheet already works out. The scope
+    // merge has always refused to overwrite one, but refusing quietly is the
+    // worst of both worlds: {level = 30} would show 30 where it was written
+    // while every formula reading `level` went on getting the real number.
+    // Better to say so and publish nothing.
+    const shadowed = [];
+    for (const d of defs) {
+      const reason = shadowReason(d.name, builtin);
+      if (!reason) continue;
+      shadowed.push({ name: d.name, path: d.path, reason });
+      delete values[d.name];
+      errors.push({ name: d.name, path: d.path, error: reason, shadow: true });
+    }
+
     this.inlineNames = values;
     this.inlineErrors = errors;
     this.inlineDefinitions = defs;
+    this.inlineDuplicates = duplicates;
+    this.inlineShadowed = shadowed;
+    // Every name the prose *reads*, kept beside every name it defines: the
+    // parse of each expression is cached by source, so the second pass costs
+    // little and orphans() becomes a set lookup rather than another walk.
+    this.inlineUses = collectUses(sources);
+  }
+
+  /**
+   * Names something on this character asks for that nothing provides.
+   *
+   * Usually the definition was deleted or renamed and the places quoting it
+   * were not: the name vanishes from every list, because nothing defines it,
+   * and all that is left is a red token in a sentence somewhere. This walks
+   * the other way round -- from the uses back -- so the sheet can say "three
+   * things still ask for {qi.max}, and here they are".
+   *
+   * A name that was only ever a typo comes out the same way, which is right:
+   * the symptom and the fix are identical.
+   */
+  orphans(auditRows = null) {
+    const known = new Set(this.scopeNames());
+    // A name that *is* defined but did not resolve -- one caught in a cycle,
+    // one whose formula does not parse -- is not an orphan. It has a
+    // definition and that definition has its own problem; saying "nothing
+    // defines it" as well would send the player looking for something that is
+    // right there.
+    const defined = new Set((this.inlineDefinitions || []).map((d) => d.name));
+    const found = new Map();
+    const add = (name, use) => {
+      if (!found.has(name)) found.set(name, { name, uses: [] });
+      found.get(name).uses.push(use);
+    };
+
+    for (const u of this.inlineUses || []) {
+      if (known.has(u.name) || defined.has(u.name)) continue;
+      // Legal where it was written: a veil's own essence.self, and the like.
+      if (u.scope && resolvePath(u.scope, u.name) !== undefined) continue;
+      add(u.name, {
+        where: describeSource(u.path),
+        path: u.path,
+        formula: u.source,
+        kind: u.kind,
+      });
+    }
+    // Everything that is not prose -- tracker maxima, skill formulas, weapon
+    // tokens, crafting numbers -- has already been checked against the scope
+    // it resolves in, so take that verdict rather than redoing it.
+    for (const r of auditRows || this.audit()) {
+      // Inline definitions are prose, and collectUses has already walked every
+      // one of them; counting their audit rows too would list the same text
+      // under the same name twice.
+      if (r.source === 'inline') continue;
+      for (const name of r.unknownReferences || []) {
+        if (known.has(name) || defined.has(name)) continue;
+        add(name, { where: r.where || r.name, path: r.id, formula: r.formula, kind: 'field' });
+      }
+    }
+    return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Everything wrong with the names on this character, as one list a reader
+   * can work down. Four kinds, and each is a different fix:
+   *
+   *   cycle      two or more definitions waiting on each other
+   *   duplicate  one name defined in more than one place
+   *   shadow     a definition trying to take a name the sheet already owns
+   *   orphan     a name being asked for that nothing defines
+   *
+   * The individual formulas carry their own errors as well -- this is the
+   * view from above, where a cycle is one problem naming three formulas
+   * rather than three formulas each complaining separately.
+   */
+  formulaProblems(auditRows = null) {
+    const rows = auditRows || this.audit();
+    const valueAt = new Map(rows
+      .filter((r) => r.source === 'inline')
+      .map((r) => [`${r.name}@${r.location}`, r.value]));
+    const out = [];
+
+    const seen = new Set();
+    for (const e of this.inlineErrors || []) {
+      if (!e.cycle) continue;
+      const key = [...e.cycle].sort().join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        kind: 'cycle',
+        name: e.cycle.join(' → '),
+        detail: e.error,
+        places: [...new Set(e.cycle)].map((n) => {
+          const d = (this.inlineDefinitions || []).find((x) => x.name === n);
+          return { label: n, where: d ? describeSource(d.path) : '', formula: d?.expr || '' };
+        }),
+      });
+    }
+
+    for (const dup of this.inlineDuplicates || []) {
+      out.push({
+        kind: 'duplicate',
+        name: dup.name,
+        detail: `Defined in ${dup.definitions.length} places. The first is the one in force; `
+          + 'the rest are ignored. Delete the ones you do not want, or give them their own names.',
+        places: dup.definitions.map((d) => ({
+          label: d.path === dup.inForce ? 'in force' : 'ignored',
+          where: describeSource(d.path),
+          formula: d.expr,
+          value: valueAt.get(`{${dup.name}}@${d.path}`) ?? null,
+          inForce: d.path === dup.inForce,
+        })),
+      });
+    }
+
+    for (const sh of this.inlineShadowed || []) {
+      out.push({
+        kind: 'shadow',
+        name: sh.name,
+        detail: sh.reason,
+        places: [{ label: 'written in', where: describeSource(sh.path), formula: '' }],
+      });
+    }
+
+    const orphanNames = new Set();
+    for (const o of this.orphans(rows)) {
+      orphanNames.add(o.name);
+      out.push({
+        kind: 'orphan',
+        name: o.name,
+        detail: `${o.uses.length} ${o.uses.length === 1 ? 'place asks' : 'places ask'} for `
+          + `"${o.name}" and nothing defines it. Either the definition was deleted or renamed, `
+          + 'or the name is misspelt here.',
+        places: o.uses.map((u) => ({ label: u.kind === 'ref' ? 'quoted in' : 'used in', where: u.where, formula: u.formula })),
+      });
+    }
+
+    // Anything else that does not work -- a tracker max that does not parse, a
+    // skill formula reading something it may not. Listed here so that "needs
+    // attention" really is everything, and the count beside it can be trusted.
+    const spokenFor = new Set(this.inlineErrors
+      ?.filter((e) => e.duplicate || e.cycle || e.shadow)
+      .map((e) => `${e.name}@${e.path}`) || []);
+    for (const r of rows) {
+      if (r.status !== 'error') continue;
+      if (r.source === 'inline' && spokenFor.has(`${String(r.name).slice(1, -1)}@${r.location}`)) continue;
+      const unknowns = r.unknownReferences || [];
+      // A row whose only fault is naming an orphan is that orphan's problem,
+      // and it is already listed under it.
+      if (unknowns.length && unknowns.every((n) => orphanNames.has(n))) continue;
+      out.push({
+        kind: 'broken',
+        name: r.name,
+        detail: r.error || 'This formula does not work.',
+        places: [{ label: 'written in', where: r.where || SOURCE_WORD[r.source] || r.source, formula: r.formula }],
+      });
+    }
+    return out;
   }
 
   /** Rendered segments for a prose field (used by the view layer). */
@@ -8413,15 +8591,7 @@ export class Character {
 
   /** Every variable name a formula may legally use -- drives validation + autocomplete. */
   scopeNames() {
-    const out = [];
-    (function walk(obj, prefix) {
-      for (const [k, v] of Object.entries(obj)) {
-        const path = prefix ? `${prefix}.${k}` : k;
-        if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, path);
-        else out.push(path);
-      }
-    }(this.scope(), ''));
-    return out.sort();
+    return flatNames(this.scope()).sort();
   }
 
   /* ---------------- custom trackers ---------------- */
@@ -8685,9 +8855,37 @@ export class Character {
       });
 
     // Inline {name = expr} definitions and their errors.
+    //
+    // What a definition may legally read is wider than the character: the
+    // other definitions (they resolve in dependency order, so one may name a
+    // sibling that has not been computed yet), and whatever local scope the
+    // text was written in -- a veil's `essence.self`, which exists in that
+    // veil's own description and nowhere else. Judging these against the
+    // character alone would report a working formula as broken.
+    const definedNames = new Set((this.inlineDefinitions || []).map((d) => d.name));
+    // Each definition is worked out on its own terms, in the scope it was
+    // written in. That matters when a name is defined twice: the row has to
+    // say what *its* formula comes to, not what the winning one came to, or a
+    // player choosing between them is comparing a number against itself.
+    const ownValue = (d) => {
+      try {
+        return evaluateFormula(d.expr, {
+          lookup: (n) => {
+            if (d.scope) {
+              const v = resolvePath(d.scope, n);
+              if (v !== undefined) return v;
+            }
+            return resolvePath(scope, n);
+          },
+        });
+      } catch {
+        return null;
+      }
+    };
     const inlineFormulas = (this.inlineDefinitions || []).map((d, i) => {
       const err = (this.inlineErrors || []).find((e) => e.name === d.name && e.path === d.path);
       const info = analyse(d.expr);
+      const local = new Set(flatNames(d.scope));
       return {
         id: `inline-${i}`,
         name: `{${d.name}}`,
@@ -8695,12 +8893,18 @@ export class Character {
         formula: d.expr,
         reads: info.variables,
         functions: info.functions,
-        unknownReferences: [],
-        value: err ? null : this.inlineNames?.[d.name] ?? null,
+        unknownReferences: info.variables.filter(
+          (v) => !known.has(v) && !definedNames.has(v) && !local.has(v),
+        ),
+        value: ownValue(d),
         error: err?.error || info.error || null,
         status: err || info.error ? 'error' : 'ok',
         createdAt: null,
         location: d.path,
+        where: describeSource(d.path),
+        // The scope this text was written in, so a reader can work the formula
+        // out the way the sheet did rather than against the character alone.
+        locals: d.scope || null,
       };
     });
 
@@ -8890,6 +9094,8 @@ export class Character {
           error: unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : error,
           status: error || unknown.length ? 'error' : 'ok',
           createdAt: t.createdAt || null,
+          locals: usesSelf ? this.trackerScope(t) : null,
+          where: 'the Trackers tab',
         };
       });
     });
@@ -8952,6 +9158,106 @@ export class Character {
     }
     return out;
   }
+}
+
+/** Where a non-prose formula lives, for a reader who needs to go and find it. */
+const SOURCE_WORD = {
+  skill: 'the Skills tab',
+  weapon: 'a weapon',
+  crafting: 'the Crafting tab',
+  sheet: 'a tracker from the sheet',
+  player: 'a field on the sheet',
+};
+
+/**
+ * Why `name` may not be defined by a player, or null if it may.
+ *
+ * Three ways a name can collide with what the sheet works out for itself: it
+ * *is* one (`level`), it hangs off one (`level.bonus`, where level is a
+ * number and cannot hold anything), or it is the branch one lives on (`str`,
+ * which already holds str.mod and the rest).
+ */
+function shadowReason(name, builtin) {
+  if (builtin.has(name)) {
+    return `"${name}" is a value the sheet works out for itself, so it cannot be defined here. `
+      + 'Pick a name of your own — a dotted one such as my.' + String(name).split('.').pop()
+      + ' never collides.';
+  }
+  const parts = String(name).split('.');
+  for (let i = 1; i < parts.length; i++) {
+    const head = parts.slice(0, i).join('.');
+    if (builtin.has(head)) {
+      return `"${head}" is a value the sheet works out for itself, so nothing can be hung off it. `
+        + `Pick a name of your own rather than "${name}".`;
+    }
+  }
+  const branch = `${name}.`;
+  const under = [...builtin].filter((b) => b.startsWith(branch));
+  if (under.length) {
+    return `"${name}" is where the sheet keeps ${under.slice(0, 3).join(', ')}`
+      + `${under.length > 3 ? ' and more' : ''}, so it cannot be defined here. `
+      + 'Pick a name of your own.';
+  }
+  return null;
+}
+
+/**
+ * A prose source path (`note:1`, `feature:Monk:5:Special`) as something a
+ * player can go and look at. The paths are internal, stable and meaningless
+ * to a reader; this is the one place that translates them.
+ */
+export function describeSource(path) {
+  const parts = String(path || '').split(':');
+  const [head, a, b] = parts;
+  const nth = (i) => Number(i) + 1;
+  switch (head) {
+    case 'feature': return `${a} class feature, level ${b}`;
+    case 'template': return 'a template feature';
+    case 'note': return `note ${nth(a)} on Lore`;
+    case 'background': return `background section ${nth(a)}`;
+    case 'trait': return a === 'additional' ? `additional trait ${nth(b)}` : `${a} trait`;
+    case 'mythic': return `mythic ability ${nth(a)}`;
+    case 'mythicTradition': return 'mythic tradition';
+    case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
+    case 'crafting': return `crafting project ${nth(a)}`;
+    case 'weapon': return `weapon ${nth(a)}, special properties`;
+    case 'gear':
+    case 'other': return `gear ${nth(a)}`;
+    case 'talent':
+    case 'bonusTalent': return `a ${a} talent`;
+    case 'tradition': return `${a} tradition`;
+    case 'drawback': return `${a} drawback`;
+    case 'boughtOff': return `${a} drawback bought off`;
+    case 'veil': return parts[3] === 'name' ? 'a veil’s name' : 'a veil’s description';
+    case 'card': return `card ${nth(a)}`;
+    case 'sideboard': return `sideboard card ${nth(a)}`;
+    case 'deckManipulation': return 'a deck manipulation';
+    case 'cardcasting': return 'Cardcasting notes';
+    case 'familiar': return 'the familiar';
+    case 'animalCompanion': return 'the animal companion';
+    case 'eidolon': return 'the eidolon';
+    case 'tab': return `the ${a} tab`;
+    default:
+      if (head?.endsWith('Extra')) return `the ${head.replace(/Extra$/, '')} tab`;
+      return head ? `${head}` : 'somewhere on the sheet';
+  }
+}
+
+/**
+ * The dotted names in a scope object: {essence: {self: 3}} -> ['essence.self'].
+ *
+ * One definition, used both for the character's own names and for the little
+ * local scopes a field brings with it, so "what may this formula read" is
+ * answered the same way in both places.
+ */
+function flatNames(obj, prefix = '') {
+  const out = [];
+  for (const [k, v] of Object.entries(obj || {})) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...flatNames(v, path));
+    else out.push(path);
+  }
+  return out;
 }
 
 function safe(fn, fallback) {
