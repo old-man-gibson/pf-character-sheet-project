@@ -80,7 +80,9 @@ import {
   COMPANION_KINDS, COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
   ABILITY_INCREASE_LEVELS, companionInUse,
 } from './companions.js';
-import { evaluateFormula, analyse } from './formula.js';
+import { evaluateFormula, analyse, resolvePath } from './formula.js';
+import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
+import { formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, valueGroups } from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
 import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
 import {
@@ -124,8 +126,16 @@ const TABS = [
   ['progression', 'Progression'],
   ['extras', 'Extras & Notes'],
   ['lore', 'Lore'],
+  ['formulas', 'Formulas'],
   ['audit', 'Formula Audit'],
 ];
+
+/**
+ * Tabs that are not the player's to arrange: the Formula Audit, which only an
+ * admin sees, and the Formulas guide, which is help rather than character data
+ * and so is always on the end of the bar where it can be found.
+ */
+const FIXED_TABS = new Set(['audit', 'formulas']);
 
 /** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
 const MODELLED_TAB_IDS = new Set([
@@ -421,6 +431,12 @@ export class CharacterSheetElement extends HTMLElement {
   #peek = [];
   /** Which kind of extension block the ⚙ manager's list is narrowed to ('' = all). */
   #extFilter = '';
+  /* The Formulas tab. Working state, not character data: what is in the
+     try-it box, what the one search box is narrowing to, and whether the
+     reference underneath has been unfolded. */
+  #formulaDraft = '';
+  #formulaQuery = '';
+  #formulaRefOpen = false;
 
   constructor() {
     super();
@@ -900,7 +916,7 @@ export class CharacterSheetElement extends HTMLElement {
     const modelled = this.#modelledSystems();
     const out = [];
     for (const [id, label] of TABS) {
-      if (id === 'audit') continue;                    // admin-only, never on the player's bar
+      if (FIXED_TABS.has(id)) continue;                // not the player's to arrange (see FIXED_TABS)
       const m = modelled[id];
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
@@ -925,6 +941,8 @@ export class CharacterSheetElement extends HTMLElement {
   #render() {
     if (!this.#model) return;
     const bar = this.#barEntries();
+    // The guide sits last on every bar, and the audit after it for an admin.
+    bar.push({ key: 'formulas', id: 'formulas', label: 'ƒx Formulas', kind: 'core' });
     if (this.isAdmin) bar.push({ key: 'audit', id: 'audit', label: 'Formula Audit', kind: 'core' });
     const allIds = [...bar.map((e) => e.id), 'systabs'];
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
@@ -936,7 +954,7 @@ export class CharacterSheetElement extends HTMLElement {
         <nav class="tabs" role="tablist">
           ${bar.map((e) => `
             <button role="tab" data-tab="${e.id}" data-tabkey="${esc(e.key)}" aria-pressed="${this.#tab === e.id}"
-              ${e.key === 'audit' ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
+              ${FIXED_TABS.has(e.key) ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
           `).join('')}
           <button role="tab" data-tab="systabs" aria-pressed="${this.#tab === 'systabs'}" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
@@ -968,6 +986,7 @@ export class CharacterSheetElement extends HTMLElement {
           </div>
         </div>
         <div class="head-actions">
+          ${this.#formulaButton()}
           <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
           <button data-action="save" class="${this.#changes ? 'primary' : ''}"
             ${this.#changes ? '' : 'disabled'}
@@ -1110,6 +1129,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();
       case 'extras': return this.#extrasPanel();
+      case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
       default: return this.#overviewPanel();
     }
@@ -6121,6 +6141,10 @@ export class CharacterSheetElement extends HTMLElement {
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
           <code>mod</code> <code>iterations</code>.
+          <button data-action="formulas" class="linkish"
+            title="The guide, a scratchpad, and every value with its current number"
+            >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
+          value this character can read with what it is worth now.
         </p>
         <p class="hint">
           <strong>Min</strong> is 0 unless you give it a formula. A negative min makes a two-sided
@@ -6142,6 +6166,18 @@ export class CharacterSheetElement extends HTMLElement {
    * (Hellfire Qi: -7..+7): `current` is a signed position, negative pips grow
    * leftwards from a zero mark, and the value is shown red while negative.
    */
+  /**
+   * A formula shown under the thing it drives -- a tracker's max, its min.
+   *
+   * Coloured rather than plain, spaced out rather than as typed, and carrying
+   * its own working on hover: "floor(level / 2) + wis.mod = floor(20 / 2) + 5
+   * = 15" answers where the number came from without leaving the row.
+   */
+  #formulaMeta(label, source) {
+    return `<div class="tmeta" title="${esc(workingLine(source, this.#model.scope()))}">${
+      esc(label)} = <code class="fx-code">${highlight(pretty(source))}</code></div>`;
+  }
+
   /** A draining tracker shows and edits what is left rather than what was spent. */
   #isDraining(t) {
     return (Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining';
@@ -6181,8 +6217,8 @@ export class CharacterSheetElement extends HTMLElement {
           ${draining ? '<span class="badge">drains</span>' : ''}
           ${stateBadge}
         </div>
-        ${t.maxFormula ? `<div class="tmeta">max = ${esc(t.maxFormula)}</div>` : ''}
-        ${t.minFormula ? `<div class="tmeta">min = ${esc(t.minFormula)}</div>` : ''}
+        ${t.maxFormula ? this.#formulaMeta('max', t.maxFormula) : ''}
+        ${t.minFormula ? this.#formulaMeta('min', t.minFormula) : ''}
         ${t.note ? `<div class="tnote">${hasTokens(t.note)
       ? this.#renderedProse(t.note, this.#model.trackerScope(t))
       : esc(t.note)}</div>` : ''}
@@ -6586,17 +6622,27 @@ export class CharacterSheetElement extends HTMLElement {
     return `<div class="preview ${kind} ${info.ok ? 'ok' : 'err'}"${info.text ? '' : ' style="display:none"'}>${esc(info.text)}</div>`;
   }
 
-  /** Live "max = 7 · min = −7" preview for the add and edit forms. */
+  /**
+   * Live preview under the add and edit forms.
+   *
+   * It shows the substitution rather than only the answer -- "max = floor(20 /
+   * 2) + 5 = 15" -- because the formula itself is in the box directly above,
+   * and what the player cannot see from there is what their own numbers do to
+   * it. A formula with nothing to substitute just states its answer.
+   */
   #trackerPreview(maxSrc, minSrc) {
     const parts = [];
     let ok = true;
     for (const [label, src] of [['max', maxSrc], ['min', minSrc]]) {
       if (!String(src || '').trim()) continue;
-      try {
-        parts.push(`${label} = ${evaluateFormula(src, this.#model.scope())}`);
-      } catch (err) {
+      const w = workings(src, this.#model.scope());
+      if (w.error) {
         ok = false;
-        parts.push(`${label}: ${err.message}`);
+        parts.push(`${label}: ${w.error}`);
+      } else if (w.substituted === w.pretty || w.substituted === w.display) {
+        parts.push(`${label} = ${w.display}`);
+      } else {
+        parts.push(`${label} = ${w.substituted} = ${w.display}`);
       }
     }
     return { ok, text: parts.join('   ·   ') };
@@ -6929,16 +6975,60 @@ export class CharacterSheetElement extends HTMLElement {
     </span>`;
   }
 
+  /**
+   * What a computed value in prose says when you point at it.
+   *
+   * The token's own source, then its working -- because a bare "24" in the
+   * middle of a sentence is the one place on the sheet where a player has no
+   * way at all of seeing what produced it. A `{name}` reference shows the
+   * formula from wherever the name was defined, which saves hunting for it.
+   */
+  #tokenTitle(seg, scope) {
+    if (seg.kind === 'ref') {
+      const def = (this.#model.inlineDefinitions || []).find((d) => d.name === seg.name);
+      return def
+        ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}`
+        : `{${seg.name}}`;
+    }
+    const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
+    return `${label} ${workingLine(seg.expr, scope)}`;
+  }
+
+  /**
+   * The scope a prose token resolves in: the names the character defines,
+   * then whatever is local to where the text was written (a veil's own
+   * invested essence), then the character. Same order inline.js uses, so a
+   * tooltip can never disagree with the value beside it.
+   */
+  #tokenScope(local) {
+    const names = this.#model.inlineNames || {};
+    const base = this.#model.scope();
+    return {
+      lookup: (name) => {
+        if (Object.prototype.hasOwnProperty.call(names, name)) return names[name];
+        if (local) {
+          const v = resolvePath(local, name);
+          if (v !== undefined) return v;
+        }
+        return resolvePath(base, name);
+      },
+    };
+  }
+
   #renderedProse(text, local = null) {
+    // Built once for the whole field rather than per token: scope() walks
+    // every tracker, skill and companion, and a field may hold dozens of them.
+    let scope = null;
+    const tokenScope = () => (scope ??= this.#tokenScope(local));
     return this.#model.renderProse(text, local).map((seg) => {
       if (seg.kind === 'text') return esc(seg.text);
-      const label = seg.kind === 'define' ? `{${seg.name} = ${seg.expr}}`
-        : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
       if (seg.error) {
+        const label = seg.kind === 'define' ? `{${seg.name} = ${seg.expr}}`
+          : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
         return `<span class="tok err" title="${esc(label)} — ${esc(seg.error)}">${esc(seg.raw)}</span>`;
       }
       const shown = formatValue(seg.value);
-      return `<span class="tok ${seg.kind}" title="${esc(label)}">${esc(shown)}</span>`;
+      return `<span class="tok ${seg.kind}" title="${esc(this.#tokenTitle(seg, tokenScope()))}">${esc(shown)}</span>`;
     }).join('');
   }
 
@@ -7328,6 +7418,60 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- audit ---------------- */
 
+  /* ---------------- formulas ---------------- */
+
+  /**
+   * The Formulas tab: a scratchpad, an index of everything this character can
+   * read, every formula already written on it, and the reference underneath.
+   *
+   * Built in formula-guide.js from plain data, so the whole thing is a pure
+   * function of the character plus three pieces of view state -- which is what
+   * lets the search box and the try-it box refresh their own sections in
+   * place, without a re-render taking the caret with it.
+   */
+  #formulaPanel() {
+    const audit = this.#model.audit();
+    return formulaPanelHtml({
+      names: this.#model.scopeNames(),
+      scope: this.#model.scope(),
+      inlineNames: this.#model.inlineNames || {},
+      audit,
+      problems: this.#model.formulaProblems(audit),
+      draft: this.#formulaDraft,
+      query: this.#formulaQuery,
+      refOpen: this.#formulaRefOpen,
+    });
+  }
+
+  /**
+   * How much on this character needs attention, for the ƒx button.
+   *
+   * The same count the tab's own "Needs attention" panel shows, from the same
+   * call -- one cycle is one problem in both places. Two numbers for the same
+   * thing would just send a player looking for a fault that is not there.
+   */
+  #brokenFormulas() {
+    return this.#model.formulaProblems().length;
+  }
+
+  /**
+   * The way into the formula system from wherever you happen to be.
+   *
+   * It sits in the header rather than only on the tab bar because the moment
+   * a player wants it is the moment they are part-way through typing
+   * something on another tab -- and because a broken formula has to be
+   * findable from anywhere, which is what the count is for.
+   */
+  #formulaButton() {
+    const broken = this.#brokenFormulas();
+    return `<button data-action="formulas" aria-pressed="${this.#tab === 'formulas'}"
+      class="${broken ? 'danger' : ''}"
+      title="${broken
+    ? `Formulas — ${broken} on this character ${broken === 1 ? 'is' : 'are'} not working`
+    : 'Formulas: what you can read, what you have written, and how to write more'}"
+      >&fnof;x${broken ? ` (${broken})` : ''}</button>`;
+  }
+
   #auditPanel() {
     const rows = this.#model.audit();
     const bad = rows.filter((r) => r.status === 'error').length;
@@ -7347,7 +7491,8 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="badge ${r.status === 'error' ? 'err' : 'ok'}">${r.status}</span>
             <span class="badge ${r.source === 'player' ? 'player' : ''}">${esc(r.source)}</span>
           </div>
-          <div class="audit-formula">${esc(r.formula)}</div>
+          <div class="audit-formula" title="${esc(workingLine(r.formula, this.#tokenScope(r.locals)))}"
+            >${highlightFlagging(r.formula, r.unknownReferences)}</div>
           <div class="hint">
             reads: ${r.reads.length ? r.reads.map((v) => `<span class="tag">${esc(v)}</span>`).join('') : '<em>nothing</em>'}
             ${r.functions.length ? ` &middot; functions: ${r.functions.map((f) => `<span class="tag">${esc(f)}()</span>`).join('')}` : ''}
@@ -8214,6 +8359,8 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    this.#bindFormulas(root);
+
     // Add-tracker form: draft fields, with the formula preview refreshed in
     // place so the field keeps focus and caret.
     root.querySelectorAll('[data-draft]').forEach((input) => {
@@ -8536,6 +8683,131 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /** Update a formula preview box in place, without re-rendering the panel. */
+  /**
+   * The Formulas tab's live parts.
+   *
+   * Everything here refreshes the section it belongs to rather than calling
+   * #render(): a search box that loses the caret after every letter is not a
+   * search box, and the try-it working has to keep up with typing.
+   */
+  #bindFormulas(root) {
+    const draft = root.querySelector('[data-fx-draft]');
+    const query = root.querySelector('[data-fx-query]');
+    if (!draft && !query) return;
+
+    const scope = () => this.#model.scope();
+    const known = () => new Set(this.#model.scopeNames());
+
+    // The working only exists once something has been typed, so going from
+    // empty to typed (or back) is the one case that has to rebuild the tab.
+    const refreshWorking = () => {
+      const box = root.querySelector('.fx-working');
+      if (!box || !this.#formulaDraft.trim()) {
+        this.#render();
+        const again = root.querySelector('[data-fx-draft]');
+        again?.focus();
+        again?.setSelectionRange(again.value.length, again.value.length);
+        return;
+      }
+      box.innerHTML = workingHtml(this.#formulaDraft, scope(), known());
+      this.#bindFormulaInserts(root);
+    };
+
+    const refreshSearch = () => {
+      const q = this.#formulaQuery;
+      const names = this.#model.scopeNames();
+      const formulaSection = root.querySelector('[data-fx-section="formulas"]');
+      const valueSection = root.querySelector('[data-fx-section="values"]');
+      if (formulaSection) {
+        formulaSection.outerHTML = myFormulasHtml(this.#model.audit(), q);
+      }
+      if (valueSection) {
+        valueSection.outerHTML = browserHtml(
+          valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length, q,
+        );
+      }
+      this.#bindFormulaInserts(root);
+    };
+
+    draft?.addEventListener('input', () => {
+      const wasEmpty = !this.#formulaDraft.trim();
+      this.#formulaDraft = draft.value;
+      if (wasEmpty !== !this.#formulaDraft.trim()) {
+        const caret = draft.selectionStart;
+        this.#render();
+        const again = root.querySelector('[data-fx-draft]');
+        if (again) { again.focus(); again.setSelectionRange(caret, caret); }
+        return;
+      }
+      refreshWorking();
+    });
+    // Tidy the spacing on demand, never while typing: pretty() rewrites the
+    // text under the caret, which is intolerable mid-word but is exactly what
+    // is wanted once the formula is finished.
+    draft?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.#formulaDraft = pretty(draft.value);
+      draft.value = this.#formulaDraft;
+      refreshWorking();
+    });
+
+    query?.addEventListener('input', () => {
+      this.#formulaQuery = query.value;
+      refreshSearch();
+    });
+
+    root.querySelector('[data-fx-ref]')?.addEventListener('toggle', (e) => {
+      this.#formulaRefOpen = e.target.open;
+    });
+
+    this.#bindFormulaInserts(root);
+  }
+
+  /**
+   * Anything on the Formulas tab that puts text in the try-it box: a name from
+   * the index, a name a formula reads, a worked example, a formula already on
+   * the character. A name is inserted at the caret (you are building an
+   * expression); a whole formula replaces what is there.
+   */
+  #bindFormulaInserts(root) {
+    root.querySelectorAll('[data-fx-insert]').forEach((el) => {
+      if (el.dataset.fxBound) return;
+      el.dataset.fxBound = '1';
+      el.addEventListener('click', () => {
+        const box = root.querySelector('[data-fx-draft]');
+        if (!box) return;
+        const text = el.dataset.fxInsert;
+        if (el.dataset.fxReplace) {
+          this.#formulaDraft = text;
+        } else {
+          const at = box.selectionStart ?? box.value.length;
+          const before = box.value.slice(0, at);
+          const after = box.value.slice(box.selectionEnd ?? at);
+          // A name landing straight after a name or a number is not what was
+          // meant, so give it room; anything else is inserted as typed.
+          const gap = /[A-Za-z0-9_.]$/.test(before) ? ' ' : '';
+          this.#formulaDraft = `${before}${gap}${text}${after}`;
+        }
+        const wasEmpty = !box.value.trim();
+        box.value = this.#formulaDraft;
+        if (wasEmpty) {
+          this.#render();
+          root.querySelector('[data-fx-draft]')?.focus();
+          return;
+        }
+        const working = root.querySelector('.fx-working');
+        if (working) {
+          working.innerHTML = workingHtml(this.#formulaDraft, this.#model.scope(),
+            new Set(this.#model.scopeNames()));
+          this.#bindFormulaInserts(root);
+        }
+        box.focus();
+        box.setSelectionRange(box.value.length, box.value.length);
+      });
+    });
+  }
+
   #refreshPreview(root, kind, maxSrc, minSrc) {
     const box = root.querySelector(`.preview.${kind}`);
     if (!box) return;
@@ -8658,6 +8930,11 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'theme':
         this.setAttribute('theme', this.getAttribute('theme') === 'light' ? 'dark' : 'light');
+        break;
+      case 'formulas':
+        this.#tab = 'formulas';
+        this.#render();
+        this.shadowRoot.querySelector('[data-fx-draft]')?.focus();
         break;
       case 'export': {
         const blob = new Blob([JSON.stringify(this.#model.toJSON(), null, 1)], { type: 'application/json' });

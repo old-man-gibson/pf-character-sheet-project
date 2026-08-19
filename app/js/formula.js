@@ -156,9 +156,11 @@ class Parser {
       const right = this.parseExpression(nextMin);
       this.count();
       // "=" is accepted as a friendly alias for equality; players write it out
-      // of spreadsheet habit and it is never an assignment here.
+      // of spreadsheet habit and it is never an assignment here. `wrote` keeps
+      // the spelling they used, so anything that prints the formula back can
+      // show their text rather than a corrected version of it.
       const op = t.value === '=' ? '==' : t.value;
-      left = { kind: 'binary', op, left, right };
+      left = { kind: 'binary', op, wrote: t.value, left, right };
     }
 
     return left;

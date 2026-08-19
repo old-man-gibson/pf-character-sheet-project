@@ -1,6 +1,207 @@
 # Inline formulas and custom trackers
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The **ƒx Formulas** tab, the sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
+
+---
+
+## The ƒx Formulas tab
+
+The formula language is the most useful thing this app has that a paper sheet does not,
+and it is worth exactly as much as a player's ability to find their way into it. So it
+has a tab of its own, and a **ƒx** button in the header that opens it from wherever
+you are. The tab sits at the end of the bar on every character and cannot be hidden or
+dragged away — it is help, not character data — and unlike the Formula Audit it is not
+an admin view: it is the player's.
+
+It is five things, in the order a player needs them.
+
+**Needs attention** — at the top, and only when there is something in it, because a
+permanent empty box teaches a player to stop looking at that part of the page. It is
+every name problem on the character, one entry each, with every place involved and a
+number beside each so the fix is decidable from the list. The **&fnof;x** button in the
+header carries the same count, from the same call, so the two can never disagree. What
+it reports is [below](#when-names-go-wrong).
+
+**Try one** — a scratchpad. Type an expression and watch it resolve against *this*
+character; nothing typed there is saved or changes anything. It shows three lines:
+
+```
+written                     floor(level / 2) + wis.mod
+with this character's values  floor(20 / 2) + 16
+comes to                    26
+reads  level 20   wis.mod 16
+```
+
+The middle line is the one that teaches. A number with no working shown is not legible,
+and "where did 26 come from" is answered without going to look up two values on two
+other tabs. Every name it reads is listed underneath as a chip with its current value;
+click one to drop it into the box. **Enter** tidies the spacing of what you have typed
+(and never while you are typing, which would move the caret out from under you).
+
+**Formulas on this character** — every formula already written on the sheet, wherever it
+lives: inline names, tracker maxima and minima, zone bounds, skill-rank and misc
+formulas, weapon tokens, crafting numbers, speeds. Each is shown coloured, with what it
+comes to and any problem it has, and clicking one opens it in the scratchpad. Most of
+the time a player does not want to write a formula — they want to find the one they
+wrote three sessions ago and copy the trick. This is the same list the GM's Formula
+Audit shows, because formulas are text and there is nothing hidden in them.
+
+**Values you can read** — the index. Every name the character publishes, grouped into
+families, each with what it is worth right now, and clicking one puts it in the
+scratchpad at the caret. **Named by you** is first and open by default: the `{name = …}`
+values the player defined are the ones whose spelling they will not remember. The rest —
+trackers, the character, abilities, health/armour/saves, attack, skills, magic and
+sub-systems, companions — are folded until asked for, because a character publishes
+around 250 names and an alphabetical wall of them is a list, not an answer.
+
+**Reference** — folded away underneath, because it is the part you need once: the three
+token forms, a three-step walk-through of making a value and giving it pips, where
+formulas work, every operator, every built-in function, what the built-in name families
+mean, and the rules that are not guessable (a name cannot take one the sheet already
+owns; the first definition of a duplicated name wins; a tracker's id is not its name; a
+tracker note shows values but does not publish them), with a table of its own for the two
+names that only work in one kind of field — `essence.self` and `self.*`. Every example in it is evaluated against the character reading
+it, so `10 + con.mod * 2` shows what it means for *them* — and clicking any example
+loads it into the scratchpad.
+
+The **one search box** at the top narrows both the value index and the list of formulas
+at once, which is what "pull it up" usually means in practice: type `burn` to get every
+`tracker.burn.*` name and every formula that mentions burn.
+
+The function and operator tables are generated from the engine's own `FUNCTIONS` map, and
+`tests/formula-format.test.mjs` fails if a built-in is added without being documented (or
+documented after being removed), so the guide cannot drift from what the language does.
+
+### Formulas are shown, not just stored
+
+Wherever a formula appears it is now coloured by the same rules, so one colour means one
+thing across the whole sheet: **gold** is a name the character supplies (the same gold a
+computed value already wears), **blue** a function, **green** a number, grey the
+operators, and a red wavy underline a name or function the character does not have —
+marked where it is written, not only in an error message underneath. A tracker's
+`max = …` line, the Formula Audit, the guide and the scratchpad all use it.
+
+Hovering any of them shows the working on one line:
+
+```
+if(mythic.tier = 0, 0, 3 + mythic.tier * 2)  =  if(10 = 0, 0, 3 + 10 * 2)  =  23
+```
+
+The same is true of a computed value in the middle of a sentence, which is the one place
+on the sheet where a bare number had no way at all of explaining itself: hovering a
+`{= …}` shows its source and its working, and hovering a `{name}` reference shows the
+formula from wherever that name was **defined**, so there is no hunting for it.
+
+Displayed formulas are re-spaced (`floor(level/2)+wis.mod` reads as
+`floor(level / 2) + wis.mod`, and brackets that do nothing are dropped) but never
+reworded: a `=` written out of spreadsheet habit is shown back as `=`, not corrected to
+`==`. The raw text is what the editor shows when you click into it, and the raw text is
+what is stored.
+
+The tracker add/edit preview shows the substitution rather than only the answer —
+`max = floor((20 + 16) / 3) = 12` — because the formula itself is in the box directly
+above it, and what a player cannot see from there is what their own numbers do to it.
+
+### Names that only exist somewhere
+
+Almost every value belongs to the character and can be read from anywhere. Two do not:
+
+| Name | Only in | What it is |
+|---|---|---|
+| `essence.self` | a veil's own name or description | the essence invested in **that veil**. Elsewhere, name the slot — `essence.hands`, `essence.head` — or read `essence.total` for the pool. |
+| `self.max` `.current` `.remaining` `.min` `.spent` `.pct` `.zone` | a tracker's own note, min and zone bounds | that tracker, without naming itself. Elsewhere use `tracker.<id>.max`; and a tracker's **max** cannot use `self` at all, since that would be defining itself. |
+
+They are the sharpest edge in the language, because they read like ordinary values, work
+perfectly where they belong, and are simply absent everywhere else — a formula that says
+`essence.self` outside a veil throws every time.
+
+So **a formula is judged where it lives**. The model works out, per formula, which names
+were legal in the field it was written in (`audit()` reports them as
+`unknownReferences`, and carries the field's own scope as `locals`), and the display
+takes that verdict rather than checking against the character alone — otherwise a veil
+reading its own invested essence would be drawn with a red underline and counted as
+broken on a sheet where it works. The red underline means *this name does not work
+here*, and hovering it says where the name does work rather than claiming it does not
+exist. In the try-it box, which has no veil and no tracker around it, both are correctly
+flagged — and the guide gives them a table of their own for the same reason.
+
+---
+
+## When names go wrong
+
+Four things can go wrong with a set of names, and all four are reported the same way:
+once, as a problem, in **Needs attention** on the Formulas tab — not as several formulas
+each complaining about the others. Every one of them is also flagged in red where it is
+written.
+
+### One name, defined twice
+
+**The first definition wins**, both are flagged, and the panel shows both with what each
+comes to:
+
+```
+Defined more than once   qi.max
+  in force   note 1 on Lore    floor(level / 2) + wis.mod    15
+  ignored    a Monk class feature, level 4    wis.mod * 3     18
+```
+
+First rather than last, deliberately. Order across the sheet is a traversal order no
+player can predict, so *which* one wins is arbitrary either way — but "the one already
+there" means that pasting in a new class page, or importing a template, cannot quietly
+change what an existing name is worth on a character that was working. The ignored
+definition still shows its own number on the row, because that is the thing needed to
+decide which of the two to delete.
+
+### A loop
+
+If `a` reads `b` and `b` reads `a`, neither can be worked out. The loop is detected
+rather than followed — nothing hangs — and reported **once, naming every member**:
+
+```
+Goes round in a circle   a → b → a
+  a   note 1 on Lore   b + 1
+  b   note 2 on Lore   a + 1
+```
+
+Anything downstream of a broken definition says which one to go and fix — *Depends on
+"a", which is not working* — rather than *Unknown value "a"*, which reads as though the
+name did not exist when it is sitting right there.
+
+### A name the sheet already owns
+
+`{level = 30}` is **refused**, and says so. It used to be refused quietly: the token
+showed 30 where it was written while every formula reading `level` went on getting the
+real number, which is the worst of both worlds. Now it publishes nothing and is flagged.
+
+That covers three shapes of collision — the name itself (`level`), something hung off one
+(`level.bonus`, where `level` is a number and cannot hold anything), and the branch a
+family lives on (`str`, which already holds `str.mod` and the rest). Dotted names of your
+own — `ki.max`, `arms.hp` — never collide.
+
+### A name nothing defines
+
+Delete the feature that defined `{qi.max}` and the name vanishes from every list, because
+nothing defines it any more; all that is left is a red token in a sentence somewhere.
+**Orphans** walk the other way round, from the uses back:
+
+```
+Nothing defines it   qi.max
+  quoted in   note 2 on Lore              {qi.max}
+  used in     weapon 1, special properties   qi.max * 2
+  used in     the Trackers tab             floor(qi.max / 2)
+```
+
+Everything asking for the name is listed, whether it is a `{name}` quotation, a name
+inside a `{= …}` sum, or a tracker max — so the choice between putting the definition
+back and editing the places that quote it can be made with all of them in view. A name
+that was only ever a typo comes out the same way, which is right: the symptom and the fix
+are identical. A name that *is* defined but is not working — one caught in a loop, one
+whose formula does not parse — is never called an orphan; it has a definition, and that
+definition has its own entry.
+
+Anything else that does not work — a tracker max that does not parse, a skill formula
+reading something it may not — is listed alongside them, so **Needs attention** really is
+everything and the count beside it can be trusted.
 
 ---
 
@@ -46,8 +247,10 @@ pair at 11/14/17 ({arms.pairs = 1 + (level >= 11) + (level >= 14) + (level >= 17
 renders as *"…AC **24**, hardness **12**, HP **36**, dispel DC **23**… (**4** pairs)"*
 with each value underlined; hover shows the formula, click to edit the raw source,
 and everything recomputes when Con or level changes. A tracker with max `arms.hp`
-gives the pool pips. Cycles, duplicates and bad references show inline in red and in
-the GM's Formula Audit; a definition can never shadow a built-in like `level`.
+gives the pool pips. Cycles, duplicates, names nothing defines and bad references show
+inline in red, in **Needs attention** on the Formulas tab and in the GM's Formula Audit;
+a definition can never take the name of a built-in like `level`, and is told so rather
+than being refused quietly. See [When names go wrong](#when-names-go-wrong).
 
 **Dice from names.** A weapon's Dice field accepts a reference — `{kinetic.fist}`
 (or `[[kinetic.fist]]` / `{= …}`) — beside literal dice. A number-valued name is
@@ -212,6 +415,9 @@ default** in the editor puts a meter back.
 
 ### Formula language
 
+_The same ground, in the app itself and against the character in front of you, is the
+Reference section of the [ƒx Formulas tab](#ƒx-formulas-tab)._
+
 Operators `+ - * / % ^`, comparisons `< > <= >= == !=` (a bare `=` is accepted as
 equality, out of spreadsheet habit), `&& || ?:`, and parentheses.
 
@@ -223,8 +429,9 @@ Functions: `floor` `ceil` `round` `trunc` `abs` `sign` `min` `max` `sum` `clamp`
 
 Readable values include `level`, `bab`, `hp.total`, `mythic.tier`, `initiative`,
 `str.score` / `str.mod` / `str.temp` / `str.tempMod` (and the other five abilities),
-`saves.*`, `ac.*`, `attack.*`, `skill.<name>`, and every tracker (below). The Trackers
-tab lists every available name.
+`saves.*`, `ac.*`, `attack.*`, `skill.<name>`, and every tracker (below). The Formulas
+tab lists every available name with its current value, searchable; the Trackers tab
+lists them too, beside the box you are typing into.
 
 ### Calling a tracker's numbers
 
@@ -248,7 +455,9 @@ tracker, with the same six numbers plus `self.zone` — the label of the zone th
 currently sitting in. So a zone reads `floor(self.max * 0.3)` rather than naming its own
 tracker, and a symmetric meter's min is just `-self.max`. `self` exists only inside the
 tracker it belongs to; a max formula cannot use it (it would be defining itself), and no
-other field on the character can see it.
+other field on the character can see it — see
+[Names that only exist somewhere](#names-that-only-exist-somewhere), which it shares with
+a veil's `essence.self`.
 
 ### Why this is safe to let players write
 
@@ -270,7 +479,8 @@ sandbox-escape attempts.
 ### GM / inspector view
 
 Because formulas are stored as text, they stay auditable. The **Formula Audit** tab
-(shown when `role="admin"`) lists, for every formula on the character:
+(shown when `role="admin"`) lists, for every formula on the character — the same set the
+player sees on their own Formulas tab, with the parsed detail a GM wants on top:
 
 - the exact source text the player wrote
 - every value it reads and every function it calls

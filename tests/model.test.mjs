@@ -1772,16 +1772,43 @@ console.log('inline formulas in prose');
   check('chain resolves out of order', res.values['qi.max'], Math.floor((18 + 16) / 4));
   check('no errors', res.errors.length, 0);
 
+  // A cycle is one fault naming every member, not one complaint per member:
+  // whichever is visited first must not be the only one told, and the others
+  // must not be left saying "unknown value" about a name that plainly exists.
   const cyc = resolveDefinitions([
     { name: 'a', expr: 'b + 1', path: 'x' }, { name: 'b', expr: 'a + 1', path: 'y' },
   ], base);
   check('cycle reported, not thrown', cyc.errors.some((e) => /Circular/.test(e.error)), true);
+  check('every name in the loop is told', cyc.errors.filter((e) => e.cycle).map((e) => e.name).sort(), ['a', 'b']);
+  check('and told the same thing', new Set(cyc.errors.filter((e) => e.cycle).map((e) => e.error)).size, 1);
+  check('the loop is spelt out', cyc.errors[0].cycle, ['a', 'b', 'a']);
+  check('no cascading unknowns', cyc.errors.some((e) => /Unknown value/.test(e.error)), false);
+  check('nothing in a loop resolves', cyc.values, {});
 
+  // Something downstream of a broken definition names it, rather than
+  // reporting the name as missing when it is right there and simply not working.
+  const knockOn = resolveDefinitions([
+    { name: 'a', expr: 'floor(', path: 'x' }, { name: 'c', expr: 'a * 2', path: 'y' },
+  ], base);
+  check('the knock-on names its cause',
+    knockOn.errors.find((e) => e.name === 'c').error, 'Depends on "a", which is not working.');
+
+  // The first definition of a duplicated name wins, so that adding another
+  // one later cannot quietly change what the existing one was worth -- and
+  // both are flagged, so neither looks fine while the other carries the
+  // warning.
   const dup = resolveDefinitions([
     { name: 'k', expr: '1', path: 'x' }, { name: 'k', expr: '2', path: 'y' },
   ], base);
-  check('duplicate flagged', dup.errors.some((e) => /more than once/.test(e.error)), true);
-  check('last definition wins', dup.values.k, 2);
+  check('first definition wins', dup.values.k, 1);
+  check('both definitions are flagged', dup.errors.filter((e) => e.duplicate).map((e) => e.path), ['x', 'y']);
+  check('one of them is named as in force', dup.errors.filter((e) => e.duplicate && e.inForce).length, 1);
+  check('the clash is reported as a whole',
+    dup.duplicates, [{ name: 'k', inForce: 'x', definitions: [{ path: 'x', expr: '1' }, { path: 'y', expr: '2' }] }]);
+  check('three definitions, still the first',
+    resolveDefinitions([
+      { name: 'k', expr: '1', path: 'x' }, { name: 'k', expr: '2', path: 'y' }, { name: 'k', expr: '3', path: 'z' },
+    ], base).values.k, 1);
 
   const r = renderTokens('HP {= con.mod * 3} / {nope}', {}, base);
   check('value renders', r[1].value, 36);
