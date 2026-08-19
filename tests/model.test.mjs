@@ -1783,7 +1783,7 @@ console.log('weapon damage/to-hit tokens');
   check('tagged crit dice are multiplied', w().calc.critAvg, 320 + 9 * 4);
   check('confirm bonus applies', w().calc.confirmTotal, 44);
   check('confirm string', w().calc.confirmStr, '+44');
-  check('crit string shows the multiplied dice', w().calc.critStr, '×4+2d8×4');
+  check('crit string shows the multiplied dice', w().calc.critStr, '(12d8+26)×4+2d8×4');
 
   // Mixed: untagged riders add once on a crit; tagged ones multiply.
   c.setItem('equipment.weapons', i, 'special', '[[2d6]] [[2d8 Crit]] {{2}} {{4 Crit}}');
@@ -1791,11 +1791,20 @@ console.log('weapon damage/to-hit tokens');
   check('crit: base ×4 + rider once + tagged ×4', w().calc.critAvg, 80 * 4 + 7 + 9 * 4);
   check('confirm stacks on the boosted attack', w().calc.confirmTotal, 42 + 4);
 
+  // The crit string has to add up to the average printed beside it. A bare
+  // "×4" could not: the multiplier takes the base and nothing else, so a row
+  // reading "dmg 12d8+2d6+26 · crit ×4" gave no route to its own number and
+  // read as though the rider had been dropped on a crit.
+  check('every term is shown, in the order they are worked out',
+    w().calc.critStr, '(12d8+26)×4+2d6+2d8×4');
+  // (12d8+26)×4 = 320, +2d6 = 7, +2d8×4 = 36 — the 363 checked just above.
+  check('which is the average beside it, term for term', w().calc.critAvg, 320 + 7 + 36);
+
   // The sheet's Bonus Crit Damage column stays unmultiplied (burst dice).
   c.setItem('equipment.weapons', i, 'special', '');
   c.setItem('equipment.weapons', i, 'bonusCritDamage', '1d10');
   check('bonus crit damage field folds in unmultiplied', w().calc.critAvg, 320 + 5.5);
-  check('and shows in the crit string', w().calc.critStr, '×4+1d10');
+  check('and shows in the crit string', w().calc.critStr, '(12d8+26)×4+1d10');
   c.setItem('equipment.weapons', i, 'bonusCritDamage', null);
 
   // Free ability multiplier beyond ×2.

@@ -5724,8 +5724,19 @@ export class Character {
         + diceAverage(critTagged.dice, critTagged.flat) * critMultNum
         + (hasBcd ? diceAverage(bcd.dice, bcd.flat) : 0)
       ) * 10) / 10;
-      w.calc.critStr = [`×${critMultNum}`,
-        hasCritTagged ? `+${diceString(critTagged.dice, critTagged.flat).replace(/^\+/, '')}×${critMultNum}` : '',
+      // Every term, in the order they are worked out, so the string adds up to
+      // the average printed beside it. A bare "×2" could not: the multiplier
+      // takes the base and nothing else, so a weapon showing "dmg 10 · crit ×2"
+      // with an average of 15 gave a reader no way of reaching 15 from what
+      // the row said, and read as though the rider had been dropped.
+      const hasRiders = Object.keys(dmg.dice).length > 0 || dmg.flat !== 0;
+      // Only a term of more than one part needs bracketing to keep × from
+      // looking as though it binds to the last bit of it.
+      const critTerm = (t) => (/[+-]/.test(String(t).slice(1)) ? `(${t})` : t);
+      w.calc.critStr = [
+        `${critTerm(diceString(baseDice.dice, baseDice.flat + bonus))}×${critMultNum}`,
+        hasRiders ? `+${diceString(dmg.dice, dmg.flat).replace(/^\+/, '')}` : '',
+        hasCritTagged ? `+${critTerm(diceString(critTagged.dice, critTagged.flat).replace(/^\+/, ''))}×${critMultNum}` : '',
         hasBcd ? `+${diceString(bcd.dice, bcd.flat).replace(/^\+/, '')}` : '',
       ].filter(Boolean).join('');
     }
