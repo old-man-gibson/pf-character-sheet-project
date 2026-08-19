@@ -66,6 +66,7 @@ import {
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
+  ATTACK_MODES, ATTACK_MODE_LABELS, attackModeTotal,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -90,6 +91,9 @@ import {
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
   trackBand,
 } from './tracker-style.js';
+import {
+  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText,
+} from './roll20.js';
 
 /**
  * What the gold left edge on a field means, in the two flavours it comes in:
@@ -100,6 +104,32 @@ const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
 const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 3 + con.mod) '
   + 'instead of a number.';
+
+/**
+ * The die on a roll button: a hexagon -- a d20's silhouette -- with the face
+ * you would read on top of it. Drawn rather than typed, because Unicode's dice
+ * characters are all six-sided and an emoji would take the host page's font.
+ */
+const D20_ICON = '<svg class="d20icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
+  + '<path d="M50 4 93 28v44L50 96 7 72V28z"/>'
+  + '<path d="M50 30 74 70H26z"/>'
+  + '<path d="M50 30V4M74 70l19 2M26 70 7 72"/>'
+  + '</svg>';
+
+/** Which Roll20 shape the buttons copy. A player preference, so it is theirs. */
+const ROLL_FORMAT_KEY = 'cs-roll20-format';
+
+function readRollFormat() {
+  try {
+    const saved = globalThis.localStorage?.getItem(ROLL_FORMAT_KEY);
+    if (ROLL_FORMATS.some(([key]) => key === saved)) return saved;
+  } catch { /* an embed with storage blocked keeps the default */ }
+  return DEFAULT_ROLL_FORMAT;
+}
+
+function writeRollFormat(format) {
+  try { globalThis.localStorage?.setItem(ROLL_FORMAT_KEY, format); } catch { /* not fatal */ }
+}
 
 const TABS = [
   ['overview', 'Overview'],
@@ -437,6 +467,16 @@ export class CharacterSheetElement extends HTMLElement {
   #formulaDraft = '';
   #formulaQuery = '';
   #formulaRefOpen = false;
+  /** The last roll copied, shown back so the player can see what they got. */
+  #rollToast = null;    // { kind, ref, what, text, failed }
+  #rollToastTimer = null;
+  /**
+   * Roll template or bare /roll. A preference of the person playing rather than
+   * of the character -- their Roll20 game is what decides it -- so it lives in
+   * localStorage beside the library, not in the document. An embed without
+   * storage falls back to the field's own value for the session.
+   */
+  #rollFormat = readRollFormat();
 
   constructor() {
     super();
@@ -958,6 +998,7 @@ export class CharacterSheetElement extends HTMLElement {
           `).join('')}
           <button role="tab" data-tab="systabs" aria-pressed="${this.#tab === 'systabs'}" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
+        <div class="rollslot">${this.#rollToastHtml()}</div>
         <div class="body">${this.#panel()}</div>
       </div>`;
     this.#applyCharacterColor();
@@ -1163,7 +1204,8 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#bigStat('HP', c.hp.total, c.hp.ability ? `${c.hp.ability} based` : '', now('hp', String))}
           ${this.#bigStat('AC', d.ac, `touch ${d.touch} &middot; FF ${d.flatFooted}`, now('ac', String))}
           ${this.#bigStat('CMD', d.cmd, `FF ${d.ffCmd}`, now('cmd', String))}
-          ${this.#bigStat('Init', fmt(c.hp.initiative), c.hp.initAbility || '', now('initiative'))}
+          ${this.#bigStat('Init', fmt(c.hp.initiative), c.hp.initAbility || '', now('initiative'),
+    this.#rollButton('initiative', 'self', 'initiative', cs))}
           ${this.#bigStat('Fort', fmt(s.fortitude.total), s.fortitude.stat1 || '', now('fortitude'))}
           ${this.#bigStat('Ref', fmt(s.reflex.total), s.reflex.stat1 || '', now('reflex'))}
           ${this.#bigStat('Will', fmt(s.will.total), s.will.stat1 || '', now('will'))}
@@ -1369,7 +1411,7 @@ export class CharacterSheetElement extends HTMLElement {
       <h3>Ability scores</h3>
       <div class="ability-head">
         <span>&nbsp;</span><span>Score</span><span>Mod</span>
-        <span class="h-temp">Temp</span><span class="h-temp">Mod</span>
+        <span class="h-temp">Temp</span><span class="h-temp">Mod</span><span>Roll</span>
       </div>
       <div class="abilities">
         ${ABILITIES.map((k) => {
@@ -1389,6 +1431,7 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="mod temp temp-mod${moved ? ' conditioned' : ''}"
               ${moved ? `title="${fmt(a.totalMod)} before conditions"` : ''}>${
               moved ? fmt(a.totalMod + cs.deltas[k]) : fmt(a.totalMod)}</span>
+            ${this.#rollButton('ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
           </div>`;
         }).join('')}
       </div>
@@ -1463,8 +1506,9 @@ export class CharacterSheetElement extends HTMLElement {
         <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => `
           <tr>
             <td>${label}</td>
-            <td class="num total">${fmt(s[k].total)}${
-              cs.changed && cs.delta[k] ? `<span class="now" title="With conditions applied">now ${fmt(cs.adjusted[k])}</span>` : ''}</td>
+            <td class="num total"><span class="rollpair">${fmt(s[k].total)}${
+              cs.changed && cs.delta[k] ? `<span class="now" title="With conditions applied">now ${fmt(cs.adjusted[k])}</span>` : ''
+}${this.#rollButton('save', k, `a ${label} save`, cs)}</span></td>
             <td class="num" title="From the Classes table">${s[k].base}</td>
             <td>${this.#abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
             <td>${this.#abilitySelect(`saves.${k}.stat2`, s[k].stat2)}</td>
@@ -1483,22 +1527,36 @@ export class CharacterSheetElement extends HTMLElement {
       ? `<span class="now" title="With conditions applied">now ${fmt(cs.adjusted[key])}</span>` : '');
     return `<section class="panel">
       <h3>Attack</h3>
-      ${this.#lineHtml('Melee', `${fmt(c.attack.totalMelee)}${now('melee')}`, true)}
-      ${this.#lineHtml('Ranged', `${fmt(c.attack.totalRanged)}${now('ranged')}`, true)}
-      ${this.#lineHtml('CMB', `${fmt(c.attack.totalCmb)}${now('cmb')}`, true)}
+      ${this.#lineHtml('Melee', `${fmt(c.attack.totalMelee)}${now('melee')}${
+        this.#rollButton('mode', 'melee', 'a melee attack', cs)}`, true)}
+      ${this.#lineHtml('Ranged', `${fmt(c.attack.totalRanged)}${now('ranged')}${
+        this.#rollButton('mode', 'ranged', 'a ranged attack', cs)}`, true)}
+      ${this.#lineHtml('CMB', `${fmt(c.attack.totalCmb)}${now('cmb')}${
+        this.#rollButton('mode', 'cmb', 'a combat maneuver', cs)}`, true)}
       ${this.#line('Iteratives', c.attack.iterative)}
       ${this.#editLine('Base attack bonus', 'attack.bab', c.attack.bab)}
       ${this.#editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
       ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from conditions.</p>` : ''}
       <div class="tablewrap" style="margin-top:8px"><table>
-        <thead><tr><th>Mode</th><th>Ability</th><th>2nd ability</th></tr></thead>
-        <tbody>${[['melee', 'Melee'], ['altMelee', 'Alt melee'], ['ranged', 'Ranged'],
-          ['altRanged', 'Alt ranged'], ['cmb', 'CMB'], ['altCmb', 'Alt CMB']].map(([k, label]) => `
-          <tr><td>${label}</td>
+        <thead><tr><th>Mode</th>
+          <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
+          <th>Ability</th><th>2nd ability</th></tr></thead>
+        <tbody>${ATTACK_MODES.map((k) => {
+          const total = attackModeTotal(c, k) ?? 0;
+          const delta = cs.changed && cs.delta[k] ? cs.delta[k] : 0;
+          return `
+          <tr><td>${ATTACK_MODE_LABELS[k]}</td>
+            <td class="num total"><span class="rollpair">${fmt(total)}${
+              delta ? `<span class="now" title="With conditions applied">now ${fmt(total + delta)}</span>` : ''
+}${this.#rollButton('mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
             <td>${this.#abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
             <td>${this.#abilitySelect(`attack.modes.${k}.stat2`, c.attack.modes[k]?.stat2)}</td>
-          </tr>`).join('')}</tbody>
+          </tr>`;
+        }).join('')}</tbody>
       </table></div>
+      <p class="hint">An <strong>alternate</strong> is the same attack with a different
+        ability in the slot — Dex for a finessed blade, Wis for a monk's fist — so it
+        carries the same BAB, misc and size, and the same import reconciliation.</p>
     </section>`;
   }
 
@@ -2332,6 +2390,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   #skillsPanel() {
     const skills = this.#model.data.skills || [];
+    // Read once: every row's d20 asks what the ticked conditions do to it.
+    const cs = this.#model.conditionState;
     const inUse = (s) => s.totalRanks > 0 || s.offset || s.spec || s.custom;
     // A character with no ranks anywhere -- one just started from a blank
     // sheet -- would otherwise open on an empty table with nothing to fill in,
@@ -2420,7 +2480,8 @@ export class CharacterSheetElement extends HTMLElement {
             <tbody>
               ${rows.map(({ s, i }) => `<tr class="${s.totalRanks > 0 ? 'trained' : 'untrained'}${s.hidden ? ' hiddenskill' : ''}">
                 <td>${this.#skillNameCell(s, i)}</td>
-                <td class="num total">${fmt(s.bonus)}</td>
+                <td class="num total"><span class="rollpair">${fmt(s.bonus)}${
+                  this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
                 <td class="num">${s.totalRanks}</td>
                 <td class="num bought">${this.#exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {
@@ -3122,7 +3183,8 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#editLine('MSB bonus', 'training.magic.msbBonus', m.msbBonus)}
       <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}</span></div>
       ${this.#editLine('MSD bonus', 'training.magic.msdBonus', m.msdBonus)}
-      ${this.#line('Concentration', `d20+${m.concentration}`)}
+      ${this.#lineHtml('Concentration', `<span class="rollpair">d20+${m.concentration}${
+        this.#rollButton('concentration', 'magic', 'a concentration check')}</span>`)}
 
       <h4 class="subhead">Spell points</h4>
       ${(m.classSP || []).map((x) => this.#line(`${x.name}`, x.sp)).join('')}
@@ -3650,6 +3712,7 @@ export class CharacterSheetElement extends HTMLElement {
   /** The six-block weapon layout from the workbook, as editable cards. */
   #weaponsPanel(e) {
     const weapons = e.weapons || [];
+    const cs = this.#model.conditionState;
     return `<section class="panel span2">
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
       ${weapons.map((w, i) => `<div class="weapon">
@@ -3661,6 +3724,7 @@ export class CharacterSheetElement extends HTMLElement {
             title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
+          ${this.#rollButton('weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
           <button class="danger" data-remove="equipment.weapons|${i}" aria-label="Remove weapon">×</button>
         </div>
         <div class="weapongrid">
@@ -4748,7 +4812,10 @@ export class CharacterSheetElement extends HTMLElement {
           placeholder="${c.plannerLevel ?? 0}" data-set="${base}.casterLevelOverride"
           data-kind="number-or-null"
           title="Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.">`)}
-        ${this.#field('Concentration', this.#num(`${base}.concentration`, c.concentration))}
+        ${this.#field('Concentration', `<span class="rollpair">${
+          this.#num(`${base}.concentration`, c.concentration)}${
+          this.#rollButton('concentration', `vancian:${i}`,
+            `${c.name || 'this class'} concentration`)}</span>`)}
       </div>
       ${this.#line('Stat modifier', fmt(c.statMod ?? 0))}
       ${c.tableName && c.tableName !== c.slotType
@@ -5189,7 +5256,8 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="bigstats" style="margin-top:10px">
         ${this.#bigStat('HP', `${k.hpCurrent ?? 0} / ${k.hpMax ?? 0}`, k.hpTemp ? `+${k.hpTemp} temp` : '')}
         ${this.#bigStat('AC', k.ac ?? 10, `touch ${k.touch ?? 10} · flat ${k.flatFooted ?? 10}`)}
-        ${this.#bigStat('Init', fmt(k.initiative ?? 0), 'Dex + bonus')}
+        ${this.#bigStat('Init', fmt(k.initiative ?? 0), 'Dex + bonus', '',
+    this.#rollButton(kind, 'init', `${label.toLowerCase()} initiative`))}
         ${this.#bigStat('BAB', fmt(k.bab ?? 0), kind === 'familiar' ? 'master’s' : 'from the table')}
         ${this.#bigStat('Attack', fmt(k.totalAttack ?? 0), `${k.attackAbility || 'Str'} + size`)}
         ${this.#bigStat('CMD', k.cmd ?? 10, `flat ${k.ffCmd ?? 10}`)}
@@ -5255,7 +5323,8 @@ export class CharacterSheetElement extends HTMLElement {
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
           <td>${this.#num(`${kind}.scores.${a}.misc`, b.scores?.[a]?.misc)}</td>
           <td class="num total">${s.total ?? 10}</td>
-          <td class="num">${fmt(s.mod ?? 0)}</td>
+          <td class="num"><span class="rollpair">${fmt(s.mod ?? 0)}${
+      this.#rollButton(kind, `ability:${a}`, `a ${ABILITY_LABELS[a]} check`)}</span></td>
         </tr>`;
   }).join('')}
       </tbody></table>
@@ -5311,7 +5380,8 @@ export class CharacterSheetElement extends HTMLElement {
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
           <td>${this.#num(`${kind}.saves.${key}.misc`, b.saves?.[key]?.misc)}</td>
-          <td class="num total">${fmt(saves[key]?.total ?? 0)}</td>
+          <td class="num total"><span class="rollpair">${fmt(saves[key]?.total ?? 0)}${
+            this.#rollButton(kind, `save:${key}`, `a ${name} save`)}</span></td>
         </tr>`).join('')}
       </tbody></table>
       <p class="hint">${kind === 'familiar'
@@ -5350,7 +5420,8 @@ export class CharacterSheetElement extends HTMLElement {
           <td>${this.#itemSelect(list, i, 'primary', a.primary === null || a.primary === undefined ? '' : (a.primary ? 'primary' : 'secondary'),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>
           <td>${this.#itemNum(list, i, 'bonus', a.bonus)}</td>
-          <td class="num total">${fmt(a.toHit ?? 0)}</td>
+          <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
+            this.#rollButton(kind, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
           <td>${esc(a.damageType || '')}</td>
           <td>${this.#itemArea(list, i, 'qualities', a.qualities, 1)}</td>
           ${this.#rowRemove(list, i)}
@@ -5449,7 +5520,8 @@ export class CharacterSheetElement extends HTMLElement {
           <td>${this.#itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
           <td>${this.#itemNum(list, i, 'misc', s.misc)}</td>
-          <td class="num total">${fmt(s.total ?? 0)}</td>
+          <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
+            this.#rollButton(kind, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${this.#rowRemove(list, i)}
         </tr>`).join('')}
       </tbody></table>
@@ -7652,8 +7724,8 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /** `now` is the conditioned reading, shown under the base when it differs. */
-  #bigStat(k, v, sub, now = '') {
-    return `<div class="bigstat${now ? ' has-now' : ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="sub">${sub || '&nbsp;'}</div>${now}</div>`;
+  #bigStat(k, v, sub, now = '', roll = '') {
+    return `<div class="bigstat${now ? ' has-now' : ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div><div class="sub">${sub || '&nbsp;'}</div>${now}${roll}</div>`;
   }
 
   /** A stat for a header strip: one line, sized to read rather than to fill. */
@@ -7676,6 +7748,121 @@ export class CharacterSheetElement extends HTMLElement {
       <span class="label">${esc(label)}</span>
       <span class="value"><input type="number" value="${Number(value) || 0}" data-set="${path}" style="width:4.2rem" aria-label="${esc(label)}"></span>
     </div>`;
+  }
+
+  /* ---------------- rolling ---------------- */
+
+  /**
+   * The d20 beside a row: one click puts that row's roll on the clipboard.
+   *
+   * The button carries only which row it is (`skill|12`, `save|will`); the text
+   * is built at the moment it is pressed, so a sheet that has been edited since
+   * it was drawn -- or a condition ticked on another tab -- copies the number
+   * that is true now rather than the one that was true when the table was.
+   *
+   * The tooltip shows the formula anyway, because a roll that quietly differs
+   * from the total printed next to it is worse than no button: conditions move
+   * these numbers, and the tooltip is where that becomes visible before the
+   * paste rather than after it.
+   */
+  #rollButton(kind, ref, what, cs = null) {
+    const spec = rollSpec(this.#model.data, kind, ref, cs ?? this.#model.conditionState);
+    if (!spec) return '';
+    const shown = spec.rolls.slice(0, 3).map((r) => r.formula).join(' · ')
+      + (spec.rolls.length > 3 ? ' …' : '');
+    return `<button class="d20" data-roll="${esc(kind)}|${esc(String(ref))}" data-rollwhat="${esc(what)}"
+      title="${esc(`Copy for Roll20 — ${shown}`)}"
+      aria-label="${esc(`Copy a Roll20 roll for ${what}`)}">${D20_ICON}</button>`;
+  }
+
+  /**
+   * What was copied, shown back.
+   *
+   * Partly so a paste that goes wrong can be read and fixed by hand, partly
+   * because it is the only place the two Roll20 shapes can be compared: the
+   * switch re-copies the same roll in the other one and remembers the choice.
+   * It appears where it is asked for and leaves on its own, so nothing on the
+   * sheet moves to make room for it.
+   */
+  #rollToastHtml() {
+    const t = this.#rollToast;
+    if (!t) return '';
+    return `<div class="rolltoast${t.failed ? ' failed' : ''}" role="status">
+      <div class="rollhead">
+        <strong>${t.failed ? 'Copy it yourself' : 'Copied'}</strong>
+        <span class="hint">${esc(t.what)}</span>
+        <span class="rollformats">${ROLL_FORMATS.map(([key, label]) => `
+          <button data-rollformat="${key}" aria-pressed="${this.#rollFormat === key}"
+            title="${key === 'template'
+    ? 'A titled box with a row per roll, using Roll20’s built-in default template'
+    : 'One bare /roll line, for a game that wants no template'}">${esc(label)}</button>`).join('')}</span>
+        <button class="rollclose" data-rollclose aria-label="Dismiss">×</button>
+      </div>
+      <textarea class="rolltext" readonly rows="2" spellcheck="false"
+        aria-label="The copied roll">${esc(t.text)}</textarea>
+      ${t.failed ? `<p class="hint warn">The clipboard is not available here — a page served
+        over plain <code>http://</code> or an embed without permission. The text is selected;
+        <kbd>Ctrl</kbd>+<kbd>C</kbd> takes it.</p>` : ''}
+    </div>`;
+  }
+
+  /** Redraw the toast alone -- copying a roll must not disturb the sheet. */
+  #renderRollToast({ select = false } = {}) {
+    const slot = this.shadowRoot.querySelector('.rollslot');
+    if (!slot) return;
+    slot.innerHTML = this.#rollToastHtml();
+    this.#bindRollToast(slot);
+    if (select) slot.querySelector('.rolltext')?.select();
+    clearTimeout(this.#rollToastTimer);
+    // A failed copy is still needed -- it is the only copy of the text there
+    // is -- so only a successful one clears itself.
+    if (this.#rollToast && !this.#rollToast.failed) {
+      this.#rollToastTimer = setTimeout(() => {
+        this.#rollToast = null;
+        if (this.isConnected) this.#renderRollToast();
+      }, 6000);
+    }
+  }
+
+  /**
+   * Copy one roll.
+   *
+   * `navigator.clipboard` is unavailable outside a secure context and can be
+   * refused inside one, so a failure is not an error state: the text goes into
+   * the toast selected, which is the same thing one keystroke later.
+   */
+  async #copyRoll(kind, ref, what) {
+    const spec = rollSpec(this.#model.data, kind, ref, this.#model.conditionState);
+    const text = rollText(spec, this.#rollFormat);
+    if (!text) return;
+    let failed = false;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      failed = true;
+    }
+    this.#rollToast = {
+      kind, ref, what: what || spec.name, text, failed,
+    };
+    this.#renderRollToast({ select: failed });
+  }
+
+  #bindRollToast(scope) {
+    scope.querySelectorAll('[data-rollformat]').forEach((b) => {
+      b.addEventListener('click', () => {
+        this.#rollFormat = b.dataset.rollformat;
+        writeRollFormat(this.#rollFormat);
+        const t = this.#rollToast;
+        if (t) this.#copyRoll(t.kind, t.ref, t.what);
+      });
+    });
+    scope.querySelectorAll('[data-rollclose]').forEach((b) => {
+      b.addEventListener('click', () => {
+        clearTimeout(this.#rollToastTimer);
+        this.#rollToast = null;
+        this.#renderRollToast();
+      });
+    });
   }
 
   /* ---------------- events ---------------- */
@@ -7824,6 +8011,21 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => { this.#tab = b.dataset.tab; this.#render(); });
     });
     this.#bindTabDrag(root);
+
+    // The d20 buttons. One listener per button rather than one on the root,
+    // because the skills table alone puts dozens of them on the page and each
+    // already carries everything the handler needs.
+    root.querySelectorAll('[data-roll]').forEach((b) => {
+      b.addEventListener('click', () => {
+        // Only the first bar separates kind from ref; what follows is the ref's
+        // own business ("eidolon|attack:0", "concentration|vancian:1").
+        const at = b.dataset.roll.indexOf('|');
+        this.#copyRoll(b.dataset.roll.slice(0, at), b.dataset.roll.slice(at + 1),
+          b.dataset.rollwhat);
+      });
+    });
+    this.#bindRollToast(root);
+
     // The Technique List's picker: a select, so a change rather than a click.
     root.querySelectorAll('select[data-action="tech-select"]').forEach((sel) => {
       sel.addEventListener('change', () => { this.#model.selectTechnique(sel.value); this.#render(); });

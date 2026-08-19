@@ -77,6 +77,9 @@ rest of the character can spend.
 
 **Casting numbers**: global CL, DC (10 + CL/2 + best casting mod), MSB, MSD (MSB+11),
 concentration, per-class SP (class levels + casting mod), each with its bonus field.
+Concentration carries a **d20** that copies the check for Roll20, as does each
+prepared-casting class's own on the Vancian tab (see
+[Rolling it at the table](using-the-sheet.md#rolling-it-at-the-table)).
 Where a character's own workbook cached a different number (Nico/Narockro/Saburo's
 sheets contain `#ERROR!`s and internally inconsistent caches), the app shows a red
 "sheet: N" hint beside the computed value.
@@ -565,6 +568,14 @@ feat named Multiattack), and Damage / Heal / Rest buttons over a hit-point line 
 spends temporary points first. Prose fields take inline formulas, and each companion
 reads from a formula as `familiar.hp`, `familiar.attack`, `eidolon.hd`,
 `eidolon.evoLeft`, `animalCompanion.str.mod`, and so on.
+
+A companion acts on its own initiative, so it rolls on its own sheet: **d20** buttons
+sit on the Init tile, on each save total, on each ability's Mod, on every skill and on
+every natural attack, and what they copy is titled *Angou's Hoot — Bite* rather than
+Angou. The master's conditions stay the master's. The damage column here is free text,
+so `1d6+7` is rolled and `1d6 plus grab` is carried along as a note instead of being
+truncated to the dice — see
+[Rolling it at the table](using-the-sheet.md#rolling-it-at-the-table).
 
 Where the worksheet's formulas and its own tables disagreed, the tabs follow the
 tables: the animal companion's and eidolon's BAB, saves, skill ranks and Str/Dex bonus
