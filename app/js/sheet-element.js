@@ -3688,7 +3688,7 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('×', `<input type="number" value="${w.abilityMult ?? 1}" step="0.5" min="0"
             data-item="equipment.weapons|${i}|abilityMult" data-kind="number" style="width:3.2rem"
             title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
-          ${this.#field('Misc dmg', this.#itemNum('equipment.weapons', i, 'miscDamage', w.miscDamage))}
+          ${this.#field('Misc dmg', this.#itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' }))}
           <span class="wsep"></span>
           ${this.#field('Crit', this.#itemNum('equipment.weapons', i, 'critRange', w.critRange))}
           ${this.#field('Mult', this.#itemSelect('equipment.weapons', i, 'critMult', w.critMult, WEAPON_CRIT_MULTS))}
@@ -3720,7 +3720,10 @@ export class CharacterSheetElement extends HTMLElement {
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
         </div>
         <label class="fld" style="margin-top:6px"><span>Special properties
-          <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, or both ("[[2d6 + con.mod]]")</span></span>
+          <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, a
+            {name} you defined, or a mix. Tag a damage token <strong>Crit</strong> for crit-only
+            (multiplied) or <strong>Mult</strong> for damage that multiplies with the weapon;
+            untagged is a rider, added once on a crit.</span></span>
           ${this.#itemArea('equipment.weapons', i, 'special', w.special, 2)}</label>
         ${w.calc ? `<div class="wcalc">
           <div class="hint">atk ${fmt(w.calc.baseAtk)} · dmg ${esc(diceString(w.calc.baseDmgDice, w.calc.baseDmgFlat))}
@@ -3729,7 +3732,8 @@ export class CharacterSheetElement extends HTMLElement {
     ? `<span class="crit">crit ${esc(w.calc.critStr)} <span class="avg">avg ${w.calc.critAvg}</span></span>` : ''}</div>
           ${w.calc.hasTokens ? `<div class="hint">
             ${w.calc.atkTokens.some((t) => !t.crit) ? `{{…}} ${esc(diceString(w.calc.tokAtk.dice, w.calc.tokAtk.flat))} to hit` : ''}
-            ${w.calc.dmgTokens.some((t) => !t.crit) ? ` · [[…]] ${esc(diceString(w.calc.tokDmg.dice, w.calc.tokDmg.flat))} damage` : ''}
+            ${w.calc.dmgTokens.some((t) => !t.crit && !t.mult) ? ` · [[…]] ${esc(diceString(w.calc.tokDmg.dice, w.calc.tokDmg.flat))} damage, added once on a crit` : ''}
+            ${w.calc.dmgTokens.some((t) => t.mult) ? ` · [[Mult]] ${esc(diceString(w.calc.tokMultDmg.dice, w.calc.tokMultDmg.flat))} damage, multiplied on a crit` : ''}
             ${w.calc.atkTokens.some((t) => t.crit) ? ` · {{Crit}} ${esc(diceString(w.calc.critAtk.dice, w.calc.critAtk.flat))} to confirm` : ''}
             ${w.calc.dmgTokens.some((t) => t.crit) ? ` · [[Crit]] ${esc(diceString(w.calc.critTagged.dice, w.calc.critTagged.flat))}×${w.calc.critMultNum} crit damage` : ''}
           </div>` : ''}

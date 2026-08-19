@@ -1712,6 +1712,63 @@ console.log('weapon damage/to-hit tokens');
   check('and excluded from totals', w().calc.totalAvg, w().calc.baseAvg);
   check('and visible to the GM audit', c.audit().some((a) => a.source === 'weapon' && a.status === 'error'), true);
 
+  // A name defined in prose, used in a weapon's tokens. Braces are prose
+  // syntax and the sandbox does not know them, so the value has to be spliced
+  // into the text *before* anything reads it as dice or as a formula --
+  // otherwise every one of these reported "Unexpected character" and quietly
+  // contributed nothing, while the same text rendered correctly in the note
+  // it was written in.
+  const notesWere = c.data.notes;
+  c.data.notes = [{ title: 'Names', body:
+    'grip {deathgrip.dmg = 13}, blast {kinetic.fist = dice(4, 8)}, small {bonus.b = 2}' }];
+  c.recompute();
+  check('the names resolved', [c.inlineNames['deathgrip.dmg'], c.inlineNames['kinetic.fist']], [13, '4d8']);
+
+  c.setItem('equipment.weapons', i, 'special', 'Grip [[{deathgrip.dmg}]]');
+  check('a name in a damage token', w().calc.tokDmg.flat, 13);
+  check('and no error', w().calc.errors, []);
+
+  c.setItem('equipment.weapons', i, 'special', 'Grip {{ {deathgrip.dmg} }}');
+  check('a name in a to-hit token', w().calc.totalAtk, 40 + 13);
+  check('which was the whole complaint', w().calc.totalAtkStr, '+53');
+
+  c.setItem('equipment.weapons', i, 'special', 'Blast [[{kinetic.fist}]]');
+  check('a name holding dice text reads as dice', w().calc.tokDmg.dice, { 8: 4 });
+  check('and not as a number', w().calc.tokDmg.flat, 0);
+
+  c.setItem('equipment.weapons', i, 'special', 'Mixed [[2d6 + {bonus.b}]]');
+  check('a name mixed into an expression', [w().calc.tokDmg.dice, w().calc.tokDmg.flat], [{ 6: 2 }, 2]);
+
+  c.setItem('equipment.weapons', i, 'special', 'Crit [[{deathgrip.dmg} Crit]]');
+  check('a name in a crit-only token', w().calc.critExtra.flat, 13);
+  check('and stays out of the normal total', w().calc.totalAvg, w().calc.baseAvg);
+
+  c.setItem('equipment.weapons', i, 'special', 'Gone [[{no.such.name}]]');
+  check('a name that does not resolve is reported',
+    w().calc.errors, ['{no.such.name}: Unknown value "no.such.name"']);
+  check('and contributes nothing', w().calc.totalAvg, w().calc.baseAvg);
+
+  c.setItem('equipment.weapons', i, 'bonusCritDamage', '{deathgrip.dmg}');
+  check('the Bonus Crit Damage column reads names too', w().calc.critExtra.flat, 13);
+  c.setItem('equipment.weapons', i, 'bonusCritDamage', '');
+
+  // The Dice field, on a weapon that uses its own dice -- Unarmed Strike
+  // takes the unarmed sphere's, so its Dice field is never read.
+  const diceWas = w().dice;
+  const unarmedWas = w().useUnarmedDice;
+  c.setItem('equipment.weapons', i, 'useUnarmedDice', false);
+  c.setItem('equipment.weapons', i, 'dice', '1d8+{bonus.b}');
+  check('a name inside the Dice field', w().diceResolved, '1d8+2');
+  check('and it reads as dice plus a number', [w().calc.baseDmgDice, w().calc.baseDmgFlat - w().damageBonus], [{ 8: 1 }, 2]);
+  c.setItem('equipment.weapons', i, 'dice', '{kinetic.fist}');
+  check('a whole Dice field that is one name still works', w().diceResolved, '4d8');
+  c.setItem('equipment.weapons', i, 'dice', '{bonus.b}');
+  check('and a numeric one is still that many d6', w().diceResolved, '2d6');
+  c.setItem('equipment.weapons', i, 'dice', diceWas);
+  c.setItem('equipment.weapons', i, 'useUnarmedDice', unarmedWas);
+  c.data.notes = notesWere;
+  c.recompute();
+
   c.setItem('equipment.weapons', i, 'special', '');
   check('cleared', w().calc.hasTokens, false);
 
@@ -1726,7 +1783,7 @@ console.log('weapon damage/to-hit tokens');
   check('tagged crit dice are multiplied', w().calc.critAvg, 320 + 9 * 4);
   check('confirm bonus applies', w().calc.confirmTotal, 44);
   check('confirm string', w().calc.confirmStr, '+44');
-  check('crit string shows the multiplied dice', w().calc.critStr, '×4+2d8×4');
+  check('crit string shows the multiplied dice', w().calc.critStr, '(12d8+26)×4+2d8×4');
 
   // Mixed: untagged riders add once on a crit; tagged ones multiply.
   c.setItem('equipment.weapons', i, 'special', '[[2d6]] [[2d8 Crit]] {{2}} {{4 Crit}}');
@@ -1734,11 +1791,58 @@ console.log('weapon damage/to-hit tokens');
   check('crit: base ×4 + rider once + tagged ×4', w().calc.critAvg, 80 * 4 + 7 + 9 * 4);
   check('confirm stacks on the boosted attack', w().calc.confirmTotal, 42 + 4);
 
+  // The crit string has to add up to the average printed beside it. A bare
+  // "×4" could not: the multiplier takes the base and nothing else, so a row
+  // reading "dmg 12d8+2d6+26 · crit ×4" gave no route to its own number and
+  // read as though the rider had been dropped on a crit.
+  check('every term is shown, in the order they are worked out',
+    w().calc.critStr, '(12d8+26)×4+2d6+2d8×4');
+  // (12d8+26)×4 = 320, +2d6 = 7, +2d8×4 = 36 — the 363 checked just above.
+  check('which is the average beside it, term for term', w().calc.critAvg, 320 + 7 + 36);
+
+  // The Mult tag: damage on every hit that multiplies with the weapon, for an
+  // ability written with no "not multiplied" caveat on it. Neither of the other
+  // two captures it -- untagged undercounts the crit, Crit misses the normal
+  // roll -- so it is its own thing, and it behaves exactly like Misc dmg.
+  c.setItem('equipment.weapons', i, 'special', 'Gauntlets [[13 Mult]]');
+  check('mult damage lands on the normal roll', w().calc.totalAvg, 80 + 13);
+  check('and multiplies on a crit', w().calc.critAvg, (80 + 13) * 4);
+  check('the crit string keeps it with the base', w().calc.critStr, '(12d8+39)×4');
+  const viaToken = w().calc.critAvg;
+  c.setItem('equipment.weapons', i, 'special', '');
+  c.setItem('equipment.weapons', i, 'miscDamage', 13);
+  check('which is exactly what the Misc dmg column does', w().calc.critAvg, viaToken);
+  c.setItem('equipment.weapons', i, 'miscDamage', 0);
+
+  c.setItem('equipment.weapons', i, 'special', '[[2d6]] [[2d8 Crit]] [[13 Mult]]');
+  check('all three kinds coexist', w().calc.totalAvg, 80 + 7 + 13);
+  check('and each is multiplied or not, as tagged',
+    w().calc.critAvg, (80 + 13) * 4 + 7 + 9 * 4);
+  check('the string separates them', w().calc.critStr, '(12d8+39)×4+2d6+2d8×4');
+  check('Mult is a damage keyword only', (() => {
+    c.setItem('equipment.weapons', i, 'special', '{{4 Mult}}');
+    return [w().calc.totalAtk, w().calc.atkTokens[0].mult];
+  })(), [44, false]);
+
+  // Misc dmg written as a rule rather than a number -- it used to read as 0,
+  // silently, which is the worst way for a damage field to be wrong.
+  c.setItem('equipment.weapons', i, 'special', '');
+  c.setItem('equipment.weapons', i, 'miscDamage', 'floor(level / 4) + 1');
+  check('a formula in Misc dmg resolves', w().miscDamageNum, Math.floor(20 / 4) + 1);
+  check('and multiplies like the number it replaces', w().calc.critAvg, (80 + 6) * 4);
+  check('and is visible to the audit',
+    c.audit().some((a) => a.id === 'weapon-misc-' + i && a.status === 'ok'), true);
+  c.setItem('equipment.weapons', i, 'miscDamage', 'nope + 1');
+  check('a bad one is reported, not silently zero', w().miscDamageError !== null, true);
+  check('and flagged in the audit',
+    c.audit().find((a) => a.id === 'weapon-misc-' + i).status, 'error');
+  c.setItem('equipment.weapons', i, 'miscDamage', 0);
+
   // The sheet's Bonus Crit Damage column stays unmultiplied (burst dice).
   c.setItem('equipment.weapons', i, 'special', '');
   c.setItem('equipment.weapons', i, 'bonusCritDamage', '1d10');
   check('bonus crit damage field folds in unmultiplied', w().calc.critAvg, 320 + 5.5);
-  check('and shows in the crit string', w().calc.critStr, '×4+1d10');
+  check('and shows in the crit string', w().calc.critStr, '(12d8+26)×4+1d10');
   c.setItem('equipment.weapons', i, 'bonusCritDamage', null);
 
   // Free ability multiplier beyond ×2.
