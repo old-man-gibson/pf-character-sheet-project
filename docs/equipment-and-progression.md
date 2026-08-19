@@ -21,7 +21,12 @@ The worksheet's four systems, separated and computed:
 
   **Damage/to-hit tokens**: write `{{…}}` in special properties to add to hit and
   `[[…]]` to add damage — dice, sandbox formulas, or both (`[[2d6 + con.mod]]`,
-  `{{2}}`, `{{1d4}}`). The card shows the full working:
+  `{{2}}`, `{{1d4}}`). A `{name}` you defined in prose works inside one too
+  (`[[{deathgrip.dmg} Crit]]`, `{{ {deathgrip.dmg} }}`, `[[2d6 + {bonus}]]`), as does
+  the Bonus Crit Damage column and the Dice field: the name's **value is put into the
+  text** before it is read, so a name holding dice text (`{kinetic.fist}` → `4d8`)
+  arrives as dice and a name holding a number arrives as a number. A name that does not
+  resolve is reported on the row and contributes nothing. The card shows the full working:
 
   ```
   atk +40 · dmg 12d8+26        avg 80

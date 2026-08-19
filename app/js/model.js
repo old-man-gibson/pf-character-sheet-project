@@ -5553,6 +5553,42 @@ export class Character {
     const evalFormula = (src) => evaluateFormula(src, scope);
     const prof = c.identity?.proficiencies;
 
+    /**
+     * Put the value of every {name} and {= …} into the text, before anything
+     * tries to read it as dice or as a formula.
+     *
+     * A weapon's fields are not formulas, they are dice expressions with
+     * formulas in them -- "2d6 + con.mod", "[[4d8 crit]]" -- so a name in one
+     * cannot simply be evaluated: it has to be *substituted*, because the
+     * name may hold dice text rather than a number. {kinetic.fist} is "4d8"
+     * and has to reach the dice reader as those characters; {deathgrip.dmg}
+     * is 13 and has to reach the formula reader as that number. Splicing the
+     * value in as text is the one treatment that serves both.
+     *
+     * Braces are prose syntax, and the sandbox has never known what to do
+     * with them: without this, every one of these reported the tokeniser's
+     * "Unexpected character" and quietly contributed nothing.
+     */
+    const spliceNames = (text) => {
+      const src = String(text ?? '');
+      if (!src.includes('{')) return { text: src, error: null };
+      let error = null;
+      const out = src.replace(/\{([^{}]*)\}/g, (whole, inner) => {
+        const expr = inner.trim().replace(/^=\s*/, '').trim();
+        if (!expr) return whole;
+        try {
+          const v = evaluateFormula(expr, scope);
+          return typeof v === 'number' ? String(v) : String(v ?? '');
+        } catch (err) {
+          // Just the reason: every caller already shows the text it came from,
+          // and "Unknown value X" names the culprit itself.
+          error = error || err.message;
+          return '';
+        }
+      });
+      return { text: out, error };
+    };
+
     for (const w of e.weapons) {
       // Read against the row's own Proficient field, the [Enhanced] veil rule
       // and the Overview's proficiencies; a `false` is shown, not applied --
@@ -5572,11 +5608,18 @@ export class Character {
       if (ref) {
         try {
           const v = evaluateFormula(ref[1], scope);
+          // A whole field that is one name: a number means that many d6, the
+          // kineticist blast rule. Only here -- a name spliced into the middle
+          // of an expression is worth the number it says.
           diceText = typeof v === 'number' ? `${Math.floor(v)}d6` : String(v ?? '');
         } catch (err) {
           w.diceError = err.message;
           diceText = '';
         }
+      } else {
+        const named = spliceNames(diceText);
+        diceText = named.text;
+        w.diceError = named.error;
       }
       w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
       const base = modeBase(w.attackType);
@@ -5603,8 +5646,11 @@ export class Character {
       const parseTokens = (re) => [...special.matchAll(re)].map((m) => {
         const raw = m[1].trim();
         const crit = /\bcrit\b/i.test(raw);
-        const p = parseDiceExpr(raw.replace(/\bcrit\.?\b/gi, ' '), evalFormula);
-        return { text: raw, crit, ...p };
+        const named = spliceNames(raw.replace(/\bcrit\.?\b/gi, ' '));
+        const p = parseDiceExpr(named.text, evalFormula);
+        // The token still reads as what the player wrote; only the fault, if
+        // there is one, comes from the name that would not resolve.
+        return { text: raw, crit, ...p, error: named.error || p.error };
       });
       const atkTokens = parseTokens(/\{\{(.+?)\}\}/gs);
       const dmgTokens = parseTokens(/\[\[(.+?)\]\]/gs);
@@ -5618,8 +5664,11 @@ export class Character {
       const dmg = tok(dmgTokens.filter((t) => !t.crit));
       const critAtk = tok(atkTokens.filter((t) => t.crit));
       const critDmg = tok(dmgTokens.filter((t) => t.crit));
-      // The weapon's own Bonus Crit Damage column joins the crit-only pool.
-      const bcd = parseDiceExpr(w.bonusCritDamage, evalFormula);
+      // The weapon's own Bonus Crit Damage column joins the crit-only pool,
+      // and reads names the same way the tokens do.
+      const bcdNamed = spliceNames(w.bonusCritDamage);
+      const bcdParsed = parseDiceExpr(bcdNamed.text, evalFormula);
+      const bcd = { ...bcdParsed, error: bcdNamed.error || bcdParsed.error };
       const critExtra = {
         dice: addDice(critDmg.dice, bcd.error ? {} : bcd.dice),
         flat: critDmg.flat + (bcd.error ? 0 : bcd.flat),

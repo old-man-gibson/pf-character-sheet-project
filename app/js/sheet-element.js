@@ -3720,7 +3720,8 @@ export class CharacterSheetElement extends HTMLElement {
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
         </div>
         <label class="fld" style="margin-top:6px"><span>Special properties
-          <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, or both ("[[2d6 + con.mod]]")</span></span>
+          <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, a
+            {name} you defined, or a mix ("[[2d6 + con.mod]]", "[[{deathgrip.dmg} Crit]]")</span></span>
           ${this.#itemArea('equipment.weapons', i, 'special', w.special, 2)}</label>
         ${w.calc ? `<div class="wcalc">
           <div class="hint">atk ${fmt(w.calc.baseAtk)} · dmg ${esc(diceString(w.calc.baseDmgDice, w.calc.baseDmgFlat))}

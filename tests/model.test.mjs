@@ -1712,6 +1712,63 @@ console.log('weapon damage/to-hit tokens');
   check('and excluded from totals', w().calc.totalAvg, w().calc.baseAvg);
   check('and visible to the GM audit', c.audit().some((a) => a.source === 'weapon' && a.status === 'error'), true);
 
+  // A name defined in prose, used in a weapon's tokens. Braces are prose
+  // syntax and the sandbox does not know them, so the value has to be spliced
+  // into the text *before* anything reads it as dice or as a formula --
+  // otherwise every one of these reported "Unexpected character" and quietly
+  // contributed nothing, while the same text rendered correctly in the note
+  // it was written in.
+  const notesWere = c.data.notes;
+  c.data.notes = [{ title: 'Names', body:
+    'grip {deathgrip.dmg = 13}, blast {kinetic.fist = dice(4, 8)}, small {bonus.b = 2}' }];
+  c.recompute();
+  check('the names resolved', [c.inlineNames['deathgrip.dmg'], c.inlineNames['kinetic.fist']], [13, '4d8']);
+
+  c.setItem('equipment.weapons', i, 'special', 'Grip [[{deathgrip.dmg}]]');
+  check('a name in a damage token', w().calc.tokDmg.flat, 13);
+  check('and no error', w().calc.errors, []);
+
+  c.setItem('equipment.weapons', i, 'special', 'Grip {{ {deathgrip.dmg} }}');
+  check('a name in a to-hit token', w().calc.totalAtk, 40 + 13);
+  check('which was the whole complaint', w().calc.totalAtkStr, '+53');
+
+  c.setItem('equipment.weapons', i, 'special', 'Blast [[{kinetic.fist}]]');
+  check('a name holding dice text reads as dice', w().calc.tokDmg.dice, { 8: 4 });
+  check('and not as a number', w().calc.tokDmg.flat, 0);
+
+  c.setItem('equipment.weapons', i, 'special', 'Mixed [[2d6 + {bonus.b}]]');
+  check('a name mixed into an expression', [w().calc.tokDmg.dice, w().calc.tokDmg.flat], [{ 6: 2 }, 2]);
+
+  c.setItem('equipment.weapons', i, 'special', 'Crit [[{deathgrip.dmg} Crit]]');
+  check('a name in a crit-only token', w().calc.critExtra.flat, 13);
+  check('and stays out of the normal total', w().calc.totalAvg, w().calc.baseAvg);
+
+  c.setItem('equipment.weapons', i, 'special', 'Gone [[{no.such.name}]]');
+  check('a name that does not resolve is reported',
+    w().calc.errors, ['{no.such.name}: Unknown value "no.such.name"']);
+  check('and contributes nothing', w().calc.totalAvg, w().calc.baseAvg);
+
+  c.setItem('equipment.weapons', i, 'bonusCritDamage', '{deathgrip.dmg}');
+  check('the Bonus Crit Damage column reads names too', w().calc.critExtra.flat, 13);
+  c.setItem('equipment.weapons', i, 'bonusCritDamage', '');
+
+  // The Dice field, on a weapon that uses its own dice -- Unarmed Strike
+  // takes the unarmed sphere's, so its Dice field is never read.
+  const diceWas = w().dice;
+  const unarmedWas = w().useUnarmedDice;
+  c.setItem('equipment.weapons', i, 'useUnarmedDice', false);
+  c.setItem('equipment.weapons', i, 'dice', '1d8+{bonus.b}');
+  check('a name inside the Dice field', w().diceResolved, '1d8+2');
+  check('and it reads as dice plus a number', [w().calc.baseDmgDice, w().calc.baseDmgFlat - w().damageBonus], [{ 8: 1 }, 2]);
+  c.setItem('equipment.weapons', i, 'dice', '{kinetic.fist}');
+  check('a whole Dice field that is one name still works', w().diceResolved, '4d8');
+  c.setItem('equipment.weapons', i, 'dice', '{bonus.b}');
+  check('and a numeric one is still that many d6', w().diceResolved, '2d6');
+  c.setItem('equipment.weapons', i, 'dice', diceWas);
+  c.setItem('equipment.weapons', i, 'useUnarmedDice', unarmedWas);
+  c.data.notes = notesWere;
+  c.recompute();
+
   c.setItem('equipment.weapons', i, 'special', '');
   check('cleared', w().calc.hasTokens, false);
 
