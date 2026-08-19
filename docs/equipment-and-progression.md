@@ -66,6 +66,14 @@ The worksheet's four systems, separated and computed:
   `crit (12d8+26)×4+2d6+2d8×4 confirm +44 · avg 363`. A base of more than one part
   is bracketed so the × cannot look as though it binds to the last bit of it. Every
   weapon shows its crit average beside the normal one, even without tokens.
+
+  The **d20** on a weapon's head copies the whole attack for Roll20 — every
+  iterative, the damage, the confirmation roll and the critical damage, with the
+  threat range as `cs>` on the die so it is highlighted rather than spotted. The
+  four pools divide there exactly as they do above: base and `Mult` multiplied,
+  riders once, `Crit` multiplied, burst once — so the copied `48d8+104` is the
+  same arithmetic as the printed average. See
+  [Rolling it at the table](using-the-sheet.md#rolling-it-at-the-table).
 - **Armor & shields** — worn pieces (the "On" checkbox) feed AC, cap the AC stat at
   the lowest Max Dex — the sheet's `MIN(MaxDex, stat)` rule, which is why Bryva's
   Str-based AC doesn't move with Str while her breastplate is on — and apply their

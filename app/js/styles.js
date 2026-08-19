@@ -525,7 +525,7 @@ button.tiny {
 /* ability score rows */
 .abilities { display: grid; gap: 5px; }
 .ability {
-  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem;
+  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem;
   gap: 6px; align-items: center;
 }
 .ability .ab { font-weight: 650; font-size: 0.85rem; }
@@ -535,7 +535,7 @@ button.tiny {
 }
 .ability .mod.temp { color: var(--cs-accent); }
 .ability-head {
-  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem; gap: 6px;
+  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem; gap: 6px;
   font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--cs-muted); margin-bottom: 3px; text-align: center;
 }
@@ -1404,7 +1404,8 @@ input[type="color"] {
 @container (max-width: 560px) {
   /* Narrower than a single crafting column: one panel per row, tables scroll. */
   .grid.crafting { grid-template-columns: 1fr; }
-  .ability, .ability-head { grid-template-columns: 2.2rem 3.4rem 2.6rem; }
+  /* The temporary pair goes; the score, the modifier and the die stay. */
+  .ability, .ability-head { grid-template-columns: 2.2rem 3.4rem 2.6rem 1.7rem; }
   .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
   .head { flex-wrap: wrap; }
   .formrow .cols { grid-template-columns: 1fr 1fr; }
@@ -1973,4 +1974,63 @@ button.linkish:hover { text-decoration-style: solid; }
   .fx-label { text-align: left; }
   .fx-fn-row { grid-template-columns: 1fr; }
 }
+/* ---------- roll buttons ---------- */
+/* A die beside a number, the same size wherever it lands -- a table row, a stat
+   line, a weapon head. Quiet until it is pointed at, because there is one on
+   every skill and forty lit buttons would be a wall rather than a table. */
+button.d20 {
+  flex: none; padding: 2px 4px; line-height: 0; border-radius: 5px;
+  background: transparent; border-color: transparent; color: var(--cs-muted);
+}
+button.d20:hover, button.d20:focus-visible {
+  color: var(--cs-accent); border-color: var(--cs-accent); background: var(--cs-accent-soft);
+}
+.d20icon {
+  width: 14px; height: 14px; display: block;
+  fill: none; stroke: currentColor; stroke-width: 8;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+/* The total and its die read as one thing, and the pair still sits against the
+   right edge of a numeric cell the way the number alone used to. */
+.rollpair { display: inline-flex; align-items: center; gap: 3px; }
+.statline .value button.d20 { margin-left: 6px; vertical-align: middle; }
+tr.untrained button.d20, tr.hiddenskill button.d20 { opacity: 0.6; }
+/* In a field the pair is the control: the box keeps the row's width and the
+   die sits beside it rather than under the label. */
+label.fld > .rollpair { display: flex; }
+label.fld > .rollpair > input { flex: 1; min-width: 0; }
+/* On a glance tile the die goes in the corner, so one tile having one does not
+   make that tile taller than the eight beside it. */
+.bigstat { position: relative; }
+.bigstat button.d20 { position: absolute; top: 3px; right: 3px; }
+
+/* ---------- the copied roll ---------- */
+/* Over the sheet rather than in it: copying a roll happens mid-play, and
+   nothing under the pointer should move because of it. The slot is a sticky
+   strip of no height, so the card floats at the top of whatever part of the
+   sheet is on screen and the table below it never shifts. */
+.rollslot { position: sticky; top: 6px; height: 0; z-index: 40; }
+.rolltoast {
+  position: absolute; top: 0; right: 0; width: min(32rem, 100%);
+  background: var(--cs-panel); border: 1px solid var(--cs-accent);
+  border-radius: var(--cs-radius); padding: 8px 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.rolltoast.failed { border-color: var(--cs-bad); }
+.rollhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.rollhead strong { font-size: 0.82rem; color: var(--cs-accent); }
+.rolltoast.failed .rollhead strong { color: var(--cs-bad); }
+.rollhead .hint { flex: 1; min-width: 8ch; }
+.rollformats { display: flex; gap: 3px; }
+.rollformats button { padding: 1px 7px; font-size: 0.7rem; }
+button.rollclose { padding: 0 6px; line-height: 1.3; }
+textarea.rolltext {
+  font-family: var(--cs-mono); font-size: 0.72rem; min-height: 0;
+  background: var(--cs-panel-2); color: var(--cs-text);
+}
+.rolltoast kbd {
+  font-family: var(--cs-mono); background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 3px;
+}
+.rolltoast p.hint { margin: 5px 0 0; }
 `;

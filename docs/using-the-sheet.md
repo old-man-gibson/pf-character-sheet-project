@@ -1,6 +1,6 @@
 # Using the sheet: Overview, wealth, hit points, stats, skills
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. How the sheet is edited and what its core tabs compute — the Overview and its panels, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar._
 
 ---
 
@@ -24,6 +24,8 @@ and anything downstream recalculates immediately.
 - The built-in meters — hit points, essence, power points — take that same styling:
   pips, bar or squares, colours, gradients and zones. See *The built-in meters take
   the same style*.
+- A **d20 button** beside every ability, saving throw, attack, skill and weapon copies
+  that roll in a form Roll20 will roll. See *Rolling it at the table* below.
 
 **Editable everywhere**
 - *Overview* — name, race, level, size, alignment, deity, portrait, **character
@@ -70,6 +72,77 @@ one back (see [Getting characters in](importing-and-saving.md#getting-characters
 > — updates the model without re-rendering the panel. The largest grids run to several
 > thousand inputs, and rebuilding those on every keystroke was plainly laggy (143 ms per
 > edit, now 4 ms).
+
+---
+
+## Rolling it at the table
+
+Every ability, saving throw, attack, skill and weapon carries a **d20 button**, and
+pressing one puts that roll on the clipboard in a form Roll20 will roll. Nothing is
+sent anywhere and nothing is stored: it is a copy, and where it goes is your business.
+
+What comes out by default is Roll20's built-in **default roll template**, which every
+game has whether or not it uses a character sheet:
+
+```
+&{template:default} {{name=Angou — Perception}} {{Skill check=[[1d20+41]]}}
+```
+
+The card that appears after a copy shows what was taken and carries a switch for the
+other shape — a bare `/roll 1d20+41 Angou — Perception` — and remembers which you
+chose. That is a fact about your Roll20 game rather than about the character, so it is
+kept per browser rather than in the document, and it applies to every character in it.
+
+| Where | What it copies |
+|---|---|
+| *Overview* → **At a glance** | **Init**, off the tile itself. |
+| *Overview* → **Ability scores** | An ability check: `1d20` plus the temporary modifier, which is the column the button sits in. |
+| *Overview* → **Saving throws** | The save's total. |
+| *Overview* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table below them does the same for all six slots, **alternates included**. |
+| *Skills* | The skill's **Total** — ranks, ability, the class-skill bonus, armour check penalty and Misc, already summed. |
+| *Equipment* → **Weapons** | The attack (iteratives included), the damage, the confirmation roll and the critical damage. |
+| *Spheres & Magic* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
+| *Vancian* → each casting class | That class's own concentration. |
+| *Familiar*, *Animal Companion*, *Eidolon* | Initiative, the three saves, an ability check off the Mod column, every skill, and every natural attack. |
+
+**What the roll knows that a typed number would not**
+
+- **It is the roll you would make, not always the one printed.** Ticked conditions move
+  these numbers, and a roll that moved says so in a **Conditions** row — *Shaken (−2)*.
+  Every button's tooltip is its formula, so what is about to be copied is readable
+  before it is copied rather than after it is pasted.
+- **Iteratives step down from the attack in full**: a BAB of 20 landing at +34 copies as
+  +34/+29/+24/+19, never +20/+15/+10/+5.
+- **An alternate is the same attack with a different ability in the slot** — Dex for a
+  finessed blade, Wis for a monk's fist — so it takes the same BAB, misc, size and
+  import reconciliation, and only the modifier moves. It says which ability in its
+  title (*Melee attack (Dex)*), because that is the whole difference between the two
+  and the reason a character keeps both.
+- **A companion rolls on its own sheet.** Its rolls are titled *Angou's Hoot — Bite*, and
+  the master's conditions stay the master's: a shaken summoner does not make their
+  eidolon shaken. The damage column on those tabs is free text, so a row reading
+  `1d6+7` is rolled and one reading `1d6 plus grab` is carried as a note instead of
+  being quietly truncated to the dice.
+- **Nothing moves a concentration check.** Shaken and its kin are worded at attack rolls,
+  saving throws, skill checks and ability checks; a concentration check is none of
+  those, so the number is the number.
+- **A threat range is `cs>` on the die.** A 15–20 weapon copies as `1d20cs>15+40`, so
+  Roll20 colours the threat rather than leaving you to spot it in the total.
+- **Criticals follow the rules, not the multiplier alone.** The weapon's own damage and
+  any `[[… Crit]]` damage multiply; untagged `[[…]]` riders and the bonus crit damage
+  column are added once. A ×4 unarmed strike doing `12d8+26` copies its critical as
+  `48d8+104`.
+- **A dice field that is partly a note comes along whole.** `4d6 (8d6)` rolls the 4d6
+  and carries the field itself in a **Dice** row, rather than quietly handing over the
+  smaller of two numbers.
+- **Names are escaped.** A weapon called *Longsword [holy]* would otherwise open an
+  inline roll and truncate the message it is pasted into, so the braces, brackets,
+  pipes and ats that Roll20 resolves before printing become the entities it prints as
+  themselves.
+
+> If the clipboard is refused — a page served over plain `http://`, or an embed without
+> permission — the card says so and hands you the text selected instead, which is the
+> same thing one <kbd>Ctrl</kbd>+<kbd>C</kbd> later.
 
 ---
 
@@ -155,6 +228,14 @@ languages are free; slots are one per point of Int bonus plus one per Linguistic
 rank, plus **Extra** for whatever a race or trait adds, as a number or a formula
 (`floor(level / 2)`). The known list is chips you add and remove, counted against
 the slots; the workbook's comma- and pipe-separated cells are split into it on import.
+
+**Attack** reads Melee, Ranged and CMB as headline numbers, and under them a table of
+all six slots the sheet keeps — each of the three plus its **alternate**, which is the
+same attack with a different ability in it: Dex for a finessed blade, Wis for a monk's
+fist. Each row shows its total and carries a **d20**. An alternate is not a second sum:
+it is its own mode's total with one modifier swapped for the other, so it shares the
+BAB, the misc bonus, the size modifier and the import reconciliation, and cannot drift
+from the number above it.
 
 **Speed** takes its bonus as a formula, because that is where class features land:
 a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up
@@ -471,6 +552,10 @@ imported Specialty flags and marked ★. **Gear** (headband et al) and **Other**
 (class features, templates) are per-skill checkboxes worth full ranks. **Spheres**
 is computed from training. All five characters' imported ranks and totals reproduce
 exactly.
+
+**Rolling one.** The **d20** beside each Total copies that check for Roll20 — see
+[Rolling it at the table](#rolling-it-at-the-table). A skill with a situational note
+carries it along, and a trained-only skill with no ranks says so.
 
 **Hiding a skill.** The list is the template's, in the template's order: rows are not
 reordered or deleted. The eye at the end of each row hides a skill instead; hidden skills

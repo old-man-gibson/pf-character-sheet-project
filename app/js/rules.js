@@ -2176,3 +2176,35 @@ function modeMod(c, mode) {
   const m = c.attack.modes[mode];
   return m ? statMod(c, m.stat1, m.stat2) : 0;
 }
+
+/** The six attack slots the sheet keeps, and what to call each one. */
+export const ATTACK_MODES = ['melee', 'altMelee', 'ranged', 'altRanged', 'cmb', 'altCmb'];
+export const ATTACK_MODE_LABELS = {
+  melee: 'Melee', altMelee: 'Alt melee', ranged: 'Ranged',
+  altRanged: 'Alt ranged', cmb: 'CMB', altCmb: 'Alt CMB',
+};
+
+const MODE_TOTAL_KEYS = { melee: 'totalMelee', ranged: 'totalRanged', cmb: 'totalCmb' };
+/** Which stored total an alternate is the alternate of. */
+export const ALT_ATTACK_OF = { altMelee: 'melee', altRanged: 'ranged', altCmb: 'cmb' };
+
+/**
+ * The total for any attack mode, alternates included.
+ *
+ * The three the sheet stores are read straight off it, because those carry the
+ * reconciliation offset that makes the imported figure come out right. An
+ * alternate is the same attack with a different ability in the slot -- same
+ * BAB, same misc, same size, same offset -- so it is that total with one
+ * modifier swapped for the other rather than a second sum that could drift
+ * from it. Null for anything that is not a mode.
+ */
+export function attackModeTotal(c, mode) {
+  const direct = MODE_TOTAL_KEYS[mode];
+  if (direct) return Number(c?.attack?.[direct]) || 0;
+  const base = ALT_ATTACK_OF[mode];
+  if (!base || !c?.attack) return null;
+  const modes = c.attack.modes || {};
+  return (Number(c.attack[MODE_TOTAL_KEYS[base]]) || 0)
+    - statMod(c, modes[base]?.stat1, modes[base]?.stat2)
+    + statMod(c, modes[mode]?.stat1, modes[mode]?.stat2);
+}
