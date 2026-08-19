@@ -22,30 +22,50 @@ The worksheet's four systems, separated and computed:
   **Damage/to-hit tokens**: write `{{…}}` in special properties to add to hit and
   `[[…]]` to add damage — dice, sandbox formulas, or both (`[[2d6 + con.mod]]`,
   `{{2}}`, `{{1d4}}`). A `{name}` you defined in prose works inside one too
-  (`[[{deathgrip.dmg} Crit]]`, `{{ {deathgrip.dmg} }}`, `[[2d6 + {bonus}]]`), as does
-  the Bonus Crit Damage column and the Dice field: the name's **value is put into the
-  text** before it is read, so a name holding dice text (`{kinetic.fist}` → `4d8`)
-  arrives as dice and a name holding a number arrives as a number. A name that does not
-  resolve is reported on the row and contributes nothing. The card shows the full working:
+  (`[[{deathgrip.dmg} Mult]]`, `{{ {deathgrip.dmg} }}`, `[[2d6 + {bonus}]]`), as does
+  the Bonus Crit Damage column, the Misc dmg column and the Dice field: the name's
+  **value is put into the text** before it is read, so a name holding dice text
+  (`{kinetic.fist}` → `4d8`) arrives as dice and a name holding a number arrives as a
+  number. A name that does not resolve is reported on the row and contributes nothing.
+
+  **When it applies, and whether it multiplies.** Two keywords, which between them
+  cover every way an ability is written. This is the part worth knowing, because the
+  wrong one is silently wrong rather than visibly broken:
+
+  | written | every hit | on a confirmed crit | for |
+  |---|---|---|---|
+  | `[[6]]` | yes | added **once**, unmultiplied | the usual rider — flaming, sneak attack, anything the rules say is not multiplied |
+  | `[[6 Crit]]` | no | added and **multiplied** | damage that only happens on a crit |
+  | `[[6 Mult]]` | yes | **multiplied** with the weapon | damage with no "not multiplied" caveat on it, which behaves like the weapon's own |
+  | `{{4}}` | yes | also on the confirmation roll | an attack bonus |
+  | `{{4 Crit}}` | no | confirmation roll only | a bonus to confirm, only |
+
+  A player **never writes the same thing twice** — untagged already covers both the
+  normal roll and the crit, and `Crit` means *only* on a crit rather than *also* on one.
+  `Mult` is a damage keyword; attack rolls are not multiplied, so it does nothing on a
+  `{{…}}`. The **Misc dmg** column is the same rule as `[[… Mult]]` — flat damage that
+  multiplies — and it takes a formula (`floor(level / 4) + 1`) as well as a number, so
+  an ability written as a rule does not go stale. The **Bonus Crit Damage** column is
+  crit-only and unmultiplied (burst dice).
+
+  The card shows the full working, and every term of the crit line is printed in the
+  order it is worked out, so the string adds up to the average beside it:
 
   ```
   atk +40 · dmg 12d8+26        avg 80
-  {{…}} +2 to hit · [[…]] 2d6+13 damage
-  atk +42 · dmg 12d8+2d6+39    avg 100
+  {{…}} +2 to hit · [[…]] 2d6+13 damage, added once on a crit
+  atk +42 · dmg 12d8+2d6+39    avg 100    crit (12d8+26)×4+2d6+13   avg 340
   ```
 
   Dice combine properly across sizes (12d8+2d6+…), averages use X×(Y+1)/2 per term,
   bad tokens are flagged on the card and excluded from totals, and every token
   appears in the GM's Formula Audit.
 
-  The **Crit** tag marks what multiplies on a critical: base weapon damage always
-  multiplies; **untagged** `[[…]]` tokens are damage riders added once,
-  unmultiplied; `[[2d8 Crit]]` is crit-only damage that **is** multiplied; and
-  `{{4 Crit}}` boosts confirmation rolls only. The workbook's Bonus Crit Damage
-  column joins as unmultiplied burst dice. Average crit = base avg × mult +
-  riders + tagged × mult + burst; the totals line reads e.g.
-  `crit ×4+2d8×4 confirm +44 · avg 363`, and every weapon shows its crit average
-  beside the normal one even without tokens.
+  Average crit = (base + `Mult` tokens) × mult + riders + `Crit` tokens × mult +
+  burst, which is exactly what the crit line prints, term by term:
+  `crit (12d8+26)×4+2d6+2d8×4 confirm +44 · avg 363`. A base of more than one part
+  is bracketed so the × cannot look as though it binds to the last bit of it. Every
+  weapon shows its crit average beside the normal one, even without tokens.
 - **Armor & shields** — worn pieces (the "On" checkbox) feed AC, cap the AC stat at
   the lowest Max Dex — the sheet's `MIN(MaxDex, stat)` rule, which is why Bryva's
   Str-based AC doesn't move with Str while her breastplate is on — and apply their

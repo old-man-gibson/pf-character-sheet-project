@@ -1800,6 +1800,44 @@ console.log('weapon damage/to-hit tokens');
   // (12d8+26)×4 = 320, +2d6 = 7, +2d8×4 = 36 — the 363 checked just above.
   check('which is the average beside it, term for term', w().calc.critAvg, 320 + 7 + 36);
 
+  // The Mult tag: damage on every hit that multiplies with the weapon, for an
+  // ability written with no "not multiplied" caveat on it. Neither of the other
+  // two captures it -- untagged undercounts the crit, Crit misses the normal
+  // roll -- so it is its own thing, and it behaves exactly like Misc dmg.
+  c.setItem('equipment.weapons', i, 'special', 'Gauntlets [[13 Mult]]');
+  check('mult damage lands on the normal roll', w().calc.totalAvg, 80 + 13);
+  check('and multiplies on a crit', w().calc.critAvg, (80 + 13) * 4);
+  check('the crit string keeps it with the base', w().calc.critStr, '(12d8+39)×4');
+  const viaToken = w().calc.critAvg;
+  c.setItem('equipment.weapons', i, 'special', '');
+  c.setItem('equipment.weapons', i, 'miscDamage', 13);
+  check('which is exactly what the Misc dmg column does', w().calc.critAvg, viaToken);
+  c.setItem('equipment.weapons', i, 'miscDamage', 0);
+
+  c.setItem('equipment.weapons', i, 'special', '[[2d6]] [[2d8 Crit]] [[13 Mult]]');
+  check('all three kinds coexist', w().calc.totalAvg, 80 + 7 + 13);
+  check('and each is multiplied or not, as tagged',
+    w().calc.critAvg, (80 + 13) * 4 + 7 + 9 * 4);
+  check('the string separates them', w().calc.critStr, '(12d8+39)×4+2d6+2d8×4');
+  check('Mult is a damage keyword only', (() => {
+    c.setItem('equipment.weapons', i, 'special', '{{4 Mult}}');
+    return [w().calc.totalAtk, w().calc.atkTokens[0].mult];
+  })(), [44, false]);
+
+  // Misc dmg written as a rule rather than a number -- it used to read as 0,
+  // silently, which is the worst way for a damage field to be wrong.
+  c.setItem('equipment.weapons', i, 'special', '');
+  c.setItem('equipment.weapons', i, 'miscDamage', 'floor(level / 4) + 1');
+  check('a formula in Misc dmg resolves', w().miscDamageNum, Math.floor(20 / 4) + 1);
+  check('and multiplies like the number it replaces', w().calc.critAvg, (80 + 6) * 4);
+  check('and is visible to the audit',
+    c.audit().some((a) => a.id === 'weapon-misc-' + i && a.status === 'ok'), true);
+  c.setItem('equipment.weapons', i, 'miscDamage', 'nope + 1');
+  check('a bad one is reported, not silently zero', w().miscDamageError !== null, true);
+  check('and flagged in the audit',
+    c.audit().find((a) => a.id === 'weapon-misc-' + i).status, 'error');
+  c.setItem('equipment.weapons', i, 'miscDamage', 0);
+
   // The sheet's Bonus Crit Damage column stays unmultiplied (burst dice).
   c.setItem('equipment.weapons', i, 'special', '');
   c.setItem('equipment.weapons', i, 'bonusCritDamage', '1d10');

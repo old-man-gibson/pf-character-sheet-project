@@ -5633,27 +5633,57 @@ export class Character {
       const abilityPart = w.damageAbility
         ? Math.floor(statMod(c, w.damageAbility, null) * (Number(w.abilityMult) || 1))
         : 0;
-      const bonus = abilityPart + (Number(w.miscDamage) || 0) + (Number(w.enhancement) || 0);
+      // Misc damage is flat damage that behaves like the weapon's own -- it
+      // multiplies on a crit -- and it is often a rule rather than a number
+      // ("Int mod + invested essence x2"), so it resolves in the sandbox like
+      // every other value a player may write. It used to take a plain number
+      // and read a formula as 0, silently.
+      const misc = spliceNames(w.miscDamage);
+      w.miscDamageNum = 0;
+      w.miscDamageError = misc.error;
+      if (String(misc.text).trim()) {
+        try {
+          w.miscDamageNum = Math.floor(Number(evalFormula(misc.text)) || 0);
+        } catch (err) {
+          w.miscDamageError = w.miscDamageError || err.message;
+        }
+      }
+      const bonus = abilityPart + w.miscDamageNum + (Number(w.enhancement) || 0);
       w.damageBonus = bonus;
       w.damageTotal = `${w.diceResolved || '—'}${bonus ? fmt(bonus) : ''}`;
 
       // Inline bonuses written into the special-properties text:
-      //   {{…}} adds to hit, [[…]] adds damage — dice, a sandbox formula, or
-      //   a mix ("2d6 + con.mod"). A trailing "Crit" keyword makes the token
-      //   crit-only: {{4 Crit}} boosts confirmation rolls, [[2d8 Crit]] adds
-      //   unmultiplied damage on a confirmed critical.
+      //   {{…}} adds to hit, [[…]] adds damage — dice, a sandbox formula, a
+      //   {name} defined in prose, or a mix ("2d6 + con.mod").
+      //
+      // Two keywords say when the damage happens and whether it multiplies,
+      // which between them cover every rule an ability is written with:
+      //
+      //   [[6]]        every hit, and added once more on a crit -- the usual
+      //                rider (flaming, sneak attack), which the rules do not
+      //                multiply
+      //   [[6 Crit]]   only on a confirmed crit, and multiplied
+      //   [[6 Mult]]   every hit, and multiplied on a crit -- damage that
+      //                behaves like the weapon's own, with no "not multiplied"
+      //                caveat on it (Deathgrip Gauntlets)
+      //
+      //   {{4}}        attack and confirmation rolls
+      //   {{4 Crit}}   confirmation rolls only
+      //
+      // Mult means nothing on an attack token: attack rolls are not multiplied.
       const special = String(w.special ?? '');
-      const parseTokens = (re) => [...special.matchAll(re)].map((m) => {
+      const parseTokens = (re, damage) => [...special.matchAll(re)].map((m) => {
         const raw = m[1].trim();
         const crit = /\bcrit\b/i.test(raw);
-        const named = spliceNames(raw.replace(/\bcrit\.?\b/gi, ' '));
+        const mult = damage && !crit && /\bmult(iplied)?\b/i.test(raw);
+        const named = spliceNames(raw.replace(/\b(?:crit|mult(?:iplied)?)\.?\b/gi, ' '));
         const p = parseDiceExpr(named.text, evalFormula);
         // The token still reads as what the player wrote; only the fault, if
         // there is one, comes from the name that would not resolve.
-        return { text: raw, crit, ...p, error: named.error || p.error };
+        return { text: raw, crit, mult, ...p, error: named.error || p.error };
       });
-      const atkTokens = parseTokens(/\{\{(.+?)\}\}/gs);
-      const dmgTokens = parseTokens(/\[\[(.+?)\]\]/gs);
+      const atkTokens = parseTokens(/\{\{(.+?)\}\}/gs, false);
+      const dmgTokens = parseTokens(/\[\[(.+?)\]\]/gs, true);
 
       const baseDice = parseDiceExpr(w.diceResolved, null);
       const tok = (list) => list.reduce(
@@ -5661,7 +5691,11 @@ export class Character {
         { dice: {}, flat: 0 },
       );
       const atk = tok(atkTokens.filter((t) => !t.crit));
-      const dmg = tok(dmgTokens.filter((t) => !t.crit));
+      const dmg = tok(dmgTokens.filter((t) => !t.crit && !t.mult));
+      // Damage on every hit that multiplies with the weapon: it joins the
+      // normal total like a rider, and the crit multiplier takes it with the
+      // base rather than adding it once afterwards.
+      const multDmg = tok(dmgTokens.filter((t) => t.mult));
       const critAtk = tok(atkTokens.filter((t) => t.crit));
       const critDmg = tok(dmgTokens.filter((t) => t.crit));
       // The weapon's own Bonus Crit Damage column joins the crit-only pool,
@@ -5688,8 +5722,9 @@ export class Character {
         totalAtkStr: Object.keys(atk.dice).length
           ? `${fmt(w.attackTotal + atk.flat)}+${diceString(atk.dice)}`
           : fmt(w.attackTotal + atk.flat),
-        totalDmgDice: addDice(baseDice.dice, dmg.dice),
-        totalDmgFlat: baseDice.flat + bonus + dmg.flat,
+        tokMultDmg: multDmg,
+        totalDmgDice: addDice(addDice(baseDice.dice, dmg.dice), multDmg.dice),
+        totalDmgFlat: baseDice.flat + bonus + dmg.flat + multDmg.flat,
         errors: [...atkTokens, ...dmgTokens].filter((t) => t.error)
           .map((t) => `${t.text}: ${t.error}`),
       };
@@ -5698,8 +5733,9 @@ export class Character {
       w.calc.totalAvg = diceAverage(w.calc.totalDmgDice, w.calc.totalDmgFlat);
       w.calc.hasTokens = atkTokens.length > 0 || dmgTokens.length > 0;
 
-      // Criticals. The Crit tag marks what multiplies:
-      //   - base weapon damage: always multiplied (standard);
+      // Criticals. What multiplies and what does not:
+      //   - base weapon damage, ability, enhancement and misc: multiplied;
+      //   - [[… Mult]] tokens: multiplied, with the base;
       //   - untagged [[…]] tokens: added once, unmultiplied (damage riders);
       //   - [[… Crit]] tokens: crit-only damage, multiplied;
       //   - the Bonus Crit Damage column: crit-only, unmultiplied (burst dice);
@@ -5718,8 +5754,14 @@ export class Character {
       w.calc.confirmStr = Object.keys(critAtk.dice).length
         ? `${fmt(w.calc.confirmTotal)}+${diceString(critAtk.dice)}`
         : fmt(w.calc.confirmTotal);
+      // Everything that multiplies is gathered first and multiplied once, so
+      // the printed string can be read straight down: (base + mult)×N + …
+      const multBase = {
+        dice: addDice(baseDice.dice, multDmg.dice),
+        flat: baseDice.flat + bonus + multDmg.flat,
+      };
       w.calc.critAvg = Math.round((
-        w.calc.baseAvg * critMultNum
+        diceAverage(multBase.dice, multBase.flat) * critMultNum
         + diceAverage(dmg.dice, dmg.flat)
         + diceAverage(critTagged.dice, critTagged.flat) * critMultNum
         + (hasBcd ? diceAverage(bcd.dice, bcd.flat) : 0)
@@ -5734,7 +5776,7 @@ export class Character {
       // looking as though it binds to the last bit of it.
       const critTerm = (t) => (/[+-]/.test(String(t).slice(1)) ? `(${t})` : t);
       w.calc.critStr = [
-        `${critTerm(diceString(baseDice.dice, baseDice.flat + bonus))}×${critMultNum}`,
+        `${critTerm(diceString(multBase.dice, multBase.flat))}×${critMultNum}`,
         hasRiders ? `+${diceString(dmg.dice, dmg.flat).replace(/^\+/, '')}` : '',
         hasCritTagged ? `+${critTerm(diceString(critTagged.dice, critTagged.flat).replace(/^\+/, ''))}×${critMultNum}` : '',
         hasBcd ? `+${diceString(bcd.dice, bcd.flat).replace(/^\+/, '')}` : '',
@@ -8968,6 +9010,28 @@ export class Character {
       };
     });
 
+    // Misc damage written as a rule rather than a number.
+    const weaponMiscFormulas = (this.data.equipment?.weapons || [])
+      .map((w, i) => ({ w, i }))
+      .filter(({ w }) => typeof w.miscDamage === 'string' && w.miscDamage.trim())
+      .map(({ w, i }) => {
+        const info = analyse(String(w.miscDamage).replace(/\{[^{}]*\}/g, '0'));
+        return {
+          id: `weapon-misc-${i}`,
+          name: `${w.name || `Weapon ${i + 1}`} misc damage`,
+          source: 'weapon',
+          formula: w.miscDamage,
+          reads: info.variables,
+          functions: info.functions,
+          unknownReferences: info.variables.filter((v) => !known.has(v)),
+          value: w.miscDamageError ? null : w.miscDamageNum ?? null,
+          error: w.miscDamageError || null,
+          status: w.miscDamageError ? 'error' : 'ok',
+          createdAt: null,
+          where: 'a weapon\u2019s Misc dmg',
+        };
+      });
+
     // Weapon damage/to-hit tokens written into special properties.
     const weaponFormulas = (this.data.equipment?.weapons || []).flatMap((w, wi) => {
       const items = [
@@ -9160,7 +9224,8 @@ export class Character {
       });
     });
 
-    return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas).concat(weaponFormulas)
+    return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas)
+      .concat(weaponMiscFormulas).concat(weaponFormulas)
       .concat(speedFormulas).concat(languageFormulas).concat(craftingFormulas).concat(deckFormulas)
       .concat(trackerFormulas);
   }
