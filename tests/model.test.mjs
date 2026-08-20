@@ -2571,10 +2571,36 @@ console.log('buff extra bonuses -- targets past the six dials');
   check('+4 Str is +2 melee and +2 CMB through the modifier',
     [cs.delta.melee, cs.delta.cmb, cs.scores.str], [2, 2, 14]);
 
-  // Size: +1 step larger moves the four numbers a step moves.
+  // Size: +1 true step larger moves the four numbers a step moves.
   cs = buff([{ target: 'size', value: 1 }]);
   check('one size larger: −1 attack and AC, +1 CMB and CMD',
     [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd], [-1, -1, 1, 1]);
+  check('and the dice walk one step', cs.sizeSteps, 1);
+
+  // Within a type only the largest counts; true and effective stack together.
+  c.data.buffs = [
+    { name: 'A', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 1 }] },
+    { name: 'B', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 2 }, { target: 'sizeEffective', value: 1 }] },
+  ];
+  c.recompute();
+  cs = c.conditionState;
+  check('two true increases take the largest, the effective stacks on top',
+    [cs.delta.melee, cs.delta.cmd, cs.sizeSteps], [-2, 2, 3]);
+
+  // An effective increase reaches the dice alone.
+  cs = buff([{ target: 'sizeEffective', value: 1 }]);
+  check('effective size: dice step, the four numbers stand',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [0, 0, 0, 0, 1]);
+
+  // The result caps at Colossal from the character's own size.
+  c.data.identity.size = 'Huge';
+  cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
+  check('a Huge character grows two true steps to Colossal and no further',
+    [cs.delta.melee, cs.sizeSteps], [-2, 2]);
+  c.data.identity.size = 'Medium';
+  cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
+  check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);
+  c.recompute();
 
   // Speed is flat feet, applied before a condition's halving.
   c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: 0 }];

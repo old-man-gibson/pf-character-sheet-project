@@ -1616,8 +1616,9 @@ export class CharacterSheetElement extends HTMLElement {
       for (const row of b.bonuses || []) {
         const v = Number(row?.valueNum) || 0;
         if (!v) continue;
-        bits.push(row.target === 'size' ? `${v > 0 ? `+${v}` : v} size`
-          : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
+        bits.push(row.target === 'size' ? `${v > 0 ? `+${v}` : v} true size`
+          : row.target === 'sizeEffective' ? `${v > 0 ? `+${v}` : v} effective size`
+            : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
       }
       return bits.join(' · ') || 'no numbers yet';
     };
@@ -1667,11 +1668,13 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="buff-bonus-add" data-index="${i}">+ Add bonus</button>
         </div>
         <p class="hint">Extra bonuses reach what the dials do not: an ability score cascades
-          into everything built on its modifier; <em>Size</em> is steps larger and moves
-          attack, AC, CMB and CMD the way a step does — and steps every weapon's own
-          damage dice along the official chart (riders like sneak keep theirs; reach
-          stays yours); <em>Save DCs</em> and <em>Essence pool</em> show where those
-          numbers are read. Values take formulas, like the dials.</p>
+          into everything built on its modifier; <em>Save DCs</em> and <em>Essence pool</em>
+          show where those numbers are read. <em>Size</em> comes in two types that stack
+          with each other, while within a type only the largest counts: <em>true</em>
+          changes the size itself — attack, AC, CMB, CMD and every weapon's damage dice
+          along the official chart — and <em>effective</em> ("treated as larger") steps
+          the dice alone. Neither grows past Colossal nor shrinks past Fine; riders like
+          sneak keep their dice, and reach stays yours. Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
           ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
         <p class="hint">The note reads {…} like prose: a definition written here — say

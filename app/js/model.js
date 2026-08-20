@@ -25,7 +25,7 @@
 
 import {
   ABILITIES, DERIVED, abilityMod, carryTiers, iterativeAttacks, skillTotal,
-  statMod, statModDelta, sizeMod, SIZE_CARRY_MULTIPLIER, POINT_BUY_COST, BUILD_DERIVED_KEYS,
+  statMod, statModDelta, sizeMod, SIZE_MODIFIERS, SIZE_CARRY_MULTIPLIER, POINT_BUY_COST, BUILD_DERIVED_KEYS,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, conditionTotals,
   foldPicks, resolveAbility, pointBuyCost, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   abpFollowers, abpSourceLevel, armorParts, fmt,
@@ -8256,7 +8256,10 @@ export class Character {
     // (recomputeBuffs) are mods, so every "now" figure moves without a second
     // pipeline. They have no ladder group, so nothing supersedes them.
     const buffsOn = [];
-    let sizeSteps = 0;
+    // Size rows come in two bonus types: within each, only the largest
+    // increase (and the deepest reduction) counts, but a true and an
+    // effective increase stack with each other.
+    const sizeRows = { size: { up: 0, down: 0 }, sizeEffective: { up: 0, down: 0 } };
     for (const b of c.buffs || []) {
       if (!b?.on) continue;
       const bmods = {};
@@ -8267,28 +8270,58 @@ export class Character {
         if (v) add(key, v);
       }
       // The extra bonuses. An ability score rides the totals' ability block so
-      // its modifier cascades; `size` (steps larger) unpacks into the four
-      // numbers a step moves; `speed` is flat feet, kept apart from the
+      // its modifier cascades; the size types are gathered across every buff
+      // and applied once below; `speed` is flat feet, kept apart from the
       // multiplier conditions use; the rest are plain channels.
       for (const row of b.bonuses || []) {
         const v = Number(row?.valueNum) || 0;
         if (!v) continue;
         const t = row.target;
         if (ABILITIES.includes(t)) bability[t] = (bability[t] || 0) + v;
-        else if (t === 'size') {
-          // A step larger: −1 attack and AC (the size modifier), +1 CMB and
-          // CMD (the special size modifier). The attack channel reaches CMB
-          // too -- rightly, for penalties like shaken -- so CMB takes 2v: v
-          // to cancel the size modifier that does not apply to maneuvers,
-          // and v for the special one that does. The steps also step every
-          // weapon's damage dice along the official chart (sizeSteps below).
-          add('attack', -v); add('ac', -v); add('cmb', 2 * v); add('cmd', v);
-          sizeSteps += v;
+        else if (t === 'size' || t === 'sizeEffective') {
+          const slot = sizeRows[t];
+          if (v > 0) slot.up = Math.max(slot.up, v);
+          else slot.down = Math.min(slot.down, v);
         } else if (t === 'speed') add('speedFt', v);
         else if (t) add(t, v);
       }
       const label = String(b.name || '').trim() || 'Buff';
       buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods, ability: bability }, count: 1 });
+    }
+    const buffCount = buffsOn.length;
+
+    /*
+     * Apply the size change once, capped to the ladder: nothing grows past
+     * Colossal or shrinks past Fine, effective steps landing after true ones.
+     * (TODO: a campaign setting for tables that allow colossal+ sizes.)
+     *
+     * True steps change the size itself: −1 attack and AC per step larger
+     * (the size modifier) and +1 CMB and CMD (the special size modifier).
+     * The attack channel reaches CMB too -- rightly, for penalties like
+     * shaken -- so CMB takes 2v: v to cancel the size modifier that does not
+     * apply to maneuvers, and v for the special one that does. Effective
+     * steps are "treated as larger", which reaches the damage dice alone --
+     * so both kinds feed `sizeSteps`, the walk the weapon dice take.
+     */
+    const ladder = Object.keys(SIZE_MODIFIERS);
+    let baseIdx = ladder.indexOf(c.identity?.size);
+    if (baseIdx < 0) baseIdx = ladder.indexOf('Medium');
+    const clampSteps = (from, want) => Math.max(-from, Math.min(ladder.length - 1 - from, want));
+    const trueSteps = clampSteps(baseIdx, sizeRows.size.up + sizeRows.size.down);
+    const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
+    const sizeSteps = trueSteps + effSteps;
+    if (trueSteps) {
+      buffsOn.push({
+        name: 'Size',
+        info: {
+          key: 'buff:size',
+          label: `${trueSteps > 0 ? `${trueSteps} size larger` : `${-trueSteps} size smaller`}`,
+          mods: {
+            attack: -trueSteps, ac: -trueSteps, cmb: 2 * trueSteps, cmd: trueSteps,
+          },
+        },
+        count: 1,
+      });
     }
     const totals = conditionTotals([...active, ...buffsOn]);
     const { mods } = totals;
@@ -8393,7 +8426,7 @@ export class Character {
     }
 
     return {
-      active, buffsOn: buffsOn.length, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+      active, buffsOn: buffCount, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
         || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps
         || !!totals.acVsMelee || !!totals.acVsRanged,
