@@ -1151,7 +1151,25 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
   font-weight: 620; font-variant-numeric: tabular-nums; cursor: help;
 }
 .tok.define { border-bottom-style: solid; }
+/* A forwarded bonus is going somewhere else, and the double rule under it says
+   so at a glance: dotted shows a value, solid names one, double sends one. */
+.tok.push { border-bottom-style: double; border-bottom-width: 3px; }
 .tok.err { color: var(--cs-bad); border-bottom-color: var(--cs-bad); font-weight: 500; }
+
+/* The operator beside a forwarded bonus's destination on the Formulas tab.
+   Shown always, penalty or not, because it is the syntax being taught. */
+.fx-into { color: var(--cs-muted); font-size: 0.78rem; margin-left: 4px; }
+
+/* The same bonus where it lands -- beside the Misc column of a skill, beside
+   the Other column of a save. Small, gold, and never mistaken for a field the
+   reader can type in, because it is not one: it is written somewhere else. */
+.fwd {
+  display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 4px;
+  background: var(--cs-accent-soft);
+  color: var(--cs-accent); font-size: 0.76rem; font-weight: 650;
+  font-variant-numeric: tabular-nums; cursor: help; vertical-align: middle;
+}
+.fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
 
 /* ---------- formula fields ---------- */
 /* Same two layers as .prose, for a single-line control: the resolved value is

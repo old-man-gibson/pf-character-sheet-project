@@ -10,7 +10,7 @@
  *      type it and watch the answer,
  *   2. an index -- every value the character publishes and every formula
  *      already written on it, searchable, with live numbers,
- *   3. a reference, folded away underneath, that explains the three token
+ *   3. a reference, folded away underneath, that explains the four token
  *      forms, the operators, every built-in function and the handful of rules
  *      that are not guessable.
  *
@@ -202,6 +202,10 @@ const PROBLEM_KINDS = {
     label: 'Nothing defines it',
     lead: 'Something still asks for this name after whatever defined it went away.',
   },
+  misdirected: {
+    label: 'Bonus goes nowhere',
+    lead: 'A forwarded bonus with nothing at the other end of it.',
+  },
   broken: {
     label: 'Does not work',
     lead: 'A formula the sheet cannot work out.',
@@ -294,6 +298,53 @@ export function myFormulasHtml(rows, query) {
   </section>`;
 }
 
+/**
+ * Every bonus this character forwards somewhere, and where each one lands.
+ *
+ * The whole point of forwarding is that the rule stops living in the column
+ * it affects -- so this is the list that answers the question the column can
+ * no longer answer on its own: what is arriving on this sheet from somewhere
+ * else, and what sent it. Grouped by destination, because "why is Bluff +46?"
+ * is the question a player actually arrives with.
+ *
+ * Absent when the character forwards nothing, like the problems panel: an
+ * empty box that is always there teaches a player to stop looking at it.
+ */
+export function forwardedHtml(rows, query) {
+  if (!rows.length) return '';
+  const q = String(query || '').trim().toLowerCase();
+  const matches = rows.filter((r) => !q
+    || String(r.expr).toLowerCase().includes(q)
+    || String(r.to).toLowerCase().includes(q)
+    || String(r.where).toLowerCase().includes(q));
+
+  return `<section class="panel span2" data-fx-section="forwarded">
+    <h3>Forwarded bonuses
+      <span class="badge">${query ? `${matches.length} of ${rows.length}` : rows.length}</span>
+    </h3>
+    <p class="hint">Bonuses written as <code>{skill.bluff += …}</code> in one place and added
+      somewhere else. Each lands on the number named here, and shows in gold beside the field
+      it lands on.</p>
+    ${matches.length === 0
+    ? `<p class="empty">No forwarded bonus here matches &ldquo;${esc(query)}&rdquo;.</p>`
+    : matches.map((r) => `<div class="fx-row${r.error ? ' bad' : ''}">
+        <div class="fx-rowhead">
+          <strong>${esc(r.to)}</strong><code class="fx-into">${r.value < 0 ? '-=' : '+='}</code>
+          ${r.type ? `<span class="badge">${esc(r.type)}</span>` : ''}
+          <span class="badge">${esc(r.where)}</span>
+          ${r.error ? '<span class="badge err">not working</span>' : ''}
+          ${!r.error && r.dropped?.length
+    ? `<span class="badge err">${esc(r.dropped.join(', '))} goes nowhere</span>` : ''}
+          <span class="fx-rowval">${r.error ? '—'
+    : esc(`${r.value > 0 ? '+' : ''}${formatNumber(r.value)}`)}</span>
+        </div>
+        <code class="fx-code fx-rowsrc" data-fx-insert="${esc(r.expr)}" data-fx-replace="1"
+          title="Click to open this in the box above">${highlight(r.expr)}</code>
+        ${r.error ? `<div class="fx-err">${esc(r.error)}</div>` : ''}
+      </div>`).join('')}
+  </section>`;
+}
+
 /* ------------------------------------------------------------------ *
  * The reference
  * ------------------------------------------------------------------ */
@@ -306,13 +357,13 @@ function egHtml(source, scope) {
   ? `<span class="fx-eg-val">${esc(w.display)}</span>` : ''}</code>`;
 }
 
-/** The three token forms — the only syntax there is to learn. */
+/** The four token forms — the only syntax there is to learn. */
 function formsHtml(scope) {
   return `<section class="panel span2">
     <h3>Making your own value</h3>
     <p class="hint">Anywhere you can type a description — a class feature, a note, a trait, a veil,
       a weapon&#39;s properties — braces turn part of the sentence into a number the sheet keeps up
-      to date. There are three of them, and that is the whole of the syntax.</p>
+      to date. There are four of them, and that is the whole of the syntax.</p>
     <div class="fx-forms">
       ${TOKEN_FORMS.map((f) => `<div class="fx-form">
         <code class="fx-code fx-formcode">${esc(f.form)}</code>
@@ -475,7 +526,7 @@ export function referenceHtml(scope, open) {
   return `<section class="panel span2 fx-ref">
     <details ${open ? 'open' : ''} data-fx-ref>
       <summary><h3 style="display:inline">Reference</h3>
-        <span class="hint"> — the three forms, where they work, every operator and function,
+        <span class="hint"> — the four forms, where they work, every operator and function,
         and the rules that are not guessable</span></summary>
       <div class="grid" style="margin-top:10px">
         ${formsHtml(scope)}
@@ -503,7 +554,8 @@ export function referenceHtml(scope, open) {
  * @param {boolean}  o.refOpen      whether the reference is unfolded
  */
 export function formulaPanelHtml({
-  names, scope, inlineNames = {}, audit = [], problems = [], draft = '', query = '', refOpen = false,
+  names, scope, inlineNames = {}, audit = [], problems = [], forwarded = [],
+  draft = '', query = '', refOpen = false,
 }) {
   const known = new Set(names);
   const groups = valueGroups(names, scope, inlineNames, query);
@@ -521,6 +573,7 @@ export function formulaPanelHtml({
     ${problemsHtml(problems)}
     ${scratchpadHtml(draft, scope, known)}
     ${myFormulasHtml(audit, query)}
+    ${forwardedHtml(forwarded, query)}
     ${browserHtml(groups, total, query)}
     ${referenceHtml(scope, refOpen)}
   </div>`;

@@ -813,6 +813,13 @@ inputs live, flag unknown names in red, and appear in the Formula Audit. Misc fo
 may read abilities, level and inline names but not other skills' totals — and inline
 names may not read skills — so no cycle can form between the two.
 
+**A bonus can also arrive from somewhere else.** A feature that grants the same bonus to
+several skills is one rule, and it is written once, in the feature that grants it:
+`Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}`. The amount shows in
+gold beside the Misc column of every skill it lands on, and hovering it names the sentence
+that sent it. Misc goes on saying what *you* typed. See
+[Forwarded bonuses](formulas-and-trackers.md#forwarded-bonuses--a-rule-written-once).
+
 Both cells show the **resolved value in place** rather than the source text with the
 answer parked beside it: the column reads as numbers, and clicking or tabbing into a
 cell swaps the source in without moving anything. The same field is used for crafting

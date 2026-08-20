@@ -178,7 +178,8 @@ for (const { prefix, eg } of VALUE_GUIDE) {
 }
 check('every function entry has a group', FUNCTION_HELP.every((f) => f.group && f.what && f.sig), true);
 check('places guide is populated', PLACES_GUIDE.length >= 4, true);
-check('three token forms', TOKEN_FORMS.map((t) => t.form), ['{= expr}', '{name = expr}', '{name}']);
+check('four token forms', TOKEN_FORMS.map((t) => t.form),
+  ['{= expr}', '{name = expr}', '{name}', '{dest += expr}']);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
