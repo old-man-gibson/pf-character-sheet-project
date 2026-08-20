@@ -2309,6 +2309,40 @@ console.log('sub-systems in use, marked on classes, and the two views of the bar
   check('delete drops the session bar entry', c.tabOrder().includes('sys:Rites'), false);
 }
 
+console.log('session quick actions -- damage, healing, and the night\'s rest');
+{
+  const c = new Character(blankDocument({ name: 'Quick', level: 5 }));
+  const max = c.hpState.max;
+
+  c.set('hp.temp', 5);
+  const hit = c.applyDamage(8);
+  check('temporary hit points absorb first', [hit.fromTemp, c.data.hp.temp, c.data.hp.current], [5, 0, max - 3]);
+  c.applyDamage(max);
+  check('damage crosses zero -- dying is watched, not clamped', c.data.hp.current < 0, true);
+
+  c.set('hp.current', max - 10);
+  c.set('hp.nonlethal', 4);
+  const heal = c.applyHealing(6);
+  check('healing raises current and erases nonlethal alike',
+    [heal.healed, c.data.hp.current, c.data.hp.nonlethal], [6, max - 4, 0]);
+  c.applyHealing(100);
+  check('healing stops at the maximum', c.data.hp.current, max);
+
+  // Rest refreshes what reads as daily and leaves other rhythms alone.
+  const daily = c.addTracker({ name: 'Ki', maxFormula: '5', refresh: 'Daily' });
+  const weekly = c.addTracker({ name: 'Favors', maxFormula: '3', refresh: 'per week' });
+  c.updateTracker(daily.id, { current: 4 });
+  c.updateTracker(weekly.id, { current: 2 });
+  check('rest refreshes the daily pool only', [c.restRefresh(),
+    c.trackers.find((t) => t.id === daily.id).current,
+    c.trackers.find((t) => t.id === weekly.id).current], [1, 0, 2]);
+
+  // The dashboard's reminder list is ordinary list data and survives a round trip.
+  c.listAdd('effects', { name: 'Studied Target', note: '+2 vs the marked foe', on: true });
+  check('active-effect reminders round-trip',
+    new Character(c.toJSON()).data.effects, [{ name: 'Studied Target', note: '+2 vs the marked foe', on: true }]);
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante

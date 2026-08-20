@@ -166,6 +166,29 @@ Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
 the numbers a table asks for mid-fight — **HP, AC (touch/FF) and the three saves**,
 with a ticked condition's adjusted values in place of the base ones.
 
+In the session view the **Overview is a dashboard** rather than the full page:
+
+- **Conditions** — what is on the character as chips; × takes one off, the picker
+  puts one on already ticked.
+- **Resources** — every tracker as one row: its meter, − / + and the count, exactly
+  the machinery the Trackers tab drives.
+- **Offense** — melee/ranged/CMB/initiative with their d20 buttons, then each
+  weapon's attack and damage line. **Expand** brings the full Attack and Weapons
+  panels up in place.
+- **Defense** — AC (touch/FF) and CMD, condition-adjusted; Expand brings the armour
+  and save breakdowns up.
+- **Key skills** — the six best by bonus with their roll buttons; Expand lists every
+  trained skill.
+- **Active effects** — a reminder list (name, note, on/off) for what is running:
+  Studied Target, a domain stance. Reminders move no numbers — a buff that should is
+  a condition or a tracker.
+- **Quick actions** — an amount plus **Damage** (temporary HP absorb first),
+  **Heal** (raises current to the max and erases nonlethal alike) and **Rest**
+  (every tracker whose refresh reads as daily goes back to unspent).
+
+Expand states persist with the character; the full Overview is one Build-view click
+away.
+
 Each view keeps its own bar (`uiPrefs.tabOrder` and `uiPrefs.sessionTabOrder`): the
 ⚙ manager always edits the view you are in, says which one that is, and its reset
 button re-seeds only that view — so hiding Crafting during play never touches the

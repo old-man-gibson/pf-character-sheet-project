@@ -89,6 +89,29 @@ export const SHEET_CSS = `
 .sessionstrip .dim { font-size: 0.75rem; }
 .sessionstrip .hptemp { font-size: 0.75rem; }
 .head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- the session dashboard ---------- */
+/* Cards over panels: the same .panel chrome, but each card leads with the
+   one line that answers the common question, and Expand brings the full
+   build-view panel up in place. */
+.dashboard .dashconds { display: flex; flex-wrap: wrap; gap: 6px; }
+.dashboard .cond-pill { font-size: 0.85rem; padding: 3px 6px 3px 10px; gap: 5px; }
+.dashboard .cond-pill input { width: 3rem; }
+.dashtracker { display: grid; grid-template-columns: minmax(7rem, 13rem) 1fr auto; gap: 10px; align-items: center; padding: 4px 0; }
+.dashtracker.invalid .tname { color: var(--cs-bad); }
+.dashtracker .tname { font-weight: 620; font-size: 0.85rem; }
+.dashtracker .dashmeter { min-width: 0; }
+.dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
+.dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.dashstat .now { display: inline; margin: 0; }
+.dashdmg { font-weight: 620; font-variant-numeric: tabular-nums; }
+.dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
+.dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
+@media (max-width: 700px) {
+  .dashtracker { grid-template-columns: 1fr auto; }
+  .dashtracker .dashmeter { grid-column: 1 / -1; }
+}
 /* Why an offered file was refused -- stays up until dismissed, because the
    fix (re-run the converter, pick a different file) happens elsewhere. */
 .importerr {

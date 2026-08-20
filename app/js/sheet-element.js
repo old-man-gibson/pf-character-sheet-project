@@ -1211,7 +1211,10 @@ export class CharacterSheetElement extends HTMLElement {
       case 'extras': return this.#extrasPanel();
       case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
-      default: return this.#overviewPanel();
+      // In the session view the Overview is a dashboard: the numbers a table
+      // asks for, in cards. The full page is one Build-view click away.
+      default: return this.#model.viewMode() === 'session'
+        ? this.#dashboardPanel() : this.#overviewPanel();
     }
   }
 
@@ -1297,6 +1300,219 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#classesPanel()}
       ${this.#traitsPanel()}
     </div>`;
+  }
+
+  /* ---------------- the session dashboard ---------------- */
+
+  /**
+   * The Overview as it reads mid-session: cards answering what a table
+   * actually asks -- what is on me, what can I spend, what do I roll, what
+   * is running -- with the full machinery one Expand (the same panels the
+   * build view shows) or one Build-view click away. Expand states persist
+   * in uiPrefs.collapsed under dash:* keys, where true means open.
+   */
+  #dashboardPanel() {
+    const open = (key) => !!this.#model.data.uiPrefs?.collapsed?.[`dash:${key}`];
+    const e = this.#model.data.equipment || {};
+    return `<div class="grid dashboard">
+      ${this.#dashConditionsCard()}
+      ${this.#dashResourcesCard()}
+      ${this.#dashOffenseCard(open('offense'))}
+      ${this.#dashDefenseCard(open('defense'))}
+      ${open('offense') ? `${this.#attackPanel()}${this.#weaponsPanel(e)}` : ''}
+      ${open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''}
+      ${this.#dashSkillsCard(open('skills'))}
+      ${this.#dashEffectsCard()}
+      ${this.#dashQuickCard()}
+    </div>`;
+  }
+
+  /** The card's corner control: one click between the summary and the full read. */
+  #dashExpand(key, openNow) {
+    return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
+      aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
+  }
+
+  /** What is on the character right now, as chips; everything else one pick away. */
+  #dashConditionsCard() {
+    const conds = this.#model.data.conditions || {};
+    const cs = this.#model.conditionState;
+    const chip = (name) => {
+      const info = conditionInfo(name);
+      const label = info?.label || name;
+      const title = info ? info.rule : '';
+      if (info?.kind === 'count') {
+        return `<span class="pill cond-pill" title="${esc(title)}">${esc(label)}
+          ${this.#num(`conditions.${name}`, Number(conds[name]) || 0, `min="0" style="width:3rem" aria-label="${esc(label)} count"`)}
+        </span>`;
+      }
+      return `<span class="pill cond-pill" title="${esc(title)}">${esc(label)}
+        <button data-action="dash-cond-off" data-name="${esc(name)}" aria-label="Take ${esc(label)} off">×</button></span>`;
+    };
+    const active = Object.keys(conds).filter((n) => Number(conds[n]) > 0)
+      .sort((a, b) => a.localeCompare(b));
+    // Offer everything not on: the listed-but-unticked and the never-listed both.
+    const options = [...new Set([
+      ...Object.keys(conds).filter((n) => !(Number(conds[n]) > 0)),
+      ...this.#model.availableConditions().map((x) => x.label),
+    ])].sort((a, b) => a.localeCompare(b));
+    return `<section class="panel span2">
+      <h3>Conditions ${cs.active.length ? `<span class="badge err">${cs.active.length} on</span>` : ''}</h3>
+      <div class="pills dashconds">
+        ${active.map(chip).join('') || '<span class="empty">None — all clear.</span>'}
+      </div>
+      <div class="pair" style="margin-top:8px; flex-wrap:wrap">
+        <select data-draft="condition" aria-label="Condition to add">
+          <option value="">Add a condition…</option>
+          ${options.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}
+        </select>
+        <button data-action="dash-add-condition">Add</button>
+      </div>
+      ${cs.notes.length ? `<p class="hint">${cs.notes.map((n) => `${esc(n[0].toUpperCase() + n.slice(1))}.`).join(' ')}</p>` : ''}
+    </section>`;
+  }
+
+  /** Every tracker as one row: name, its own meter, and the − n + controls. */
+  #dashResourcesCard() {
+    const trackers = this.#model.trackers;
+    const row = (t) => {
+      const max = Number(t.max) || 0;
+      const min = Number(t.min) || 0;
+      const cur = Number(t.current) || 0;
+      const draining = this.#isDraining(t);
+      const twoSided = min < 0;
+      const shown = draining ? max - cur : cur;
+      const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
+      const range = min === 0 ? `/ ${max}`
+        : (twoSided && min === -max) ? `/ ±${max}` : `/ ${signed(min)}…${signed(max)}`;
+      return `<div class="dashtracker${t.error ? ' invalid' : ''}">
+        <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
+        <div class="dashmeter">${this.#trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
+        <span class="tracker-controls">
+          <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
+          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
+            aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
+          <span class="pool">${range}</span>
+          <button data-tracker-step="${t.id}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
+        </span>
+      </div>`;
+    };
+    return `<section class="panel span2">
+      <h3>Resources
+        <button class="linkish" style="margin-left:auto" data-action="goto-trackers"
+          title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
+      </h3>
+      ${trackers.map(row).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
+    </section>`;
+  }
+
+  /** The attack numbers and every weapon's line; Expand brings the full panels up. */
+  #dashOffenseCard(openNow) {
+    const c = this.#model.data;
+    const cs = this.#model.conditionState;
+    const weapons = c.equipment?.weapons || [];
+    const now = (key) => (cs.changed && cs.delta[key]
+      ? `<span class="now" title="With conditions applied">now ${fmt(cs.adjusted[key])}</span>` : '');
+    const stat = (label, value, nowKey, kind, ref, rollLabel) => `<span class="dashstat">${esc(label)}
+      <strong>${fmt(value)}</strong>${now(nowKey)}${this.#rollButton(kind, ref, rollLabel, cs)}</span>`;
+    const wrow = (w, i) => `<div class="statline">
+      <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
+      <span class="value rollpair"><strong>${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</strong>
+        <span class="dashdmg">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
+        ${this.#rollButton('weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}</span>
+    </div>`;
+    return `<section class="panel">
+      <h3>Offense ${this.#dashExpand('offense', openNow)}</h3>
+      <div class="dashstats">
+        ${stat('Melee', c.attack.totalMelee, 'melee', 'mode', 'melee', 'a melee attack')}
+        ${stat('Ranged', c.attack.totalRanged, 'ranged', 'mode', 'ranged', 'a ranged attack')}
+        ${stat('CMB', c.attack.totalCmb, 'cmb', 'mode', 'cmb', 'a combat maneuver')}
+        ${stat('Init', c.hp.initiative, 'initiative', 'initiative', 'self', 'initiative')}
+      </div>
+      <div class="rowlist" style="margin-top:6px">
+        ${weapons.map(wrow).join('') || '<p class="empty">No weapons yet — Expand to add one.</p>'}
+      </div>
+      <p class="hint">Iteratives ${esc(c.attack.iterative || '—')}${cs.changed && cs.delta.damage
+    ? ` · ${fmt(cs.delta.damage)} on damage rolls from conditions` : ''}</p>
+    </section>`;
+  }
+
+  /** AC and CMD at a glance, condition-adjusted; Expand brings the breakdowns up. */
+  #dashDefenseCard(openNow) {
+    const d = this.#model.data.defenses;
+    const cs = this.#model.conditionState;
+    const shown = (key, base) => (cs.changed && cs.delta[key]
+      ? `<strong class="now" title="With conditions applied">${cs.adjusted[key]}</strong>` : `<strong>${base}</strong>`);
+    return `<section class="panel">
+      <h3>Defense ${this.#dashExpand('defense', openNow)}</h3>
+      ${this.#lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${d.touch} · FF ${d.flatFooted}</span>`, true)}
+      ${this.#lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${d.ffCmd}</span>`, true)}
+      <p class="hint">The saves stand in the strip above. Expand for the armour and
+        save breakdowns by bonus type.</p>
+    </section>`;
+  }
+
+  /** The skills that come up, best first; Expand lists every trained one. */
+  #dashSkillsCard(openNow) {
+    const cs = this.#model.conditionState;
+    const all = (this.#model.data.skills || []).map((s, i) => ({ s, i })).filter(({ s }) => !s.hidden);
+    const byBonus = (a, b) => (Number(b.s.bonus) || 0) - (Number(a.s.bonus) || 0);
+    const trained = all.filter(({ s }) => (Number(s.totalRanks) || 0) > 0).sort(byBonus);
+    const pool = trained.length ? trained : [...all].sort(byBonus);
+    const rows = openNow ? pool : pool.slice(0, 6);
+    const row = ({ s, i }) => `<div class="statline">
+      <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
+      <span class="value rollpair">${fmt(s.bonus)}${this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
+    </div>`;
+    return `<section class="panel">
+      <h3>Key skills ${this.#dashExpand('skills', openNow)}</h3>
+      <div class="rowlist">${rows.map(row).join('') || '<p class="empty">No skills yet.</p>'}</div>
+      <p class="hint">${trained.length} trained · ${openNow ? 'all of them above'
+    : `the top ${Math.min(6, pool.length)} by bonus`} — ranks are spent on the Skills tab.</p>
+    </section>`;
+  }
+
+  /** Player-written reminders of what is running. They move no numbers. */
+  #dashEffectsCard() {
+    const effects = this.#model.data.effects || [];
+    const row = (x, i) => `<div class="item statline">
+      <span class="label pair" style="flex:1">
+        ${this.#itemCheck('effects', i, 'on', x.on !== false)}
+        ${this.#itemText('effects', i, 'name', x.name, 'Studied Target')}
+      </span>
+      <span class="value pair" style="flex:1">
+        ${this.#itemText('effects', i, 'note', x.note, '+2 vs the marked foe')}
+        <button class="danger" data-remove="effects|${i}" aria-label="Remove effect">×</button>
+      </span>
+    </div>`;
+    return `<section class="panel">
+      <h3>Active effects</h3>
+      <div class="rowlist">${effects.map(row).join('') || '<p class="empty">Nothing running.</p>'}</div>
+      <div style="margin-top:8px">${this.#addButton('effects', 'Add effect', { name: '', note: '', on: true })}</div>
+      <p class="hint">Reminders, not rules: a ticked effect moves no numbers — a buff
+        that should is a condition or a tracker. This just keeps what is running in sight.</p>
+    </section>`;
+  }
+
+  /** Damage, healing and the night's rest, one field and three buttons. */
+  #dashQuickCard() {
+    const hp = this.#model.hpState;
+    return `<section class="panel span2">
+      <h3>Quick actions</h3>
+      <div class="pair" style="flex-wrap:wrap">
+        <input type="number" min="0" data-draft="quickHp" value="${esc(this.#draft.quickHp ?? '')}"
+          placeholder="Amount" style="width:5.5rem" aria-label="Hit points to apply">
+        <button data-action="quick-damage"
+          title="Temporary hit points absorb first; the rest comes off current">Damage</button>
+        <button data-action="quick-heal"
+          title="Current climbs to the maximum, and the same points erase nonlethal">Heal</button>
+        <span class="dashsep" aria-hidden="true"></span>
+        <button data-action="quick-rest"
+          title="Every tracker with a daily refresh goes back to unspent. Slots and pools with other rhythms are yours to move.">Rest</button>
+      </div>
+      <p class="hint">HP ${hp.current}/${hp.max}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
+    ? ` · ${hp.nonlethal} nonlethal` : ''} — the strip above follows along.</p>
+    </section>`;
   }
 
   #detailsPanel() {
@@ -9450,6 +9666,63 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'class-system-toggle':
         this.#model.toggleClassSystem(Number(button?.dataset.index), button?.dataset.system);
+        this.#render();
+        break;
+      // The dashboard's condition chips: Add puts a condition on ticked, ×
+      // takes it off (it stays in the build view's grid, unticked).
+      case 'dash-add-condition': {
+        const name = String(this.#draft.condition || '').trim();
+        if (name) {
+          const conds = this.#model.data.conditions || (this.#model.data.conditions = {});
+          conds[name] = conditionInfo(name)?.kind === 'count'
+            ? Math.max(1, Number(conds[name]) || 0) : true;
+          this.#model.recompute();
+        }
+        this.#draft.condition = '';
+        this.#render();
+        break;
+      }
+      case 'dash-cond-off': {
+        const name = button?.dataset.name;
+        if (name) {
+          const conds = this.#model.data.conditions || {};
+          conds[name] = conditionInfo(name)?.kind === 'count' ? 0 : false;
+          this.#model.recompute();
+        }
+        this.#render();
+        break;
+      }
+      case 'quick-damage': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.applyDamage(n);
+          this.#historyNote = `Took ${r.taken} damage${r.fromTemp ? ` (${r.fromTemp} to temporary hit points)` : ''}.`;
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-heal': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.applyHealing(n);
+          this.#historyNote = r.healed ? `Healed ${r.healed}.` : 'Already at full hit points.';
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-rest': {
+        const count = this.#model.restRefresh();
+        this.#historyNote = count
+          ? `Rested — ${count} tracker${count === 1 ? '' : 's'} refreshed.`
+          : 'Rested — nothing with a daily refresh was spent.';
+        this.#render();
+        break;
+      }
+      case 'goto-trackers':
+        if (this.#barEntries().some((x) => x.id === 'trackers')) this.#tab = 'trackers';
+        else this.#historyNote = 'The Trackers tab is hidden in this view — show it from the ⚙ manager.';
         this.#render();
         break;
       case 'tech-select':

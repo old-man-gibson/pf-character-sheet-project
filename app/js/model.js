@@ -3506,6 +3506,10 @@ export class Character {
     for (const cls of d.classes || []) {
       if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
     }
+    // Active-effect reminders on the session dashboard: a name, a note and an
+    // on/off tick. They move no numbers -- a buff that should is a condition
+    // or a tracker -- they just keep "Studied Target, +2" in sight during play.
+    if (!Array.isArray(d.effects)) d.effects = [];
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
@@ -5089,6 +5093,62 @@ export class Character {
   resetTabOrder() {
     return this.setTabOrder(this.viewMode() === 'session'
       ? this.sessionDefaultTabs() : DEFAULT_TAB_ORDER);
+  }
+
+  /* ---------------- session quick actions ---------------- */
+
+  /**
+   * Take damage the way the table calls it out: temporary hit points absorb
+   * first, the rest comes off current. No floor -- below zero is the dying
+   * machinery's business, and it already watches `current`.
+   * Returns what actually happened, for the toast that reports it.
+   */
+  applyDamage(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!n) return { taken: 0, fromTemp: 0 };
+    const hp = this.data.hp;
+    const temp = Math.max(0, Number(hp.temp) || 0);
+    const fromTemp = Math.min(temp, n);
+    hp.temp = temp - fromTemp;
+    hp.current = (Number(hp.current) || 0) - (n - fromTemp);
+    this.recompute();
+    this.#emit({ type: 'quick-action', action: 'damage', amount: n });
+    return { taken: n, fromTemp };
+  }
+
+  /**
+   * Heal: current climbs to the maximum, and the same points erase nonlethal
+   * (healing removes nonlethal damage point for point alongside lethal).
+   */
+  applyHealing(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!n) return { healed: 0 };
+    const hp = this.data.hp;
+    const max = this.hpState.max;
+    const before = Number(hp.current) || 0;
+    hp.current = Math.min(max, before + n);
+    hp.nonlethal = Math.max(0, (Number(hp.nonlethal) || 0) - n);
+    this.recompute();
+    this.#emit({ type: 'quick-action', action: 'heal', amount: n });
+    return { healed: hp.current - before };
+  }
+
+  /**
+   * A night's rest: every tracker whose refresh reads as daily -- "Daily",
+   * "per day", "on rest", "at dawn" -- goes back to unspent (a two-sided
+   * meter to its zero mark). Hit points, spell slots and pools with other
+   * rhythms keep their own rules and are the player's to move.
+   * Returns how many trackers moved.
+   */
+  restRefresh() {
+    let count = 0;
+    for (const t of this.trackers) {
+      if (!/daily|day|rest|dawn|morning|night/i.test(String(t.refresh || ''))) continue;
+      if ((Number(t.current) || 0) !== 0) { t.current = 0; count++; }
+    }
+    if (count) this.recompute();
+    this.#emit({ type: 'quick-action', action: 'rest', count });
+    return count;
   }
 
   /** Put a tab on the bar (at the end, or at `at`) -- a no-op if it is already there. */
