@@ -168,26 +168,44 @@ with a ticked condition's adjusted values in place of the base ones.
 
 In the session view the **Overview is a dashboard** rather than the full page:
 
-- **Conditions** — what is on the character as chips; × takes one off, the picker
-  puts one on already ticked.
-- **Resources** — every tracker as one row: its meter, − / + and the count, exactly
-  the machinery the Trackers tab drives.
-- **Offense** — melee/ranged/CMB/initiative with their d20 buttons, then each
-  weapon's attack and damage line. **Expand** brings the full Attack and Weapons
-  panels up in place.
-- **Defense** — AC (touch/FF) and CMD, condition-adjusted; Expand brings the armour
-  and save breakdowns up.
+- **Conditions** — what is on the character as chips; × takes one off, and
+  **+ Add condition** opens the catalogue as short shelves (Fear, Worn down, Held,
+  Addled, Senses, Footing) where a click puts one on already ticked — Energy Drain
+  climbs a level per click.
+- **Buffs** — see below.
+- **Resources** — every tracker as a compact row (its meter, − / + and the count),
+  packed two or three across as the width allows, in the same order as the Trackers
+  tab, which stays the canonical detailed view.
+- **Offense** — melee/ranged/CMB/initiative with their d20 buttons; each weapon's
+  line, whose d20 copies a **full attack** (every iterative, damage and crit); and a
+  Full attack line for the bare iterative chain. **Expand** brings the full Attack
+  and Weapons panels up in place.
+- **Defense** — AC (touch/FF) and CMD, then **Fortitude, Reflex and Will with their
+  roll buttons**, all buff- and condition-adjusted; Expand brings the armour and
+  save breakdowns up.
 - **Key skills** — the six best by bonus with their roll buttons; Expand lists every
   trained skill.
-- **Active effects** — a reminder list (name, note, on/off) for what is running:
-  Studied Target, a domain stance. Reminders move no numbers — a buff that should is
-  a condition or a tracker.
+- **Active effects** — a reminder list (name, note, on/off) for what is running.
+  Reminders move no numbers — a bonus with numbers behind it is a **buff**.
 - **Quick actions** — an amount plus **Damage** (temporary HP absorb first),
   **Heal** (raises current to the max and erases nonlethal alike) and **Rest**
   (every tracker whose refresh reads as daily goes back to unspent).
 
 Expand states persist with the character; the full Overview is one Build-view click
 away.
+
+### Buffs
+
+Buffs live on the session dashboard and on the build Overview (under Conditions): a
+row per buff with an on/off tick, a name, and six dials — **Attack, Damage, AC,
+Saves, Skills, Init**. A ticked buff rides the same machinery as a ticked
+condition, so every number it moves shows its *now* value beside the base — green
+when it went up — on the strip, the dashboard, the Overview and in the d20 copies.
+
+Every dial takes a plain number **or a formula** in the same sandbox as the
+trackers: a Citadel banner's `1 + essence.shoulder` to Attack and AC keeps the
+bonus right as shoulder essence is re-invested, without touching the buff again. A
+broken formula degrades to 0 with the error shown on the row.
 
 Each view keeps its own bar (`uiPrefs.tabOrder` and `uiPrefs.sessionTabOrder`): the
 ⚙ manager always edits the view you are in, says which one that is, and its reset

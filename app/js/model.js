@@ -48,7 +48,7 @@ import {
   PREP_STYLE_KEYS, CASTING_SOURCE_KEYS, prepStyle, castingNoun,
   bonusSpellSlots, castableAt, statScore,
   PRIMORDIA_LEVELS, PRIMORDIA_REPEAT_FROM, primordiaTechnique, primordiaGrantsAt, grantCount,
-  GAME_SYSTEMS,
+  GAME_SYSTEMS, BUFF_MOD_KEYS,
 } from './rules.js';
 import {
   COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion, computeCompanion,
@@ -3507,9 +3507,12 @@ export class Character {
       if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
     }
     // Active-effect reminders on the session dashboard: a name, a note and an
-    // on/off tick. They move no numbers -- a buff that should is a condition
-    // or a tracker -- they just keep "Studied Target, +2" in sight during play.
+    // on/off tick. They move no numbers -- a buff that should is a buff row --
+    // they just keep "watching the north door" in sight during play.
     if (!Array.isArray(d.effects)) d.effects = [];
+    // Buffs: named, tickable bonuses whose dials (BUFF_MOD_KEYS) take a number
+    // or a formula, and ride the condition totals so every "now" figure moves.
+    if (!Array.isArray(d.buffs)) d.buffs = [];
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
@@ -4598,6 +4601,9 @@ export class Character {
     this.#recomputePrimordia();
     this.#recomputeCompanions();
     this.#recomputeTrackers();
+    // After the trackers and sub-systems, so a buff's formula can read them
+    // ("1 + essence.shoulder" follows the essence as it is re-invested).
+    this.#recomputeBuffs();
     this.#emit({ type: 'recompute' });
     return this;
   }
@@ -5093,6 +5099,41 @@ export class Character {
   resetTabOrder() {
     return this.setTabOrder(this.viewMode() === 'session'
       ? this.sessionDefaultTabs() : DEFAULT_TAB_ORDER);
+  }
+
+  /**
+   * Resolve each buff's dials. A dial takes a plain number or a formula in
+   * the tracker sandbox -- "1 + essence.shoulder" keeps a Citadel banner's
+   * bonus right as essence moves -- and the resolved number lands beside the
+   * source (`attackNum`…), exactly as a speed's bonus does. conditionState
+   * reads only the resolved side, so a broken formula degrades to 0 with the
+   * error on the row rather than taking the sheet down.
+   */
+  #recomputeBuffs() {
+    const buffs = this.data.buffs || [];
+    if (!buffs.length) return;
+    const scope = this.scope();
+    for (const b of buffs) {
+      if (!b || typeof b !== 'object') continue;
+      const errs = [];
+      for (const [key] of BUFF_MOD_KEYS) {
+        const raw = b[key];
+        let value = 0;
+        b[`${key}Error`] = null;
+        if (typeof raw === 'string' && raw.trim() !== '') {
+          try {
+            value = Math.floor(Number(evaluateFormula(raw, scope)) || 0);
+          } catch (err) {
+            b[`${key}Error`] = err.message;
+            errs.push(`${key}: ${err.message}`);
+          }
+        } else {
+          value = Math.floor(Number(raw) || 0);
+        }
+        b[`${key}Num`] = value;
+      }
+      b.error = errs.length ? errs.join('; ') : null;
+    }
   }
 
   /* ---------------- session quick actions ---------------- */
@@ -7772,7 +7813,21 @@ export class Character {
       const count = conditionCount(info, value);
       if (count > 0) active.push({ name, info: info || { key: name, label: name }, count });
     }
-    const totals = conditionTotals(active);
+    // Ticked buffs ride the same totals as conditions: their resolved dials
+    // (recomputeBuffs) are mods, so every "now" figure moves without a second
+    // pipeline. They have no ladder group, so nothing supersedes them.
+    const buffsOn = [];
+    for (const b of c.buffs || []) {
+      if (!b?.on) continue;
+      const bmods = {};
+      for (const [key] of BUFF_MOD_KEYS) {
+        const v = Number(b[`${key}Num`]) || 0;
+        if (v) bmods[key] = v;
+      }
+      const label = String(b.name || '').trim() || 'Buff';
+      buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods }, count: 1 });
+    }
+    const totals = conditionTotals([...active, ...buffsOn]);
     const { mods } = totals;
 
     // Ability modifiers as the conditions leave them, against the temporary
@@ -7862,7 +7917,7 @@ export class Character {
     }
 
     return {
-      active, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+      active, buffsOn: buffsOn.length, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
         || totals.speed !== 1 || !!totals.acVsMelee || !!totals.acVsRanged,
     };

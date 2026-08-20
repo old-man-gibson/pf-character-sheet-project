@@ -2343,6 +2343,37 @@ console.log('session quick actions -- damage, healing, and the night\'s rest');
     new Character(c.toJSON()).data.effects, [{ name: 'Studied Target', note: '+2 vs the marked foe', on: true }]);
 }
 
+console.log('buffs -- ticked bonuses riding the condition machinery, dials take formulas');
+{
+  const c = new Character(blankDocument({ name: 'Buffy', level: 6 }));
+  c.listAdd('buffs', {
+    name: 'Haste', on: true, attack: 1, damage: 0, ac: 1, saves: 0, skills: 0, initiative: 0, note: '',
+  });
+  let cs = c.conditionState;
+  check('a ticked buff moves the now numbers',
+    [cs.changed, cs.adjusted.melee - cs.base.melee, cs.adjusted.ac - cs.base.ac], [true, 1, 1]);
+  check('and counts as on', cs.buffsOn, 1);
+  c.setItem('buffs', 0, 'on', false);
+  cs = c.conditionState;
+  check('unticked it moves nothing', [cs.changed, cs.buffsOn], [false, 0]);
+
+  // A dial takes a formula in the tracker sandbox and keeps up with the scope.
+  c.setItem('buffs', 0, 'on', true);
+  c.setItem('buffs', 0, 'attack', '1 + floor(level / 2)');
+  check('a formula dial resolves against the scope', c.data.buffs[0].attackNum, 4);
+  check('and lands on the roll numbers', c.conditionState.adjusted.melee - c.conditionState.base.melee, 4);
+  c.setItem('buffs', 0, 'attack', 'no_such_name');
+  check('a broken dial degrades to 0 with the error on the row',
+    [c.data.buffs[0].attackNum, !!c.data.buffs[0].error], [0, true]);
+
+  // Buffs and conditions add up in the same totals.
+  c.setItem('buffs', 0, 'attack', 2);
+  c.data.conditions = { Shaken: true };
+  c.recompute();
+  check('a +2 buff and shaken (−2) cancel on attacks',
+    c.conditionState.adjusted.melee - c.conditionState.base.melee, 0);
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante

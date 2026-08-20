@@ -97,10 +97,25 @@ export const SHEET_CSS = `
 .dashboard .dashconds { display: flex; flex-wrap: wrap; gap: 6px; }
 .dashboard .cond-pill { font-size: 0.85rem; padding: 3px 6px 3px 10px; gap: 5px; }
 .dashboard .cond-pill input { width: 3rem; }
-.dashtracker { display: grid; grid-template-columns: minmax(7rem, 13rem) 1fr auto; gap: 10px; align-items: center; padding: 4px 0; }
+/* The condition picker: short shelves, not one long dropdown. */
+.condcats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 10px; margin-top: 10px; }
+.condcat { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.condcat h4 { margin: 0 0 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted); }
+.condcat button { text-align: left; font-size: 0.8rem; }
+.condcat button[disabled] { opacity: 0.5; }
+/* Trackers pack side by side and keep their listed order; the Trackers tab
+   stays the canonical one-per-row read. */
+.dashtrackers { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 2px 18px; }
+.dashtracker { display: grid; grid-template-columns: minmax(5.5rem, max-content) 1fr auto; gap: 8px; align-items: center; padding: 4px 0; min-width: 0; }
 .dashtracker.invalid .tname { color: var(--cs-bad); }
-.dashtracker .tname { font-weight: 620; font-size: 0.85rem; }
-.dashtracker .dashmeter { min-width: 0; }
+.dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
+.dashtracker .dashmeter { min-width: 3rem; }
+/* One reminder per block: the tick and name on the first line, the note under. */
+.effectlist { display: grid; gap: 8px; }
+.effectrow { display: grid; gap: 4px; }
+.effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
+.effectrow.off input[type="text"] { opacity: 0.55; }
+.now.up { color: var(--cs-good); }
 .dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
 .dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }

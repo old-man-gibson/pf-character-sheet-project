@@ -1956,6 +1956,37 @@ export const SHEET_CONDITIONS = ['blinded', 'cowering', 'dazzled', 'deafened',
   'helpless', 'panicked', 'paralyzed', 'pinned', 'prone', 'shaken', 'sickened',
   'stunned'];
 
+/**
+ * How a condition picker shelves the catalogue: one shelf per kind of trouble,
+ * so twenty-odd conditions read as six short columns rather than one long list.
+ * (`group` above is the supersession ladder, a different thing.)
+ */
+export const CONDITION_CATS = ['Fear', 'Worn down', 'Held', 'Addled', 'Senses', 'Footing'];
+const CONDITION_CAT_KEYS = {
+  Fear: ['shaken', 'frightened', 'panicked', 'cowering'],
+  'Worn down': ['fatigued', 'exhausted', 'sickened', 'nauseated', 'energyDrain'],
+  Held: ['grappled', 'pinned', 'entangled', 'helpless', 'paralyzed'],
+  Addled: ['dazed', 'staggered', 'stunned', 'confused', 'unconscious'],
+  Senses: ['blinded', 'dazzled', 'deafened'],
+  Footing: ['prone', 'flatFooted'],
+};
+for (const [cat, keys] of Object.entries(CONDITION_CAT_KEYS)) {
+  for (const key of keys) {
+    const cond = CONDITIONS.find((x) => x.key === key);
+    if (cond) cond.cat = cat;
+  }
+}
+
+/**
+ * The numeric dials a buff can turn, in the order a buff editor shows them.
+ * Each key is one the condition totals already sum, so a ticked buff rides the
+ * same machinery as a ticked condition -- every "now" number moves with it.
+ */
+export const BUFF_MOD_KEYS = [
+  ['attack', 'Attack'], ['damage', 'Damage'], ['ac', 'AC'],
+  ['saves', 'Saves'], ['skills', 'Skills'], ['initiative', 'Init'],
+];
+
 const CONDITION_INDEX = new Map();
 for (const cond of CONDITIONS) {
   for (const name of [cond.key, cond.label, ...(cond.aliases || [])]) {

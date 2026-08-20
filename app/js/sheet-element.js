@@ -74,7 +74,7 @@ import {
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
-  mergeLayout, GAME_SYSTEMS,
+  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS,
 } from './rules.js';
 import {
   COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
@@ -452,6 +452,8 @@ export class CharacterSheetElement extends HTMLElement {
   #confirmDelete = null;
   /** Which Classes row has its sub-system picker open (index, or null). */
   #openClassSystems = null;
+  /** Whether the dashboard's grouped condition picker is unfolded. */
+  #condPickerOpen = false;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -1084,11 +1086,12 @@ export class CharacterSheetElement extends HTMLElement {
     const s = c.saves;
     const cs = this.#model.conditionState;
     const shown = (key, base, format = fmt) => (cs.changed && cs.delta[key]
-      ? `<strong class="now" title="With conditions applied">${format(cs.adjusted[key])}</strong>`
+      ? `<strong class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">${format(cs.adjusted[key])}</strong>`
       : `<strong>${format(base)}</strong>`);
+    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
     return `<div class="subtitle sessionstrip">
       HP <strong${hp.current < hp.max ? ' class="bad"' : ''}>${hp.current}/${hp.max}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
-      &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${d.touch} &middot; FF ${d.flatFooted}</span>
+      &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${moved('touch', d.touch)} &middot; FF ${moved('flatFooted', d.flatFooted)}</span>
       &middot; Fort ${shown('fortitude', s.fortitude.total)}
       Ref ${shown('reflex', s.reflex.total)}
       Will ${shown('will', s.will.total)}
@@ -1296,6 +1299,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#conditionsPanel()}
         ${this.#carryPanel()}
       </div>
+      ${this.#collapsible('buffs', this.#buffsPanel())}
       ${this.#collapsible('wealth', this.#wealthPanel())}
       ${this.#classesPanel()}
       ${this.#traitsPanel()}
@@ -1316,6 +1320,7 @@ export class CharacterSheetElement extends HTMLElement {
     const e = this.#model.data.equipment || {};
     return `<div class="grid dashboard">
       ${this.#dashConditionsCard()}
+      ${this.#buffsPanel()}
       ${this.#dashResourcesCard()}
       ${this.#dashOffenseCard(open('offense'))}
       ${this.#dashDefenseCard(open('defense'))}
@@ -1351,24 +1356,85 @@ export class CharacterSheetElement extends HTMLElement {
     };
     const active = Object.keys(conds).filter((n) => Number(conds[n]) > 0)
       .sort((a, b) => a.localeCompare(b));
-    // Offer everything not on: the listed-but-unticked and the never-listed both.
-    const options = [...new Set([
-      ...Object.keys(conds).filter((n) => !(Number(conds[n]) > 0)),
-      ...this.#model.availableConditions().map((x) => x.label),
-    ])].sort((a, b) => a.localeCompare(b));
     return `<section class="panel span2">
-      <h3>Conditions ${cs.active.length ? `<span class="badge err">${cs.active.length} on</span>` : ''}</h3>
+      <h3>Conditions ${cs.active.length ? `<span class="badge err">${cs.active.length} on</span>` : ''}
+        <button class="linkish" style="margin-left:auto" data-action="dash-cond-picker"
+          aria-expanded="${this.#condPickerOpen}">${this.#condPickerOpen ? 'Close' : '+ Add condition'}</button>
+      </h3>
       <div class="pills dashconds">
         ${active.map(chip).join('') || '<span class="empty">None — all clear.</span>'}
       </div>
-      <div class="pair" style="margin-top:8px; flex-wrap:wrap">
-        <select data-draft="condition" aria-label="Condition to add">
-          <option value="">Add a condition…</option>
-          ${options.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('')}
-        </select>
-        <button data-action="dash-add-condition">Add</button>
-      </div>
+      ${this.#dashCondPicker()}
       ${cs.notes.length ? `<p class="hint">${cs.notes.map((n) => `${esc(n[0].toUpperCase() + n.slice(1))}.`).join(' ')}</p>` : ''}
+    </section>`;
+  }
+
+  /**
+   * The catalogue as short shelves rather than one long dropdown: a column per
+   * kind of trouble, a button per condition. A click puts it on already
+   * ticked; Energy Drain climbs a level per click; what is on shows pressed.
+   */
+  #dashCondPicker() {
+    if (!this.#condPickerOpen) return '';
+    const conds = this.#model.data.conditions || {};
+    const onNow = (info) => Object.entries(conds)
+      .some(([n, v]) => Number(v) > 0 && conditionInfo(n)?.key === info.key);
+    const btn = (info) => {
+      const on = onNow(info);
+      const count = info.kind === 'count';
+      return `<button data-action="dash-cond-on" data-name="${esc(info.label)}"
+        aria-pressed="${on}" ${on && !count ? 'disabled' : ''}
+        title="${esc(info.rule)}">${esc(info.label)}${count && on ? ' +1' : ''}</button>`;
+    };
+    const cats = CONDITION_CATS.map((cat) => `<div class="condcat">
+      <h4>${esc(cat)}</h4>
+      ${CONDITIONS.filter((x) => x.cat === cat).map(btn).join('')}
+    </div>`);
+    // Whatever the workbook listed that the catalogue does not know.
+    const custom = Object.keys(conds).filter((n) => !conditionInfo(n) && !(Number(conds[n]) > 0));
+    if (custom.length) {
+      cats.push(`<div class="condcat"><h4>From the sheet</h4>
+        ${custom.map((n) => `<button data-action="dash-cond-on" data-name="${esc(n)}">${esc(n)}</button>`).join('')}
+      </div>`);
+    }
+    return `<div class="condcats">${cats.join('')}</div>`;
+  }
+
+  /**
+   * Buffs: named, tickable bonuses that ride the condition machinery, so a
+   * ticked buff moves every "now" figure exactly as a ticked condition does.
+   * Each dial takes a number or a formula -- a Citadel banner's
+   * "1 + essence.shoulder" keeps up as essence moves. Shown on the session
+   * dashboard and on the build Overview alike.
+   */
+  #buffsPanel() {
+    const buffs = this.#model.data.buffs || [];
+    const cs = this.#model.conditionState;
+    const list = 'buffs';
+    const rows = buffs.map((b, i) => `<tr class="${b.on ? '' : 'untrained'}">
+      <td class="mid">${this.#itemCheck(list, i, 'on', b.on !== false)}</td>
+      <td>${this.#itemText(list, i, 'name', b.name, 'Haste, Citadel banner…')}</td>
+      ${BUFF_MOD_KEYS.map(([key]) => `<td class="num">${this.#itemExpr(list, i, key, b, { width: '4.6rem' })}</td>`).join('')}
+      <td>${this.#itemText(list, i, 'note', b.note, 'note')}</td>
+      ${this.#rowRemove(list, i)}
+    </tr>`).join('');
+    const broken = buffs.filter((b) => b.error);
+    return `<section class="panel span2">
+      <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th title="Ticked buffs count; unticked wait">On</th><th>Buff</th>
+          ${BUFF_MOD_KEYS.map(([, label]) => `<th class="num">${label}</th>`).join('')}
+          <th>Note</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="${BUFF_MOD_KEYS.length + 4}"><span class="empty">No buffs yet.</span></td></tr>`}</tbody>
+      </table></div>
+      <div style="margin-top:8px">${this.#addButton(list, 'Add buff', {
+    name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '',
+  })}</div>
+      ${broken.map((b) => `<p class="hint warn">${esc(b.name || 'Buff')}: ${esc(b.error)}</p>`).join('')}
+      <p class="hint">A ticked buff rides the same machinery as a condition: attacks, AC,
+        saves, skills, initiative and damage all show their <em>now</em> value with it in.
+        Every dial takes a number or a formula — <code>1 + essence.shoulder</code> keeps a
+        banner's bonus right as the essence moves.</p>
     </section>`;
   }
 
@@ -1402,7 +1468,9 @@ export class CharacterSheetElement extends HTMLElement {
         <button class="linkish" style="margin-left:auto" data-action="goto-trackers"
           title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
       </h3>
-      ${trackers.map(row).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
+      <div class="dashtrackers">
+        ${trackers.map(row).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
+      </div>
     </section>`;
   }
 
@@ -1412,14 +1480,14 @@ export class CharacterSheetElement extends HTMLElement {
     const cs = this.#model.conditionState;
     const weapons = c.equipment?.weapons || [];
     const now = (key) => (cs.changed && cs.delta[key]
-      ? `<span class="now" title="With conditions applied">now ${fmt(cs.adjusted[key])}</span>` : '');
+      ? `<span class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">now ${fmt(cs.adjusted[key])}</span>` : '');
     const stat = (label, value, nowKey, kind, ref, rollLabel) => `<span class="dashstat">${esc(label)}
       <strong>${fmt(value)}</strong>${now(nowKey)}${this.#rollButton(kind, ref, rollLabel, cs)}</span>`;
     const wrow = (w, i) => `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
       <span class="value rollpair"><strong>${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</strong>
         <span class="dashdmg">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
-        ${this.#rollButton('weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}</span>
+        ${this.#rollButton('weapon', i, `a full attack with ${String(w.name || '').trim() || 'this weapon'} — every iterative, damage and crit`, cs)}</span>
     </div>`;
     return `<section class="panel">
       <h3>Offense ${this.#dashExpand('offense', openNow)}</h3>
@@ -1432,23 +1500,32 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="rowlist" style="margin-top:6px">
         ${weapons.map(wrow).join('') || '<p class="empty">No weapons yet — Expand to add one.</p>'}
       </div>
-      <p class="hint">Iteratives ${esc(c.attack.iterative || '—')}${cs.changed && cs.delta.damage
-    ? ` · ${fmt(cs.delta.damage)} on damage rolls from conditions` : ''}</p>
+      ${this.#lineHtml('Full attack', `<span class="dim">${esc(c.attack.iterative || '—')}</span>
+        ${this.#rollButton('mode', 'melee', 'a full-round melee attack — every iterative', cs)}`)}
+      ${cs.changed && cs.delta.damage
+    ? `<p class="hint">${fmt(cs.delta.damage)} on damage rolls from conditions and buffs.</p>` : ''}
     </section>`;
   }
 
-  /** AC and CMD at a glance, condition-adjusted; Expand brings the breakdowns up. */
+  /** AC, CMD and the saves at a glance, adjusted; Expand brings the breakdowns up. */
   #dashDefenseCard(openNow) {
     const d = this.#model.data.defenses;
+    const s = this.#model.data.saves;
     const cs = this.#model.conditionState;
-    const shown = (key, base) => (cs.changed && cs.delta[key]
-      ? `<strong class="now" title="With conditions applied">${cs.adjusted[key]}</strong>` : `<strong>${base}</strong>`);
+    const shown = (key, base, format = String) => (cs.changed && cs.delta[key]
+      ? `<strong class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">${format(cs.adjusted[key])}</strong>`
+      : `<strong>${format(base)}</strong>`);
+    const save = (key, label) => this.#lineHtml(label,
+      `${shown(key, s[key].total, fmt)}${this.#rollButton('save', key, `a ${label} save`, cs)}`, true);
+    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
     return `<section class="panel">
       <h3>Defense ${this.#dashExpand('defense', openNow)}</h3>
-      ${this.#lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${d.touch} · FF ${d.flatFooted}</span>`, true)}
+      ${this.#lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
       ${this.#lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${d.ffCmd}</span>`, true)}
-      <p class="hint">The saves stand in the strip above. Expand for the armour and
-        save breakdowns by bonus type.</p>
+      ${save('fortitude', 'Fortitude')}
+      ${save('reflex', 'Reflex')}
+      ${save('will', 'Will')}
+      <p class="hint">Expand for the armour and save breakdowns by bonus type.</p>
     </section>`;
   }
 
@@ -1475,22 +1552,20 @@ export class CharacterSheetElement extends HTMLElement {
   /** Player-written reminders of what is running. They move no numbers. */
   #dashEffectsCard() {
     const effects = this.#model.data.effects || [];
-    const row = (x, i) => `<div class="item statline">
-      <span class="label pair" style="flex:1">
+    const row = (x, i) => `<div class="effectrow${x.on === false ? ' off' : ''}">
+      <div class="pair">
         ${this.#itemCheck('effects', i, 'on', x.on !== false)}
-        ${this.#itemText('effects', i, 'name', x.name, 'Studied Target')}
-      </span>
-      <span class="value pair" style="flex:1">
-        ${this.#itemText('effects', i, 'note', x.note, '+2 vs the marked foe')}
+        ${this.#itemText('effects', i, 'name', x.name, 'Watching the north door')}
         <button class="danger" data-remove="effects|${i}" aria-label="Remove effect">×</button>
-      </span>
+      </div>
+      ${this.#itemText('effects', i, 'note', x.note, 'the detail worth remembering')}
     </div>`;
     return `<section class="panel">
       <h3>Active effects</h3>
-      <div class="rowlist">${effects.map(row).join('') || '<p class="empty">Nothing running.</p>'}</div>
+      <div class="effectlist">${effects.map(row).join('') || '<p class="empty">Nothing running.</p>'}</div>
       <div style="margin-top:8px">${this.#addButton('effects', 'Add effect', { name: '', note: '', on: true })}</div>
-      <p class="hint">Reminders, not rules: a ticked effect moves no numbers — a buff
-        that should is a condition or a tracker. This just keeps what is running in sight.</p>
+      <p class="hint">Reminders, not rules: these move no numbers. A bonus with numbers
+        behind it belongs in <strong>Buffs</strong> above, where it moves everything.</p>
     </section>`;
   }
 
@@ -9668,17 +9743,24 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.toggleClassSystem(Number(button?.dataset.index), button?.dataset.system);
         this.#render();
         break;
-      // The dashboard's condition chips: Add puts a condition on ticked, ×
-      // takes it off (it stays in the build view's grid, unticked).
-      case 'dash-add-condition': {
-        const name = String(this.#draft.condition || '').trim();
+      // The dashboard's condition chips: the picker puts a condition on
+      // ticked (Energy Drain climbs a level per click), × takes it off (it
+      // stays in the build view's grid, unticked).
+      case 'dash-cond-picker':
+        this.#condPickerOpen = !this.#condPickerOpen;
+        this.#render();
+        break;
+      case 'dash-cond-on': {
+        const name = button?.dataset.name;
         if (name) {
           const conds = this.#model.data.conditions || (this.#model.data.conditions = {});
-          conds[name] = conditionInfo(name)?.kind === 'count'
-            ? Math.max(1, Number(conds[name]) || 0) : true;
+          // The sheet may already list this condition under an alias of its
+          // own ("Fatigue" for Fatigued) -- tick that entry, not a twin.
+          const info = conditionInfo(name);
+          const key = (info && Object.keys(conds).find((n) => conditionInfo(n)?.key === info.key)) || name;
+          conds[key] = info?.kind === 'count' ? (Number(conds[key]) || 0) + 1 : true;
           this.#model.recompute();
         }
-        this.#draft.condition = '';
         this.#render();
         break;
       }
