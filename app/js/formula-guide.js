@@ -46,13 +46,13 @@ const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
 const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon']);
 const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves']);
 const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed']);
-const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab']);
+const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class']);
 
 /** The groups, in the order the browser shows them. */
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
   { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
-  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, mythic tier, base attack bonus.' },
+  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, mythic tier, base attack bonus, and levels in each class.' },
   { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },

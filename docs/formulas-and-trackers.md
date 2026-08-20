@@ -315,6 +315,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `attack.melee`, `attack.ranged`, `attack.cmb`, `attack` | one attack total, or all three |
 | `damage`, `damage.mult`, `damage.crit` | weapon damage — see below |
 | `weapon.melee.attack`, `weapon.axes.damage`, … | the same, on some weapons only — see below |
+| `class.<name>.level` | levels in one class — see below |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity |
@@ -359,6 +360,45 @@ and will apply the moment one is bought.
 
 The character's own `attack.melee`, `attack.ranged` and `attack.cmb` reach the weapon rows
 too. One attack must not read two ways on two panels.
+
+### Class levels
+
+`class.<name>.level` is how many levels of one class the character has, under the same
+slugging skills use — *Legendary Kineticist* is `class.legendary_kineticist`, and the
+**The character** family in *Values you can read* lists every one of them with its number
+beside it, which is the place to check the spelling. On a gestalt build each side is
+counted separately, so a rule that scales off one class of three can say so:
+
+```
+Elemental Overflow is {= floor(class.legendary_kineticist.level / 5)} points of burn.
+```
+
+`level` is the character's level and always was; this is the class's. Writing the number
+in by hand instead goes stale at the next level-up, which is the whole thing this language
+exists to stop.
+
+It is also a **destination**, because "counts as two levels higher" is a rule about
+exactly this number:
+
+```
+Practiced Kineticist {class.legendary_kineticist.level += 2}
+```
+
+What that moves, and what it deliberately does not:
+
+- **Moves**: the class's effective level everywhere it is read — the Vancian and psionic
+  blocks that name the class, a companion's master level, `class.<name>.level` itself, and
+  the sphere **caster level** and **magic skill bonus**, each at that class's own rate. Two
+  class levels on a mid-caster is one caster level, which is what the boost is worth and
+  not what the CL Bonus field would give.
+- **Does not move**: the levels actually taken. Hit dice, base saves and BAB are built
+  from which class ran at which character level, and so are the sphere **talent budget**
+  and **spell points**. "Counts as two levels higher" is a rule about what a class can do,
+  not about being handed two more levels' worth of it. A flat caster-level bonus that is
+  not a class-level bonus already has its own field on the Magic Training tab.
+
+A class the character has no levels in is refused rather than conjured: an effective level
+is a multiplier on a class you have.
 
 **Saying what kind of bonus it is.** End the expression with `as <type>` and the bonus
 stops stacking with another of the same type at the same destination:

@@ -3058,6 +3058,59 @@ console.log('forwarded bonuses -- damage, and the weapons a rule applies to');
     [atkBase, flatBase]);
 }
 
+console.log('class levels -- readable by name, and raisable by a rule');
+{
+  const c = new Character(load('narockro'));   // Warlord 10 / Legendary Kineticist 11 / Incanter 1
+  const names = c.classNames();
+  check('both lists are read, the table first',
+    names.includes('Warlord') && names.includes('Legendary Kineticist'), true);
+
+  // Readable, under the same slug a skill would use.
+  const scope = c.scope();
+  check('a class publishes its levels', scope.class.legendary_kineticist.level,
+    c.classLevelCount('Legendary Kineticist'));
+  check('gestalt classes each get their own count',
+    [scope.class.warlord.level, scope.class.incanter.level],
+    [c.classLevelCount('Warlord'), c.classLevelCount('Incanter')]);
+  check('and the index lists them', c.scopeNames().includes('class.warlord.level'), true);
+  check('a formula can read one',
+    c.renderProse('{= class.warlord.level}').find((s) => s.kind === 'value').value,
+    c.classLevelCount('Warlord'));
+
+  // Raisable: "counts as two levels higher" is a rule about this number.
+  const kin = () => c.classLevelCount('Legendary Kineticist');
+  const kinBase = kin();
+  const clBase = c.data.training.magic.globalCL;
+  const talentsBase = (c.data.training.magic.classes || []).map((x) => x.totalTalents);
+  c.setClassFeature('Legendary Kineticist', 1, 'Features',
+    'Practiced {class.legendary_kineticist.level += 2}');
+  check('the effective level moves', kin(), kinBase + 2);
+  check('and reading it back agrees', c.scope().class.legendary_kineticist.level, kinBase + 2);
+  check('the levels actually taken do not', c.classLevelsIn('Legendary Kineticist').length,
+    c.data.progression.levels.filter((r) => (r.classes || []).includes('Legendary Kineticist')).length);
+  check('nor does the talent budget',
+    (c.data.training.magic.classes || []).map((x) => x.totalTalents), talentsBase);
+  check('caster level follows, at the class’s own rate',
+    c.data.training.magic.globalCL >= clBase, true);
+
+  // Reopening must not drift, and the rule must be reversible.
+  let again = c;
+  for (let i = 0; i < 3; i++) again = new Character(again.toJSON());
+  check('and reopening the document keeps it',
+    again.classLevelCount('Legendary Kineticist'), kinBase + 2);
+
+  // A class the character has no levels in takes nothing: an effective level
+  // is a multiplier on a class you have, not a way to acquire one.
+  c.setClassFeature('Legendary Kineticist', 2, 'Features', '{class.wizard.level += 4}');
+  check('a class that is not there is reported',
+    c.contributions.errors.some((e) => /class\.wizard\.level/.test(e.error)), true);
+  c.setClassFeature('Legendary Kineticist', 2, 'Features', '');
+
+  c.setClassFeature('Legendary Kineticist', 1, 'Features', '');
+  check('taking the rule away puts the level back', kin(), kinBase);
+  check('and the caster level with it', c.data.training.magic.globalCL, clBase);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));

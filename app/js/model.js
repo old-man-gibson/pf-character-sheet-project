@@ -4388,6 +4388,24 @@ export class Character {
     return out;
   }
 
+  /**
+   * Every class this character has, by the name it is written under.
+   *
+   * Two lists that normally agree: the Classes table, which is where hit dice
+   * and save progressions live, and the Planner, which is where the levels
+   * are. A class can be in one and not the other -- a Planner column named but
+   * never given a row, a class row the Planner never mentions -- so both are
+   * read, table first, because that is the spelling the player chose.
+   */
+  classNames() {
+    const out = [];
+    for (const name of [...(this.data.classes || []).map((x) => x?.name), ...this.progressionClasses()]) {
+      const clean = String(name || '').trim();
+      if (clean && !out.includes(clean)) out.push(clean);
+    }
+    return out;
+  }
+
   /** The levels at which a class appears. */
   classLevelsIn(className) {
     return (this.data.progression?.levels || [])
@@ -4411,7 +4429,14 @@ export class Character {
     const match = closestName(className, this.progressionClasses());
     if (!match) return 0;
     const cap = Number(this.data.identity?.level) || 20;
-    return this.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+    const own = this.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+    // "Counts as two levels higher of Kineticist" is a rule about this number
+    // and nothing else, so it goes on here rather than in the Planner: the
+    // levels the character actually took do not move, and neither do the hit
+    // dice, base saves and BAB that are built from which class ran when.
+    // Nothing is conjured out of nothing -- a class with no levels stays at 0,
+    // because an effective level is a multiplier on a class you have.
+    return own + (own ? this.#forwarded(`class.${slug(match)}.level`) : 0);
   }
 
   #featureGroup(className) {
@@ -4952,8 +4977,11 @@ export class Character {
 
   /** Does anything forwarded land before the prose that forwards it is read? */
   #forwardsEarly() {
+    // A class level is early for the same reason an ability score is: the
+    // training pass reads it before any prose has been looked at, and the
+    // casting tables it feeds are downstream of that.
     return Object.entries(this.contributions?.totals || {})
-      .some(([name, value]) => value && FORWARD_EARLY.has(name));
+      .some(([name, value]) => value && (FORWARD_EARLY.has(name) || name.startsWith('class.')));
   }
 
   #computePass() {
@@ -9212,11 +9240,22 @@ export class Character {
       // Low-Caster progression, or Mid-Caster with the mythic version.
       const amtFloor = m.mythicAmt ? Math.floor(level * 0.75)
         : m.amt ? Math.floor(level * 0.5) : 0;
+      // A class counting as levels higher counts here: caster level and magic
+      // skill bonus are read off the class level, so a rule that raises one
+      // raises the other. Deliberately not the talent budget or the spell
+      // points -- "counts as two levels higher" is a rule about what a class
+      // can do, not about being handed two more levels' worth of it.
+      //
+      // The distinction is worth the arithmetic: two class levels on a
+      // mid-caster is one caster level, which is what the boost is worth and
+      // not what m.clBonus would give.
+      const effectiveLevels = (x) => (x.classLevelsCurrent ?? 0)
+        + this.#forwarded(`class.${slug(x.name)}.level`);
       m.globalCL = Math.max(0, amtFloor, ...casters.map(
-        (x) => Math.floor((x.classLevelsCurrent ?? 0) * (TYPE_RATES[x.effectiveType] ?? 0)),
+        (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
       )) + (Number(m.clBonus) || 0);
       m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0);
-      m.msb = Math.max(0, ...casters.map((x) => x.classLevelsCurrent ?? 0))
+      m.msb = Math.max(0, ...casters.map(effectiveLevels))
         + (Number(m.msbBonus) || 0);
       m.msd = m.msb + 11 + (Number(m.msdBonus) || 0);
       m.concentration = m.globalCL + bestMod;
@@ -9698,6 +9737,12 @@ export class Character {
         dice: c.training?.combat?.unarmed?.dice || '',
       },
       skill: {},
+      // Levels in each class, under its own slugged name -- Legendary
+      // Kineticist is class.legendary_kineticist. A rule that scales off one
+      // class of a gestalt build has no other way to say so: `level` is the
+      // character's, and writing the number in by hand goes stale at the next
+      // level-up, which is the whole thing this language exists to stop.
+      class: {},
       tracker: {},
       // Essence invested per receptacle, mirroring the workbook's own named
       // ranges (VeilEssenceHands, VeilEssenceShoulder2, VeilEssenceWeapon...).
@@ -9760,6 +9805,15 @@ export class Character {
     for (const sk of c.skills) {
       const name = slug(sk.spec ? `${sk.name} ${sk.spec}` : sk.name);
       if (s.skill[name] === undefined) s.skill[name] = sk.bonus;
+    }
+
+    // The effective level, which is what every rule written about a class
+    // means -- so a class counting as two levels higher reads as two levels
+    // higher here too, and the number a formula sees is the number the casting
+    // tables saw.
+    for (const name of this.classNames()) {
+      const key = slug(name);
+      if (s.class[key] === undefined) s.class[key] = { level: this.classLevelCount(name) };
     }
 
     // The companions, so a tracker or an ability can read them: familiar.hp,
@@ -9833,6 +9887,15 @@ export class Character {
       skills.push(name);
     }
     for (const [name, label] of FORWARD_STATS) add(name, label);
+
+    // A class's effective level. The destination is the same name the scope
+    // publishes it under, so `{= class.legendary_kineticist.level}` and
+    // `{class.legendary_kineticist.level += 2}` can never mean two different
+    // classes.
+    for (const cls of this.classNames()) {
+      const name = `class.${slug(cls)}.level`;
+      if (!expand.has(name)) add(name, `${cls} levels`);
+    }
 
     expand.set('skill', skills);
     list.push({ name: 'skill', label: 'Every skill', family: skills });

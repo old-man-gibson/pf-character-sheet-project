@@ -53,6 +53,7 @@ check('attack', classify('attack.cmb'), 'offence');
 check('companion', classify('eidolon.hd'), 'companion');
 check('magic', classify('caster.sp'), 'magic');
 check('character', classify('level'), 'character');
+check('a class level is the character too', classify('class.legendary_kineticist.level'), 'character');
 check('anything else', classify('somethingNew.x'), 'other');
 check('every family has a section', VALUE_SECTIONS.map((s) => s.key).includes('other'), true);
 
