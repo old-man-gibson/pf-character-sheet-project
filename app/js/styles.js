@@ -11,6 +11,9 @@ export const SHEET_CSS = `
   --cs-bg: #14161c;
   --cs-panel: #1c1f27;
   --cs-panel-2: #232733;
+  /* Half a step from the panel towards the hover colour: enough to follow one
+     row across a wide table, not enough to be a colour in its own right. */
+  --cs-zebra: color-mix(in srgb, var(--cs-panel-2) 50%, var(--cs-panel));
   --cs-line: #333949;
   --cs-text: #e6e8ef;
   --cs-muted: #9aa2b8;
@@ -30,6 +33,24 @@ export const SHEET_CSS = `
   --fx-number: #8fcf9d;
   --fx-string: #c9a3e0;
   --fx-op: var(--cs-muted);
+  /* The six abilities, in the fills the workbook gives them (sheet2!B15:B20).
+     An ability wears its hue wherever the sheet names one, and so does every
+     dropdown that picks an ability -- in the hue of the one it picked. */
+  --ab-str: #ea9999;
+  --ab-dex: #b7e680;
+  --ab-con: #cca677;
+  --ab-int: #ffe599;
+  --ab-wis: #c27ba0;
+  --ab-cha: #a4c2f4;
+  /* How much of that hue each part takes. The fills are pastels drawn for
+     black text on white paper, so the dark theme wears them thin and inks the
+     word in the hue itself; the light theme washes them heavier and darkens
+     the ink towards the text colour. One knob each, set once per theme, and
+     the ink set where the closest-run pairing still clears 4.5:1 -- Wis here,
+     Int on the light theme, the two that sit nearest their own wash. */
+  --ab-wash: 15%;
+  --ab-edge: 55%;
+  --ab-ink: 30%;
   --cs-radius: 8px;
   --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -62,6 +83,9 @@ export const SHEET_CSS = `
   --cs-edit: #2563c9;
   --fx-number: #1f7a43;
   --fx-string: #6b3fa0;
+  --ab-wash: 38%;
+  --ab-edge: 72%;
+  --ab-ink: 66%;
 }
 
 * { box-sizing: border-box; }
@@ -653,10 +677,52 @@ button.tiny {
 .veil .prose textarea { resize: vertical; min-height: 34px; font-size: 0.76rem; }
 .veil .prose-view { font-size: 0.76rem; min-height: 34px; }
 
+/* ---------- ability colour coding ---------- */
+/*
+ * Everything below keys off the *value* of data-ab rather than the attribute
+ * merely being there: a dropdown that picks an ability carries the attribute
+ * empty until one is picked, which is what leaves it looking like any other.
+ */
+[data-ab="str"] { --ab: var(--ab-str); }
+[data-ab="dex"] { --ab: var(--ab-dex); }
+[data-ab="con"] { --ab: var(--ab-con); }
+[data-ab="int"] { --ab: var(--ab-int); }
+[data-ab="wis"] { --ab: var(--ab-wis); }
+[data-ab="cha"] { --ab: var(--ab-cha); }
+
+/* The name of an ability: the workbook's own coloured cell, kept to a chip so
+   that six of them stacked in a table still read as rows. */
+.abmark[data-ab]:not([data-ab=""]) {
+  display: inline-block; border-left: 3px solid var(--ab); border-radius: 3px;
+  padding: 1px 5px; font-weight: 650;
+  /* Str is a narrower word than Con, and six chips that each hug their own
+     word are six different widths. One width in em, so it holds at whatever
+     size the surrounding table sets. */
+  min-width: 3.2em;
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+}
+/* A dropdown that picks an ability wears what it picked, so which stat a slot
+   runs on is answered before its label is read. */
+select[data-ab]:not([data-ab=""]) {
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
+  border-color: color-mix(in srgb, var(--ab) var(--ab-edge), var(--cs-line));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+  font-weight: 620;
+}
+/* Focus still reads as focus rather than as an ability. */
+select[data-ab]:not([data-ab=""]):focus { border-color: var(--cs-edit); }
+/* And where a browser paints the open list from CSS, the choices are coded
+   too -- the same six colours, in the same order, every time it opens. */
+option[data-ab]:not([data-ab=""]) {
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+}
+
 /* ability score rows */
 .abilities { display: grid; gap: 5px; }
 .ability {
-  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem;
+  display: grid; grid-template-columns: 3rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem;
   gap: 6px; align-items: center;
 }
 .ability .ab { font-weight: 650; font-size: 0.85rem; }
@@ -666,7 +732,7 @@ button.tiny {
 }
 .ability .mod.temp { color: var(--cs-accent); }
 .ability-head {
-  display: grid; grid-template-columns: 2.4rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem; gap: 6px;
+  display: grid; grid-template-columns: 3rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem; gap: 6px;
   font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--cs-muted); margin-bottom: 3px; text-align: center;
 }
@@ -681,8 +747,14 @@ th {
   color: var(--cs-muted); font-weight: 600; position: sticky; top: 0;
   background: var(--cs-panel); z-index: 1;
 }
+/* Alternating rows, for a table wide enough that an eye can lose its place.
+   Hover is the whole step, so it still reads on a striped row and a plain one
+   alike; a cell with a wash of its own (a group band, a row that wants
+   filling) is translucent, and tints the stripe rather than hiding it. */
+tbody tr:nth-child(even) { background: var(--cs-zebra); }
 tbody tr:hover { background: var(--cs-panel-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num {text-align: left}
 td.total { font-weight: 660; color: var(--cs-accent); }
 tr.trained td:first-child { font-weight: 600; }
 tr.untrained { color: var(--cs-muted); }
@@ -693,6 +765,9 @@ table.build th[scope="row"] {
   text-align: left; font-size: 0.8rem; color: var(--cs-text);
   text-transform: none; letter-spacing: 0; z-index: 2;
 }
+/* Sticky cells paint their own background, so the stripe has to be repeated
+   here or a row would break in two at the freeze. */
+table.build tbody tr:nth-child(even) th[scope="row"] { background: var(--cs-zebra); }
 table.build th { white-space: nowrap; vertical-align: bottom; }
 table.build td { padding: 3px 4px; }
 table.build input[type="number"] { width: 3.2rem; padding: 3px 4px; }
@@ -1576,7 +1651,7 @@ input[type="color"] {
   /* Narrower than a single crafting column: one panel per row, tables scroll. */
   .grid.crafting { grid-template-columns: 1fr; }
   /* The temporary pair goes; the score, the modifier and the die stay. */
-  .ability, .ability-head { grid-template-columns: 2.2rem 3.4rem 2.6rem 1.7rem; }
+  .ability, .ability-head { grid-template-columns: 2.8rem 3.4rem 2.6rem 1.7rem; }
   .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
   .head { flex-wrap: wrap; }
   .formrow .cols { grid-template-columns: 1fr 1fr; }

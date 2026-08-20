@@ -345,6 +345,29 @@ function slotSpend({ path, total, left, shape = 'pips', name = 'slot' }) {
 /** The six abilities as the pick selectors label them. */
 const ABILITY_LABELS_LIST = ABILITIES.map((k) => ABILITY_LABELS[k]);
 
+/** The ability a value names ('Str' -> 'str'), or '' if it names none. */
+const abilityKey = (value) => {
+  const k = String(value ?? '').trim().toLowerCase();
+  return ABILITIES.includes(k) ? k : '';
+};
+
+/**
+ * Is this list of choices abilities -- all six, or one track's three?
+ *
+ * Asked of the options rather than declared at each of the two dozen call
+ * sites, because an ability slot goes by a different name at nearly every one
+ * (a save's stat, a weapon's damage ability, a card's suit) while the choices
+ * are always these. So a slot written tomorrow is coloured the day it lands.
+ */
+const picksAbility = (values) => values.length > 1 && values.every((v) => abilityKey(v));
+
+/**
+ * The hook a dropdown and its options hang their colour on; see "ability
+ * colour coding" in the stylesheet. It stays on a picker with nothing picked,
+ * empty, so the change handler has something to find and repaint.
+ */
+const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '');
+
 const round = (v, places = 2) => {
   const f = 10 ** places;
   return Math.round((Number(v) || 0) * f) / f;
@@ -2024,7 +2047,7 @@ export class CharacterSheetElement extends HTMLElement {
       const mod = (Number(a.totalMod) || 0) + delta;
       const movedScore = score !== baseScore;
       return `<div class="statline">
-        <span class="label">${ABILITY_LABELS[k]}
+        <span class="label"><span class="abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
           <span class="dim">${movedScore
     ? `<strong class="adj ${score > baseScore ? 'up' : ''}" title="${esc(`Base ${baseScore} — with ${cs.sources} applied`)}">${score}</strong>` : score}</span></span>
         <span class="value rollpair">${delta
@@ -2331,7 +2354,7 @@ export class CharacterSheetElement extends HTMLElement {
           const a = c.abilities[k];
           const moved = cs.changed && cs.deltas[k];
           return `<div class="ability">
-            <span class="ab">${ABILITY_LABELS[k]}</span>
+            <span class="ab abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
             ${built
               ? `<span class="mod">${a.score}</span>`
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score">`}
@@ -3094,7 +3117,7 @@ export class CharacterSheetElement extends HTMLElement {
               ${ABILITIES.map((ab) => {
                 const r = build[ab].resolved || {};
                 return `<tr>
-                  <th scope="row">${ABILITY_LABELS[ab]}</th>
+                  <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
                     g.sum ? `<td class="num grouped groupend total ${r.enhancementWasted ? 'over' : ''}"
                       title="${r.enhancementWasted
@@ -3155,7 +3178,7 @@ export class CharacterSheetElement extends HTMLElement {
                 const r = build[ab].resolved || {};
                 const a = c.abilities[ab];
                 return `<tr>
-                  <th scope="row">${ABILITY_LABELS[ab]}</th>
+                  <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
                   <td class="num">${r.temporary ? fmt(r.temporary) : '—'}</td>
                   <td class="num total">${r.tempTotal ?? 0}</td>
@@ -3341,13 +3364,17 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** A select of allowed abilities for one progression pick. */
   #pickSelect(kind, level, slot, value, allowed, disabled) {
+    const ab = picksAbility(allowed);
     const opts = ['', ...allowed].map((a) => {
       const v = a || '';
       const label = a || '—';
       const sel = String(value || '').toLowerCase().slice(0, 3) === v.toLowerCase().slice(0, 3) && (a || !value);
-      return `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(label)}</option>`;
+      return `<option value="${esc(v)}"${abAttr(ab, v)}${sel ? ' selected' : ''}>${esc(label)}</option>`;
     }).join('');
-    return `<select data-pick="${kind}|${level}|${slot}" ${disabled ? 'disabled' : ''}>${opts}</select>`;
+    // The pick is matched on its first three letters just above, so a sheet
+    // that wrote "Strength" out in full is still a Str pick -- and still red.
+    return `<select data-pick="${kind}|${level}|${slot}" ${disabled ? 'disabled' : ''}${
+      abAttr(ab, String(value || '').slice(0, 3))}>${opts}</select>`;
   }
 
   #abpPicksPanel() {
@@ -3501,13 +3528,15 @@ export class CharacterSheetElement extends HTMLElement {
             <thead><tr>
               <th>Skill</th><th class="num">Total</th>
               <th class="num" title="Total ranks: min(level, bought + flags × level + spheres)">Ranks</th>
+              <th title="Class skill: +3 once the skill has a rank">Class</th>
               <th class="num" title="Ranks bought with skill points">Bought</th>
               <th title="Specialty skill (full ranks)">★</th>
               <th title="Gear grants full ranks (e.g. headband)">Gear</th>
               <th title="Another source grants full ranks (class features, templates)">Other</th>
               <th class="num" title="From sphere talents">Spheres</th>
               <th>Ability</th><th class="num">Mod</th><th class="num">Misc</th>
-              <th>Class</th><th>Notes</th><th></th>
+              <th title="Requires training: no check at all without a rank in it">Trained only</th>
+              <th>Notes</th><th></th>
             </tr></thead>
             <tbody>
               ${rows.map(({ s, i }) => `<tr class="${s.totalRanks > 0 ? 'trained' : 'untrained'}${s.hidden ? ' hiddenskill' : ''}">
@@ -3515,6 +3544,7 @@ export class CharacterSheetElement extends HTMLElement {
                 <td class="num total"><span class="rollpair">${fmt(s.bonus)}${
                   this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
                 <td class="num">${s.totalRanks}</td>
+                <td class="mid">${this.#itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
                 <td class="num bought">${this.#exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {
                     kind: 'rank',
@@ -3536,7 +3566,7 @@ export class CharacterSheetElement extends HTMLElement {
                   error: s.miscError,
                   title: 'Number or formula, e.g. int.mod, skill_familiarity, floor(level/2)',
                 })}</td>
-                <td class="mid">${this.#itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
+                <td class="mid">${this.#itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
                 <td>${this.#itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
                   title="${s.hidden ? 'Hidden — show this skill again' : 'Hide this skill from the list'}"
@@ -6425,7 +6455,7 @@ export class CharacterSheetElement extends HTMLElement {
             data-set="${kind}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
       : this.#num(`${kind}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
-          <th scope="row">${ABILITY_LABELS[a]}</th>
+          <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>
           <td>${base}</td>
           ${evo ? `<td>${this.#num(`${kind}.scores.${a}.evo`, b.scores?.[a]?.evo)}</td>` : ''}
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
@@ -8879,15 +8909,16 @@ export class CharacterSheetElement extends HTMLElement {
   /** `blank: null` for a choice that must be made -- no empty option at all. */
   #select(path, value, options, blank = '—') {
     const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
+    const ab = picksAbility(pairs.map(([v]) => v));
     // Keep a value the option list doesn't know (e.g. a magic sphere recorded
     // in a combat column) instead of silently blanking it.
     if (value && !pairs.some(([v]) => String(v) === String(value))) {
       pairs.push([value, `${value} *`]);
     }
     const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label]) => `<option value="${esc(v)}"${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
+      .map(([v, label]) => `<option value="${esc(v)}"${abAttr(ab, v)}${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
       .join('');
-    return `<select data-set="${path}" data-kind="text">${opts}</select>`;
+    return `<select data-set="${path}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
   }
 
   /** Ability-stat picker, used by the AC / attack / save stat slots. */
@@ -8958,14 +8989,15 @@ export class CharacterSheetElement extends HTMLElement {
   /** Options are `value`, `[value, label]` or `[value, label, tooltip]`. */
   #itemSelect(list, i, field, value, options, blank = '—') {
     const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
+    const ab = picksAbility(pairs.map(([v]) => v));
     if (value && !pairs.some(([v]) => String(v) === String(value))) {
       pairs.push([value, `${value} *`]);
     }
     const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${
+      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${abAttr(ab, v)}${
         String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
       .join('');
-    return `<select data-item="${list}|${i}|${field}" data-kind="text">${opts}</select>`;
+    return `<select data-item="${list}|${i}|${field}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
   }
 
   #rowTools(list, i) {
@@ -9366,6 +9398,15 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.setItem(list, Number(index), field, readControl(input));
         if (AFFECTS_DERIVED.test(list)) this.#rerender(input);
       });
+    });
+
+    // An ability picker wears the colour of the ability it picked, so it has to
+    // repaint the moment the choice changes. Every ability slot on the sheet
+    // today sits under a path AFFECTS_DERIVED matches, and so comes back as
+    // fresh markup anyway; this is what keeps one that does not -- a slot an
+    // extension adds, a new top-level key -- from wearing the old colour.
+    root.querySelectorAll('select[data-ab]').forEach((sel) => {
+      sel.addEventListener('change', () => { sel.dataset.ab = abilityKey(sel.value); });
     });
 
     /*

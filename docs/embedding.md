@@ -50,4 +50,9 @@ Available: `--cs-bg`, `--cs-panel`, `--cs-panel-2`, `--cs-line`, `--cs-text`,
 `--cs-font`, `--cs-mono`, and `--cs-formula` / `--cs-formula-strong` (the edge that
 marks a field as accepting formulas, at rest and on hover).
 
+The six ability hues are properties too — `--ab-str`, `--ab-dex`, `--ab-con`,
+`--ab-int`, `--ab-wis`, `--ab-cha` — with `--ab-wash`, `--ab-edge` and `--ab-ink`
+saying how much of a hue the background, the border and the word each take. See
+*[Ability colours](using-the-sheet.md#ability-colours)*.
+
 There is no build step and no runtime dependency — plain ES modules.

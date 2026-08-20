@@ -742,6 +742,14 @@ imported Specialty flags and marked ★. **Gear** (headband et al) and **Other**
 is computed from training. All five characters' imported ranks and totals reproduce
 exactly.
 
+**Class** sits beside Ranks, where its +3 is decided — a class skill is worth nothing
+until the skill has a rank in it. **Trained only** sits at the far end, before the
+notes: the workbook's Requires Training column, which the sheet carries per skill and
+a d20 reads before it rolls. It is a checkbox like the others, so a skill you add
+yourself can be marked. It does not change the total — a trained-only skill with no
+ranks still sums the way the workbook sums it; what it changes is the roll, which says
+so rather than being quietly wrong.
+
 **Rolling one.** The **d20** beside each Total copies that check for Roll20 — see
 [Rolling it at the table](#rolling-it-at-the-table). A skill with a situational note
 carries it along, and a trained-only skill with no ranks says so.
@@ -831,3 +839,28 @@ with no colour of its own is drawn in it.
 It is stored as `identity.color` and travels with the character's JSON. Embedders can
 still override it per instance with `--cs-accent`, since the character's own colour is
 set on the element rather than in the stylesheet.
+
+---
+
+## Ability colours
+
+The six abilities keep the colours the workbook gave them — Str red, Dex green, Con
+tan, Int yellow, Wis mauve, Cha blue — and two things wear them.
+
+An **ability's name** is a chip in its own colour: the rows of the Ability scores
+panel, the Ability checks card, and the ability column of every build table on Stats
+and of a companion's scores.
+
+A **dropdown that picks an ability** wears the colour of the ability it picked, and
+changes colour when the pick changes. That is every one of them — the two stat slots
+on armor class, each saving throw and each attack mode, a skill's key ability, a
+weapon's damage ability, the casting and manifesting stats, a suit in the deck, an
+ABP or level-4 or mythic pick, a companion's attack ability. A dropdown is treated as
+an ability picker when its choices *are* abilities, so a slot added later is coloured
+the day it lands rather than the day someone remembers to tag it.
+
+Nothing here is a setting: the colours are fixed so that the same red always means
+Strength. They are the workbook's own cell fills, worn thin over the dark theme and
+washed over the light one, with the word inked dark enough to read on either.
+Embedders can repaint them per instance with `--ab-str` and its five siblings; see
+*[Embedding](embedding.md)*.
