@@ -156,6 +156,31 @@ to send it back to the manager, or **reset** to the default nine. The bar is sav
 with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
 export.
 
+### Session view and build view
+
+The header's **Build view / Session view** button switches between two arrangements
+of the same sheet. The *build* view is everything above. The *session* view is what
+comes up at the table: its bar starts from **Overview, Skills, Feats & Mythic,
+Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
+*marked* on a class (below), and a standing strip under the character's name shows
+the numbers a table asks for mid-fight — **HP, AC (touch/FF) and the three saves**,
+with a ticked condition's adjusted values in place of the base ones.
+
+Each view keeps its own bar (`uiPrefs.tabOrder` and `uiPrefs.sessionTabOrder`): the
+⚙ manager always edits the view you are in, says which one that is, and its reset
+button re-seeds only that view — so hiding Crafting during play never touches the
+build bar, and both arrangements survive a reload and travel with an export.
+
+### Marking a class's systems
+
+On the Overview's **Classes** table, the **Systems** column expands into a row of
+toggles — Spheres of Power, Spheres of Might, Champion of the Spheres, Vancian magic,
+Path of War, Psionics, Akashic, Cardcasting, the three companions, Techniques,
+Cooking, Item crafting. Marking one says "this class plays with that machinery"
+before anything is typed into its tab: the tab shows *marked* in the ⚙ manager and
+joins the session view's bar. Extension-pack classes can carry these tags with them
+(see [Extensions](extensions.md)).
+
 Two tabs are not part of that arrangement and sit after it: **ƒx Formulas** — the
 formula guide, scratchpad and value index, on every character, described in
 [Formulas & trackers](formulas-and-trackers.md#ƒx-formulas-tab) — and **Formula
@@ -166,12 +191,12 @@ is not working.
 
 The manager lists what is off the bar **alphabetically**, in three groups:
 
-- **Hidden tabs** — the rest of the built-in tabs (Spheres & Magic, Crafting,
-  Extras & Notes), the modelled sub-systems (Akashic, Maneuvers, Vancian, Psionics,
+- **Hidden tabs** — the rest of the built-in tabs (Extras & Notes), the modelled
+  sub-systems (Spheres & Magic, Crafting, Akashic, Maneuvers, Vancian, Psionics,
   Template, and the three companions), and the workbook's own worksheets. A
   sub-system that already holds the character's data is badged *in use*, so a
-  character with veils sees which waiting tab has them; **Show** puts a tab at the
-  end of the bar.
+  character with veils sees which waiting tab has them; one a class names without
+  data yet is badged *marked*; **Show** puts a tab at the end of the bar.
 - **Extra — weird systems** — the odd machinery kept out of the way unless a
   character runs on it: **Cardcasting**, the **Technique List** and **AutoTechnique**
   pair, and **Auto-Cooking**.

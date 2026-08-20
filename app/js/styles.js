@@ -80,6 +80,14 @@ export const SHEET_CSS = `
 .head-main { flex: 1; min-width: 0; }
 .name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
+/* The session view's standing line: the numbers a table asks for mid-fight,
+   visible on every tab while that view is on. */
+.sessionstrip { display: flex; flex-wrap: wrap; gap: 2px 7px; align-items: baseline; margin-top: 4px; }
+.sessionstrip strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.sessionstrip strong.bad { color: var(--cs-bad); }
+.sessionstrip strong.now { display: inline; font-size: inherit; margin: 0; }
+.sessionstrip .dim { font-size: 0.75rem; }
+.sessionstrip .hptemp { font-size: 0.75rem; }
 .head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 /* Why an offered file was refused -- stays up until dismissed, because the
    fix (re-run the converter, pick a different file) happens elsewhere. */

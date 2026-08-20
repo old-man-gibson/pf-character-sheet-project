@@ -226,6 +226,29 @@ export function resolveAbility(entry = {}) {
  * cached values in all five exports.
  * ------------------------------------------------------------------ */
 
+/**
+ * The sub-systems a class can be marked with on the Classes table, and the
+ * tabs each one lights up. Marking a class says "this character plays with
+ * that machinery" before any of its data is typed in: the ⚙ manager badges
+ * the tabs and the session view puts them on its bar.
+ */
+export const GAME_SYSTEMS = [
+  { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['combat'] },
+  { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['combat'] },
+  { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['combat'] },
+  { id: 'vancian', label: 'Vancian magic', tabs: ['vancian'] },
+  { id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'] },
+  { id: 'psionics', label: 'Psionics', tabs: ['psionics'] },
+  { id: 'akashic', label: 'Akashic', tabs: ['akashic'] },
+  { id: 'cardcasting', label: 'Cardcasting', tabs: ['cardcasting'] },
+  { id: 'animal-companion', label: 'Animal companion', tabs: ['animalCompanion'] },
+  { id: 'familiar', label: 'Familiar', tabs: ['familiar'] },
+  { id: 'eidolon', label: 'Eidolon', tabs: ['eidolon'] },
+  { id: 'techniques', label: 'Techniques', tabs: ['techniques', 'autoTechnique'] },
+  { id: 'cooking', label: 'Cooking', tabs: ['cooking'] },
+  { id: 'crafting', label: 'Item crafting', tabs: ['crafting'] },
+];
+
 export const CASTING_TYPES = ['Low', 'Mid', 'High'];
 export const PRACTITIONER_TYPES = ['Proficient', 'Adept', 'Expert'];
 

@@ -42,7 +42,6 @@ import {
   castingTableNames,
   psionicTables, psionicCurveTotals,
   CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
-  DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_MONTH,
@@ -75,11 +74,11 @@ import {
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
-  mergeLayout,
+  mergeLayout, GAME_SYSTEMS,
 } from './rules.js';
 import {
-  COMPANION_KINDS, COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
-  ABILITY_INCREASE_LEVELS, companionInUse,
+  COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
+  ABILITY_INCREASE_LEVELS,
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
@@ -451,6 +450,8 @@ export class CharacterSheetElement extends HTMLElement {
   #showAllSkills = false;
   #showAllGear = false;
   #confirmDelete = null;
+  /** Which Classes row has its sub-system picker open (index, or null). */
+  #openClassSystems = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -960,7 +961,8 @@ export class CharacterSheetElement extends HTMLElement {
       const m = modelled[id];
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
-        inUse: m ? m.has : true, weird: isWeirdTab(label),
+        inUse: m ? m.has || m.tagged : true, has: m ? m.has : true,
+        tagged: !!m?.tagged, weird: isWeirdTab(label),
       });
     }
     (d.sheetTabs || []).forEach((tab, index) => {
@@ -1025,8 +1027,10 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
           </div>
+          ${this.#sessionStrip()}
         </div>
         <div class="head-actions">
+          ${this.#viewModeButton()}
           ${this.#formulaButton()}
           <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
           <button data-action="save" class="${this.#changes ? 'primary' : ''}"
@@ -1055,6 +1059,41 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
       </header>`;
+  }
+
+  /** The Session/Build switch: which view of the sheet is showing. */
+  #viewModeButton() {
+    const session = this.#model.viewMode() === 'session';
+    return `<button data-action="view-mode" aria-pressed="${session}"
+      title="${session
+    ? 'Session view: the tabs that come up at the table. Switch back to see everything.'
+    : 'Switch to the session view: only the tabs that come up at the table'}">
+      ${session ? 'Session' : 'Build'} view</button>`;
+  }
+
+  /**
+   * The numbers a table asks for mid-fight, on every tab while the session
+   * view is on: hit points, AC and the three saves. When a ticked condition
+   * moves one, the moved value is what shows -- that is what is being rolled.
+   */
+  #sessionStrip() {
+    if (this.#model.viewMode() !== 'session') return '';
+    const c = this.#model.data;
+    const hp = this.#model.hpState;
+    const d = c.defenses;
+    const s = c.saves;
+    const cs = this.#model.conditionState;
+    const shown = (key, base, format = fmt) => (cs.changed && cs.delta[key]
+      ? `<strong class="now" title="With conditions applied">${format(cs.adjusted[key])}</strong>`
+      : `<strong>${format(base)}</strong>`);
+    return `<div class="subtitle sessionstrip">
+      HP <strong${hp.current < hp.max ? ' class="bad"' : ''}>${hp.current}/${hp.max}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
+      &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${d.touch} &middot; FF ${d.flatFooted}</span>
+      &middot; Fort ${shown('fortitude', s.fortitude.total)}
+      Ref ${shown('reflex', s.reflex.total)}
+      Will ${shown('will', s.will.total)}
+      ${cs.active.length ? `<span class="badge err">${cs.active.length} condition${cs.active.length === 1 ? '' : 's'}</span>` : ''}
+    </div>`;
   }
 
   /**
@@ -1686,6 +1725,36 @@ export class CharacterSheetElement extends HTMLElement {
     const c = this.#model.data;
     const g = c.gestalt || { saves: {} };
     const sv = (k) => g.saves?.[k] || {};
+    // The sub-system picker: a row of toggles under the class it belongs to.
+    // Marking a system badges its tabs in the ⚙ manager and puts them on the
+    // session view's bar before anything is typed into them.
+    const sysButton = (x, i) => {
+      const n = (x.systems || []).length;
+      const open = this.#openClassSystems === i;
+      return `<button data-action="class-systems" data-index="${i}" aria-expanded="${open}"
+        title="Mark the sub-systems this class uses — they light their tabs up in the ⚙ manager and on the session view">
+        ${open ? '▾' : '▸'} ${n || '—'}</button>`;
+    };
+    const sysPicker = (x, i) => {
+      if (this.#openClassSystems !== i) return '';
+      const on = new Set(x.systems || []);
+      const known = new Set(GAME_SYSTEMS.map((s) => s.id));
+      const extra = [...on].filter((id) => !known.has(id));
+      return `<tr class="syspicker"><td colspan="10">
+        <p class="hint" style="margin:2px 0 6px">
+          The machinery ${esc(x.name || 'this class')} plays with. A marked system shows
+          <em>marked</em> on its tabs in the ⚙ manager and joins the session view's bar,
+          even before anything is typed into it.
+        </p>
+        <div class="pair" style="flex-wrap:wrap">
+          ${GAME_SYSTEMS.map((s) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${s.id}" aria-pressed="${on.has(s.id)}">${esc(s.label)}</button>`).join('')}
+          ${extra.map((id) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${esc(id)}" aria-pressed="true"
+            title="A tag from an extension pack this app has no tab for">${esc(id)}</button>`).join('')}
+        </div>
+      </td></tr>`;
+    };
     return `<section class="panel span2">
       <h3>Classes</h3>
       <div class="tablewrap"><table>
@@ -1695,7 +1764,8 @@ export class CharacterSheetElement extends HTMLElement {
           <th class="num">HD</th>
           <th title="Good Fortitude">Fort</th><th title="Good Reflex">Ref</th><th title="Good Will">Will</th>
           <th class="num" title="Skill ranks per level">Ranks</th>
-          <th>Archetypes</th><th></th>
+          <th>Archetypes</th>
+          <th title="The sub-systems this class uses (Spheres, Path of War, psionics…)">Systems</th><th></th>
         </tr></thead>
         <tbody>${c.classes.map((x, i) => `<tr>
           <td>${this.#itemText('classes', i, 'name', x.name)}</td>
@@ -1713,12 +1783,13 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
               ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
             </span>`).join('')}</span>` : ''}${this.#itemText('classes', i, 'archetypes', x.archetypes)}</td>
+          <td class="mid">${sysButton(x, i)}</td>
           ${this.#rowTools('classes', i)}
-        </tr>`).join('')}</tbody>
+        </tr>${sysPicker(x, i)}`).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${this.#addButton('classes', 'Add class', {
         name: 'New class', hd: 8, bab: 0.75, goodFort: false, goodRef: false,
-        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null,
+        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
       })}</div>
       <div class="fieldgrid" style="margin-top:8px">
         <div class="statline"><span class="label">Save bases (gestalt)</span>
@@ -2675,7 +2746,9 @@ export class CharacterSheetElement extends HTMLElement {
     const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
-      ${e.kind === 'modelled' ? (e.inUse ? '<span class="badge ok">in use</span>' : '<span class="badge">empty</span>') : ''}`;
+      ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
+    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
+      : '<span class="badge">empty</span>') : ''}`;
     const name = (e) => (e.kind === 'system'
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
       : esc(e.label));
@@ -2703,13 +2776,21 @@ export class CharacterSheetElement extends HTMLElement {
       </span>
     </div>`;
 
+    const mode = this.#model.viewMode();
     return `<div class="grid"><section class="panel span2">
-      <h3>Tab bar</h3>
+      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
+        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
+    ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
+          Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
+      </h3>
       <p class="hint">
         The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
         to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact. The default is Overview, Stats, Lore, Skills, Progression, Feats &amp;
-        Mythic, Primordia, Trackers, Equipment; <button data-action="tab-reset">reset to it</button>
+        its data intact. Each view keeps its own bar: the <em>build</em> view starts from
+        Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Primordia, Trackers,
+        Equipment; the <em>session</em> view starts from what comes up at the table -- the
+        tabs above plus every sub-system in use or marked on a class, minus the build
+        machinery. <button data-action="tab-reset">Reset this view's bar</button>
       </p>
       <div class="rowlist tabbar-list">
         ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
@@ -2720,9 +2801,11 @@ export class CharacterSheetElement extends HTMLElement {
       <h3>Hidden tabs</h3>
       <p class="hint">
         Everything else the sheet can show, alphabetically: the rest of the built-in
-        tabs, the modelled sub-systems (Akashic, Maneuvers, Vancian, Psionics, the
-        companions…), and the workbook's own worksheets. <em>In use</em> marks a
-        sub-system that already holds this character's data.
+        tabs, the modelled sub-systems (Spheres &amp; Magic, Crafting, Akashic, Maneuvers,
+        Vancian, Psionics, the companions…), and the workbook's own worksheets.
+        <em>In use</em> marks a sub-system that already holds this character's data;
+        <em>marked</em> means a class on the Overview names the system but its tab is
+        still empty.
       </p>
       <div class="rowlist">
         ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}
@@ -4236,30 +4319,17 @@ export class CharacterSheetElement extends HTMLElement {
    * manager; `has` is what the manager badges as "in use", so a character with
    * veils or a deck can see which of the waiting tabs actually has their data.
    */
+  /**
+   * The sub-system tabs with an "in use" state, keyed by tab id. The data
+   * checks live on the model (`systemTabsInUse` -- Spheres & Magic and
+   * Crafting included); `tagged` says a class on the Overview marks the
+   * system even though nothing is typed into its tab yet.
+   */
   #modelledSystems() {
-    const d = this.#model.data;
-    const rows = [
-      { id: 'akashic', label: 'Akashic', has: !!(d.akashic?.slots || []).length },
-      { id: 'maneuvers', label: 'Maneuvers', has: !!(d.maneuvers?.disciplines || []).length },
-      { id: 'vancian', label: 'Vancian', has: !!(d.vancian?.classes || []).length },
-      { id: 'psionics', label: 'Psionics', has: !!(d.psionics?.classes || []).length },
-      // A deck, or the Card Casting drawback on the tradition, is enough.
-      { id: 'cardcasting', label: 'Cardcasting', has: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled },
-      // Techniques: a catalogue with anything on it; a draft with a name; a dish with anything on the plate.
-      { id: 'techniques', label: 'Technique List', has: !!(d.techniques?.catalogue || []).length },
-      { id: 'autoTechnique', label: 'AutoTechnique', has: !!d.techniques?.draft?.name },
-      { id: 'cooking', label: 'Auto-Cooking', has: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)) },
-      // A character who gains a template later has nothing imported to show, so
-      // the tab is off until it is asked for -- and then offers to start one.
-      { id: 'template', label: 'Template', has: !!(d.templates || []).length },
-      // A companion is in use once it has a name, a master class, or anything
-      // on it; until then the tab waits in the manager like the others.
-      ...COMPANION_KINDS.map((kind) => ({
-        id: kind, label: COMPANION_LABELS[kind], has: companionInUse(kind, d[kind]),
-      })),
-    ];
+    const has = this.#model.systemTabsInUse();
+    const tagged = this.#model.taggedSystemTabs();
     const out = {};
-    for (const r of rows) out[r.id] = r;
+    for (const [id, h] of Object.entries(has)) out[id] = { id, has: h, tagged: tagged.has(id) };
     return out;
   }
 
@@ -9365,7 +9435,21 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'tab-reset':
-        this.#model.setTabOrder(DEFAULT_TAB_ORDER);
+        this.#model.resetTabOrder();
+        this.#render();
+        break;
+      case 'view-mode':
+        this.#model.setViewMode(this.#model.viewMode() === 'session' ? 'build' : 'session');
+        this.#render();
+        break;
+      case 'class-systems': {
+        const index = Number(button?.dataset.index);
+        this.#openClassSystems = this.#openClassSystems === index ? null : index;
+        this.#render();
+        break;
+      }
+      case 'class-system-toggle':
+        this.#model.toggleClassSystem(Number(button?.dataset.index), button?.dataset.system);
         this.#render();
         break;
       case 'tech-select':

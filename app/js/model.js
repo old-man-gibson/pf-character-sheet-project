@@ -48,10 +48,11 @@ import {
   PREP_STYLE_KEYS, CASTING_SOURCE_KEYS, prepStyle, castingNoun,
   bonusSpellSlots, castableAt, statScore,
   PRIMORDIA_LEVELS, PRIMORDIA_REPEAT_FROM, primordiaTechnique, primordiaGrantsAt, grantCount,
+  GAME_SYSTEMS,
 } from './rules.js';
 import {
   COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion, computeCompanion,
-  companionScope,
+  companionScope, companionInUse,
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import {
@@ -3492,6 +3493,19 @@ export class Character {
     // waits in the ⚙ manager. Started from the standard eight; the player
     // rearranges, hides and shows from there.
     if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = [...DEFAULT_TAB_ORDER];
+    // Two views of the same sheet: the build view (everything) and the session
+    // view (what actually comes up at the table). Each keeps its own tab bar;
+    // the session bar is seeded from what the character uses the first time
+    // the view is opened, and is the player's to rearrange from there.
+    if (d.uiPrefs.viewMode !== 'session') d.uiPrefs.viewMode = 'build';
+    if (d.uiPrefs.sessionTabOrder !== undefined && !Array.isArray(d.uiPrefs.sessionTabOrder)) {
+      delete d.uiPrefs.sessionTabOrder;
+    }
+    // The sub-systems a class is marked with (GAME_SYSTEMS ids). An old save
+    // simply has none marked.
+    for (const cls of d.classes || []) {
+      if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
+    }
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
@@ -4937,9 +4951,11 @@ export class Character {
       prefs.hiddenTabs[next] = prefs.hiddenTabs[tab.name];
       delete prefs.hiddenTabs[tab.name];
     }
-    // Its place on the tab bar is keyed by name, so the place follows the name.
-    if (Array.isArray(prefs?.tabOrder)) {
-      prefs.tabOrder = prefs.tabOrder.map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
+    // Its place on the tab bars is keyed by name, so the place follows the name.
+    for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+      if (Array.isArray(prefs?.[listKey])) {
+        prefs[listKey] = prefs[listKey].map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
+      }
     }
     tab.name = next;
     this.recompute();
@@ -4952,25 +4968,127 @@ export class Character {
     if (!tab) return this;
     tabs.splice(index, 1);
     if (this.data.uiPrefs?.hiddenTabs) delete this.data.uiPrefs.hiddenTabs[tab.name];
-    if (Array.isArray(this.data.uiPrefs?.tabOrder)) {
-      this.data.uiPrefs.tabOrder = this.data.uiPrefs.tabOrder.filter((k) => k !== `sys:${tab.name}`);
+    for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+      if (Array.isArray(this.data.uiPrefs?.[listKey])) {
+        this.data.uiPrefs[listKey] = this.data.uiPrefs[listKey].filter((k) => k !== `sys:${tab.name}`);
+      }
     }
     this.recompute();
     return this;
   }
 
-  /* ---------------- the tab bar ---------------- */
+  /* ---------------- the tab bar, in two views ---------------- */
 
-  /** The keys on the tab bar, in order (a copy). */
-  tabOrder() {
-    return [...(this.data.uiPrefs?.tabOrder || DEFAULT_TAB_ORDER)];
+  /** Which view the sheet is in: 'build' (everything) or 'session' (at the table). */
+  viewMode() {
+    return this.data.uiPrefs?.viewMode === 'session' ? 'session' : 'build';
   }
 
-  /** Replace the tab bar wholesale; keys are de-duplicated, order kept. */
+  /**
+   * Switch views. Each view keeps its own tab bar; entering the session view
+   * for the first time seeds its bar from what the character actually uses,
+   * so the first look is already the right one.
+   */
+  setViewMode(mode) {
+    const next = mode === 'session' ? 'session' : 'build';
+    if (!this.data.uiPrefs) this.data.uiPrefs = {};
+    if (next === 'session' && !Array.isArray(this.data.uiPrefs.sessionTabOrder)) {
+      this.data.uiPrefs.sessionTabOrder = this.sessionDefaultTabs();
+    }
+    this.data.uiPrefs.viewMode = next;
+    this.recompute();
+    this.#emit({ type: 'view-mode', mode: next });
+    return this;
+  }
+
+  /**
+   * Which modelled sub-system tabs already hold this character's data, keyed
+   * by tab id -- the single source for the ⚙ manager's "in use"/"empty"
+   * badges and for seeding the session bar.
+   */
+  systemTabsInUse() {
+    const d = this.data;
+    const cr = d.crafting;
+    const trainingSide = (side) => !!side
+      && ((side.classes || []).some((x) => x?.name) || !!side.tradition?.name);
+    const out = {
+      combat: trainingSide(d.training?.combat) || trainingSide(d.training?.magic),
+      crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
+        || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
+      akashic: !!(d.akashic?.slots || []).length,
+      maneuvers: !!(d.maneuvers?.disciplines || []).length,
+      vancian: !!(d.vancian?.classes || []).length,
+      psionics: !!(d.psionics?.classes || []).length,
+      // A deck, or the Card Casting drawback on the tradition, is enough.
+      cardcasting: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled,
+      techniques: !!(d.techniques?.catalogue || []).length,
+      autoTechnique: !!d.techniques?.draft?.name,
+      cooking: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)),
+      template: !!(d.templates || []).length,
+    };
+    for (const kind of COMPANION_KINDS) out[kind] = companionInUse(kind, d[kind]);
+    return out;
+  }
+
+  /** The tab ids lit up by the systems marked on the Classes table. */
+  taggedSystemTabs() {
+    const byId = new Map(GAME_SYSTEMS.map((s) => [s.id, s]));
+    const tagged = new Set();
+    for (const cls of this.data.classes || []) {
+      for (const id of cls?.systems || []) {
+        for (const tabId of byId.get(id)?.tabs || []) tagged.add(tabId);
+      }
+    }
+    return tagged;
+  }
+
+  /** Mark or unmark one class as using one sub-system (a GAME_SYSTEMS id). */
+  toggleClassSystem(index, systemId) {
+    const cls = (this.data.classes || [])[index];
+    if (!cls || typeof cls !== 'object') return this;
+    if (!Array.isArray(cls.systems)) cls.systems = [];
+    const at = cls.systems.indexOf(systemId);
+    if (at >= 0) cls.systems.splice(at, 1);
+    else cls.systems.push(systemId);
+    this.recompute();
+    this.#emit({ type: 'class-system', index, systemId, on: at < 0 });
+    return this;
+  }
+
+  /**
+   * The session bar a character starts from: the tabs that come up at the
+   * table, plus every sub-system that is in use or marked on a class. The
+   * heavy build machinery -- Stats, Progression, the worksheets -- waits in
+   * the ⚙ manager, where it can always be pulled back on.
+   */
+  sessionDefaultTabs() {
+    const inUse = this.systemTabsInUse();
+    const tagged = this.taggedSystemTabs();
+    const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
+    return ['overview', 'skills', ...systems, 'features', 'primordia', 'trackers', 'gear', 'lore'];
+  }
+
+  /** The keys on the active view's tab bar, in order (a copy). */
+  tabOrder() {
+    const prefs = this.data.uiPrefs || {};
+    if (this.viewMode() === 'session') {
+      return [...(prefs.sessionTabOrder || this.sessionDefaultTabs())];
+    }
+    return [...(prefs.tabOrder || DEFAULT_TAB_ORDER)];
+  }
+
+  /** Replace the active view's tab bar wholesale; keys are de-duplicated, order kept. */
   setTabOrder(keys) {
-    this.data.uiPrefs.tabOrder = [...new Set(keys.map(String))];
+    const listKey = this.viewMode() === 'session' ? 'sessionTabOrder' : 'tabOrder';
+    this.data.uiPrefs[listKey] = [...new Set(keys.map(String))];
     this.recompute();
     return this;
+  }
+
+  /** Put the active view's bar back to its default. */
+  resetTabOrder() {
+    return this.setTabOrder(this.viewMode() === 'session'
+      ? this.sessionDefaultTabs() : DEFAULT_TAB_ORDER);
   }
 
   /** Put a tab on the bar (at the end, or at `at`) -- a no-op if it is already there. */

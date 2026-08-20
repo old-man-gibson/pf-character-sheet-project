@@ -84,6 +84,9 @@ export function normalizeBlock(block) {
         goodFort: bool(b.goodFort), goodRef: bool(b.goodRef), goodWill: bool(b.goodWill),
         skillRanks: num(b.skillRanks, 2),
         classSkills: arr(b.classSkills).map(str).filter(Boolean),
+        // Sub-systems the class plays with (GAME_SYSTEMS ids in rules.js);
+        // unknown ids are kept -- they still read as tags on the class row.
+        systems: arr(b.systems).map(lower).filter(Boolean),
         archetypes: str(b.archetypes),
         features: arr(b.features).map((f) => ({
           level: Math.max(1, Math.min(20, num(f?.level, 1))),
@@ -633,9 +636,13 @@ export function applyBlock(model, rawBlock) {
         goodFort: block.goodFort, goodRef: block.goodRef, goodWill: block.goodWill,
         skillRanks: block.skillRanks, archetypes: block.archetypes, levelsOverride: null,
       };
-      if (existing === -1) model.listAdd('classes', row);
+      if (existing === -1) model.listAdd('classes', { ...row, systems: block.systems });
       else {
         for (const [k, v] of Object.entries(row)) model.setItem('classes', existing, k, v);
+        // The block's system tags join the row's rather than replace them --
+        // whatever the player already marked by hand stays marked.
+        const had = (model.data.classes[existing].systems || []);
+        model.setItem('classes', existing, 'systems', [...new Set([...had, ...block.systems])]);
       }
       // The per-level feature names go into the class's own feature column on
       // the Progression tab, one cell per level, keyed by the class's level.
