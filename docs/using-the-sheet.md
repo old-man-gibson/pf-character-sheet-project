@@ -265,9 +265,9 @@ never granting a movement type the character lacks) — and three special ones:
   numbers and the dice), **effective** ("treated as larger", dice alone), and
   **stacking** for the odd item that makes size effects stack outright (wraps of
   suppressed size) — within true and effective only the largest counts, and the
-  kinds stack with each other. The Colossal cap binds the damage dice alone; the
-  attack and AC penalties and the CMB and CMD bonuses run with the full summed
-  steps.
+  kinds stack with each other. Nothing grows past Colossal nor shrinks past Fine:
+  the attack and AC penalties, the CMB and CMD bonuses and the dice all run off
+  the capped steps.
 - **Save DCs** and **Essence pool** are shown where those numbers are read — the
   Casting numbers and Veils cards — without re-running slot tables or investment
   math.

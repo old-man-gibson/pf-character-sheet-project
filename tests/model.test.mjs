@@ -2600,12 +2600,16 @@ console.log('buff extra bonuses -- targets past the six dials');
   check('effective size: dice step, the four numbers stand',
     [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [0, 0, 0, 0, 1]);
 
-  // The Colossal cap binds the dice alone: the attack and AC penalties and
-  // the CMB and CMD bonuses run with the full summed steps.
+  // The Colossal cap binds everything: modifiers and dice both run off the
+  // capped steps, so an absurd row still reads as Colossal.
   c.data.identity.size = 'Huge';
   cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
-  check('a Huge character rolls Colossal dice and no bigger, but the numbers run uncapped',
-    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 2]);
+  check('a Huge character stops at Colossal in numbers and dice alike',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+  c.data.identity.size = 'Medium';
+  cs = buff([{ target: 'size', value: 500 }]);
+  check('a +500 row is four steps from Medium, everywhere',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 4]);
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
   check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);

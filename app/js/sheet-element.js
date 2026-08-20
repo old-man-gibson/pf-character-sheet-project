@@ -206,6 +206,7 @@ const DASH_CARDS = [
   ['talents', 'Talents'],
   ['offense', 'Offense'],
   ['defense', 'Defense'],
+  ['abilities', 'Ability checks'],
   ['skills', 'Key skills'],
   ['effects', 'Active effects'],
   ['quick', 'Quick actions'],
@@ -1406,6 +1407,7 @@ export class CharacterSheetElement extends HTMLElement {
         + (open('offense') ? `${this.#attackPanel()}${this.#weaponsPanel(e)}` : ''),
       defense: () => this.#dashDefenseCard(open('defense'))
         + (open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''),
+      abilities: () => this.#dashAbilitiesCard(),
       skills: () => this.#dashSkillsCard(open('skills')),
       effects: () => this.#dashEffectsCard(),
       quick: () => this.#dashQuickCard(),
@@ -1435,7 +1437,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
     if (on('combat') && this.#model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'skills', 'effects', 'quick');
+    out.push('offense', 'defense', 'abilities', 'skills', 'effects', 'quick');
     return out;
   }
 
@@ -1671,10 +1673,9 @@ export class CharacterSheetElement extends HTMLElement {
           official chart — <em>effective</em> ("treated as larger") steps the dice alone,
           and <em>stacking</em> is for the odd item that makes size effects stack outright
           (wraps of suppressed size): it sums with everything and carries the full true
-          bundle. The Colossal cap binds the damage dice alone — the attack and AC
-          penalties and the CMB and CMD bonuses run with the full summed steps. Riders
-          like sneak keep their dice, and reach stays yours. Values take formulas, like
-          the dials.</p>
+          bundle. Nothing grows past Colossal nor shrinks past Fine — modifiers and
+          dice alike run off the capped steps. Riders like sneak keep their dice, and
+          reach stays yours. Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
           ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
         <p class="hint">The note reads {…} like prose: a definition written here — say
@@ -1993,6 +1994,38 @@ export class CharacterSheetElement extends HTMLElement {
     if (!d) return `${base ?? 0}`;
     return `<strong class="adj ${d > 0 ? 'up' : ''}"
       title="${esc(`Base ${base ?? 0} — with ${cs.sources} applied`)}">${(Number(base) || 0) + d}</strong>`;
+  }
+
+  /**
+   * The six abilities with their check d20s -- Strength to force a door, an
+   * Intelligence check to recall. Scores and modifiers show what conditions
+   * and buffs leave them at, the same read as everywhere else.
+   */
+  #dashAbilitiesCard() {
+    const c = this.#model.data;
+    const cs = this.#model.conditionState;
+    const row = (k) => {
+      const a = c.abilities[k] || {};
+      const baseScore = Number(a.tempScore) || 0;
+      const score = cs.changed ? (cs.scores[k] ?? baseScore) : baseScore;
+      // The same sum the d20 copy rolls: the ability's own movement plus the
+      // flat penalty on ability checks (a negative level's, say).
+      const delta = cs.changed ? (cs.deltas[k] || 0) + (cs.delta.abilityChecks || 0) : 0;
+      const mod = (Number(a.totalMod) || 0) + delta;
+      const movedScore = score !== baseScore;
+      return `<div class="statline">
+        <span class="label">${ABILITY_LABELS[k]}
+          <span class="dim">${movedScore
+    ? `<strong class="adj ${score > baseScore ? 'up' : ''}" title="${esc(`Base ${baseScore} — with ${cs.sources} applied`)}">${score}</strong>` : score}</span></span>
+        <span class="value rollpair">${delta
+    ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(a.totalMod)} — with ${cs.sources} applied`)}">${fmt(mod)}</strong>`
+    : fmt(a.totalMod)}${this.#rollButton('ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}</span>
+      </div>`;
+    };
+    return `<section class="panel">
+      <h3>Ability checks</h3>
+      <div class="rowlist">${ABILITIES.map(row).join('')}</div>
+    </section>`;
   }
 
   /** The Spheres casting figures a round actually asks for, with the concentration d20. */
