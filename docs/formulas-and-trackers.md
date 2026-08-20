@@ -1,6 +1,6 @@
 # Inline formulas and custom trackers
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The **ƒx Formulas** tab, the sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The **ƒx Formulas** tab, the sandboxed formula language: `{name = expr}` and `{dest += expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
 
 ---
 
@@ -54,7 +54,7 @@ trackers, the character, abilities, health/armour/saves, attack, skills, magic a
 sub-systems, companions — are folded until asked for, because a character publishes
 around 250 names and an alphabetical wall of them is a list, not an answer.
 
-**Reference** — folded away underneath, because it is the part you need once: the three
+**Reference** — folded away underneath, because it is the part you need once: the four
 token forms, a three-step walk-through of making a value and giving it pips, where
 formulas work, every operator, every built-in function, what the built-in name families
 mean, and the rules that are not guessable (a name cannot take one the sheet already
@@ -129,7 +129,7 @@ flagged — and the guide gives them a table of their own for the same reason.
 
 ## When names go wrong
 
-Four things can go wrong with a set of names, and all four are reported the same way:
+Five things can go wrong with a set of names, and all five are reported the same way:
 once, as a problem, in **Needs attention** on the Formulas tab — not as several formulas
 each complaining about the others. Every one of them is also flagged in red where it is
 written.
@@ -199,6 +199,28 @@ are identical. A name that *is* defined but is not working — one caught in a l
 whose formula does not parse — is never called an orphan; it has a definition, and that
 definition has its own entry.
 
+### A bonus that goes nowhere
+
+A [forwarded bonus](#forwarded-bonuses--a-rule-written-once) aimed at something that
+cannot take one fails more quietly than any of the above: the sentence still reads
+perfectly, the number in it is still right, and the destination is simply never told. So
+it is reported, and the two ways of getting it wrong are told apart, because the fixes
+differ:
+
+```
+Bonus goes nowhere   skill.bluf +=
+  "skill.bluf" is not something a bonus can be forwarded to.
+  written in   Vigilante 5, Features    {skill.bluf += 3}
+
+Bonus goes nowhere   caster.level +=
+  "caster.level" is a value you can read, but the sheet has nowhere to put a bonus to it.
+  written in   note 1 on Lore           {caster.level += 1}
+```
+
+The first is a misspelling, fixed in the token. The second is not the player's mistake at
+all: the name is real and readable, it just has no slot for an arriving bonus, and the
+list of names that do is in [Forwarded bonuses](#forwarded-bonuses--a-rule-written-once).
+
 Anything else that does not work — a tracker max that does not parse, a skill formula
 reading something it may not — is listed alongside them, so **Needs attention** really is
 everything and the count beside it can be trusted.
@@ -216,6 +238,7 @@ sphere talents, crafting resources and notes — can carry formulas inside the t
 | `{= expr}` | inline value: evaluates and displays the result |
 | `{name = expr}` | **named** value: evaluates, displays, and defines `name` for use anywhere on the character |
 | `{name}` | reference: displays a previously named value |
+| `{dest += expr}` | **forwarded** bonus: evaluates, displays, and adds the answer to `dest` — a skill, a save, AC, an attack |
 
 **Which fields take them.** A field that understands formulas carries a soft gold
 bar down its **right** edge — the same gold the computed values wear — and says so
@@ -251,6 +274,84 @@ gives the pool pips. Cycles, duplicates, names nothing defines and bad reference
 inline in red, in **Needs attention** on the Formulas tab and in the GM's Formula Audit;
 a definition can never take the name of a built-in like `level`, and is told so rather
 than being refused quietly. See [When names go wrong](#when-names-go-wrong).
+
+### Forwarded bonuses — a rule written once
+
+The three forms above all **publish**: they work a number out and leave it somewhere for
+something else to come and read. That is the wrong way round for half of what a character
+sheet actually contains. *Mythic Social Grace adds your tier to the skills Social Grace
+picked* is one sentence in the rulebook; written as a definition it becomes one formula
+in the feature and a copy of it pasted into the Misc column of every skill it touches,
+where nothing says where it came from and nothing moves the other five when the rule is
+read again.
+
+The fourth form pushes instead:
+
+```
+Mythic Social Grace {skill.bluff, skill.diplomacy += if(level >= 4, 4 + if(level >= 8, level, 0), 0)}
+```
+
+The expression on the right is worked out exactly as any other formula is, and the answer
+is **added to the destinations named on the left**. Several destinations, separated by
+commas, because the point of the form is not writing the same expression twice; `-=` for
+a penalty. `{target.skill.bluff = …}` says the same thing the long way, for anyone who
+would rather name the destination than lean on two characters of punctuation.
+
+The token still shows its value where it is written — `+19`, signed, because a bonus that
+does not say which way it goes is not saying much — and carries a double underline rather
+than the dotted one a plain value wears. Hovering it names the destination and shows the
+working.
+
+**Where it lands.** Reading and writing are not the same list. Several hundred names
+publish themselves to a formula; only the totals the sheet rebuilds from their parts each
+recompute have anywhere to *put* an arriving bonus:
+
+| Destination | What it is |
+|---|---|
+| `skill.bluff`, `skill.craft_weapons_and_armor`, … | one skill, by the same slugged name a formula reads it under |
+| `skill` | every skill |
+| `saves.fortitude`, `saves.reflex`, `saves.will`, `saves` | one save, or all three |
+| `ac.total`, `ac.touch`, `ac.flatFooted`, `ac.cmd`, `ac` | one armour class, or the three that are armour classes (not CMD) |
+| `attack.melee`, `attack.ranged`, `attack.cmb`, `attack` | one attack total, or all three |
+| `initiative` | initiative |
+| `hp.total` | maximum hit points |
+
+Anything else is refused and **said so**, in *Needs attention* and beside the formula,
+with the two mistakes told apart because the fixes differ: `skill.bluf` *is not something
+a bonus can be forwarded to* (a misspelling), while `caster.level` *is a value you can
+read, but the sheet has nowhere to put a bonus to it* (a real name, no slot). Neither
+one moves a number, and neither one throws.
+
+Deliberately absent: **ability scores**. A permanent one is a build number with its own
+columns on the Stats tab, and a temporary one is a buff — neither wants a bonus arriving
+from a sentence somewhere else on the sheet.
+
+**Where it shows.** Half of forwarding is arriving; the other half is being findable
+afterwards, because the column that used to hold the rule no longer does. So the amount
+sits in gold beside the field it lands on — the **Misc** column of the skill, the
+**Other** column of the save — and points back at the sentence that sent it:
+
+```
+Forwarded here
++2 from note 1 on Lore — += 2
++2 from Vigilante 4, Features — += 2
+```
+
+and the Formulas tab grows a **Forwarded bonuses** panel listing every one of them by
+destination, amount and source. Two features aimed at the same number both count, and
+both are named.
+
+**What a bonus may read.** Anything the character publishes, and any `{name = …}` the
+character defines — `{skill.stealth += skill_familiarity}` works. The one direction that
+does not exist is the reverse: a *name* may not be written in terms of a bonus. Names are
+resolved first and bonuses second, so nothing can loop.
+
+**How it is worked out.** A forwarded bonus is written in prose, and prose is read late —
+long after the saves and AC it may be aimed at have been totalled. So the sheet is worked
+out, the bonuses are read off it, and it is worked out again with them in hand. Twice,
+and never a third time: the second pass reuses the amounts the first arrived at, so a
+bonus can never chase its own destination round a loop. A character with no forwarded
+bonuses, or none aimed earlier than the skills, costs exactly what it always did.
 
 **Dice from names.** A weapon's Dice field accepts a reference — `{kinetic.fist}`
 (or `[[kinetic.fist]]` / `{= …}`) — beside literal dice. A number-valued name is

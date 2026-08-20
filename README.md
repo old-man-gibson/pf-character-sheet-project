@@ -96,6 +96,7 @@ app/js/convert.js       xlsx -> JSON converter, shared by the browser and Node
 app/js/formula.js       sandboxed expression language
 app/js/formula-format.js  formula display: highlighting, re-spacing, showing the working
 app/js/formula-guide.js   the Formulas tab: problems, scratchpad, value index, in-app guide
+app/js/inline.js        the {...} forms in prose: values, names and forwarded bonuses
 app/js/rules.js         Pathfinder tables + derived-stat definitions
 app/js/model.js         live character model
 app/js/history.js       saved versions, snapshots and checkpoints (IndexedDB)
@@ -168,7 +169,7 @@ is what the converter's `extraTabs` capture is for.
 | [Using the sheet](docs/using-the-sheet.md) | How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar. |
 | [Equipment & progression](docs/equipment-and-progression.md) | The gear list and what it feeds, the Item Crafting calculator, mythic tiers and paths, the Progression tab (column rule groups, schedules, owed slots), and templates. |
 | [Sub-systems](docs/sub-systems.md) | The modelled sub-systems, each read once off its worksheet: Spheres & Magic training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions. |
-| [Formulas & trackers](docs/formulas-and-trackers.md) | The **ƒx Formulas** tab (scratchpad, value index, in-app guide), the sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
+| [Formulas & trackers](docs/formulas-and-trackers.md) | The **ƒx Formulas** tab (scratchpad, value index, in-app guide), the sandboxed formula language: `{name = expr}` and `{dest += expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
 | [Embedding](docs/embedding.md) | The `<character-sheet>` custom element: attributes, events, theming through custom properties, and the audit API. |
 | [Extensions](docs/extensions.md) | Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage. |
 | [To do](docs/todo.md) | Agreed but not built: a picker for option menus, reading menu pages, the names still hard-coded in the engine. |

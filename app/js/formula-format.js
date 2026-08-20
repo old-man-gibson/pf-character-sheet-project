@@ -526,7 +526,7 @@ export const PLACES_GUIDE = [
   },
 ];
 
-/** The three token forms: the first thing to learn, and the only syntax to memorise. */
+/** The four token forms: the first thing to learn, and the only syntax to memorise. */
 export const TOKEN_FORMS = [
   {
     form: '{= expr}',
@@ -545,6 +545,15 @@ export const TOKEN_FORMS = [
     name: 'Reuse a value',
     what: 'Prints a name you defined elsewhere. Define it once, quote it everywhere.',
     eg: 'Spend {qi.max} qi at dawn.',
+  },
+  {
+    form: '{dest += expr}',
+    name: 'Forward a bonus',
+    what: 'Works it out, prints it, and adds it to something else — a skill, a save, AC, '
+      + 'an attack. The rule lives in the feature that grants it instead of being copied into '
+      + 'every column it touches. Several destinations at once, separated by commas; '
+      + '-= for a penalty. "target.bluff = …" says the same thing the long way.',
+    eg: 'Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}.',
   },
 ];
 

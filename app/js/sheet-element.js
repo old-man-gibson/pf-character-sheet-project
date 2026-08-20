@@ -45,13 +45,13 @@ import {
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_MONTH,
+  MATERIAL_CASTING_PER_MONTH, skillForwardKey, describeSource,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype } from './extensions.js';
 import { SHEET_CSS } from './styles.js';
 import {
-  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
+  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY, FORWARD_BY_DERIVED,
   BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
   BUILD_DERIVED_KEYS, PROWESS_TRACKS, ABP_LEVELS, ARRAY_LEVELS, LEVEL4_LEVELS,
   ENHANCEMENT_CAP, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, MENTAL_PROWESS_LEVELS,
@@ -83,7 +83,9 @@ import {
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
-import { formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, valueGroups } from './formula-guide.js';
+import {
+  formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
+} from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
 import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
 import {
@@ -1754,7 +1756,25 @@ export class CharacterSheetElement extends HTMLElement {
 
   #sheetBonusCell(key) {
     return `<td class="num"><input type="number" value="${this.#model.offsetOf(key)}"
-      data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"></td>`;
+      data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"
+      >${this.#forwardedBadge(FORWARD_BY_DERIVED[key])}</td>`;
+  }
+
+  /**
+   * A forwarded bonus, shown where it lands.
+   *
+   * Half of forwarding is arriving; the other half is being findable
+   * afterwards. A number that grew by 24 with nothing beside it to say why is
+   * worse than the copied formulas it replaced -- so the amount sits next to
+   * the field it is added to, and points back at the sentence that sent it.
+   */
+  #forwardedBadge(name) {
+    const f = name ? this.#model.forwardedInto(name) : null;
+    if (!f) return '';
+    const from = f.from
+      .map((x) => `${fmt(x.value)} from ${x.where} — ${x.sign < 0 ? '-=' : '+='} ${x.expr}`)
+      .join('\n');
+    return `<span class="fwd" title="Forwarded here\n${esc(from)}">${fmt(f.total)}</span>`;
   }
 
   #sheetBonusHint(examples) {
@@ -1788,13 +1808,16 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#meterStyleEditor('hp')}
       <div class="hprow">
         ${this.#num('hp.current', hp.current)}<span class="hpsep">/</span>
-        <span class="value" title="Base maximum + mythic bonus">${hp.max}</span>
+        <span class="value" title="Base maximum + mythic bonus + anything forwarded here">${hp.max}</span>
         ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, spent first">+${hp.temp}</span>` : ''}
       </div>
       <div class="fieldgrid two">
         ${this.#field('Base maximum', this.#num('hp.total', this.#model.data.hp.total))}
         ${this.#field('Mythic bonus', `<span class="value">+${this.#model.mythicHp}</span>`)}
       </div>
+      ${this.#model.forwardedInto('hp.total')
+        ? `<div class="fieldgrid two">${this.#field('Forwarded',
+          `<span class="value">${this.#forwardedBadge('hp.total')}</span>`)}</div>` : ''}
       <div class="fieldgrid two">
         ${this.#field('Temporary', this.#num('hp.temp', hp.temp))}
         ${this.#field('Nonlethal', this.#num('hp.nonlethal', hp.nonlethal))}
@@ -2503,7 +2526,7 @@ export class CharacterSheetElement extends HTMLElement {
                   value: s.miscResolved,
                   error: s.miscError,
                   title: 'Number or formula, e.g. int.mod, skill_familiarity, floor(level/2)',
-                })}</td>
+                })}${this.#forwardedBadge(skillForwardKey(s))}</td>
                 <td class="mid">${this.#itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
                 <td>${this.#itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
@@ -2528,7 +2551,9 @@ export class CharacterSheetElement extends HTMLElement {
           <strong>Spheres</strong> comes from the training tab's talent counts.
           <strong>Misc</strong> holds flat bonuses from gear, traits and the like — a number, or a
           formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name defined
-          in prose like <code>skill_familiarity</code>.
+          in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus
+          <em>forwarded</em> here from a feature that wrote
+          <code>{skill.bluff += …}</code> — point at it to see which one.
         </p>
         <p class="hint">
           Only ${VARIANT_SKILLS.map((v) => `<strong>${esc(v)}</strong>`).join(', ')} and
@@ -7066,8 +7091,25 @@ export class CharacterSheetElement extends HTMLElement {
         ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}`
         : `{${seg.name}}`;
     }
+    // A forwarded bonus says where it goes before it says how it was worked
+    // out: the number is standing in a sentence about something else, and
+    // "+24" there means nothing at all until you know it is Bluff's.
+    if (seg.kind === 'push') {
+      const op = seg.sign < 0 ? '-=' : '+=';
+      return `${fmt(seg.value)} to ${this.#targetLabels(seg.targets)} — `
+        + `{${seg.targets.join(', ')} ${op} …} ${workingLine(seg.expr, scope)}`;
+    }
     const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
     return `${label} ${workingLine(seg.expr, scope)}`;
+  }
+
+  /** Destination names as a reader would say them: "Bluff and Diplomacy". */
+  #targetLabels(targets) {
+    const byName = new Map((this.#model.forwardTargetList || []).map((t) => [t.name, t.label]));
+    const names = targets.map((t) => byName.get(t) || t);
+    return names.length > 1
+      ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+      : names[0] || '';
   }
 
   /**
@@ -7103,7 +7145,10 @@ export class CharacterSheetElement extends HTMLElement {
           : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
         return `<span class="tok err" title="${esc(label)} — ${esc(seg.error)}">${esc(seg.raw)}</span>`;
       }
-      const shown = formatValue(seg.value);
+      // A bonus always shows its sign. It is a change to a number somewhere
+      // else, and a bare "2" in the middle of a sentence does not say whether
+      // the sentence is helping or hurting.
+      const shown = seg.kind === 'push' ? fmt(seg.value) : formatValue(seg.value);
       return `<span class="tok ${seg.kind}" title="${esc(this.#tokenTitle(seg, tokenScope()))}">${esc(shown)}</span>`;
     }).join('');
   }
@@ -7513,10 +7558,23 @@ export class CharacterSheetElement extends HTMLElement {
       inlineNames: this.#model.inlineNames || {},
       audit,
       problems: this.#model.formulaProblems(audit),
+      forwarded: this.#forwardedRows(),
       draft: this.#formulaDraft,
       query: this.#formulaQuery,
       refOpen: this.#formulaRefOpen,
     });
+  }
+
+  /** Every forwarded bonus, as the tab lists them: destination, amount, source. */
+  #forwardedRows() {
+    return (this.#model.contributions?.entries || []).map((e) => ({
+      to: this.#targetLabels(e.targets),
+      value: e.value,
+      expr: e.expr,
+      where: describeSource(e.path),
+      error: e.error,
+      dropped: e.dropped,
+    }));
   }
 
   /**
@@ -8923,9 +8981,13 @@ export class CharacterSheetElement extends HTMLElement {
       const q = this.#formulaQuery;
       const names = this.#model.scopeNames();
       const formulaSection = root.querySelector('[data-fx-section="formulas"]');
+      const forwardedSection = root.querySelector('[data-fx-section="forwarded"]');
       const valueSection = root.querySelector('[data-fx-section="values"]');
       if (formulaSection) {
         formulaSection.outerHTML = myFormulasHtml(this.#model.audit(), q);
+      }
+      if (forwardedSection) {
+        forwardedSection.outerHTML = forwardedHtml(this.#forwardedRows(), q);
       }
       if (valueSection) {
         valueSection.outerHTML = browserHtml(

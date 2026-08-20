@@ -2311,6 +2311,123 @@ console.log('skill misc accepts formulas and named values');
   check('restored', bluff().bonus, base);
 }
 
+console.log('forwarded bonuses -- a rule written once, added everywhere it applies');
+{
+  const { tokenize } = await import('../app/js/inline.js');
+
+  // Grammar. The new form has to earn its place without moving any of the old
+  // ones: a definition is still a definition and a comparison is still a
+  // comparison, whatever punctuation they happen to contain.
+  const push = tokenize('{skill.bluff += 4}')[0];
+  check('push token', push.kind, 'push');
+  check('push target', push.targets, ['skill.bluff']);
+  check('push expr', push.expr, '4');
+  check('push sign', push.sign, 1);
+  check('a penalty', tokenize('{ac.total -= 2}')[0].sign, -1);
+  check('several destinations at once',
+    tokenize('{skill.bluff, skill.diplomacy += level}')[0].targets, ['skill.bluff', 'skill.diplomacy']);
+  check('the long spelling means the same', tokenize('{target.skill.bluff = 4}')[0].targets, ['skill.bluff']);
+  check('and is still a push', tokenize('{target.skill.bluff = 4}')[0].kind, 'push');
+  check('a definition is still a definition', tokenize('{qi.max = wis.mod + level}')[0].kind, 'define');
+  check('">=" is not an operator here', tokenize('{= a >= 3}')[0].kind, 'value');
+  check('"a + b = c" is still a value', tokenize('{a + b = c}')[0].kind, 'value');
+
+  const c = new Character(load('nico'));   // the vigilante, and Social Grace
+  const level = Number(c.data.identity.level) || 0;
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  const bluffBase = skill('Bluff').bonus;
+  const bluffMiscBase = skill('Bluff').miscResolved;
+  const diploBase = skill('Diplomacy').bonus;
+  const willBase = c.data.saves.will.total;
+  const acBase = c.data.defenses.ac;
+  const touchBase = c.data.defenses.touch;
+  const meleeBase = c.data.attack.totalMelee;
+  const initBase = c.data.hp.initiative;
+  const hpBase = c.hpMax;
+
+  // The rule as it is actually written: one sentence in the feature that
+  // grants it, naming the skills it was taken for.
+  c.setClassFeature('Vigilante', 1, 'Features',
+    'Mythic Social Grace {skill.bluff, skill.diplomacy += if(level >= 4, 4 + if(level >= 8, level, 0), 0)}');
+  const grace = 4 + level;
+  check('one token, two skills', [skill('Bluff').bonus, skill('Diplomacy').bonus],
+    [bluffBase + grace, diploBase + grace]);
+  check('the amount is exposed on the row', skill('Bluff').forwarded, grace);
+  check('and the Misc column still says what was typed', skill('Bluff').miscResolved, bluffMiscBase);
+  check('the destination knows where it came from',
+    c.forwardedInto('skill.bluff').from.map((f) => f.value), [grace]);
+  check('and by what rule', c.forwardedInto('skill.bluff').from[0].expr,
+    'if(level >= 4, 4 + if(level >= 8, level, 0), 0)');
+
+  // It is a rule, not a number, so it moves when the character does.
+  c.set('identity.level', 3);
+  check('nothing below the level it starts at', skill('Bluff').forwarded, 0);
+  check('and nothing shown at the destination either', c.forwardedInto('skill.bluff'), null);
+  c.set('identity.level', 6);
+  check('the first step', skill('Bluff').forwarded, 4);
+  c.set('identity.level', level);
+
+  // Every other kind of destination, including the ones totalled before the
+  // prose that feeds them is read.
+  c.setClassFeature('Vigilante', 2, 'Features',
+    'Steady {saves.will += 2} {ac += 1} {attack.melee -= 1} {initiative += 3} {hp.total += level}');
+  check('a save', c.data.saves.will.total, willBase + 2);
+  check('AC, and the family reaches touch as well',
+    [c.data.defenses.ac, c.data.defenses.touch], [acBase + 1, touchBase + 1]);
+  check('an attack, downwards', c.data.attack.totalMelee, meleeBase - 1);
+  check('initiative', c.data.hp.initiative, initBase + 3);
+  check('max hit points', c.hpMax, hpBase + level);
+
+  // Recomputing must be a fixed point: the second pass reuses the amounts the
+  // first arrived at, so nothing climbs by repeating the sum.
+  const settled = [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac, c.hpMax];
+  c.recompute(); c.recompute(); c.recompute();
+  check('recompute settles',
+    [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac, c.hpMax], settled);
+
+  // ...and so must saving and reopening. The saved document carries the moved
+  // totals, so a reconciliation offset that swallowed a forwarded bonus would
+  // add it again on every load and the sheet would drift a little each time.
+  let again = c;
+  for (let i = 0; i < 3; i++) again = new Character(again.toJSON());
+  check('and so does reopening the document',
+    [again.data.skills.find((s) => s.name === 'Bluff').bonus, again.data.saves.will.total,
+      again.data.defenses.ac, again.hpMax], settled);
+
+  // Two features aimed at the same number both count, and both are findable.
+  c.setClassFeature('Vigilante', 3, 'Features', 'Resolve {saves.will += 1}');
+  check('bonuses stack', c.data.saves.will.total, willBase + 3);
+  check('and each is named', c.forwardedInto('saves.will').from.length, 2);
+
+  // A bonus may be written in terms of a name the character defines.
+  c.setClassFeature('Vigilante', 4, 'Features',
+    'Familiarity {skill_familiarity = 4 + floor(level / 5)} {skill.stealth += skill_familiarity}');
+  check('a bonus can read a name', c.forwardedInto('skill.stealth').total, 4 + Math.floor(level / 5));
+
+  // Nowhere to land. Two different mistakes, told apart, and neither thrown.
+  c.setClassFeature('Vigilante', 5, 'Features', '{skill.bluf += 3} {caster.level += 1}');
+  const misdirected = c.formulaProblems().filter((p) => p.kind === 'misdirected');
+  check('both are reported', misdirected.length, 2);
+  check('a misspelt destination',
+    /is not something a bonus can be forwarded to/.test(
+      misdirected.find((p) => /bluf/.test(p.name)).detail), true);
+  check('a readable value with nowhere to put a bonus',
+    /you can read, but the sheet has nowhere to put a bonus/.test(
+      misdirected.find((p) => /caster/.test(p.name)).detail), true);
+  check('and neither one moves a number', skill('Bluff').forwarded, grace);
+
+  // A formula that does not work is reported against where it is written.
+  c.setClassFeature('Vigilante', 6, 'Features', '{saves.reflex += floor(}');
+  check('a broken bonus is caught, not thrown',
+    c.contributions.errors.some((e) => e.path === 'feature:Vigilante:6:Features'), true);
+
+  for (const lvl of [1, 2, 3, 4, 5, 6]) c.setClassFeature('Vigilante', lvl, 'Features', '');
+  check('removing the rules puts every number back',
+    [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac,
+      c.data.attack.totalMelee, c.data.hp.initiative, c.hpMax],
+    [bluffBase, willBase, acBase, meleeBase, initBase, hpBase]);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));

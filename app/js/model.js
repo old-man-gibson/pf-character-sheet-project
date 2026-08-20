@@ -24,7 +24,8 @@
  */
 
 import {
-  ABILITIES, DERIVED, abilityMod, carryTiers, iterativeAttacks, skillTotal,
+  ABILITIES, DERIVED, FORWARD_STATS, FORWARD_FAMILIES, FORWARD_BY_DERIVED,
+  abilityMod, carryTiers, iterativeAttacks, skillTotal,
   statMod, statModDelta, sizeMod, SIZE_CARRY_MULTIPLIER, POINT_BUY_COST, BUILD_DERIVED_KEYS,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, conditionTotals,
   foldPicks, resolveAbility, pointBuyCost, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
@@ -56,6 +57,7 @@ import {
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import {
   collectDefinitions, collectUses, resolveDefinitions, renderTokens, hasTokens,
+  collectContributions, resolveContributions,
 } from './inline.js';
 import {
   normalizeStyle, resolveZones, isDefaultStyle, normalizeHex, FEATURE_GROUP_COLORS, zoneAt,
@@ -69,6 +71,21 @@ const slug = (s) => String(s || '')
 
 /** How the specialty picks name a skill: its skill and its variant together. */
 const skillKey = (s) => `${s.name}|${s.spec || ''}`;
+
+/**
+ * The name a formula forwards a bonus to a skill under -- the same slug the
+ * scope publishes the skill's total as, so `{= skill.bluff}` and
+ * `{skill.bluff += 4}` can never mean two different rows.
+ */
+export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec}` : s.name)}`;
+
+/**
+ * Forwarded destinations that are totalled *before* the prose forwarding to
+ * them is read, and so are the reason a recompute ever runs a second pass.
+ * Skills are not here: they are worked out after the names are, which is what
+ * makes `{skill.bluff += 4}` free.
+ */
+const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
 
 /**
  * The document shape this build understands, written by tools/convert.py.
@@ -3129,6 +3146,16 @@ export class Character {
     this.trackers = this.#loadTrackers();
     this.#reconcile();
     this.recompute();
+    // Forwarded bonuses are written in prose, so the first reconcile could not
+    // see them -- and the totals it measured against were saved with those
+    // bonuses already in them. Left there, the offset would swallow every
+    // forwarded bonus on load and the sheet would add it a second time, so a
+    // +2 to Will would climb by 2 every time the document was reopened. Now
+    // that the bonuses are known, measure once more without them.
+    if (this.#forwardsEarly()) {
+      this.#reconcile();
+      this.recompute();
+    }
   }
 
   /**
@@ -3857,10 +3884,15 @@ export class Character {
     for (const d of DERIVED) {
       if (!d.reconcile) continue;
       const bare = safe(() => d.compute(this.data), 0);
-      const target = d.key === 'initiative'
-        ? Number(this.data.hp?.initiative ?? 0)
-        : Number(getPath(this.data, d.key) ?? 0);
-      this.offsets[d.key] = target - bare;
+      // Always the figure the document arrived with, never the one on `data`:
+      // this runs a second time once forwarded bonuses are known, and by then
+      // `data` holds what the first pass worked out rather than what was saved.
+      const target = Number(this.imported[d.key]) || 0;
+      // An offset is what the source workbook added and this sheet cannot see.
+      // A bonus this sheet forwards here is not that -- it is visible, it is
+      // written down, and it was already in the saved figure -- so it comes
+      // off before the difference is called an offset.
+      this.offsets[d.key] = target - bare - this.#forwarded(FORWARD_BY_DERIVED[d.key]);
     }
   }
 
@@ -4460,8 +4492,35 @@ export class Character {
     }
   }
 
-  /** Recompute every derived value. Cheap enough to run on each keystroke. */
+  /**
+   * Recompute every derived value. Cheap enough to run on each keystroke.
+   *
+   * Twice, when a forwarded bonus asks for it. A `{saves.will += 2}` is
+   * written in prose, and prose is read late -- long after the saves and AC it
+   * may be aimed at have been totalled -- so the sheet is worked out, the
+   * bonuses are read off it, and it is worked out again with them in hand.
+   *
+   * Never a third time. The second pass reuses the amounts the first one
+   * arrived at rather than working them out afresh, so a bonus can never chase
+   * its own destination round a loop and settle somewhere that depends on
+   * where it started. A character with no forwarded bonuses, or none aimed
+   * earlier than the skills, costs exactly what it always did.
+   */
   recompute() {
+    this.contributions = null;
+    this.#computePass();
+    if (this.#forwardsEarly()) this.#computePass();
+    this.#emit({ type: 'recompute' });
+    return this;
+  }
+
+  /** Does anything forwarded land before the prose that forwards it is read? */
+  #forwardsEarly() {
+    return Object.entries(this.contributions?.totals || {})
+      .some(([name, value]) => value && FORWARD_EARLY.has(name));
+  }
+
+  #computePass() {
     const c = this.data;
     this.#applyMythic();
     this.#refreshAbilities();
@@ -4469,7 +4528,12 @@ export class Character {
     this.#resolveDefenceBonuses();
 
     for (const d of DERIVED) {
-      const value = safe(() => d.compute(c), 0) + (this.offsets[d.key] || 0);
+      // The reconciliation offset and the forwarded bonus are both flat
+      // additions and are deliberately kept apart: the offset is what the
+      // source workbook added and this sheet cannot see, while the forwarded
+      // amount is a rule the player wrote down and can point at.
+      const value = safe(() => d.compute(c), 0) + (this.offsets[d.key] || 0)
+        + this.#forwarded(FORWARD_BY_DERIVED[d.key]);
       if (d.key === 'initiative') c.hp.initiative = value;
       else setPath(c, d.key, value);
     }
@@ -4561,7 +4625,11 @@ export class Character {
         misc = Number(s.offset) || 0;
       }
       s.miscResolved = misc;
-      s.bonus = computed + misc;
+      // A bonus forwarded here from somewhere else on the sheet is kept beside
+      // the Misc the player typed, never folded into it: the column has to go
+      // on saying what was written in it, and the row has to go on adding up.
+      s.forwarded = this.#forwarded(skillForwardKey(s));
+      s.bonus = computed + misc + s.forwarded;
       s.abilityMod = am;
     });
 
@@ -4580,8 +4648,6 @@ export class Character {
     this.#recomputePrimordia();
     this.#recomputeCompanions();
     this.#recomputeTrackers();
-    this.#emit({ type: 'recompute' });
-    return this;
   }
 
   /* ---------------- companions ---------------- */
@@ -4607,7 +4673,7 @@ export class Character {
     return {
       level: Number(c.identity?.level) || 0,
       bab: Number(c.attack?.bab) || 0,
-      hp: (Number(c.hp?.total) || 0) + (Number(this.mythicHp) || 0),
+      hp: this.hpMax,
       baseSaves: {
         fort: Number(c.saves?.fortitude?.base) || 0,
         ref: Number(c.saves?.reflex?.base) || 0,
@@ -5337,6 +5403,24 @@ export class Character {
     this.inlineDefinitions = defs;
     this.inlineDuplicates = duplicates;
     this.inlineShadowed = shadowed;
+
+    // Forwarded bonuses are worked out here too, and only once: the second
+    // recompute pass re-resolves the names (a name may read a save that a
+    // bonus has just moved) but keeps the amounts this pass arrived at.
+    //
+    // Names first, bonuses second, and never the other way round. A bonus may
+    // be written in terms of a name the character defines; a name may not be
+    // written in terms of a bonus. One direction, so nothing can loop.
+    if (!this.contributions) {
+      const targets = this.forwardTargets();
+      // Kept beside the answers: the view needs to call a destination by its
+      // name ("Bluff", not "skill.bluff") and rebuilding the list per tooltip
+      // would walk every skill again for every token on the tab.
+      this.forwardTargetList = targets.list;
+      this.contributions = resolveContributions(
+        collectContributions(sources), values, this.scope(), targets,
+      );
+    }
     // Every name the prose *reads*, kept beside every name it defines: the
     // parse of each expression is cached by source, so the second pass costs
     // little and orphans() becomes a set lookup rather than another walk.
@@ -5398,12 +5482,13 @@ export class Character {
 
   /**
    * Everything wrong with the names on this character, as one list a reader
-   * can work down. Four kinds, and each is a different fix:
+   * can work down. Five kinds, and each is a different fix:
    *
-   *   cycle      two or more definitions waiting on each other
-   *   duplicate  one name defined in more than one place
-   *   shadow     a definition trying to take a name the sheet already owns
-   *   orphan     a name being asked for that nothing defines
+   *   cycle       two or more definitions waiting on each other
+   *   duplicate   one name defined in more than one place
+   *   shadow      a definition trying to take a name the sheet already owns
+   *   misdirected a forwarded bonus with nowhere to land
+   *   orphan      a name being asked for that nothing defines
    *
    * The individual formulas carry their own errors as well -- this is the
    * view from above, where a cycle is one problem naming three formulas
@@ -5455,6 +5540,19 @@ export class Character {
         name: sh.name,
         detail: sh.reason,
         places: [{ label: 'written in', where: describeSource(sh.path), formula: '' }],
+      });
+    }
+
+    // A bonus that never arrives. Either its formula does not work, or it is
+    // aimed at something that cannot take one -- and unlike a name nothing
+    // defines, this fails silently everywhere else: the sentence still reads
+    // fine, the destination is simply never told.
+    for (const e of this.contributions?.errors || []) {
+      out.push({
+        kind: 'misdirected',
+        name: e.target ? `${e.target} +=` : e.source || 'forwarded bonus',
+        detail: e.error,
+        places: [{ label: 'written in', where: describeSource(e.path), formula: e.source || '' }],
       });
     }
 
@@ -6623,7 +6721,7 @@ export class Character {
       if (overMax) issues.push(`${m.name} can only be taken ${entry.max} times.`);
     }
 
-    const hpTotal = (Number(c.hp?.total) || 0) + (this.mythicHp || 0);
+    const hpTotal = this.hpMax;
     const lifebound = mods.lifeboundDeck && deckSize ? Math.max(1, Math.floor(hpTotal / 3 / deckSize)) : null;
     const handMax = mods.tightHand ? 3 + loadedHand : null;
 
@@ -7538,9 +7636,22 @@ export class Character {
       * (Number(this.data.identity?.mythicTier) || 0);
   }
 
+  /**
+   * The maximum: the sheet's own total, the mythic tiers' bonus, and whatever
+   * a feature forwards here with `{hp.total += ...}`.
+   *
+   * One getter rather than the same sum written out at every place that needs
+   * it -- the table, the companions' master block, the deck's lifebound cards,
+   * the formula scope -- because they must never disagree about how many hit
+   * points the character has.
+   */
+  get hpMax() {
+    return (Number(this.data.hp?.total) || 0) + this.mythicHp + this.#forwarded('hp.total');
+  }
+
   get hpState() {
     const hp = this.data.hp;
-    const max = (Number(hp.total) || 0) + this.mythicHp;
+    const max = this.hpMax;
     if (hp.current === undefined || hp.current === null) hp.current = max;
     if (hp.temp === undefined || hp.temp === null) hp.temp = 0;
     if (hp.nonlethal === undefined || hp.nonlethal === null) hp.nonlethal = 0;
@@ -7665,7 +7776,7 @@ export class Character {
       reflex: c.saves.reflex.total,
       will: c.saves.will.total,
       initiative: c.hp.initiative,
-      hp: (Number(c.hp.total) || 0) + this.mythicHp,
+      hp: this.hpMax,
     };
     const adjusted = {};
     for (const [key, value] of Object.entries(base)) adjusted[key] = value + (delta[key] || 0);
@@ -7855,7 +7966,7 @@ export class Character {
   /** Full rest: back to maximum, temporary and nonlethal cleared. */
   restoreAll() {
     const hp = this.data.hp;
-    hp.current = (Number(hp.total) || 0) + this.mythicHp;
+    hp.current = this.hpMax;
     hp.temp = 0;
     hp.nonlethal = 0;
     // Back to the resting point: nothing spent, or the neutral 0 of a two-sided
@@ -8556,7 +8667,7 @@ export class Character {
       level: Number(c.identity.level) || 0,
       bab: Number(c.attack.bab) || 0,
       hp: {
-        total: (Number(c.hp.total) || 0) + this.mythicHp,
+        total: this.hpMax,
         current: Number(c.hp.current ?? c.hp.total) || 0,
         temp: Number(c.hp.temp) || 0,
       },
@@ -8694,6 +8805,77 @@ export class Character {
   /** Every variable name a formula may legally use -- drives validation + autocomplete. */
   scopeNames() {
     return flatNames(this.scope()).sort();
+  }
+
+  /* ---------------- forwarded bonuses ---------------- */
+
+  /**
+   * Every destination a bonus may be forwarded to on this character, and how
+   * to expand the ones that stand for a family.
+   *
+   * Reading and writing are not the same list, and saying so is half the
+   * feature: hundreds of names publish themselves to a formula, but only the
+   * totals the sheet rebuilds from their parts each recompute have anywhere
+   * to *put* an arriving bonus. `known` is what tells a misspelt destination
+   * ("skill.bluf") apart from a real value with nowhere to take a bonus
+   * ("caster.level"), because those are two different mistakes with two
+   * different fixes.
+   */
+  forwardTargets() {
+    const list = [];
+    const expand = new Map();
+    const add = (name, label) => {
+      list.push({ name, label });
+      expand.set(name, [name]);
+    };
+
+    // A skill by the same slugged name a formula reads it under, so
+    // `{= skill.bluff}` and `{skill.bluff += 4}` can never mean two different
+    // rows. Duplicated slugs collapse to one destination and land on every
+    // row that answers to it, which is what "+2 to Craft" means when the
+    // character keeps two Craft rows.
+    const skills = [];
+    for (const sk of this.data.skills || []) {
+      const name = skillForwardKey(sk);
+      if (expand.has(name)) continue;
+      add(name, skillLabel(sk.name, sk.spec));
+      skills.push(name);
+    }
+    for (const [name, label] of FORWARD_STATS) add(name, label);
+
+    expand.set('skill', skills);
+    list.push({ name: 'skill', label: 'Every skill', family: skills });
+    for (const [name, members] of Object.entries(FORWARD_FAMILIES)) {
+      expand.set(name, members);
+      list.push({ name, label: `All ${name === 'ac' ? 'armour classes' : name}`, family: members });
+    }
+
+    let names = null;
+    return {
+      list,
+      expand: (name) => expand.get(name) || null,
+      known: (name) => (names ??= new Set(this.scopeNames())).has(name),
+    };
+  }
+
+  /** What forwarded bonuses come to at one destination. */
+  #forwarded(name) {
+    return Number(this.contributions?.totals?.[name]) || 0;
+  }
+
+  /**
+   * What is arriving at one destination, and from where -- the view a number
+   * owes its reader when part of it was decided somewhere else entirely.
+   *
+   * Returns null when nothing is forwarded there, so a caller can leave the
+   * display alone rather than render an empty explanation of nothing.
+   */
+  forwardedInto(name) {
+    const total = this.#forwarded(name);
+    const from = (this.contributions?.entries || [])
+      .filter((e) => !e.error && e.value && e.lands.includes(name))
+      .map((e) => ({ where: describeSource(e.path), value: e.value, expr: e.expr, sign: e.sign }));
+    return from.length ? { total, from } : null;
   }
 
   /* ---------------- custom trackers ---------------- */
