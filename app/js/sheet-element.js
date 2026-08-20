@@ -45,7 +45,7 @@ import {
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_MONTH, skillForwardKey, describeSource,
+  MATERIAL_CASTING_PER_MONTH, skillForwardKey, describeSource, weaponHandle,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype } from './extensions.js';
@@ -3805,6 +3805,11 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('Wt', this.#itemNum('equipment.weapons', i, 'weight', w.weight))}
           ${this.#field('Price', this.#itemNum('equipment.weapons', i, 'price', w.price))}
           <span class="wsep"></span>
+          ${this.#field('Formula name', `<input type="text" class="mono" value="${esc(w.id ?? '')}"
+            data-item="equipment.weapons|${i}|id" data-kind="text" placeholder="${esc(weaponHandle(w.name))}"
+            style="width:7rem"
+            title="What a formula calls this weapon: {weapon.${esc(w.handle || '')}.damage += 2}. Leave it blank to take the name cut down to its first bracket.">
+            <span class="hint whandle">weapon.<strong>${esc(w.handle || '')}</strong></span>`)}
           ${this.#field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
             title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
