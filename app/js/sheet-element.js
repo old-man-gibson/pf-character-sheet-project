@@ -1451,7 +1451,7 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
     const row = (b, i) => {
       const open = this.#openBuff === i;
-      return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}">
+      return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}${open ? ' open' : ''}">
         <div class="buffhead">
           ${this.#itemCheck(list, i, 'on', b.on !== false)}
           ${open ? this.#itemText(list, i, 'name', b.name, 'Citadel banner') : `<span class="bname">${esc(b.name || 'Unnamed buff')}</span>`}

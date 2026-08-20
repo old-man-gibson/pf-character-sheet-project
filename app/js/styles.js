@@ -111,7 +111,10 @@ export const SHEET_CSS = `
 .dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
 .dashtracker .dashmeter { min-width: 3rem; }
 /* Buffs: one line collapsed, a roomy editor open -- long formulas need width. */
-.bufflist { display: grid; gap: 8px; }
+/* Collapsed buffs are one line each, so they pack shoulder to shoulder;
+   only an open editor takes the full row its formulas need. */
+.bufflist { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 8px; }
+.buffcard.open { grid-column: 1 / -1; }
 .buffcard { border: 1px solid var(--cs-line); border-radius: var(--cs-radius); padding: 6px 10px; background: var(--cs-panel-2); }
 .buffcard.invalid { border-color: var(--cs-bad); }
 .buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
