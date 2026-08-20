@@ -1171,6 +1171,14 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
 }
 .fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
 
+/* The name a formula calls a weapon by, under the field that sets it. Shown
+   whole, because the point of the field is knowing what to type elsewhere. */
+.hint.whandle {
+  display: block; font-family: var(--cs-mono);
+  font-size: 0.68rem; opacity: 0.75; margin-top: 2px; white-space: nowrap;
+}
+.hint.whandle strong { color: var(--cs-accent); font-weight: 650; }
+
 /* ---------- formula fields ---------- */
 /* Same two layers as .prose, for a single-line control: the resolved value is
    what fills the cell, the source shows in place while the field has focus. */

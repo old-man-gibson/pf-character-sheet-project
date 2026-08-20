@@ -348,15 +348,25 @@ Put a selector in front of it and it reaches only some:
 Weapon Focus {weapon.melee.attack += 1}
 Deadly Aim {weapon.ranged.damage += 4}
 Axe specialist {weapon.axes.damage += 2}
-That one guitar {weapon.guitar_axe.damage.mult += 1d6}
+That one knife {weapon.chefs_knife.damage.mult += 1d6}
 ```
 
 A selector is **`melee`, `ranged` or `cmb`** (matched against the row's attack type), a
-**fighter weapon group** written on the row, or a **weapon's own name**, slugged the way
-skills are — *Mic & Cord* is `mic_cord`. A selector that names no group and no weapon on
-the character is a misspelling and is reported as one; a shape that simply matches nothing
-today — `weapon.ranged` on a character carrying no bow — is not, because the rule is right
-and will apply the moment one is bought.
+**fighter weapon group** written on the row, or a **single weapon's handle**. A selector
+that names no group and no weapon on the character is a misspelling and is reported as
+one; a shape that simply matches nothing today — `weapon.ranged` on a character carrying
+no bow — is not, because the rule is right and will apply the moment one is bought.
+
+**A weapon's handle** is the short name a formula calls it by, and it is a field on the
+row: **Formula name**, with the name it currently answers to written under it. A weapon's
+*name* is written for the table, not for a formula — *Chef's Knife (Bastard Sword) &
+Cutting Board* is the joke, the statistics and the off-hand all in one string — so the
+default is that name cut at the first bracket, ampersand or comma, with the apostrophes
+dropped: **`chefs_knife`**. Fill the field in and what you write wins, slugged the same
+way, so *Big Knife* becomes `big_knife`; blank it and it goes back to following the name.
+Two weapons never share one — the second gets a number — because a bonus aimed at a handle
+two weapons answered to would land on both. A weapon also still answers to its whole
+slugged name, so a rule written before the row had a handle keeps working.
 
 The character's own `attack.melee`, `attack.ranged` and `attack.cmb` reach the weapon rows
 too. One attack must not read two ways on two panels.

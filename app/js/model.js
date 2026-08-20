@@ -83,6 +83,26 @@ const skillKey = (s) => `${s.name}|${s.spec || ''}`;
 export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec}` : s.name)}`;
 
 /**
+ * The short name a formula calls a weapon by, worked out from its own.
+ *
+ * A weapon's name is written for the table, not for a formula: "Chef's Knife
+ * (Bastard Sword) & Cutting Board" is the joke, the statistics and the off-hand
+ * all in one string, and slugging the lot gives a handle nobody will type
+ * twice. So it is cut at the first bracket, ampersand or comma -- which is
+ * where a weapon's name usually stops and its bookkeeping begins -- and the
+ * apostrophes go, because `chef_s` is not what anyone means by Chef's.
+ *
+ * It is only the default. The row has a field for it, and what a player writes
+ * there wins.
+ */
+export function weaponHandle(name) {
+  const strip = (v) => String(v ?? '').replace(/['’]/g, '');
+  const head = strip(name).split(/[(&,\/[]/)[0].trim();
+  const from = head || strip(name).trim();
+  return from ? slug(from) : 'weapon';
+}
+
+/**
  * Forwarded destinations that are totalled *before* the prose forwarding to
  * them is read, and so are the reason a recompute ever runs a second pass.
  * Skills are not here: they are worked out after the names are, which is what
@@ -6364,10 +6384,34 @@ export class Character {
    * enhancement. A per-weapon offset reconciles against the workbook's cached
    * attack roll, so imports match and edits still move the number.
    */
+  /**
+   * The short name each weapon answers to in a formula, in row order.
+   *
+   * The Formula name field on the row if there is one, the name cut down if
+   * there is not, and a number on the end where two would otherwise collide --
+   * two Craft rows can share a skill name harmlessly, but two weapons sharing
+   * a handle would send one weapon's bonus to both.
+   */
+  weaponHandles() {
+    const seen = new Set();
+    return (this.data.equipment?.weapons || []).map((w) => {
+      const typed = String(w?.id ?? '').trim();
+      let id = typed ? slug(typed) : weaponHandle(w?.name);
+      if (seen.has(id)) {
+        let n = 2;
+        while (seen.has(`${id}${n}`)) n += 1;
+        id = `${id}${n}`;
+      }
+      seen.add(id);
+      return id;
+    });
+  }
+
   #recomputeEquipment() {
     const c = this.data;
     const e = c.equipment;
     if (!e) return;
+    const handles = this.weaponHandles();
 
     const modeBase = (type) => {
       const modes = {
@@ -6430,6 +6474,10 @@ export class Character {
     };
 
     for (const [wi, w] of e.weapons.entries()) {
+      // What a formula calls this weapon. Resolved rather than stored so the
+      // field on the row keeps whatever the player typed into it, caret and
+      // all, while the name a rule has to use is settled here.
+      w.handle = handles[wi];
       // Read against the row's own Proficient field, the [Enhanced] veil rule
       // and the Overview's proficiencies; a `false` is shown, not applied --
       // the -4 is the player's to write, as it always was.
@@ -9909,6 +9957,7 @@ export class Character {
     // rows a bonus reaches -- and a character with eight weapons in four
     // groups would otherwise need a hundred and change names listed out.
     const weapons = this.data.equipment?.weapons || [];
+    const handles = this.weaponHandles();
     const groups = new Set(weapons.flatMap((w) => (w.groups || []).filter(Boolean).map(slug)));
     const weaponTarget = (name) => {
       let rest = name;
@@ -9924,20 +9973,24 @@ export class Character {
       // misspelling and is reported as one. A shape that simply matches
       // nothing today -- "melee weapons" on a character carrying only a bow --
       // is not: the rule is right, and it will apply the moment one is bought.
+      // A weapon answers to its handle and to its whole slugged name alike:
+      // the handle is what anyone will actually type, but a rule written
+      // before the row had one must not stop working.
+      const named = (w, i) => handles[i] === sel || slug(w.name) === sel;
       if (sel && !WEAPON_SHAPES.has(sel) && !groups.has(sel)
-        && !weapons.some((w) => slug(w.name) === sel)) return null;
-      const matches = (w) => {
+        && !weapons.some(named)) return null;
+      const matches = (w, i) => {
         if (!sel) return true;
         const type = String(w.attackType || '').toLowerCase();
         if (WEAPON_SHAPES.has(sel)) return type.includes(sel);
-        return (w.groups || []).some((g) => slug(g) === sel) || slug(w.name) === sel;
+        return (w.groups || []).some((g) => slug(g) === sel) || named(w, i);
       };
-      return weapons.flatMap((w, i) => (matches(w) ? [`weapon.${i}.${channel}`] : []));
+      return weapons.flatMap((w, i) => (matches(w, i) ? [`weapon.${i}.${channel}`] : []));
     };
     for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
       list.push({ name: ch === 'attack' ? `weapon.${ch}` : ch, label: `${label}, every weapon` });
     }
-    for (const sel of [...WEAPON_SHAPES, ...groups, ...weapons.map((w) => slug(w.name))]) {
+    for (const sel of [...WEAPON_SHAPES, ...groups, ...handles]) {
       if (!sel) continue;
       for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
         list.push({ name: `weapon.${sel}.${ch}`, label: `${label}, ${sel.replace(/_/g, ' ')}` });

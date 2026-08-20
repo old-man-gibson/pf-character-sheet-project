@@ -3111,6 +3111,62 @@ console.log('class levels -- readable by name, and raisable by a rule');
   check('and the caster level with it', c.data.training.magic.globalCL, clBase);
 }
 
+console.log('weapon handles -- the short name a formula calls a weapon by');
+{
+  const { weaponHandle } = await import('../app/js/model.js');
+
+  // The default is the name cut where the bookkeeping starts.
+  check('a name written for the table becomes one written for a formula',
+    weaponHandle("Chef's Knife (Bastard Sword) & Cutting Board"), 'chefs_knife');
+  check('brackets cut it', weaponHandle('Carving Fork (Trident)'), 'carving_fork');
+  check('an ampersand cuts it', weaponHandle('Mic & Cord'), 'mic');
+  check('a plain name is left alone', weaponHandle('Guitar Axe'), 'guitar_axe');
+  check('apostrophes go rather than becoming an underscore',
+    weaponHandle("Chef's Knife").includes('_s'), false);
+  check('a name that is all brackets still gets something',
+    weaponHandle('(Unnamed)'), 'unnamed');
+  check('and an empty one does too', weaponHandle(''), 'weapon');
+
+  const c = new Character(load('bryva'));   // five kitchen implements, all parenthesised
+  check('every weapon gets one', c.weaponHandles().length, c.data.equipment.weapons.length);
+  check('and they are short enough to type', c.weaponHandles()[0], 'chefs_knife');
+  check('the row carries it for the view', c.data.equipment.weapons[0].handle, 'chefs_knife');
+
+  const flat = () => c.data.equipment.weapons.map((w) => w.calc.totalDmgFlat);
+  const base = flat();
+  const full = c.data.equipment.weapons[1].name.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  c.setClassFeature('Blacksmith', 1, 'Features',
+    `Short {weapon.chefs_knife.damage += 5} and long {weapon.${full}.damage += 3}`);
+  check('a weapon answers to its handle, and to its whole name as well',
+    flat().map((v, i) => v - base[i]), [5, 3, 0, 0, 0]);
+
+  // The field on the row wins, and what is typed there is slugged.
+  c.setItem('equipment.weapons', 0, 'id', 'Big Knife');
+  check('a typed handle replaces the derived one', c.weaponHandles()[0], 'big_knife');
+  check('and the old one stops matching', flat()[0] - base[0], 0);
+  c.setClassFeature('Blacksmith', 1, 'Features', 'Renamed {weapon.big_knife.damage += 5}');
+  check('while the new one works', flat().map((v, i) => v - base[i]), [5, 0, 0, 0, 0]);
+  check('the weapon keeps the name it is called at the table',
+    /Chef/.test(c.data.equipment.weapons[0].name), true);
+
+  // Two weapons must never share a handle, or one bonus would land on both.
+  c.setItem('equipment.weapons', 1, 'id', 'Big Knife');
+  check('a collision is numbered rather than shared',
+    c.weaponHandles().slice(0, 2), ['big_knife', 'big_knife2']);
+  check('and the bonus still lands on one weapon only',
+    flat().map((v, i) => v - base[i]), [5, 0, 0, 0, 0]);
+
+  // Blanking the field falls back to the name again.
+  c.setItem('equipment.weapons', 0, 'id', '');
+  c.setItem('equipment.weapons', 1, 'id', '');
+  check('an empty field goes back to the derived handle',
+    c.weaponHandles(), ['chefs_knife', 'spatula', 'carving_fork', 'tenderizers', 'tongs']);
+  c.setClassFeature('Blacksmith', 1, 'Features', '');
+  check('and nothing is left behind', flat(), base);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));
