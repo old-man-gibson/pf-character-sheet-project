@@ -42,6 +42,14 @@
   }
   .chip.local button.drop:hover { color: #e0635f; border-color: #e0635f; }
   .picker .local-tag { font-size: 0.68rem; opacity: 0.55; margin-left: 5px; }
+  /* Long names clamp rather than widen the strip; the full name is the title. */
+  .picker .cname {
+    display: inline-block; max-width: 14rem; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+  }
+  @media (max-width: 768px) { .picker .cname { max-width: 9rem; } }
+  .picker button.fold { color: var(--muted); }
+  .picker button.fold:hover { color: var(--accent); }
   .picker button.import { border-style: dashed; color: var(--muted); }
   .picker button.import:hover { color: var(--accent); }
   .picker button.exportall { color: var(--muted); }
@@ -253,22 +261,49 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
     (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
+  /*
+   * The picker can fold to just the open character -- on a phone the full
+   * roster is most of the screen. The choice is remembered per browser, and
+   * a browser that never chose starts folded when the viewport is narrow.
+   */
+  const FOLD_KEY = 'character-sheet:picker-folded';
+  function pickerFolded() {
+    try {
+      const saved = localStorage.getItem(FOLD_KEY);
+      if (saved !== null) return saved === '1';
+    } catch { /* no storage: fall through to the viewport */ }
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+  function setPickerFolded(on) {
+    try { localStorage.setItem(FOLD_KEY, on ? '1' : '0'); } catch { /* not fatal */ }
+  }
+
   function draw() {
-    picker.innerHTML = `${all().map((c) => (c.local
+    const folded = pickerFolded();
+    const roster = all();
+    const shown = folded ? roster.filter((c) => c.id === current) : roster;
+    const others = roster.length - shown.length;
+    const chip = (c) => (c.local
       ? `<span class="chip local">
-           <button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}">
-             ${esc(c.name)} <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
+           <button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
+             <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
            </button>
            <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
              aria-label="Remove ${esc(c.name)}">×</button>
          </span>`
-      : `<span class="chip"><button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}">
-           ${esc(c.name)} <span style="opacity:.6">L${esc(c.level)}</span>
-         </button></span>`)).join('')}
-      <button class="import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+      : `<span class="chip"><button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
+           <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span>
+         </button></span>`);
+    picker.innerHTML = `${shown.map(chip).join('')}
+      ${folded
+    ? `<button class="fold" id="unfoldBtn" aria-expanded="false"
+          title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
+    : `<button class="import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
       <button class="import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
       <button class="exportall" id="exportAllBtn"
-        title="Download every character in this picker as one .zip">Export all</button>`;
+        title="Download every character in this picker as one .zip">Export all</button>
+      <button class="fold" id="foldBtn" aria-expanded="true"
+        title="Fold the picker to just the open character">▾ Fold</button>`}`;
 
     picker.querySelectorAll('button.pick').forEach((b) => {
       b.addEventListener('click', () => { current = b.dataset.id; select(); draw(); });
@@ -276,9 +311,11 @@
     picker.querySelectorAll('button.drop').forEach((b) => {
       b.addEventListener('click', () => remove(b.dataset.drop));
     });
-    picker.querySelector('#newBtn').addEventListener('click', () => newDialog.showModal());
-    picker.querySelector('#importBtn').addEventListener('click', () => importFile.click());
-    picker.querySelector('#exportAllBtn').addEventListener('click', exportAll);
+    picker.querySelector('#newBtn')?.addEventListener('click', () => newDialog.showModal());
+    picker.querySelector('#importBtn')?.addEventListener('click', () => importFile.click());
+    picker.querySelector('#exportAllBtn')?.addEventListener('click', exportAll);
+    picker.querySelector('#foldBtn')?.addEventListener('click', () => { setPickerFolded(true); draw(); });
+    picker.querySelector('#unfoldBtn')?.addEventListener('click', () => { setPickerFolded(false); draw(); });
   }
 
   /*

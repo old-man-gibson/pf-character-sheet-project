@@ -244,6 +244,34 @@ trackers: a Citadel banner's `1 + essence.shoulder` to Attack and AC keeps the
 bonus right as shoulder essence is re-invested, without touching the buff again. A
 broken formula degrades to 0 with the error shown on the row.
 
+**Extra bonuses** reach what the dials do not: **+ Add bonus** in the editor adds a
+[target, value] pair, as many as the buff needs, values taking formulas like the
+dials. Targets: melee or ranged attacks alone, CMB, CMD, a single save, ability
+checks, max hit points, speed (flat feet, applied before a condition halves and
+never granting a movement type the character lacks) — and three special ones:
+
+- **An ability score** (bull's strength as `Strength +4`) rides the same block
+  conditions use, so the raised score cascades into everything built on its
+  modifier — attacks, skills, saves, AC, initiative.
+- **Size** is steps larger (+1 = one size up): attack and AC move by the size
+  modifier, CMB and CMD by the special size modifier (which the plain attack
+  channel rightly skips) — and every weapon's own damage dice **step along the
+  official progression chart** (1d8 → 2d6 enlarged, 2d6 → 1d10 reduced), with the
+  FAQ's remappings for d4s, d12s, d10 pools and off-chart d6/d8 counts, applied one
+  size step at a time so multi-step changes read each step's own size and dice.
+  Token riders (sneak, flaming) keep their dice, as the rules leave them; reach
+  stays yours. The stepped dice show on the dashboard's weapon lines and ride the
+  d20 copies, damage and crit alike. Size comes in three kinds — **true** (the four
+  numbers and the dice), **effective** ("treated as larger", dice alone), and
+  **stacking** for the odd item that makes size effects stack outright (wraps of
+  suppressed size) — within true and effective only the largest counts, and the
+  kinds stack with each other. Nothing grows past Colossal nor shrinks past Fine:
+  the attack and AC penalties, the CMB and CMD bonuses and the dice all run off
+  the capped steps.
+- **Save DCs** and **Essence pool** are shown where those numbers are read — the
+  Casting numbers and Veils cards — without re-running slot tables or investment
+  math.
+
 The **note** is prose that reads `{…}`: a definition written there — say
 `{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total < 0.5,
 if(hp.current < 0, 2, 1.5), 1)}` — becomes a name the whole sheet reads: a weapon's

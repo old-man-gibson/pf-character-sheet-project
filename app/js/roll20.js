@@ -33,7 +33,7 @@
  */
 import {
   ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
-  attackModeTotal, parseDiceExpr,
+  attackModeTotal, parseDiceExpr, stepDiceMap,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
 
@@ -477,13 +477,24 @@ export function weaponRollSpec(c, index, cs = null) {
     };
   }
 
+  // A size buff steps the weapon's own dice along the official chart; the
+  // token riders (sneak, flaming) keep their dice, exactly as the rules leave
+  // them alone.
+  const grow = cs?.sizeSteps || 0;
+  const sized = grow
+    ? stepDiceMap(calc.baseDmgDice || {}, grow, c.identity?.size)
+    : { dice: calc.baseDmgDice || {}, flat: 0 };
+
   const atkOpts = { dice: calc.tokAtk?.dice, critRange };
   const rolls = iterates(modeKey)
     ? iterativeRolls(c.attack?.bab, calc.totalAtk + atkDelta, 'Attack', atkOpts)
     : [{ label: 'Attack', formula: d20(calc.totalAtk + atkDelta, atkOpts) }];
   rolls.push({
     label: 'Damage',
-    formula: damageFormula(calc.totalDmgDice, calc.totalDmgFlat + dmgDelta),
+    formula: damageFormula(
+      addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
+      calc.totalDmgFlat + dmgDelta + sized.flat,
+    ),
   });
 
   const mult = Math.max(2, Math.floor(Number(calc.critMultNum) || 2));
@@ -497,8 +508,8 @@ export function weaponRollSpec(c, index, cs = null) {
   // `multBase` the card prints as `(12d8+26)×4`: the weapon's own damage, the
   // ability, enhancement and Misc dmg, and any [[... Mult]] token.
   const multBase = {
-    dice: addDice(calc.baseDmgDice || {}, calc.tokMultDmg?.dice || {}),
-    flat: (calc.baseDmgFlat || 0) + dmgDelta + (calc.tokMultDmg?.flat || 0),
+    dice: addDice(sized.dice, calc.tokMultDmg?.dice || {}),
+    flat: (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + (calc.tokMultDmg?.flat || 0),
   };
   const critDice = addDice(
     addDice(scaleDice(multBase.dice, mult), calc.tokDmg?.dice || {}),

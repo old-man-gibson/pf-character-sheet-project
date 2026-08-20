@@ -28,6 +28,8 @@ import {
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import { rollSpec } from '../app/js/roll20.js';
 
 let pass = 0;
 let fail = 0;
@@ -2543,6 +2545,166 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
   });
   check('a spell note round-trips',
     new Character(c.toJSON()).data.vancian.prepared.at(-1).note, 'heals {1 + min(5, level)}d8');
+}
+
+console.log('buff extra bonuses -- targets past the six dials');
+{
+  const c = new Character(blankDocument({ name: 'Shifter', level: 6 }));
+  const buff = (bonuses) => {
+    c.data.buffs = [{
+      name: 'Test', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0,
+      note: '', bonuses,
+    }];
+    c.recompute();
+    return c.conditionState;
+  };
+
+  // Plain channels: CMB, CMD, one save, the display-level DC and essence.
+  let cs = buff([{ target: 'cmb', value: 2 }, { target: 'cmd', value: 3 },
+    { target: 'reflex', value: 4 }, { target: 'dc', value: 1 }, { target: 'essence', value: 2 }]);
+  check('cmb, cmd and a single save move',
+    [cs.delta.cmb, cs.delta.cmd, cs.delta.reflex, cs.delta.fortitude], [2, 3, 4, 0]);
+  check('dc and essence ride as display deltas', [cs.delta.dc, cs.delta.essence, cs.changed], [1, 2, true]);
+  check('a lone buff names itself, not conditions', cs.sources, 'buffs');
+  c.data.conditions = { Shaken: true };
+  c.recompute();
+  check('with a condition too, both are named', c.conditionState.sources, 'conditions and buffs');
+  c.data.buffs = [];
+  c.recompute();
+  check('conditions alone name conditions', c.conditionState.sources, 'conditions');
+  c.data.conditions = {};
+
+  // An ability score cascades through its modifier (blank sheet: Str 10, melee off Str).
+  cs = buff([{ target: 'str', value: 4 }]);
+  check('+4 Str is +2 melee and +2 CMB through the modifier',
+    [cs.delta.melee, cs.delta.cmb, cs.scores.str], [2, 2, 14]);
+
+  // Size: +1 true step larger moves the four numbers a step moves.
+  cs = buff([{ target: 'size', value: 1 }]);
+  check('one size larger: −1 attack and AC, +1 CMB and CMD',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd], [-1, -1, 1, 1]);
+  check('and the dice walk one step', cs.sizeSteps, 1);
+
+  // Within a type only the largest counts; true and effective stack together.
+  c.data.buffs = [
+    { name: 'A', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 1 }] },
+    { name: 'B', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 2 }, { target: 'sizeEffective', value: 1 }] },
+  ];
+  c.recompute();
+  cs = c.conditionState;
+  check('two true increases take the largest, the effective stacks on top',
+    [cs.delta.melee, cs.delta.cmd, cs.sizeSteps], [-2, 2, 3]);
+
+  // An effective increase reaches the dice alone.
+  cs = buff([{ target: 'sizeEffective', value: 1 }]);
+  check('effective size: dice step, the four numbers stand',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [0, 0, 0, 0, 1]);
+
+  // The Colossal cap binds everything: modifiers and dice both run off the
+  // capped steps, so an absurd row still reads as Colossal.
+  c.data.identity.size = 'Huge';
+  cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
+  check('a Huge character stops at Colossal in numbers and dice alike',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+  c.data.identity.size = 'Medium';
+  cs = buff([{ target: 'size', value: 500 }]);
+  check('a +500 row is four steps from Medium, everywhere',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 4]);
+
+  // {size} reads the true size after buffs -- and only the true size: the
+  // stacking and effective kinds change what a character counts as, not what
+  // it is, which is the wraps' own distinction.
+  cs = buff([{ target: 'size', value: 2 }, { target: 'sizeEffective', value: 1 }, { target: 'sizeStacking', value: 1 }]);
+  check('a formula\'s size follows the true rows alone', c.scope().size, 'Huge');
+  check('and the ladder caps it',
+    (() => { c.data.buffs[0].bonuses[0].value = 20; c.recompute(); return c.scope().size; })(), 'Colossal');
+  c.data.buffs[0].on = false;
+  c.recompute();
+  check('unticked, the size comes home', c.scope().size, 'Medium');
+  c.data.identity.size = 'Medium';
+  cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
+  check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);
+
+  // Wraps of suppressed size: the item's own example. Kinetic form (Large)
+  // plus enlarge person written as stacking: the wearer becomes Large in
+  // fact, but is Huge for attack, AC, CMB, CMD and weapon dice -- which is
+  // exactly the sheet's true-size bundle, so both steps land there.
+  c.data.buffs = [
+    { name: 'Kinetic Form', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 1 }] },
+    { name: 'Enlarge Person (wraps)', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'sizeStacking', value: 1 }] },
+  ];
+  c.recompute();
+  cs = c.conditionState;
+  check('with the wraps, the stacking row sums with the largest true one',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+  check('and the cap still holds a stack of them',
+    (() => { c.data.buffs[1].bonuses[0].value = 9; c.recompute(); return c.conditionState.sizeSteps; })(), 4);
+  c.recompute();
+
+  // Speed is flat feet, applied before a condition's halving.
+  c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: 0 }];
+  cs = buff([{ target: 'speed', value: 10 }]);
+  check('+10 ft on a 30 ft move', cs.speeds[0].adjusted, 40);
+  c.data.conditions = { Entangled: true };
+  c.recompute();
+  cs = c.conditionState;
+  check('the bonus goes on before entangled halves', cs.speeds[0].adjusted, 20);
+  c.data.conditions = {};
+
+  // A bonus value takes a formula, and a broken one lands on the row.
+  cs = buff([{ target: 'cmd', value: '1 + floor(level / 3)' }]);
+  check('a formula bonus resolves', cs.delta.cmd, 3);
+  cs = buff([{ target: 'cmd', value: 'no_such' }]);
+  check('a broken bonus degrades to 0 with the error kept',
+    [cs.delta.cmd, !!c.data.buffs[0].bonuses[0].valueError, !!c.data.buffs[0].error], [0, true, true]);
+}
+
+console.log('size changes walk the official damage-dice chart');
+{
+  const step = (n, d, s, size = 'Medium') => {
+    const r = stepDamageDice(n, d, s, size);
+    return r ? `${r[0]}${r[1] > 1 ? `d${r[1]}` : ''}` : null;
+  };
+  // The enlarge/reduce table's own values.
+  check('1d6 up from Medium (1d6 or less: one step)', step(1, 6, 1), '1d8');
+  check('1d8 up from Medium (two steps)', step(1, 8, 1), '2d6');
+  check('2d6 up from Medium (greatsword enlarged)', step(2, 6, 1), '3d6');
+  check('1d4 up from Small (small size: one step)', step(1, 4, 1, 'Small'), '1d6');
+  check('1d8 down from Medium (1d8 or less: one step)', step(1, 8, -1), '1d6');
+  check('2d6 down from Medium (medium size: one step)', step(2, 6, -1), '1d10');
+  // The FAQ's own remap examples.
+  check('10d6 reads as 8d8, then two steps up', step(10, 6, 1), '12d8');
+  check('5d8 reads as 6d6, then two steps up', step(5, 8, 1), '8d6');
+  check('2d4 reads as 1d8', step(2, 4, 1), '2d6');
+  check('3d4 reads as 2d6', step(3, 4, 1), '3d6');
+  check('1d12 reads as 2d6', step(1, 12, 1), '3d6');
+  check('2d10 up is 4d8 regardless of size', step(2, 10, 1, 'Small'), '4d8');
+  check('2d10 down is 2d8 regardless of size', step(2, 10, -1, 'Small'), '2d8');
+  // Multi-step changes read each step's own size and dice.
+  check('1d6 up twice from Medium: 1d8 then 2d6', step(1, 6, 2), '2d6');
+  check('the chart floors at 1', step(1, 2, -2), '1');
+  check('an unknown die is left alone', stepDamageDice(2, 3, 1), null);
+  // A map steps per component, and a flat 1 lands in flat.
+  check('a mixed map steps each part on its own (1d8 → 2d6, 1d6 → 1d8)',
+    stepDiceMap({ 8: 1, 6: 1 }, 1, 'Medium'), { dice: { 6: 2, 8: 1 }, flat: 0 });
+  check('stepping down to the flat 1', stepDiceMap({ 2: 1 }, -1, 'Medium'), { dice: {}, flat: 1 });
+
+  // And on a weapon: a size buff steps the dice in the d20 copy.
+  const c = new Character(blankDocument({ name: 'Big', level: 6 }));
+  c.listAdd('equipment.weapons', {
+    name: 'Greatsword', attackType: 'Melee', dice: '2d6', damageAbility: 'Str', abilityMult: 1.5,
+    miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 19, critMult: 'x2',
+    damageType: '', groups: [], special: '', size: '', range: '', handedness: '',
+    familiarity: '', ammunition: '', weight: 0, price: 0, attackOffset: 0,
+  });
+  c.data.buffs = [{
+    name: 'Enlarge', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0,
+    note: '', bonuses: [{ target: 'size', value: 1 }],
+  }];
+  c.recompute();
+  const spec = rollSpec(c.data, 'weapon', 0, c.conditionState);
+  const dmg = spec.rolls.find((r) => r.label === 'Damage');
+  check('an enlarged greatsword rolls 3d6', dmg.formula.startsWith('3d6'), true);
 }
 
 console.log('skill misc accepts formulas and named values');
