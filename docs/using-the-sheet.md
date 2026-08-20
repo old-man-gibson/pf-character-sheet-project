@@ -199,12 +199,16 @@ minimized; all of this persists per character.
 
 Top to bottom, the Overview reads: **At a glance** (the eight numbers a table asks
 for), **Details** (what the player writes about the character) beside the ability
-scores, **Specialty** beside **Languages**, then two supergroups — **Defenses** (hit points, armor class, saving throws)
-and **Offenses** (attack, speed, proficiencies) — then conditions beside carrying capacity, the
-Classes table, and traits.
+scores, **Specialty** beside **Languages**, the **Classes** table — the levels every
+number below it comes out of — then two supergroups: **Defenses** (hit points, armor
+class, saving throws) and **Offenses** (attack, speed and proficiencies, three panels
+to a row where the width is there). Last come conditions beside carrying capacity, the
+wallet, and traits.
 
 **Conditions** are switches, not number boxes: all of them are on or off except
-negative levels, which count. Each chip says what the condition costs
+negative levels, which count. They are laid out three to a row — the standard
+eighteen in six rows, the whole list in one look — falling to two and then one as the
+panel narrows. Each chip says what the condition costs
 (*−2 atk, −2 saves…*), and ticking one changes nothing in the sheet's own totals —
 those stay reconciled to the workbook — but every stat it moves grows a second
 reading, **now +N**, under the base: attacks, AC, touch, flat-footed, CMD, the three
@@ -228,11 +232,27 @@ languages are free; slots are one per point of Int bonus plus one per Linguistic
 rank, plus **Extra** for whatever a race or trait adds, as a number or a formula
 (`floor(level / 2)`). The known list is chips you add and remove, counted against
 the slots; the workbook's comma- and pipe-separated cells are split into it on import.
+Each chip has a grip: drag one past its neighbours to put the list in the order you
+want it read. The caret in the heading folds the whole panel down to one line —
+every language the character speaks, native ones first, in a box with a **Copy**
+button beside it, which is the form a table or a post asks for.
+
+**Base attack bonus** is worked out from the Classes table rather than typed: at each
+character level the best BAB progression among the classes present at it, summed and
+floored once at the end. Each class's progression — full, ¾, ½ — is a column on that
+table, and the figure here is a read-out with an override behind it: type a number to
+pin it, clear the box to hand it back. All five source workbooks reproduce their own
+BAB to the point under that rule, so an import needs no override; one whose class
+table cannot explain its BAB keeps the number it came with, pinned, rather than
+losing it.
 
 **Attack** reads Melee, Ranged and CMB as headline numbers, and under them a table of
 all six slots the sheet keeps — each of the three plus its **alternate**, which is the
 same attack with a different ability in it: Dex for a finessed blade, Wis for a monk's
-fist. Each row shows its total and carries a **d20**. An alternate is not a second sum:
+fist. Each row shows its total and carries a **d20**. An alternate is folded into the
+attack it belongs to and starts that way, so the table reads as three rows; the caret
+on each says what is underneath it (*Show the alternate — Wis, +36*). An alternate is
+not a second sum:
 it is its own mode's total with one modifier swapped for the other, so it shares the
 BAB, the misc bonus, the size modifier and the import reconciliation, and cannot drift
 from the number above it.
@@ -246,7 +266,9 @@ does; formula bonuses appear in the Formula audit like every other player formul
 terms the weapon rows on Equipment carry: **familiarities** (simple, martial, exotic),
 **handedness** (light, one-handed, two-handed — for the classes and traits that grant
 "all light weapons"), the fighter **weapon groups**, and **specific weapons** typed in
-one by one like languages. **Armor** is unarmored, light, medium and heavy; **shields**
+one by one like languages — that last row folds away behind its caret, since a race's
+list is written once and read after that, and folded it is the names in a sentence.
+**Armor** is unarmored, light, medium and heavy; **shields**
 are none, buckler, light, heavy and tower, where *None* is a statement — ticking it clears
 the kinds and a kind clears it. A **Notes** field takes whatever the lists cannot say.
 On import the sentences are read into the lists — *"all simple and double-chained kama,
@@ -287,12 +309,20 @@ two switches the earlier one (Narockro's) had:
 |---|---|
 | OoO / day | Mana/Day ÷ 2 |
 | owed under the Oath | days since the last offering × OoO/day + ⌊session mana ÷ 2⌋ — half of everything earned |
-| owed for material casting | whole months since the last offering × 30 |
+| owed for material casting | whole months since the last offering × 10 × caster level |
 | **Mana after** | current − (the parts whose switch is on) |
 
 Days and months are counted the way `TODAY() − date` and `DATEDIF(…, "M")` count them,
 so the figure moves with the calendar exactly as the sheet's does. Formulas can read
 `mana.current`, `mana.expected` and `mana.after`.
+
+The panel says only as much as the character owes. **On hand**, **Current mana** and
+**Mana / day** are everyone's. The rest — *Owed*, *After offering*, the baseline, the
+date of the last offering, OoO/day and the session mana since — belongs to the two
+switches, and with neither of them on those fields are readable but not writable:
+there is no offering to keep a baseline for. The switches themselves say what they
+cost on hover rather than in the row, since the answer to the formula is already the
+*Owed* figure above them.
 
 The panel is also the hook for what comes later: a **ledger**. Every reward, spend and
 offering is a dated line with a label and an amount, and the wallet moves with it — a
@@ -497,18 +527,39 @@ with the level filter applied.
 
 ## Classes (gestalt) & traits
 
-The Classes table lives on the Overview. Levels per class are counted from the
-Planner up to the current level (with a manual override for sparse Planners; a class
-the Planner never names is assumed to run all levels). From it the app derives,
-following gestalt rules (best progression among the classes present each level):
+The Classes table lives on the Overview, above the Defenses. **Levels** is a read-out
+before it is a field: the number in the box is how many of the character's levels
+feature that class in the Planner, which is what every other tab means by "class
+level", and hovering it says so — *featured on 8 of 9 levels*. The name is matched
+against the Planner's own spelling the way the casting blocks match it, so one
+mistyped letter no longer answers "never" and quietly promotes the class to every
+level. Type a number to pin it instead (for a sparse Planner), and clear the box to
+hand it back. A class the Planner never names at all still runs all levels.
+
+From that table the app derives, following gestalt rules (best progression among the
+classes present each level):
 
 - **Save bases** — good saves +2 once and +½/level, poor +⅓/level — written straight
   into the Saves panel.
+- **Base attack bonus** — the best of the **BAB** column on each level, summed and
+  floored once at the end, which is the workbook's own arithmetic: fifteen levels of ¾
+  is 11, and ten of full plus one of ¾ is 10. It lands on the Attack panel, where an
+  override can pin it.
 - **HP/level** (best HD) and **skill ranks/level** (best class).
+
+A character on one class track is not gestalt and is not told about it: the same
+three numbers are shown without the best-of wording, and without the gestalt note.
 
 Traits & drawbacks are structured slots: Traits 1–3 always; Drawback 1 unlocks
 Trait 4, Drawback 2 unlocks Trait 5, and a Major Drawback buys a Drawback Feat —
-locked slots grey out until their drawback is filled. Categories cover the standard
+locked slots grey out until their drawback is filled. Each row is slot, category,
+**name** and effect. The workbook had two cells for those last three and every sheet
+overloaded one: a trait was written *"Fate's Favored (+1 to any existing Luck
+bonuses)"* with the name and the effect together, while a drawback's name went in the
+category column — which is not a category, has never been shown, and so carried
+*Pride* and *Overly Cautious* invisibly. The name is split out into its own column on
+load, once, from whichever of the two was carrying it; a slot that reads as neither
+keeps its text whole and starts with no name. Categories cover the standard
 list (Campaign, Combat, Cosmic, Equipment, Faith, Family, Magic, Mount, Race,
 Regional, Religion, Social) plus any the player adds (Akashic, Mythic, Psionic…).
 Race traits sit beside them in their own list — see [The Overview](#the-overview).
