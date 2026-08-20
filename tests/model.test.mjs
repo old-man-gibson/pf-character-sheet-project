@@ -2706,6 +2706,14 @@ console.log('weapon handles -- the short name a formula calls a weapon by');
     c.weaponHandles(), ['chefs_knife', 'spatula', 'carving_fork', 'tenderizers', 'tongs']);
   c.setClassFeature('Blacksmith', 1, 'Features', '');
   check('and nothing is left behind', flat(), base);
+
+  // Folding a weapon away is a view preference the character keeps, the way a
+  // hidden skill is -- collapse the four you are not using and they stay that
+  // way next time the sheet is opened.
+  c.setItem('equipment.weapons', 2, 'collapsed', true);
+  check('a folded weapon survives a round trip',
+    new Character(c.toJSON()).data.equipment.weapons.map((w) => !!w.collapsed),
+    [false, false, true, false, false]);
 }
 
 console.log('round-trips through JSON');

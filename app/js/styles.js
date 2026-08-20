@@ -842,8 +842,33 @@ tr.untrained .sname { font-weight: 500; }
   border: 1px solid var(--cs-line); border-radius: 6px;
   padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
 }
-.weaponhead { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+.weaponhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 7px; }
 .weaponhead input[type="text"] { flex: 1; font-weight: 640; }
+
+/* Collapsed: the head is the summary -- name, attack, damage, proficiency --
+   which is what a weapon you are not editing has to say. Hidden rather than
+   left unrendered, and hidden with display:none so the fields inside go out
+   of the tab order too rather than becoming a trap for a keyboard. */
+.weapon.collapsed > *:not(.weaponhead) { display: none; }
+.weapon.collapsed .weaponhead { margin-bottom: 0; }
+.wfold {
+  flex: 0 0 auto; width: 1.7rem; min-height: 1.7rem; padding: 0;
+  font-size: 0.82rem; color: var(--cs-muted);
+  background: none; border-color: transparent;
+}
+.wfold:hover, .wfold:focus-visible { color: var(--cs-accent); border-color: var(--cs-line); }
+
+/* The two names a weapon has: the one it is called at the table, and the one
+   a formula calls it by. Side by side while there is room, and the handle
+   drops under the name when there is not -- it is the shorter of the two and
+   the one a reader can do without at a glance. */
+.wnames { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; flex: 1 1 10rem; min-width: 0; }
+.wnames > input[type="text"] { flex: 1 1 10rem; min-width: 0; }
+.whandle { display: flex; align-items: center; gap: 1px; flex: 0 1 auto; }
+.whandle > span { font-family: var(--cs-mono); font-size: 0.68rem; color: var(--cs-muted); }
+.weaponhead .whandle input[type="text"] {
+  flex: 0 0 auto; width: 7rem; font-weight: 500; font-size: 0.72rem; padding: 2px 4px;
+}
 .bigroll {
   font-size: 1.05rem; font-weight: 680; color: var(--cs-accent);
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -965,13 +990,6 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
 }
 .fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
 
-/* The name a formula calls a weapon by, under the field that sets it. Shown
-   whole, because the point of the field is knowing what to type elsewhere. */
-.hint.whandle {
-  display: block; font-family: var(--cs-mono);
-  font-size: 0.68rem; opacity: 0.75; margin-top: 2px; white-space: nowrap;
-}
-.hint.whandle strong { color: var(--cs-accent); font-weight: 650; }
 
 /* ---------- formula fields ---------- */
 /* Same two layers as .prose, for a single-line control: the resolved value is
