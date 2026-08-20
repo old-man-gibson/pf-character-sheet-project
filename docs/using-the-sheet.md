@@ -201,6 +201,27 @@ In the session view the **Overview is a dashboard** rather than the full page:
 Expand states persist with the character; the full Overview is one Build-view click
 away.
 
+**The dashboard is yours to compose.** Its cards are fixed building blocks, but which
+show, and in what order, is the player's: **Arrange cards** (top right of the
+dashboard) lists the shown cards with move/hide and everything else one click from
+joining. Left automatic, the caster cards come and go with what the character
+actually uses; the first change pins the arrangement (`uiPrefs.dashCards`), and
+**Reset to automatic** hands it back. Beyond the standing cards there are:
+
+- **Spells & slots** — a row per Vancian casting class with its slot pips
+  (spontaneous and hybrid casters spend here), the prepared list with its squares,
+  each class's concentration d20 and a **New day** button — the same pools the
+  Vancian tab spends, seen from the table. Automatic once a casting class exists.
+- **Power points** — the psionic pool's meter with − / + and **New day**. Automatic
+  for manifesters.
+- **Casting numbers** — the Spheres figures a round asks for: caster level,
+  concentration with its d20, MSB/MSD, save DC, spell points, practitioner DC.
+  Automatic with magic training.
+- **Reference lists**, opt-in for whatever a playstyle keeps reaching for:
+  **Veils shaped** (slot, essence, DC each), **Readied maneuvers** (by discipline,
+  ticked on the Maneuvers tab), and **Talents** (every sphere talent as a one-line
+  entry, full text on hover).
+
 ### Buffs
 
 Buffs live on the session dashboard and on the build Overview (under Conditions).

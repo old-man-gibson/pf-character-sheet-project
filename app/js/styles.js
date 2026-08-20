@@ -136,6 +136,13 @@ export const SHEET_CSS = `
 .effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
 .effectrow.off input[type="text"] { opacity: 0.55; }
 .now.up { color: var(--cs-good); }
+/* The dashboard's own toolbar, and the caster and reference cards. */
+.dashtools { display: flex; justify-content: flex-end; margin: -6px 0; }
+.dashcaster { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 4px 0; }
+.dashcaster .tname { font-weight: 620; font-size: 0.85rem; }
+.dashslots { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; flex: 1; }
+.dashslot { display: inline-flex; gap: 5px; align-items: center; }
+.dashtalent { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 0; }
 /* A number a condition or buff has moved, shown in place of the base. */
 .adj { color: var(--cs-bad); }
 .adj.up { color: var(--cs-good); }

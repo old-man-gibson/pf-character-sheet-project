@@ -189,6 +189,30 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 ));
 
 /**
+ * The session dashboard's building blocks, in their default order. The blocks
+ * are fixed; which of them show, and in what order, is the player's
+ * (`uiPrefs.dashCards`) -- and until they arrange it themselves, the caster
+ * cards come and go with the systems the character actually uses.
+ */
+const DASH_CARDS = [
+  ['conditions', 'Conditions'],
+  ['buffs', 'Buffs'],
+  ['resources', 'Resources'],
+  ['vancian', 'Spells & slots'],
+  ['psionics', 'Power points'],
+  ['spheres', 'Casting numbers'],
+  ['veils', 'Veils shaped'],
+  ['maneuvers', 'Readied maneuvers'],
+  ['talents', 'Talents'],
+  ['offense', 'Offense'],
+  ['defense', 'Defense'],
+  ['skills', 'Key skills'],
+  ['effects', 'Active effects'],
+  ['quick', 'Quick actions'],
+];
+const DASH_CARD_LABELS = new Map(DASH_CARDS);
+
+/**
  * Past this many steps a row of pips is a wall rather than a reading, so the
  * pip shape draws nothing and a meter falls back to its bar.
  */
@@ -469,6 +493,8 @@ export class CharacterSheetElement extends HTMLElement {
   #openBuff = null;
   /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
   #confirmReset = false;
+  /** Whether the dashboard's card arranger is open. */
+  #dashArrange = false;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -1367,18 +1393,97 @@ export class CharacterSheetElement extends HTMLElement {
   #dashboardPanel() {
     const open = (key) => !!this.#model.data.uiPrefs?.collapsed?.[`dash:${key}`];
     const e = this.#model.data.equipment || {};
+    const render = {
+      conditions: () => this.#dashConditionsCard(),
+      buffs: () => this.#buffsPanel(),
+      resources: () => this.#dashResourcesCard(),
+      vancian: () => this.#dashVancianCard(),
+      psionics: () => this.#dashPsionicsCard(),
+      spheres: () => this.#dashSpheresCard(),
+      veils: () => this.#dashVeilsCard(),
+      maneuvers: () => this.#dashManeuversCard(),
+      talents: () => this.#dashTalentsCard(),
+      offense: () => this.#dashOffenseCard(open('offense'))
+        + (open('offense') ? `${this.#attackPanel()}${this.#weaponsPanel(e)}` : ''),
+      defense: () => this.#dashDefenseCard(open('defense'))
+        + (open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''),
+      skills: () => this.#dashSkillsCard(open('skills')),
+      effects: () => this.#dashEffectsCard(),
+      quick: () => this.#dashQuickCard(),
+    };
     return `<div class="grid dashboard">
-      ${this.#dashConditionsCard()}
-      ${this.#buffsPanel()}
-      ${this.#dashResourcesCard()}
-      ${this.#dashOffenseCard(open('offense'))}
-      ${this.#dashDefenseCard(open('defense'))}
-      ${open('offense') ? `${this.#attackPanel()}${this.#weaponsPanel(e)}` : ''}
-      ${open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''}
-      ${this.#dashSkillsCard(open('skills'))}
-      ${this.#dashEffectsCard()}
-      ${this.#dashQuickCard()}
+      <div class="dashtools span2">
+        <button class="linkish" data-action="dash-arrange" aria-expanded="${this.#dashArrange}">
+          ${this.#dashArrange ? 'Done arranging' : 'Arrange cards'}</button>
+      </div>
+      ${this.#dashArrange ? this.#dashArrangePanel() : ''}
+      ${this.#dashCardIds().map((id) => render[id]?.() || '').join('')}
     </div>`;
+  }
+
+  /**
+   * The dashboard's default composition: the standing cards, plus the caster
+   * cards for whatever the character actually uses -- Vancian slots, the
+   * psionic pool, the Spheres casting numbers. The reference lists (veils,
+   * readied maneuvers, talents) wait in the arranger, because which of those
+   * belongs on a player's overview is a playstyle call, not a data one.
+   */
+  #dashDefaultCards() {
+    const inUse = this.#model.systemTabsInUse();
+    const tagged = this.#model.taggedSystemTabs();
+    const on = (id) => inUse[id] || tagged.has(id);
+    const out = ['conditions', 'buffs', 'resources'];
+    if (on('vancian')) out.push('vancian');
+    if (on('psionics')) out.push('psionics');
+    if (on('combat') && this.#model.data.training?.magic) out.push('spheres');
+    out.push('offense', 'defense', 'skills', 'effects', 'quick');
+    return out;
+  }
+
+  /** The cards to show, in order: the player's arrangement, else the automatic one. */
+  #dashCardIds() {
+    const saved = this.#model.data.uiPrefs?.dashCards;
+    if (!Array.isArray(saved)) return this.#dashDefaultCards();
+    const known = new Set(DASH_CARD_LABELS.keys());
+    return saved.filter((id) => known.has(id));
+  }
+
+  /**
+   * The arranger: every building block, the shown ones in order with move and
+   * hide, the rest one click from joining. The first edit pins the automatic
+   * arrangement into uiPrefs.dashCards; Reset hands it back to automatic.
+   */
+  #dashArrangePanel() {
+    const visible = this.#dashCardIds();
+    const custom = Array.isArray(this.#model.data.uiPrefs?.dashCards);
+    const hidden = DASH_CARDS.filter(([id]) => !visible.includes(id));
+    const row = (id, i) => `<div class="item statline">
+      <span class="label">${esc(DASH_CARD_LABELS.get(id) || id)}</span>
+      <span class="value pair">
+        <button data-action="dash-card-move" data-id="${id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(DASH_CARD_LABELS.get(id))} up">↑</button>
+        <button data-action="dash-card-move" data-id="${id}" data-dir="1" ${i === visible.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(DASH_CARD_LABELS.get(id))} down">↓</button>
+        <button data-action="dash-card-hide" data-id="${id}" ${visible.length === 1 ? 'disabled' : ''}>Hide</button>
+      </span>
+    </div>`;
+    const offRow = ([id, label]) => `<div class="item statline">
+      <span class="label">${esc(label)}</span>
+      <span class="value"><button data-action="dash-card-show" data-id="${id}">Show</button></span>
+    </div>`;
+    return `<section class="panel span2">
+      <h3>Your overview ${custom ? '<span class="badge player">arranged by you</span>' : '<span class="badge">automatic</span>'}
+        ${custom ? '<button style="margin-left:auto" data-action="dash-cards-reset" title="Back to the automatic arrangement: the standing cards plus whatever this character casts or manifests with">Reset to automatic</button>' : ''}
+      </h3>
+      <p class="hint">
+        The cards are fixed building blocks; which show, and in what order, is yours.
+        Left automatic, the caster cards come and go with what the character uses; the
+        first change you make here pins the arrangement. The reference lists — veils,
+        readied maneuvers, talents — are below, for whatever your playstyle keeps
+        reaching for.
+      </p>
+      <div class="rowlist">${visible.map(row).join('')}</div>
+      ${hidden.length ? `<h4 class="subhead" style="margin-top:10px">More to add</h4>
+      <div class="rowlist">${hidden.map(offRow).join('')}</div>` : ''}
+    </section>`;
   }
 
   /** The card's corner control: one click between the summary and the full read. */
@@ -1756,6 +1861,171 @@ export class CharacterSheetElement extends HTMLElement {
     return `${Math.min(hp.current, maxNow)}/${maxNow}`;
   })()}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
     ? ` · ${hp.nonlethal} nonlethal` : ''} — the strip above follows along.</p>
+    </section>`;
+  }
+
+  /**
+   * Vancian, as the table spends it: a row per casting class with its slot
+   * pips (spontaneous and hybrid casters), then the prepared list with its
+   * squares -- the same paths the Vancian tab writes, so the two views are one
+   * pool. Tables, DCs and known lists stay on the tab.
+   */
+  #dashVancianCard() {
+    const v = this.#model.data.vancian;
+    const classes = v?.classes || [];
+    if (!classes.length) {
+      return `<section class="panel"><h3>Spells &amp; slots</h3>
+        <p class="empty">No casting classes yet — the Vancian tab starts one.</p></section>`;
+    }
+    const classRow = (c, ci) => {
+      const base = `vancian.classes.${ci}`;
+      const spends = prepStyle(c.prep).slots === 'pool';
+      const noun = c.noun || castingNoun(c.source);
+      const levels = (c.spells || []).map((s, si) => {
+        if (!s.slots || s.atWill) return '';
+        return `<span class="dashslot"><span class="dim">L${s.level}</span>${spends
+          ? slotSpend({ path: `${base}.spells|${si}|used`, total: s.slots, left: s.left, name: `${noun.one} level ${s.level}` })
+          : `<span class="pool">${s.slots}/day</span>`}</span>`;
+      }).filter(Boolean).join('');
+      return `<div class="dashcaster">
+        <span class="tname">${esc(c.name || 'Casting class')} <span class="dim">CL ${c.casterLevel ?? 0}</span></span>
+        <span class="dashslots">${levels || '<span class="empty">no slots at this level</span>'}</span>
+        ${this.#rollButton('concentration', `vancian:${ci}`, `${c.name || 'this class'} concentration`)}
+      </div>`;
+    };
+    const prepared = (v.prepared || []).map((r, i) => ({ r, i })).filter(({ r }) => r.name);
+    const prow = ({ r, i }) => `<div class="statline">
+      <span class="label" title="${esc(r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
+      <span class="value">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
+        || '<span class="dim">—</span>'}</span>
+    </div>`;
+    return `<section class="panel span2">
+      <h3>Spells &amp; slots
+        ${v.calc?.spent ? `<span class="badge">${v.calc.spent} spent today</span>` : ''}
+        <button style="margin-left:auto" data-action="vancian-new-day"
+          title="Everything spent comes back">New day</button>
+      </h3>
+      ${classes.map(classRow).join('')}
+      ${prepared.length ? `<div class="rowlist" style="margin-top:6px">${prepared.map(prow).join('')}</div>` : ''}
+      <p class="hint">Pips spend an anonymous slot; squares spend a prepared casting —
+        the Vancian tab holds the tables, DCs and spell lists.</p>
+    </section>`;
+  }
+
+  /** The day's power points, spendable in place; the tab holds the powers. */
+  #dashPsionicsCard() {
+    const p = this.#model.data.psionics;
+    const pool = Number(p?.pool) || 0;
+    if (!p || (!pool && !(p.classes || []).length)) {
+      return `<section class="panel"><h3>Power points</h3>
+        <p class="empty">No manifesting classes yet — the Psionics tab starts one.</p></section>`;
+    }
+    const left = Number(p.left) || 0;
+    return `<section class="panel">
+      <h3>Power points <span class="badge">${left} of ${pool}</span>
+        <button class="linkish" style="margin-left:auto" data-action="psionics-new-day"
+          title="The whole pool comes back">New day</button>
+      </h3>
+      ${this.#meterVisual(this.#model.meterSpec('pp'))}
+      <div class="tracker-controls" style="margin-top:6px">
+        <button data-pool-step="-1" aria-label="Spend one power point">−</button>
+        <input type="number" value="${left}" data-pool-left aria-label="Power points remaining">
+        <span class="pool">/ ${pool}</span>
+        <button data-pool-step="1" aria-label="Restore one power point">+</button>
+      </div>
+    </section>`;
+  }
+
+  /** The Spheres casting figures a round actually asks for, with the concentration d20. */
+  #dashSpheresCard() {
+    const t = this.#model.data.training || {};
+    const m = t.magic;
+    if (!m) {
+      return `<section class="panel"><h3>Casting numbers</h3>
+        <p class="empty">No magic training — the Spheres &amp; Magic tab starts it.</p></section>`;
+    }
+    return `<section class="panel">
+      <h3>Casting numbers</h3>
+      ${this.#line('Caster level', m.globalCL ?? 0)}
+      ${this.#lineHtml('Concentration', `<span class="rollpair">${fmt(m.concentration ?? 0)}${
+        this.#rollButton('concentration', 'magic', 'a concentration check')}</span>`, true)}
+      ${this.#line('MSB / MSD', `${fmt(m.msb ?? 0)} / ${m.msd ?? 0}`)}
+      ${this.#line('Save DC', m.globalDC ?? 0)}
+      ${this.#line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}
+      ${t.combat ? this.#line('Practitioner DC', t.combat.practitionerDC ?? 0) : ''}
+      <p class="hint">Points spent in play live on their tracker in Resources; the
+        talents are on Spheres &amp; Magic.</p>
+    </section>`;
+  }
+
+  /** Every shaped veil at a glance: slot, essence invested, save DC. */
+  #dashVeilsCard() {
+    const a = this.#model.data.akashic;
+    const holders = [...(a?.slots || []), ...(a?.kheshig || [])];
+    const shaped = holders.flatMap((s) => (s.veils || []).map((v) => ({ slot: s.slot, v })));
+    return `<section class="panel">
+      <h3>Veils shaped ${shaped.length ? `<span class="badge">${shaped.length}</span>` : ''}</h3>
+      <div class="rowlist">${shaped.map(({ slot, v }) => `<div class="statline">
+        <span class="label" title="${esc(v.name || '')}">${esc(v.name || '—')} <span class="dim">${esc(slot || '')}</span></span>
+        <span class="value">${Number(v.essence) ? `${v.essence} essence · ` : ''}DC ${v.dc ?? 0}</span>
+      </div>`).join('') || '<p class="empty">No veils shaped — the Akashic tab is where they go on.</p>'}</div>
+    </section>`;
+  }
+
+  /** What is readied, by discipline -- the ticks live on the Maneuvers tab. */
+  #dashManeuversCard() {
+    const m = this.#model.data.maneuvers;
+    const disciplines = (m?.disciplines || [])
+      .map((d) => ({ name: d.name, readied: (d.entries || []).filter((e) => e.known) }))
+      .filter((d) => d.readied.length);
+    return `<section class="panel">
+      <h3>Readied maneuvers</h3>
+      ${disciplines.map((d) => `
+        <h4 class="subhead">${esc(d.name)}</h4>
+        <div class="rowlist">${d.readied.map((e) => `<div class="statline">
+          <span class="label" title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}">${esc(e.name)}</span>
+          <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
+        </div>`).join('')}</div>`).join('')
+    || '<p class="empty">Nothing readied — tick maneuvers on the Maneuvers tab.</p>'}
+    </section>`;
+  }
+
+  /**
+   * The sphere talents, one clamped line each, grouped by side -- a reference
+   * the table can scan without opening the training grids.
+   */
+  #dashTalentsCard() {
+    const t = this.#model.data.training || {};
+    const line = (text) => `<div class="dashtalent" title="${esc(text)}">${hasTokens(text)
+      ? this.#renderedProse(text) : esc(text)}</div>`;
+    const side = (key, label) => {
+      const s = t[key];
+      if (!s) return '';
+      const texts = [];
+      for (const cls of s.classes || []) {
+        if (cls.blendedMirror) continue;
+        for (const lv of cls.levels || []) {
+          const v = String(lv.talent || '').trim();
+          if (v) texts.push(v);
+        }
+      }
+      for (const b of s.bonusTalents || []) {
+        const v = String(b.talent || '').trim();
+        if (v) texts.push(v);
+      }
+      for (const e of s.tradition?.entries || []) {
+        const v = String(e.talent || '').trim();
+        if (v) texts.push(v);
+      }
+      if (!texts.length) return '';
+      return `<h4 class="subhead">${label} <span class="badge">${texts.length}</span></h4>
+        ${texts.map(line).join('')}`;
+    };
+    const body = `${side('combat', 'Combat')}${side('magic', 'Magic')}`;
+    return `<section class="panel">
+      <h3>Talents</h3>
+      ${body || '<p class="empty">No talents yet — they are written on Spheres &amp; Magic.</p>'}
+      ${body ? '<p class="hint">Hover a line for its full text; the training grids are on Spheres &amp; Magic.</p>' : ''}
     </section>`;
   }
 
@@ -10373,6 +10643,39 @@ export class CharacterSheetElement extends HTMLElement {
       // stays in the build view's grid, unticked).
       case 'dash-cond-picker':
         this.#condPickerOpen = !this.#condPickerOpen;
+        this.#render();
+        break;
+      // Arranging the dashboard: the first edit pins the automatic set into
+      // uiPrefs.dashCards; Reset hands the composition back to automatic.
+      case 'dash-arrange':
+        this.#dashArrange = !this.#dashArrange;
+        this.#render();
+        break;
+      case 'dash-card-hide': {
+        const order = this.#dashCardIds().filter((id) => id !== button?.dataset.id);
+        this.#model.set('uiPrefs.dashCards', order);
+        this.#render();
+        break;
+      }
+      case 'dash-card-show': {
+        const order = [...this.#dashCardIds(), button?.dataset.id].filter(Boolean);
+        this.#model.set('uiPrefs.dashCards', order);
+        this.#render();
+        break;
+      }
+      case 'dash-card-move': {
+        const order = this.#dashCardIds();
+        const from = order.indexOf(button?.dataset.id);
+        const to = from + Number(button?.dataset.dir);
+        if (from >= 0 && to >= 0 && to < order.length) {
+          [order[from], order[to]] = [order[to], order[from]];
+          this.#model.set('uiPrefs.dashCards', order);
+        }
+        this.#render();
+        break;
+      }
+      case 'dash-cards-reset':
+        this.#model.set('uiPrefs.dashCards', null);
         this.#render();
         break;
       case 'buff-add':
