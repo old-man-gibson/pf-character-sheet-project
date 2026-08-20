@@ -77,6 +77,7 @@ import {
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
   mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS,
+  conditionTotals, statModDelta,
 } from './rules.js';
 import {
   COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
@@ -93,7 +94,7 @@ import {
   trackBand,
 } from './tracker-style.js';
 import {
-  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText,
+  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
 } from './roll20.js';
 
 /**
@@ -1130,8 +1131,15 @@ export class CharacterSheetElement extends HTMLElement {
       ? `<strong class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">${format(cs.adjusted[key])}</strong>`
       : `<strong>${format(base)}</strong>`);
     const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
+    const maxNow = moved('hp', hp.max);
+    // Negative levels take current and total alike, so the shown current never
+    // stands above the drained maximum; the stored value is untouched and
+    // comes back when the levels do.
+    const curNow = Math.min(hp.current, maxNow);
     return `<div class="subtitle sessionstrip">
-      HP <strong${hp.current < hp.max ? ' class="bad"' : ''}>${hp.current}/${hp.max}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
+      HP <strong class="${curNow < maxNow ? 'bad' : ''}"
+        title="${maxNow !== hp.max ? esc(`Base ${hp.current}/${hp.max} — negative levels reduce current and total hit points`) : ''}"
+        >${curNow}/${maxNow}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
       &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${moved('touch', d.touch)} &middot; FF ${moved('flatFooted', d.flatFooted)}</span>
       &middot; Fort ${shown('fortitude', s.fortitude.total)}
       Ref ${shown('reflex', s.reflex.total)}
@@ -1405,9 +1413,43 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="pills dashconds">
         ${active.map(chip).join('') || '<span class="empty">None — all clear.</span>'}
       </div>
+      ${this.#dashCondNumbers()}
       ${this.#dashCondPicker()}
-      ${cs.notes.length ? `<p class="hint">${cs.notes.map((n) => `${esc(n[0].toUpperCase() + n.slice(1))}.`).join(' ')}</p>` : ''}
+      ${cs.notes.length ? `<ul class="condnotes">${cs.notes.map((n) => `<li>${esc(n[0].toUpperCase() + n.slice(1))}.</li>`).join('')}</ul>` : ''}
     </section>`;
+  }
+
+  /**
+   * What the ticked conditions add up to, one tag per number they move --
+   * conditions alone, so a buff's bonus never reads as a penalty here. An
+   * ability score shows where it lands (floored at 0: a penalty past the
+   * score empties it, no further).
+   */
+  #dashCondNumbers() {
+    const cs = this.#model.conditionState;
+    if (!cs.active.length) return '';
+    const t = conditionTotals(cs.active);
+    const bits = [];
+    const labels = [['attack', 'Attack'], ['melee', 'Melee'], ['ranged', 'Ranged'], ['damage', 'Damage'],
+      ['ac', 'AC'], ['cmd', 'CMD'], ['saves', 'Saves'], ['skills', 'Skills'],
+      ['abilityChecks', 'Ability checks'], ['initiative', 'Init'], ['hp', 'HP']];
+    for (const [key, label] of labels) {
+      if (t.mods[key]) bits.push(`${label} ${fmt(t.mods[key])}`);
+    }
+    for (const key of ABILITIES) {
+      const base = Number(this.#model.data.abilities[key]?.tempScore) || 0;
+      let score = base + (t.ability[key] || 0);
+      if (t.abilitySet[key] !== undefined) score = Math.min(score, t.abilitySet[key]);
+      score = Math.max(0, score);
+      if (score !== base) bits.push(`${ABILITY_LABELS[key]} ${base} → ${score}`);
+    }
+    if (t.losesDex) bits.push('no Dex to AC');
+    if (t.speed === 0) bits.push('no move');
+    else if (t.speed < 1) bits.push('half speed');
+    if (t.acVsMelee) bits.push(`AC vs melee ${fmt(t.acVsMelee)}`);
+    if (t.acVsRanged) bits.push(`AC vs ranged ${fmt(t.acVsRanged)}`);
+    if (!bits.length) return '';
+    return `<div class="condnums">${bits.map((b) => `<span class="tag">${esc(b)}</span>`).join('')}</div>`;
   }
 
   /**
@@ -1553,16 +1595,41 @@ export class CharacterSheetElement extends HTMLElement {
     const c = this.#model.data;
     const cs = this.#model.conditionState;
     const weapons = c.equipment?.weapons || [];
-    const now = (key) => (cs.changed && cs.delta[key]
-      ? `<span class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">now ${fmt(cs.adjusted[key])}</span>` : '');
-    const stat = (label, value, nowKey, kind, ref, rollLabel) => `<span class="dashstat">${esc(label)}
-      <strong>${fmt(value)}</strong>${now(nowKey)}${this.#rollButton(kind, ref, rollLabel, cs)}</span>`;
-    const wrow = (w, i) => `<div class="statline">
+    // Moved numbers replace the base in place, coloured by direction, with the
+    // base in the tooltip -- the same read as AC and the saves, everywhere.
+    const stat = (label, value, nowKey, kind, ref, rollLabel) => {
+      const delta = cs.changed ? (cs.delta[nowKey] || 0) : 0;
+      const shown = delta
+        ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="Base ${fmt(value)} — with conditions and buffs">${fmt(cs.adjusted[nowKey])}</strong>`
+        : `<strong>${fmt(value)}</strong>`;
+      return `<span class="dashstat">${esc(label)} ${shown}${this.#rollButton(kind, ref, rollLabel, cs)}</span>`;
+    };
+    const wrow = (w, i) => {
+      const { calc } = w;
+      const modeKey = WEAPON_MODE_KEYS[w.attackType];
+      const atkDelta = (cs.changed && modeKey && cs.delta[modeKey]) || 0;
+      const dmgDelta = (cs.changed && calc && cs.delta.damage) || 0;
+      const baseAtkStr = calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0);
+      const atkStr = !atkDelta ? baseAtkStr
+        : calc
+          ? (Object.keys(calc.tokAtk?.dice || {}).length
+            ? `${fmt(calc.totalAtk + atkDelta)}+${diceString(calc.tokAtk.dice)}`
+            : fmt(calc.totalAtk + atkDelta))
+          : fmt((Number(w.attackTotal) || 0) + atkDelta);
+      const baseDmgStr = calc?.totalDmgStr ?? w.damageTotal ?? '—';
+      const dmgStr = !dmgDelta ? baseDmgStr
+        : diceString(calc.totalDmgDice, calc.totalDmgFlat + dmgDelta)
+          + ((calc.notes || []).length ? ` ${calc.notes.join(' ')}` : '');
+      const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
+      return `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
-      <span class="value rollpair"><strong>${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</strong>
-        <span class="dashdmg">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
+      <span class="value rollpair"><strong class="${cls(atkDelta)}"
+          title="${atkDelta ? esc(`Base ${baseAtkStr} — with conditions and buffs`) : ''}">${esc(atkStr)}</strong>
+        <span class="dashdmg${cls(dmgDelta)}"
+          title="${dmgDelta ? esc(`Base ${baseDmgStr} — with conditions and buffs`) : ''}">${esc(dmgStr)}</span>
         ${this.#rollButton('weapon', i, `a full attack with ${String(w.name || '').trim() || 'this weapon'} — every iterative, damage and crit`, cs)}</span>
     </div>`;
+    };
     return `<section class="panel">
       <h3>Offense ${this.#dashExpand('offense', openNow)}</h3>
       <div class="dashstats">
@@ -1626,10 +1693,19 @@ export class CharacterSheetElement extends HTMLElement {
     const trained = all.filter(({ s }) => (Number(s.totalRanks) || 0) > 0).sort(byBonus);
     const pool = trained.length ? trained : [...all].sort(byBonus);
     const rows = openNow ? pool : pool.slice(0, 6);
-    const row = ({ s, i }) => `<div class="statline">
+    // The same delta the d20 copy applies: the flat skill-check penalty plus
+    // whatever the skill's own ability lost or gained.
+    const row = ({ s, i }) => {
+      const delta = cs.changed
+        ? statModDelta(cs.deltas || {}, (s.abilities || [])[0], null) + (cs.delta.skills || 0) : 0;
+      const shown = delta
+        ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="Base ${fmt(s.bonus)} — with conditions and buffs">${fmt((Number(s.bonus) || 0) + delta)}</strong>`
+        : fmt(s.bonus);
+      return `<div class="statline">
       <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
-      <span class="value rollpair">${fmt(s.bonus)}${this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
+      <span class="value rollpair">${shown}${this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
     </div>`;
+    };
     return `<section class="panel">
       <h3>Key skills ${this.#dashExpand('skills', openNow)}</h3>
       <div class="rowlist">${rows.map(row).join('') || '<p class="empty">No skills yet.</p>'}</div>
@@ -1674,7 +1750,11 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="quick-rest"
           title="Every tracker with a daily refresh goes back to unspent. Slots and pools with other rhythms are yours to move.">Rest</button>
       </div>
-      <p class="hint">HP ${hp.current}/${hp.max}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
+      <p class="hint">HP ${(() => {
+    const cs = this.#model.conditionState;
+    const maxNow = cs.changed && cs.delta.hp ? cs.adjusted.hp : hp.max;
+    return `${Math.min(hp.current, maxNow)}/${maxNow}`;
+  })()}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
     ? ` · ${hp.nonlethal} nonlethal` : ''} — the strip above follows along.</p>
     </section>`;
   }

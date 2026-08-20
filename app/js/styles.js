@@ -136,6 +136,15 @@ export const SHEET_CSS = `
 .effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
 .effectrow.off input[type="text"] { opacity: 0.55; }
 .now.up { color: var(--cs-good); }
+/* A number a condition or buff has moved, shown in place of the base. */
+.adj { color: var(--cs-bad); }
+.adj.up { color: var(--cs-good); }
+/* What the ticked conditions add up to, and the rules they carry -- read at
+   the table, so no smaller than the sheet's own text. */
+.condnums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.condnums .tag { font-size: 0.82rem; padding: 2px 8px; }
+.condnotes { margin: 8px 0 0; padding-left: 1.2rem; font-size: 0.85rem; color: var(--cs-text); }
+.condnotes li { margin: 2px 0; }
 .dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
 .dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }

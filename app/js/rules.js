@@ -1880,12 +1880,13 @@ export const CONDITIONS = [
     label: 'Energy Drain',
     aliases: ['energy drain', 'negative levels'],
     kind: 'count',
-    rule: 'Each negative level is −1 on attack rolls, saving throws, skill checks, ability checks and combat maneuver checks, and −5 hit points.',
+    rule: 'Each negative level is a cumulative −1 on ability checks, attack rolls, combat maneuver checks, CMD, saving throws and skill checks, and −5 current and total hit points.',
     mods: {
-      attack: -1, saves: -1, skills: -1, abilityChecks: -1, hp: -5,
+      attack: -1, saves: -1, skills: -1, abilityChecks: -1, cmd: -1, hp: -5,
     },
-    notes: ['−1 effective level for every level-dependent effect',
-      'a spellcaster loses one spell or slot from their highest available level'],
+    notes: ['−1 effective level for every level-dependent variable, spellcasting included',
+      'no prepared spells or slots are lost',
+      'dies when negative levels equal or exceed total Hit Dice'],
   },
   {
     key: 'entangled',
@@ -2142,7 +2143,7 @@ export function conditionTotals(active) {
   }
 
   const mods = {
-    attack: 0, melee: 0, ranged: 0, damage: 0, ac: 0, saves: 0,
+    attack: 0, melee: 0, ranged: 0, damage: 0, ac: 0, cmd: 0, saves: 0,
     skills: 0, abilityChecks: 0, initiative: 0, hp: 0,
   };
   const ability = {};

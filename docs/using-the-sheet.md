@@ -171,7 +171,13 @@ In the session view the **Overview is a dashboard** rather than the full page:
 - **Conditions** — what is on the character as chips; × takes one off, and
   **+ Add condition** opens the catalogue as short shelves (Fear, Worn down, Held,
   Addled, Senses, Footing) where a click puts one on already ticked — Energy Drain
-  climbs a level per click.
+  climbs a level per click. Under the chips, a line of tags sums what the ticked
+  conditions do per stat — *Attack −2 · CMD −2 · Skills −2 · Dex 14 → 10* (an
+  ability score floors at 0) — conditions alone, so a buff's bonus never muddies
+  the read; the rules they carry follow as a readable list. Across the dashboard a
+  moved number **replaces** the base in place — red down, green up — with the base
+  in its tooltip: attacks, weapon damage, skills, AC, saves and the strip all read
+  the same way.
 - **Buffs** — see below.
 - **Resources** — every tracker as a compact row (its meter, − / + and the count),
   packed two or three across as the width allows, in the same order as the Trackers

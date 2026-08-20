@@ -8277,7 +8277,7 @@ export class Character {
       ac: mods.ac + acAbilityDelta,
       touch: mods.ac + acAbilityDelta,
       flatFooted: mods.ac + (c.defenses.uncannyDodge ? acAbilityDelta : 0),
-      cmd: cmdDexDelta,
+      cmd: cmdDexDelta + mods.cmd,
       fortitude: sv('fortitude'),
       reflex: sv('reflex'),
       will: sv('will'),

@@ -2505,6 +2505,23 @@ console.log('buffs -- ticked bonuses riding the condition machinery, dials take 
   check('and stands while the buff is off', c.inlineNames['deathgrip.dmg.max'], 14);
 }
 
+console.log('energy drain -- the full scope of a negative level');
+{
+  const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  c.data.conditions = { 'Energy Drain': 2 };
+  c.recompute();
+  const cs = c.conditionState;
+  check('cumulative −1 on attacks, CMB, CMD, saves, skills and ability checks',
+    [cs.delta.melee, cs.delta.cmb, cs.delta.cmd, cs.delta.fortitude, cs.delta.skills, cs.delta.abilityChecks],
+    [-2, -2, -2, -2, -2, -2]);
+  check('−5 total hit points per level', cs.delta.hp, -10);
+  const info = conditionInfo('Energy Drain');
+  check('the notes carry the level-dependent, no-lost-spells and death clauses',
+    info.notes.some((n) => /level-dependent/.test(n))
+    && info.notes.some((n) => /no prepared spells/.test(n))
+    && info.notes.some((n) => /dies/.test(n)), true);
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante
