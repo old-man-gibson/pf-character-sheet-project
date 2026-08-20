@@ -2372,6 +2372,13 @@ console.log('buffs -- ticked bonuses riding the condition machinery, dials take 
   c.recompute();
   check('a +2 buff and shaken (−2) cancel on attacks',
     c.conditionState.adjusted.melee - c.conditionState.base.melee, 0);
+
+  // A buff's note is prose: a {name = expr} written there is a definition the
+  // whole sheet reads by name -- and it stands whether the buff is ticked.
+  c.setItem('buffs', 0, 'note', '{deathgrip.dmg.max = 2 * (1 + level)}');
+  check('a note definition lands in the inline names', c.inlineNames['deathgrip.dmg.max'], 14);
+  c.setItem('buffs', 0, 'on', false);
+  check('and stands while the buff is off', c.inlineNames['deathgrip.dmg.max'], 14);
 }
 
 console.log('skill misc accepts formulas and named values');

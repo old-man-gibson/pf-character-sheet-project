@@ -400,7 +400,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
@@ -454,6 +454,10 @@ export class CharacterSheetElement extends HTMLElement {
   #openClassSystems = null;
   /** Whether the dashboard's grouped condition picker is unfolded. */
   #condPickerOpen = false;
+  /** Which buff row has its editor open (index, or null). */
+  #openBuff = null;
+  /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
+  #confirmReset = false;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -1047,10 +1051,11 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="export">Export JSON</button>
           <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import</button>
           <input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>
-          <button data-action="reset" class="danger"
-            title="Back to the character as imported. Named checkpoints are kept.">Reset</button>
+          <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
+            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>
         </div>
         ${this.#resumeBanner()}
+        ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
           <button data-action="dismiss-history-note" aria-label="Dismiss">×</button>
@@ -1061,6 +1066,31 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
       </header>`;
+  }
+
+  /**
+   * The armed Reset: a banner that says exactly what goes and what stays, and
+   * a button that stays dead until the player types RESET. A destructive
+   * action this size should never ride on one click landing an inch left of
+   * History.
+   */
+  #resetConfirmHtml() {
+    const checkpoints = (this.#snapshots || []).filter((s) => s.kind === 'checkpoint').length;
+    return `<div class="resetconfirm" role="alertdialog" aria-label="Confirm reset">
+      <span>
+        <strong>Reset to the character as imported?</strong>
+        This discards the saved version, any unsaved edits${this.#changes ? ` (${this.#changes} right now)` : ''}
+        and the automatic snapshots. Named checkpoints are kept${checkpoints
+    ? ` — you have ${checkpoints}` : ' (you have none; History can name one first)'}.
+        Type <code>RESET</code> to arm the button.
+      </span>
+      <span class="pair">
+        <input type="text" data-reset-word placeholder="RESET" autocomplete="off" spellcheck="false"
+          aria-label="Type RESET to arm the reset button" style="width:6.5rem">
+        <button class="danger" data-action="reset-confirm" disabled>Reset</button>
+        <button data-action="reset-cancel">Keep everything</button>
+      </span>
+    </div>`;
   }
 
   /** The Session/Build switch: which view of the sheet is showing. */
@@ -1411,26 +1441,48 @@ export class CharacterSheetElement extends HTMLElement {
     const buffs = this.#model.data.buffs || [];
     const cs = this.#model.conditionState;
     const list = 'buffs';
-    const rows = buffs.map((b, i) => `<tr class="${b.on ? '' : 'untrained'}">
-      <td class="mid">${this.#itemCheck(list, i, 'on', b.on !== false)}</td>
-      <td>${this.#itemText(list, i, 'name', b.name, 'Haste, Citadel banner…')}</td>
-      ${BUFF_MOD_KEYS.map(([key]) => `<td class="num">${this.#itemExpr(list, i, key, b, { width: '4.6rem' })}</td>`).join('')}
-      <td>${this.#itemText(list, i, 'note', b.note, 'note')}</td>
-      ${this.#rowRemove(list, i)}
-    </tr>`).join('');
-    const broken = buffs.filter((b) => b.error);
+    // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
+    // dial is a full-width formula field with its working, because the formulas
+    // worth writing -- nested if(…) off hit points and essence -- need room.
+    const summary = (b) => BUFF_MOD_KEYS
+      .map(([key, label]) => { const v = Number(b[`${key}Num`]) || 0; return v ? `${fmt(v)} ${label}` : ''; })
+      .filter(Boolean).join(' · ') || 'no numbers yet';
+    const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
+      ${this.#itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
+    const row = (b, i) => {
+      const open = this.#openBuff === i;
+      return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}">
+        <div class="buffhead">
+          ${this.#itemCheck(list, i, 'on', b.on !== false)}
+          ${open ? this.#itemText(list, i, 'name', b.name, 'Citadel banner') : `<span class="bname">${esc(b.name || 'Unnamed buff')}</span>`}
+          <span class="bsum hint" style="margin:0">${esc(summary(b))}</span>
+          ${b.error ? `<span class="badge err" title="${esc(b.error)}">formula problem</span>` : ''}
+          <span class="pair" style="margin-left:auto">
+            <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
+              title="${open ? 'Close the editor' : 'Open the dials and formulas'}">${open ? '▾ Close' : '▸ Edit'}</button>
+            <button class="danger" data-remove="buffs|${i}" aria-label="Remove buff">×</button>
+          </span>
+        </div>
+        ${open ? `<div class="buffbody">
+          <div class="fieldgrid">${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}</div>
+          ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
+    .map(([key, label]) => this.#formulaMeta(label.toLowerCase(), b[key])).join('')}
+          <label class="fld" style="margin-top:6px"><span>Note</span>
+            ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
+          <p class="hint">The note reads {…} like prose: a definition written here — say
+            <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
+            — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
+            It stands whether the buff is ticked or not; a value that should switch says so itself, with if(…).</p>
+        </div>` : ''}
+      </div>`;
+    };
     return `<section class="panel span2">
-      <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}</h3>
-      <div class="tablewrap"><table>
-        <thead><tr><th title="Ticked buffs count; unticked wait">On</th><th>Buff</th>
-          ${BUFF_MOD_KEYS.map(([, label]) => `<th class="num">${label}</th>`).join('')}
-          <th>Note</th><th></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="${BUFF_MOD_KEYS.length + 4}"><span class="empty">No buffs yet.</span></td></tr>`}</tbody>
-      </table></div>
-      <div style="margin-top:8px">${this.#addButton(list, 'Add buff', {
-    name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '',
-  })}</div>
-      ${broken.map((b) => `<p class="hint warn">${esc(b.name || 'Buff')}: ${esc(b.error)}</p>`).join('')}
+      <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
+        <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
+      </h3>
+      <div class="bufflist">
+        ${buffs.map(row).join('') || '<p class="empty">No buffs yet.</p>'}
+      </div>
       <p class="hint">A ticked buff rides the same machinery as a condition: attacks, AC,
         saves, skills, initiative and damage all show their <em>now</em> value with it in.
         Every dial takes a number or a formula — <code>1 + essence.shoulder</code> keeps a
@@ -1500,8 +1552,23 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="rowlist" style="margin-top:6px">
         ${weapons.map(wrow).join('') || '<p class="empty">No weapons yet — Expand to add one.</p>'}
       </div>
-      ${this.#lineHtml('Full attack', `<span class="dim">${esc(c.attack.iterative || '—')}</span>
-        ${this.#rollButton('mode', 'melee', 'a full-round melee attack — every iterative', cs)}`)}
+      ${(() => {
+    // The full-attack line names the weapon whose damage rides along; with
+    // no weapons it falls back to the bare melee iterative chain.
+    const pick = Number(this.#draft.fullAttackWeapon);
+    const chosen = Number.isInteger(pick) && weapons[pick] ? pick : (weapons.length ? 0 : null);
+    const wname = (w, i) => String(w.name || '').trim() || `Weapon ${i + 1}`;
+    const control = weapons.length > 1
+      ? `<select data-draft="fullAttackWeapon" aria-label="Weapon for the full attack">
+          ${weapons.map((w, i) => `<option value="${i}"${i === chosen ? ' selected' : ''}>${esc(wname(w, i))}</option>`).join('')}
+        </select>`
+      : weapons.length === 1 ? `<span class="dim">${esc(wname(weapons[0], 0))}</span>` : '';
+    const roll = chosen !== null
+      ? this.#rollButton('weapon', chosen, `a full attack with ${wname(weapons[chosen], chosen)} — every iterative, its damage and crit`, cs)
+      : this.#rollButton('mode', 'melee', 'a full-round melee attack — every iterative', cs);
+    return this.#lineHtml('Full attack', `${control}
+      <span class="dim">${esc(c.attack.iterative || '—')}</span> ${roll}`);
+  })()}
       ${cs.changed && cs.delta.damage
     ? `<p class="hint">${fmt(cs.delta.damage)} on damage rolls from conditions and buffs.</p>` : ''}
     </section>`;
@@ -8937,6 +9004,24 @@ export class CharacterSheetElement extends HTMLElement {
         if (key === 'formula' || key === 'minFormula') {
           this.#refreshPreview(root, 'add', this.#draft.formula, this.#draft.minFormula);
         }
+        // The full-attack d20 is built for the picked weapon, so the pick
+        // has to rebuild it.
+        if (key === 'fullAttackWeapon') this.#render();
+      });
+    });
+
+    // The word that arms Reset. Toggled in place -- a re-render per keystroke
+    // would drop focus mid-word.
+    root.querySelectorAll('[data-reset-word]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const armed = input.value.trim().toUpperCase() === 'RESET';
+        const btn = root.querySelector('[data-action="reset-confirm"]');
+        if (btn) btn.disabled = !armed;
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && input.value.trim().toUpperCase() === 'RESET') {
+          root.querySelector('[data-action="reset-confirm"]')?.click();
+        }
       });
     });
 
@@ -9750,6 +9835,19 @@ export class CharacterSheetElement extends HTMLElement {
         this.#condPickerOpen = !this.#condPickerOpen;
         this.#render();
         break;
+      case 'buff-add':
+        this.#openBuff = (this.#model.data.buffs || []).length;
+        this.#model.listAdd('buffs', {
+          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '',
+        });
+        this.#render();
+        break;
+      case 'buff-open': {
+        const index = Number(button?.dataset.index);
+        this.#openBuff = this.#openBuff === index ? null : index;
+        this.#render();
+        break;
+      }
       case 'dash-cond-on': {
         const name = button?.dataset.name;
         if (name) {
@@ -10016,8 +10114,23 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'reset':
+        this.#confirmReset = true;
+        this.#render();
+        this.shadowRoot.querySelector('[data-reset-word]')?.focus();
+        break;
+      case 'reset-cancel':
+        this.#confirmReset = false;
+        this.#render();
+        break;
+      case 'reset-confirm': {
+        // The button only exists armed, but check the word anyway -- the DOM
+        // is not the gate, the word is.
+        const word = this.shadowRoot.querySelector('[data-reset-word]')?.value || '';
+        if (word.trim().toUpperCase() !== 'RESET') break;
+        this.#confirmReset = false;
         this.resetToSource();
         break;
+      }
       default:
         break;
     }

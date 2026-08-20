@@ -110,6 +110,20 @@ export const SHEET_CSS = `
 .dashtracker.invalid .tname { color: var(--cs-bad); }
 .dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
 .dashtracker .dashmeter { min-width: 3rem; }
+/* Buffs: one line collapsed, a roomy editor open -- long formulas need width. */
+.bufflist { display: grid; gap: 8px; }
+.buffcard { border: 1px solid var(--cs-line); border-radius: var(--cs-radius); padding: 6px 10px; background: var(--cs-panel-2); }
+.buffcard.invalid { border-color: var(--cs-bad); }
+.buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
+.buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.buffhead .bname { font-weight: 620; font-size: 0.9rem; }
+.buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
+.buffhead > input[type="checkbox"] { flex: none; width: auto; }
+.effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
+/* The full-attack weapon pick: a name, not a paragraph. */
+.dashboard .statline select { max-width: 10rem; }
+.buffbody { margin-top: 8px; }
+.buffbody .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
 /* One reminder per block: the tick and name on the first line, the note under. */
 .effectlist { display: grid; gap: 8px; }
 .effectrow { display: grid; gap: 4px; }
@@ -136,6 +150,16 @@ export const SHEET_CSS = `
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .importerr button { margin-left: auto; padding: 0 6px; }
+/* The armed Reset: loud enough to read, dead until the word is typed. */
+.resetconfirm {
+  flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 8px 10px; font-size: 0.8rem;
+  color: var(--cs-text); background: rgba(224, 99, 95, 0.10);
+  border: 1px solid var(--cs-bad); border-radius: 6px;
+}
+.resetconfirm > span:first-child { flex: 1 1 24rem; }
+.resetconfirm strong { color: var(--cs-bad); }
+.resetconfirm .pair { margin-left: auto; }
 
 /* ---------- saving, and going back ---------- */
 /* Work that was never saved, offered rather than assumed: the sheet opens on

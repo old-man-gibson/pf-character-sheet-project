@@ -178,7 +178,8 @@ In the session view the **Overview is a dashboard** rather than the full page:
   tab, which stays the canonical detailed view.
 - **Offense** — melee/ranged/CMB/initiative with their d20 buttons; each weapon's
   line, whose d20 copies a **full attack** (every iterative, damage and crit); and a
-  Full attack line for the bare iterative chain. **Expand** brings the full Attack
+  Full attack line that names which weapon's damage rides along — pick one from its
+  dropdown when the character carries several. **Expand** brings the full Attack
   and Weapons panels up in place.
 - **Defense** — AC (touch/FF) and CMD, then **Fortitude, Reflex and Will with their
   roll buttons**, all buff- and condition-adjusted; Expand brings the armour and
@@ -196,16 +197,25 @@ away.
 
 ### Buffs
 
-Buffs live on the session dashboard and on the build Overview (under Conditions): a
-row per buff with an on/off tick, a name, and six dials — **Attack, Damage, AC,
-Saves, Skills, Init**. A ticked buff rides the same machinery as a ticked
-condition, so every number it moves shows its *now* value beside the base — green
-when it went up — on the strip, the dashboard, the Overview and in the d20 copies.
+Buffs live on the session dashboard and on the build Overview (under Conditions).
+Collapsed, a buff is one line — tick, name, and what it comes to ("+4 Attack ·
++4 AC"); **Edit** opens it into a roomy editor with six full-width dials —
+**Attack, Damage, AC, Saves, Skills, Init** — and a note. A ticked buff rides the
+same machinery as a ticked condition, so every number it moves shows its *now*
+value beside the base — green when it went up — on the strip, the dashboard, the
+Overview and in the d20 copies.
 
 Every dial takes a plain number **or a formula** in the same sandbox as the
 trackers: a Citadel banner's `1 + essence.shoulder` to Attack and AC keeps the
 bonus right as shoulder essence is re-invested, without touching the buff again. A
 broken formula degrades to 0 with the error shown on the row.
+
+The **note** is prose that reads `{…}`: a definition written there — say
+`{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total < 0.5,
+if(hp.current < 0, 2, 1.5), 1)}` — becomes a name the whole sheet reads: a weapon's
+dice, a tracker's maximum, another buff's dial. The definition stands whether the
+buff is ticked or not (a reference must not break when the buff is off); a value
+that should switch says so itself, with `if(…)`.
 
 Each view keeps its own bar (`uiPrefs.tabOrder` and `uiPrefs.sessionTabOrder`): the
 ⚙ manager always edits the view you are in, says which one that is, and its reset

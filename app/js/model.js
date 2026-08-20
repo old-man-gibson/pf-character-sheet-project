@@ -5446,6 +5446,13 @@ export class Character {
       push(`crafting:${i}:notes`, p.notes);
     });
     (d.equipment?.weapons || []).forEach((w, i) => push(`weapon:${i}`, w.special));
+    // A buff's note reads {…} like any prose, so a buff can carry its rule as
+    // a definition -- "{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * …}" --
+    // that weapons and trackers then read by name. The definition stands
+    // whether the buff is ticked or not (a reference must not break when the
+    // buff is off); a value that should switch with something says so itself,
+    // with if(…), exactly as the dials do.
+    (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
     (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
     (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
     // Everything a player writes on a training side reads {…}: the talent
