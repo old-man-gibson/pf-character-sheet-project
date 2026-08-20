@@ -4884,9 +4884,20 @@ export class CharacterSheetElement extends HTMLElement {
     const cs = this.#model.conditionState;
     return `<section class="panel span2">
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
-      ${weapons.map((w, i) => `<div class="weapon">
+      ${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
         <div class="weaponhead">
-          ${this.#itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
+          <button class="wfold" data-action="toggle-weapon" data-index="${i}"
+            aria-expanded="${!w.collapsed}"
+            title="${w.collapsed ? 'Open this weapon' : 'Collapse this weapon'}"
+            aria-label="${w.collapsed ? 'Open' : 'Collapse'} ${esc(String(w.name || '').trim() || 'weapon')}"
+            >${w.collapsed ? '▸' : '▾'}</button>
+          <span class="wnames">
+            ${this.#itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
+            <label class="whandle" title="What a formula calls this weapon — {weapon.${esc(w.handle || '')}.damage += 2}. Clear it and it goes back to the weapon's own name, cut at the first bracket.">
+              <span>weapon.</span><input type="text" class="mono" value="${esc(w.handle ?? '')}"
+                data-item="equipment.weapons|${i}|id" data-kind="text"
+                placeholder="${esc(weaponHandle(w.name))}" aria-label="Formula name"></label>
+          </span>
           <span class="bigroll" title="Attack including {{…}} tokens">${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</span>
           <span class="bigroll dmg" title="Damage including [[…]] tokens">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
           ${w.proficient === false ? `<span class="badge err nonprof"
@@ -4944,11 +4955,6 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('Wt', this.#itemNum('equipment.weapons', i, 'weight', w.weight))}
           ${this.#field('Price', this.#itemNum('equipment.weapons', i, 'price', w.price))}
           <span class="wsep"></span>
-          ${this.#field('Formula name', `<input type="text" class="mono" value="${esc(w.id ?? '')}"
-            data-item="equipment.weapons|${i}|id" data-kind="text" placeholder="${esc(weaponHandle(w.name))}"
-            style="width:7rem"
-            title="What a formula calls this weapon: {weapon.${esc(w.handle || '')}.damage += 2}. Leave it blank to take the name cut down to its first bracket.">
-            <span class="hint whandle">weapon.<strong>${esc(w.handle || '')}</strong></span>`)}
           ${this.#field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
             title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
@@ -10870,6 +10876,13 @@ export class CharacterSheetElement extends HTMLElement {
         this.#showAllSkills = !this.#showAllSkills;
         this.#render();
         break;
+      case 'toggle-weapon': {
+        const i = Number(button?.dataset.index);
+        const w = this.#model.data.equipment?.weapons?.[i];
+        if (w) this.#model.setItem('equipment.weapons', i, 'collapsed', !w.collapsed);
+        this.#render();
+        break;
+      }
       case 'toggle-skill-hidden': {
         const i = Number(button?.dataset.index);
         const s = this.#model.data.skills?.[i];

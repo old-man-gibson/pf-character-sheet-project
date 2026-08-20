@@ -357,8 +357,9 @@ that names no group and no weapon on the character is a misspelling and is repor
 one; a shape that simply matches nothing today — `weapon.ranged` on a character carrying
 no bow — is not, because the rule is right and will apply the moment one is bought.
 
-**A weapon's handle** is the short name a formula calls it by, and it is a field on the
-row: **Formula name**, with the name it currently answers to written under it. A weapon's
+**A weapon's handle** is the short name a formula calls it by, and it is a field in the
+weapon's own header, beside its name and prefixed `weapon.` so it reads as what you would
+type. A weapon's
 *name* is written for the table, not for a formula — *Chef's Knife (Bastard Sword) &
 Cutting Board* is the joke, the statistics and the off-hand all in one string — so the
 default is that name cut at the first bracket, ampersand or comma, with the apostrophes
