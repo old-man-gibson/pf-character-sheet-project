@@ -311,27 +311,133 @@ export function sphereSide(sphere, fallback = null) {
  * block): 5 ranks per talent in the associated sphere, capped at level.
  * `lightBody: true` rows are set to full level when the character's Primordia
  * Technique is Light Body, matching the sheet's special case.
+ *
+ * Each row names what has to be on the character for it to pay out. A source
+ * with no `talent` is the sphere itself -- "Fencing (Base)", satisfied by
+ * having the sphere at all -- and one with a `talent` is a package or a named
+ * talent inside that sphere, which has to be there by name. Two sources are an
+ * either/or: Diplomacy comes from Leadership or from Warleader, Acrobatics from
+ * the Leap package or the Run one.
+ *
+ * The check is three-valued, because a talent this sheet cannot see is not the
+ * same as one the character does not have -- the Primordia techniques grant
+ * sphere talents by the handful without ever naming which -- so a sphere whose
+ * talents are all unnamed leaves the row to the player's own switch. See
+ * `sphereSkillRequirement`.
  */
 export const RANKS_PER_TALENT = 5;
 export const SPHERE_SKILL_RANKS = [
-  { key: 'Acrobatics', spheres: ['Athletics'], lightBody: true, match: { name: 'Acrobatics' } },
-  { key: 'Climb', spheres: ['Athletics'], lightBody: true, match: { name: 'Climb' } },
-  { key: 'Fly', spheres: ['Athletics'], lightBody: true, match: { name: 'Fly' } },
-  { key: 'Swim', spheres: ['Athletics'], lightBody: true, match: { name: 'Swim' } },
-  { key: 'Bluff', spheres: ['Fencing'], match: { name: 'Bluff' } },
-  { key: 'Craft (any)', manual: true, match: { name: 'Craft', spec: null } },
-  { key: 'Craft (alchemy)', spheres: ['Alchemy'], match: { name: 'Craft', spec: /alchem/i } },
-  { key: 'Craft (mechanical)', spheres: ['Tech'], match: { name: 'Craft', spec: /mechan/i } },
-  { key: 'Craft (traps)', spheres: ['Trap'], match: { name: 'Craft', spec: /trap/i } },
-  { key: 'Diplomacy', spheres: ['Leadership', 'Warleader'], match: { name: 'Diplomacy' } },
-  { key: 'Handle Animal', spheres: ['Beastmastery'], match: { name: 'Handle Animal' } },
-  { key: 'Intimidate', spheres: ['Gladiator'], match: { name: 'Intimidate' } },
-  { key: 'Perception', spheres: ['Scout'], match: { name: 'Perception' } },
-  { key: 'Ride', spheres: ['Beastmastery'], match: { name: 'Ride' } },
-  { key: 'Sense Motive', spheres: ['Fencing'], match: { name: 'Sense Motive' } },
-  { key: 'Sleight of Hand', spheres: ['Scoundrel'], match: { name: 'Sleight of Hand' } },
-  { key: 'Stealth', spheres: ['Scout'], match: { name: 'Stealth' } },
+  { key: 'Acrobatics', lightBody: true, match: { name: 'Acrobatics' },
+    from: [{ sphere: 'Athletics', talent: 'Leap', kind: 'package' },
+      { sphere: 'Athletics', talent: 'Run', kind: 'package' }] },
+  { key: 'Climb', lightBody: true, match: { name: 'Climb' },
+    from: [{ sphere: 'Athletics', talent: 'Climb', kind: 'package' }] },
+  { key: 'Fly', lightBody: true, match: { name: 'Fly' },
+    from: [{ sphere: 'Athletics', talent: 'Fly', kind: 'package' }] },
+  { key: 'Swim', lightBody: true, match: { name: 'Swim' },
+    from: [{ sphere: 'Athletics', talent: 'Swim', kind: 'package' }] },
+  { key: 'Bluff', match: { name: 'Bluff' }, from: [{ sphere: 'Fencing' }] },
+  { key: 'Craft (any)', match: { name: 'Craft', spec: null },
+    from: [{ sphere: 'Equipment', talent: 'Craftsman', kind: 'talent' }] },
+  { key: 'Craft (alchemy)', match: { name: 'Craft', spec: /alchem/i }, from: [{ sphere: 'Alchemy' }] },
+  { key: 'Craft (mechanical)', match: { name: 'Craft', spec: /mechan/i }, from: [{ sphere: 'Tech' }] },
+  { key: 'Craft (traps)', match: { name: 'Craft', spec: /trap/i }, from: [{ sphere: 'Trap' }] },
+  { key: 'Diplomacy', match: { name: 'Diplomacy' },
+    from: [{ sphere: 'Leadership' }, { sphere: 'Warleader' }] },
+  { key: 'Handle Animal', match: { name: 'Handle Animal' },
+    from: [{ sphere: 'Beastmastery', talent: 'Handle Animal', kind: 'package' }] },
+  { key: 'Intimidate', match: { name: 'Intimidate' }, from: [{ sphere: 'Gladiator' }] },
+  { key: 'Perception', match: { name: 'Perception' },
+    from: [{ sphere: 'Scout', talent: 'Great Senses', kind: 'talent' }] },
+  { key: 'Ride', match: { name: 'Ride' },
+    from: [{ sphere: 'Beastmastery', talent: 'Ride', kind: 'package' }] },
+  { key: 'Sense Motive', match: { name: 'Sense Motive' },
+    from: [{ sphere: 'Fencing', talent: 'Read Foe', kind: 'talent' }] },
+  { key: 'Sleight of Hand', match: { name: 'Sleight of Hand' }, from: [{ sphere: 'Scoundrel' }] },
+  { key: 'Stealth', match: { name: 'Stealth' }, from: [{ sphere: 'Scout' }] },
 ];
+
+/** One source, worded as the table words it: "Athletics (Leap package)". */
+export function sphereSourceLabel({ sphere, talent, kind = 'talent' }) {
+  return talent ? `${sphere} (${talent} ${kind})` : `${sphere} (Base)`;
+}
+
+/**
+ * Every source of a row, as one phrase: "Leadership (Base) or Warleader
+ * (Base)", and "Athletics (Leap or Run package)" where two of them are the
+ * same sphere -- naming the sphere twice reads as two spheres.
+ */
+export function sphereSkillLabel(def) {
+  const bySphere = new Map();
+  for (const s of def.from || []) {
+    if (!bySphere.has(s.sphere)) bySphere.set(s.sphere, []);
+    bySphere.get(s.sphere).push(s);
+  }
+  return [...bySphere].map(([sphere, list]) => {
+    if (list.some((s) => !s.talent)) return `${sphere} (Base)`;
+    const kinds = new Set(list.map((s) => s.kind || 'talent'));
+    if (kinds.size > 1) return list.map(sphereSourceLabel).join(' or ');
+    return `${sphere} (${list.map((s) => s.talent).join(' or ')} ${[...kinds][0]})`;
+  }).join(' or ');
+}
+
+/**
+ * Does one talent name answer to another? Loosely, because names are typed by
+ * hand and come with their choices attached: "Guardian Sphere (Challenge
+ * package -4/+2)" carries "Challenge" the same as a bare "Challenge" does, and
+ * so does the "(leap)" a technique offers.
+ */
+export function talentNamed(text, talent) {
+  const escaped = String(talent).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(String(text ?? ''));
+}
+
+/**
+ * Is a row's requirement met, and how surely?
+ *
+ * The character's side of it comes in four parts, per sphere:
+ *
+ *   has(s)      does the character have any talent in the sphere at all
+ *   named(s)    the talents in it that are written down by name
+ *   choices(s)  sets of names, one of each set certainly taken -- a choice the
+ *               rules offer and the player has not written down yet is still a
+ *               talent they have, and still one of those options
+ *   unnamed(s)  how many talents in the sphere are none of the above
+ *
+ * and the answer is:
+ *
+ *   met      the sphere is there and so is the talent, either by name or
+ *            because every option of an unmade choice is one this row takes
+ *   unknown  the sphere is there and has talents this sheet cannot name, so it
+ *            cannot say either way -- the player's switch decides
+ *   unmet    the sphere is not there, or every talent in it is accounted for
+ *            and the one asked for is not among them
+ */
+export function sphereSkillRequirement(def, {
+  has, named, choices = () => [], unnamed = () => 0,
+}) {
+  const sources = (def.from || []).filter((s) => has(s.sphere));
+  if (!sources.length) return 'unmet';
+  // A "(Base)" row wants the sphere and nothing else.
+  if (sources.some((s) => !s.talent)) return 'met';
+  if (sources.some((s) => (named(s.sphere) || []).some((n) => talentNamed(n, s.talent)))) return 'met';
+
+  // Light Body's first level is "the Athletics sphere, taking (leap) or (run)":
+  // whichever the player took, a row that accepts both has it.
+  for (const sphere of new Set(sources.map((s) => s.sphere))) {
+    const wanted = sources.filter((s) => s.sphere === sphere).map((s) => s.talent);
+    for (const options of choices(sphere) || []) {
+      if (options.length && options.every((o) => wanted.some((t) => talentNamed(o, t)))) return 'met';
+    }
+  }
+
+  return sources.some((s) => unnamed(s.sphere) > 0) ? 'unknown' : 'unmet';
+}
+
+/** The spheres a row draws its talent count from, however many sources name them. */
+export function sphereSkillSpheres(def) {
+  return [...new Set((def.from || []).map((s) => s.sphere))];
+}
 
 /** Background skills (Pathfinder Unchained), for the specialty picker. */
 export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Animal',
@@ -396,8 +502,8 @@ export const PRIMORDIA_TECHNIQUES = [
         },
         { text: 'Unarmed Combatant as a bonus feat', feat: true, cite: 'EitR' },
       ],
-      3: [{ text: 'Wall Stunt as a bonus talent', talent: true }],
-      5: [{ text: 'Air Stunt (legendary) as a bonus talent', talent: true }],
+      3: [{ text: 'Wall Stunt as a bonus talent', talent: true, name: 'Wall Stunt' }],
+      5: [{ text: 'Air Stunt (legendary) as a bonus talent', talent: true, name: 'Air Stunt' }],
     },
     repeat: {
       text: 'A bonus talent from the Athletics sphere',
@@ -458,8 +564,8 @@ export const PRIMORDIA_TECHNIQUES = [
         { text: 'Divination sphere as a bonus talent', talent: true },
         { text: 'Practiced Seer as a bonus feat', feat: true },
       ],
-      3: [{ text: 'Detect Spellcaster as a bonus talent', talent: true }],
-      5: [{ text: 'Fast Divinations as a bonus talent', talent: true }],
+      3: [{ text: 'Detect Spellcaster as a bonus talent', talent: true, name: 'Detect Spellcaster' }],
+      5: [{ text: 'Fast Divinations as a bonus talent', talent: true, name: 'Fast Divinations' }],
     },
     repeat: {
       text: 'A bonus talent from the Divination sphere',

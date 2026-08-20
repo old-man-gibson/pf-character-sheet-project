@@ -202,6 +202,10 @@ adds a third for tristalt and beyond, and each track has a × to delete it), and
 read-only **HP, ranks, Fort/Ref/Will per level** computed gestalt-style from the
 classes chosen on that row (good ½, poor ⅓).
 
+A track that runs one class the whole way is twenty identical dropdowns, so each
+track header carries **Fill column…**: pick a class and it goes on every level of
+that track at once. Individual rows can then be changed as usual.
+
 **Class features live in collapsible groups below the table**, one per class named
 in the progression, listing exactly the levels that class covers. Each group has its
 own columns (add, rename inline, remove) — the imported sheets' feature text

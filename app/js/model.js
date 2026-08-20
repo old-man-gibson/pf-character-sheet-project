@@ -32,6 +32,7 @@ import {
   parseDiceExpr, addDice, diceString, diceAverage,
   TALENT_RATES, TYPE_RATES, TYPE_TO_TALENTS, TALENTS_TO_TYPE,
   SPHERE_SKILL_RANKS, RANKS_PER_TALENT, BACKGROUND_SKILLS,
+  sphereSkillRequirement, sphereSkillSpheres, sphereSkillLabel,
   SAVE_BONUS_TYPES, AC_BONUS_TYPES, abpDefence,
   cleanSkillVariant, skillLabel, skillVariantKind, performCategory,
   spBoonPoints, boonStep, sphereSide, drawbackWeight, unarmedDice, UNARMED_SPHERES,
@@ -787,6 +788,114 @@ export function setManeuverCatalogue(doc) {
 
 export function maneuverCatalogue() {
   return MANEUVER_CATALOGUE;
+}
+
+/* ------------------------------------------------------------------ *
+ * The shared option catalogues.
+ *
+ * A class feature taken over and over -- a rogue talent, an iaijutsu
+ * technique, a smithing insight -- picks from a menu that lives on a page of
+ * its own, and so in a pack of its own. A character records which it picked,
+ * never a copy of the menu, so a feature column points at a catalogue by name
+ * and the menu itself arrives with whatever pack provides it.
+ *
+ * With no catalogue loaded the column is what it always was: a box to type in.
+ * ------------------------------------------------------------------ */
+
+let OPTION_CATALOGUES = new Map();
+
+/**
+ * A class or feature name as it is matched on, across the ways two pages
+ * spell it: "Iaijutsu Technique" against a column reading "Iaijutsu
+ * technique", "Rogue Talents" against "Rogue talent".
+ */
+const menuKey = (s) => String(s || '').toLowerCase()
+  .replace(/\((?:ex|su|sp)\)/g, '')
+  .replace(/[^a-z0-9 ]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .replace(/(\w{3,})s$/, '$1');
+
+/** Register the menus the active packs provide. Keyed by name, case-blind. */
+export function setOptionCatalogues(list) {
+  OPTION_CATALOGUES = new Map();
+  for (const c of Array.isArray(list) ? list : []) {
+    const name = String(c?.name || '').trim();
+    if (!name) continue;
+    OPTION_CATALOGUES.set(name.toLowerCase(), {
+      name,
+      class: String(c?.class || '').trim(),
+      feature: String(c?.feature || '').trim(),
+      classKey: menuKey(c?.class),
+      featureKey: menuKey(c?.feature),
+      text: String(c?.text || ''),
+      options: (Array.isArray(c?.options) ? c.options : []).map((o) => ({
+        name: String(o?.name || ''),
+        type: o?.type ? String(o.type) : null,
+        category: String(o?.category || ''),
+        source: String(o?.source || ''),
+        text: String(o?.text || ''),
+        minLevel: o?.minLevel == null ? null : Number(o.minLevel) || null,
+        replaces: (Array.isArray(o?.replaces) ? o.replaces : []).map(String).filter(Boolean),
+      })).filter((o) => o.name),
+    });
+  }
+}
+
+/** One menu by name, or null where no pack provides it. */
+export function optionCatalogue(name) {
+  const key = String(name || '').trim().toLowerCase();
+  return key ? OPTION_CATALOGUES.get(key) || null : null;
+}
+
+/** Every menu registered, for a picker of catalogues. */
+export function optionCatalogues() {
+  return [...OPTION_CATALOGUES.values()];
+}
+
+/**
+ * The menu a pack means for this class's column, where one says so.
+ *
+ * A menu block names the class and the feature it is for, so a column of that
+ * name is what it is for -- switching the pack on is enough, and nothing has
+ * to be added a second time to make the cells offer it. A menu naming no
+ * class is offered to any class's column of that name.
+ */
+export function optionCatalogueFor(className, column) {
+  const cls = menuKey(className);
+  const col = menuKey(column);
+  if (!col) return null;
+  const hits = [...OPTION_CATALOGUES.values()].filter((c) => c.featureKey === col && (!c.classKey || c.classKey === cls));
+  // A menu that names the class is meant more particularly than one that does not.
+  return hits.find((c) => c.classKey) || hits[0] || null;
+}
+
+/**
+ * One menu made of several, in the order a column names them.
+ *
+ * An archetype's menu joins the class's rather than replacing it outright:
+ * the Isougiri's topological techniques push out the four base techniques
+ * their own text names ("this replaces the Ranged Cut and Armor Rending
+ * Slash") and leave the rest of the samurai's list standing. Later menus win,
+ * so removing an archetype is putting its name back off the list.
+ */
+export function resolveOptionMenu(names) {
+  const list = (Array.isArray(names) ? names : [names]).filter(Boolean);
+  const found = list.map((n) => optionCatalogue(n)).filter(Boolean);
+  if (found.length < 2) return found[0] || null;
+  // One page writes "Armor-Rending Slash" and the next "Armor Rending Slash",
+  // so entries meet on their letters rather than their punctuation.
+  const key = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const out = [];
+  for (const cat of found) {
+    const gone = new Set(cat.options.flatMap((o) => o.replaces).map(key));
+    for (let i = out.length - 1; i >= 0; i--) if (gone.has(key(out[i].name))) out.splice(i, 1);
+    for (const o of cat.options) {
+      const at = out.findIndex((x) => key(x.name) === key(o.name));
+      if (at === -1) out.push(o); else out[at] = o;
+    }
+  }
+  return { ...found[found.length - 1], name: found.map((c) => c.name).join(' + '), options: out };
 }
 
 /** Every maneuver and stance a discipline grants, by discipline name. */
@@ -2377,7 +2486,8 @@ function temporaryTemplateGroup(rows) {
  * ------------------------------------------------------------------ */
 
 export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
-export const MATERIAL_CASTING_PER_MONTH = 30;
+/** Material casting costs this much per caster level, every whole month. */
+export const MATERIAL_CASTING_PER_LEVEL = 10;
 
 const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
 /** "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''. */
@@ -2448,19 +2558,23 @@ function monthsBetween(from, to) {
 /**
  * The wallet as it stands today: what the next offering will cost, part by
  * part, and what is left after it. `today` is injectable so a test does not
- * move with the calendar.
+ * move with the calendar, and so is `casterLevel`, which the material-casting
+ * upkeep is charged against: it is 10 a level every whole month, so the same
+ * month costs a 4th-level caster 40 and a 15th-level one 150.
  */
-export function wealthView(w, today = new Date()) {
+export function wealthView(w, today = new Date(), casterLevel = 0) {
   const v = normalizeWealth(w);
+  const cl = Math.max(0, Number(casterLevel) || 0);
   const offeringPerDay = v.manaPerDay / 2;
+  const castingPerMonth = MATERIAL_CASTING_PER_LEVEL * cl;
   const days = daysBetween(v.lastOffering, today);
   const months = monthsBetween(v.lastOffering, today);
   const oath = v.oathOfOfferings ? days * offeringPerDay + Math.floor(v.sessionMana / 2) : 0;
-  const casting = v.materialCasting ? months * MATERIAL_CASTING_PER_MONTH : 0;
+  const casting = v.materialCasting ? months * castingPerMonth : 0;
   const expected = oath + casting;
   return {
     ...v,
-    offeringPerDay, days, months,
+    offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
     expected: { oath, casting, total: expected },
     after: v.current - expected,
     gains: v.baseline === null ? null : v.current - v.baseline,
@@ -3443,6 +3557,68 @@ export class Character {
     }
     if (!Array.isArray(d.grantedFeats.others)) d.grantedFeats.others = [];
 
+    /*
+     * A trait's name, which the workbook had nowhere to put.
+     *
+     * There were two cells for three things, so every sheet overloaded one of
+     * them, and not the same one: a trait reads "Fate's Favored (+1 to any
+     * existing Luck bonuses)" with the name and the effect in the one cell,
+     * while a drawback's name went in the category column -- which is not a
+     * category, has never been shown, and so has been carrying "Pride" and
+     * "Overly Cautious" invisibly on every sheet that used it.
+     *
+     * The name gets its own field here, once, on any slot that has not been
+     * through this: taken from the category on a drawback, and otherwise split
+     * off the front of the text where the text is written as "Name (effect)"
+     * or is a bare name with no sentence in it. A slot that reads as neither
+     * keeps its text whole and starts with no name, which is what prose should
+     * do. A category on a drawback is dropped once its name is out: it was
+     * never a category, and the column does not show one.
+     */
+    {
+      // "Name (effect)", the shape every sheet writes a trait in. The name is
+      // short and paren-free; the effect is everything the brackets hold,
+      // which may itself contain brackets.
+      const shaped = /^([^()]{1,60}?)\s*\(([\s\S]+)\)\s*$/;
+      const bare = (s) => s.length <= 48 && !/[.;:!?]/.test(s);
+      const split = (text) => {
+        const t = String(text ?? '').trim();
+        const m = shaped.exec(t);
+        if (m) return { name: m[1].trim(), text: m[2].trim() };
+        if (t && bare(t)) return { name: t, text: '' };
+        return { name: '', text: t };
+      };
+      const kindOf = (key) => TRAIT_SLOTS.find((s) => s.key === key)?.kind || 'trait';
+      const name = (slot, kind) => {
+        if (!slot || typeof slot !== 'object' || typeof slot.name === 'string') return;
+        const drawback = kind !== 'trait';
+        const category = String(slot.category ?? '').trim();
+        const own = String(slot.text ?? '').trim();
+        // A drawback whose category cell holds something holds its name there:
+        // that cell is the only place the sheet had for it, and taking it
+        // beats guessing at the front of the effect. It carries the effect too
+        // when the effect column is empty, and then it is split like any other.
+        if (drawback && category && !/^drawbacks?$/i.test(category)) {
+          if (own) {
+            slot.name = category;
+          } else {
+            const inner = split(category);
+            slot.name = inner.name || category;
+            slot.text = inner.text;
+          }
+        } else {
+          const from = split(own);
+          slot.name = from.name;
+          slot.text = from.text;
+        }
+        if (drawback) slot.category = null;
+      };
+      for (const [key, slot] of Object.entries(d.traitSlots || {})) {
+        if (key === 'additional') (slot || []).forEach((s) => name(s, 'trait'));
+        else name(slot, kindOf(key));
+      }
+    }
+
     if (!d.skillBudget) d.skillBudget = { bonusPerLevel: 0, intPerLevel: 0 };
 
     /*
@@ -3516,6 +3692,11 @@ export class Character {
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
+    // So do the alternate attacks: three of the six rows are the same attack
+    // with one ability swapped, and most characters use one of them.
+    for (const k of ['melee', 'ranged', 'cmb']) {
+      if (d.uiPrefs.collapsed[`atk:${k}`] === undefined) d.uiPrefs.collapsed[`atk:${k}`] = true;
+    }
     if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
     // How the built-in meters are painted. Empty on a sheet nobody has
     // restyled, and only the meters that differ from the default are in it.
@@ -3667,10 +3848,27 @@ export class Character {
             name: String(x?.name ?? '').trim(),
             rule: String(x?.rule ?? '').trim(),
             color: normalizeHex(x?.color) || FEATURE_GROUP_COLORS[i % FEATURE_GROUP_COLORS.length],
+            // the menu this group's cells pick from, by catalogue name
+            ...(String(x?.optionsFrom ?? '').trim() ? { optionsFrom: String(x.optionsFrom).trim() } : {}),
           }))
-          .filter((x) => x.name || x.rule);
+          .filter((x) => x.name || x.rule || x.optionsFrom);
         if (groups.length) g.rules[col] = groups;
         else delete g.rules[col];
+      }
+      // A class's own feature text sits with the class, under its ladder.
+      g.notes = (Array.isArray(g.notes) ? g.notes : []).map((n) => ({
+        name: String(n?.name ?? '').trim(),
+        type: TEMPLATE_TYPES.includes(n?.type) ? n.type : null,
+        text: String(n?.text ?? ''),
+      })).filter((n) => n.name);
+      // A column may name a menu of its own, which every group in it shares --
+      // or several, layered, where an archetype has joined its own to the class's.
+      if (!g.optionsFrom || typeof g.optionsFrom !== 'object' || Array.isArray(g.optionsFrom)) g.optionsFrom = {};
+      for (const [col, v] of Object.entries(g.optionsFrom)) {
+        if (!g.columns?.includes(col)) { delete g.optionsFrom[col]; continue; }
+        const list = (Array.isArray(v) ? v : [v]).map((x) => String(x ?? '').trim()).filter(Boolean);
+        // The empty list is kept: it is the player having said "no menu".
+        g.optionsFrom[col] = list.length === 1 ? list[0] : list;
       }
     }
 
@@ -3700,6 +3898,29 @@ export class Character {
       w.proficiencyNote = String(w.proficiencyNote ?? '');
       w.baseWeapon = String(w.baseWeapon ?? '');
     }
+
+    // An earlier version put a class's feature text on the Template tab, which
+    // is for templates. Such a group is recognised exactly -- named for a class
+    // on this sheet, carrying no template link, every one of its features named
+    // on that class's ladder, and the class holding no text of its own yet --
+    // and moves under the class, where the rest of its progression already
+    // lives. Anything less exact is a template, and stays one.
+    if (Array.isArray(d.classes) && d.classes.length) {
+      d.templates = d.templates.filter((tp) => {
+        const cls = d.classes.find((c) => normalizeName(c.name) === normalizeName(tp.name))?.name;
+        const g = cls ? d.progression.classFeatures[cls] : null;
+        if (!g || tp.link || tp.approvalLink || tp.tab || g.notes?.length) return true;
+        const onLadder = new Set([...(g.columns || []),
+          ...Object.values(g.byLevel || {}).flatMap((row) => Object.values(row)
+            .flatMap((cell) => String(typeof cell === 'string' ? cell : Object.values(cell || {}).join(', ')).split(/,\s*/)))]
+          .map(normalizeName).filter(Boolean));
+        const features = tp.features || [];
+        if (!features.length || !features.every((f) => onLadder.has(normalizeName(f.name)))) return true;
+        g.notes = features.map((f) => ({ name: f.name, type: f.type ?? null, text: f.text || '' }));
+        return false;
+      });
+    }
+
     // Legacy user-added simple weapons.
     if (Array.isArray(d.weapons) && d.weapons.length) {
       for (const w of d.weapons) {
@@ -4041,6 +4262,25 @@ export class Character {
     return this;
   }
 
+  /**
+   * Put one class on every level of a track, or clear the track.
+   *
+   * A single-classed track is twenty identical dropdowns, and a gestalt sheet
+   * has two or three of them: the common case for this table is "this side is
+   * Fighter the whole way", and it should not take twenty clicks to say so.
+   */
+  fillProgressionTrack(track, className) {
+    const p = this.data.progression;
+    if (!p || track < 0 || track >= p.tracks) return this;
+    const value = className ? String(className) : null;
+    for (const row of p.levels || []) {
+      while (row.classes.length < p.tracks) row.classes.push(null);
+      row.classes[track] = value;
+    }
+    this.recompute();
+    return this;
+  }
+
   addProgressionTrack() {
     const p = this.data.progression;
     if (!p) return this;
@@ -4102,8 +4342,9 @@ export class Character {
     const p = this.data.progression;
     if (!p) return null;
     const key = className || 'General';
-    if (!p.classFeatures[key]) p.classFeatures[key] = { columns: [], byLevel: {}, rules: {} };
+    if (!p.classFeatures[key]) p.classFeatures[key] = { columns: [], byLevel: {}, rules: {}, optionsFrom: {} };
     if (!p.classFeatures[key].rules) p.classFeatures[key].rules = {};
+    if (!p.classFeatures[key].optionsFrom) p.classFeatures[key].optionsFrom = {};
     return p.classFeatures[key];
   }
 
@@ -4172,10 +4413,12 @@ export class Character {
     return this;
   }
 
-  addClassFeatureColumn(className, name) {
+  /** `at` puts the column back where it was, which is what restoring one wants. */
+  addClassFeatureColumn(className, name, at = null) {
     const g = this.#featureGroup(className);
     if (!g || !name || g.columns.includes(name)) return this;
-    g.columns.push(name);
+    if (at === null || at < 0 || at > g.columns.length) g.columns.push(name);
+    else g.columns.splice(at, 0, name);
     this.recompute();
     return this;
   }
@@ -4191,10 +4434,14 @@ export class Character {
         delete row[old];
       }
     }
-    // The level rule and a saved column width both follow the rename.
+    // The level rule, the menu and a saved column width all follow the rename.
     if (g.rules?.[old] !== undefined) {
       g.rules[name] = g.rules[old];
       delete g.rules[old];
+    }
+    if (g.optionsFrom?.[old] !== undefined) {
+      g.optionsFrom[name] = g.optionsFrom[old];
+      delete g.optionsFrom[old];
     }
     const widths = this.data.uiPrefs?.colWidths?.[`progfeat-${className}`];
     if (widths && widths[old] !== undefined) {
@@ -4240,6 +4487,10 @@ export class Character {
     const group = g?.rules?.[col]?.[groupIndex];
     if (!group) return this;
 
+    if (patch.optionsFrom !== undefined) {
+      const menu = String(patch.optionsFrom ?? '').trim();
+      if (menu) group.optionsFrom = menu; else delete group.optionsFrom;
+    }
     const wasKey = featureGroupKey(group, groupIndex);
     for (const key of ['name', 'rule']) {
       if (patch[key] === undefined) continue;
@@ -4264,9 +4515,9 @@ export class Character {
       }
     }
 
-    // A group with neither a name nor a rule is nothing; drop it, and drop the
-    // column's list with the last one so an empty column reads as unruled.
-    if (!group.name && !group.rule) return this.removeClassFeatureRuleGroup(className, index, groupIndex);
+    // A group with neither a name nor a rule nor a menu is nothing; drop it,
+    // and the column's list with the last one, so it reads as unruled again.
+    if (!group.name && !group.rule && !group.optionsFrom) return this.removeClassFeatureRuleGroup(className, index, groupIndex);
     this.recompute();
     return this;
   }
@@ -4280,6 +4531,114 @@ export class Character {
     if (!list.length) delete g.rules[col];
     this.recompute();
     return this;
+  }
+
+  /**
+   * A class's own feature text, kept with the class rather than on the
+   * Template tab, which is for templates.
+   *
+   * The ladder above says which feature arrives when; this says what each one
+   * does, one entry per distinct feature however many levels grant it. An
+   * archetype's features join the same list and leave it again with the
+   * archetype.
+   */
+  classFeatureNotes(className) {
+    return this.data.progression?.classFeatures?.[className]?.notes || [];
+  }
+
+  addClassFeatureNote(className, { name, type = null, text = '' } = {}) {
+    const g = this.#featureGroup(className);
+    const n = String(name ?? '').trim();
+    if (!g || !n) return this;
+    if (!Array.isArray(g.notes)) g.notes = [];
+    if (g.notes.some((x) => normalizeName(x.name) === normalizeName(n))) return this;
+    g.notes.push({ name: n, type: TEMPLATE_TYPES.includes(type) ? type : null, text: String(text ?? '') });
+    this.recompute();
+    return this;
+  }
+
+  setClassFeatureNote(className, index, patch = {}) {
+    const note = this.#featureGroup(className)?.notes?.[index];
+    if (!note) return this;
+    if (patch.name !== undefined) note.name = String(patch.name);
+    if (patch.text !== undefined) note.text = String(patch.text);
+    if (patch.type !== undefined) note.type = TEMPLATE_TYPES.includes(patch.type) ? patch.type : null;
+    this.recompute();
+    return this;
+  }
+
+  removeClassFeatureNote(className, index) {
+    const notes = this.#featureGroup(className)?.notes;
+    if (!notes?.[index]) return this;
+    notes.splice(index, 1);
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * Point a whole column at a menu, by catalogue name. Every group in it picks
+   * from that menu unless the group names one of its own. Empty text clears it.
+   */
+  setClassFeatureColumnOptions(className, index, catalogue) {
+    const g = this.#featureGroup(className);
+    const col = g?.columns?.[index];
+    if (!g || col === undefined) return this;
+    const list = (Array.isArray(catalogue) ? catalogue : [catalogue])
+      .map((s) => String(s ?? '').trim()).filter(Boolean);
+    // One menu is stored as the name itself; several as the list they are; and
+    // none as the empty list, which is the player saying so rather than saying
+    // nothing -- a pack's own claim on the column does not come back over it.
+    g.optionsFrom[col] = list.length === 1 ? list[0] : list;
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * The menus a column picks from, in the order they layer.
+   *
+   * Nothing recorded means the packs decide: a menu that names this class and
+   * this feature is what the column is for. An empty list recorded means the
+   * player said no menu, which no pack then overrides.
+   */
+  classFeatureColumnOptions(className, column) {
+    const v = this.data.progression?.classFeatures?.[className]?.optionsFrom?.[column];
+    if (v === undefined) {
+      const auto = optionCatalogueFor(className, column);
+      return auto ? [auto.name] : [];
+    }
+    return Array.isArray(v) ? [...v] : (v ? [v] : []);
+  }
+
+  /** Did the player name the column's menu, or did a pack claim it? */
+  classFeatureColumnOptionsChosen(className, column) {
+    return this.data.progression?.classFeatures?.[className]?.optionsFrom?.[column] !== undefined;
+  }
+
+  /**
+   * Layer another menu onto a column, or take it off again.
+   *
+   * This is how an archetype's own menu joins the class's: it goes on the end,
+   * so its entries win and the ones its text replaces drop out, and removing
+   * the archetype is taking the name off the list again.
+   */
+  addClassFeatureColumnOptions(className, column, catalogue) {
+    const g = this.#featureGroup(className);
+    const index = (g?.columns || []).indexOf(column);
+    const name = String(catalogue ?? '').trim();
+    if (index === -1 || !name) return this;
+    const list = this.classFeatureColumnOptions(className, column)
+      .filter((n) => n.toLowerCase() !== name.toLowerCase());
+    return this.setClassFeatureColumnOptions(className, index, [...list, name]);
+  }
+
+  removeClassFeatureColumnOptions(className, column, catalogue) {
+    const g = this.#featureGroup(className);
+    const index = (g?.columns || []).indexOf(column);
+    const name = String(catalogue ?? '').trim();
+    if (index === -1 || !name) return this;
+    const list = this.classFeatureColumnOptions(className, column)
+      .filter((n) => n.toLowerCase() !== name.toLowerCase());
+    return this.setClassFeatureColumnOptions(className, index, list);
   }
 
   /**
@@ -4323,12 +4682,18 @@ export class Character {
       : Object.keys(g.byLevel || {}).map(Number).sort((a, b) => a - b);
     const charLevel = Number(this.data.identity.level) || 0;
 
-    // Parse each group's rule once for the whole column, not once per cell.
+    // Parse each group's rule once for the whole column, not once per cell,
+    // and resolve its menu once too -- the group's own, else the column's.
+    const menuOf = (col, grp) => resolveOptionMenu(grp?.optionsFrom
+      ? [grp.optionsFrom] : this.classFeatureColumnOptions(className, col));
     const parsed = Object.fromEntries(columns.map((col) => [col,
       (g.rules?.[col] || []).map((grp, i) => ({
         index: i, key: featureGroupKey(grp, i), name: grp.name, color: grp.color,
+        optionsFrom: grp.optionsFrom || null, menu: menuOf(col, grp),
         ast: parseLevelRule(grp.rule || ''),
       }))]));
+    // An unruled column has no group to hang a menu on, so it keeps its own.
+    const columnMenu = Object.fromEntries(columns.map((col) => [col, menuOf(col, null)]));
 
     return levels.map((level, i) => {
       const classLevel = i + 1;
@@ -4354,8 +4719,11 @@ export class Character {
           stranded: false,
         });
         const fields = ruled
-          ? hits.map((grp) => ({ group: grp, key: grp.key, ...state(textFor(grp)) }))
-          : [{ group: null, key: null, ...state(String(store ?? '')), due: false, planned: false }];
+          ? hits.map((grp) => ({ group: grp, key: grp.key, menu: grp.menu, ...state(textFor(grp)) }))
+          : [{
+            group: null, key: null, menu: columnMenu[col],
+            ...state(String(store ?? '')), due: false, planned: false,
+          }];
 
         // Text on a level no rule covers, or under a group since removed --
         // kept, flagged and read-only, never dropped.
@@ -4366,6 +4734,7 @@ export class Character {
         const orphans = orphanKeys.map((k) => ({
           group: { key: k, name: k, color: null, orphan: true },
           key: k,
+          menu: columnMenu[col],
           text: String(store[k]),
           on: false,
           due: false,
@@ -4374,14 +4743,14 @@ export class Character {
         }));
         if (ruled && !hits.length && !asMap && String(store ?? '').trim()) {
           orphans.push({
-            group: null, key: null, text: String(store), on: false,
+            group: null, key: null, menu: columnMenu[col], text: String(store), on: false,
             due: false, planned: false, stranded: true,
           });
         }
         // A locked, empty cell still needs one field to draw.
         if (ruled && !hits.length && !orphans.length) {
           orphans.push({
-            group: null, key: null, text: '', on: false,
+            group: null, key: null, menu: columnMenu[col], text: '', on: false,
             due: false, planned: false, stranded: false,
           });
         }
@@ -4389,6 +4758,7 @@ export class Character {
         cells[col] = {
           ruled,
           on,
+          menu: columnMenu[col],
           fields: ruled && !hits.length ? orphans : [...fields, ...orphans],
           stranded: orphans.some((o) => o.stranded),
         };
@@ -4424,6 +4794,7 @@ export class Character {
     g.columns.splice(index, 1);
     for (const row of Object.values(g.byLevel)) delete row[name];
     delete g.rules[name];
+    delete g.optionsFrom[name];
     this.recompute();
     return this;
   }
@@ -4778,6 +5149,24 @@ export class Character {
     if (index < 0 || index >= arr.length || to < 0 || to >= arr.length) return this;
     const [item] = arr.splice(index, 1);
     arr.splice(to, 0, item);
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * Move an item to a place in its own list, for dragging one row past
+   * another. `to` is where the item should land counting the list as it is
+   * now, so dropping "after the third" is 3 whether the item came from before
+   * it or after; the shift a removal causes is taken off here rather than by
+   * every caller.
+   */
+  listMoveTo(path, from, to) {
+    const arr = this.list(path);
+    if (from < 0 || from >= arr.length) return this;
+    const target = Math.max(0, Math.min(arr.length - 1, to > from ? to - 1 : to));
+    if (target === from) return this;
+    const [item] = arr.splice(from, 1);
+    arr.splice(target, 0, item);
     this.recompute();
     return this;
   }
@@ -5219,9 +5608,18 @@ export class Character {
 
   /* ---------------- wealth ---------------- */
 
+  /**
+   * The caster level the sheet charges upkeep against: the global caster level
+   * the magic training works out, and the character's own level for someone
+   * who casts without a sphere block behind it.
+   */
+  get casterLevel() {
+    return Number(this.data.training?.magic?.globalCL ?? this.data.identity?.level) || 0;
+  }
+
   /** The wallet today: current mana, the offering owed part by part, and what is left after it. */
   wealthView(today = new Date()) {
-    return wealthView(this.data.wealth, today);
+    return wealthView(this.data.wealth, today, this.casterLevel);
   }
 
   /**
@@ -8163,7 +8561,53 @@ export class Character {
     const active = classes.filter((x) => x.gestaltLevels > 0);
     summary.hpPerLevel = Math.max(0, ...active.map((x) => Number(x.hd) || 0));
     summary.ranksPerLevel = Math.max(0, ...active.map((x) => Number(x.skillRanks) || 0));
+
+    /*
+     * Base attack bonus, the same way as the saves: each level takes the best
+     * progression among the classes present at it, and the sum is floored
+     * once at the end rather than per class. Floor-at-the-end is what the
+     * workbook did, and the difference is real -- fifteen levels of 3/4 is
+     * 11 that way and 11 the other, but ten of full plus one of 3/4 is 10,
+     * not 10 and a bit rounded up somewhere.
+     *
+     * `babOverride` on a class row overrides that class's rate, which is what
+     * the workbook's own column beside BAB was for.
+     */
+    // The workbook wrote "no override" as an empty cell, as a dash, and as a
+    // null, and `Number(null)` is a perfectly finite zero -- which would
+    // quietly give every class a BAB progression of none.
+    const rateOf = (cls) => {
+      const raw = cls.babOverride;
+      const over = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+      return Number.isFinite(over) ? over : (Number(cls.bab) || 0);
+    };
+    let rate = 0;
+    for (let l = 1; l <= level; l++) {
+      const present = classes.filter((x) => presence.get(x)[l - 1]);
+      if (present.length) rate += Math.max(...present.map(rateOf));
+    }
+    summary.babPerLevel = rate;
+    summary.bab = Math.floor(rate);
     c.gestalt = summary;
+
+    /*
+     * The BAB the sheet was imported with, once.
+     *
+     * All five source workbooks agree with the rule above to the point, so
+     * nothing moves on a normal import -- but a sheet whose classes do not
+     * explain its BAB (a class table left half-filled, a progression the app
+     * has no row for) would otherwise lose it the moment this ran. So the
+     * first pass compares the two and pins the imported number as an override
+     * when they differ, and leaves the field automatic when they agree.
+     */
+    if (c.attack) {
+      if (c.attack.babOverride === undefined) {
+        const imported = Number(c.attack.bab);
+        c.attack.babOverride = Number.isFinite(imported) && imported !== summary.bab ? imported : null;
+      }
+      c.attack.babBase = summary.bab;
+      c.attack.bab = c.attack.babOverride == null ? summary.bab : Number(c.attack.babOverride) || 0;
+    }
 
     // Per-level read-only numbers for the Progression tab, from the class
     // tracks actually chosen on each row.
@@ -8205,10 +8649,21 @@ export class Character {
 
   /* ---------------- spheres training ---------------- */
 
-  /** Does the progression grant a level of `className` at character level `lvl`? */
+  /**
+   * Does the progression grant a level of `className` at character level `lvl`?
+   *
+   * Matched the way `classLevelCount` matches, because it is the same join and
+   * the same trap: a class table reading `Legendary Kineticist` against a
+   * Planner reading `legendary kineticst` is one character, and an exact
+   * comparison answers "never" for every level -- which the caller then reads
+   * as a class the Planner does not mention at all.
+   */
   #plannerHasClass(className, lvl) {
     const row = this.data.progression?.levels?.[lvl - 1];
-    return !!row && (row.classes || []).includes(className);
+    if (!row) return false;
+    const classes = row.classes || [];
+    return classes.includes(className)
+      || !!closestName(className, classes);
   }
 
   /**
@@ -8577,8 +9032,89 @@ export class Character {
   }
 
   /**
+   * What the Primordia technique has put in its own sphere, level by level.
+   *
+   * The technique names most of what it grants -- Light Body's Wall Stunt at
+   * 3rd and Air Stunt at 5th are in the rules, not in the player's hands -- so
+   * those are names like any other. Its first level is a choice between two
+   * packages, which is a name once the player has made it and a pair of
+   * possible names until they do. The levels from 7th are the player's pick
+   * outright: a name when it is filled in, and nothing the sheet can read when
+   * it is not.
+   */
+  #techniqueTalents() {
+    const t = primordiaTechnique(this.data.identity?.primordiaTechnique);
+    const sphere = t?.talents?.sphere;
+    if (!sphere) return null;
+    const level = Number(this.data.identity.level) || 0;
+    const picks = this.data.primordia?.picks || {};
+    const names = [];
+    const choices = [];
+    for (const lvl of PRIMORDIA_LEVELS) {
+      if (lvl > level) break;
+      for (const g of primordiaGrantsAt(t, lvl)) {
+        if (!grantCount(g, 'talent')) continue;
+        const pick = String(picks[lvl] ?? '').trim();
+        if (g.name) names.push(g.name);
+        else if (pick) names.push(pick);
+        else if (g.pick?.options?.length) choices.push(g.pick.options);
+      }
+    }
+    return { side: t.talents.side, sphere, names, choices };
+  }
+
+  /**
+   * What this side's talents are, sphere by sphere, for a rule that has to ask
+   * whether a particular one is there: the names it can read, the choices it
+   * knows were made without knowing which way, and how many are neither.
+   *
+   * The unnamed count is the tally less what is accounted for rather than a
+   * count of its own, so it cannot drift from the number the rest of the sheet
+   * is working with.
+   */
+  #sphereTalentKnowledge(side, sideKey) {
+    const out = new Map();
+    const of = (sphere) => {
+      const s = String(sphere || '').trim();
+      if (!s) return null;
+      if (!out.has(s)) out.set(s, { names: [], choices: [], unnamed: 0 });
+      return out.get(s);
+    };
+    const put = (sphere, talent) => {
+      const t = String(talent || '').trim();
+      const row = t ? of(sphere) : null;
+      if (row) row.names.push(t);
+    };
+    for (const cls of side?.classes || []) {
+      if (cls.blendedMirror) continue;
+      for (const lv of cls.levels || []) put(lv.sphere, lv.talent);
+    }
+    for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
+    for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
+
+    const tech = this.#techniqueTalents();
+    if (tech && tech.side === sideKey) {
+      const row = of(tech.sphere);
+      row.names.push(...tech.names);
+      row.choices.push(...tech.choices);
+    }
+
+    for (const [sphere, row] of out) {
+      const total = Number((side?.tally || {})[sphere]) || 0;
+      row.unnamed = Math.max(0, total - row.names.length - row.choices.length);
+    }
+    return out;
+  }
+
+  /**
    * Bonus skill ranks from sphere talents: 5 per talent in the associated
    * sphere, capped at level. Returns a map of skill index -> ranks.
+   *
+   * A row only pays out if what it asks for is on the character -- the sphere
+   * for a "(Base)" row, the named package or talent for the rest. Where the
+   * sheet cannot tell (a sphere whose talents are all unnamed, which is what
+   * a Primordia technique's grants look like) the row falls back to the
+   * player's own switch, which is what that column has always been.
    */
   #sphereRanksBySkill() {
     const map = new Map();
@@ -8587,21 +9123,27 @@ export class Character {
     const level = Number(this.data.identity.level) || 0;
     const tally = t.tally || {};
     const lightBody = this.data.identity.primordiaTechnique === 'Light Body';
+    const known = this.#sphereTalentKnowledge(t, 'combat');
+    const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
+    const check = {
+      has: (sphere) => (tally[sphere] || 0) > 0,
+      named: (sphere) => of(sphere).names,
+      choices: (sphere) => of(sphere).choices,
+      unnamed: (sphere) => of(sphere).unnamed,
+    };
 
     this.trainingSkillRanks = (t.skillRanks || []).map((row) => {
       const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
-      let talents = 0;
-      let ranks = 0;
-      if (def?.manual) {
-        ranks = row.enabled ? level : 0;
-      } else if (def) {
-        talents = (def.spheres || []).reduce((n, s) => n + (tally[s] || 0), 0);
-        if (def.lightBody && lightBody) ranks = row.enabled ? level : 0;
-        else ranks = row.enabled && talents > 0
-          ? Math.min(level, talents * RANKS_PER_TALENT * (Number(row.multiplier) || 1))
-          : 0;
-      }
-      return { ...row, talents, current: ranks };
+      if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
+      const state = sphereSkillRequirement(def, check);
+      const talents = sphereSkillSpheres(def).reduce((n, s) => n + (tally[s] || 0), 0);
+      const on = row.enabled && state !== 'unmet';
+      const ranks = !on ? 0
+        : (def.lightBody && lightBody) ? level
+          : talents > 0
+            ? Math.min(level, talents * RANKS_PER_TALENT * (Number(row.multiplier) || 1))
+            : 0;
+      return { ...row, talents, requirement: sphereSkillLabel(def), state, current: ranks };
     });
 
     for (const row of this.trainingSkillRanks) {
@@ -8820,9 +9362,9 @@ export class Character {
         cmb: c.attack.totalCmb,
       },
       // The wallet: what is on hand, what the next offering costs, what is left after it.
-      mana: (() => { const w = wealthView(c.wealth); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
+      mana: (() => { const w = wealthView(c.wealth, new Date(), this.casterLevel); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
       caster: {
-        level: Number(c.training?.magic?.globalCL ?? c.identity.level) || 0,
+        level: this.casterLevel,
         dc: Number(c.training?.magic?.globalDC) || 0,
         msb: Number(c.training?.magic?.msb) || 0,
         msd: Number(c.training?.magic?.msd) || 0,
