@@ -438,7 +438,7 @@ export function skillRollSpec(c, index, cs = null) {
 }
 
 /** Which condition slot a weapon's attack type is penalised through. */
-const WEAPON_MODE_KEYS = {
+export const WEAPON_MODE_KEYS = {
   Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
   'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
 };

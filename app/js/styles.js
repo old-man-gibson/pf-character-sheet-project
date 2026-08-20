@@ -136,6 +136,35 @@ export const SHEET_CSS = `
 .effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
 .effectrow.off input[type="text"] { opacity: 0.55; }
 .now.up { color: var(--cs-good); }
+/* The dashboard's own toolbar, and the caster and reference cards. */
+.dashtools { display: flex; justify-content: flex-end; margin: -6px 0; }
+.dashcaster { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 4px 0; }
+.dashcaster .tname { font-weight: 620; font-size: 0.85rem; }
+.dashslots { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; flex: 1; }
+.dashslot { display: inline-flex; gap: 5px; align-items: center; }
+.dashtalent { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 0; }
+.dashtalent.mnote { color: var(--cs-muted); margin: -2px 0 2px; }
+/* The prepared list packs into columns; every row's squares hang off the same
+   left edge, so pip one is always top-left and fills rightward. */
+.dashspells { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0 20px; margin-top: 6px; }
+.dashspell { display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr); gap: 10px; align-items: center; padding: 2px 0; }
+.dashspell .sname { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashspell .suses { justify-self: start; }
+.dashspell .pips.square, .dashspell .pips { margin-top: 0; }
+/* The Vancian spell list: squares hug the right, held clear of the armed ×. */
+.spelllist .spendcell { text-align: right; }
+.spelllist .spendcell .pips.square { margin-left: auto; margin-top: 0; }
+.spelllist td.tools { padding-left: 16px; }
+.spelllist .tools button.armed { font-size: 0.68rem; padding: 2px 6px; }
+/* A number a condition or buff has moved, shown in place of the base. */
+.adj { color: var(--cs-bad); }
+.adj.up { color: var(--cs-good); }
+/* What the ticked conditions add up to, and the rules they carry -- read at
+   the table, so no smaller than the sheet's own text. */
+.condnums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.condnums .tag { font-size: 0.82rem; padding: 2px 8px; }
+.condnotes { margin: 8px 0 0; padding-left: 1.2rem; font-size: 0.85rem; color: var(--cs-text); }
+.condnotes li { margin: 2px 0; }
 .dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
 .dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
@@ -409,8 +438,8 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
    rather than truncate -- a name you have to hover to read is not readable. */
 .discipline-wrap { overflow: hidden; }
 .disciplines {
-  display: grid; gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   align-items: start;
 }
 .discipline {
@@ -446,9 +475,17 @@ button.tiny {
 }
 .discipline-body .dlevel:first-child { border-top: none; margin-top: 0; padding-top: 0; }
 .mrow {
-  display: flex; align-items: flex-start; gap: 6px; padding: 2px 3px;
+  display: flex; align-items: flex-start; gap: 6px; padding: 3px 4px;
   border-radius: 4px; cursor: pointer; min-width: 0;
 }
+/* The overview-note pen on a readied maneuver: quiet until it holds one. */
+.mnote-btn {
+  flex: none; padding: 0 4px; border: 0; background: none; font-size: 0.72rem;
+  color: var(--cs-muted); opacity: 0.55; cursor: pointer; line-height: 1.3;
+}
+.mrow:hover .mnote-btn { opacity: 1; }
+.mnote-btn.has-note { color: var(--cs-edit); opacity: 1; }
+.mnote-edit { margin: 0 4px 6px 24px; }
 .mrow:hover { background: var(--cs-accent-soft); }
 /* The global input rule sets width:100%, which would give the tick box the
    whole row and leave the name nothing. */

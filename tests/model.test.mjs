@@ -2505,6 +2505,46 @@ console.log('buffs -- ticked bonuses riding the condition machinery, dials take 
   check('and stands while the buff is off', c.inlineNames['deathgrip.dmg.max'], 14);
 }
 
+console.log('energy drain -- the full scope of a negative level');
+{
+  const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  c.data.conditions = { 'Energy Drain': 2 };
+  c.recompute();
+  const cs = c.conditionState;
+  check('cumulative −1 on attacks, CMB, CMD, saves, skills and ability checks',
+    [cs.delta.melee, cs.delta.cmb, cs.delta.cmd, cs.delta.fortitude, cs.delta.skills, cs.delta.abilityChecks],
+    [-2, -2, -2, -2, -2, -2]);
+  check('−5 total hit points per level', cs.delta.hp, -10);
+  const info = conditionInfo('Energy Drain');
+  check('the notes carry the level-dependent, no-lost-spells and death clauses',
+    info.notes.some((n) => /level-dependent/.test(n))
+    && info.notes.some((n) => /no prepared spells/.test(n))
+    && info.notes.some((n) => /dies/.test(n)), true);
+}
+
+console.log('maneuver notes -- the player\'s line under a readied maneuver');
+{
+  const c = new Character(blankDocument({ name: 'Blade', level: 5 }));
+  c.listAdd('maneuvers.disciplines', { name: 'Golden Lion', known: ['Demoralizing Roar'] });
+  c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', 'Allies move {5 * floor(level / 2)} ft.');
+  check('the note is stored by name',
+    c.data.maneuvers.disciplines[0].notes['Demoralizing Roar'], 'Allies move {5 * floor(level / 2)} ft.');
+  check('and survives a round trip',
+    new Character(c.toJSON()).data.maneuvers.disciplines[0].notes['Demoralizing Roar'],
+    'Allies move {5 * floor(level / 2)} ft.');
+  c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', '   ');
+  check('an emptied note is removed, not stored blank',
+    'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
+
+  // A prepared spell's note is prose data too, and survives the round trip.
+  c.listAdd('vancian.prepared', {
+    prepUsed: '', classLevel: 'Ora 1', name: 'Cure Light Wounds', uses: 2, used: 0,
+    note: 'heals {1 + min(5, level)}d8',
+  });
+  check('a spell note round-trips',
+    new Character(c.toJSON()).data.vancian.prepared.at(-1).note, 'heals {1 + min(5, level)}d8');
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante

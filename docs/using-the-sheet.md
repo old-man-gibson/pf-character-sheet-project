@@ -171,7 +171,13 @@ In the session view the **Overview is a dashboard** rather than the full page:
 - **Conditions** — what is on the character as chips; × takes one off, and
   **+ Add condition** opens the catalogue as short shelves (Fear, Worn down, Held,
   Addled, Senses, Footing) where a click puts one on already ticked — Energy Drain
-  climbs a level per click.
+  climbs a level per click. Under the chips, a line of tags sums what the ticked
+  conditions do per stat — *Attack −2 · CMD −2 · Skills −2 · Dex 14 → 10* (an
+  ability score floors at 0) — conditions alone, so a buff's bonus never muddies
+  the read; the rules they carry follow as a readable list. Across the dashboard a
+  moved number **replaces** the base in place — red down, green up — with the base
+  in its tooltip: attacks, weapon damage, skills, AC, saves and the strip all read
+  the same way.
 - **Buffs** — see below.
 - **Resources** — every tracker as a compact row (its meter, − / + and the count),
   packed two or three across as the width allows, in the same order as the Trackers
@@ -194,6 +200,34 @@ In the session view the **Overview is a dashboard** rather than the full page:
 
 Expand states persist with the character; the full Overview is one Build-view click
 away.
+
+**The dashboard is yours to compose.** Its cards are fixed building blocks, but which
+show, and in what order, is the player's: **Arrange cards** (top right of the
+dashboard) lists the shown cards with move/hide and everything else one click from
+joining. Left automatic, the caster cards come and go with what the character
+actually uses; the first change pins the arrangement (`uiPrefs.dashCards`), and
+**Reset to automatic** hands it back. Beyond the standing cards there are:
+
+- **Spells & slots** — a row per Vancian casting class with its slot pips
+  (spontaneous and hybrid casters spend here), the prepared list with its squares,
+  each class's concentration d20 and a **New day** button — the same pools the
+  Vancian tab spends, seen from the table. Automatic once a casting class exists.
+- **Power points** — the psionic pool's meter with − / + and **New day**. Automatic
+  for manifesters.
+- **Casting numbers** — the Spheres figures a round asks for: caster level,
+  concentration with its d20, MSB/MSD, save DC, spell points, practitioner DC.
+  Automatic with magic training.
+- **Reference lists**, opt-in for whatever a playstyle keeps reaching for:
+  **Veils shaped** (slot, essence, DC each), **Readied maneuvers** (by discipline,
+  ticked on the Maneuvers tab), and **Talents** (every sphere talent as a one-line
+  entry, full text on hover).
+
+In Spells &amp; slots the prepared list packs into columns, and every row's
+squares hang off the same left edge — the first use is always top-left, spending
+rightward. A readied maneuver can carry **the player's own line** for the
+dashboard: the ✎ on its row (Maneuvers tab) opens a note that reads `{…}` like any
+prose — *"Allies heal `{5 * floor(level / 2)}`"* shows the resolved number under
+the maneuver's name on the card, and keeps up with the level.
 
 ### Buffs
 
