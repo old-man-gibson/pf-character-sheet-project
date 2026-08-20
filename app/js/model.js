@@ -8293,9 +8293,12 @@ export class Character {
     const buffCount = buffsOn.length;
 
     /*
-     * Apply the size change once, capped to the ladder: nothing grows past
-     * Colossal or shrinks past Fine, effective steps landing after true ones.
-     * (TODO: a campaign setting for tables that allow colossal+ sizes.)
+     * Apply the size change once. The Colossal cap binds the damage dice
+     * alone: the dice walk stops where the ladder does (nothing rolls past
+     * Colossal's dice, effective steps landing after true ones), while the
+     * attack and AC penalties and the CMB and CMD bonuses run with the full
+     * summed steps, uncapped. (TODO: a campaign setting for tables that
+     * allow colossal+ sizes.)
      *
      * True steps change the size itself: −1 attack and AC per step larger
      * (the size modifier) and +1 CMB and CMD (the special size modifier).
@@ -8309,17 +8312,18 @@ export class Character {
     let baseIdx = ladder.indexOf(c.identity?.size);
     if (baseIdx < 0) baseIdx = ladder.indexOf('Medium');
     const clampSteps = (from, want) => Math.max(-from, Math.min(ladder.length - 1 - from, want));
-    const trueSteps = clampSteps(baseIdx, sizeRows.size.up + sizeRows.size.down + sizeRows.stacking);
+    const modSteps = sizeRows.size.up + sizeRows.size.down + sizeRows.stacking;
+    const trueSteps = clampSteps(baseIdx, modSteps);
     const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
     const sizeSteps = trueSteps + effSteps;
-    if (trueSteps) {
+    if (modSteps) {
       buffsOn.push({
         name: 'Size',
         info: {
           key: 'buff:size',
-          label: `${trueSteps > 0 ? `${trueSteps} size larger` : `${-trueSteps} size smaller`}`,
+          label: `${modSteps > 0 ? `${modSteps} size larger` : `${-modSteps} size smaller`}`,
           mods: {
-            attack: -trueSteps, ac: -trueSteps, cmb: 2 * trueSteps, cmd: trueSteps,
+            attack: -modSteps, ac: -modSteps, cmb: 2 * modSteps, cmd: modSteps,
           },
         },
         count: 1,
@@ -8429,6 +8433,10 @@ export class Character {
 
     return {
       active, buffsOn: buffCount, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+      // What moved the numbers, for the tooltips: named honestly, so a lone
+      // buff never reads as "conditions".
+      sources: active.length && buffCount ? 'conditions and buffs'
+        : buffCount ? 'buffs' : 'conditions',
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
         || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps
         || !!totals.acVsMelee || !!totals.acVsRanged,

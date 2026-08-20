@@ -261,7 +261,13 @@ never granting a movement type the character lacks) — and three special ones:
   size step at a time so multi-step changes read each step's own size and dice.
   Token riders (sneak, flaming) keep their dice, as the rules leave them; reach
   stays yours. The stepped dice show on the dashboard's weapon lines and ride the
-  d20 copies, damage and crit alike.
+  d20 copies, damage and crit alike. Size comes in three kinds — **true** (the four
+  numbers and the dice), **effective** ("treated as larger", dice alone), and
+  **stacking** for the odd item that makes size effects stack outright (wraps of
+  suppressed size) — within true and effective only the largest counts, and the
+  kinds stack with each other. The Colossal cap binds the damage dice alone; the
+  attack and AC penalties and the CMB and CMD bonuses run with the full summed
+  steps.
 - **Save DCs** and **Essence pool** are shown where those numbers are read — the
   Casting numbers and Veils cards — without re-running slot tables or investment
   math.

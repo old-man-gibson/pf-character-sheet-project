@@ -2565,6 +2565,14 @@ console.log('buff extra bonuses -- targets past the six dials');
   check('cmb, cmd and a single save move',
     [cs.delta.cmb, cs.delta.cmd, cs.delta.reflex, cs.delta.fortitude], [2, 3, 4, 0]);
   check('dc and essence ride as display deltas', [cs.delta.dc, cs.delta.essence, cs.changed], [1, 2, true]);
+  check('a lone buff names itself, not conditions', cs.sources, 'buffs');
+  c.data.conditions = { Shaken: true };
+  c.recompute();
+  check('with a condition too, both are named', c.conditionState.sources, 'conditions and buffs');
+  c.data.buffs = [];
+  c.recompute();
+  check('conditions alone name conditions', c.conditionState.sources, 'conditions');
+  c.data.conditions = {};
 
   // An ability score cascades through its modifier (blank sheet: Str 10, melee off Str).
   cs = buff([{ target: 'str', value: 4 }]);
@@ -2592,11 +2600,12 @@ console.log('buff extra bonuses -- targets past the six dials');
   check('effective size: dice step, the four numbers stand',
     [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [0, 0, 0, 0, 1]);
 
-  // The result caps at Colossal from the character's own size.
+  // The Colossal cap binds the dice alone: the attack and AC penalties and
+  // the CMB and CMD bonuses run with the full summed steps.
   c.data.identity.size = 'Huge';
   cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
-  check('a Huge character grows two true steps to Colossal and no further',
-    [cs.delta.melee, cs.sizeSteps], [-2, 2]);
+  check('a Huge character rolls Colossal dice and no bigger, but the numbers run uncapped',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 2]);
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
   check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);
