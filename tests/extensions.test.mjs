@@ -7,9 +7,14 @@ import {
   extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
+  ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
-import { parseClassFeatures, parseGroupFeatures, parseNamedLines } from '../app/js/extension-manager.js';
-import { Character, setManeuverCatalogue, disciplineEntries } from '../app/js/model.js';
+import {
+  parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
+} from '../app/js/extension-manager.js';
+import {
+  Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+} from '../app/js/model.js';
 import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
@@ -188,7 +193,8 @@ console.log('apply -- blocks land on a blank character through the model');
   check('same class again updates rather than duplicating', c.data.classes.map((x) => [x.name, x.hd]), [['Barbarian', 10]]);
   check('features without text add no template group', (c.data.templates || []).length, 0);
   applyBlock(c, { ...barb, features: [{ level: 1, name: 'Rage', text: 'r' }, { level: 3, name: 'Trap sense +1', text: 't' }, { level: 6, name: 'Trap sense +2', text: '' }, { level: 9, name: 'Trap sense +3', text: 't' }] });
-  check('features with text go on the Template tab once each, +N variants folded', c.data.templates.map((t) => [t.name, t.features.map((f) => f.name)]), [['Barbarian', ['Rage', 'Trap sense +1']]]);
+  check('features with text go under the class once each, +N variants folded -- the Template tab is for templates',
+    [c.classFeatureNotes('Barbarian').map((f) => f.name), c.data.templates.length], [['Rage', 'Trap sense +1'], 0]);
   c.data.templates.length = 0;
 
   const before = c.data.abilities.con.score;
@@ -263,11 +269,11 @@ console.log('apply -- blocks land on a blank character through the model');
   const yoj = { kind: 'archetype', name: 'Yojimbo', class: LS, features: [{ name: 'Bonded Challenge', text: 'b. This ability alters challenge.' }, { name: "Guardian's Toughness", type: 'Ex', text: 'At 4th level, g. This ability replaces banner.' }] };
   const other = { kind: 'archetype', name: 'Nobody', class: 'Wizard', features: [{ name: 'X', text: 'x. This ability replaces spells.' }] };
   const cell = (lvl) => c3.data.progression.classFeatures[LS].byLevel[lvl]?.Special || '';
-  const tplNames = () => (c3.data.templates.find((t) => t.name === LS)?.features || []).map((f) => f.name);
+  const tplNames = () => c3.classFeatureNotes(LS).map((f) => f.name);
   check('needs its class', archetypeStatus(c3, other), { ok: false, reason: 'no-class', className: 'Wizard' });
   ok('gunblade goes on', /Added Gunblade Duelist to Legendary Samurai, replacing Resolve, Greater resolve, iaijutsu master, altering sheath control\./.test(applyBlock(c3, gun)));
   check('replaced features leave their cells, new ones arrive at their levels', [cell(2), cell(9), cell(10)], ['Perfect Craftsmanship', '', 'Gun Fusion']);
-  ok('template group swapped too', !tplNames().includes('Resolve') && tplNames().includes('Gun Fusion') && tplNames().includes('Bullet Control'));
+  ok("the class's own feature text swapped too", !tplNames().includes('Resolve') && tplNames().includes('Gun Fusion') && tplNames().includes('Bullet Control'));
   check('the class row names it', [c3.data.classes[0].archetypes, c3.data.classes[0].archetypeStack.map((e) => e.name)], ['Gunblade Duelist', ['Gunblade Duelist']]);
   check('oni conflicts on sheath control', archetypeStatus(c3, oni), { ok: false, reason: 'conflict', with: 'Gunblade Duelist', shared: ['sheath control'] });
   ok('and is refused with a reason', /cannot be added: it and Gunblade Duelist both change sheath control\./.test(applyBlock(c3, oni)));
@@ -276,7 +282,7 @@ console.log('apply -- blocks land on a blank character through the model');
   check('applied twice is refused', archetypeStatus(c3, yoj).reason, 'applied');
   ok('removing gunblade restores exactly its features', /Removed Gunblade Duelist from Legendary Samurai; Resolve, Greater resolve, iaijutsu master restored\./.test(removeArchetype(c3, LS, 'Gunblade Duelist')));
   check('cells back, yojimbo untouched', [cell(2), cell(9), cell(10), cell(4)], ['Resolve', 'Greater resolve', 'iaijutsu master', "Guardian's Toughness"]);
-  ok('template group restored', tplNames().includes('Resolve') && !tplNames().includes('Gun Fusion') && tplNames().includes("Guardian's Toughness"));
+  ok("and the class's own feature text restored", tplNames().includes('Resolve') && !tplNames().includes('Gun Fusion') && tplNames().includes("Guardian's Toughness"));
   check('row names only yojimbo now', [c3.data.classes[0].archetypes, c3.data.classes[0].archetypeStack.map((e) => e.name)], ['Yojimbo', ['Yojimbo']]);
   check('oni now conflicts with yojimbo on challenge', archetypeStatus(c3, oni), { ok: false, reason: 'conflict', with: 'Yojimbo', shared: ['challenge'] });
   // "can be combined with" lets an overlap through
@@ -308,7 +314,356 @@ console.log('apply -- blocks land on a blank character through the model');
   check('lifted race carries mods and traits', [lifted[1].abilityMods, lifted[1].traits.length], [{ con: 2, cha: -2 }, 4]);
   // round trip: the same document reloads with everything in place
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
-  check('round trip keeps the class, race, templates and tracker', [back.data.classes.length, back.data.identity.race, back.data.templates.length, back.trackers.some((x) => x.name === 'Rage rounds')], [1, 'Dwarf', 2, true]);
+  check('round trip keeps the class with its feature text, the race, the templates and the tracker',
+    [back.data.classes.length, back.classFeatureNotes('Barbarian').length, back.data.identity.race, back.data.templates.length, back.trackers.some((x) => x.name === 'Rage rounds')],
+    [1, 2, 'Dwarf', 2, true]);
+  ok('a group named for a class that a feature block made is a group still, not swallowed',
+    back.data.templates.some((t) => t.name === 'Barbarian'));
+}
+
+console.log('repeat features -- a column each, on the schedule their levels describe');
+{
+  check('an arithmetic run to the top is written the way a book writes it',
+    [ruleForLevels([2, 4, 6, 8, 10, 12, 14, 16, 18, 20]), ruleForLevels([1, 6, 11, 16]), ruleForLevels([9, 13, 17])],
+    ['2, +2', '1, +5', '9, +4']);
+  check('anything else is the levels themselves, which is never wrong',
+    [ruleForLevels([3, 5]), ruleForLevels([2, 4, 6, 8]), ruleForLevels([7]), ruleForLevels([])],
+    ['3, 5', '2, 4, 6, 8', '7', '']);
+
+  const feats = [
+    { level: 1, name: 'Combat training' }, { level: 1, name: 'thunderous blows +1d6' },
+    { level: 2, name: 'Skilled craftsman' }, { level: 2, name: 'smithing insight' },
+    { level: 3, name: 'Thunderous blows +2d6' }, { level: 4, name: 'Smithing insight' },
+    { level: 5, name: 'thunderous blows +3d6' }, { level: 6, name: 'Smithing insight' },
+    { level: 20, name: "Smith's masterpiece" },
+  ];
+  const cols = repeatColumns(feats);
+  check('only what repeats gets a column, best-cased', cols.map((c) => [c.name, c.rule]),
+    [['Thunderous blows', '1, 3, 5'], ['Smithing insight', '2, 4, 6']]);
+  check('a ladder writes the number it grew by; a menu writes nothing, so the level reads as owed',
+    cols.map((c) => c.at.map((a) => a.text)), [['+1d6', '+2d6', '+3d6'], ['', '', '']]);
+
+  const c = new Character(blankDocument({ name: 'Smith', level: 6 }));
+  for (let l = 1; l <= 6; l++) c.setProgressionClass(l, 0, 'Blacksmith');
+  applyBlock(c, {
+    kind: 'class', name: 'Blacksmith', hd: 10, bab: 1, goodFort: true, goodWill: true, skillRanks: 4, features: feats,
+  });
+  const g = c.data.progression.classFeatures.Blacksmith;
+  check('columns made, the one-offs left in Special', g.columns, ['Special', 'Thunderous blows', 'Smithing insight']);
+  check('each column carries its own schedule, named for itself',
+    Object.fromEntries(Object.entries(g.rules).map(([k, v]) => [k, v.map((x) => [x.name, x.rule])])),
+    { 'Thunderous blows': [['Thunderous blows', '1, 3, 5']], 'Smithing insight': [['Smithing insight', '2, 4, 6']] });
+  check('cells: the ladder filled in, the menu left to pick, Special holding the rest',
+    [g.byLevel[1], g.byLevel[2], g.byLevel[20]],
+    [{ Special: 'Combat training', 'Thunderous blows': '+1d6' }, { Special: 'Skilled craftsman', 'Smithing insight': '' }, { Special: "Smith's masterpiece" }]);
+  check('the grid says how many picks are owed at this level', c.classFeatureDue('Blacksmith'), { 'Smithing insight': 3 });
+}
+
+console.log('option menus -- a pack provides them, a column points at one');
+{
+  const menu = {
+    kind: 'options', name: 'Blacksmith Smithing Insight', class: 'Blacksmith', feature: 'Smithing insight',
+    text: 'Pick one each time the class grants an insight.',
+    options: [
+      { name: 'Durable', type: 'Ex', category: 'Insights', text: 'Items resist sundering.' },
+      { name: 'Gunsmith', type: 'ex', category: 'Insights', minLevel: '5', text: 'Craft firearms.' },
+      { name: '', text: 'nameless, dropped' },
+    ],
+  };
+  const b = normalizeBlock(menu);
+  check('the block keeps the class, the feature and its entries',
+    [b.kind, b.class, b.feature, b.options.map((o) => [o.name, o.type, o.category, o.minLevel])],
+    ['options', 'Blacksmith', 'Smithing insight', [['Durable', 'Ex', 'Insights', null], ['Gunsmith', 'Ex', 'Insights', 5]]]);
+
+  const c = new Character(blankDocument({ name: 'Smith', level: 6 }));
+  for (let l = 1; l <= 6; l++) c.setProgressionClass(l, 0, 'Blacksmith');
+  applyBlock(c, {
+    kind: 'class', name: 'Blacksmith', hd: 10, bab: 1, skillRanks: 4,
+    features: [{ level: 2, name: 'Smithing insight' }, { level: 4, name: 'Smithing insight' }],
+  });
+  const said = applyBlock(c, menu);
+  ok('says which column it landed on', /Smithing insight column now picks from/.test(said));
+  check('the sheet holds the menu\'s name, never a copy of it',
+    c.data.progression.classFeatures.Blacksmith.optionsFrom, { 'Smithing insight': 'Blacksmith Smithing Insight' });
+  check('and nothing of the menu itself is on the character', JSON.stringify(c.toJSON()).includes('Craft firearms'), false);
+
+  // The runtime hands the model what the active packs provide.
+  setOptionCatalogues(optionCataloguesFrom([{ ...menu }, { kind: 'note', name: 'not a menu' }]));
+  check('one catalogue, by name', optionCatalogues().map((x) => [x.name, x.options.length]), [['Blacksmith Smithing Insight', 2]]);
+  const row = c.classFeatureRows('Blacksmith').find((r) => r.level === 2);
+  check('the cell that picks from it knows its entries',
+    row.cells['Smithing insight'].fields.map((f) => f.menu?.options.map((o) => o.name)), [['Durable', 'Gunsmith']]);
+  setOptionCatalogues([]);
+  const off = c.classFeatureRows('Blacksmith').find((r) => r.level === 2);
+  check('with its pack switched off the cell is a box to type in again, and the name is still on the sheet',
+    [off.cells['Smithing insight'].fields[0].menu, c.classFeatureColumnOptions('Blacksmith', 'Smithing insight')],
+    [null, ['Blacksmith Smithing Insight']]);
+
+  // No such column: the menu stays in its pack rather than being copied anywhere.
+  const bare = new Character(blankDocument({ name: 'Nobody', level: 1 }));
+  const note = applyBlock(bare, menu);
+  ok('says nothing picks from it yet, and copies nothing onto the sheet',
+    /Nothing on this sheet picks from .Blacksmith Smithing Insight./.test(note) && bare.data.templates.length === 0);
+}
+
+console.log('an archetype\'s own menu -- layered on the class\'s, and off again with it');
+{
+  check('an entry says which of the menu it joins it pushes out',
+    parseOptionReplaces('This replaces the Ranged Cut and Armor Rending Slash Iaijutsu Techniques.', 'Topological Iaijutsu Techniques'),
+    ['Ranged Cut', 'Armor Rending Slash']);
+  check('singular or plural, and nothing where nothing is said',
+    [parseOptionReplaces('This replaces the Explosive Cut and Vacuum Slash Iaijutsu Technique.', 'Topological Iaijutsu Techniques'),
+      parseOptionReplaces('An Isougiri must be 5th level or higher to select this technique.', 'Topological Iaijutsu Techniques')],
+    [['Explosive Cut', 'Vacuum Slash'], []]);
+
+  const base = {
+    kind: 'options', name: 'Legendary Samurai Iaijutsu Technique', class: 'Legendary Samurai', feature: 'Iaijutsu Technique',
+    options: [
+      { name: 'Armor-Rending Slash', type: 'Ex', category: 'Slashes', text: 'a' },
+      { name: 'Death Slash', type: 'Ex', category: 'Slashes', minLevel: 17, text: 'b' },
+      { name: 'Ranged Cut', type: 'Ex', category: 'Cuts', text: 'c' },
+    ],
+  };
+  const arch = {
+    kind: 'archetype', name: 'Isougiri', class: 'Legendary Samurai',
+    features: [{
+      level: 1, name: 'Topological Iaijutsu Techniques', text: 'Topological Draw alters Iaijutsu Techniques.',
+      options: [
+        { name: 'Zero-Point Thrust', type: 'Ex', category: 'Cuts', text: 'This replaces the Ranged Cut and Armor Rending Slash Iaijutsu Techniques.' },
+        { name: 'Folding Thrust', type: 'Su', category: 'Cuts', minLevel: 9, text: 'x' },
+      ],
+    }],
+  };
+  setOptionCatalogues(optionCataloguesFrom([base, arch]));
+  check('an archetype\'s menu is a catalogue of its own, named for both',
+    optionCatalogues().map((c) => c.name),
+    ['Legendary Samurai Iaijutsu Technique', 'Isougiri — Topological Iaijutsu Techniques']);
+
+  const c = new Character(blankDocument({ name: 'Isou', level: 9 }));
+  for (let l = 1; l <= 9; l++) c.setProgressionClass(l, 0, 'Legendary Samurai');
+  applyBlock(c, {
+    kind: 'class', name: 'Legendary Samurai', hd: 10, bab: 1, skillRanks: 4,
+    features: [{ level: 1, name: 'Iaijutsu technique' }, { level: 5, name: 'Iaijutsu technique' }, { level: 9, name: 'Iaijutsu technique' }],
+  });
+  applyBlock(c, base);
+  check('the class\'s column takes the class\'s menu', c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+    ['Legendary Samurai Iaijutsu Technique']);
+
+  applyArchetype(c, arch);
+  check('the archetype layers its own on top rather than replacing it',
+    c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+    ['Legendary Samurai Iaijutsu Technique', 'Isougiri — Topological Iaijutsu Techniques']);
+  const merged = resolveOptionMenu(c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'));
+  check('the entries it replaces drop out -- punctuation and all -- and the rest of the class\'s list stands',
+    merged.options.map((o) => o.name), ['Death Slash', 'Zero-Point Thrust', 'Folding Thrust']);
+
+  // What a level offers is what a level offers: an entry asking for more is not on it.
+  const offered = (lvl) => merged.options.filter((o) => !o.minLevel || o.minLevel <= lvl).map((o) => o.name);
+  check('level 1 offers what asks for nothing', offered(1), ['Zero-Point Thrust']);
+  check('level 9 offers what it has reached, not the 17th-level entry', offered(9), ['Zero-Point Thrust', 'Folding Thrust']);
+
+  removeArchetype(c, 'Legendary Samurai', 'Isougiri');
+  check('taking the archetype off takes its menu with it',
+    [c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+      resolveOptionMenu(c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique')).options.map((o) => o.name)],
+    [['Legendary Samurai Iaijutsu Technique'], ['Armor-Rending Slash', 'Death Slash', 'Ranged Cut']]);
+}
+
+console.log('a replaced repeat feature -- its whole column goes, and comes back where it was');
+{
+  const c = new Character(blankDocument({ name: 'Isou', level: 11 }));
+  for (let l = 1; l <= 11; l++) c.setProgressionClass(l, 0, 'Legendary Samurai');
+  applyBlock(c, {
+    kind: 'class', name: 'Legendary Samurai', hd: 10, bab: 1, skillRanks: 4,
+    features: [{ level: 1, name: 'Challenge' }, { level: 3, name: 'Kiai art' }, { level: 7, name: 'Kiai art' },
+      { level: 11, name: 'Kiai art' }, { level: 6, name: 'Advanced blade' }, { level: 11, name: 'Advanced blade' }],
+  });
+  setOptionCatalogues(optionCataloguesFrom([{ kind: 'options', name: 'Kiai Arts', class: 'Legendary Samurai', feature: 'Kiai art', options: [{ name: 'Follow My Lead', text: 'y' }] }]));
+  applyBlock(c, { kind: 'options', name: 'Kiai Arts', class: 'Legendary Samurai', feature: 'Kiai art', options: [{ name: 'Follow My Lead', text: 'y' }] });
+  c.setClassFeature('Legendary Samurai', 3, 'Kiai art', 'Follow My Lead');
+  const cols = () => c.data.progression.classFeatures['Legendary Samurai'].columns;
+  check('the class made a column each', cols(), ['Special', 'Kiai art', 'Advanced blade']);
+
+  applyArchetype(c, {
+    kind: 'archetype', name: 'Silent Retainer', class: 'Legendary Samurai',
+    features: [{ level: 3, name: 'Wordless Service', text: 'This replaces kiai art.' }],
+  });
+  check('replacing a repeat feature takes its column with it', cols(), ['Special', 'Advanced blade']);
+  removeArchetype(c, 'Legendary Samurai', 'Silent Retainer');
+  check('and it comes back where it was, with its schedule, its menu and what was written in it',
+    [cols(), c.classFeatureColumnOptions('Legendary Samurai', 'Kiai art'),
+      c.data.progression.classFeatures['Legendary Samurai'].byLevel[3]['Kiai art'],
+      c.classFeatureRuleGroups('Legendary Samurai', 'Kiai art').map((g) => g.rule)],
+    [['Special', 'Kiai art', 'Advanced blade'], ['Kiai Arts'], 'Follow My Lead', ['3, 7, 11']]);
+  setOptionCatalogues([]);
+}
+
+console.log('one grant at a time -- an archetype that takes the 10th and 14th, not the feature');
+{
+  check('the levels ride on the key, so each is its own thing to swap',
+    parseSwaps("This replaces the 10th and 14th level Warrior's grace.", 'Legendary Samurai'),
+    { replaces: ['warriors grace@10', 'warriors grace@14'], alters: [] });
+  check('a single one, hyphenated, reads the same',
+    parseSwaps('This replaces the 4th-level rage power.', 'Barbarian').replaces, ['rage power@4']);
+  check('two grants of one feature do not meet; the whole feature meets either',
+    [swapsMeet('warriors grace@10', 'warriors grace@14'), swapsMeet('warriors grace@10', 'warriors grace'),
+      swapsMeet('warriors grace@10', 'warriors grace@10'), swapsMeet('warriors grace@10', 'spirit')],
+    [false, true, true, false]);
+
+  const samurai = (level = 20) => {
+    const c = new Character(blankDocument({ name: 'Isou', level }));
+    for (let l = 1; l <= level; l++) c.setProgressionClass(l, 0, 'Legendary Samurai');
+    applyBlock(c, {
+      kind: 'class', name: 'Legendary Samurai', hd: 10, bab: 1, skillRanks: 4,
+      features: [{ level: 1, name: 'Challenge' },
+        ...[2, 6, 10, 14, 18].map((l) => ({ level: l, name: "Warrior's grace", text: 'A social talent.' }))],
+    });
+    c.setClassFeature('Legendary Samurai', 10, "Warrior's grace", 'Social Grace');
+    return c;
+  };
+  const rule = (c) => c.classFeatureRuleGroups('Legendary Samurai', "Warrior's grace")[0]?.rule;
+  const grants = (c) => c.classFeatureRows('Legendary Samurai')
+    .filter((r) => r.cells["Warrior's grace"]?.fields.some((f) => f.on && f.group)).map((r) => r.classLevel);
+  const iso = {
+    kind: 'archetype', name: 'Isougiri', class: 'Legendary Samurai',
+    features: [{ level: 11, name: 'Spatial Discontinuity', text: "This replaces the 10th and 14th level Warrior's grace." }],
+  };
+  const envoy = {
+    kind: 'archetype', name: 'Court Envoy', class: 'Legendary Samurai',
+    features: [{ level: 18, name: 'Envoy', text: "This replaces the 18th level Warrior's grace." }],
+  };
+
+  const c = samurai();
+  check('the class grants at every fourth level from the second', [rule(c), grants(c)], ['2, +4', [2, 6, 10, 14, 18]]);
+  ok('and says which levels went', /replacing Warrior's grace at 10th and 14th/.test(applyArchetype(c, iso)));
+  check('the schedule loses those levels and keeps the rest -- the column stands',
+    [rule(c), grants(c), c.data.progression.classFeatures['Legendary Samurai'].columns.includes("Warrior's grace")],
+    ['2, +4, -10, -14', [2, 6, 18], true]);
+  check('what had been picked at a level it took is kept, to put back',
+    c.data.progression.classFeatures['Legendary Samurai'].byLevel[10]["Warrior's grace"], '');
+  ok('the feature\'s own text stays: it arrives one time fewer, it does not go',
+    c.classFeatureNotes('Legendary Samurai').some((f) => f.name === "Warrior's grace"));
+
+  // The point of counting grants rather than features: these two can stand together.
+  check('an archetype taking a different grant of the same feature is not a clash',
+    archetypeStatus(c, envoy).ok, true);
+  applyArchetype(c, envoy);
+  check('both subtractions stand', [rule(c), grants(c)], ['2, +4, -10, -14, -18', [2, 6]]);
+  const whole = {
+    kind: 'archetype', name: 'Recluse', class: 'Legendary Samurai',
+    features: [{ level: 2, name: 'Hermit', text: "This replaces warrior's grace." }],
+  };
+  check('one taking the whole feature is', [archetypeStatus(c, whole).ok, archetypeStatus(c, whole).shared],
+    [false, ['warriors grace (10th)', 'warriors grace (14th)']]);
+
+  // Undoing takes the subtraction back out, so the order they come off in does not matter.
+  for (const order of [['Isougiri', 'Court Envoy'], ['Court Envoy', 'Isougiri']]) {
+    const x = samurai();
+    applyArchetype(x, iso);
+    applyArchetype(x, envoy);
+    for (const n of order) removeArchetype(x, 'Legendary Samurai', n);
+    check(`removing ${order.join(' then ')} puts every level and its pick back`,
+      [rule(x), grants(x), x.data.progression.classFeatures['Legendary Samurai'].byLevel[10]["Warrior's grace"]],
+      ['2, +4', [2, 6, 10, 14, 18], 'Social Grace']);
+  }
+
+  // A level the class does not grant at is not a swap that happened.
+  const other = new Character(blankDocument({ name: 'Other', level: 20 }));
+  for (let l = 1; l <= 20; l++) other.setProgressionClass(l, 0, 'Legendary Samurai');
+  applyBlock(other, {
+    kind: 'class', name: 'Legendary Samurai', hd: 10, bab: 1, skillRanks: 4,
+    features: [2, 6, 12, 18, 20].map((l) => ({ level: l, name: "Warrior's grace", text: 'A social talent.' })),
+  });
+  const said = applyArchetype(other, iso);
+  ok('a grant the class never had is said, not silently skipped',
+    /warriors grace \(10th\), warriors grace \(14th\) not on the sheet/.test(said)
+    && other.classFeatureRuleGroups('Legendary Samurai', "Warrior's grace")[0].rule === '2, 6, 12, 18, 20');
+}
+
+console.log('a menu names its class and its feature, so a column of that name picks from it');
+{
+  const menu = (name, feature, cls = 'Legendary Samurai') => ({
+    kind: 'options', name, class: cls, feature, options: [{ name: `${name} entry`, text: 'x' }],
+  });
+  setOptionCatalogues(optionCataloguesFrom([
+    menu('Legendary Samurai Iaijutsu Technique', 'Iaijutsu Technique'),
+    menu('Legendary Samurai Kiai Art', 'Kiai Art'),
+    menu('Rogue Talent', 'Rogue Talents', 'Rogue'),
+  ]));
+  check('matched across the spellings two pages use, and across the plural',
+    [optionCatalogueFor('Legendary Samurai', 'Iaijutsu technique')?.name,
+      optionCatalogueFor('Legendary Samurai', "Kiai art")?.name,
+      optionCatalogueFor('Rogue', 'Rogue talent')?.name],
+    ['Legendary Samurai Iaijutsu Technique', 'Legendary Samurai Kiai Art', 'Rogue Talent']);
+  check('another class\'s menu is not this class\'s, and an unnamed column matches nothing',
+    [optionCatalogueFor('Rogue', 'Iaijutsu technique'), optionCatalogueFor('Legendary Samurai', 'Special')],
+    [null, null]);
+
+  const c = new Character(blankDocument({ name: 'Isou', level: 9 }));
+  for (let l = 1; l <= 9; l++) c.setProgressionClass(l, 0, 'Legendary Samurai');
+  applyBlock(c, {
+    kind: 'class', name: 'Legendary Samurai', hd: 10, bab: 1, skillRanks: 4,
+    features: [1, 5, 9].map((l) => ({ level: l, name: 'Iaijutsu technique' })),
+  });
+  check('the column picks from it with nothing added and nothing recorded',
+    [c.data.progression.classFeatures['Legendary Samurai'].optionsFrom,
+      c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+      c.classFeatureRows('Legendary Samurai')[0].cells['Iaijutsu technique'].fields[0].menu?.options.length],
+    [{}, ['Legendary Samurai Iaijutsu Technique'], 1]);
+  ok('adding the menu block says it was already picked from, and changes nothing',
+    /already picks from/.test(applyBlock(c, menu('Legendary Samurai Iaijutsu Technique', 'Iaijutsu Technique')))
+    && JSON.stringify(c.data.progression.classFeatures['Legendary Samurai'].optionsFrom) === '{}');
+
+  // An archetype layering onto a column no one recorded keeps the pack's own claim under it.
+  applyArchetype(c, {
+    kind: 'archetype', name: 'Isougiri', class: 'Legendary Samurai',
+    features: [{
+      level: 1, name: 'Topological Iaijutsu Techniques', text: 'Topological Draw alters Iaijutsu Techniques.',
+      options: [{ name: 'Zero-Point Thrust', text: 'y' }],
+    }],
+  });
+  check('the class\'s menu is still under the archetype\'s',
+    c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+    ['Legendary Samurai Iaijutsu Technique', 'Isougiri — Topological Iaijutsu Techniques']);
+  removeArchetype(c, 'Legendary Samurai', 'Isougiri');
+
+  // Saying no is a decision, and no pack takes it back.
+  const index = c.data.progression.classFeatures['Legendary Samurai'].columns.indexOf('Iaijutsu technique');
+  c.setClassFeatureColumnOptions('Legendary Samurai', index, '');
+  check('"no menu" is recorded as such, and survives a save',
+    [c.classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique'),
+      c.classFeatureColumnOptionsChosen('Legendary Samurai', 'Iaijutsu technique'),
+      new Character(JSON.parse(JSON.stringify(c.toJSON()))).classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique')],
+    [[], true, []]);
+  setOptionCatalogues([]);
+}
+
+console.log('the Template tab is for templates: a class\'s feature text moves under the class');
+{
+  const doc = blankDocument({ name: 'Old', level: 5 });
+  doc.classes = [{ name: 'Barbarian', hd: 12, bab: 1, goodFort: true, skillRanks: 4 }];
+  doc.progression = {
+    tracks: 2,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, classes: i < 5 ? ['Barbarian'] : [] })),
+    classFeatures: { Barbarian: { columns: ['Special'], byLevel: { 1: { Special: 'Rage, Fast movement' }, 3: { Special: 'Trap sense +1' } }, rules: {} } },
+  };
+  doc.templates = [
+    { tab: null, name: 'Barbarian', link: null, approvalLink: null, features: [
+      { name: 'Rage', type: null, text: 'Rage text.', tables: [], children: [] },
+      { name: 'Trap sense +1', type: 'Ex', text: 'Trap text.', tables: [], children: [] }] },
+    { tab: null, name: 'Half-Dragon', link: 'http://x', approvalLink: null, features: [{ name: 'Breath weapon', type: 'Su', text: 'b', tables: [], children: [] }] },
+  ];
+  const c = new Character(doc);
+  check('a group named for a class, every feature of it on that class\'s ladder, moves under the class',
+    [c.data.templates.map((t) => t.name), c.classFeatureNotes('Barbarian').map((n) => [n.name, n.type, n.text])],
+    [['Half-Dragon'], [['Rage', null, 'Rage text.'], ['Trap sense +1', 'Ex', 'Trap text.']]]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and having moved, it stays moved -- the move happens once', [again.data.templates.length, again.classFeatureNotes('Barbarian').length], [1, 2]);
+
+  const other = blankDocument({ name: 'Keep', level: 5 });
+  other.classes = [{ name: 'Barbarian', hd: 12, bab: 1, skillRanks: 4 }];
+  other.templates = [{ tab: null, name: 'Barbarian', link: null, approvalLink: null, features: [{ name: 'Something Else', type: null, text: 'x', tables: [], children: [] }] }];
+  check('a template that merely shares a class\'s name is a template still', new Character(other).data.templates.map((t) => t.name), ['Barbarian']);
 }
 
 console.log('editor -- the textarea line formats');
@@ -319,6 +674,17 @@ check('class features by level', parseClassFeatures('1st: Fast movement, Rage\n3
 check('group features with a type', parseGroupFeatures('Rage (Ex): text\nPlain: t2\nBare'), [
   { name: 'Rage', type: 'Ex', text: 'text' }, { name: 'Plain', type: null, text: 't2' }, { name: 'Bare', type: null, text: '' },
 ]);
+check('menu entries: category, type and the level it asks for are each optional', parseMenuOptions(
+  ['Slashes / Bloody Slash (Ex) 5+: The target takes bleed damage.',
+    'Cuts / Ranged Cut (Ex): Strike at 30 feet.',
+    'Durable: Items resist sundering.'].join('\n')), [
+  { name: 'Bloody Slash', type: 'Ex', category: 'Slashes', minLevel: 5, text: 'The target takes bleed damage.' },
+  { name: 'Ranged Cut', type: 'Ex', category: 'Cuts', minLevel: null, text: 'Strike at 30 feet.' },
+  { name: 'Durable', type: null, category: '', minLevel: null, text: 'Items resist sundering.' },
+]);
+ok('and they write back out as what they parse from', menuOptionLines(parseMenuOptions('Cuts / Ranged Cut (Ex) 9+: x')) === 'Cuts / Ranged Cut (Ex) 9+: x');
+check('an entry keeps what its own text says it replaces', normalizeBlock({ kind: 'options', name: 'M', feature: 'Smithing insight',
+  options: parseMenuOptions('Gunsmith: Craft firearms. This replaces the Polish smithing insight.') }).options[0].replaces, ['Polish']);
 check('named lines keep later colons', parseNamedLines('Darkvision: sees 60 ft: really'), [{ name: 'Darkvision', text: 'sees 60 ft: really' }]);
 check('blank pack has an id and no blocks', [blankExtension({ name: 'A B' }).id, blankExtension().blocks], ['a-b', []]);
 

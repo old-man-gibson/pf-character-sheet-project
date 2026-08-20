@@ -17,9 +17,11 @@
 
 import {
   setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
+  setOptionCatalogues,
 } from './model.js';
 import {
   extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
+  optionCataloguesFrom,
 } from './extensions.js';
 
 const REGISTRARS = {
@@ -58,7 +60,11 @@ class ExtensionRuntime extends EventTarget {
 
   /** Re-merge and re-register; fires `change` unless told to be quiet. */
   refresh({ silent = false } = {}) {
-    registerTables(mergeTables(this.active()), REGISTRARS);
+    const active = this.active();
+    registerTables(mergeTables(active), REGISTRARS);
+    // The option menus a pack carries as blocks, so a feature column pointing
+    // at one by name finds it as soon as its pack is switched on.
+    setOptionCatalogues(optionCataloguesFrom(activeBlocks(active)));
     if (!silent) this.dispatchEvent(new CustomEvent('change', { detail: { active: this.active() } }));
   }
 }

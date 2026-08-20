@@ -45,10 +45,12 @@ import {
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_MONTH,
+  MATERIAL_CASTING_PER_MONTH, optionCatalogues,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
-import { applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype } from './extensions.js';
+import {
+  applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype, swapLabel,
+} from './extensions.js';
 import { SHEET_CSS } from './styles.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
@@ -403,6 +405,9 @@ function readControl(input) {
  */
 const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
+/** Two names the player typed, or a pack wrote, meaning the same thing. */
+const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
   if (!input) return null;
@@ -410,7 +415,8 @@ function controlKey(input) {
     : input.dataset.item ? `item:${input.dataset.item}`
       : input.dataset.build ? `build:${input.dataset.build}`
         : input.dataset.offset ? `offset:${input.dataset.offset}`
-          : input.dataset.pick ? `pick:${input.dataset.pick}` : null;
+          : input.dataset.pick ? `pick:${input.dataset.pick}`
+            : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
   return attr;
 }
 
@@ -445,6 +451,7 @@ export class CharacterSheetElement extends HTMLElement {
   #adopting = null;
   #tab = 'overview';
   #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '' };
+  #menuLists = new Map();   // option menus a render's feature cells offer, name -> {id, menu}
   #editTracker = null;   // id of the custom tracker being edited in place
   #editMeter = null;     // key of the built-in meter whose style is open ('hp', 'essence')
   #editDraft = { name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null) };
@@ -461,6 +468,7 @@ export class CharacterSheetElement extends HTMLElement {
   #peek = [];
   /** Which kind of extension block the ⚙ manager's list is narrowed to ('' = all). */
   #extFilter = '';
+  #extSearch = '';   // what is typed into the block shelf's search box
   /* The Formulas tab. Working state, not character data: what is in the
      try-it box, what the one search box is narrowing to, and whether the
      reference underneath has been unfolded. */
@@ -927,7 +935,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#render();
     if (!key) return;
     const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-    const attr = { set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick' }[kind];
+    const attr = { set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick', extsearch: 'data-ext-search' }[kind];
     const next = this.shadowRoot.querySelector(`[${attr}="${CSS.escape(ref)}"]`);
     if (!next) return;
     // A formula field that regains focus keeps showing its source. Set that
@@ -2769,11 +2777,26 @@ export class CharacterSheetElement extends HTMLElement {
     const blocks = extensionRuntime.blocks();
     const kinds = [...new Set(blocks.map((b) => b.kind))];
     const filter = kinds.includes(this.#extFilter) ? this.#extFilter : '';
-    const shown = filter ? blocks.filter((b) => b.kind === filter) : blocks;
+    const byKind = filter ? blocks.filter((b) => b.kind === filter) : blocks;
+    // A pack of thirty archetypes is a list to search, not one to scroll. The
+    // words are looked for in the block's name, its pack and what it is for,
+    // so "warrior" finds an archetype that replaces warrior's grace.
+    const words = this.#extSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const haystack = (b) => [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
+      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
+      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
+    const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
     const byPack = new Map();
     for (const b of shown) {
       if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
       byPack.get(b.extId).blocks.push(b);
+    }
+    // Searching looks through what a block is for as well as what it is called,
+    // so "warrior" finds an archetype that replaces warrior's grace. A block
+    // the words name outright comes first all the same.
+    if (words.length) {
+      const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
+      for (const p of byPack.values()) p.blocks.sort((a, b) => Number(named(b)) - Number(named(a)));
     }
     const detail = (b) => {
       switch (b.kind) {
@@ -2785,8 +2808,9 @@ export class CharacterSheetElement extends HTMLElement {
         case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
         case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
         case 'archetype': {
-          const rep = [...new Set(b.features.flatMap((f) => f.replaces))];
-          const alt = [...new Set(b.features.flatMap((f) => f.alters))];
+          // "warriors grace@10" is how a swap of one grant is filed; here it reads.
+          const rep = [...new Set(b.features.flatMap((f) => f.replaces))].map(swapLabel);
+          const alt = [...new Set(b.features.flatMap((f) => f.alters))].map(swapLabel);
           return [`for ${b.class || 'its class'}`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : '',
             b.stacksWith.length ? `combines with ${b.stacksWith.join(', ')}` : ''].filter(Boolean).join(' · ');
         }
@@ -2827,12 +2851,17 @@ export class CharacterSheetElement extends HTMLElement {
         onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
         from the page's <em>Extensions</em> button.
       </p>
-      ${kinds.length > 1 ? `<p class="pair" style="margin:0 0 6px">
-        <button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}
+      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
+        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
+        <input type="search" data-ext-search="1" value="${esc(this.#extSearch)}" spellcheck="false"
+          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
+          title="By name, pack, class, or what a block's features are called and replace">
+        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
       </p>` : ''}
       <div class="rowlist">
-        ${rows || `<p class="empty">${packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
+        ${rows || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
+    : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
       </div>
     </section>`;
   }
@@ -6809,6 +6838,9 @@ export class CharacterSheetElement extends HTMLElement {
   #classFeatureGroups() {
     const model = this.#model;
     const p = model.data.progression;
+    // The menus this grid's cells pick from, gathered as the cells render so
+    // one list is written per menu however many cells offer it.
+    this.#menuLists = new Map();
     const names = model.progressionClasses();
     // Feature groups whose class is no longer in any track keep their data
     // and stay visible so nothing silently disappears.
@@ -6867,8 +6899,72 @@ export class CharacterSheetElement extends HTMLElement {
         <div style="margin-top:6px">
           <button class="primary" data-action="add-cf-column" data-class="${esc(name)}">+ Add column</button>
         </div>
+        ${this.#classFeatureNotes(name)}
       </section>`);
-    }).join('');
+    }).join('') + this.#menuListMarkup();
+  }
+
+  /**
+   * What a class's features do, under the ladder that says when each arrives.
+   *
+   * One entry per distinct feature however many levels grant it, an archetype's
+   * among them. This is where a pack's rules text lands: the Template tab is
+   * for templates, and a class is not one.
+   */
+  #classFeatureNotes(className) {
+    const notes = this.#model.classFeatureNotes(className);
+    const open = !this.#model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
+    return `<div class="cfnotes">
+      <button class="notehead" data-collapse="cfnotes-${esc(className)}" aria-expanded="${open}">
+        ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
+      </button>
+      ${open ? `${notes.map((f, i) => `<div class="cfnote">
+        <span class="pair">
+          <input type="text" class="notename" value="${esc(f.name)}" spellcheck="false"
+            data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'name' }))}">
+          <select data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'type' }))}">
+            ${['', 'Ex', 'Su', 'Sp'].map((t) => `<option value="${t}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('')}
+          </select>
+          <button class="danger" data-action="remove-cfnote" data-class="${esc(className)}" data-index="${i}"
+            title="Remove ${esc(f.name)}">×</button>
+        </span>
+        ${this.#prose(`data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow')}
+      </div>`).join('') || '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
+      <div style="margin-top:6px">
+        <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
+      </div>` : ''}
+    </div>`;
+  }
+
+  /**
+   * The id of the list a menu's cells offer, made on first use.
+   *
+   * A menu belongs to the pack that provides it, not to the character, so the
+   * grid never holds a copy: it writes the list once and every cell picking
+   * from that menu points at it.
+   */
+  #menuListId(menu, atLevel) {
+    // A cell offers what it could actually take: an entry asking for a level
+    // above this one is not on this cell's list. Levels that can take the same
+    // entries share a list, so a twenty-level column writes two or three.
+    const options = menu.options.filter((o) => !o.minLevel || o.minLevel <= atLevel);
+    const key = `${menu.name}|${options.length}`;
+    if (!this.#menuLists.has(key)) {
+      this.#menuLists.set(key, { id: `cfmenu-${this.#menuLists.size}`, menu: { ...menu, options } });
+    }
+    return this.#menuLists.get(key).id;
+  }
+
+  /** Those lists, written once each after the tables that offer them. */
+  #menuListMarkup() {
+    return [...this.#menuLists.values()].map(({ id, menu }) => `<datalist id="${id}">${
+      menu.options.map((o) => {
+        // What the browser shows beside the name: where it sits in the menu
+        // and the level it asks for, which is what a player is choosing on.
+        const hint = [o.category, o.minLevel ? `${o.minLevel}th+` : '', o.source].filter(Boolean).join(' · ');
+        return `<option value="${esc(o.name)}">${esc(hint)}</option>`;
+      }).join('')
+    }</datalist>`).join('');
   }
 
   /**
@@ -6908,6 +7004,7 @@ export class CharacterSheetElement extends HTMLElement {
         <button class="danger" data-action="remove-cf-column" data-class="${esc(className)}" data-col="${index}" title="Remove column">×</button>
       </span>
       ${groups.map(groupRow).join('')}
+      ${this.#featureColumnMenu(className, col, index)}
       <button class="addgroup" data-action="add-rule-group" data-class="${esc(className)}" data-col="${index}"
         title="${groups.length ? 'Another schedule sharing this column'
     : 'Limit this column to certain levels — try "odd", "even", "2, +4"'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
@@ -6960,10 +7057,68 @@ export class CharacterSheetElement extends HTMLElement {
       c: className, l: row.level, k: col, g: field.key,
     }));
 
+    // Where a menu is attached the cell offers it, and says what the entry
+    // written in it does. Still a box to type in: a GM's ruling, an option no
+    // pack carries, or a note beside the name all go in as they always did.
+    const menu = field.menu?.options?.length ? field.menu : null;
+    const body = menu
+      ? this.#menuField(ref, field, menu, placeholder, row.classLevel)
+      : this.#prose(`class="cfeat" data-cfeat="${ref}"${field.on ? '' : ' disabled'}${placeholder}`, field.text, 1, 'grow');
+
     return `<span class="ffield ${state}"${colour ? ` style="--gc:${esc(colour)};--gc-soft:${rgba(colour, 0.13)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>
-      ${tag}${this.#prose(`class="cfeat" data-cfeat="${ref}"${field.on ? '' : ' disabled'}${placeholder}`,
-    field.text, 1, 'grow')}
+      ${tag}${body}
     </span>`;
+  }
+
+  /**
+   * Which menu a column's cells pick from.
+   *
+   * Only shown once a pack provides one, since with none there is nothing to
+   * choose between. A menu named on the column but no longer provided stays
+   * listed, so switching its pack off does not quietly forget the choice.
+   */
+  #featureColumnMenu(className, col, index) {
+    // A column may name several menus, layered -- an archetype's over the
+    // class's. The dropdown edits the first; the rest are shown after it,
+    // since an archetype's pill is where those come and go.
+    const stack = this.#model.classFeatureColumnOptions(className, col);
+    const [chosen = '', ...layered] = stack;
+    const all = optionCatalogues();
+    if (!all.length && !chosen) return '';
+    const names = all.map((c) => c.name);
+    if (chosen && !names.some((n) => same(n, chosen))) names.push(chosen);
+    const missing = chosen && !all.some((c) => same(c.name, chosen));
+    const claimed = chosen && !this.#model.classFeatureColumnOptionsChosen(className, col);
+    return `<select class="colmenu${missing ? ' bad' : ''}" data-cfmenu="${esc(className)}|${index}"
+      title="${esc(missing ? `“${chosen}” is not switched on — its pack is off or not installed.`
+    : claimed ? `“${chosen}” names this class and this feature, so this column picks from it. Choose another, or none.`
+      : chosen ? `Cells in this column pick from “${chosen}”.`
+        : 'Pick from a menu a pack provides, rather than typing each entry.')}">
+      <option value=""${chosen ? '' : ' selected'}>— no menu —</option>
+      ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+    </select>${layered.map((n) => `<span class="colmenu layered" title="${
+      esc(`“${n}” is layered over the menu above — its entries win, and the ones it replaces drop out.`)}">+ ${esc(n)}</span>`).join('')}`;
+  }
+
+  /** A cell that picks from a menu: the names on offer, and what the one written means. */
+  #menuField(ref, field, menu, placeholder, atLevel) {
+    const chosen = menu.options.find((o) => same(o.name, field.text));
+    const offered = menu.options.filter((o) => !o.minLevel || o.minLevel <= atLevel).length;
+    // An entry written into a level below the one it asks for is flagged, not
+    // refused: a GM may allow it, and the sheet's job is to say what the book
+    // says rather than to stop anyone.
+    const tooSoon = chosen?.minLevel > atLevel;
+    const hint = chosen
+      ? [chosen.category, chosen.minLevel ? `needs ${chosen.minLevel}th level` : '', chosen.source]
+        .filter(Boolean).join(' · ')
+        + (tooSoon ? `\n\nThis is a ${chosen.minLevel}th-level entry, written at ${atLevel}th.` : '')
+        + (chosen.text ? `\n\n${chosen.text}` : '')
+      : `${offered} of ${menu.options.length} on offer at this level — ${menu.name}`;
+    // A locked cell never opens its list, so it does not ask for one written.
+    const list = field.on ? ` list="${this.#menuListId(menu, atLevel)}"` : '';
+    return `<input type="text" class="cfeat pick${tooSoon ? ' early' : ''}"${list} data-cfeat="${ref}"
+      value="${esc(field.text)}"${field.on ? '' : ' disabled'}${placeholder}
+      title="${esc(hint)}" spellcheck="false">`;
   }
 
   /* ---------------- lore & leftover tabs ---------------- */
@@ -8319,9 +8474,9 @@ export class CharacterSheetElement extends HTMLElement {
       t.style.height = 'auto';
       t.style.height = `${Math.max(26, t.scrollHeight)}px`;
     };
-    root.querySelectorAll('textarea.cfeat').forEach((t) => {
-      grow(t);
-      t.addEventListener('input', () => grow(t));
+    root.querySelectorAll('.cfeat').forEach((t) => {
+      const isBox = t.tagName === 'TEXTAREA';
+      if (isBox) { grow(t); t.addEventListener('input', () => grow(t)); }
       t.addEventListener('change', () => {
         const { c, l, k, g } = JSON.parse(t.dataset.cfeat);
         this.#model.setClassFeature(c, Number(l), k, t.value, g ?? null);
@@ -8443,6 +8598,34 @@ export class CharacterSheetElement extends HTMLElement {
         const idx = Number(input.dataset.cfcol.slice(sep + 1));
         this.#model.renameClassFeatureColumn(cls, idx, input.value.trim());
         this.#rerender(input);
+      });
+    });
+
+    // The block shelf's search: typed into, so it filters as you go and keeps
+    // the caret where it was.
+    root.querySelectorAll('[data-ext-search]').forEach((input) => {
+      input.addEventListener('input', () => {
+        this.#extSearch = input.value;
+        this.#rerender(input);
+      });
+    });
+
+    // A class's own feature text, under its ladder.
+    root.querySelectorAll('[data-cfnote]').forEach((el) => {
+      el.addEventListener('change', () => {
+        const { c, i, k } = JSON.parse(el.dataset.cfnote);
+        this.#model.setClassFeatureNote(c, Number(i), { [k]: el.value });
+        this.#rerender(el);
+      });
+    });
+
+    root.querySelectorAll('[data-cfmenu]').forEach((select) => {
+      select.addEventListener('change', () => {
+        const sep = select.dataset.cfmenu.lastIndexOf('|');
+        const cls = select.dataset.cfmenu.slice(0, sep);
+        const idx = Number(select.dataset.cfmenu.slice(sep + 1));
+        this.#model.setClassFeatureColumnOptions(cls, idx, select.value);
+        this.#render();
       });
     });
 
@@ -9523,6 +9706,14 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.removeProgressionTrack(Number(button?.dataset.track));
         this.#render();
         break;
+      case 'add-cfnote':
+        this.#model.addClassFeatureNote(button?.dataset.class, { name: 'New feature' });
+        this.#render();
+        return;
+      case 'remove-cfnote':
+        this.#model.removeClassFeatureNote(button?.dataset.class, Number(button?.dataset.index));
+        this.#render();
+        return;
       case 'add-cf-column': {
         const cls = button?.dataset.class;
         const cols = this.#model.data.progression.classFeatures?.[cls]?.columns || [];

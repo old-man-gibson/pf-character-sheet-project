@@ -272,6 +272,8 @@ Hit Die: d12.
         case 'veil': return `${b.slot || 'no slot'}${b.descriptor ? ` · ${b.descriptor}` : ''} · ${b.text.slice(0, 80)}…`;
         case 'archetype': { const rep = [...new Set(b.features.flatMap((f) => f.replaces))]; const alt = [...new Set(b.features.flatMap((f) => f.alters))]; return [`for ${b.class || '?'}`, `${b.features.length} feature(s)`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : ''].filter(Boolean).join(' · '); }
         case 'template': return `${b.features.length} feature(s): ${b.features.map((f) => f.name).join(', ')}`;
+        case 'options': return [b.class && `for ${b.class}'s ${b.feature || '?'}`, `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}`,
+          [...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')].filter(Boolean).join(' · ');
         default: return '';
       }
     };
@@ -503,6 +505,21 @@ Hit Die: d12.
           ${F(i, 'source', 'Source', b.source, { wide: true })}
           <p class="hint" style="grid-column:1/-1;margin:0">Read from the features: ${esc([...new Set(b.features.flatMap((f) => f.replaces))].map((k) => `replaces ${k}`).concat([...new Set(b.features.flatMap((f) => f.alters))].map((k) => `alters ${k}`)).join(' · ') || 'nothing yet')}.</p>
         </div>`;
+      case 'options':
+        return `<div class="fields">
+          ${F(i, 'name', 'Menu name', b.name, { ph: 'Legendary Samurai Iaijutsu Technique' })}
+          ${F(i, 'class', 'Class it is for', b.class, { ph: 'Legendary Samurai' })}
+          ${F(i, 'feature', 'Feature that picks from it', b.feature, { ph: 'Iaijutsu Technique — a column of this name picks from the menu' })}
+          ${A(i, 'options', 'Entries', menuOptionLines(b.options), 10,
+    'one per line, "Category / Name (Ex) 5+: text" — the category and the "(Ex)" and the level it asks for are all optional, e.g.\nSlashes / Bloody Slash (Ex) 5+: The target takes bleed damage.\nCuts / Ranged Cut (Ex): Strike at a range of 30 feet.\nDurable: Items the blacksmith maintains resist sundering.', false)}
+          ${A(i, 'text', 'About these options', b.text, 2, 'what the menu is, a condition its entries use')}
+          ${F(i, 'source', 'Source', b.source, { wide: true })}
+          <p class="hint" style="grid-column:1/-1;margin:0">${b.options.length
+    ? `${b.options.length} entr${b.options.length === 1 ? 'y' : 'ies'}${
+      [...new Set(b.options.map((o) => o.category).filter(Boolean))].length
+        ? ` in ${[...new Set(b.options.map((o) => o.category).filter(Boolean))].join(', ')}` : ''}. An entry saying what it replaces (“this replaces the Ranged Cut and Armor Rending Slash iaijutsu techniques”) pushes those out where this menu layers over another.`
+    : 'No entries yet.'}</p>
+        </div>`;
       case 'note':
         return `<div class="fields">
           ${F(i, 'name', 'Title', b.name)}
@@ -673,6 +690,12 @@ Hit Die: d12.
         b.features = b.kind === 'class' ? parseClassFeatures(value) : parseGroupFeatures(value);
         return;
       case 'traits': b.traits = parseNamedLines(value); return;
+      case 'options': {
+        // re-normalise so each entry's "this replaces…" is read off its new text
+        const fresh = normalizeBlock({ ...b, options: parseMenuOptions(value) });
+        b.options = fresh.options;
+        return;
+      }
       default: b[key] = value;
     }
   }
@@ -815,6 +838,43 @@ export function parseGroupFeatures(text) {
     const m = name.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
     return m ? { name: m[1].trim(), type: m[2][0].toUpperCase() + m[2].slice(1).toLowerCase(), text: t } : { name, type: null, text: t };
   });
+}
+
+/**
+ * A menu's entries, one per line:
+ *
+ *   Slashes / Bloody Slash (Ex) 5+: The target takes bleed damage.
+ *   Cuts / Ranged Cut (Ex): Strike at a range of 30 feet.
+ *   Durable: Items the blacksmith maintains resist sundering.
+ *
+ * The category, the type and the level the entry asks for are each optional.
+ * What an entry replaces is read from its own text, as it is off a page.
+ */
+export function parseMenuOptions(text) {
+  return parseNamedLines(text).map(({ name, text: t }) => {
+    const cut = name.lastIndexOf('/');
+    const category = cut === -1 ? '' : name.slice(0, cut).trim();
+    let rest = (cut === -1 ? name : name.slice(cut + 1)).trim();
+    let minLevel = null;
+    const lvl = rest.match(/\s+(\d{1,2})(?:st|nd|rd|th)?\+$/);
+    if (lvl) { minLevel = Number(lvl[1]); rest = rest.slice(0, lvl.index).trim(); }
+    const typed = rest.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
+    return {
+      name: (typed ? typed[1] : rest).trim(),
+      type: typed ? typed[2][0].toUpperCase() + typed[2].slice(1).toLowerCase() : null,
+      category,
+      minLevel,
+      text: t,
+    };
+  }).filter((o) => o.name);
+}
+
+/** Those entries written back out, so the box reads as what it parses. */
+export function menuOptionLines(options) {
+  return (Array.isArray(options) ? options : []).map((o) => {
+    const head = [o.category ? `${o.category} / ` : '', o.name, o.type ? ` (${o.type})` : '', o.minLevel ? ` ${o.minLevel}+` : ''].join('');
+    return `${head}: ${String(o.text || '').replace(/\n+/g, ' ')}`;
+  }).join('\n');
 }
 
 /** "Name: text" per line; a line without a colon is a name with no text. */

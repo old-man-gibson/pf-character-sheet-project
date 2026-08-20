@@ -43,6 +43,7 @@ export const BLOCK_KINDS = {
   tracker: { label: 'Tracker', lands: 'Trackers tab' },
   veil: { label: 'Veil', lands: 'Its chakra slot on the Akashic tab (shaped, essence 0)' },
   archetype: { label: 'Archetype', lands: 'Its class on the sheet: replaced features leave the Progression ladder and Template group, the new ones go in; a pill on the class row removes it and restores them' },
+  options: { label: 'Option menu', lands: 'The class feature it names on the Progression tab, as the menu its cells pick from; and its own Template group' },
   note: { label: 'Note', lands: 'Extras & Notes' },
 };
 
@@ -131,7 +132,10 @@ export function normalizeBlock(block) {
       const features = arr(b.features).map((f) => {
         const text = str(f?.text);
         const swaps = parseSwaps(text, className);
-        const given = (k) => arr(f?.[k]).map((s) => swapKey(s, className)).filter(Boolean);
+        // a swap a pack states outright, with the level it names kept on it
+        const given = (k) => arr(f?.[k])
+          .map((s) => swapAt(swapKey(swapBase(s), className), swapLevel(s)))
+          .filter(Boolean);
         return {
           name: str(f?.name).trim(),
           type: featureType(f?.type),
@@ -140,10 +144,7 @@ export function normalizeBlock(block) {
           replaces: given('replaces').length ? given('replaces') : swaps.replaces,
           alters: given('alters').length ? given('alters') : swaps.alters,
           // a menu the player picks from (talents, techniques…), and its notes
-          options: arr(f?.options).map((o) => ({
-            name: str(o?.name).trim(), type: featureType(o?.type), category: str(o?.category).trim(), text: str(o?.text),
-            minLevel: o?.minLevel === null || o?.minLevel === undefined || o?.minLevel === '' ? null : Math.max(1, Math.min(20, num(o.minLevel, 1))),
-          })).filter((o) => o.name),
+          options: normalizeOptions(f?.options, str(f?.name)),
           optionsInfo: str(f?.optionsInfo),
         };
       }).filter((f) => f.name);
@@ -156,12 +157,153 @@ export function normalizeBlock(block) {
         stacksWith: stacks.length ? stacks : parseStacksWith(features.map((f) => f.text).join('\n')),
       };
     }
+    case 'options':
+      // A menu on a page of its own -- rogue talents, iaijutsu techniques --
+      // naming the class feature whose cells pick from it.
+      return {
+        ...base,
+        class: str(b.class ?? b.className).trim(),
+        feature: str(b.feature).trim(),
+        options: normalizeOptions(b.options, str(b.feature) || str(b.name)),
+      };
     case 'note':
       return { ...base, name: base.name || str(b.title).trim(), text: base.text || str(b.body) };
     default:
       return null;
   }
 }
+
+/* ---------------- repeat features as their own column ---------------- */
+
+/** Two rows name the same feature when only the number it scales by differs. */
+const columnKey = (s) => featureKey(String(s ?? '').replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, ''));
+/** The column's title: the feature's name with that number taken off. */
+const columnName = (s) => str(s).replace(/\s*[+\-–]?\s*\d+d\d+\s*$/i, '')
+  .replace(/\s*[+\-–]\s*\d+\s*$/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+
+/**
+ * A level list as a rule the player can read and edit.
+ *
+ * An arithmetic run that carries on to 20th is written the way a book writes
+ * it -- "2, +2", "1, +5" -- and anything else as the levels themselves, which
+ * the rule language takes literally. Nothing is inferred: a list that is not
+ * a clean run comes back exactly as it is.
+ */
+export function ruleForLevels(levels, max = 20) {
+  const ls = [...new Set(levels.map(Number))].filter((l) => l >= 1 && l <= max).sort((a, b) => a - b);
+  if (!ls.length) return '';
+  if (ls.length === 1) return String(ls[0]);
+  const step = ls[1] - ls[0];
+  const even = ls.every((l, i) => i === 0 || l - ls[i - 1] === step);
+  // "2, +2" runs to the top of the table, so it may only stand for a list
+  // that does too -- otherwise the rule would grant levels the class does not.
+  return even && ls[ls.length - 1] + step > max ? `${ls[0]}, +${step}` : ls.join(', ');
+}
+
+/**
+ * The features a class names at more than one level, as columns.
+ *
+ * Each comes back with the levels it lands on written as a rule, and what to
+ * put in each cell: a ladder whose name changes as it grows ("Thunderous blows
+ * +1d6", "+2d6") writes the part that changed, while a menu named the same way
+ * every time ("Prowess", "Smithing insight") writes nothing at all -- those
+ * cells are the choices still to make, which is what the column's badge counts.
+ */
+export function repeatColumns(features) {
+  const groups = new Map();
+  for (const f of arr(features)) {
+    const key = columnKey(f?.name);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    const levels = [...new Set(list.map((f) => f.level))];
+    if (levels.length < 2) continue;
+    // A table writes the first entry of a cell capitalised and the rest not,
+    // so the best-cased spelling names the column.
+    const titled = list.find((f) => /^[A-Z]/.test(str(f.name).trim())) || list[0];
+    const name = columnName(titled.name) || str(titled.name);
+    const ladder = new Set(list.map((f) => lower(f.name))).size > 1;
+    out.push({
+      name,
+      rule: ruleForLevels(levels),
+      at: list.map((f) => ({
+        feature: f,
+        // the part the name added to the column's own title, else nothing
+        text: ladder
+          ? (lower(f.name).startsWith(lower(name)) ? str(f.name).slice(name.length).trim() : str(f.name)) || str(f.name)
+          : '',
+      })),
+    });
+  }
+  return out;
+}
+
+/**
+ * Which entries of the menu it joins an option pushes out, read off its own
+ * text: "This replaces the Ranged Cut and Armor Rending Slash Iaijutsu
+ * Techniques." The kind-word at the end is the menu's own name, which every
+ * such sentence repeats, so the longest tail of `feature` the sentence ends
+ * with comes off -- leaving the entries themselves.
+ */
+export function parseOptionReplaces(text, feature = '') {
+  const words = str(feature).trim().split(/\s+/).filter(Boolean);
+  const tails = words.map((_, i) => words.slice(i).join(' ')).filter((s) => s.length > 2);
+  const out = [];
+  for (const m of str(text).matchAll(/\breplace[sd]?\s+(?:the\s+)?([^.;]+?)(?=[.;]|$)/gi)) {
+    let list = m[1].trim();
+    for (const tail of tails) {
+      // singular or plural, since one sentence writes "Techniques" and the next "Technique"
+      const stem = tail.replace(/s$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\s+${stem}s?$`, 'i');
+      if (re.test(list)) { list = list.replace(re, ''); break; }
+    }
+    for (const s of list.replace(/\s*,?\s+(?:and|or)\s+/gi, ', ').split(/,\s*/)) {
+      const name = s.trim().replace(/^the\s+/i, '');
+      if (name && name.length < 60 && !out.some((x) => lower(x) === lower(name))) out.push(name);
+    }
+  }
+  return out;
+}
+
+/**
+ * A menu's entries, wherever they hang: on a class feature, on an archetype's
+ * feature, or on a block of their own. `feature` names what the menu is for,
+ * which is what lets an entry's "this replaces…" sentence be read.
+ */
+export function normalizeOptions(v, feature = '') {
+  return arr(v).map((o) => {
+    const text = str(o?.text);
+    const given = arr(o?.replaces).map((s) => str(s).trim()).filter(Boolean);
+    return {
+      name: str(o?.name).trim(),
+      type: featureType(o?.type),
+      category: str(o?.category).trim(),
+      text,
+      source: str(o?.source).trim(),
+      minLevel: o?.minLevel === null || o?.minLevel === undefined || o?.minLevel === '' ? null : Math.max(1, Math.min(20, num(o.minLevel, 1))),
+      replaces: given.length ? given : parseOptionReplaces(text, feature),
+    };
+  }).filter((o) => o.name);
+}
+
+/**
+ * "Trap Sense +1", "trap sense", "Trap Sense (Ex)" and "Kiai Arts" / "kiai art"
+ * are one feature. Used to pair a progression table's names with the prose
+ * below it, and to tell which of a class's features repeat.
+ */
+export const featureKey = (s) => lower(s)
+  .replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '')
+  .replace(/\s*[+\-–]\s*\d+(?:\/[+\-–—]|\/-)?\s*$/g, '')
+  .replace(/\s+\d+\/[-–—]$/, '')
+  .replace(/\s*\([^)]*\)\s*$/, '')                           // "gambit (2)", "tactical presence (rallying)"
+  .replace(/\s+\d+\/day$/, '')
+  .replace(/[^a-z0-9 ]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .replace(/(\w{3,})s$/, '$1');                              // plural-insensitive on the last word
 
 /**
  * The traits an alternate racial trait replaces, read off its text:
@@ -196,6 +338,28 @@ export function parseReplaces(text) {
  * "proficiencies" are all the one proficiency feature; "iaijutsu master" and
  * "iaijutsu mastery" meet on their stem.
  */
+/**
+ * A swap key may name one grant of a feature rather than the feature: an
+ * archetype replacing "the 10th and 14th level warrior's grace" takes those
+ * two and leaves the others. The level rides on the key as "@10", which keeps
+ * a swap list the flat list of strings it has always been, and lets two
+ * archetypes taking different grants of the same feature stack.
+ */
+export const swapAt = (key, level) => (key && level ? `${key}@${level}` : key);
+export const swapBase = (k) => str(k).split('@')[0];
+export const swapLevel = (k) => {
+  const n = Number(str(k).split('@')[1]);
+  return Number.isFinite(n) && n >= 1 ? n : null;
+};
+/** Do two swap keys land on each other? A whole feature covers each of its grants. */
+export const swapsMeet = (a, b) => {
+  if (a === b) return true;
+  if (swapBase(a) !== swapBase(b)) return false;
+  return swapLevel(a) === null || swapLevel(b) === null;
+};
+/** "warriors grace@10" as a person reads it. */
+export const swapLabel = (k) => (swapLevel(k) ? `${swapBase(k)} (${swapLevel(k)}th)` : swapBase(k));
+
 export function swapKey(s, className = '') {
   let k = lower(s).replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '').replace(/sheathe/g, 'sheath').trim();
   if (/proficienc/.test(k)) return 'weapon and armor proficiency';
@@ -246,9 +410,16 @@ export function parseSwaps(text, className = '') {
     // "the X ability of the Y class feature" -> Y, altered
     const sub = list.match(/^(?:the\s+)?(.+?)\s+abilit(?:y|ies)\s+of\s+(?:the\s+)?(.+?)\s+class features?$/i);
     if (sub) { push(alters, swapKey(sub[2], className)); continue; }
-    // "the 10th and 14th level Warrior's grace" -> some of a feature's instances: altered
-    const partial = list.match(/^(?:the\s+)?\d+(?:st|nd|rd|th)(?:\s*(?:,|and)\s*\d+(?:st|nd|rd|th))*[- ]level\s+(.+)$/i);
-    if (partial) { push(alters, swapKey(partial[1], className)); continue; }
+    // "the 10th and 14th level Warrior's grace" -- not the feature, but the
+    // grants it names. Each level is its own thing to swap, so two archetypes
+    // taking different ones of the same feature can stand together.
+    const partial = list.match(/^(?:the\s+)?((?:\d{1,2}(?:st|nd|rd|th))(?:\s*(?:,|and|&)\s*\d{1,2}(?:st|nd|rd|th))*)[- ]level\s+(.+)$/i);
+    if (partial) {
+      const key = swapKey(partial[2], className);
+      const at = [...partial[1].matchAll(/(\d{1,2})(?:st|nd|rd|th)/gi)].map((x) => Number(x[1]));
+      for (const l of at) push(verb === 'replaces' ? replaces : alters, swapAt(key, l));
+      continue;
+    }
     // "the duty's call, charm kiai art" -> kiai art, altered: one named sub-ability, commas and all
     const named = list.match(SUB);
     if (named && verb === 'replaces' && !BARE.test(list)) { push(alters, swapKey(named[1], className)); continue; }
@@ -637,16 +808,33 @@ export function applyBlock(model, rawBlock) {
       else {
         for (const [k, v] of Object.entries(row)) model.setItem('classes', existing, k, v);
       }
-      // The per-level feature names go into the class's own feature column on
+      // The per-level feature names go into the class's own feature columns on
       // the Progression tab, one cell per level, keyed by the class's level.
+      // A feature the table names at more than one level earns a column of its
+      // own, on the schedule its levels describe; the rest stay in Special.
+      const columns = block.features.length && d.progression ? repeatColumns(block.features) : [];
       if (block.features.length && d.progression) {
+        const spread = new Set(columns.flatMap((c) => c.at.map((a) => a.feature)));
         const byLevel = new Map();
         for (const f of block.features) {
+          if (spread.has(f)) continue;
           const cur = byLevel.get(f.level) || [];
           cur.push(f.name);
           byLevel.set(f.level, cur);
         }
         for (const [level, names] of byLevel) model.setClassFeature(block.name, level, 'Special', names.join(', '));
+        for (const col of columns) {
+          model.addClassFeatureColumn(block.name, col.name);
+          const index = (model.data.progression.classFeatures?.[block.name]?.columns || []).indexOf(col.name);
+          if (index === -1) continue;
+          if (!model.classFeatureRuleGroups(block.name, col.name).length) {
+            model.addClassFeatureRuleGroup(block.name, index, { name: col.name, rule: col.rule });
+          }
+          // A ladder writes its own value in each cell ("+3d6"); a menu writes
+          // an empty one, so the level is on the grid as a pick still owed --
+          // which is what the column's badge counts.
+          for (const a of col.at) model.setClassFeature(block.name, a.feature.level, col.name, a.text);
+        }
       }
       // Its class skills are the skills a player ticks; tick the ones the sheet has.
       let ticked = 0;
@@ -656,33 +844,21 @@ export function applyBlock(model, rawBlock) {
           if (wanted.has(lower(s.name)) && !s.classSkill) { model.setItem('skills', i, 'classSkill', true); ticked += 1; }
         });
       }
-      // The features' rules text goes on the Template tab in a group named
-      // for the class -- one entry per distinct feature, so the prose is on
-      // the sheet and not only in the pack. Names alone are the ladder above.
+      // The features' rules text goes under the class itself, beneath its
+      // ladder -- one entry per distinct feature, so the prose is on the sheet
+      // and not only in the pack. Names alone are the ladder above.
       const withText = [];
       const seen = new Set();
       for (const f of block.features) {
-        const key = lower(f.name).replace(/\s*[+\-]\d+.*$/, '');
+        const key = featureKey(f.name);
         if (!f.text || seen.has(key)) continue;
         seen.add(key);
         withText.push(f);
       }
-      if (withText.length) {
-        const templates = model.list('templates');
-        let ti = templates.findIndex((t) => lower(t.name) === lower(block.name));
-        if (ti === -1) {
-          model.listAdd('templates', { tab: null, name: block.name, link: null, approvalLink: null, features: [] });
-          ti = templates.length - 1;
-        }
-        const have = new Set((templates[ti].features || []).map((f) => lower(f.name)));
-        for (const f of withText) {
-          if (have.has(lower(f.name))) continue;
-          model.listAdd(`templates.${ti}.features`, { name: f.name, type: null, text: f.text, tables: [], children: [] });
-        }
-      }
+      for (const f of withText) model.addClassFeatureNote(block.name, { name: f.name, text: f.text });
       return `${existing === -1 ? 'Added' : 'Updated'} class ${block.name}`
         + `${block.features.length ? `, ${block.features.length} feature(s) on the Progression tab` : ''}`
-        + `${withText.length ? `, ${withText.length} with text on the Template tab` : ''}`
+        + `${withText.length ? `, ${withText.length} with their text under the class` : ''}`
         + `${ticked ? `, ${ticked} class skill(s) ticked` : ''}.`;
     }
     case 'race': {
@@ -750,12 +926,134 @@ export function applyBlock(model, rawBlock) {
     }
     case 'archetype':
       return applyArchetype(model, block);
+    case 'options':
+      return applyOptions(model, block);
     case 'note':
       model.listAdd('notes', { title: block.name, body: block.text });
       return `Added note ${block.name || '(untitled)'}.`;
     default:
       throw new Error(`Unknown block kind ${block.kind}`);
   }
+}
+
+/**
+ * Point a class feature's column at the menu this block holds.
+ *
+ * The menu itself stays in the pack -- a rogue talent list is 178 entries and
+ * has no business being copied into every character who has a rogue level --
+ * so what lands on the sheet is its name. The column is found by the feature
+ * the block names, forgivingly (`Iaijutsu technique` against `Iaijutsu
+ * Technique`); failing that, by a column whose cells already say so.
+ *
+ * With no such class or column on the sheet the menu still lands, as a group
+ * on the Template tab, so nothing pasted goes nowhere.
+ */
+export function applyOptions(model, block) {
+  const className = block.class.replace(/\s*\(class\)$/i, '').trim();
+  const classes = model.list('classes') || [];
+  const onSheet = classes.find((c) => lower(c.name) === lower(className))
+    || classes.find((c) => featureKey(c.name) === featureKey(className));
+  const target = onSheet?.name || className;
+  const group = model.data.progression?.classFeatures?.[target];
+  const wanted = featureKey(block.feature || block.name);
+  let column = (group?.columns || []).find((c) => featureKey(c) === wanted);
+  // A menu named for its page ("Legendary Samurai Iaijutsu Technique") against
+  // a column named for the feature ("Iaijutsu technique"): one ends the other.
+  if (!column) {
+    column = (group?.columns || []).find((c) => {
+      const k = featureKey(c);
+      return k.length > 3 && (wanted.endsWith(k) || featureKey(block.name).endsWith(k));
+    });
+  }
+  if (column) {
+    // Naming the class and the feature is claim enough: where the column
+    // already picks from this menu because of that, adding it changes nothing.
+    if (model.classFeatureColumnOptions(target, column).some((n) => lower(n) === lower(block.name))) {
+      return `${target}'s ${column} column already picks from “${block.name}” — the menu names the class and the feature, so it needed no adding.`;
+    }
+    const index = group.columns.indexOf(column);
+    model.setClassFeatureColumnOptions(target, index, [...model.classFeatureColumnOptions(target, column), block.name]);
+    return `${block.options.length} option(s) for ${target}: the ${column} column now picks from “${block.name}”.`;
+  }
+
+  // A menu with no column to hang on is not copied anywhere: it stays in its
+  // pack, and takes effect the moment the class that has that feature arrives.
+  return `Nothing on this sheet picks from “${block.name}” yet — it is for ${
+    [target || 'a class', block.feature].filter(Boolean).join('’s ')}, and its ${
+    block.options.length} option(s) are offered as soon as that feature has a column on the Progression tab.`;
+}
+
+/**
+ * Take one class level off a feature column's schedule.
+ *
+ * The rule language already writes this -- "2, 6, 10, 14, 18, -10" grants at
+ * every one of those but the tenth -- so subtracting the level is an edit to
+ * the rule a player can read and undo by hand. Returns false where the column
+ * never granted at that level, which is not a swap that happened and is worth
+ * saying rather than doing nothing quietly.
+ */
+function dropRuleLevel(model, className, columnIndex, level, entry) {
+  const col = model.data.progression?.classFeatures?.[className]?.columns?.[columnIndex];
+  if (!col) return false;
+  // Which group grants there is the grid's own answer, asked the grid's way.
+  const row = model.classFeatureRows(className).find((r) => r.classLevel === level);
+  const gi = row?.cells?.[col]?.fields.find((f) => f.on && f.group)?.group?.index;
+  if (gi === undefined || gi === null) return false;
+  const was = model.classFeatureRuleGroups(className, col)[gi]?.rule || '';
+  model.setClassFeatureRuleGroup(className, columnIndex, gi, { rule: `${was}${was ? ', ' : ''}-${level}` });
+  // The level, not the rule as it stood: taking that one term back out again
+  // is the same edit whatever order the archetypes come off in.
+  entry.ruleEdits.push({ column: col, group: gi, level });
+  return true;
+}
+
+/** Put a level back on a schedule by dropping the "-N" that took it off. */
+function restoreRuleLevel(model, className, column, groupIndex, level) {
+  const index = (model.data.progression?.classFeatures?.[className]?.columns || []).indexOf(column);
+  const grp = model.classFeatureRuleGroups(className, column)[groupIndex];
+  if (index === -1 || !grp) return;
+  const terms = str(grp.rule).split(',').map((s) => s.trim()).filter(Boolean);
+  const at = terms.lastIndexOf(`-${level}`);
+  if (at === -1) return;
+  terms.splice(at, 1);
+  model.setClassFeatureRuleGroup(className, index, groupIndex, { rule: terms.join(', ') });
+}
+
+/** What an archetype's own menu is called, wherever it is looked up from. */
+export const archetypeMenuName = (archetype, feature) => `${str(archetype).trim()} — ${str(feature).trim()}`;
+
+/**
+ * The menus the active packs provide, for the model's catalogue registry:
+ * blocks that are nothing but a menu, and the menus archetypes carry on their
+ * features. Both are looked up by name, so neither is ever copied onto a
+ * character.
+ */
+export function optionCataloguesFrom(blocks) {
+  const out = [];
+  for (const b of arr(blocks)) {
+    const kind = lower(b?.kind);
+    if (kind === 'options') {
+      out.push({
+        name: str(b.name).trim(),
+        class: str(b.class ?? b.className).trim(),
+        feature: str(b.feature).trim(),
+        text: str(b.text),
+        options: normalizeOptions(b.options, str(b.feature) || str(b.name)),
+      });
+    } else if (kind === 'archetype') {
+      for (const f of arr(b.features)) {
+        if (!arr(f?.options).length) continue;
+        out.push({
+          name: archetypeMenuName(b.name, f.name),
+          class: str(b.class ?? b.className).trim(),
+          feature: str(f.name).trim(),
+          text: str(f.optionsInfo),
+          options: normalizeOptions(f.options, str(f.name)),
+        });
+      }
+    }
+  }
+  return out.filter((c) => c.name && c.options.length);
 }
 
 /** A race trait fills an empty slot before it appends, since a blank sheet ships three. */
@@ -863,8 +1161,11 @@ export function archetypeStatus(model, block) {
   const allowed = (a, c) => arr(a.stacksWith).some((n) => lower(n) === lower(c.name) || lower(c.name).startsWith(lower(n)) || lower(n).startsWith(lower(c.name)));
   for (const e of stack) {
     if (allowed(b, e) || allowed(e, b)) continue;
-    const shared = arr(e.touches).filter((k) => mine.has(k));
-    if (shared.length) return { ok: false, reason: 'conflict', with: e.name, shared };
+    // Two archetypes taking different grants of one feature -- the 10th and
+    // the 14th warrior's grace -- do not meet; one taking the whole feature
+    // meets either of them.
+    const shared = arr(e.touches).filter((k) => [...mine].some((m) => swapsMeet(k, m))).map(swapLabel);
+    if (shared.length) return { ok: false, reason: 'conflict', with: e.name, shared: [...new Set(shared)] };
   }
   return { ok: true, className: row.name };
 }
@@ -899,38 +1200,78 @@ export function applyArchetype(model, block) {
   const className = row.name;
   const d = model.data;
   const group = d.progression?.classFeatures?.[className] || null;
-  const templates = model.list('templates');
-  let ti = templates.findIndex((t) => lower(t.name) === lower(className));
-
   const entry = {
     name: b.name, class: className, touches: [...archetypeTouches(b)], stacksWith: [...(b.stacksWith || [])],
     removedCells: [],      // {level, name} taken out of Progression cells
+    removedColumns: [],    // whole feature columns a replaced repeat feature had
+    ruleEdits: [],         // {column, group, rule} a level taken off a schedule
+    addedMenus: [],        // {column, menu} an archetype's own menu layered on
     addedCells: [],        // {level, name} written into Progression cells
-    removedTemplate: [],   // {name, type, text} taken out of the Template group
-    addedTemplate: [],     // names written into the Template group
+    removedNotes: [],      // {name, type, text} taken out of the class's own text
+    addedNotes: [],        // names written into it
     notFound: [],
   };
+  // The character level a class level sits at, which a gestalt gap makes differ.
+  const charLevelOf = (classLevel) => model.classFeatureRows(className)
+    .find((r) => r.classLevel === classLevel)?.level ?? null;
+
   const removeKey = (key) => {
+    const base = swapBase(key);
+    const at = swapLevel(key);              // one named grant, or the whole feature
+    const charAt = at === null ? null : charLevelOf(at);
     let hit = false;
     if (group) {
       for (const [level, cells] of Object.entries(group.byLevel || {})) {
+        if (charAt !== null && Number(level) !== charAt) continue;
         const names = cellNames(cells?.Special);
         if (!names) continue;
-        const keep = names.filter((n) => swapKey(n, className) !== key);
+        const keep = names.filter((n) => swapKey(n, className) !== base);
         if (keep.length !== names.length) {
           hit = true;
-          for (const n of names) if (swapKey(n, className) === key) entry.removedCells.push({ level: Number(level), name: n });
+          for (const n of names) if (swapKey(n, className) === base) entry.removedCells.push({ level: Number(level), name: n });
           model.setClassFeature(className, Number(level), 'Special', keep.join(', '));
         }
       }
-    }
-    if (ti !== -1) {
-      const feats = templates[ti].features || [];
-      for (let i = feats.length - 1; i >= 0; i--) {
-        if (swapKey(feats[i].name, className) === key) {
+      const ci2 = (group.columns || []).findIndex((c) => c !== 'Special' && swapKey(c, className) === base);
+      if (ci2 !== -1 && at !== null) {
+        // One grant of a repeat feature: the column stays and its schedule
+        // loses that level, which is what the rule language's "-10" is for.
+        // A level the column never granted is not a swap that happened.
+        if (dropRuleLevel(model, className, ci2, at, entry)) {
           hit = true;
-          entry.removedTemplate.push({ name: feats[i].name, type: feats[i].type ?? null, text: feats[i].text || '' });
-          model.listRemove(`templates.${ti}.features`, i);
+          // whatever had been picked at that level is kept, to put back
+          const had = charAt === null ? '' : group.byLevel?.[charAt]?.[group.columns[ci2]];
+          if (typeof had === 'string' && had.trim()) {
+            entry.removedCells.push({ level: charAt, column: group.columns[ci2], name: had });
+            model.setClassFeature(className, charAt, group.columns[ci2], '');
+          }
+        }
+      } else if (ci2 !== -1) {
+        // The whole feature: the column goes -- its schedule, its menu and
+        // whatever was written in it, kept whole for putting back.
+        const col = group.columns[ci2];
+        hit = true;
+        entry.removedColumns.push({
+          name: col,
+          at: ci2,
+          rules: structuredClone(group.rules?.[col] || []),
+          optionsFrom: structuredClone(group.optionsFrom?.[col] ?? null),
+          cells: Object.fromEntries(Object.entries(group.byLevel || {})
+            .filter(([, cells]) => cells?.[col] !== undefined)
+            .map(([level, cells]) => [level, structuredClone(cells[col])])),
+        });
+        model.removeClassFeatureColumn(className, ci2);
+      }
+    }
+    // A named grant leaves the feature's text where it is: the feature stands,
+    // it simply arrives one time fewer.
+    if (at === null) {
+      const notes = model.classFeatureNotes(className);
+      for (let i = notes.length - 1; i >= 0; i--) {
+        if (swapKey(notes[i].name, className) === base) {
+          hit = true;
+          entry.removedNotes.push({ name: notes[i].name, type: notes[i].type ?? null, text: notes[i].text || '' });
+          model.removeClassFeatureNote(className, i);
         }
       }
     }
@@ -944,37 +1285,31 @@ export function applyArchetype(model, block) {
     model.setClassFeature(className, level, 'Special', [...names, name].join(', '));
     entry.addedCells.push({ level, name });
   };
-  const addTemplate = (f) => {
-    if (ti === -1) {
-      model.listAdd('templates', { tab: null, name: className, link: null, approvalLink: null, features: [] });
-      ti = templates.length - 1;
-    }
-    if ((templates[ti].features || []).some((x) => lower(x.name) === lower(f.name))) return;
-    model.listAdd(`templates.${ti}.features`, { name: f.name, type: f.type, text: f.text, tables: [], children: [] });
-    entry.addedTemplate.push(f.name);
+  // An archetype's feature text joins the class's own, under its ladder.
+  const addNote = (f) => {
+    if (model.classFeatureNotes(className).some((x) => lower(x.name) === lower(f.name))) return;
+    model.addClassFeatureNote(className, { name: f.name, type: f.type, text: f.text });
+    entry.addedNotes.push(f.name);
   };
 
-  entry.addedGroups = [];    // Template groups made for a feature's options menu
   for (const f of b.features) {
-    for (const key of f.replaces) { if (!removeKey(key) && !entry.notFound.includes(key)) entry.notFound.push(key); }
+    for (const key of f.replaces) {
+      const said = swapLabel(key);
+      if (!removeKey(key) && !entry.notFound.includes(said)) entry.notFound.push(said);
+    }
     addCell(f.level || 1, f.name);
-    addTemplate(f);
-    // A menu of options -- talents, techniques -- is its own group on the
-    // Template tab, "<Class> — <feature>", one entry per option under its
-    // category, with the menu's information (a condition it uses) first.
+    addNote(f);
+    // A menu of options -- talents, techniques -- is a catalogue in its own
+    // pack, never copied onto a character. Where the feature it alters has a
+    // column, the menu is layered onto it: the archetype's entries win, the
+    // base ones its text replaces drop out, and the rest of the class's stands.
     if (f.options && f.options.length) {
-      const groupName = `${className} — ${f.name}`;
-      if (!templates.some((t) => lower(t.name) === lower(groupName))) {
-        model.listAdd('templates', { tab: null, name: groupName, link: null, approvalLink: null, features: [] });
-        const gi = templates.length - 1;
-        if (f.optionsInfo) model.listAdd(`templates.${gi}.features`, { name: 'About these options', type: null, text: f.optionsInfo, tables: [], children: [] });
-        for (const o of f.options) {
-          const cat = o.category.replace(/(sh|ch|x|ss)es$/i, '$1').replace(/ies$/i, 'y').replace(/s$/i, '');
-          const label = cat ? `${cat}: ${o.name}` : o.name;
-          const text = o.minLevel ? `(Level ${o.minLevel}+) ${o.text}` : o.text;
-          model.listAdd(`templates.${gi}.features`, { name: label, type: o.type, text, tables: [], children: [] });
-        }
-        entry.addedGroups.push(groupName);
+      const wants = [...f.alters, ...f.replaces];
+      const col = (d.progression?.classFeatures?.[className]?.columns || [])
+        .find((c) => c !== 'Special' && wants.includes(swapKey(c, className)));
+      if (col) {
+        model.addClassFeatureColumnOptions(className, col, archetypeMenuName(b.name, f.name));
+        entry.addedMenus.push({ column: col, menu: archetypeMenuName(b.name, f.name) });
       }
     }
   }
@@ -985,7 +1320,13 @@ export function applyArchetype(model, block) {
   if (!tags.some((t) => lower(t) === lower(b.name))) model.setItem('classes', ci, 'archetypes', [...tags, b.name].join(', '));
   model.recompute();
   const parts = [`Added ${b.name} to ${className}`];
-  if (entry.removedCells.length) parts.push(`replacing ${[...new Set(entry.removedCells.map((c) => c.name))].join(', ')}`);
+  // A feature replaced outright is named; grants replaced one at a time are
+  // named with the levels, since which of them went is the whole point.
+  const took = [...new Set(entry.removedCells.filter((c) => !c.column).map((c) => c.name))];
+  const byColumn = new Map();
+  for (const r of entry.ruleEdits) byColumn.set(r.column, [...(byColumn.get(r.column) || []), r.level]);
+  for (const [col, levels] of byColumn) took.push(`${col} at ${levels.sort((a, z) => a - z).map((l) => `${l}th`).join(' and ')}`);
+  if (took.length) parts.push(`replacing ${took.join(', ')}`);
   const altered = [...new Set(b.features.flatMap((f) => f.alters))];
   if (altered.length) parts.push(`altering ${altered.join(', ')}`);
   if (entry.notFound.length) parts.push(`(${entry.notFound.join(', ')} not on the sheet)`);
@@ -1002,43 +1343,47 @@ export function removeArchetype(model, className, name) {
   const e = stack[at];
   const cls = row.name;
   const d = model.data;
-  const templates = model.list('templates');
-  const ti = templates.findIndex((t) => lower(t.name) === lower(cls));
   // its own additions go
   for (const { level, name: n } of e.addedCells) {
     const names = cellNames(d.progression?.classFeatures?.[cls]?.byLevel?.[level]?.Special);
     if (!names) continue;
     model.setClassFeature(cls, level, 'Special', names.filter((x) => lower(x) !== lower(n)).join(', '));
   }
-  if (ti !== -1) {
-    const feats = templates[ti].features || [];
-    for (let i = feats.length - 1; i >= 0; i--) if (e.addedTemplate.some((n) => lower(n) === lower(feats[i].name))) model.listRemove(`templates.${ti}.features`, i);
+  for (const n of e.addedNotes || []) {
+    const i = model.classFeatureNotes(cls).findIndex((x) => lower(x.name) === lower(n));
+    if (i !== -1) model.removeClassFeatureNote(cls, i);
   }
+  // the menus it layered come off, before the columns they sat on move
+  for (const { column, menu } of e.addedMenus || []) model.removeClassFeatureColumnOptions(cls, column, menu);
+  // a schedule it took a level off gets the level back
+  for (const { column, group, level } of e.ruleEdits || []) restoreRuleLevel(model, cls, column, group, level);
   // what it took comes back
-  for (const { level, name: n } of e.removedCells) {
+  for (const { level, column, name: n } of e.removedCells) {
+    if (column) { model.setClassFeature(cls, level, column, n); continue; }
     const names = cellNames(d.progression?.classFeatures?.[cls]?.byLevel?.[level]?.Special) || [];
     if (!names.some((x) => lower(x) === lower(n))) model.setClassFeature(cls, level, 'Special', [...names, n].join(', '));
   }
-  if (e.removedTemplate.length) {
-    let tj = ti;
-    if (tj === -1) { model.listAdd('templates', { tab: null, name: cls, link: null, approvalLink: null, features: [] }); tj = templates.length - 1; }
-    for (const f of e.removedTemplate) {
-      if (!(templates[tj].features || []).some((x) => lower(x.name) === lower(f.name))) {
-        model.listAdd(`templates.${tj}.features`, { name: f.name, type: f.type, text: f.text, tables: [], children: [] });
-      }
+  for (const col of e.removedColumns || []) {
+    model.addClassFeatureColumn(cls, col.name, col.at ?? null);
+    const index = (d.progression?.classFeatures?.[cls]?.columns || []).indexOf(col.name);
+    if (index === -1) continue;
+    for (const grp of col.rules || []) model.addClassFeatureRuleGroup(cls, index, grp);
+    if (col.optionsFrom) model.setClassFeatureColumnOptions(cls, index, col.optionsFrom);
+    for (const [level, cell] of Object.entries(col.cells || {})) {
+      if (cell && typeof cell === 'object') {
+        for (const [key, text] of Object.entries(cell)) model.setClassFeature(cls, Number(level), col.name, text, key);
+      } else model.setClassFeature(cls, Number(level), col.name, cell);
     }
   }
-  // …and the option menus it made go last, so no index above moved under us
-  for (const gname of e.addedGroups || []) {
-    const gi = templates.findIndex((t) => lower(t.name) === lower(gname));
-    if (gi !== -1) model.listRemove('templates', gi);
-  }
+  for (const f of e.removedNotes || []) model.addClassFeatureNote(cls, f);
   row.archetypeStack = stack.filter((_, i) => i !== at);
   if (!row.archetypeStack.length) delete row.archetypeStack;
   const tags = str(row.archetypes).split(/,\s*/).map((t) => t.trim()).filter((t) => t && lower(t) !== lower(name));
   model.setItem('classes', ci, 'archetypes', tags.join(', '));
   model.recompute();
-  return `Removed ${e.name} from ${cls}${e.removedCells.length ? `; ${[...new Set(e.removedCells.map((c) => c.name))].join(', ')} restored` : ''}.`;
+  const back = [...new Set([...e.removedCells.map((c) => c.name), ...(e.ruleEdits || []).map((r) => r.column),
+    ...(e.removedColumns || []).map((c) => c.name)].filter(Boolean))];
+  return `Removed ${e.name} from ${cls}${back.length ? `; ${back.join(', ')} restored` : ''}.`;
 }
 
 /* ---------------- packing a character's own content ---------------- */

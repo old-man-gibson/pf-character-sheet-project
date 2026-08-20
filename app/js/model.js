@@ -788,6 +788,114 @@ export function maneuverCatalogue() {
   return MANEUVER_CATALOGUE;
 }
 
+/* ------------------------------------------------------------------ *
+ * The shared option catalogues.
+ *
+ * A class feature taken over and over -- a rogue talent, an iaijutsu
+ * technique, a smithing insight -- picks from a menu that lives on a page of
+ * its own, and so in a pack of its own. A character records which it picked,
+ * never a copy of the menu, so a feature column points at a catalogue by name
+ * and the menu itself arrives with whatever pack provides it.
+ *
+ * With no catalogue loaded the column is what it always was: a box to type in.
+ * ------------------------------------------------------------------ */
+
+let OPTION_CATALOGUES = new Map();
+
+/**
+ * A class or feature name as it is matched on, across the ways two pages
+ * spell it: "Iaijutsu Technique" against a column reading "Iaijutsu
+ * technique", "Rogue Talents" against "Rogue talent".
+ */
+const menuKey = (s) => String(s || '').toLowerCase()
+  .replace(/\((?:ex|su|sp)\)/g, '')
+  .replace(/[^a-z0-9 ]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .replace(/(\w{3,})s$/, '$1');
+
+/** Register the menus the active packs provide. Keyed by name, case-blind. */
+export function setOptionCatalogues(list) {
+  OPTION_CATALOGUES = new Map();
+  for (const c of Array.isArray(list) ? list : []) {
+    const name = String(c?.name || '').trim();
+    if (!name) continue;
+    OPTION_CATALOGUES.set(name.toLowerCase(), {
+      name,
+      class: String(c?.class || '').trim(),
+      feature: String(c?.feature || '').trim(),
+      classKey: menuKey(c?.class),
+      featureKey: menuKey(c?.feature),
+      text: String(c?.text || ''),
+      options: (Array.isArray(c?.options) ? c.options : []).map((o) => ({
+        name: String(o?.name || ''),
+        type: o?.type ? String(o.type) : null,
+        category: String(o?.category || ''),
+        source: String(o?.source || ''),
+        text: String(o?.text || ''),
+        minLevel: o?.minLevel == null ? null : Number(o.minLevel) || null,
+        replaces: (Array.isArray(o?.replaces) ? o.replaces : []).map(String).filter(Boolean),
+      })).filter((o) => o.name),
+    });
+  }
+}
+
+/** One menu by name, or null where no pack provides it. */
+export function optionCatalogue(name) {
+  const key = String(name || '').trim().toLowerCase();
+  return key ? OPTION_CATALOGUES.get(key) || null : null;
+}
+
+/** Every menu registered, for a picker of catalogues. */
+export function optionCatalogues() {
+  return [...OPTION_CATALOGUES.values()];
+}
+
+/**
+ * The menu a pack means for this class's column, where one says so.
+ *
+ * A menu block names the class and the feature it is for, so a column of that
+ * name is what it is for -- switching the pack on is enough, and nothing has
+ * to be added a second time to make the cells offer it. A menu naming no
+ * class is offered to any class's column of that name.
+ */
+export function optionCatalogueFor(className, column) {
+  const cls = menuKey(className);
+  const col = menuKey(column);
+  if (!col) return null;
+  const hits = [...OPTION_CATALOGUES.values()].filter((c) => c.featureKey === col && (!c.classKey || c.classKey === cls));
+  // A menu that names the class is meant more particularly than one that does not.
+  return hits.find((c) => c.classKey) || hits[0] || null;
+}
+
+/**
+ * One menu made of several, in the order a column names them.
+ *
+ * An archetype's menu joins the class's rather than replacing it outright:
+ * the Isougiri's topological techniques push out the four base techniques
+ * their own text names ("this replaces the Ranged Cut and Armor Rending
+ * Slash") and leave the rest of the samurai's list standing. Later menus win,
+ * so removing an archetype is putting its name back off the list.
+ */
+export function resolveOptionMenu(names) {
+  const list = (Array.isArray(names) ? names : [names]).filter(Boolean);
+  const found = list.map((n) => optionCatalogue(n)).filter(Boolean);
+  if (found.length < 2) return found[0] || null;
+  // One page writes "Armor-Rending Slash" and the next "Armor Rending Slash",
+  // so entries meet on their letters rather than their punctuation.
+  const key = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const out = [];
+  for (const cat of found) {
+    const gone = new Set(cat.options.flatMap((o) => o.replaces).map(key));
+    for (let i = out.length - 1; i >= 0; i--) if (gone.has(key(out[i].name))) out.splice(i, 1);
+    for (const o of cat.options) {
+      const at = out.findIndex((x) => key(x.name) === key(o.name));
+      if (at === -1) out.push(o); else out[at] = o;
+    }
+  }
+  return { ...found[found.length - 1], name: found.map((c) => c.name).join(' + '), options: out };
+}
+
 /** Every maneuver and stance a discipline grants, by discipline name. */
 export function disciplineEntries(name) {
   const key = String(name || '').trim().toLowerCase();
@@ -3646,10 +3754,27 @@ export class Character {
             name: String(x?.name ?? '').trim(),
             rule: String(x?.rule ?? '').trim(),
             color: normalizeHex(x?.color) || FEATURE_GROUP_COLORS[i % FEATURE_GROUP_COLORS.length],
+            // the menu this group's cells pick from, by catalogue name
+            ...(String(x?.optionsFrom ?? '').trim() ? { optionsFrom: String(x.optionsFrom).trim() } : {}),
           }))
-          .filter((x) => x.name || x.rule);
+          .filter((x) => x.name || x.rule || x.optionsFrom);
         if (groups.length) g.rules[col] = groups;
         else delete g.rules[col];
+      }
+      // A class's own feature text sits with the class, under its ladder.
+      g.notes = (Array.isArray(g.notes) ? g.notes : []).map((n) => ({
+        name: String(n?.name ?? '').trim(),
+        type: TEMPLATE_TYPES.includes(n?.type) ? n.type : null,
+        text: String(n?.text ?? ''),
+      })).filter((n) => n.name);
+      // A column may name a menu of its own, which every group in it shares --
+      // or several, layered, where an archetype has joined its own to the class's.
+      if (!g.optionsFrom || typeof g.optionsFrom !== 'object' || Array.isArray(g.optionsFrom)) g.optionsFrom = {};
+      for (const [col, v] of Object.entries(g.optionsFrom)) {
+        if (!g.columns?.includes(col)) { delete g.optionsFrom[col]; continue; }
+        const list = (Array.isArray(v) ? v : [v]).map((x) => String(x ?? '').trim()).filter(Boolean);
+        // The empty list is kept: it is the player having said "no menu".
+        g.optionsFrom[col] = list.length === 1 ? list[0] : list;
       }
     }
 
@@ -3679,6 +3804,29 @@ export class Character {
       w.proficiencyNote = String(w.proficiencyNote ?? '');
       w.baseWeapon = String(w.baseWeapon ?? '');
     }
+
+    // An earlier version put a class's feature text on the Template tab, which
+    // is for templates. Such a group is recognised exactly -- named for a class
+    // on this sheet, carrying no template link, every one of its features named
+    // on that class's ladder, and the class holding no text of its own yet --
+    // and moves under the class, where the rest of its progression already
+    // lives. Anything less exact is a template, and stays one.
+    if (Array.isArray(d.classes) && d.classes.length) {
+      d.templates = d.templates.filter((tp) => {
+        const cls = d.classes.find((c) => normalizeName(c.name) === normalizeName(tp.name))?.name;
+        const g = cls ? d.progression.classFeatures[cls] : null;
+        if (!g || tp.link || tp.approvalLink || tp.tab || g.notes?.length) return true;
+        const onLadder = new Set([...(g.columns || []),
+          ...Object.values(g.byLevel || {}).flatMap((row) => Object.values(row)
+            .flatMap((cell) => String(typeof cell === 'string' ? cell : Object.values(cell || {}).join(', ')).split(/,\s*/)))]
+          .map(normalizeName).filter(Boolean));
+        const features = tp.features || [];
+        if (!features.length || !features.every((f) => onLadder.has(normalizeName(f.name)))) return true;
+        g.notes = features.map((f) => ({ name: f.name, type: f.type ?? null, text: f.text || '' }));
+        return false;
+      });
+    }
+
     // Legacy user-added simple weapons.
     if (Array.isArray(d.weapons) && d.weapons.length) {
       for (const w of d.weapons) {
@@ -4081,8 +4229,9 @@ export class Character {
     const p = this.data.progression;
     if (!p) return null;
     const key = className || 'General';
-    if (!p.classFeatures[key]) p.classFeatures[key] = { columns: [], byLevel: {}, rules: {} };
+    if (!p.classFeatures[key]) p.classFeatures[key] = { columns: [], byLevel: {}, rules: {}, optionsFrom: {} };
     if (!p.classFeatures[key].rules) p.classFeatures[key].rules = {};
+    if (!p.classFeatures[key].optionsFrom) p.classFeatures[key].optionsFrom = {};
     return p.classFeatures[key];
   }
 
@@ -4151,10 +4300,12 @@ export class Character {
     return this;
   }
 
-  addClassFeatureColumn(className, name) {
+  /** `at` puts the column back where it was, which is what restoring one wants. */
+  addClassFeatureColumn(className, name, at = null) {
     const g = this.#featureGroup(className);
     if (!g || !name || g.columns.includes(name)) return this;
-    g.columns.push(name);
+    if (at === null || at < 0 || at > g.columns.length) g.columns.push(name);
+    else g.columns.splice(at, 0, name);
     this.recompute();
     return this;
   }
@@ -4170,10 +4321,14 @@ export class Character {
         delete row[old];
       }
     }
-    // The level rule and a saved column width both follow the rename.
+    // The level rule, the menu and a saved column width all follow the rename.
     if (g.rules?.[old] !== undefined) {
       g.rules[name] = g.rules[old];
       delete g.rules[old];
+    }
+    if (g.optionsFrom?.[old] !== undefined) {
+      g.optionsFrom[name] = g.optionsFrom[old];
+      delete g.optionsFrom[old];
     }
     const widths = this.data.uiPrefs?.colWidths?.[`progfeat-${className}`];
     if (widths && widths[old] !== undefined) {
@@ -4219,6 +4374,10 @@ export class Character {
     const group = g?.rules?.[col]?.[groupIndex];
     if (!group) return this;
 
+    if (patch.optionsFrom !== undefined) {
+      const menu = String(patch.optionsFrom ?? '').trim();
+      if (menu) group.optionsFrom = menu; else delete group.optionsFrom;
+    }
     const wasKey = featureGroupKey(group, groupIndex);
     for (const key of ['name', 'rule']) {
       if (patch[key] === undefined) continue;
@@ -4243,9 +4402,9 @@ export class Character {
       }
     }
 
-    // A group with neither a name nor a rule is nothing; drop it, and drop the
-    // column's list with the last one so an empty column reads as unruled.
-    if (!group.name && !group.rule) return this.removeClassFeatureRuleGroup(className, index, groupIndex);
+    // A group with neither a name nor a rule nor a menu is nothing; drop it,
+    // and the column's list with the last one, so it reads as unruled again.
+    if (!group.name && !group.rule && !group.optionsFrom) return this.removeClassFeatureRuleGroup(className, index, groupIndex);
     this.recompute();
     return this;
   }
@@ -4259,6 +4418,114 @@ export class Character {
     if (!list.length) delete g.rules[col];
     this.recompute();
     return this;
+  }
+
+  /**
+   * A class's own feature text, kept with the class rather than on the
+   * Template tab, which is for templates.
+   *
+   * The ladder above says which feature arrives when; this says what each one
+   * does, one entry per distinct feature however many levels grant it. An
+   * archetype's features join the same list and leave it again with the
+   * archetype.
+   */
+  classFeatureNotes(className) {
+    return this.data.progression?.classFeatures?.[className]?.notes || [];
+  }
+
+  addClassFeatureNote(className, { name, type = null, text = '' } = {}) {
+    const g = this.#featureGroup(className);
+    const n = String(name ?? '').trim();
+    if (!g || !n) return this;
+    if (!Array.isArray(g.notes)) g.notes = [];
+    if (g.notes.some((x) => normalizeName(x.name) === normalizeName(n))) return this;
+    g.notes.push({ name: n, type: TEMPLATE_TYPES.includes(type) ? type : null, text: String(text ?? '') });
+    this.recompute();
+    return this;
+  }
+
+  setClassFeatureNote(className, index, patch = {}) {
+    const note = this.#featureGroup(className)?.notes?.[index];
+    if (!note) return this;
+    if (patch.name !== undefined) note.name = String(patch.name);
+    if (patch.text !== undefined) note.text = String(patch.text);
+    if (patch.type !== undefined) note.type = TEMPLATE_TYPES.includes(patch.type) ? patch.type : null;
+    this.recompute();
+    return this;
+  }
+
+  removeClassFeatureNote(className, index) {
+    const notes = this.#featureGroup(className)?.notes;
+    if (!notes?.[index]) return this;
+    notes.splice(index, 1);
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * Point a whole column at a menu, by catalogue name. Every group in it picks
+   * from that menu unless the group names one of its own. Empty text clears it.
+   */
+  setClassFeatureColumnOptions(className, index, catalogue) {
+    const g = this.#featureGroup(className);
+    const col = g?.columns?.[index];
+    if (!g || col === undefined) return this;
+    const list = (Array.isArray(catalogue) ? catalogue : [catalogue])
+      .map((s) => String(s ?? '').trim()).filter(Boolean);
+    // One menu is stored as the name itself; several as the list they are; and
+    // none as the empty list, which is the player saying so rather than saying
+    // nothing -- a pack's own claim on the column does not come back over it.
+    g.optionsFrom[col] = list.length === 1 ? list[0] : list;
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * The menus a column picks from, in the order they layer.
+   *
+   * Nothing recorded means the packs decide: a menu that names this class and
+   * this feature is what the column is for. An empty list recorded means the
+   * player said no menu, which no pack then overrides.
+   */
+  classFeatureColumnOptions(className, column) {
+    const v = this.data.progression?.classFeatures?.[className]?.optionsFrom?.[column];
+    if (v === undefined) {
+      const auto = optionCatalogueFor(className, column);
+      return auto ? [auto.name] : [];
+    }
+    return Array.isArray(v) ? [...v] : (v ? [v] : []);
+  }
+
+  /** Did the player name the column's menu, or did a pack claim it? */
+  classFeatureColumnOptionsChosen(className, column) {
+    return this.data.progression?.classFeatures?.[className]?.optionsFrom?.[column] !== undefined;
+  }
+
+  /**
+   * Layer another menu onto a column, or take it off again.
+   *
+   * This is how an archetype's own menu joins the class's: it goes on the end,
+   * so its entries win and the ones its text replaces drop out, and removing
+   * the archetype is taking the name off the list again.
+   */
+  addClassFeatureColumnOptions(className, column, catalogue) {
+    const g = this.#featureGroup(className);
+    const index = (g?.columns || []).indexOf(column);
+    const name = String(catalogue ?? '').trim();
+    if (index === -1 || !name) return this;
+    const list = this.classFeatureColumnOptions(className, column)
+      .filter((n) => n.toLowerCase() !== name.toLowerCase());
+    return this.setClassFeatureColumnOptions(className, index, [...list, name]);
+  }
+
+  removeClassFeatureColumnOptions(className, column, catalogue) {
+    const g = this.#featureGroup(className);
+    const index = (g?.columns || []).indexOf(column);
+    const name = String(catalogue ?? '').trim();
+    if (index === -1 || !name) return this;
+    const list = this.classFeatureColumnOptions(className, column)
+      .filter((n) => n.toLowerCase() !== name.toLowerCase());
+    return this.setClassFeatureColumnOptions(className, index, list);
   }
 
   /**
@@ -4302,12 +4569,18 @@ export class Character {
       : Object.keys(g.byLevel || {}).map(Number).sort((a, b) => a - b);
     const charLevel = Number(this.data.identity.level) || 0;
 
-    // Parse each group's rule once for the whole column, not once per cell.
+    // Parse each group's rule once for the whole column, not once per cell,
+    // and resolve its menu once too -- the group's own, else the column's.
+    const menuOf = (col, grp) => resolveOptionMenu(grp?.optionsFrom
+      ? [grp.optionsFrom] : this.classFeatureColumnOptions(className, col));
     const parsed = Object.fromEntries(columns.map((col) => [col,
       (g.rules?.[col] || []).map((grp, i) => ({
         index: i, key: featureGroupKey(grp, i), name: grp.name, color: grp.color,
+        optionsFrom: grp.optionsFrom || null, menu: menuOf(col, grp),
         ast: parseLevelRule(grp.rule || ''),
       }))]));
+    // An unruled column has no group to hang a menu on, so it keeps its own.
+    const columnMenu = Object.fromEntries(columns.map((col) => [col, menuOf(col, null)]));
 
     return levels.map((level, i) => {
       const classLevel = i + 1;
@@ -4333,8 +4606,11 @@ export class Character {
           stranded: false,
         });
         const fields = ruled
-          ? hits.map((grp) => ({ group: grp, key: grp.key, ...state(textFor(grp)) }))
-          : [{ group: null, key: null, ...state(String(store ?? '')), due: false, planned: false }];
+          ? hits.map((grp) => ({ group: grp, key: grp.key, menu: grp.menu, ...state(textFor(grp)) }))
+          : [{
+            group: null, key: null, menu: columnMenu[col],
+            ...state(String(store ?? '')), due: false, planned: false,
+          }];
 
         // Text on a level no rule covers, or under a group since removed --
         // kept, flagged and read-only, never dropped.
@@ -4345,6 +4621,7 @@ export class Character {
         const orphans = orphanKeys.map((k) => ({
           group: { key: k, name: k, color: null, orphan: true },
           key: k,
+          menu: columnMenu[col],
           text: String(store[k]),
           on: false,
           due: false,
@@ -4353,14 +4630,14 @@ export class Character {
         }));
         if (ruled && !hits.length && !asMap && String(store ?? '').trim()) {
           orphans.push({
-            group: null, key: null, text: String(store), on: false,
+            group: null, key: null, menu: columnMenu[col], text: String(store), on: false,
             due: false, planned: false, stranded: true,
           });
         }
         // A locked, empty cell still needs one field to draw.
         if (ruled && !hits.length && !orphans.length) {
           orphans.push({
-            group: null, key: null, text: '', on: false,
+            group: null, key: null, menu: columnMenu[col], text: '', on: false,
             due: false, planned: false, stranded: false,
           });
         }
@@ -4368,6 +4645,7 @@ export class Character {
         cells[col] = {
           ruled,
           on,
+          menu: columnMenu[col],
           fields: ruled && !hits.length ? orphans : [...fields, ...orphans],
           stranded: orphans.some((o) => o.stranded),
         };
@@ -4403,6 +4681,7 @@ export class Character {
     g.columns.splice(index, 1);
     for (const row of Object.values(g.byLevel)) delete row[name];
     delete g.rules[name];
+    delete g.optionsFrom[name];
     this.recompute();
     return this;
   }
