@@ -500,6 +500,218 @@ Privacy policyAbout Library of MetzofitzDisclaimersTerms of UseDonate to Mirahez
   check('archetypes: names with flavour, none for the one without, publisher lines skipped', r.blocks[2].text.split('\n').map((l) => l.split(':')[0]), ['Ancestral Inheritor', 'Legendary Samurai Alternate Class Features', 'Ronin']);
 }
 
+console.log('a wikidot paste of two class pages -- side menu, contents, bare-number table, untyped feature headings');
+{
+  // The Spheres of Power wiki copies with the site banner and the whole side
+  // menu above the breadcrumb, the contents under it, and the site's links and
+  // small print below; its tables number the levels plainly and one page in
+  // three heads its features without "(Ex)".
+  const pages = `Wikidot.com
+
+.wikidot.com
+
+Share on
+
+Explore »
+
+Spheres of Power Wiki
+
+A Quick Reference Site
+
+Home
+Admin
+Help
+
+Create account or Sign in
+
+Special Release
+
+Spheres of Might 5E
+
+$19.99
+
+Combat Spheres
+
+Alchemy
+Athletics
+Barrage
+
+Page tags
+
+home
+Blacksmith
+Spheres of Power Wiki Home Page » Spheres Of Might » Blacksmith
+
+Fold
+Table of Contents
+Class Abilities
+Combat Training
+Maintenance (Ex)
+Polish
+Archetypes
+-Barista [Apoc]
+
+“The only joy greater than winning a prize with your own two hands is forging it.”
+
+Blacksmiths are craftsmen who forge the tools they need by hand, and are masters of equipment both on the battlefield and off it.
+
+Starting Wealth: 4d6 x 10 gp (average 140 gp).
+
+Role: Blacksmiths support their party by crafting and maintaining potent weapons and armor.
+
+Alignment: Any.
+
+Hit Die: d10
+
+Class Skills: The blacksmith's class skills are Appraise (Int), Climb (Str), Craft (Int), Perception (Wis), and Swim (Str).
+
+Skill Ranks Per Level: 4 + Int modifier.
+
+Class Abilities
+
+Table: Blacksmith
+
+Class Level\tBase Attack Bonus\tFort Save\tReflex Save\tWill Save\tSpecial\tCombat Talents
+1\t+1\t+2\t+0\t+2\tCombat training, maintenance, thunderous blows +1d6\t1
+2\t+2\t+3\t+0\t+3\tSkilled craftsman\t2
+20\t+20/+15/+10/+5\t+12\t+6\t+12\tSmith's masterpiece\t20
+
+Combat Training
+
+A blacksmith may combine combat spheres and talents to create powerful martial techniques. Blacksmiths are considered Expert combatants.
+
+Maintenance (Ex)
+
+Starting at 1st level, the blacksmith learns how to maintain and optimize his equipment and that of his party members.
+
+Polish
+
+The blacksmith polishes a suit of armor to a mirror sheen, granting it a bonus against gaze attacks.
+
+Smith's Masterpiece
+
+At 20th level, the blacksmith may create a single masterpiece, an item of unrivalled quality.
+
+Archetypes
+
+The following are archetypes that blacksmiths can choose.
+
+-Barista [Apoc]
+
+Baristas specialize in brewing drinks for their allies.
+
+-Iron Chef
+
+Iron chefs are experts at creating food for their allies.
+
+Favored Class Bonuses
+
+Dwarf: Add +1/4 to the blacksmith's thunderous blows damage.
+
+Human: Gain +1/6 of a combat talent.
+
+Class Equipment
+
+Forging Hammer [TS:WAT]
+
+Aura faint Creation; CL 5th
+
+Slot none; Price 15,000 gp; Weight 15 lbs.
+
+Spheres of Might by Drop Dead Studios
+Classes
+Armiger\tBlacksmith\tCommander\tConscript
+Rules
+Martial Traditions\tMartial Packages
+
+Help
+|
+Terms of Service
+Powered by Wikidot.com
+This website uses cookies. See the Legal & OGL page for important information.
+
+Wikidot.com
+
+.wikidot.com
+
+Spheres of Power Wiki
+
+Home
+Admin
+
+Page tags
+
+home
+Striker
+Spheres of Power Wiki Home Page » Spheres Of Might » Striker
+
+Fold
+Table of Contents
+Class Abilities
+Weapon and Armor Proficiency
+
+“Who needs a weapon when I am one?”
+
+Strikers fight with their bare hands, building tension with every blow they land and every blow they take.
+
+Hit Die: d10
+
+Class Skills: The striker's class skills are Acrobatics (Dex), Climb (Str), and Escape Artist (Dex).
+
+Skill Ranks Per Level: 4 + Int modifier.
+
+Class Abilities
+
+Table: Striker
+
+Level\tBase Attack Bonus\tFort Save\tReflex Save\tWill Save\tSpecial\tCombat Talents
+1st\t+1\t+2\t+2\t+0\tBare knuckles, tension\t1
+20th\t+20/+15/+10/+5\t+12\t+12\t+6\tUltimate tension\t20
+
+Weapon and Armor Proficiency
+
+A striker is proficient with simple weapons and light armor.
+
+Bare Knuckles
+
+A striker's unarmed strikes deal damage as if she were a monk of her striker level.
+
+Tension
+
+A striker builds tension as she fights, spending it on the striker arts she knows.
+
+Powered by Wikidot.com
+`;
+  const r = parsePaste(pages);
+  check('both pages read, each with its favored-class and archetype notes',
+    r.blocks.map((b) => `${b.kind}:${b.name}`),
+    ['class:Blacksmith', 'note:Favored class options — Blacksmith', 'note:Blacksmith — archetypes', 'class:Striker']);
+  const [bs, , arch, st] = r.blocks;
+  check('a "Class Level" header and plainly numbered rows give BAB and saves',
+    [bs.hd, bs.bab, bs.goodFort, bs.goodRef, bs.goodWill, bs.skillRanks], [10, 1, true, false, true, 4]);
+  check('class skills read', bs.classSkills, ['Appraise', 'Climb', 'Craft', 'Perception', 'Swim']);
+  check('the table\'s features, level by level', bs.features.map((f) => `${f.level} ${f.name}`),
+    ['1 Combat training', '1 maintenance', '1 thunderous blows +1d6', '1 Combat Talents 1', '2 Skilled craftsman',
+      '2 Combat Talents 2', '20 Smith\'s masterpiece', '20 Combat Talents 20']);
+  const f = (n) => bs.features.find((x) => x.name.toLowerCase() === n);
+  ok('an untyped heading over its paragraph is the feature the table names', /Expert combatants/.test(f('combat training').text));
+  ok('a typed heading still is', /maintain and optimize/.test(f('maintenance').text));
+  ok('an untyped heading the table does not name stays a sidebar inside the feature above',
+    /\n\nPolish\n\nThe blacksmith polishes/.test(f('maintenance').text) && !bs.features.some((x) => x.name === 'Polish'));
+  ok('the epigraph and flavour are the description', /“The only joy/.test(bs.text) && /Blacksmiths are craftsmen/.test(bs.text));
+  check('archetypes, their dashes off', arch.text.split('\n').map((l) => l.split(':')[0]), ['Barista [Apoc]', 'Iron Chef']);
+  check('the favored-class list stops where the next section starts', r.blocks[1].text.split('\n').map((l) => l.split(':')[0]), ['Dwarf', 'Human']);
+  check('the second page is its own class', [st.name, st.hd, st.bab, st.goodFort, st.goodRef, st.goodWill], ['Striker', 10, 1, true, true, false]);
+  ok('"Weapon and Armor Proficiency" over a paragraph is a feature, not a heading',
+    /proficient with simple weapons/.test(st.features.find((x) => /^Weapon and Armor/i.test(x.name))?.text || ''));
+  ok('nothing of the first page is on the second', !/blacksmith/i.test(JSON.stringify(st)));
+  const left = r.leftovers.map((l) => l.text);
+  ok('the side menu, contents, breadcrumb and footer are not left over',
+    !left.some((t) => /Athletics|Table of Contents|Home Page »|Powered by Wikidot|Drop Dead Studios|Terms of Service/.test(t)));
+  ok('nor are they anywhere in a block', !/Athletics|Powered by Wikidot|Drop Dead Studios/.test(JSON.stringify(r.blocks)));
+  check('nothing worth tagging is left over', r.leftovers.filter((l) => l.suggest !== 'skip').length, 0);
+}
+
 console.log('archetype pages -- a whole archetype, and the alternate-class-features page split into options');
 {
   const pages = `Anonymous
@@ -631,6 +843,99 @@ This page was last edited on 24 February 2026, at 00:04.
   ok('the report says so', /Archetype Oni Warrior for Legendary Samurai: 4 feature\(s\); replaces challenge, sheath control, advanced blade, iaijutsu master; alters weapon and armor proficiency\./.test(r.report[0]) && /3 alternate class feature\(s\)/.test(r.report[1]));
 }
 
+console.log('an option page -- the menu a class feature picks from, on a page of its own');
+{
+  // The info box says which class and which option, which is what tells this
+  // page from an archetype's; the contents list says which of its headings
+  // sit inside which.
+  const page = `Anonymous
+Library of Metzofitz
+
+Legendary Samurai Iaijutsu Technique
+
+From Library of Metzofitz
+
+Namespaces
+
+Page
+Discussion
+
+Page actions
+
+Read
+View source
+History
+
+Legendary Samurai Iaijutsu Technique
+
+Information
+
+Classes Available
+
+Legendary Samurai (class)
+
+Option
+
+Legendary Samurai Iaijutsu Technique
+
+Legendary Samurai, pgs. 4–7
+
+Contents
+
+1 Legendary Samurai
+
+1.1 Slashes
+1.2 Cuts
+
+2 Related
+
+Legendary Samurai
+
+Slashes
+
+Armor-Rending Slash (Ex): Whenever the legendary samurai makes a successful iaijutsu strike, that creature takes a -2 to their armor class for a number of rounds equal to their Charisma modifier.
+
+Bloody Slash (Ex): The target takes bleed damage equal to half the legendary samurai's class level. A legendary samurai must be 5th level or higher to select this iaijutsu technique.
+
+Cuts
+
+Ranged Cut (Ex): The legendary samurai can make an iaijutsu strike at a range of 30 feet.
+
+Tornado Cut (Su): The legendary samurai targets every space adjacent to them. A legendary samurai must be 10th level or higher to select this iaijutsu technique.
+
+Related
+
+Archetypes
+
+Classes
+
+Legendary Samurai (class)
+
+Retrieved from "https://metzo.miraheze.org/wiki/Legendary_Samurai_Iaijutsu_Technique"
+
+Navigation
+
+Main page
+Recent changes
+Random page
+`;
+  const r = parsePaste(page);
+  check('one option menu, nothing else', r.blocks.map((b) => `${b.kind}:${b.name}`), ['options:Legendary Samurai Iaijutsu Technique']);
+  const m = r.blocks[0];
+  check('the class it is for, and the feature that picks from it', [m.class, m.feature], ['Legendary Samurai', 'Iaijutsu Technique']);
+  check('its entries, under the headings the contents list called inner ones',
+    m.options.map((o) => [o.name, o.type, o.category, o.minLevel]),
+    [['Armor-Rending Slash', 'Ex', 'Slashes', null], ['Bloody Slash', 'Ex', 'Slashes', 5],
+      ['Ranged Cut', 'Ex', 'Cuts', null], ['Tornado Cut', 'Su', 'Cuts', 10]]);
+  ok('the level a technique asks for, not a level it scales at',
+    /bleed damage/.test(m.options[1].text) && !m.options[0].minLevel);
+  ok('the outer heading only repeated the class, so it says nothing about where it is from',
+    m.options.every((o) => !o.source));
+  ok('the page citation is the menu\'s source, not one of its entries', /pgs\. 4–7/.test(m.source));
+  check('the chrome, the contents and the page\'s own tail are not left over', r.leftovers.filter((l) => l.suggest !== 'skip').length, 0);
+  ok('the report says what it read', /21|4 option\(s\)/.test(r.report[0]) && /Slashes, Cuts/.test(r.report[0]));
+}
+
 console.log('a plain homebrew archetype document -- no info box, title features with colons, free-form swap sentences');
 {
   const doc = "Isougiri\nDescription\nThe Isougiri swung his sword, sheathed it, and drew it again, thousands of times every day. Sweat built up on his brow, his arms and legs burning from the exertion of perfecting the same motion.\nThe tree before him fell. \nThe boulder behind it slid apart. \nBy understanding this motion, he began to learn how to cleave all of space… and, soon after, refute the Gods themselves.\nClass Features\nScholar’s Education\nThis archetype is only available to Isougiri with the Scholarly Samurai feat. If they retrain or permanently lose the feat, they also lose access to this archetype.\nTopological Theory (Ex)\nAt 1st level, An Isougiri gains access to Theory, using it to focus his attacks. An Isougiri begins the day with no Theory, but can gain Theory in the following ways (An Isougiri cannot gain Theory from each of these more than once per round and must be in combat to gain Theory):\nOpening Theorem: Whenever the Isougiri rolls initiative, he gains 1 Theory.\nProven Lemma: Whenever the Isougiri successfully damages a creature using Topological Draw, he gains 1 Theory.\nHis Theory goes up or down throughout the day, but usually cannot go higher than his Intelligence modifier (minimum 1), though some feats, abilities, and magic items may affect this maximum.\nThis feature alters Spirit and counts as such for items, class features, and feats. Opening Theorem, Proven Lemma, and Observed Contradiction count as Spirited Initiative, Samurai Strike, and Warrior's Guard respectively.\nBounded Domain (Ex)\nBounded Domain defines the range of the Isougiri's Topological Draw and Topological Iaijutsu Techniques and is centered on the Isougiri himself at all times. Other attacks are not subject to Bounded Domain or affected by it.\nThe domain has a range of 20 feet at level 1 and increases by 5 feet at level 4 and every three levels thereafter, to a maximum of 50 feet at level 19.\nTopological Draw (Ex)\nAt 1st level, An Isougiri can strike in the blink of an eye, cutting down foes with his unique talents. \nThe Isougiri can make an attack action with a non-thrown melee weapon the Isougiri is proficient with, as long as it is sheathed before the attack.\nThis alters Iaijutsu Strike\nTopological Iaijutsu Techniques\nAt 1st level and every four levels afterwards, An Isougiri gains the ability to alter their iaijutsu strike, gaining a topological iaijutsu technique of their choice (See end of document).\nTopological Draw alters Iaijutsu Techniques. Topological Draw counts as Iaijutsu Techniques for items, feats, and class features.\nTopological Precision (Ex)\nAt 7th level, the save DC of all Topological Iaijutsu Techniques used against a target increases by ½ the target’s Mapped counters, rounded up.\nThis replaces Sheathe Block.\nTopological Step: Projection (Ex)\nAt 8th level, the Isougiri can spend 1 Theory as a swift action to project himself partially into the complex plane.\nLevel 12: The Isougiri gains a +2 bonus to his Reflex saves for the duration of Topological Step: Projection. This bonus increases by 1 at levels 16 and 20.\nTopological Step: Projection replaces Dragon Defense.\nSpatial Discontinuity (Su)\nAt 11th level, the Isougiri can spend 1 Theory to select one or more edges between two squares within his Bounded Domain as boundaries.\nThis replaces the 10th and 14th level Warrior’s grace.\n\nAxiomatic Corollary: Empty Set ∅ (Su)\nAt level 20, the Isougiri proves the ultimate corollary: by severing his own topological form, he becomes the primitive empty set ∅ that is part of every set.\n\nTopological Iaijutsu Techniques\n\nCuts\nMapped: A creature gains Mapped 1 for a number of rounds equal to the Isougiri’s intelligence modifier. Additional applications increase its counter by 1.\n\nZero-Point Thrust (Ex)\nThe Isougiri makes a melee attack against a target or space within his Bounded Domain. If the target is flanked, flat-footed, or otherwise loses its Dexterity bonus to AC, it gains Mapped before the attack resolves.\nLevel 6: On a failed Fortitude save, the target also loses natural armor bonuses to AC equal to its Mapped counter for the duration.\nThis replaces the Ranged Cut and Armor Rending Slash Iaijutsu Techniques.\n\nSlashes\n\nVolumetric Slash (Ex)\nThe Isougiri makes a melee attack against a Mapped creature within his Bounded Domain. Large or larger creatures take additional damage equal to 2d6 per 3 class levels.\nAn Isougiri must be at least 5th level to select this technique.\n";
@@ -649,7 +954,8 @@ console.log('a plain homebrew archetype document -- no info box, title features 
   check('"Topological Draw alters Iaijutsu Techniques." -- a named subject', f('Topological Iaijutsu').alters, ['iaijutsu technique']);
   check('"This replaces Sheathe Block." at 7th', [f('Topological Precision').level, f('Topological Precision').replaces], [7, ['sheath block']]);
   check('"Topological Step: Projection replaces Dragon Defense." -- subject with a colon', [f('Topological Step').level, f('Topological Step').replaces], [8, ['dragon defense']]);
-  check('"replaces the 10th and 14th level Warrior’s grace" -> altered, not gone', [f('Spatial').replaces, f('Spatial').alters], [[], ['warriors grace']]);
+  check('"replaces the 10th and 14th level Warrior’s grace" -> those two grants, not the feature',
+    [f('Spatial').replaces, f('Spatial').alters], [['warriors grace@10', 'warriors grace@14'], []]);
   check('"At level 20"', f('Axiomatic').level, 20);
   ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
   ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));

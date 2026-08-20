@@ -1119,10 +1119,45 @@ table.featgrid th .addgroup {
   background: transparent; border-style: dashed;
 }
 .badge.due { background: var(--cs-accent-soft); color: var(--cs-accent); border-color: var(--cs-accent); }
+textarea.cfeat, input.cfeat {
+  width: 100%; min-height: 26px; font-size: 0.78rem; line-height: 1.35; padding: 3px 5px;
+}
 textarea.cfeat {
-  width: 100%; min-height: 26px; resize: none; overflow: hidden;
-  font-size: 0.78rem; line-height: 1.35; padding: 3px 5px;
-  white-space: pre-wrap; word-break: break-word;
+  resize: none; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+}
+/* A cell picking from a menu a pack provides. Still a box to type in -- the
+   arrow only says there is a list behind it. */
+input.cfeat.pick { text-overflow: ellipsis; }
+/* An entry taken below the level it asks for: said, not stopped. */
+table.featgrid .ffield input.cfeat.pick.early {
+  border-color: var(--cs-accent); border-style: dashed; color: var(--cs-accent);
+}
+table.featgrid th .colmenu {
+  width: 100%; margin-top: 2px; padding: 1px 3px; font-size: 0.6rem;
+  text-transform: none; letter-spacing: 0; color: var(--cs-muted);
+  background: transparent; border: 1px dashed var(--cs-line);
+}
+table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+/* What a class's features do, folded under its ladder. */
+.cfnotes { margin-top: 10px; border-top: 1px solid var(--cs-line); padding-top: 8px; }
+.cfnotes .notehead {
+  width: 100%; text-align: left; padding: 2px 6px; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
+  background: transparent; border: 0;
+}
+.cfnotes .notehead:hover { color: var(--cs-text); }
+.cfnote { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
+.cfnote > .pair { gap: 4px; }
+.cfnote .notename { flex: 1; min-width: 0; font-weight: 600; }
+.cfnote select { flex: none; width: 4rem; }
+
+/* The block shelf's find bar: the kind buttons, then a box to type in. */
+.extfind { flex-wrap: wrap; gap: 4px; }
+.extfind input[type="search"] { flex: 1 1 12rem; min-width: 8rem; }
+/* A menu layered over the one above, which an archetype put there. */
+table.featgrid th span.colmenu.layered {
+  display: block; border-style: solid; border-color: var(--cs-accent);
+  color: var(--cs-accent); text-align: left;
 }
 /* A cell holds one field per rule group granting at that level. Where two
    groups land on the same level the fields stack, each keeping its own colour
@@ -1143,24 +1178,29 @@ table.featgrid td .ftag.orphan { color: var(--cs-accent); text-decoration: line-
    shows its .prose-view instead of the textarea, and would otherwise be the one
    uncoloured cell in a coloured column. */
 table.featgrid .ffield.slot-on textarea.cfeat,
+table.featgrid .ffield.slot-on input.cfeat,
 table.featgrid .ffield.slot-on .prose-view {
   background: var(--gc-soft); border-color: var(--gc);
 }
 /* Reached and still empty: a slot you owe. Loud enough to find by scanning. */
 table.featgrid .ffield.slot-on.due textarea.cfeat,
+table.featgrid .ffield.slot-on.due input.cfeat,
 table.featgrid .ffield.slot-on.due .prose-view {
   border-style: dashed; border-width: 2px; background: var(--gc-soft);
 }
 table.featgrid .ffield.slot-on.due { box-shadow: inset 3px 0 0 var(--gc); }
 /* Empty but not reached yet: the plan, not a chore. tr.future already dims it. */
 table.featgrid .ffield.slot-on.planned textarea.cfeat,
+table.featgrid .ffield.slot-on.planned input.cfeat,
 table.featgrid .ffield.slot-on.planned .prose-view { border-style: dotted; background: transparent; }
 table.featgrid .ffield.slot-off textarea.cfeat,
+table.featgrid .ffield.slot-off input.cfeat,
 table.featgrid .ffield.slot-off .prose-view {
   opacity: 0.3; background: transparent; border-style: dashed;
 }
 /* Text stranded outside every rule stays legible and flagged, never hidden. */
 table.featgrid .ffield.slot-off.kept textarea.cfeat,
+table.featgrid .ffield.slot-off.kept input.cfeat,
 table.featgrid .ffield.slot-off.kept .prose-view {
   opacity: 0.75; border-style: solid; border-color: var(--cs-accent);
 }
