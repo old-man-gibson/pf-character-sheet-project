@@ -77,7 +77,10 @@ export const SHEET_CSS = `
   width: 84px; height: 84px; flex: none; border-radius: var(--cs-radius);
   object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
 }
-.head-main { flex: 1; min-width: 0; }
+/* A real minimum, not zero: when the header buttons would otherwise crush the
+   name and summary into a one-word column (768-1024px), the actions wrap to
+   their own row below instead. */
+.head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
 .name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
 /* The session view's standing line: the numbers a table asks for mid-fight,
