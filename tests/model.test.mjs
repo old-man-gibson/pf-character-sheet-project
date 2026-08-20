@@ -2535,6 +2535,14 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
   c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', '   ');
   check('an emptied note is removed, not stored blank',
     'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
+
+  // A prepared spell's note is prose data too, and survives the round trip.
+  c.listAdd('vancian.prepared', {
+    prepUsed: '', classLevel: 'Ora 1', name: 'Cure Light Wounds', uses: 2, used: 0,
+    note: 'heals {1 + min(5, level)}d8',
+  });
+  check('a spell note round-trips',
+    new Character(c.toJSON()).data.vancian.prepared.at(-1).note, 'heals {1 + min(5, level)}d8');
 }
 
 console.log('skill misc accepts formulas and named values');

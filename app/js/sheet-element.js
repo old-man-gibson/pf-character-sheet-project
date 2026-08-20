@@ -497,6 +497,8 @@ export class CharacterSheetElement extends HTMLElement {
   #dashArrange = false;
   /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
   #openManeuverNote = null;
+  /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
+  #armedRemove = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -1899,7 +1901,7 @@ export class CharacterSheetElement extends HTMLElement {
     // Spell rows pack into columns, and every row's squares start at the same
     // left edge -- pip one top-left, filling rightward, whatever the count.
     const prow = ({ r, i }) => `<div class="dashspell">
-      <span class="sname" title="${esc(r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
+      <span class="sname" title="${esc(r.note ? `${r.name} — ${this.#proseText(r.note)}` : r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
       <span class="suses">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
         || '<span class="dim">—</span>'}</span>
     </div>`;
@@ -5883,25 +5885,30 @@ export class CharacterSheetElement extends HTMLElement {
         cell cannot also be something you reset each morning — so players used it as a
         label instead. Whatever is in it is kept as written; <strong>Prepared</strong> is
         how many times this spell is committed, and the squares beside it are what is
-        left of them.</p>
-      ${rows.length ? `<table><thead><tr>
-        <th style="width:9rem">Label</th><th style="width:9rem">Class / level</th><th>Spell</th>
-        <th class="num" style="width:5rem" title="How many times this spell is prepared">Prepared</th>
-        <th style="width:5rem" title="Click a square to spend or restore">Left</th><th></th>
+        left of them. <strong>Notes</strong> reads {…} like any prose, so a spell's text
+        can carry its numbers — <code>heals {2 + level}d8</code> — and stay right.</p>
+      ${rows.length ? `<table class="spelllist"><thead><tr>
+        <th style="width:6.5rem">Label</th>
+        <th style="width:4.5rem" title="Class and spell level">C / L</th>
+        <th style="width:13rem">Spell</th>
+        <th title="The spell's text or your own note — {…} formulas resolve">Notes</th>
+        <th class="num" style="width:4rem" title="How many times this spell is prepared">Prep.</th>
+        <th style="width:4.5rem" title="Click a square to spend or restore">Left</th><th></th>
       </tr></thead><tbody>
         ${rows.map((r, i) => `<tr>
           <td>${this.#itemText(list, i, 'prepUsed', r.prepUsed, '')}</td>
           <td>${this.#itemText(list, i, 'classLevel', r.classLevel, '')}</td>
           <td>${this.#itemText(list, i, 'name', r.name, 'Spell')}</td>
+          <td>${r.name ? this.#prose(`data-item="${list}|${i}|note"`, r.note, 1, 'grow') : ''}</td>
           <td class="num">${r.name ? this.#itemNum(list, i, 'uses', r.uses) : ''}</td>
-          <td>${r.name ? slotSpend({
+          <td class="spendcell">${r.name ? slotSpend({
     path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
   }) : ''}</td>
-          ${this.#rowRemove(list, i)}
+          ${this.#rowRemoveArmed(list, i, r.name || 'this row')}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No spells listed.</p>'}
       <div style="margin-top:6px">${this.#addButton(list, 'Add spell', {
-    prepUsed: '', classLevel: '', name: '', uses: 1, used: 0,
+    prepUsed: '', classLevel: '', name: '', uses: 1, used: 0, note: '',
   })}</div>
     </section>`;
   }
@@ -8875,6 +8882,27 @@ export class CharacterSheetElement extends HTMLElement {
     </td>`;
   }
 
+  /**
+   * A × that asks twice: the first click arms it (it says so), the second
+   * removes. For rows a stray click would genuinely hurt to lose.
+   */
+  #rowRemoveArmed(list, i, what = 'row') {
+    const key = `${list}|${i}`;
+    const armed = this.#armedRemove === key;
+    return `<td class="tools">
+      <button class="danger${armed ? ' armed' : ''}" data-remove-armed="${key}"
+        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
+        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>
+    </td>`;
+  }
+
+  /** Prose rendered to plain text -- for a title, where markup cannot go. */
+  #proseText(text) {
+    if (!hasTokens(text)) return String(text ?? '');
+    return this.#model.renderProse(text).map((seg) => (seg.kind === 'text' ? seg.text
+      : seg.error ? `{${seg.error}}` : formatValue(seg.value))).join('');
+  }
+
   #addButton(list, label, template) {
     return `<button class="primary" data-add="${list}" data-template="${esc(JSON.stringify(template))}">+ ${esc(label)}</button>`;
   }
@@ -9385,6 +9413,23 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => {
         const [list, index] = b.dataset.remove.split('|');
         this.#model.listRemove(list, Number(index));
+        this.#render();
+      });
+    });
+
+    // The two-click ×: the first click arms it, the second removes. Arming a
+    // different one disarms the first, and a removal drops the armed state so
+    // it can never point at the row that slid into the gap.
+    root.querySelectorAll('[data-remove-armed]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const key = b.dataset.removeArmed;
+        if (this.#armedRemove === key) {
+          const [list, index] = key.split('|');
+          this.#armedRemove = null;
+          this.#model.listRemove(list, Number(index));
+        } else {
+          this.#armedRemove = key;
+        }
         this.#render();
       });
     });

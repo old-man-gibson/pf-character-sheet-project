@@ -151,6 +151,11 @@ export const SHEET_CSS = `
 .dashspell .sname { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dashspell .suses { justify-self: start; }
 .dashspell .pips.square, .dashspell .pips { margin-top: 0; }
+/* The Vancian spell list: squares hug the right, held clear of the armed ×. */
+.spelllist .spendcell { text-align: right; }
+.spelllist .spendcell .pips.square { margin-left: auto; margin-top: 0; }
+.spelllist td.tools { padding-left: 16px; }
+.spelllist .tools button.armed { font-size: 0.68rem; padding: 2px 6px; }
 /* A number a condition or buff has moved, shown in place of the base. */
 .adj { color: var(--cs-bad); }
 .adj.up { color: var(--cs-good); }

@@ -5871,12 +5871,13 @@ export class Character {
     // buff is off); a value that should switch with something says so itself,
     // with if(…), exactly as the dials do.
     (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
-    // A maneuver's overview note is prose too.
+    // A maneuver's overview note is prose too, and so is a prepared spell's.
     (d.maneuvers?.disciplines || []).forEach((disc, di) => {
       for (const [name, text] of Object.entries(disc.notes || {})) {
         push(`maneuverNote:${di}:${name}`, text);
       }
     });
+    (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
     (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
     (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
     // Everything a player writes on a training side reads {…}: the talent
