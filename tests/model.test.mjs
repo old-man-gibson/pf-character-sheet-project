@@ -2600,6 +2600,21 @@ console.log('buff extra bonuses -- targets past the six dials');
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
   check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);
+
+  // Wraps of suppressed size: the item's own example. Kinetic form (Large)
+  // plus enlarge person written as stacking: the wearer becomes Large in
+  // fact, but is Huge for attack, AC, CMB, CMD and weapon dice -- which is
+  // exactly the sheet's true-size bundle, so both steps land there.
+  c.data.buffs = [
+    { name: 'Kinetic Form', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'size', value: 1 }] },
+    { name: 'Enlarge Person (wraps)', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [{ target: 'sizeStacking', value: 1 }] },
+  ];
+  c.recompute();
+  cs = c.conditionState;
+  check('with the wraps, the stacking row sums with the largest true one',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+  check('and the cap still holds a stack of them',
+    (() => { c.data.buffs[1].bonuses[0].value = 9; c.recompute(); return c.conditionState.sizeSteps; })(), 4);
   c.recompute();
 
   // Speed is flat feet, applied before a condition's halving.

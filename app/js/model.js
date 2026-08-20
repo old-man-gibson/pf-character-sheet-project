@@ -8256,10 +8256,11 @@ export class Character {
     // (recomputeBuffs) are mods, so every "now" figure moves without a second
     // pipeline. They have no ladder group, so nothing supersedes them.
     const buffsOn = [];
-    // Size rows come in two bonus types: within each, only the largest
-    // increase (and the deepest reduction) counts, but a true and an
-    // effective increase stack with each other.
-    const sizeRows = { size: { up: 0, down: 0 }, sizeEffective: { up: 0, down: 0 } };
+    // Size rows come in types: within true and effective, only the largest
+    // increase (and the deepest reduction) counts, and the two stack with
+    // each other; the stacking kind (wraps of suppressed size and its ilk)
+    // sums outright and rides the true bundle.
+    const sizeRows = { size: { up: 0, down: 0 }, sizeEffective: { up: 0, down: 0 }, stacking: 0 };
     for (const b of c.buffs || []) {
       if (!b?.on) continue;
       const bmods = {};
@@ -8282,7 +8283,8 @@ export class Character {
           const slot = sizeRows[t];
           if (v > 0) slot.up = Math.max(slot.up, v);
           else slot.down = Math.min(slot.down, v);
-        } else if (t === 'speed') add('speedFt', v);
+        } else if (t === 'sizeStacking') sizeRows.stacking += v;
+        else if (t === 'speed') add('speedFt', v);
         else if (t) add(t, v);
       }
       const label = String(b.name || '').trim() || 'Buff';
@@ -8307,7 +8309,7 @@ export class Character {
     let baseIdx = ladder.indexOf(c.identity?.size);
     if (baseIdx < 0) baseIdx = ladder.indexOf('Medium');
     const clampSteps = (from, want) => Math.max(-from, Math.min(ladder.length - 1 - from, want));
-    const trueSteps = clampSteps(baseIdx, sizeRows.size.up + sizeRows.size.down);
+    const trueSteps = clampSteps(baseIdx, sizeRows.size.up + sizeRows.size.down + sizeRows.stacking);
     const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
     const sizeSteps = trueSteps + effSteps;
     if (trueSteps) {

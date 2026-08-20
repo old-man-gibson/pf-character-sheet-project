@@ -2219,14 +2219,17 @@ export const BUFF_TARGETS = [
   ['str', 'Strength'], ['dex', 'Dexterity'], ['con', 'Constitution'],
   ['int', 'Intelligence'], ['wis', 'Wisdom'], ['cha', 'Charisma'],
   ['essence', 'Essence pool'],
-  // Two bonus types, per the rules: within each only the largest increase
-  // counts, but a true and an effective increase stack with each other. True
-  // changes the size (attack, AC, CMB, CMD and the damage dice); effective is
-  // "treated as larger", which reaches the damage dice alone. The result caps
-  // at Colossal either way. TODO: a campaign setting for tables that allow
-  // colossal+ sizes.
+  // Size bonus types, per the rules: within a type only the largest increase
+  // counts, but the types stack with each other. True changes the size
+  // (attack, AC, CMB, CMD and the damage dice); effective is "treated as
+  // larger", which reaches the damage dice alone. The stacking kind is for
+  // the odd item that makes size effects stack outright -- wraps of
+  // suppressed size -- it sums with everything and carries the full true
+  // bundle. The result caps at Colossal whatever the mix. TODO: a campaign
+  // setting for tables that allow colossal+ sizes.
   ['size', 'True size (+1 = one larger)'],
   ['sizeEffective', 'Effective size (dice only)'],
+  ['sizeStacking', 'Size — stacking (wraps & such)'],
 ];
 
 const CONDITION_INDEX = new Map();
