@@ -14,7 +14,7 @@ import {
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
   setCookingTables, cookingDish, emptyDish,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
-  wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_MONTH,
+  wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient,
 } from '../app/js/model.js';
 import {
@@ -130,11 +130,42 @@ console.log('live recalculation moves the right numbers by the right amount');
   const c = new Character(load('angou'));
   const bab0 = c.data.attack.bab;
   const melee0 = c.data.attack.totalMelee;
-  c.set('attack.bab', bab0 + 1);
+  // BAB comes off the class table now, so the field that moves it is the override.
+  c.set('attack.babOverride', bab0 + 1);
   check('BAB +1 raises melee attack by 1', c.data.attack.totalMelee, melee0 + 1);
   check('iteratives regenerate', c.data.attack.iterative, '+21/+16/+11/+6/+1');
-  c.set('attack.bab', bab0);
+  c.set('attack.babOverride', null);
   check('iteratives restore', c.data.attack.iterative, '+20/+15/+10/+5');
+  check('and the base is back to the classes\' own', c.data.attack.bab, bab0);
+}
+
+console.log('base attack bonus -- the class table, gestalt-style');
+{
+  // Each level takes the best progression among the classes present at it, and
+  // the sum is floored once. Every source workbook agrees with that to the
+  // point, so an import needs no override to reproduce its own BAB.
+  for (const [id, bab] of [['angou', 20], ['bryva', 16], ['narockro', 10], ['nico', 11], ['saburo', 9]]) {
+    const c = new Character(load(id));
+    check(`${id}: computed, not pinned`, [c.data.attack.babBase, c.data.attack.babOverride, c.data.attack.bab],
+      [bab, null, bab]);
+  }
+  const n = new Character(load('nico'));
+  check('two 3/4 classes over 15 levels is 11.25, floored once', n.data.gestalt.babPerLevel, 11.25);
+  const r = new Character(load('narockro'));
+  check('a full class on 10 of 11 levels, 3/4 on the eleventh', r.data.gestalt.babPerLevel, 10.75);
+
+  // A class row's own progression is a field, and the total follows it.
+  const c = new Character(load('saburo'));
+  c.setItem('classes', 0, 'bab', 0.5);
+  check('dropping the Samurai to a half progression', c.data.attack.bab, 8);
+  c.setItem('classes', 0, 'bab', 1);
+  check('and back', c.data.attack.bab, 9);
+
+  // A sheet the class table cannot explain keeps the number it came with.
+  const odd = new Character({ ...load('saburo'), classes: [], attack: { ...load('saburo').attack, bab: 7 } });
+  check('an unexplained BAB is pinned as an override', [odd.data.attack.babBase, odd.data.attack.babOverride, odd.data.attack.bab], [0, 7, 7]);
+  const again = new Character(JSON.parse(JSON.stringify(odd.toJSON())));
+  check('and stays pinned across a save', again.data.attack.bab, 7);
 }
 
 console.log('carry capacity follows Strength');
@@ -779,6 +810,80 @@ console.log('sphere skill ranks feed the skills table');
   c.setItem('training.combat.skillRanks', i, 'enabled', true);
 }
 
+console.log('sphere skill ranks -- each row asks for a sphere or a named talent');
+{
+  // "(Base)" wants the sphere; a package or a named talent wants that talent
+  // by name; and a sphere whose talents were granted without names cannot be
+  // decided either way, so the player's own tick is what settles it.
+  const c = new Character(load('saburo'));
+  const at = (k) => c.trainingSkillRanks.find((r) => r.skill === k);
+  check('Fencing (Base) is met by having the sphere', [at('Bluff').state, at('Bluff').requirement],
+    ['met', 'Fencing (Base)']);
+  check('Fencing (Read Foe) is not: the sphere\'s talents are named and it is not among them',
+    at('Sense Motive').state, 'unmet');
+  check('a technique talent still unnamed leaves the tick to decide',
+    [at('Climb').state, at('Climb').enabled, at('Climb').current], ['unknown', true, 9]);
+  check('the same row with the tick off pays nothing', at('Fly').current, 0);
+  check('a sphere the character has no talent in cannot pay at all',
+    [at('Stealth').state, at('Stealth').current], ['unmet', 0]);
+
+  // An unmet row stays unmet however the switch is set: the requirement is the
+  // rule, and the switch only speaks where the sheet cannot.
+  const j = c.trainingSkillRanks.indexOf(at('Sense Motive'));
+  c.setItem('training.combat.skillRanks', j, 'enabled', true);
+  check('ticking an unmet row grants nothing', at('Sense Motive').current, 0);
+
+  // Naming the talent the row wants turns it on by itself.
+  c.data.training.combat.bonusTalents.push({ talent: 'Read Foe', sphere: 'Fencing', source: 'test' });
+  c.recompute();
+  check('naming Read Foe meets it', [at('Sense Motive').state, at('Sense Motive').current], ['met', 9]);
+
+  // Two sources are an either/or, and one of them is enough.
+  const n = new Character(load('narockro'));
+  const dip = n.trainingSkillRanks.find((r) => r.skill === 'Diplomacy');
+  check('Diplomacy takes Leadership or Warleader', dip.requirement, 'Leadership (Base) or Warleader (Base)');
+  check('and Warleader alone satisfies it', [dip.state, dip.current], ['met', 11]);
+
+  // A package name is matched inside the choices the player typed after it.
+  const b = new Character(load('bryva'));
+  b.data.training.combat.bonusTalents.push({ talent: 'Beastmastery Sphere (Ride package, +2)', sphere: 'Beastmastery', source: 'test' });
+  b.recompute();
+  const ride = b.trainingSkillRanks.find((r) => r.skill === 'Ride');
+  check('"Beastmastery Sphere (Ride package, +2)" carries the Ride package', ride.state, 'met');
+}
+
+console.log('sphere skill ranks -- a technique names most of what it grants');
+{
+  // Light Body is Athletics: (leap) or (run) at 1st, Wall Stunt at 3rd, Air
+  // Stunt at 5th, and the player's own pick every other level from 7th.
+  const c = new Character(load('saburo'));
+  const at = (k) => c.trainingSkillRanks.find((r) => r.skill === k);
+  check('the technique is Light Body at level 9, five Athletics talents',
+    [c.data.identity.primordiaTechnique, at('Swim').talents], ['Light Body', 5]);
+  check('Acrobatics takes either package, and 1st level grants one of them',
+    at('Acrobatics').state, 'met');
+  check('the others wait on the picks nobody has written down', at('Swim').state, 'unknown');
+
+  c.set('primordia.picks.7', 'Swim package');
+  check('naming one settles its own row', at('Swim').state, 'met');
+  check('and leaves the rest waiting', at('Climb').state, 'unknown');
+
+  c.set('primordia.picks.9', 'Freerunner');
+  check('with every Athletics talent named, an absent package is a plain no',
+    [at('Climb').state, at('Fly').state], ['unmet', 'unmet']);
+  check('and Acrobatics is still met, on the 1st-level grant alone', at('Acrobatics').state, 'met');
+
+  c.set('primordia.picks.1', '(run)');
+  check('the choice made explicitly reads the same', at('Acrobatics').state, 'met');
+
+  // Wall Stunt and Air Stunt are the rules', not the player's, so they count
+  // as named without anyone typing them.
+  const angou = new Character(load('angou'));
+  const ac = angou.trainingSkillRanks.find((r) => r.skill === 'Acrobatics');
+  check('Angou: ten Athletics talents, two of them named by the rules themselves',
+    [ac.talents, ac.state], [10, 'met']);
+}
+
 console.log('unarmed practitioner damage');
 {
   for (const id of IDS) {
@@ -1330,13 +1435,31 @@ console.log('trait slots');
   const t = c.data.traitSlots;
   check('trait 1 category', t.trait1.category, 'Faith');
   check('trait 3 category', t.trait3.category, 'Combat');
-  check('trait 3 text', /Talented Knuckle/.test(t.trait3.text || ''), true);
-  check('drawback 1 filled', /Umbral Unmasking/.test(t.drawback1.text || ''), true);
-  check('major drawback', /Blatant/.test(t.majorDrawback.category || t.majorDrawback.text || ''), true);
+  // "Name (effect)" is how every sheet wrote a trait; the name gets its own field.
+  check('trait 3 splits into a name and an effect', [t.trait3.name, t.trait3.text],
+    ['Talented Knuckle', '+2 effective Talents for purposes of Unarmed Combatant']);
+  check('drawback 1 filled', t.drawback1.name, 'Umbral Unmasking');
+  check('and keeps the whole effect, brackets and all',
+    /^Has a monstrous Oni-like shadow\..*invisibility\)\.$/s.test(t.drawback1.text), true);
+  check('major drawback', t.majorDrawback.name, 'Blatant');
+  check('a drawback has no category to show', t.drawback1.category, null);
   c.set('traitSlots.trait5.text', 'New trait');
   check('slots editable', c.data.traitSlots.trait5.text, 'New trait');
+  c.set('traitSlots.trait5.name', 'Fate’s Favored');
+  check('and the name is a field of its own', c.data.traitSlots.trait5.name, 'Fate’s Favored');
   c.data.traitCategories.push('Akashic');
   check('custom categories stored', c.data.traitCategories.includes('Akashic'), true);
+
+  // The other place a name hid: the drawback rows whose "category" cell was
+  // never a category, and was never shown.
+  const n = new Character(load('narockro'));
+  check('a drawback name taken out of the category cell', n.data.traitSlots.drawback1.name, 'Pride');
+  check('with its effect left where it was',
+    /^When someone threatens/.test(n.data.traitSlots.drawback1.text), true);
+  check('a name that is only bracketed keeps its brackets',
+    n.data.traitSlots.majorDrawback.name, 'Spell Vulnerability (Divination)');
+  const nb = new Character(JSON.parse(JSON.stringify(n.toJSON())));
+  check('and the split does not run twice', nb.data.traitSlots.drawback1, n.data.traitSlots.drawback1);
 }
 
 console.log('granted feats -- each row names what handed it over');
@@ -2175,7 +2298,8 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
   // Session mana and the month roll over.
   c.set('wealth.sessionMana', 301);
   check('half the session mana is owed, rounded down', c.wealthView(today).expected.oath, 1425 + 150);
-  check('a whole month adds 30 for casting', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_MONTH);
+  check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [4, 9]);
+  check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 4);
   check('and the day before it does not', c.wealthView(new Date(2026, 8, 1)).expected.casting, 0);
   c.set('wealth.sessionMana', 0);
   // The switches.

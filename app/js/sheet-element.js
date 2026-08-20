@@ -45,7 +45,7 @@ import {
   DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_MONTH, optionCatalogues,
+  MATERIAL_CASTING_PER_LEVEL, optionCatalogues,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -68,7 +68,7 @@ import {
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
-  ATTACK_MODES, ATTACK_MODE_LABELS, attackModeTotal,
+  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, attackModeTotal,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -223,6 +223,9 @@ function loadSharedTables() {
 }
 
 const val = (v) => (v === null || v === undefined || v === '' ? '—' : esc(v));
+
+/** The base attack progressions a class can run, as the rules name them. */
+const BAB_RATES = [[1, 'full'], [0.75, '&frac34;'], [0.5, '&frac12;'], [0, 'none']];
 
 /**
  * The frame colours a card wears: frame, its darker edge, and the card-stock
@@ -1188,9 +1191,10 @@ export class CharacterSheetElement extends HTMLElement {
 
   /**
    * The Overview, top to bottom: who the character is, the numbers a table
-   * asks for, then what defends them and what they attack with -- each of
-   * those a supergroup of the panels that belong together -- and last the
-   * things that change less often: classes, conditions, traits.
+   * asks for, the classes those numbers come out of, then what defends them
+   * and what they attack with -- each of those a supergroup of the panels that
+   * belong together -- and last the things that change less often: conditions,
+   * the wallet, traits.
    */
   #overviewPanel() {
     const c = this.#model.data;
@@ -1238,6 +1242,8 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#languagesPanel()}
       </div>
 
+      ${this.#classesPanel()}
+
       <div class="supergroup span2" aria-label="Defenses">
         <div class="supergroup-title">Defenses</div>
         <div class="supergroup-body">
@@ -1249,11 +1255,9 @@ export class CharacterSheetElement extends HTMLElement {
 
       <div class="supergroup span2" aria-label="Offenses">
         <div class="supergroup-title">Offenses</div>
-        <div class="supergroup-body">
-          <div class="offense-pair">
-            ${this.#attackPanel()}
-            ${this.#speedPanel()}
-          </div>
+        <div class="supergroup-body offenses">
+          ${this.#attackPanel()}
+          ${this.#speedPanel()}
           ${this.#proficienciesPanel()}
         </div>
       </div>
@@ -1263,7 +1267,6 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#carryPanel()}
       </div>
       ${this.#collapsible('wealth', this.#wealthPanel())}
-      ${this.#classesPanel()}
       ${this.#traitsPanel()}
     </div>`;
   }
@@ -1372,6 +1375,13 @@ export class CharacterSheetElement extends HTMLElement {
    * One slot per point of Int bonus and one per Linguistics rank are the
    * rules; anything else that grants some is a number or a formula in Extra,
    * so a "+1 per two levels" stays true as the character levels.
+   *
+   * The list is edited once and read constantly, so folded down the panel is
+   * the thing that gets read: every language the character speaks on one line,
+   * in a box, ready to be copied into a post. Opened it is the fields again,
+   * and the order is the player's -- a chip can be dragged past its
+   * neighbours by the grip, which is what keeps the trade tongues at the front
+   * and the dead ones at the back.
    */
   #languagesPanel() {
     const c = this.#model.data;
@@ -1379,10 +1389,26 @@ export class CharacterSheetElement extends HTMLElement {
     const slots = i.languageSlots || { int: 0, linguistics: 0, extra: 0, total: 0, known: 0 };
     const langs = i.languages || [];
     const spare = slots.total - slots.known;
-    return `<section class="panel">
-      <h3>Languages
+    const shut = !!c.uiPrefs?.collapsed?.languages;
+    const spoken = [...String(i.nativeLanguages || '').split(/[,;]/), ...langs]
+      .map((s) => String(s).trim()).filter(Boolean);
+    const head = `<h3>Languages
         <span class="badge${spare < 0 ? ' err' : ''}" title="Known, against the slots Int, Linguistics and Extra grant">${slots.known} / ${slots.total}</span>
-      </h3>
+        <button class="disclose" data-collapse="languages" aria-expanded="${!shut}"
+          title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
+      </h3>`;
+    if (shut) {
+      return `<section class="panel collapsed">
+        ${head}
+        <div class="langcopy">
+          <input class="ro" data-post="languages" readonly value="${esc(spoken.join(', '))}"
+            placeholder="No languages yet." aria-label="Every language spoken">
+          <button data-copy="languages" title="Copy the whole list">Copy</button>
+        </div>
+      </section>`;
+    }
+    return `<section class="panel">
+      ${head}
       <div class="fieldgrid">
         ${this.#field('Native', this.#text('identity.nativeLanguages', i.nativeLanguages, 'Common'))}
         ${this.#field('From Int', `<span class="value" title="One per point of Intelligence bonus">${slots.int}</span>`)}
@@ -1394,8 +1420,9 @@ export class CharacterSheetElement extends HTMLElement {
           title: 'A number, or a formula — e.g. floor(level / 2)',
         }))}
       </div>
-      <div class="langlist">
-        ${langs.map((l, li) => `<span class="lang">
+      <div class="langlist" data-langlist>
+        ${langs.map((l, li) => `<span class="lang" data-langdrop="${li}">
+          <span class="grip" data-langgrip title="Drag to reorder">&#10495;</span>
           ${this.#itemText('identity.languages', li, 'self', l, 'Language')}
           <button class="danger tiny" data-remove="identity.languages|${li}" aria-label="Remove">×</button>
         </span>`).join('')}
@@ -1542,18 +1569,44 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#lineHtml('CMB', `${fmt(c.attack.totalCmb)}${now('cmb')}${
         this.#rollButton('mode', 'cmb', 'a combat maneuver', cs)}`, true)}
       ${this.#line('Iteratives', c.attack.iterative)}
-      ${this.#editLine('Base attack bonus', 'attack.bab', c.attack.bab)}
+      ${(() => {
+    // BAB comes off the class table now, gestalt-style, so the field is a
+    // read-out with an override behind it -- the same arrangement as a class's
+    // Levels, and for the same reason.
+    const base = Number(c.attack.babBase) || 0;
+    const over = c.attack.babOverride == null ? null : Number(c.attack.babOverride);
+    const why = over == null
+      ? `From the Classes table: the best BAB progression among the classes on each level, summed and floored. Type a number to override it.`
+      : `Pinned at ${over}. The Classes table comes to ${base}; clear the box to go back to that.`;
+    return this.#lineHtml('Base attack bonus', `<input type="number"
+      class="autonum${over == null ? ' auto' : ''}" value="${over ?? ''}" placeholder="${base}"
+      data-set="attack.babOverride" data-kind="number-or-null" style="width:4.2rem"
+      title="${esc(why)}" aria-label="Base attack bonus">`);
+  })()}
       ${this.#editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
       ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from conditions.</p>` : ''}
-      <div class="tablewrap" style="margin-top:8px"><table>
+      <div class="tablewrap" style="margin-top:8px"><table class="attackmodes">
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
           <th>Ability</th><th>2nd ability</th></tr></thead>
         <tbody>${ATTACK_MODES.map((k) => {
+          const alt = ALT_ATTACK_OF[k];
+          const shut = !!this.#model.data.uiPrefs?.collapsed?.[`atk:${alt || k}`];
+          // An alternate is folded into the attack it is an alternate of: the
+          // caret is on that row and says what is under it, so a sheet with
+          // nothing but a finesse swap does not carry six rows to say three.
+          if (alt && shut) return '';
           const total = attackModeTotal(c, k) ?? 0;
           const delta = cs.changed && cs.delta[k] ? cs.delta[k] : 0;
+          const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
+          const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
+          const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
+          const caret = altOf ? `<button class="disclose" data-collapse="atk:${k}"
+            aria-expanded="${!shut}" title="${esc(shut
+    ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
+    : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
           return `
-          <tr><td>${ATTACK_MODE_LABELS[k]}</td>
+          <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
             <td class="num total"><span class="rollpair">${fmt(total)}${
               delta ? `<span class="now" title="With conditions applied">now ${fmt(total + delta)}</span>` : ''
 }${this.#rollButton('mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
@@ -1562,9 +1615,12 @@ export class CharacterSheetElement extends HTMLElement {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <p class="hint">An <strong>alternate</strong> is the same attack with a different
+      <p class="hint">Base attack bonus is the Classes table's, gestalt-style: the best
+        progression among the classes present at each level, summed and floored once.
+        An <strong>alternate</strong> is the same attack with a different
         ability in the slot — Dex for a finessed blade, Wis for a monk's fist — so it
-        carries the same BAB, misc and size, and the same import reconciliation.</p>
+        carries the same BAB, misc and size, and the same import reconciliation. Each one
+        folds into the attack it belongs to; the caret says what is under it.</p>
     </section>`;
   }
 
@@ -1600,7 +1656,7 @@ export class CharacterSheetElement extends HTMLElement {
           })}</td>
           <td class="num total">${Number(sp.final) || 0} ft.${
             slowed ? `<span class="now" title="With conditions applied">now ${adj.adjusted} ft.</span>` : ''}</td>
-          ${this.#rowTools('identity.speeds', i)}
+          <td class="tools quiet">${this.#rowRemoveButton('identity.speeds', i, `Remove ${sp.type || 'this movement'}`)}</td>
         </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -1628,13 +1684,19 @@ export class CharacterSheetElement extends HTMLElement {
     const row = (label, body, hint = '') => `<div class="profrow">
       <span class="tlabel"${hint ? ` title="${esc(hint)}"` : ''}>${esc(label)}</span>${body}</div>`;
     const weapons = p.weapons || [];
+    const named = weapons.filter((w) => String(w).trim());
+    // The named weapons are a list a race or a class hands over once and then
+    // nobody edits again, and it is the longest thing in the panel. Folded
+    // away it is a sentence; opened it is the fields it was.
+    const wkey = 'prof-weapons';
+    const wshut = !!this.#model.data.uiPrefs?.collapsed?.[wkey];
     const summary = [
       ...(p.familiarities || []).map((f) => `${f.toLowerCase()} weapons`),
       ...(p.handedness || []).map((h) => `${h.toLowerCase()} weapons`),
       ...(p.groups || []).map((g) => `${g.toLowerCase()} group`),
-      ...weapons.filter((w) => String(w).trim()),
+      ...named,
     ];
-    return `<section class="panel span2 proficiencies">
+    return `<section class="panel proficiencies">
       <h3>Proficiencies</h3>
       <div class="profgrid">
         <div class="profcol">
@@ -1642,16 +1704,6 @@ export class CharacterSheetElement extends HTMLElement {
           ${row('Familiarities', chips('familiarities', WEAPON_FAMILIARITY, 'Weapon familiarities'), 'Simple, martial and exotic — the categories a class grants whole')}
           ${row('Handedness', chips('handedness', WEAPON_HANDEDNESS, 'Weapon handedness'), '"All light weapons", "all one-handed weapons" — as some classes and traits grant them')}
           ${row('Weapon groups', chips('groups', WEAPON_GROUPS.filter((g) => g !== 'Veil'), 'Weapon groups'), 'The fighter weapon groups')}
-          <div class="profrow">
-            <span class="tlabel" title="Weapons named one by one — a race's or a class's list">Specific weapons</span>
-            <div class="langlist proflist">
-              ${weapons.map((w, i) => `<span class="lang">
-                ${this.#itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
-                <button class="danger tiny" data-remove="identity.proficiencies.weapons|${i}" aria-label="Remove">×</button>
-              </span>`).join('')}
-              ${this.#addButton('identity.proficiencies.weapons', 'Add weapon', '')}
-            </div>
-          </div>
         </div>
         <div class="profcol">
           <h4>Armor</h4>
@@ -1661,6 +1713,28 @@ export class CharacterSheetElement extends HTMLElement {
           <label class="fld" style="margin-top:8px"><span>Notes
             <span class="hint">— anything the lists cannot say</span></span>
             ${this.#area('identity.proficiencies.notes', p.notes, 2)}</label>
+        </div>
+      </div>
+      <!-- The named weapons take the whole panel rather than half of it: a
+           race's list runs to a dozen, and a dozen chips in a half-width
+           column is a dozen rows. -->
+      <div class="profrow profwide">
+        <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
+          <button class="disclose" data-collapse="${wkey}" aria-expanded="${!wshut}"
+            title="${wshut ? 'Expand' : 'Collapse'}">${wshut ? '▸' : '▾'}</button>
+          Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
+        </span>
+        <div class="profweaponbody">
+          ${wshut
+    ? `<span class="profnamed" title="Click the caret to edit them">${named.length
+      ? esc(named.join(', ')) : 'none named'}</span>`
+    : `<div class="langlist proflist">
+            ${weapons.map((w, i) => `<span class="lang">
+              ${this.#itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
+              <button class="danger tiny" data-remove="identity.proficiencies.weapons|${i}" aria-label="Remove">×</button>
+            </span>`).join('')}
+            ${this.#addButton('identity.proficiencies.weapons', 'Add weapon', '')}
+          </div>`}
         </div>
       </div>
       <p class="hint">${summary.length
@@ -1690,29 +1764,65 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- classes (gestalt) ---------------- */
 
+  /**
+   * The class table, and the levels each class actually runs for.
+   *
+   * Levels is a read-out before it is a field: the number is how often the
+   * Planner features that class at or below the character's own level, which
+   * is what every other tab means by "class level". Left alone it stays that
+   * count and moves when the Planner does; a number typed in pins it instead,
+   * and clearing the box hands it back.
+   *
+   * The gestalt summary under the table is for a character running more than
+   * one class track. On a single track there is no best-of to take, so the
+   * same three numbers are said without the gestalt language.
+   */
   #classesPanel() {
     const c = this.#model.data;
     const g = c.gestalt || { saves: {} };
     const sv = (k) => g.saves?.[k] || {};
+    const level = Number(c.identity.level) || 0;
+    const gestalt = (c.progression?.tracks ?? 1) > 1;
     return `<section class="panel span2">
       <h3>Classes</h3>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="classes">
+        <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
+          <col class="save"><col class="save"><col class="save">
+          <col class="ranks"><col class="arch"><col class="tools"></colgroup>
         <thead><tr>
           <th>Class</th>
-          <th class="num" title="Counted from the Planner up to the current level; type a number to override">Levels</th>
+          <th class="num" title="How many of the character's levels feature this class in the Planner; type a number to override">Levels</th>
           <th class="num">HD</th>
-          <th title="Good Fortitude">Fort</th><th title="Good Reflex">Ref</th><th title="Good Will">Will</th>
+          <th title="Base attack progression — the best one on each level is what the character's BAB is built from">BAB</th>
+          <th class="mid" title="Good Fortitude">Fort</th><th class="mid" title="Good Reflex">Ref</th><th class="mid" title="Good Will">Will</th>
           <th class="num" title="Skill ranks per level">Ranks</th>
           <th>Archetypes</th><th></th>
         </tr></thead>
-        <tbody>${c.classes.map((x, i) => `<tr>
+        <tbody>${c.classes.map((x, i) => {
+          const auto = Number(x.gestaltLevels) || 0;
+          const over = x.levelsOverride == null ? null : Number(x.levelsOverride);
+          const why = over == null
+            ? `Featured on ${auto} of ${level} level${level === 1 ? '' : 's'} in the Planner. Type a number to override it.`
+            : `Pinned at ${over}. The Planner features it on ${auto} of ${level}; clear the box to go back to that.`;
+          return `<tr>
           <td>${this.#itemText('classes', i, 'name', x.name)}</td>
-          <td class="num"><span class="pair">
-            <input type="number" value="${x.levelsOverride ?? ''}" placeholder="${x.gestaltLevels ?? 0}"
-              data-item="classes|${i}|levelsOverride" data-kind="number-or-null" style="width:3.4rem"
-              title="Auto: ${x.gestaltLevels ?? 0} from the Planner. Enter a number to override.">
-          </span></td>
+          <td class="num"><input type="number" class="autonum${over == null ? ' auto' : ''}"
+            value="${over ?? ''}" placeholder="${auto}" title="${esc(why)}"
+            data-item="classes|${i}|levelsOverride" data-kind="number-or-null"
+            aria-label="Levels of ${esc(x.name || 'this class')}"></td>
           <td class="num">d${val(x.hd)}</td>
+          <td>${(() => {
+    // The progression, not a bonus: what the class adds to BAB per level.
+    // Kept as the fraction the rules state it in, because that is what the
+    // gestalt sum adds up and floors.
+    const rate = Number(x.bab) || 0;
+    const known = BAB_RATES.some(([v]) => v === rate);
+    const opts = known ? BAB_RATES : [...BAB_RATES, [rate, String(rate)]];
+    return `<select data-item="classes|${i}|bab" data-kind="number"
+      aria-label="BAB progression for ${esc(x.name || 'this class')}">
+      ${opts.map(([v, label]) => `<option value="${v}"${v === rate ? ' selected' : ''}>${label}</option>`).join('')}
+    </select>`;
+  })()}</td>
           <td class="mid">${this.#itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
           <td class="mid">${this.#itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
           <td class="mid">${this.#itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
@@ -1722,24 +1832,26 @@ export class CharacterSheetElement extends HTMLElement {
               ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
             </span>`).join('')}</span>` : ''}${this.#itemText('classes', i, 'archetypes', x.archetypes)}</td>
           ${this.#rowTools('classes', i)}
-        </tr>`).join('')}</tbody>
+        </tr>`;
+        }).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${this.#addButton('classes', 'Add class', {
         name: 'New class', hd: 8, bab: 0.75, goodFort: false, goodRef: false,
         goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null,
       })}</div>
       <div class="fieldgrid" style="margin-top:8px">
-        <div class="statline"><span class="label">Save bases (gestalt)</span>
-          <span class="value">Fort ${sv('fortitude').base ?? 0} ·
-            Ref ${sv('reflex').base ?? 0} · Will ${sv('will').base ?? 0}</span></div>
-        <div class="statline"><span class="label">HP / level (best HD)</span>
+        <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
+          <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;
+            Ref ${sv('reflex').base ?? 0} &middot; Will ${sv('will').base ?? 0}</span></div>
+        <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
           <span class="value">d${g.hpPerLevel || 0}</span></div>
-        <div class="statline"><span class="label">Skill ranks / level (best)</span>
+        <div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
           <span class="value">${g.ranksPerLevel || 0}</span></div>
       </div>
       <p class="hint">
-        Gestalt: each level takes the best progression among the classes present that
-        level (from the Planner). Good saves give +2 once plus ½/level; poor give ⅓/level.
+        ${gestalt ? `Gestalt: each level takes the best progression among the classes present that
+        level (from the Planner). Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`
+    : `Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`}
         These bases drive the Saves panel automatically.
       </p>
     </section>`;
@@ -1915,7 +2027,7 @@ export class CharacterSheetElement extends HTMLElement {
     const c = this.#model.data;
     const slots = c.traitSlots || {};
     const categories = [...TRAIT_CATEGORIES, ...(c.traitCategories || [])];
-    const filled = (key) => !!(slots[key]?.text || slots[key]?.category);
+    const filled = (key) => !!(slots[key]?.name || slots[key]?.text || slots[key]?.category);
 
     const standard = ['trait1', 'trait2', 'trait3'];
     const picked = standard.filter(filled).length;
@@ -1925,11 +2037,14 @@ export class CharacterSheetElement extends HTMLElement {
       const isDrawback = def.kind !== 'trait';
       // The three standard picks are owed; an empty one says so.
       const owed = standard.includes(def.key) && !filled(def.key);
+      const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
+        : owed ? 'Pick a trait' : '';
       return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="A standard trait pick, still to be chosen"' : ''}>
         <td>${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
         <td>${isDrawback ? '<span class="hint">—</span>'
           : this.#select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
-        <td>${this.#prose(`data-set="traitSlots.${def.key}.text" placeholder="${esc(locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first` : owed ? 'Pick a trait' : '')}"`, v.text, 1, 'grow')}</td>
+        <td>${this.#text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
+        <td>${this.#prose(`data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
       </tr>`;
     };
 
@@ -1941,13 +2056,15 @@ export class CharacterSheetElement extends HTMLElement {
           <h4 class="subhead">Character traits
             <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
           </h4>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Slot</th><th>Category</th><th>Trait / effect</th></tr></thead>
+          <div class="tablewrap"><table class="traits">
+            <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
+            <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
               ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
               ${(slots.additional || []).map((x, i) => `<tr>
                 <td>Additional</td>
                 <td>${this.#itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
+                <td>${this.#itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
                 <td><span class="pair" style="width:100%">
                   ${this.#prose(`data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
                   <button class="danger" data-remove="traitSlots.additional|${i}" aria-label="Remove">×</button>
@@ -1956,7 +2073,7 @@ export class CharacterSheetElement extends HTMLElement {
             </tbody>
           </table></div>
           <div style="margin-top:8px" class="pair">
-            ${this.#addButton('traitSlots.additional', 'Add additional trait', { category: null, text: '' })}
+            ${this.#addButton('traitSlots.additional', 'Add additional trait', { category: null, name: '', text: '' })}
             <input data-draft="traitCategory" placeholder="New category (e.g. Akashic)"
               value="${esc(this.#draft.traitCategory || '')}" style="max-width:14rem">
             <button data-action="add-trait-category">Add category</button>
@@ -3268,23 +3385,63 @@ export class CharacterSheetElement extends HTMLElement {
     </section>`;
   }
 
+  /**
+   * Bonus skill ranks, for the skills that have any coming.
+   *
+   * The block is seventeen rows of which a character has two or three: the
+   * rest ask for a sphere they have no talent in, or for a package they did
+   * not take, and a row that can only ever read zero is not information. What
+   * is left is the rows their talents can reach -- shown whether or not the
+   * switch is on, because the switch is the point of them -- and a character
+   * with none of those is told so in a sentence instead of in a table of
+   * noughts.
+   *
+   * **From** is what the row wants. Where the sheet can see the talent it says
+   * so and the row is automatic; where the sphere still holds talents nobody
+   * has written down -- a Primordia technique's picks from 7th level, most
+   * often -- the row is marked and the switch decides, because a talent this
+   * sheet cannot see is not a talent the character does not have. Naming them
+   * on the Primordia tab settles those rows one way or the other.
+   */
   #sphereSkillPanel() {
-    const rows = this.#model.trainingSkillRanks || [];
     const list = 'training.combat.skillRanks';
+    // The index is the row's place in the stored list, which the filter must
+    // not renumber: it is what every field on the row binds to.
+    const rows = (this.#model.trainingSkillRanks || [])
+      .map((r, i) => ({ ...r, i }))
+      .filter((r) => r.state !== 'unmet' || r.current > 0);
+    if (!rows.length) {
+      return `<section class="panel">
+        <h3>Bonus skill ranks from spheres</h3>
+        <p class="empty">This character has no talents that grant bonus ranks.</p>
+      </section>`;
+    }
+    const anyUnsure = rows.some((r) => r.state === 'unknown');
     return `<section class="panel">
       <h3>Bonus skill ranks from spheres</h3>
-      <div class="tablewrap"><table>
-        <thead><tr><th></th><th>Skill</th><th class="num">Talents</th><th class="num">Ranks</th></tr></thead>
-        <tbody>${rows.map((r, i) => `<tr class="${r.current ? 'trained' : 'untrained'}">
-          <td class="mid">${this.#itemCheck(list, i, 'enabled', r.enabled)}</td>
-          <td>${esc(r.skill)}</td>
+      <div class="tablewrap"><table class="sphereranks">
+        <thead><tr><th></th><th>Skill</th>
+          <th class="num">Talents</th><th class="num">Ranks</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr class="${r.current ? 'trained' : 'untrained'}">
+          <td class="mid">${this.#itemCheck(list, r.i, 'enabled', r.enabled)}</td>
+          <td>${esc(r.skill)}
+            <div class="req${r.state === 'unknown' ? ' unsure' : ''}"
+              title="${esc(r.state === 'met'
+    ? `${r.requirement} — found on this character.`
+    : `${r.requirement} — the sphere is here, but it still holds talents nobody has named. Write them in on the Primordia tab and this row answers itself; until then the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
           <td class="num">${r.talents || ''}</td>
           <td class="num total">${r.current || ''}</td>
         </tr>`).join('')}</tbody>
       </table></div>
       <p class="hint">
         5 ranks per talent in the associated sphere, capped at level; these flow
-        into the Spheres column of the Skills tab automatically.
+        into the Spheres column of the Skills tab automatically. A row appears
+        only when what it asks for — the sphere for a <em>Base</em> row, the named
+        package or talent otherwise — is on the character.
+        ${anyUnsure ? 'A <span class="req unsure">dotted</span> requirement is one the sheet cannot yet confirm: '
+    + 'the sphere is there and still holds talents nobody has written down — a technique\'s picks from 7th '
+    + 'level, usually. Name them on the <strong>Primordia</strong> tab and the row answers itself; '
+    + 'until then the tick is yours to make.' : ''}
       </p>
     </section>`;
   }
@@ -3559,7 +3716,11 @@ export class CharacterSheetElement extends HTMLElement {
     const c = this.#model.data;
     const g = c.grantedFeats || { others: [] };
     const major = c.traitSlots?.majorDrawback || {};
-    const hasMajor = !!(major.category || major.text);
+    const hasMajor = !!(major.name || major.category || major.text);
+    // What bought the feat is the drawback's NAME -- "Spell Vulnerability
+    // (Divination)" -- not what it does to you. Before traits had a name field
+    // the effect was all there was to show, and it read as the source.
+    const majorName = String(major.name || major.category || major.text || '').trim();
 
     const fixed = (key, label, hint) => `<tr>
       <td><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
@@ -3572,7 +3733,7 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="tablewrap"><table>
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
-          ${hasMajor ? fixed('drawback', 'Drawback', esc(String(major.category || major.text).slice(0, 60))) : ''}
+          ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
           ${(g.others || []).map((f, i) => `<tr>
             <td>${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
@@ -6783,7 +6944,13 @@ export class CharacterSheetElement extends HTMLElement {
             <th class="num">Lvl</th>
             ${tracks.map((t) => `<th><span class="pair">Track ${t + 1}
               ${p.tracks > 1 ? `<button class="danger" data-action="remove-track" data-track="${t}"
-                title="Delete this track">×</button>` : ''}</span></th>`).join('')}
+                title="Delete this track">×</button>` : ''}</span>
+              <select class="fillcol" data-filltrack="${t}"
+                title="Put one class on every level of this track"
+                aria-label="Fill track ${t + 1} with one class">
+                <option value="" selected disabled hidden>Fill column…</option>
+                ${classNames.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+              </select></th>`).join('')}
             <th class="num" title="Best hit die among the classes that level">HP</th>
             <th class="num" title="Best skill ranks">Ranks</th>
             <th class="num">Fort</th><th class="num">Ref</th><th class="num">Will</th>
@@ -7300,6 +7467,17 @@ export class CharacterSheetElement extends HTMLElement {
    * left after it, and the ledger every reward, spend and offering is written
    * to. "Record" is the hook a session-reward automation will call; "Make
    * offering" pays what is owed and starts the count over.
+   *
+   * Most of this panel is the offering, and most characters owe no offering.
+   * What everyone has -- what is on hand, what comes in a day -- stays in the
+   * open; the four fields that only mean something under the Oath or the
+   * upkeep are grouped, and go dead when neither switch is on, so a character
+   * with neither cannot half-fill a ledger they will never pay from.
+   *
+   * The two switches say what they cost on hover rather than in the row. A
+   * formula printed beside a checkbox reads as its label, and neither of these
+   * is a label: they are the rules the Owed figure above is already showing
+   * the answer to.
    */
   #wealthPanel() {
     const v = this.#model.wealthView();
@@ -7307,6 +7485,11 @@ export class CharacterSheetElement extends HTMLElement {
     const draft = { amount: this.#draft.wealthAmount ?? '', label: this.#draft.wealthLabel ?? '', kind: this.#draft.wealthKind || 'session' };
     const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
     const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
+    // Dead rather than gone: the numbers stay readable, and the moment either
+    // switch goes on they are fields again with whatever was in them.
+    const off = v.due ? '' : ' disabled';
+    const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
+    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} a caster level every whole month — ${n(v.castingPerMonth)} a month at caster level ${v.casterLevel}.`;
     return `<section class="panel span2 wealth">
       <h3>Wealth
         <span class="badge">${esc(v.currency)}</span>
@@ -7315,23 +7498,30 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="wealthgrid">
         <div class="wealthnums">
           <div class="bigstat"><div class="k">On hand</div><div class="v">${n(v.current)}</div><div class="sub">${esc(v.currency)}</div></div>
-          <div class="bigstat"><div class="k">Owed</div><div class="v">${n(v.expected.total)}</div>
-            <div class="sub">${v.due ? [
+          ${v.due ? `<div class="bigstat"><div class="k">Owed</div><div class="v">${n(v.expected.total)}</div>
+            <div class="sub">${[
     v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
     v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
-  ].filter(Boolean).join(' · ') : 'no oath, no upkeep'}</div></div>
+  ].filter(Boolean).join(' · ')}</div></div>
           <div class="bigstat"><div class="k">After offering</div><div class="v ${v.after < 0 ? 'neg' : ''}">${n(v.after)}</div>
-            <div class="sub">${v.lastOffering ? `${v.days} day${v.days === 1 ? '' : 's'} since ${esc(v.lastOffering)}` : 'no offering recorded'}</div></div>
+            <div class="sub">${v.lastOffering ? `${v.days} day${v.days === 1 ? '' : 's'} since ${esc(v.lastOffering)}` : 'no offering recorded'}</div></div>` : ''}
         </div>
-        <div class="fieldgrid wealthfields">
-          ${this.#field('Current mana', this.#num('wealth.current', v.current))}
-          ${this.#field('Baseline after last offering', `<input type="number" value="${v.baseline === null ? '' : v.baseline}" data-set="wealth.baseline" data-kind="number-or-null" placeholder="—" title="The balance recorded after the last offering">`)}
-          ${this.#field('Mana / day', this.#num('wealth.manaPerDay', v.manaPerDay))}
-          ${this.#field('OoO / day', this.#roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
-          ${this.#field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text">`)}
-          ${this.#field('Session mana since', this.#num('wealth.sessionMana', v.sessionMana, 'min="0" title="Mana earned in sessions since the last offering; the oath takes half"'))}
-          <label class="fld"><span>Oath of Offerings</span>${this.#check('wealth.oathOfOfferings', v.oathOfOfferings, 'days × OoO/day + ⌊session mana ÷ 2⌋')}</label>
-          <label class="fld"><span>Material Casting</span>${this.#check('wealth.materialCasting', v.materialCasting, `${MATERIAL_CASTING_PER_MONTH} a month`)}</label>
+        <div class="wealthfieldcol">
+          <div class="fieldgrid wealthfields">
+            ${this.#field('Current mana', this.#num('wealth.current', v.current))}
+            ${this.#field('Mana / day', this.#num('wealth.manaPerDay', v.manaPerDay))}
+            <label class="fld"><span>Oath of Offerings</span>${this.#check('wealth.oathOfOfferings', v.oathOfOfferings, '', oathRule)}</label>
+            <label class="fld"><span>Material Casting</span>${this.#check('wealth.materialCasting', v.materialCasting, '', castingRule)}</label>
+          </div>
+          <div class="offeringfields${v.due ? '' : ' dormant'}"${v.due ? ''
+    : ' title="Only the Oath of Offerings and material casting are paid this way — tick one to fill these in."'}>
+            <div class="fieldgrid wealthfields">
+              ${this.#field('Baseline after last offering', `<input type="number" value="${v.baseline === null ? '' : v.baseline}" data-set="wealth.baseline" data-kind="number-or-null" placeholder="—" title="The balance recorded after the last offering"${off}>`)}
+              ${this.#field('OoO / day', this.#roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
+              ${this.#field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"${off}>`)}
+              ${this.#field('Session mana since', this.#num('wealth.sessionMana', v.sessionMana, `min="0" title="Mana earned in sessions since the last offering; the oath takes half"${off}`))}
+            </div>
+          </div>
         </div>
       </div>
       <div class="wealthactions">
@@ -7762,8 +7952,9 @@ export class CharacterSheetElement extends HTMLElement {
     return `<textarea data-set="${path}" data-kind="text" rows="${rows}">${esc(value ?? '')}</textarea>`;
   }
 
-  #check(path, value, label = '') {
-    return `<label class="chk"><input type="checkbox" ${value ? 'checked' : ''}
+  /** `title` is for a rule the switch obeys but should not be labelled with. */
+  #check(path, value, label = '', title = '') {
+    return `<label class="chk"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" ${value ? 'checked' : ''}
       data-set="${path}" data-kind="bool">${label ? `<span>${esc(label)}</span>` : ''}</label>`;
   }
 
@@ -8433,8 +8624,10 @@ export class CharacterSheetElement extends HTMLElement {
       d.addEventListener('toggle', () => this.#openPosts.set(d.dataset.postbox, d.open));
     });
 
-    // Generated Discord posts: hand the text to the clipboard, or select it
-    // when the browser refuses (a page served over plain http).
+    // Generated Discord posts, and the folded language list: hand the text to
+    // the clipboard, or select it when the browser refuses (a page served over
+    // plain http). The box is not always inside a <details> -- the languages
+    // are already in the open -- so opening one is only if there is one.
     root.querySelectorAll('[data-copy]').forEach((b) => {
       b.addEventListener('click', async (e) => {
         e.preventDefault();   // the button lives in a <summary>
@@ -8448,7 +8641,8 @@ export class CharacterSheetElement extends HTMLElement {
           await navigator.clipboard.writeText(box.value);
           done('Copied');
         } catch {
-          b.closest('details').open = true;
+          const holder = b.closest('details');
+          if (holder) holder.open = true;
           box.focus();
           box.select();
           done('Press Ctrl+C');
@@ -8460,6 +8654,17 @@ export class CharacterSheetElement extends HTMLElement {
       select.addEventListener('change', () => {
         const [lvl, track] = select.dataset.prog.split('|');
         this.#model.setProgressionClass(Number(lvl), Number(track), select.value || null);
+        this.#render();
+      });
+    });
+
+    // "Fill column…": one class down every level of a track. The picker is an
+    // action rather than a value, so it goes back to its prompt afterwards --
+    // which the re-render does for it.
+    root.querySelectorAll('[data-filltrack]').forEach((select) => {
+      select.addEventListener('change', () => {
+        if (!select.value) return;
+        this.#model.fillProgressionTrack(Number(select.dataset.filltrack), select.value);
         this.#render();
       });
     });
@@ -8590,6 +8795,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindTemplateDrag(root);
+    this.#bindLanguageDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -9224,6 +9430,66 @@ export class CharacterSheetElement extends HTMLElement {
    * `draggable` is switched on by the grip and off again when the drag ends, so
    * the fields inside a card stay selectable with the mouse.
    */
+  /**
+   * Dragging a language past its neighbours.
+   *
+   * The chips are a row rather than a column, so the half a chip the pointer is
+   * on decides which side of it the drop lands, and the marker is drawn on that
+   * edge. As on the Template tab the grip is the only part that starts a drag:
+   * the chip is mostly a text field, and a field that cannot be selected with
+   * the mouse is worse than a list that cannot be reordered.
+   */
+  #bindLanguageDrag(root) {
+    const list = root.querySelector('[data-langlist]');
+    if (!list) return;
+    const chips = [...list.querySelectorAll('[data-langdrop]')];
+    if (chips.length < 2) return;
+    let from = null;
+    const clear = () => chips.forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+    const after = (e, el) => {
+      const r = el.getBoundingClientRect();
+      return e.clientX > r.left + r.width / 2;
+    };
+
+    chips.forEach((chip) => {
+      const grip = chip.querySelector('[data-langgrip]');
+      if (grip) {
+        grip.addEventListener('pointerdown', () => { chip.draggable = true; });
+        grip.addEventListener('pointerup', () => { chip.draggable = false; });
+      }
+      chip.addEventListener('dragstart', (e) => {
+        from = Number(chip.dataset.langdrop);
+        chip.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag with nothing on the transfer.
+        e.dataTransfer.setData('text/plain', chip.dataset.langdrop);
+      });
+      chip.addEventListener('dragend', () => {
+        chip.draggable = false;
+        chip.classList.remove('dragging');
+        from = null;
+        clear();
+      });
+      chip.addEventListener('dragover', (e) => {
+        if (from === null || Number(chip.dataset.langdrop) === from) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clear();
+        chip.classList.add(after(e, chip) ? 'drop-after' : 'drop-before');
+      });
+      chip.addEventListener('drop', (e) => {
+        const at = Number(chip.dataset.langdrop);
+        if (from === null || at === from) return;
+        e.preventDefault();
+        const to = at + (after(e, chip) ? 1 : 0);
+        clear();
+        this.#model.listMoveTo('identity.languages', from, to);
+        from = null;
+        this.#render();
+      });
+    });
+  }
+
   #bindTemplateDrag(root) {
     const parse = (el) => (el?.dataset.tdrop || '').split('|').map(Number);
     const clear = () => root.querySelectorAll('.drop-before, .drop-after, .drop-into')

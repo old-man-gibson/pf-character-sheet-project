@@ -225,11 +225,22 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 .dishref th { vertical-align: top; text-align: left; color: var(--cs-muted); font-size: 0.74rem; padding-right: 8px; }
 
 /* ---------- wealth ---------- */
-.wealthgrid { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
+/* The wallet is a short panel wearing a long one's clothes: on hand, what
+   comes in a day, and -- for the two characters who owe one -- the offering.
+   Across the full width it was mostly rule, so it is capped and left where the
+   column starts. */
+.panel.wealth { max-width: 54rem; }
+.wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
 .wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
 .wealthnums .bigstat .v.neg { color: var(--cs-bad); }
+.wealthfieldcol { display: grid; gap: 9px; }
 .wealthfields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* The offering half, with neither switch on: still readable, no longer
+   writable, and ruled off so it is plain which half it is. */
+.offeringfields { border-top: 1px solid var(--cs-line); padding-top: 8px; }
+.offeringfields.dormant { opacity: 0.5; }
+.offeringfields.dormant input { cursor: not-allowed; }
 .wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
 .wealthactions .pair input, .wealthactions .pair select { width: auto; }
 table.ledger { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-top: 6px; }
@@ -1473,11 +1484,20 @@ input[type="color"] {
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
   align-items: start;
 }
-/* Attack and speed side by side (or stacked, narrow) above the full-width
-   proficiencies panel, so a third track never sits empty beside them. */
-.offense-pair {
-  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+/* Attack, speed and proficiencies read as one row: what you swing with, how
+   fast you get there, and what you are allowed to hold. Attack and speed are
+   short tables and were being stretched to half the band each; three tracks
+   gives them their measure and hands the spare width to the proficiency chips,
+   which are the only thing here that wants it.
+
+   Under about a thousand pixels three tracks stop fitting, and the band falls
+   back to what it was: the pair side by side with proficiencies full width. */
+.supergroup-body.offenses {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
+}
+@container (max-width: 1040px) {
+  .supergroup-body.offenses { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+  .supergroup-body.offenses > .panel.proficiencies { grid-column: 1 / -1; }
 }
 /* Two panels that read as one row: the wide one takes what is left after
    the narrow one has its measure. Details beside the ability scores, and the
@@ -1495,7 +1515,33 @@ input[type="color"] {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 
-/* Languages: a wrap of small chips, each a field and its cross. */
+/* ---------- the class table ----------
+   Fixed columns, because the two that were growing to fill are the two with
+   nothing to show: Ranks is one digit and Levels is two, while Archetypes is a
+   sentence -- so the spare width goes to the sentence and the numbers keep
+   their measure. Both numeric fields fill their column, which is what puts the
+   box under its own right-aligned heading.
+
+   The Levels box is a read-out first: when nothing is typed in it the
+   placeholder is the Planner's own count for that class, so it is drawn as the
+   value it is rather than as the ghost of one. */
+table.classes { table-layout: fixed; }
+table.classes col.cls { width: 12rem; }
+table.classes col.lvl { width: 4.4rem; }
+table.classes col.hd { width: 3.1rem; }
+table.classes col.bab { width: 4.6rem; }
+table.classes col.save { width: 3rem; }
+table.classes col.ranks { width: 4.2rem; }
+table.classes col.tools { width: 6.2rem; }
+table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
+table.classes td input[type="text"] { width: 100%; min-width: 0; }
+table.classes td.num input[type="number"] { width: 100%; text-align: right; }
+/* A field whose value is computed and whose box is the override: the number
+   showing is the placeholder, so it is drawn as the value it is. */
+input.autonum.auto::placeholder { color: var(--cs-accent); opacity: 1; font-weight: 620; }
+
+/* Languages: a wrap of small chips, each a grip, a field and its cross. The
+   drop marker is on the left or right edge, because the list runs across. */
 .langlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .lang {
   display: inline-flex; align-items: center; gap: 3px;
@@ -1503,23 +1549,63 @@ input[type="color"] {
   padding: 2px 3px 2px 4px;
 }
 .lang input[type="text"] { width: 9rem; min-width: 6rem; padding: 2px 5px; }
+.lang .grip { font-size: 0.8rem; letter-spacing: -2px; padding: 0 1px; }
+.lang.dragging { opacity: 0.4; }
+.lang.drop-before { box-shadow: -3px 0 0 0 var(--cs-accent); }
+.lang.drop-after { box-shadow: 3px 0 0 0 var(--cs-accent); }
+/* Folded: the whole list on one line, in a box that can be selected and a
+   button that saves the selecting. */
+.langcopy { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.langcopy input.ro { flex: 1; min-width: 0; }
 
 /* Proficiencies: rows of toggle chips, weapons on the left, armor and shields
-   on the right, and the specific weapons as a chip list like the languages. */
-.profgrid { display: grid; gap: 4px 20px; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
-@container (max-width: 700px) { .profgrid { grid-template-columns: 1fr; } }
+   on the right, and the specific weapons as a chip list like the languages.
+
+   The panel is its own container, so the two columns fall to one when the
+   PANEL is narrow rather than when the whole sheet is -- which is what the
+   query meant all along, and what lets this sit in a third of a row. */
+.panel.proficiencies { container-type: inline-size; }
+.profgrid { display: grid; gap: 4px 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+@container (max-width: 460px) { .profgrid { grid-template-columns: 1fr; } }
 .profcol h4 {
   margin: 6px 0 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--cs-muted); font-weight: 700;
 }
 .profcol h4 + h4 { margin-top: 10px; }
-.profrow { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; border-bottom: 1px solid var(--cs-line); }
+.profrow { display: flex; gap: 6px; align-items: flex-start; padding: 4px 0; border-bottom: 1px solid var(--cs-line); }
 .profrow:last-child { border-bottom: 0; }
-.profrow .tlabel { padding-top: 4px; flex: 0 0 6.2rem; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; }
-button.chip-toggle { padding: 2px 8px; font-size: 0.76rem; border-radius: 999px; }
+.profrow .tlabel { padding-top: 4px; flex: 0 0 5.4rem; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+button.chip-toggle { padding: 1px 7px; font-size: 0.74rem; border-radius: 999px; }
 .proflist { margin-top: 0; }
-.proflist .lang input[type="text"] { width: 8rem; }
+.proflist .lang input[type="text"] { width: 7rem; min-width: 5rem; }
+/* Specific weapons, folded: the caret keeps its place at the head of the body
+   column so the labels down the left still line up. */
+/* The named weapons take the panel's whole width, and their label sits above
+   them rather than beside them -- a column of label plus a column of chips is
+   two narrow columns, and the chips are the part that needs the room. */
+.profrow.profwide {
+  display: block; border-top: 1px solid var(--cs-line); border-bottom: 0;
+  margin-top: 4px; padding-top: 7px;
+}
+.profrow.profwide .tlabel {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  padding-top: 0; margin-bottom: 5px;
+}
+.profrow.profwide .profweaponbody { display: block; }
+.profweaponbody { display: flex; gap: 4px; align-items: flex-start; min-width: 0; flex: 1; }
+.profweaponbody .disclose { padding-top: 3px; }
+.profweaponbody .langlist { flex: 1; min-width: 0; }
+/* Opened, the named weapons are a grid rather than a ragged wrap: a race's
+   dozen reads as a list that way, and as a staircase the other. */
+.profweaponbody .proflist {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 5px; align-items: start;
+}
+.profweaponbody .proflist .lang { min-width: 0; }
+.profweaponbody .proflist .lang input[type="text"] { width: 100%; min-width: 0; }
+.profweaponbody .proflist > button { grid-column: 1 / -1; justify-self: start; }
+.profnamed { padding-top: 4px; font-size: 0.78rem; color: var(--cs-text); }
 .weaponhead .badge.nonprof { white-space: nowrap; }
 table.perks td:first-child { width: 100%; }
 label.fld .xf { width: 100%; }
@@ -1542,16 +1628,49 @@ table.saves td, table.defense td { white-space: nowrap; }
 .statline .value.pair select { min-width: 4.6rem; }
 .statline .value.pair .hint { margin: 0 2px; }
 
-/* Speed: base is a real field, bonus a formula field, and Final is the model's. */
+/* Speed: base is a real field, bonus a formula field, and Final is the model's.
+   The four movement types are a fixed list that nobody reorders, so the row
+   keeps only its cross -- and that only while the pointer is on the row, which
+   is what gives the table back the width it was scrolling for. */
 table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
+td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
+td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
+tr:hover > td.tools.quiet button,
+td.tools.quiet button:focus-visible { opacity: 1; }
 
-/* ---------- conditions ---------- */
+/* Bonus skill ranks: what each row asks for, beside the row. A requirement the
+   sheet could confirm is stated plainly; one it could not is underlined the way
+   an unresolved thing is elsewhere, and the tick is the player's answer. */
+table.sphereranks .req { color: var(--cs-muted); font-size: 0.7rem; line-height: 1.25; }
+table.sphereranks td { vertical-align: top; }
+table.sphereranks .req.unsure,
+.hint .req.unsure {
+  color: var(--cs-edit); text-decoration: underline dotted currentColor;
+  text-underline-offset: 2px;
+}
+
+/* The progression header's "Fill column…": an action wearing a picker's
+   clothes, so it is quiet until wanted and never looks like a value. */
+select.fillcol {
+  display: block; width: 100%; margin-top: 3px; font-size: 0.7rem;
+  padding: 2px 3px; color: var(--cs-muted); text-transform: none; letter-spacing: 0;
+}
+select.fillcol:hover, select.fillcol:focus { color: var(--cs-text); }
+
+/* ---------- conditions ----------
+   Three to a row, which is what the standard eighteen want: six rows of three
+   is the whole list in one look, where an auto-filled grid put four or five to
+   a row and ran the effects together. The panel is its own container so the
+   count falls with the panel rather than with the window. */
+.panel.conditions { container-type: inline-size; }
 .panel.conditions .condgrid {
   display: grid; gap: 6px;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+@container (max-width: 560px) { .panel.conditions .condgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 400px) { .panel.conditions .condgrid { grid-template-columns: minmax(0, 1fr); } }
 label.cond {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center;
   column-gap: 7px; row-gap: 0;
@@ -1597,6 +1716,15 @@ h4.subhead {
   letter-spacing: 0.08em; color: var(--cs-muted); font-weight: 650;
 }
 h4.subhead .hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* Four columns, three of them known quantities: the slot is a fixed label, the
+   category comes off a list, and a trait's name is a few words. Only the
+   effect is prose, so only the effect grows. */
+table.traits { table-layout: fixed; }
+table.traits col.slot { width: 7.4rem; }
+table.traits col.cat { width: 8.6rem; }
+table.traits col.tname { width: 12.5rem; }
+table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
+table.traits td { vertical-align: top; }
 table.racetraits td:first-child { width: 11rem; }
 table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }

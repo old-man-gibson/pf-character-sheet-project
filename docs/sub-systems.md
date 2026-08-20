@@ -87,12 +87,62 @@ sheets contain `#ERROR!`s and internally inconsistent caches), the app shows a r
 **Sphere BAB/CL/DC tables** per sphere with rank/DC bonus fields — Alchemy keys off
 Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
 
-**Bonus skill ranks**: 5 ranks per talent in an associated sphere (Athletics →
-Acrobatics/Climb/Fly/Swim, Tech → Craft (mechanical), Fencing → Bluff/Sense Motive,
-Gladiator → Intimidate, Scout → Perception/Stealth, Scoundrel → Sleight of Hand,
-Beastmastery → Handle Animal/Ride, Leadership/Warleader → Diplomacy, …), capped at
-level, toggleable per row, flowing straight into the Skills tab's Spheres column.
-Light Body sets the Athletics-linked skills to full level, as the sheet does.
+**Bonus skill ranks**: 5 ranks per talent in the associated sphere, capped at level,
+toggleable per row, flowing straight into the Skills tab's Spheres column. Light Body
+sets the Athletics-linked skills to full level, as the sheet does.
+
+Each row says what it wants, and only pays out when the character has it — the sphere
+itself for a *Base* row, the named package or talent for the rest:
+
+| Skill | Sphere or talent |
+|---|---|
+| Acrobatics | Athletics (Leap package), Athletics (Run package) |
+| Bluff | Fencing (Base) |
+| Climb | Athletics (Climb package) |
+| Craft (any) | Equipment (Craftsman talent) |
+| Craft (alchemy) | Alchemy (Base) |
+| Craft (mechanical) | Tech (Base) |
+| Craft (traps) | Trap (Base) |
+| Diplomacy | Leadership (Base), Warleader (Base) |
+| Fly | Athletics (Fly package) |
+| Handle Animal | Beastmastery (Handle Animal package) |
+| Intimidate | Gladiator (Base) |
+| Perception | Scout (Great Senses talent) |
+| Ride | Beastmastery (Ride package) |
+| Sense Motive | Fencing (Read Foe talent) |
+| Sleight of Hand | Scoundrel (Base) |
+| Stealth | Scout (Base) |
+| Swim | Athletics (Swim package) |
+
+Two sources are an either/or: Diplomacy comes from Leadership *or* Warleader.
+
+Talents are read from everywhere they come from — the class ladders, the bonus
+talents, the tradition, and the **Primordia technique**, which names most of what it
+grants: Light Body's Wall Stunt at 3rd and Air Stunt at 5th are the rules' choice, not
+the player's, so they count as named without anyone typing them. Names are matched
+loosely, because they are written with their choices attached: *"Guardian Sphere
+(Challenge package -4/+2)"* carries "Challenge" the same as a bare "Challenge" does.
+
+The check is three-valued, because a talent the sheet cannot see is not the same as
+one the character does not have:
+
+- **met** — the talent is there. A row is also met when an unmade choice can only
+  land on talents it accepts: Light Body's 1st level is *the Athletics sphere, taking
+  (leap) or (run)*, and Acrobatics takes either, so it is satisfied whichever way that
+  choice went — before anyone writes it down.
+- **unmet** — the sphere is not there at all, or every talent in it is accounted for
+  and the one asked for is not among them. The row does not appear.
+- **unknown** — the sphere is there and still holds talents nobody has named, which is
+  usually a technique's own picks from 7th level. The requirement is drawn with a
+  dotted underline and the tick beside the row decides, which is what that column has
+  always been. Naming those picks on the **Primordia** tab settles the row one way or
+  the other: give Light Body's 7th-level pick the Swim package and Swim answers for
+  itself; fill in every pick without one and Climb turns from *unknown* to a plain no.
+
+Only the rows a character can reach are listed: the block is seventeen skills and a
+character has two or three, and a row that can only ever read zero is not information.
+A character with no such talent at all gets a sentence saying so instead of a table of
+noughts.
 
 **Unarmed damage** implements the practitioner table (dataSheet F80:L101) with the
 sheet's exact die-step chain: talents in Boxing/Brute/Open Hand/Wrestling (each

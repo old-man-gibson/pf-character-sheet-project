@@ -32,6 +32,7 @@ import {
   parseDiceExpr, addDice, diceString, diceAverage,
   TALENT_RATES, TYPE_RATES, TYPE_TO_TALENTS, TALENTS_TO_TYPE,
   SPHERE_SKILL_RANKS, RANKS_PER_TALENT, BACKGROUND_SKILLS,
+  sphereSkillRequirement, sphereSkillSpheres, sphereSkillLabel,
   SAVE_BONUS_TYPES, AC_BONUS_TYPES, abpDefence,
   cleanSkillVariant, skillLabel, skillVariantKind, performCategory,
   spBoonPoints, boonStep, sphereSide, drawbackWeight, unarmedDice, UNARMED_SPHERES,
@@ -2484,7 +2485,8 @@ function temporaryTemplateGroup(rows) {
  * ------------------------------------------------------------------ */
 
 export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
-export const MATERIAL_CASTING_PER_MONTH = 30;
+/** Material casting costs this much per caster level, every whole month. */
+export const MATERIAL_CASTING_PER_LEVEL = 10;
 
 const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
 /** "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''. */
@@ -2555,19 +2557,23 @@ function monthsBetween(from, to) {
 /**
  * The wallet as it stands today: what the next offering will cost, part by
  * part, and what is left after it. `today` is injectable so a test does not
- * move with the calendar.
+ * move with the calendar, and so is `casterLevel`, which the material-casting
+ * upkeep is charged against: it is 10 a level every whole month, so the same
+ * month costs a 4th-level caster 40 and a 15th-level one 150.
  */
-export function wealthView(w, today = new Date()) {
+export function wealthView(w, today = new Date(), casterLevel = 0) {
   const v = normalizeWealth(w);
+  const cl = Math.max(0, Number(casterLevel) || 0);
   const offeringPerDay = v.manaPerDay / 2;
+  const castingPerMonth = MATERIAL_CASTING_PER_LEVEL * cl;
   const days = daysBetween(v.lastOffering, today);
   const months = monthsBetween(v.lastOffering, today);
   const oath = v.oathOfOfferings ? days * offeringPerDay + Math.floor(v.sessionMana / 2) : 0;
-  const casting = v.materialCasting ? months * MATERIAL_CASTING_PER_MONTH : 0;
+  const casting = v.materialCasting ? months * castingPerMonth : 0;
   const expected = oath + casting;
   return {
     ...v,
-    offeringPerDay, days, months,
+    offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
     expected: { oath, casting, total: expected },
     after: v.current - expected,
     gains: v.baseline === null ? null : v.current - v.baseline,
@@ -3550,6 +3556,68 @@ export class Character {
     }
     if (!Array.isArray(d.grantedFeats.others)) d.grantedFeats.others = [];
 
+    /*
+     * A trait's name, which the workbook had nowhere to put.
+     *
+     * There were two cells for three things, so every sheet overloaded one of
+     * them, and not the same one: a trait reads "Fate's Favored (+1 to any
+     * existing Luck bonuses)" with the name and the effect in the one cell,
+     * while a drawback's name went in the category column -- which is not a
+     * category, has never been shown, and so has been carrying "Pride" and
+     * "Overly Cautious" invisibly on every sheet that used it.
+     *
+     * The name gets its own field here, once, on any slot that has not been
+     * through this: taken from the category on a drawback, and otherwise split
+     * off the front of the text where the text is written as "Name (effect)"
+     * or is a bare name with no sentence in it. A slot that reads as neither
+     * keeps its text whole and starts with no name, which is what prose should
+     * do. A category on a drawback is dropped once its name is out: it was
+     * never a category, and the column does not show one.
+     */
+    {
+      // "Name (effect)", the shape every sheet writes a trait in. The name is
+      // short and paren-free; the effect is everything the brackets hold,
+      // which may itself contain brackets.
+      const shaped = /^([^()]{1,60}?)\s*\(([\s\S]+)\)\s*$/;
+      const bare = (s) => s.length <= 48 && !/[.;:!?]/.test(s);
+      const split = (text) => {
+        const t = String(text ?? '').trim();
+        const m = shaped.exec(t);
+        if (m) return { name: m[1].trim(), text: m[2].trim() };
+        if (t && bare(t)) return { name: t, text: '' };
+        return { name: '', text: t };
+      };
+      const kindOf = (key) => TRAIT_SLOTS.find((s) => s.key === key)?.kind || 'trait';
+      const name = (slot, kind) => {
+        if (!slot || typeof slot !== 'object' || typeof slot.name === 'string') return;
+        const drawback = kind !== 'trait';
+        const category = String(slot.category ?? '').trim();
+        const own = String(slot.text ?? '').trim();
+        // A drawback whose category cell holds something holds its name there:
+        // that cell is the only place the sheet had for it, and taking it
+        // beats guessing at the front of the effect. It carries the effect too
+        // when the effect column is empty, and then it is split like any other.
+        if (drawback && category && !/^drawbacks?$/i.test(category)) {
+          if (own) {
+            slot.name = category;
+          } else {
+            const inner = split(category);
+            slot.name = inner.name || category;
+            slot.text = inner.text;
+          }
+        } else {
+          const from = split(own);
+          slot.name = from.name;
+          slot.text = from.text;
+        }
+        if (drawback) slot.category = null;
+      };
+      for (const [key, slot] of Object.entries(d.traitSlots || {})) {
+        if (key === 'additional') (slot || []).forEach((s) => name(s, 'trait'));
+        else name(slot, kindOf(key));
+      }
+    }
+
     if (!d.skillBudget) d.skillBudget = { bonusPerLevel: 0, intPerLevel: 0 };
 
     /*
@@ -3603,6 +3671,11 @@ export class Character {
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
+    // So do the alternate attacks: three of the six rows are the same attack
+    // with one ability swapped, and most characters use one of them.
+    for (const k of ['melee', 'ranged', 'cmb']) {
+      if (d.uiPrefs.collapsed[`atk:${k}`] === undefined) d.uiPrefs.collapsed[`atk:${k}`] = true;
+    }
     if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
     // How the built-in meters are painted. Empty on a sheet nobody has
     // restyled, and only the meters that differ from the default are in it.
@@ -4164,6 +4237,25 @@ export class Character {
     if (!row) return this;
     while (row.classes.length < this.data.progression.tracks) row.classes.push(null);
     row.classes[track] = className || null;
+    this.recompute();
+    return this;
+  }
+
+  /**
+   * Put one class on every level of a track, or clear the track.
+   *
+   * A single-classed track is twenty identical dropdowns, and a gestalt sheet
+   * has two or three of them: the common case for this table is "this side is
+   * Fighter the whole way", and it should not take twenty clicks to say so.
+   */
+  fillProgressionTrack(track, className) {
+    const p = this.data.progression;
+    if (!p || track < 0 || track >= p.tracks) return this;
+    const value = className ? String(className) : null;
+    for (const row of p.levels || []) {
+      while (row.classes.length < p.tracks) row.classes.push(null);
+      row.classes[track] = value;
+    }
     this.recompute();
     return this;
   }
@@ -5038,6 +5130,24 @@ export class Character {
   }
 
   /**
+   * Move an item to a place in its own list, for dragging one row past
+   * another. `to` is where the item should land counting the list as it is
+   * now, so dropping "after the third" is 3 whether the item came from before
+   * it or after; the shift a removal causes is taken off here rather than by
+   * every caller.
+   */
+  listMoveTo(path, from, to) {
+    const arr = this.list(path);
+    if (from < 0 || from >= arr.length) return this;
+    const target = Math.max(0, Math.min(arr.length - 1, to > from ? to - 1 : to));
+    if (target === from) return this;
+    const [item] = arr.splice(from, 1);
+    arr.splice(target, 0, item);
+    this.recompute();
+    return this;
+  }
+
+  /**
    * Edit one field of one item in a list section.
    *
    * Some field names come from spreadsheet headers and can contain dots, so an
@@ -5279,9 +5389,18 @@ export class Character {
 
   /* ---------------- wealth ---------------- */
 
+  /**
+   * The caster level the sheet charges upkeep against: the global caster level
+   * the magic training works out, and the character's own level for someone
+   * who casts without a sphere block behind it.
+   */
+  get casterLevel() {
+    return Number(this.data.training?.magic?.globalCL ?? this.data.identity?.level) || 0;
+  }
+
   /** The wallet today: current mana, the offering owed part by part, and what is left after it. */
   wealthView(today = new Date()) {
-    return wealthView(this.data.wealth, today);
+    return wealthView(this.data.wealth, today, this.casterLevel);
   }
 
   /**
@@ -8202,7 +8321,53 @@ export class Character {
     const active = classes.filter((x) => x.gestaltLevels > 0);
     summary.hpPerLevel = Math.max(0, ...active.map((x) => Number(x.hd) || 0));
     summary.ranksPerLevel = Math.max(0, ...active.map((x) => Number(x.skillRanks) || 0));
+
+    /*
+     * Base attack bonus, the same way as the saves: each level takes the best
+     * progression among the classes present at it, and the sum is floored
+     * once at the end rather than per class. Floor-at-the-end is what the
+     * workbook did, and the difference is real -- fifteen levels of 3/4 is
+     * 11 that way and 11 the other, but ten of full plus one of 3/4 is 10,
+     * not 10 and a bit rounded up somewhere.
+     *
+     * `babOverride` on a class row overrides that class's rate, which is what
+     * the workbook's own column beside BAB was for.
+     */
+    // The workbook wrote "no override" as an empty cell, as a dash, and as a
+    // null, and `Number(null)` is a perfectly finite zero -- which would
+    // quietly give every class a BAB progression of none.
+    const rateOf = (cls) => {
+      const raw = cls.babOverride;
+      const over = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+      return Number.isFinite(over) ? over : (Number(cls.bab) || 0);
+    };
+    let rate = 0;
+    for (let l = 1; l <= level; l++) {
+      const present = classes.filter((x) => presence.get(x)[l - 1]);
+      if (present.length) rate += Math.max(...present.map(rateOf));
+    }
+    summary.babPerLevel = rate;
+    summary.bab = Math.floor(rate);
     c.gestalt = summary;
+
+    /*
+     * The BAB the sheet was imported with, once.
+     *
+     * All five source workbooks agree with the rule above to the point, so
+     * nothing moves on a normal import -- but a sheet whose classes do not
+     * explain its BAB (a class table left half-filled, a progression the app
+     * has no row for) would otherwise lose it the moment this ran. So the
+     * first pass compares the two and pins the imported number as an override
+     * when they differ, and leaves the field automatic when they agree.
+     */
+    if (c.attack) {
+      if (c.attack.babOverride === undefined) {
+        const imported = Number(c.attack.bab);
+        c.attack.babOverride = Number.isFinite(imported) && imported !== summary.bab ? imported : null;
+      }
+      c.attack.babBase = summary.bab;
+      c.attack.bab = c.attack.babOverride == null ? summary.bab : Number(c.attack.babOverride) || 0;
+    }
 
     // Per-level read-only numbers for the Progression tab, from the class
     // tracks actually chosen on each row.
@@ -8244,10 +8409,21 @@ export class Character {
 
   /* ---------------- spheres training ---------------- */
 
-  /** Does the progression grant a level of `className` at character level `lvl`? */
+  /**
+   * Does the progression grant a level of `className` at character level `lvl`?
+   *
+   * Matched the way `classLevelCount` matches, because it is the same join and
+   * the same trap: a class table reading `Legendary Kineticist` against a
+   * Planner reading `legendary kineticst` is one character, and an exact
+   * comparison answers "never" for every level -- which the caller then reads
+   * as a class the Planner does not mention at all.
+   */
   #plannerHasClass(className, lvl) {
     const row = this.data.progression?.levels?.[lvl - 1];
-    return !!row && (row.classes || []).includes(className);
+    if (!row) return false;
+    const classes = row.classes || [];
+    return classes.includes(className)
+      || !!closestName(className, classes);
   }
 
   /**
@@ -8616,8 +8792,89 @@ export class Character {
   }
 
   /**
+   * What the Primordia technique has put in its own sphere, level by level.
+   *
+   * The technique names most of what it grants -- Light Body's Wall Stunt at
+   * 3rd and Air Stunt at 5th are in the rules, not in the player's hands -- so
+   * those are names like any other. Its first level is a choice between two
+   * packages, which is a name once the player has made it and a pair of
+   * possible names until they do. The levels from 7th are the player's pick
+   * outright: a name when it is filled in, and nothing the sheet can read when
+   * it is not.
+   */
+  #techniqueTalents() {
+    const t = primordiaTechnique(this.data.identity?.primordiaTechnique);
+    const sphere = t?.talents?.sphere;
+    if (!sphere) return null;
+    const level = Number(this.data.identity.level) || 0;
+    const picks = this.data.primordia?.picks || {};
+    const names = [];
+    const choices = [];
+    for (const lvl of PRIMORDIA_LEVELS) {
+      if (lvl > level) break;
+      for (const g of primordiaGrantsAt(t, lvl)) {
+        if (!grantCount(g, 'talent')) continue;
+        const pick = String(picks[lvl] ?? '').trim();
+        if (g.name) names.push(g.name);
+        else if (pick) names.push(pick);
+        else if (g.pick?.options?.length) choices.push(g.pick.options);
+      }
+    }
+    return { side: t.talents.side, sphere, names, choices };
+  }
+
+  /**
+   * What this side's talents are, sphere by sphere, for a rule that has to ask
+   * whether a particular one is there: the names it can read, the choices it
+   * knows were made without knowing which way, and how many are neither.
+   *
+   * The unnamed count is the tally less what is accounted for rather than a
+   * count of its own, so it cannot drift from the number the rest of the sheet
+   * is working with.
+   */
+  #sphereTalentKnowledge(side, sideKey) {
+    const out = new Map();
+    const of = (sphere) => {
+      const s = String(sphere || '').trim();
+      if (!s) return null;
+      if (!out.has(s)) out.set(s, { names: [], choices: [], unnamed: 0 });
+      return out.get(s);
+    };
+    const put = (sphere, talent) => {
+      const t = String(talent || '').trim();
+      const row = t ? of(sphere) : null;
+      if (row) row.names.push(t);
+    };
+    for (const cls of side?.classes || []) {
+      if (cls.blendedMirror) continue;
+      for (const lv of cls.levels || []) put(lv.sphere, lv.talent);
+    }
+    for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
+    for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
+
+    const tech = this.#techniqueTalents();
+    if (tech && tech.side === sideKey) {
+      const row = of(tech.sphere);
+      row.names.push(...tech.names);
+      row.choices.push(...tech.choices);
+    }
+
+    for (const [sphere, row] of out) {
+      const total = Number((side?.tally || {})[sphere]) || 0;
+      row.unnamed = Math.max(0, total - row.names.length - row.choices.length);
+    }
+    return out;
+  }
+
+  /**
    * Bonus skill ranks from sphere talents: 5 per talent in the associated
    * sphere, capped at level. Returns a map of skill index -> ranks.
+   *
+   * A row only pays out if what it asks for is on the character -- the sphere
+   * for a "(Base)" row, the named package or talent for the rest. Where the
+   * sheet cannot tell (a sphere whose talents are all unnamed, which is what
+   * a Primordia technique's grants look like) the row falls back to the
+   * player's own switch, which is what that column has always been.
    */
   #sphereRanksBySkill() {
     const map = new Map();
@@ -8626,21 +8883,27 @@ export class Character {
     const level = Number(this.data.identity.level) || 0;
     const tally = t.tally || {};
     const lightBody = this.data.identity.primordiaTechnique === 'Light Body';
+    const known = this.#sphereTalentKnowledge(t, 'combat');
+    const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
+    const check = {
+      has: (sphere) => (tally[sphere] || 0) > 0,
+      named: (sphere) => of(sphere).names,
+      choices: (sphere) => of(sphere).choices,
+      unnamed: (sphere) => of(sphere).unnamed,
+    };
 
     this.trainingSkillRanks = (t.skillRanks || []).map((row) => {
       const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
-      let talents = 0;
-      let ranks = 0;
-      if (def?.manual) {
-        ranks = row.enabled ? level : 0;
-      } else if (def) {
-        talents = (def.spheres || []).reduce((n, s) => n + (tally[s] || 0), 0);
-        if (def.lightBody && lightBody) ranks = row.enabled ? level : 0;
-        else ranks = row.enabled && talents > 0
-          ? Math.min(level, talents * RANKS_PER_TALENT * (Number(row.multiplier) || 1))
-          : 0;
-      }
-      return { ...row, talents, current: ranks };
+      if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
+      const state = sphereSkillRequirement(def, check);
+      const talents = sphereSkillSpheres(def).reduce((n, s) => n + (tally[s] || 0), 0);
+      const on = row.enabled && state !== 'unmet';
+      const ranks = !on ? 0
+        : (def.lightBody && lightBody) ? level
+          : talents > 0
+            ? Math.min(level, talents * RANKS_PER_TALENT * (Number(row.multiplier) || 1))
+            : 0;
+      return { ...row, talents, requirement: sphereSkillLabel(def), state, current: ranks };
     });
 
     for (const row of this.trainingSkillRanks) {
@@ -8859,9 +9122,9 @@ export class Character {
         cmb: c.attack.totalCmb,
       },
       // The wallet: what is on hand, what the next offering costs, what is left after it.
-      mana: (() => { const w = wealthView(c.wealth); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
+      mana: (() => { const w = wealthView(c.wealth, new Date(), this.casterLevel); return { current: w.current, expected: w.expected.total, after: w.after, perDay: w.manaPerDay }; })(),
       caster: {
-        level: Number(c.training?.magic?.globalCL ?? c.identity.level) || 0,
+        level: this.casterLevel,
         dc: Number(c.training?.magic?.globalDC) || 0,
         msb: Number(c.training?.magic?.msb) || 0,
         msd: Number(c.training?.magic?.msd) || 0,
