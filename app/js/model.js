@@ -9445,6 +9445,30 @@ export class Character {
     return out;
   }
 
+  /**
+   * The size the character is at right now: the base plus the largest ticked
+   * true-size change, capped to the ladder. This is what a formula's `size`
+   * reads. Stacking and effective rows do not move it -- they change what the
+   * character counts as, not what it is (the wraps' own distinction).
+   */
+  sizeNow() {
+    const ladder = Object.keys(SIZE_MODIFIERS);
+    let idx = ladder.indexOf(this.data.identity?.size);
+    if (idx < 0) idx = ladder.indexOf('Medium');
+    let up = 0;
+    let down = 0;
+    for (const b of this.data.buffs || []) {
+      if (!b?.on) continue;
+      for (const row of b.bonuses || []) {
+        if (row?.target !== 'size') continue;
+        const v = Number(row.valueNum ?? row.value) || 0;
+        if (v > 0) up = Math.max(up, v);
+        else down = Math.min(down, v);
+      }
+    }
+    return ladder[Math.max(0, Math.min(ladder.length - 1, idx + up + down))];
+  }
+
   scope() {
     const c = this.data;
     const s = {
@@ -9456,7 +9480,9 @@ export class Character {
         temp: Number(c.hp.temp) || 0,
       },
       mythic: { tier: Number(c.identity.mythicTier) || 0 },
-      size: c.identity.size,
+      // The size as it stands, true-size buffs included -- {size} follows an
+      // enlarge the moment it is ticked.
+      size: this.sizeNow(),
       initiative: Number(c.hp.initiative) || 0,
       saves: {
         fortitude: c.saves.fortitude.total,

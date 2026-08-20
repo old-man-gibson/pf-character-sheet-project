@@ -1175,6 +1175,16 @@ export class CharacterSheetElement extends HTMLElement {
       &middot; Fort ${shown('fortitude', s.fortitude.total)}
       Ref ${shown('reflex', s.reflex.total)}
       Will ${shown('will', s.will.total)}
+      ${(() => {
+    // A changed size is worth a standing word: {size} and the dice follow it.
+    const sizeNow = this.#model.sizeNow();
+    const base = this.#model.data.identity?.size;
+    if (sizeNow === base) return '';
+    const ladder = Object.keys(SIZE_MODIFIERS);
+    const up = ladder.indexOf(sizeNow) > ladder.indexOf(base);
+    return `&middot; <strong class="adj ${up ? 'up' : ''}"
+      title="${esc(`Base ${base} — with buffs applied`)}">${esc(sizeNow)}</strong>`;
+  })()}
       ${cs.active.length ? `<span class="badge err">${cs.active.length} condition${cs.active.length === 1 ? '' : 's'}</span>` : ''}
     </div>`;
   }

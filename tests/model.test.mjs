@@ -2610,6 +2610,17 @@ console.log('buff extra bonuses -- targets past the six dials');
   cs = buff([{ target: 'size', value: 500 }]);
   check('a +500 row is four steps from Medium, everywhere',
     [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 4]);
+
+  // {size} reads the true size after buffs -- and only the true size: the
+  // stacking and effective kinds change what a character counts as, not what
+  // it is, which is the wraps' own distinction.
+  cs = buff([{ target: 'size', value: 2 }, { target: 'sizeEffective', value: 1 }, { target: 'sizeStacking', value: 1 }]);
+  check('a formula\'s size follows the true rows alone', c.scope().size, 'Huge');
+  check('and the ladder caps it',
+    (() => { c.data.buffs[0].bonuses[0].value = 20; c.recompute(); return c.scope().size; })(), 'Colossal');
+  c.data.buffs[0].on = false;
+  c.recompute();
+  check('unticked, the size comes home', c.scope().size, 'Medium');
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 3 }, { target: 'sizeEffective', value: 3 }]);
   check('from Medium, true and effective together stop at Colossal', cs.sizeSteps, 4);
