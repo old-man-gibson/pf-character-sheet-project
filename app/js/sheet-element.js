@@ -3528,13 +3528,15 @@ export class CharacterSheetElement extends HTMLElement {
             <thead><tr>
               <th>Skill</th><th class="num">Total</th>
               <th class="num" title="Total ranks: min(level, bought + flags × level + spheres)">Ranks</th>
+              <th title="Class skill: +3 once the skill has a rank">Class</th>
               <th class="num" title="Ranks bought with skill points">Bought</th>
               <th title="Specialty skill (full ranks)">★</th>
               <th title="Gear grants full ranks (e.g. headband)">Gear</th>
               <th title="Another source grants full ranks (class features, templates)">Other</th>
               <th class="num" title="From sphere talents">Spheres</th>
               <th>Ability</th><th class="num">Mod</th><th class="num">Misc</th>
-              <th>Class</th><th>Notes</th><th></th>
+              <th title="Requires training: no check at all without a rank in it">Trained only</th>
+              <th>Notes</th><th></th>
             </tr></thead>
             <tbody>
               ${rows.map(({ s, i }) => `<tr class="${s.totalRanks > 0 ? 'trained' : 'untrained'}${s.hidden ? ' hiddenskill' : ''}">
@@ -3542,6 +3544,7 @@ export class CharacterSheetElement extends HTMLElement {
                 <td class="num total"><span class="rollpair">${fmt(s.bonus)}${
                   this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
                 <td class="num">${s.totalRanks}</td>
+                <td class="mid">${this.#itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
                 <td class="num bought">${this.#exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {
                     kind: 'rank',
@@ -3563,7 +3566,7 @@ export class CharacterSheetElement extends HTMLElement {
                   error: s.miscError,
                   title: 'Number or formula, e.g. int.mod, skill_familiarity, floor(level/2)',
                 })}</td>
-                <td class="mid">${this.#itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
+                <td class="mid">${this.#itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
                 <td>${this.#itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
                   title="${s.hidden ? 'Hidden — show this skill again' : 'Hide this skill from the list'}"

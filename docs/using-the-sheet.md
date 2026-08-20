@@ -742,6 +742,14 @@ imported Specialty flags and marked ★. **Gear** (headband et al) and **Other**
 is computed from training. All five characters' imported ranks and totals reproduce
 exactly.
 
+**Class** sits beside Ranks, where its +3 is decided — a class skill is worth nothing
+until the skill has a rank in it. **Trained only** sits at the far end, before the
+notes: the workbook's Requires Training column, which the sheet carries per skill and
+a d20 reads before it rolls. It is a checkbox like the others, so a skill you add
+yourself can be marked. It does not change the total — a trained-only skill with no
+ranks still sums the way the workbook sums it; what it changes is the roll, which says
+so rather than being quietly wrong.
+
 **Rolling one.** The **d20** beside each Total copies that check for Roll20 — see
 [Rolling it at the table](#rolling-it-at-the-table). A skill with a situational note
 carries it along, and a trained-only skill with no ranks says so.
