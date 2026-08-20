@@ -11,6 +11,9 @@ export const SHEET_CSS = `
   --cs-bg: #14161c;
   --cs-panel: #1c1f27;
   --cs-panel-2: #232733;
+  /* Half a step from the panel towards the hover colour: enough to follow one
+     row across a wide table, not enough to be a colour in its own right. */
+  --cs-zebra: color-mix(in srgb, var(--cs-panel-2) 50%, var(--cs-panel));
   --cs-line: #333949;
   --cs-text: #e6e8ef;
   --cs-muted: #9aa2b8;
@@ -692,6 +695,10 @@ button.tiny {
 .abmark[data-ab]:not([data-ab=""]) {
   display: inline-block; border-left: 3px solid var(--ab); border-radius: 3px;
   padding: 1px 5px; font-weight: 650;
+  /* Str is a narrower word than Con, and six chips that each hug their own
+     word are six different widths. One width in em, so it holds at whatever
+     size the surrounding table sets. */
+  min-width: 3.2em;
   background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
   color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
 }
@@ -740,6 +747,11 @@ th {
   color: var(--cs-muted); font-weight: 600; position: sticky; top: 0;
   background: var(--cs-panel); z-index: 1;
 }
+/* Alternating rows, for a table wide enough that an eye can lose its place.
+   Hover is the whole step, so it still reads on a striped row and a plain one
+   alike; a cell with a wash of its own (a group band, a row that wants
+   filling) is translucent, and tints the stripe rather than hiding it. */
+tbody tr:nth-child(even) { background: var(--cs-zebra); }
 tbody tr:hover { background: var(--cs-panel-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 th.num {text-align: left}
@@ -753,6 +765,9 @@ table.build th[scope="row"] {
   text-align: left; font-size: 0.8rem; color: var(--cs-text);
   text-transform: none; letter-spacing: 0; z-index: 2;
 }
+/* Sticky cells paint their own background, so the stripe has to be repeated
+   here or a row would break in two at the freeze. */
+table.build tbody tr:nth-child(even) th[scope="row"] { background: var(--cs-zebra); }
 table.build th { white-space: nowrap; vertical-align: bottom; }
 table.build td { padding: 3px 4px; }
 table.build input[type="number"] { width: 3.2rem; padding: 3px 4px; }
