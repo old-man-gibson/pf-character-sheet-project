@@ -37,6 +37,11 @@ const PUSH_RE = /^([^=]*?)([+-])=([\s\S]*)$/;
 // The long spelling, out of the same habit that writes "=" for "==": say what
 // the destination is rather than leaning on two characters of punctuation.
 const TARGET_RE = /^target\./;
+// "... as size" on the end of a forwarded bonus names its type, the way the
+// rulebook says it: "a +2 size bonus to Strength". A trailing word after the
+// whole expression, because the type belongs to the bonus rather than to any
+// one of the destinations it may be aimed at.
+const AS_RE = /\s+as\s+([A-Za-z][A-Za-z0-9_-]*)\s*$/;
 
 /** Split prose into text and token segments. */
 export function tokenize(text) {
@@ -69,17 +74,28 @@ function parseTargets(left, { keyword = false } = {}) {
   return parts.map((p) => p.replace(TARGET_RE, ''));
 }
 
+/** Split "expr as size" into the expression and the bonus type it declares. */
+function parseType(expr) {
+  const m = AS_RE.exec(expr);
+  return m
+    ? { expr: expr.slice(0, m.index).trim(), type: m[1].toLowerCase() }
+    : { expr: expr.trim(), type: '' };
+}
+
 function parseToken(inner, raw) {
   const s = inner.trim();
   // {= expr}
   if (s.startsWith('=')) return { kind: 'value', expr: s.slice(1).trim(), raw };
 
-  // {skill.bluff += 4}, {saves.will -= 2}, {skill.bluff, skill.diplomacy += tier}
+  // {skill.bluff += 4}, {saves.will -= 2}, {skill.bluff, skill.diplomacy += tier},
+  // {str.score += 2 as size}
   const push = PUSH_RE.exec(s);
   if (push) {
     const targets = parseTargets(push[1]);
     if (targets) {
-      return { kind: 'push', targets, sign: push[2] === '-' ? -1 : 1, expr: push[3].trim(), raw };
+      return {
+        kind: 'push', targets, sign: push[2] === '-' ? -1 : 1, raw, ...parseType(push[3]),
+      };
     }
   }
 
@@ -89,7 +105,7 @@ function parseToken(inner, raw) {
     const expr = s.slice(eq + 1).trim();
     // {target.skill.bluff = 4} -- the same bonus, spelled the long way.
     const targets = parseTargets(name, { keyword: true });
-    if (targets) return { kind: 'push', targets, sign: 1, expr, raw };
+    if (targets) return { kind: 'push', targets, sign: 1, raw, ...parseType(expr) };
     if (NAME_RE.test(name)) return { kind: 'define', name, expr, raw };
     return { kind: 'value', expr: s, raw };   // "a+b = c" is not a definition
   }
@@ -108,8 +124,8 @@ export function hasTokens(text) {
  */
 export function collectDefinitions(sources) {
   const defs = [];
-  for (const { path, text, scope } of sources) {
-    if (!hasTokens(text)) continue;
+  for (const { path, text, scope, forwardsOnly } of sources) {
+    if (forwardsOnly || !hasTokens(text)) continue;
     for (const t of tokenize(text)) {
       // `scope` carries whatever only makes sense where the text was written
       // -- a veil's own invested essence, say -- so a definition can use it
@@ -126,7 +142,11 @@ export function collectDefinitions(sources) {
  *
  * Unlike a definition, two of these are not a clash: a skill can be handed a
  * bonus by a class feature, a trait and a veil at once, and all three count.
- * @param sources  array of {path, text, scope}
+ *
+ * `forwardsOnly` sources are included here and nowhere else -- a tracker note
+ * is read too late to publish a name, but a bonus is not a name, and the note
+ * beside a resource is exactly where a rule that scales with it belongs.
+ * @param sources  array of {path, text, scope, forwardsOnly}
  */
 export function collectContributions(sources) {
   const out = [];
@@ -134,7 +154,9 @@ export function collectContributions(sources) {
     if (!hasTokens(text)) continue;
     for (const t of tokenize(text)) {
       if (t.kind === 'push') {
-        out.push({ targets: t.targets, sign: t.sign, expr: t.expr, path, scope, raw: t.raw });
+        out.push({
+          targets: t.targets, sign: t.sign, expr: t.expr, type: t.type || '', path, scope, raw: t.raw,
+        });
       }
     }
   }
@@ -154,8 +176,8 @@ export function collectContributions(sources) {
  */
 export function collectUses(sources) {
   const out = [];
-  for (const { path, text, scope } of sources) {
-    if (!hasTokens(text)) continue;
+  for (const { path, text, scope, forwardsOnly } of sources) {
+    if (forwardsOnly || !hasTokens(text)) continue;
     for (const t of tokenize(text)) {
       if (t.kind === 'ref') {
         out.push({ name: t.name, path, scope, kind: 'ref', source: t.raw });
@@ -326,6 +348,14 @@ export function resolveDefinitions(defs, baseScope) {
  * come back as errors against the place they are written, because that is the
  * only place a player can go and fix them.
  *
+ * A bonus may name its type -- "as size", "as morale" -- and then it does not
+ * stack with another of the same type at the same destination: the largest
+ * bonus and the largest penalty of each type count, and untyped ones all do.
+ * The type is a stacking key and nothing else, so a house type works exactly
+ * as a printed one does. Note that this settles forwarded bonuses against each
+ * other only; a size bonus typed into the Stats tab's own Size column is a
+ * different number in a different place, and the sheet adds both.
+ *
  * @param contributions  from collectContributions()
  * @param names          the resolved {name = …} values
  * @param baseScope      the character's own values
@@ -340,6 +370,8 @@ export function resolveContributions(contributions, names, baseScope, targets) {
   const totals = {};
   const entries = [];
   const errors = [];
+  const by = {};              // destination -> every bonus aimed at it, in order
+  const countedAt = {};       // destination -> the subset of those that stack
 
   const scopeFor = (local) => ({
     lookup: (n) => {
@@ -387,23 +419,53 @@ export function resolveContributions(contributions, names, baseScope, targets) {
       lands.push(...into);
     }
 
-    if (error) errors.push({ path: c.path, error, source: c.raw });
-    else for (const key of new Set(lands)) totals[key] = (totals[key] || 0) + value;
-
     // A bonus with nowhere at all to go is not working, and must say so where
     // it is listed rather than sitting in the list looking as though it
     // arrived. One that lands somewhere and not somewhere else still counts
     // for the part that landed, and names the part that did not.
-    entries.push({
+    if (error) errors.push({ path: c.path, error, source: c.raw });
+    const entry = {
       ...c,
       value,
       error: error || (dropped.length && !lands.length ? `Goes nowhere: ${dropped.join(', ')}` : null),
       dropped,
       lands: [...new Set(lands)],
-    });
+    };
+    entries.push(entry);
+    if (!error) for (const key of entry.lands) (by[key] ||= []).push(entry);
   }
 
-  return { totals, entries, errors };
+  // Now the stacking, per destination. Untyped bonuses all count; within a
+  // named type only the best bonus and the worst penalty do, which is the
+  // whole reason for saying "as size" -- two size bonuses are one size bonus,
+  // and the sheet has to know that without being told twice.
+  //
+  // The ones that lose are not dropped from the list. "Where did this number
+  // come from" is answered badly by a source that has quietly vanished, so
+  // every bonus stays, marked `counts: false` where a bigger one of its type
+  // is already there.
+  for (const [key, list] of Object.entries(by)) {
+    let total = 0;
+    const best = new Map();      // type -> the entry holding the largest bonus
+    const worst = new Map();     // type -> the entry holding the largest penalty
+    const counts = new Set();
+    for (const e of list) {
+      if (!e.type) { total += e.value; counts.add(e); continue; }
+      const pick = e.value < 0 ? worst : best;
+      const held = pick.get(e.type);
+      // First one wins a tie, so the order a rule was written in decides which
+      // of two identical bonuses is shown as the one in force -- arbitrary
+      // either way, but stable, and it never changes under a later edit.
+      if (!held || (e.value < 0 ? e.value < held.value : e.value > held.value)) pick.set(e.type, e);
+    }
+    for (const map of [best, worst]) {
+      for (const e of map.values()) { total += e.value; counts.add(e); }
+    }
+    totals[key] = total;
+    countedAt[key] = counts;
+  }
+
+  return { totals, entries, errors, by, countedAt };
 }
 
 /**

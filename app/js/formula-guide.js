@@ -330,6 +330,7 @@ export function forwardedHtml(rows, query) {
     : matches.map((r) => `<div class="fx-row${r.error ? ' bad' : ''}">
         <div class="fx-rowhead">
           <strong>${esc(r.to)}</strong><code class="fx-into">${r.value < 0 ? '-=' : '+='}</code>
+          ${r.type ? `<span class="badge">${esc(r.type)}</span>` : ''}
           <span class="badge">${esc(r.where)}</span>
           ${r.error ? '<span class="badge err">not working</span>' : ''}
           ${!r.error && r.dropped?.length

@@ -40,6 +40,7 @@ import {
   UNORTHODOX_FEAT, UNORTHODOX_SPHERES_PER_FEAT,
   TRAIT_SLOTS, gestaltSaveBase,
   WEAPON_GROUPS, WEAPON_HANDEDNESS, WEAPON_FAMILIARITY, ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
+  ALT_ATTACK_OF,
   parseLevelRule, levelRuleGrants, parseGroupText,
   tierAtLevel, MYTHIC_STAT_TIERS, MYTHIC_STAT_BONUS, MYTHIC_TIERS,
   CRAFT_BASE_COSTS, CRAFT_BASE_SPEED, CRAFT_SPEED_MULTIPLIER, CRAFT_DC_PER_BYPASS,
@@ -86,6 +87,22 @@ export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec
  * makes `{skill.bluff += 4}` free.
  */
 const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
+
+/**
+ * The four numbers a forwarded bonus can reach on a weapon, longest name
+ * first so "damage.crit" is never read as "damage" with something else in
+ * front of it. They mirror the [[...]] token keywords exactly, because they
+ * are the same four rules written a different way.
+ */
+const WEAPON_CHANNEL_LABELS = [
+  ['damage.mult', 'Damage, multiplied on a crit'],
+  ['damage.crit', 'Damage on a crit only'],
+  ['damage', 'Damage'],
+  ['attack', 'Attack'],
+];
+const WEAPON_CHANNELS = WEAPON_CHANNEL_LABELS.map(([ch]) => ch);
+/** Selectors that pick weapons by how they are used rather than by name. */
+const WEAPON_SHAPES = new Set(['melee', 'ranged', 'cmb']);
 
 /**
  * The document shape this build understands, written by tools/convert.py.
@@ -3147,13 +3164,25 @@ export class Character {
     this.#reconcile();
     this.recompute();
     // Forwarded bonuses are written in prose, so the first reconcile could not
-    // see them -- and the totals it measured against were saved with those
-    // bonuses already in them. Left there, the offset would swallow every
-    // forwarded bonus on load and the sheet would add it a second time, so a
-    // +2 to Will would climb by 2 every time the document was reopened. Now
-    // that the bonuses are known, measure once more without them.
+    // see them -- and a document saved by this sheet has them in every total
+    // it saved. Left there, the offset would swallow the bonus on load and the
+    // sheet would add it again, so a +2 to Will would climb by 2 every time
+    // the document was reopened. Now that the bonuses are known, measure once
+    // more with them in the picture.
     if (this.#forwardsEarly()) {
+      // ...except where the first measurement already balanced. An offset is
+      // what the workbook added that this sheet cannot see; if there was
+      // nothing to explain before the bonuses were counted, there is nothing
+      // to explain now either, and the difference the second measurement finds
+      // is the bonus itself. That is the case for a document saved before a
+      // rule was written -- or before the sheet could read where it was
+      // written -- and swallowing it would mean the rule never showed up at
+      // all. Where the workbook *did* add something the two are genuinely
+      // indistinguishable, and the second reading stands.
+      const balanced = new Set(Object.entries(this.offsets)
+        .filter(([, v]) => !v).map(([k]) => k));
       this.#reconcile();
+      for (const key of balanced) this.offsets[key] = 0;
       this.recompute();
     }
   }
@@ -3913,6 +3942,7 @@ export class Character {
 
   #refreshAbilities() {
     const build = this.data.statsBuild;
+    const applied = new Set();
     if (build) {
       const level = Number(this.data.identity.level) || 0;
       const folded = foldPicks(this.data.progressionPicks, level);
@@ -3933,8 +3963,15 @@ export class Character {
         entry.resolved = r;
         const a = this.data.abilities[key];
         if (a) {
-          a.score = r.total;
-          a.tempScore = r.tempTotal;
+          // A bonus forwarded here goes on top of what the build resolves to,
+          // never into it: the columns on the Stats tab have to go on adding
+          // up to the number they add up to. Added rather than remembered, so
+          // the second recompute pass lands on the same answer as the first
+          // -- `r` is worked out afresh from the entry every time.
+          a.forwarded = this.#forwarded(`${key}.score`);
+          a.score = r.total + a.forwarded;
+          a.tempScore = r.tempTotal + a.forwarded;
+          applied.add(key);
         }
       }
     }
@@ -3942,10 +3979,15 @@ export class Character {
     for (const key of ABILITIES) {
       const a = this.data.abilities[key];
       if (!a) continue;
+      // Without a build entry the score is a plain typed number, so a
+      // forwarded bonus rides the working score instead of being written into
+      // it -- adding it to a stored number twice is exactly the drift the
+      // two-pass recompute exists to avoid.
+      const loose = applied.has(key) ? 0 : (a.forwarded = this.#forwarded(`${key}.score`));
       a.mod = abilityMod(a.score);
       // A blank temp score means "same as base".
       if (!a.tempScore) a.tempScore = a.score;
-      a.totalMod = abilityMod(a.tempScore);
+      a.totalMod = abilityMod(a.tempScore + loose);
       a.checkMod = a.totalMod;
     }
   }
@@ -5251,8 +5293,8 @@ export class Character {
   proseSources() {
     const d = this.data;
     const out = [];
-    const push = (path, text, scope) => {
-      if (typeof text === 'string' && hasTokens(text)) out.push({ path, text, scope });
+    const push = (path, text, scope, forwardsOnly = false) => {
+      if (typeof text === 'string' && hasTokens(text)) out.push({ path, text, scope, forwardsOnly });
     };
     for (const [cls, g] of Object.entries(d.progression?.classFeatures || {})) {
       for (const [lvl, row] of Object.entries(g.byLevel || {})) {
@@ -5362,6 +5404,15 @@ export class Character {
     (d.sheetTabs || []).forEach((tab, ti) => (tab.rows || []).forEach((row, ri) => {
       (row.cells || []).forEach((cell, ci) => push(`tab:${tab.name}:${ri}:${ci}`, cell));
     }));
+    // A tracker's note, for forwarded bonuses only.
+    //
+    // A note may not define a name -- it is evaluated after the trackers it
+    // reads, so the name would be a pass behind -- and its reads are already
+    // listed one row per token by audit(). But a bonus is not a name, and the
+    // note beside a resource is exactly where a rule that scales with it
+    // belongs: "+2 Strength while Burn is 3 or more" is a fact about Burn, and
+    // writing it anywhere else means writing Burn's name out again.
+    for (const t of this.trackers || []) push(`tracker:${t.id}:note`, t.note, this.trackerScope(t), true);
     return out;
   }
 
@@ -5640,10 +5691,15 @@ export class Character {
       const key = modes[type];
       if (!key) return null;
       const m = c.attack.modes[key];
+      // The same sum the Overview's own melee/ranged/CMB totals are built from,
+      // forwarded bonuses included: `{attack.melee += 2}` has to mean the same
+      // thing on a weapon row as it does in the Attack panel, or the two
+      // numbers for one attack disagree.
       return (Number(c.attack.bab) || 0)
         + statMod(c, m?.stat1, m?.stat2)
         - sizeMod(c)
-        + (Number(c.attack.miscBonus) || 0);
+        + (Number(c.attack.miscBonus) || 0)
+        + this.#forwarded(`attack.${ALT_ATTACK_OF[key] || key}`);
     };
 
     const unarmedDiceNow = c.training?.combat?.unarmed?.dice;
@@ -5687,7 +5743,7 @@ export class Character {
       return { text: out, error };
     };
 
-    for (const w of e.weapons) {
+    for (const [wi, w] of e.weapons.entries()) {
       // Read against the row's own Proficient field, the [Enhanced] veil rule
       // and the Overview's proficiencies; a `false` is shown, not applied --
       // the -4 is the player's to write, as it always was.
@@ -5726,7 +5782,8 @@ export class Character {
       if (w.attackOffset === undefined) {
         w.attackOffset = w.sheetAttack != null ? (Number(w.sheetAttack) || 0) - attack : 0;
       }
-      w.attackTotal = attack + w.attackOffset;
+      w.forwardedAttack = this.#forwarded(`weapon.${wi}.attack`);
+      w.attackTotal = attack + w.attackOffset + w.forwardedAttack;
 
       const abilityPart = w.damageAbility
         ? Math.floor(statMod(c, w.damageAbility, null) * (Number(w.abilityMult) || 1))
@@ -5788,14 +5845,22 @@ export class Character {
         (acc, t) => ({ dice: addDice(acc.dice, t.dice), flat: acc.flat + (t.error ? 0 : t.flat) }),
         { dice: {}, flat: 0 },
       );
+      // Forwarded damage joins the token pools rather than sitting beside
+      // them: a bonus written as a rule elsewhere on the sheet is the same
+      // kind of thing as one written in this weapon's own properties, and the
+      // crit line has to add both up the same way.
+      const fwdDmg = (ch) => this.#forwarded(`weapon.${wi}.${ch}`);
       const atk = tok(atkTokens.filter((t) => !t.crit));
       const dmg = tok(dmgTokens.filter((t) => !t.crit && !t.mult));
+      dmg.flat += fwdDmg('damage');
       // Damage on every hit that multiplies with the weapon: it joins the
       // normal total like a rider, and the crit multiplier takes it with the
       // base rather than adding it once afterwards.
       const multDmg = tok(dmgTokens.filter((t) => t.mult));
+      multDmg.flat += fwdDmg('damage.mult');
       const critAtk = tok(atkTokens.filter((t) => t.crit));
       const critDmg = tok(dmgTokens.filter((t) => t.crit));
+      critDmg.flat += fwdDmg('damage.crit');
       // The weapon's own Bonus Crit Damage column joins the crit-only pool,
       // and reads names the same way the tokens do.
       const bcdNamed = spliceNames(w.bonusCritDamage);
@@ -5829,7 +5894,11 @@ export class Character {
       w.calc.totalDmgStr = diceString(w.calc.totalDmgDice, w.calc.totalDmgFlat)
         + (baseDice.notes.length ? ` ${baseDice.notes.join(' ')}` : '');
       w.calc.totalAvg = diceAverage(w.calc.totalDmgDice, w.calc.totalDmgFlat);
-      w.calc.hasTokens = atkTokens.length > 0 || dmgTokens.length > 0;
+      // A weapon whose only extra damage was forwarded here still has parts
+      // worth showing, so the breakdown opens for it too.
+      w.forwardedDamage = { plain: fwdDmg('damage'), mult: fwdDmg('damage.mult'), crit: fwdDmg('damage.crit') };
+      const anyForwarded = Object.values(w.forwardedDamage).some(Boolean) || !!w.forwardedAttack;
+      w.calc.hasTokens = atkTokens.length > 0 || dmgTokens.length > 0 || anyForwarded;
 
       // Criticals. What multiplies and what does not:
       //   - base weapon damage, ability, enhancement and misc: multiplied;
@@ -5847,7 +5916,8 @@ export class Character {
       w.calc.critAtk = critAtk;
       w.calc.critTagged = critTagged;
       w.calc.critExtra = critExtra;
-      w.calc.hasCritTokens = atkTokens.some((t) => t.crit) || dmgTokens.some((t) => t.crit);
+      w.calc.hasCritTokens = atkTokens.some((t) => t.crit) || dmgTokens.some((t) => t.crit)
+        || !!w.forwardedDamage.crit;
       w.calc.confirmTotal = w.calc.totalAtk + critAtk.flat;
       w.calc.confirmStr = Object.keys(critAtk.dice).length
         ? `${fmt(w.calc.confirmTotal)}+${diceString(critAtk.dice)}`
@@ -8850,10 +8920,50 @@ export class Character {
       list.push({ name, label: `All ${name === 'ac' ? 'armour classes' : name}`, family: members });
     }
 
+    // Weapons are matched rather than enumerated. "Melee weapons", "axes" and
+    // "the guitar axe" are all the same shape of rule -- a condition on which
+    // rows a bonus reaches -- and a character with eight weapons in four
+    // groups would otherwise need a hundred and change names listed out.
+    const weapons = this.data.equipment?.weapons || [];
+    const groups = new Set(weapons.flatMap((w) => (w.groups || []).filter(Boolean).map(slug)));
+    const weaponTarget = (name) => {
+      let rest = name;
+      if (rest.startsWith('weapon.')) rest = rest.slice('weapon.'.length);
+      else if (rest !== 'weapon' && !/^damage(\.|$)/.test(rest)) return null;
+      if (rest === 'weapon') return null;
+      // Longest first, so "damage.crit" is not read as "damage" with a
+      // selector called "crit" hanging off the front of nothing.
+      const channel = WEAPON_CHANNELS.find((ch) => rest === ch || rest.endsWith(`.${ch}`));
+      if (!channel) return null;
+      const sel = rest === channel ? '' : rest.slice(0, -(channel.length + 1));
+      // A selector that names no group and no weapon on this character is a
+      // misspelling and is reported as one. A shape that simply matches
+      // nothing today -- "melee weapons" on a character carrying only a bow --
+      // is not: the rule is right, and it will apply the moment one is bought.
+      if (sel && !WEAPON_SHAPES.has(sel) && !groups.has(sel)
+        && !weapons.some((w) => slug(w.name) === sel)) return null;
+      const matches = (w) => {
+        if (!sel) return true;
+        const type = String(w.attackType || '').toLowerCase();
+        if (WEAPON_SHAPES.has(sel)) return type.includes(sel);
+        return (w.groups || []).some((g) => slug(g) === sel) || slug(w.name) === sel;
+      };
+      return weapons.flatMap((w, i) => (matches(w) ? [`weapon.${i}.${channel}`] : []));
+    };
+    for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
+      list.push({ name: ch === 'attack' ? `weapon.${ch}` : ch, label: `${label}, every weapon` });
+    }
+    for (const sel of [...WEAPON_SHAPES, ...groups, ...weapons.map((w) => slug(w.name))]) {
+      if (!sel) continue;
+      for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
+        list.push({ name: `weapon.${sel}.${ch}`, label: `${label}, ${sel.replace(/_/g, ' ')}` });
+      }
+    }
+
     let names = null;
     return {
       list,
-      expand: (name) => expand.get(name) || null,
+      expand: (name) => expand.get(name) || weaponTarget(name),
       known: (name) => (names ??= new Set(this.scopeNames())).has(name),
     };
   }
@@ -8872,9 +8982,20 @@ export class Character {
    */
   forwardedInto(name) {
     const total = this.#forwarded(name);
-    const from = (this.contributions?.entries || [])
-      .filter((e) => !e.error && e.value && e.lands.includes(name))
-      .map((e) => ({ where: describeSource(e.path), value: e.value, expr: e.expr, sign: e.sign }));
+    const counted = this.contributions?.countedAt?.[name];
+    // Superseded bonuses stay on the list. A size bonus that lost to a bigger
+    // size bonus has not gone away -- it is the reason the bigger one is not
+    // adding to it -- and a reader who cannot see it will write it in again.
+    const from = (this.contributions?.by?.[name] || [])
+      .filter((e) => e.value)
+      .map((e) => ({
+        where: describeSource(e.path),
+        value: e.value,
+        expr: e.expr,
+        sign: e.sign,
+        type: e.type,
+        counts: !counted || counted.has(e),
+      }));
     return from.length ? { total, from } : null;
   }
 
@@ -9544,6 +9665,7 @@ export function describeSource(path) {
     case 'animalCompanion': return 'the animal companion';
     case 'eidolon': return 'the eidolon';
     case 'tab': return `the ${a} tab`;
+    case 'tracker': return `the ${a} tracker’s note`;
     default:
       if (head?.endsWith('Extra')) return `the ${head.replace(/Extra$/, '')} tab`;
       return head ? `${head}` : 'somewhere on the sheet';

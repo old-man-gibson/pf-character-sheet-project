@@ -550,9 +550,11 @@ export const TOKEN_FORMS = [
     form: '{dest += expr}',
     name: 'Forward a bonus',
     what: 'Works it out, prints it, and adds it to something else — a skill, a save, AC, '
-      + 'an attack. The rule lives in the feature that grants it instead of being copied into '
-      + 'every column it touches. Several destinations at once, separated by commas; '
-      + '-= for a penalty. "target.bluff = …" says the same thing the long way.',
+      + 'an attack, an ability score, damage on some or all of your weapons. The rule lives in '
+      + 'the feature that grants it instead of '
+      + 'being copied into every column it touches. Several destinations at once, separated by '
+      + 'commas; -= for a penalty; end with "as size" (or morale, luck, …) and it will not '
+      + 'stack with another bonus of that type. "target.bluff = …" says the same thing the long way.',
     eg: 'Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}.',
   },
 ];

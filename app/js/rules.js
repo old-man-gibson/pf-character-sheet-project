@@ -2139,9 +2139,12 @@ export const DERIVED = [
  * points are here too, added the way the mythic bonus is, and carry no
  * derived key because the sheet's HP total is typed rather than computed.
  *
- * Deliberately absent: ability scores. A permanent one is a build number with
- * its own columns on the Stats tab, and a temporary one is a buff -- neither
- * wants a bonus arriving from a sentence somewhere else on the sheet.
+ * An ability score is here too, and is the one that pays for itself twice: it
+ * is not a total but the thing a dozen totals are built from, so `str.score`
+ * cascades through the modifier into attacks, damage, skills, saves, CMD and
+ * carrying capacity without any of them being named. It lands beside the
+ * Stats tab build rather than in it -- the build columns go on adding up to
+ * the number they add up to.
  * -------------------------------------------------------------- */
 
 /** [name a formula writes to, what to call it, the DERIVED key it lands on]. */
@@ -2158,6 +2161,12 @@ export const FORWARD_STATS = [
   ['attack.ranged', 'Ranged attack', 'attack.totalRanged'],
   ['attack.cmb', 'CMB', 'attack.totalCmb'],
   ['hp.total', 'Max hit points', null],
+  ['str.score', 'Strength', null],
+  ['dex.score', 'Dexterity', null],
+  ['con.score', 'Constitution', null],
+  ['int.score', 'Intelligence', null],
+  ['wis.score', 'Wisdom', null],
+  ['cha.score', 'Charisma', null],
 ];
 
 /**

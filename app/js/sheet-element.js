@@ -1768,13 +1768,18 @@ export class CharacterSheetElement extends HTMLElement {
    * worse than the copied formulas it replaced -- so the amount sits next to
    * the field it is added to, and points back at the sentence that sent it.
    */
-  #forwardedBadge(name) {
+  #forwardedBadge(name, tag = '') {
     const f = name ? this.#model.forwardedInto(name) : null;
     if (!f) return '';
+    // A superseded bonus stays on the list, marked. It is the reason the one
+    // above it is not adding to it, and a reader who cannot see it will write
+    // it in again by hand.
     const from = f.from
-      .map((x) => `${fmt(x.value)} from ${x.where} — ${x.sign < 0 ? '-=' : '+='} ${x.expr}`)
+      .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''} from ${x.where}`
+        + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${x.counts ? '' : `  (does not stack with the other ${x.type})`}`)
       .join('\n');
-    return `<span class="fwd" title="Forwarded here\n${esc(from)}">${fmt(f.total)}</span>`;
+    return `<span class="fwd" title="Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
+      + `${fmt(f.total)}${tag ? ` <em>${esc(tag)}</em>` : ''}</span>`;
   }
 
   #sheetBonusHint(examples) {
@@ -3755,7 +3760,8 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="weapongrid">
           ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType, WEAPON_ATTACK_TYPES))}
           ${this.#field('Enh.', this.#itemNum('equipment.weapons', i, 'enhancement', w.enhancement))}
-          ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack))}
+          ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack)
+            + this.#forwardedBadge(`weapon.${i}.attack`))}
           ${this.#field('Adj.', this.#itemNum('equipment.weapons', i, 'attackOffset', w.attackOffset))}
           <span class="wsep"></span>
           ${this.#field('Dice', `<span class="pair">
@@ -3777,7 +3783,10 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('×', `<input type="number" value="${w.abilityMult ?? 1}" step="0.5" min="0"
             data-item="equipment.weapons|${i}|abilityMult" data-kind="number" style="width:3.2rem"
             title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
-          ${this.#field('Misc dmg', this.#itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' }))}
+          ${this.#field('Misc dmg', this.#itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' })
+            + this.#forwardedBadge(`weapon.${i}.damage`)
+            + this.#forwardedBadge(`weapon.${i}.damage.mult`, 'mult')
+            + this.#forwardedBadge(`weapon.${i}.damage.crit`, 'crit'))}
           <span class="wsep"></span>
           ${this.#field('Crit', this.#itemNum('equipment.weapons', i, 'critRange', w.critRange))}
           ${this.#field('Mult', this.#itemSelect('equipment.weapons', i, 'critMult', w.critMult, WEAPON_CRIT_MULTS))}
@@ -7096,8 +7105,9 @@ export class CharacterSheetElement extends HTMLElement {
     // "+24" there means nothing at all until you know it is Bluff's.
     if (seg.kind === 'push') {
       const op = seg.sign < 0 ? '-=' : '+=';
-      return `${fmt(seg.value)} to ${this.#targetLabels(seg.targets)} — `
-        + `{${seg.targets.join(', ')} ${op} …} ${workingLine(seg.expr, scope)}`;
+      const as = seg.type ? ` as ${seg.type}` : '';
+      return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${this.#targetLabels(seg.targets)} — `
+        + `{${seg.targets.join(', ')} ${op} …${as}} ${workingLine(seg.expr, scope)}`;
     }
     const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
     return `${label} ${workingLine(seg.expr, scope)}`;
@@ -7571,6 +7581,7 @@ export class CharacterSheetElement extends HTMLElement {
       to: this.#targetLabels(e.targets),
       value: e.value,
       expr: e.expr,
+      type: e.type,
       where: describeSource(e.path),
       error: e.error,
       dropped: e.dropped,

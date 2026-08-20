@@ -963,6 +963,7 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
   color: var(--cs-accent); font-size: 0.76rem; font-weight: 650;
   font-variant-numeric: tabular-nums; cursor: help; vertical-align: middle;
 }
+.fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
 
 /* ---------- formula fields ---------- */
 /* Same two layers as .prose, for a single-line control: the resolved value is
