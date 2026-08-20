@@ -742,6 +742,7 @@ th {
 }
 tbody tr:hover { background: var(--cs-panel-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num {text-align: left}
 td.total { font-weight: 660; color: var(--cs-accent); }
 tr.trained td:first-child { font-weight: 600; }
 tr.untrained { color: var(--cs-muted); }
