@@ -80,7 +80,73 @@ export const SHEET_CSS = `
 .head-main { flex: 1; min-width: 0; }
 .name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
+/* The session view's standing line: the numbers a table asks for mid-fight,
+   visible on every tab while that view is on. */
+.sessionstrip { display: flex; flex-wrap: wrap; gap: 2px 7px; align-items: baseline; margin-top: 4px; }
+.sessionstrip strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.sessionstrip strong.bad { color: var(--cs-bad); }
+.sessionstrip strong.now { display: inline; font-size: inherit; margin: 0; }
+.sessionstrip .dim { font-size: 0.75rem; }
+.sessionstrip .hptemp { font-size: 0.75rem; }
 .head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- the session dashboard ---------- */
+/* Cards over panels: the same .panel chrome, but each card leads with the
+   one line that answers the common question, and Expand brings the full
+   build-view panel up in place. */
+.dashboard .dashconds { display: flex; flex-wrap: wrap; gap: 6px; }
+.dashboard .cond-pill { font-size: 0.85rem; padding: 3px 6px 3px 10px; gap: 5px; }
+.dashboard .cond-pill input { width: 3rem; }
+/* The condition picker: short shelves, not one long dropdown. */
+.condcats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 10px; margin-top: 10px; }
+.condcat { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.condcat h4 { margin: 0 0 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted); }
+.condcat button { text-align: left; font-size: 0.8rem; }
+.condcat button[disabled] { opacity: 0.5; }
+/* Trackers pack side by side and keep their listed order; the Trackers tab
+   stays the canonical one-per-row read. */
+.dashtrackers { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 2px 18px; }
+.dashtracker { display: grid; grid-template-columns: minmax(5.5rem, max-content) 1fr auto; gap: 8px; align-items: center; padding: 4px 0; min-width: 0; }
+.dashtracker.invalid .tname { color: var(--cs-bad); }
+.dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
+.dashtracker .dashmeter { min-width: 3rem; }
+/* Buffs: one line collapsed, a roomy editor open -- long formulas need width. */
+/* Buffs pack shoulder to shoulder and never move: the editor is its own
+   full-width block under the grid, tied to the open card by the highlight. */
+.bufflist { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 8px; }
+.buffcard { border: 1px solid var(--cs-line); border-radius: var(--cs-radius); padding: 6px 10px; background: var(--cs-panel-2); }
+.buffcard.open { border-color: var(--cs-edit); }
+.buffcard.invalid { border-color: var(--cs-bad); }
+.buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
+.buffeditor {
+  margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
+  border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
+}
+.buffeditor .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.buffhead .bname { font-weight: 620; font-size: 0.9rem; }
+.buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
+.buffhead > input[type="checkbox"] { flex: none; width: auto; }
+.effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
+/* The full-attack weapon pick: a name, not a paragraph. */
+.dashboard .statline select { max-width: 10rem; }
+/* One reminder per block: the tick and name on the first line, the note under. */
+.effectlist { display: grid; gap: 8px; }
+.effectrow { display: grid; gap: 4px; }
+.effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
+.effectrow.off input[type="text"] { opacity: 0.55; }
+.now.up { color: var(--cs-good); }
+.dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
+.dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.dashstat .now { display: inline; margin: 0; }
+.dashdmg { font-weight: 620; font-variant-numeric: tabular-nums; }
+.dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
+.dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
+@media (max-width: 700px) {
+  .dashtracker { grid-template-columns: 1fr auto; }
+  .dashtracker .dashmeter { grid-column: 1 / -1; }
+}
 /* Why an offered file was refused -- stays up until dismissed, because the
    fix (re-run the converter, pick a different file) happens elsewhere. */
 .importerr {
@@ -90,6 +156,16 @@ export const SHEET_CSS = `
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .importerr button { margin-left: auto; padding: 0 6px; }
+/* The armed Reset: loud enough to read, dead until the word is typed. */
+.resetconfirm {
+  flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 8px 10px; font-size: 0.8rem;
+  color: var(--cs-text); background: rgba(224, 99, 95, 0.10);
+  border: 1px solid var(--cs-bad); border-radius: 6px;
+}
+.resetconfirm > span:first-child { flex: 1 1 24rem; }
+.resetconfirm strong { color: var(--cs-bad); }
+.resetconfirm .pair { margin-left: auto; }
 
 /* ---------- saving, and going back ---------- */
 /* Work that was never saved, offered rather than assumed: the sheet opens on

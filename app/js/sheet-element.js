@@ -42,7 +42,6 @@ import {
   castingTableNames,
   psionicTables, psionicCurveTotals,
   CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
-  DEFAULT_TAB_ORDER,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_LEVEL, optionCatalogues,
@@ -77,11 +76,11 @@ import {
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
-  mergeLayout,
+  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS,
 } from './rules.js';
 import {
-  COMPANION_KINDS, COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
-  ABILITY_INCREASE_LEVELS, companionInUse,
+  COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
+  ABILITY_INCREASE_LEVELS,
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
@@ -406,7 +405,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
@@ -461,6 +460,14 @@ export class CharacterSheetElement extends HTMLElement {
   #showAllSkills = false;
   #showAllGear = false;
   #confirmDelete = null;
+  /** Which Classes row has its sub-system picker open (index, or null). */
+  #openClassSystems = null;
+  /** Whether the dashboard's grouped condition picker is unfolded. */
+  #condPickerOpen = false;
+  /** Which buff row has its editor open (index, or null). */
+  #openBuff = null;
+  /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
+  #confirmReset = false;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -971,7 +978,8 @@ export class CharacterSheetElement extends HTMLElement {
       const m = modelled[id];
       out.push({
         key: id, id, label, kind: m ? 'modelled' : 'core',
-        inUse: m ? m.has : true, weird: isWeirdTab(label),
+        inUse: m ? m.has || m.tagged : true, has: m ? m.has : true,
+        tagged: !!m?.tagged, weird: isWeirdTab(label),
       });
     }
     (d.sheetTabs || []).forEach((tab, index) => {
@@ -1036,8 +1044,10 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
           </div>
+          ${this.#sessionStrip()}
         </div>
         <div class="head-actions">
+          ${this.#viewModeButton()}
           ${this.#formulaButton()}
           <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
           <button data-action="save" class="${this.#changes ? 'primary' : ''}"
@@ -1052,10 +1062,11 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="export">Export JSON</button>
           <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import</button>
           <input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>
-          <button data-action="reset" class="danger"
-            title="Back to the character as imported. Named checkpoints are kept.">Reset</button>
+          <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
+            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>
         </div>
         ${this.#resumeBanner()}
+        ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
           <button data-action="dismiss-history-note" aria-label="Dismiss">×</button>
@@ -1066,6 +1077,67 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
       </header>`;
+  }
+
+  /**
+   * The armed Reset: a banner that says exactly what goes and what stays, and
+   * a button that stays dead until the player types RESET. A destructive
+   * action this size should never ride on one click landing an inch left of
+   * History.
+   */
+  #resetConfirmHtml() {
+    const checkpoints = (this.#snapshots || []).filter((s) => s.kind === 'checkpoint').length;
+    return `<div class="resetconfirm" role="alertdialog" aria-label="Confirm reset">
+      <span>
+        <strong>Reset to the character as imported?</strong>
+        This discards the saved version, any unsaved edits${this.#changes ? ` (${this.#changes} right now)` : ''}
+        and the automatic snapshots. Named checkpoints are kept${checkpoints
+    ? ` — you have ${checkpoints}` : ' (you have none; History can name one first)'}.
+        Type <code>RESET</code> to arm the button.
+      </span>
+      <span class="pair">
+        <input type="text" data-reset-word placeholder="RESET" autocomplete="off" spellcheck="false"
+          aria-label="Type RESET to arm the reset button" style="width:6.5rem">
+        <button class="danger" data-action="reset-confirm" disabled>Reset</button>
+        <button data-action="reset-cancel">Keep everything</button>
+      </span>
+    </div>`;
+  }
+
+  /** The Session/Build switch: which view of the sheet is showing. */
+  #viewModeButton() {
+    const session = this.#model.viewMode() === 'session';
+    return `<button data-action="view-mode" aria-pressed="${session}"
+      title="${session
+    ? 'Session view: the tabs that come up at the table. Switch back to see everything.'
+    : 'Switch to the session view: only the tabs that come up at the table'}">
+      ${session ? 'Session' : 'Build'} view</button>`;
+  }
+
+  /**
+   * The numbers a table asks for mid-fight, on every tab while the session
+   * view is on: hit points, AC and the three saves. When a ticked condition
+   * moves one, the moved value is what shows -- that is what is being rolled.
+   */
+  #sessionStrip() {
+    if (this.#model.viewMode() !== 'session') return '';
+    const c = this.#model.data;
+    const hp = this.#model.hpState;
+    const d = c.defenses;
+    const s = c.saves;
+    const cs = this.#model.conditionState;
+    const shown = (key, base, format = fmt) => (cs.changed && cs.delta[key]
+      ? `<strong class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">${format(cs.adjusted[key])}</strong>`
+      : `<strong>${format(base)}</strong>`);
+    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
+    return `<div class="subtitle sessionstrip">
+      HP <strong${hp.current < hp.max ? ' class="bad"' : ''}>${hp.current}/${hp.max}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
+      &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${moved('touch', d.touch)} &middot; FF ${moved('flatFooted', d.flatFooted)}</span>
+      &middot; Fort ${shown('fortitude', s.fortitude.total)}
+      Ref ${shown('reflex', s.reflex.total)}
+      Will ${shown('will', s.will.total)}
+      ${cs.active.length ? `<span class="badge err">${cs.active.length} condition${cs.active.length === 1 ? '' : 's'}</span>` : ''}
+    </div>`;
   }
 
   /**
@@ -1183,7 +1255,10 @@ export class CharacterSheetElement extends HTMLElement {
       case 'extras': return this.#extrasPanel();
       case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
-      default: return this.#overviewPanel();
+      // In the session view the Overview is a dashboard: the numbers a table
+      // asks for, in cards. The full page is one Build-view click away.
+      default: return this.#model.viewMode() === 'session'
+        ? this.#dashboardPanel() : this.#overviewPanel();
     }
   }
 
@@ -1266,9 +1341,342 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#conditionsPanel()}
         ${this.#carryPanel()}
       </div>
+      ${this.#collapsible('buffs', this.#buffsPanel())}
       ${this.#collapsible('wealth', this.#wealthPanel())}
       ${this.#traitsPanel()}
     </div>`;
+  }
+
+  /* ---------------- the session dashboard ---------------- */
+
+  /**
+   * The Overview as it reads mid-session: cards answering what a table
+   * actually asks -- what is on me, what can I spend, what do I roll, what
+   * is running -- with the full machinery one Expand (the same panels the
+   * build view shows) or one Build-view click away. Expand states persist
+   * in uiPrefs.collapsed under dash:* keys, where true means open.
+   */
+  #dashboardPanel() {
+    const open = (key) => !!this.#model.data.uiPrefs?.collapsed?.[`dash:${key}`];
+    const e = this.#model.data.equipment || {};
+    return `<div class="grid dashboard">
+      ${this.#dashConditionsCard()}
+      ${this.#buffsPanel()}
+      ${this.#dashResourcesCard()}
+      ${this.#dashOffenseCard(open('offense'))}
+      ${this.#dashDefenseCard(open('defense'))}
+      ${open('offense') ? `${this.#attackPanel()}${this.#weaponsPanel(e)}` : ''}
+      ${open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''}
+      ${this.#dashSkillsCard(open('skills'))}
+      ${this.#dashEffectsCard()}
+      ${this.#dashQuickCard()}
+    </div>`;
+  }
+
+  /** The card's corner control: one click between the summary and the full read. */
+  #dashExpand(key, openNow) {
+    return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
+      aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
+  }
+
+  /** What is on the character right now, as chips; everything else one pick away. */
+  #dashConditionsCard() {
+    const conds = this.#model.data.conditions || {};
+    const cs = this.#model.conditionState;
+    const chip = (name) => {
+      const info = conditionInfo(name);
+      const label = info?.label || name;
+      const title = info ? info.rule : '';
+      if (info?.kind === 'count') {
+        return `<span class="pill cond-pill" title="${esc(title)}">${esc(label)}
+          ${this.#num(`conditions.${name}`, Number(conds[name]) || 0, `min="0" style="width:3rem" aria-label="${esc(label)} count"`)}
+        </span>`;
+      }
+      return `<span class="pill cond-pill" title="${esc(title)}">${esc(label)}
+        <button data-action="dash-cond-off" data-name="${esc(name)}" aria-label="Take ${esc(label)} off">×</button></span>`;
+    };
+    const active = Object.keys(conds).filter((n) => Number(conds[n]) > 0)
+      .sort((a, b) => a.localeCompare(b));
+    return `<section class="panel span2">
+      <h3>Conditions ${cs.active.length ? `<span class="badge err">${cs.active.length} on</span>` : ''}
+        <button class="linkish" style="margin-left:auto" data-action="dash-cond-picker"
+          aria-expanded="${this.#condPickerOpen}">${this.#condPickerOpen ? 'Close' : '+ Add condition'}</button>
+      </h3>
+      <div class="pills dashconds">
+        ${active.map(chip).join('') || '<span class="empty">None — all clear.</span>'}
+      </div>
+      ${this.#dashCondPicker()}
+      ${cs.notes.length ? `<p class="hint">${cs.notes.map((n) => `${esc(n[0].toUpperCase() + n.slice(1))}.`).join(' ')}</p>` : ''}
+    </section>`;
+  }
+
+  /**
+   * The catalogue as short shelves rather than one long dropdown: a column per
+   * kind of trouble, a button per condition. A click puts it on already
+   * ticked; Energy Drain climbs a level per click; what is on shows pressed.
+   */
+  #dashCondPicker() {
+    if (!this.#condPickerOpen) return '';
+    const conds = this.#model.data.conditions || {};
+    const onNow = (info) => Object.entries(conds)
+      .some(([n, v]) => Number(v) > 0 && conditionInfo(n)?.key === info.key);
+    const btn = (info) => {
+      const on = onNow(info);
+      const count = info.kind === 'count';
+      return `<button data-action="dash-cond-on" data-name="${esc(info.label)}"
+        aria-pressed="${on}" ${on && !count ? 'disabled' : ''}
+        title="${esc(info.rule)}">${esc(info.label)}${count && on ? ' +1' : ''}</button>`;
+    };
+    const cats = CONDITION_CATS.map((cat) => `<div class="condcat">
+      <h4>${esc(cat)}</h4>
+      ${CONDITIONS.filter((x) => x.cat === cat).map(btn).join('')}
+    </div>`);
+    // Whatever the workbook listed that the catalogue does not know.
+    const custom = Object.keys(conds).filter((n) => !conditionInfo(n) && !(Number(conds[n]) > 0));
+    if (custom.length) {
+      cats.push(`<div class="condcat"><h4>From the sheet</h4>
+        ${custom.map((n) => `<button data-action="dash-cond-on" data-name="${esc(n)}">${esc(n)}</button>`).join('')}
+      </div>`);
+    }
+    return `<div class="condcats">${cats.join('')}</div>`;
+  }
+
+  /**
+   * Buffs: named, tickable bonuses that ride the condition machinery, so a
+   * ticked buff moves every "now" figure exactly as a ticked condition does.
+   * Each dial takes a number or a formula -- a Citadel banner's
+   * "1 + essence.shoulder" keeps up as essence moves. Shown on the session
+   * dashboard and on the build Overview alike.
+   */
+  #buffsPanel() {
+    const buffs = this.#model.data.buffs || [];
+    const cs = this.#model.conditionState;
+    const list = 'buffs';
+    // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
+    // dial is a full-width formula field with its working, because the formulas
+    // worth writing -- nested if(…) off hit points and essence -- need room.
+    const summary = (b) => BUFF_MOD_KEYS
+      .map(([key, label]) => { const v = Number(b[`${key}Num`]) || 0; return v ? `${fmt(v)} ${label}` : ''; })
+      .filter(Boolean).join(' · ') || 'no numbers yet';
+    const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
+      ${this.#itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
+    // The cards never move: the editor is its own full-width block under the
+    // grid, tied to the open card by the shared highlight.
+    const row = (b, i) => {
+      const open = this.#openBuff === i;
+      return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}${open ? ' open' : ''}">
+        <div class="buffhead">
+          ${this.#itemCheck(list, i, 'on', b.on !== false)}
+          <span class="bname">${esc(b.name || 'Unnamed buff')}</span>
+          <span class="bsum hint" style="margin:0">${esc(summary(b))}</span>
+          ${b.error ? `<span class="badge err" title="${esc(b.error)}">formula problem</span>` : ''}
+          <span class="pair" style="margin-left:auto">
+            <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
+              title="${open ? 'Close the editor' : 'Open the dials and formulas'}">${open ? '▾ Close' : '▸ Edit'}</button>
+            <button class="danger" data-remove="buffs|${i}" aria-label="Remove buff">×</button>
+          </span>
+        </div>
+      </div>`;
+    };
+    const editing = buffs[this.#openBuff] ? this.#openBuff : null;
+    const editor = editing === null ? '' : (() => {
+      const b = buffs[editing];
+      const i = editing;
+      return `<div class="buffeditor">
+        <div class="fieldgrid">
+          <label class="fld"><span>Buff</span>${this.#itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
+          ${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}
+        </div>
+        ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
+    .map(([key, label]) => this.#formulaMeta(label.toLowerCase(), b[key])).join('')}
+        <label class="fld" style="margin-top:6px"><span>Note</span>
+          ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
+        <p class="hint">The note reads {…} like prose: a definition written here — say
+          <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
+          — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
+          It stands whether the buff is ticked or not; a value that should switch says so itself, with if(…).</p>
+      </div>`;
+    })();
+    return `<section class="panel span2">
+      <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
+        <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
+      </h3>
+      <div class="bufflist">
+        ${buffs.map(row).join('') || '<p class="empty">No buffs yet.</p>'}
+      </div>
+      ${editor}
+      <p class="hint">A ticked buff rides the same machinery as a condition: attacks, AC,
+        saves, skills, initiative and damage all show their <em>now</em> value with it in.
+        Every dial takes a number or a formula — <code>1 + essence.shoulder</code> keeps a
+        banner's bonus right as the essence moves.</p>
+    </section>`;
+  }
+
+  /** Every tracker as one row: name, its own meter, and the − n + controls. */
+  #dashResourcesCard() {
+    const trackers = this.#model.trackers;
+    const row = (t) => {
+      const max = Number(t.max) || 0;
+      const min = Number(t.min) || 0;
+      const cur = Number(t.current) || 0;
+      const draining = this.#isDraining(t);
+      const twoSided = min < 0;
+      const shown = draining ? max - cur : cur;
+      const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
+      const range = min === 0 ? `/ ${max}`
+        : (twoSided && min === -max) ? `/ ±${max}` : `/ ${signed(min)}…${signed(max)}`;
+      return `<div class="dashtracker${t.error ? ' invalid' : ''}">
+        <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
+        <div class="dashmeter">${this.#trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
+        <span class="tracker-controls">
+          <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
+          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
+            aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
+          <span class="pool">${range}</span>
+          <button data-tracker-step="${t.id}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
+        </span>
+      </div>`;
+    };
+    return `<section class="panel span2">
+      <h3>Resources
+        <button class="linkish" style="margin-left:auto" data-action="goto-trackers"
+          title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
+      </h3>
+      <div class="dashtrackers">
+        ${trackers.map(row).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
+      </div>
+    </section>`;
+  }
+
+  /** The attack numbers and every weapon's line; Expand brings the full panels up. */
+  #dashOffenseCard(openNow) {
+    const c = this.#model.data;
+    const cs = this.#model.conditionState;
+    const weapons = c.equipment?.weapons || [];
+    const now = (key) => (cs.changed && cs.delta[key]
+      ? `<span class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">now ${fmt(cs.adjusted[key])}</span>` : '');
+    const stat = (label, value, nowKey, kind, ref, rollLabel) => `<span class="dashstat">${esc(label)}
+      <strong>${fmt(value)}</strong>${now(nowKey)}${this.#rollButton(kind, ref, rollLabel, cs)}</span>`;
+    const wrow = (w, i) => `<div class="statline">
+      <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
+      <span class="value rollpair"><strong>${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</strong>
+        <span class="dashdmg">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
+        ${this.#rollButton('weapon', i, `a full attack with ${String(w.name || '').trim() || 'this weapon'} — every iterative, damage and crit`, cs)}</span>
+    </div>`;
+    return `<section class="panel">
+      <h3>Offense ${this.#dashExpand('offense', openNow)}</h3>
+      <div class="dashstats">
+        ${stat('Melee', c.attack.totalMelee, 'melee', 'mode', 'melee', 'a melee attack')}
+        ${stat('Ranged', c.attack.totalRanged, 'ranged', 'mode', 'ranged', 'a ranged attack')}
+        ${stat('CMB', c.attack.totalCmb, 'cmb', 'mode', 'cmb', 'a combat maneuver')}
+        ${stat('Init', c.hp.initiative, 'initiative', 'initiative', 'self', 'initiative')}
+      </div>
+      <div class="rowlist" style="margin-top:6px">
+        ${weapons.map(wrow).join('') || '<p class="empty">No weapons yet — Expand to add one.</p>'}
+      </div>
+      ${(() => {
+    // The full-attack line names the weapon whose damage rides along; with
+    // no weapons it falls back to the bare melee iterative chain.
+    const pick = Number(this.#draft.fullAttackWeapon);
+    const chosen = Number.isInteger(pick) && weapons[pick] ? pick : (weapons.length ? 0 : null);
+    const wname = (w, i) => String(w.name || '').trim() || `Weapon ${i + 1}`;
+    const control = weapons.length > 1
+      ? `<select data-draft="fullAttackWeapon" aria-label="Weapon for the full attack">
+          ${weapons.map((w, i) => `<option value="${i}"${i === chosen ? ' selected' : ''}>${esc(wname(w, i))}</option>`).join('')}
+        </select>`
+      : weapons.length === 1 ? `<span class="dim">${esc(wname(weapons[0], 0))}</span>` : '';
+    const roll = chosen !== null
+      ? this.#rollButton('weapon', chosen, `a full attack with ${wname(weapons[chosen], chosen)} — every iterative, its damage and crit`, cs)
+      : this.#rollButton('mode', 'melee', 'a full-round melee attack — every iterative', cs);
+    return this.#lineHtml('Full attack', `${control}
+      <span class="dim">${esc(c.attack.iterative || '—')}</span> ${roll}`);
+  })()}
+      ${cs.changed && cs.delta.damage
+    ? `<p class="hint">${fmt(cs.delta.damage)} on damage rolls from conditions and buffs.</p>` : ''}
+    </section>`;
+  }
+
+  /** AC, CMD and the saves at a glance, adjusted; Expand brings the breakdowns up. */
+  #dashDefenseCard(openNow) {
+    const d = this.#model.data.defenses;
+    const s = this.#model.data.saves;
+    const cs = this.#model.conditionState;
+    const shown = (key, base, format = String) => (cs.changed && cs.delta[key]
+      ? `<strong class="now ${cs.delta[key] > 0 ? 'up' : ''}" title="With conditions and buffs applied">${format(cs.adjusted[key])}</strong>`
+      : `<strong>${format(base)}</strong>`);
+    const save = (key, label) => this.#lineHtml(label,
+      `${shown(key, s[key].total, fmt)}${this.#rollButton('save', key, `a ${label} save`, cs)}`, true);
+    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
+    return `<section class="panel">
+      <h3>Defense ${this.#dashExpand('defense', openNow)}</h3>
+      ${this.#lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
+      ${this.#lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${d.ffCmd}</span>`, true)}
+      ${save('fortitude', 'Fortitude')}
+      ${save('reflex', 'Reflex')}
+      ${save('will', 'Will')}
+      <p class="hint">Expand for the armour and save breakdowns by bonus type.</p>
+    </section>`;
+  }
+
+  /** The skills that come up, best first; Expand lists every trained one. */
+  #dashSkillsCard(openNow) {
+    const cs = this.#model.conditionState;
+    const all = (this.#model.data.skills || []).map((s, i) => ({ s, i })).filter(({ s }) => !s.hidden);
+    const byBonus = (a, b) => (Number(b.s.bonus) || 0) - (Number(a.s.bonus) || 0);
+    const trained = all.filter(({ s }) => (Number(s.totalRanks) || 0) > 0).sort(byBonus);
+    const pool = trained.length ? trained : [...all].sort(byBonus);
+    const rows = openNow ? pool : pool.slice(0, 6);
+    const row = ({ s, i }) => `<div class="statline">
+      <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
+      <span class="value rollpair">${fmt(s.bonus)}${this.#rollButton('skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
+    </div>`;
+    return `<section class="panel">
+      <h3>Key skills ${this.#dashExpand('skills', openNow)}</h3>
+      <div class="rowlist">${rows.map(row).join('') || '<p class="empty">No skills yet.</p>'}</div>
+      <p class="hint">${trained.length} trained · ${openNow ? 'all of them above'
+    : `the top ${Math.min(6, pool.length)} by bonus`} — ranks are spent on the Skills tab.</p>
+    </section>`;
+  }
+
+  /** Player-written reminders of what is running. They move no numbers. */
+  #dashEffectsCard() {
+    const effects = this.#model.data.effects || [];
+    const row = (x, i) => `<div class="effectrow${x.on === false ? ' off' : ''}">
+      <div class="pair">
+        ${this.#itemCheck('effects', i, 'on', x.on !== false)}
+        ${this.#itemText('effects', i, 'name', x.name, 'Watching the north door')}
+        <button class="danger" data-remove="effects|${i}" aria-label="Remove effect">×</button>
+      </div>
+      ${this.#itemText('effects', i, 'note', x.note, 'the detail worth remembering')}
+    </div>`;
+    return `<section class="panel">
+      <h3>Active effects</h3>
+      <div class="effectlist">${effects.map(row).join('') || '<p class="empty">Nothing running.</p>'}</div>
+      <div style="margin-top:8px">${this.#addButton('effects', 'Add effect', { name: '', note: '', on: true })}</div>
+      <p class="hint">Reminders, not rules: these move no numbers. A bonus with numbers
+        behind it belongs in <strong>Buffs</strong> above, where it moves everything.</p>
+    </section>`;
+  }
+
+  /** Damage, healing and the night's rest, one field and three buttons. */
+  #dashQuickCard() {
+    const hp = this.#model.hpState;
+    return `<section class="panel span2">
+      <h3>Quick actions</h3>
+      <div class="pair" style="flex-wrap:wrap">
+        <input type="number" min="0" data-draft="quickHp" value="${esc(this.#draft.quickHp ?? '')}"
+          placeholder="Amount" style="width:5.5rem" aria-label="Hit points to apply">
+        <button data-action="quick-damage"
+          title="Temporary hit points absorb first; the rest comes off current">Damage</button>
+        <button data-action="quick-heal"
+          title="Current climbs to the maximum, and the same points erase nonlethal">Heal</button>
+        <span class="dashsep" aria-hidden="true"></span>
+        <button data-action="quick-rest"
+          title="Every tracker with a daily refresh goes back to unspent. Slots and pools with other rhythms are yours to move.">Rest</button>
+      </div>
+      <p class="hint">HP ${hp.current}/${hp.max}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
+    ? ` · ${hp.nonlethal} nonlethal` : ''} — the strip above follows along.</p>
+    </section>`;
   }
 
   #detailsPanel() {
@@ -1783,12 +2191,42 @@ export class CharacterSheetElement extends HTMLElement {
     const sv = (k) => g.saves?.[k] || {};
     const level = Number(c.identity.level) || 0;
     const gestalt = (c.progression?.tracks ?? 1) > 1;
+    // The sub-system picker: a row of toggles under the class it belongs to.
+    // Marking a system badges its tabs in the ⚙ manager and puts them on the
+    // session view's bar before anything is typed into them.
+    const sysButton = (x, i) => {
+      const n = (x.systems || []).length;
+      const open = this.#openClassSystems === i;
+      return `<button data-action="class-systems" data-index="${i}" aria-expanded="${open}"
+        title="Mark the sub-systems this class uses — they light their tabs up in the ⚙ manager and on the session view">
+        ${open ? '▾' : '▸'} ${n || '—'}</button>`;
+    };
+    const sysPicker = (x, i) => {
+      if (this.#openClassSystems !== i) return '';
+      const on = new Set(x.systems || []);
+      const known = new Set(GAME_SYSTEMS.map((s) => s.id));
+      const extra = [...on].filter((id) => !known.has(id));
+      return `<tr class="syspicker"><td colspan="11">
+        <p class="hint" style="margin:2px 0 6px">
+          The machinery ${esc(x.name || 'this class')} plays with. A marked system shows
+          <em>marked</em> on its tabs in the ⚙ manager and joins the session view's bar,
+          even before anything is typed into it.
+        </p>
+        <div class="pair" style="flex-wrap:wrap">
+          ${GAME_SYSTEMS.map((s) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${s.id}" aria-pressed="${on.has(s.id)}">${esc(s.label)}</button>`).join('')}
+          ${extra.map((id) => `<button data-action="class-system-toggle" data-index="${i}"
+            data-system="${esc(id)}" aria-pressed="true"
+            title="A tag from an extension pack this app has no tab for">${esc(id)}</button>`).join('')}
+        </div>
+      </td></tr>`;
+    };
     return `<section class="panel span2">
       <h3>Classes</h3>
       <div class="tablewrap"><table class="classes">
         <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
           <col class="save"><col class="save"><col class="save">
-          <col class="ranks"><col class="arch"><col class="tools"></colgroup>
+          <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
         <thead><tr>
           <th>Class</th>
           <th class="num" title="How many of the character's levels feature this class in the Planner; type a number to override">Levels</th>
@@ -1796,7 +2234,8 @@ export class CharacterSheetElement extends HTMLElement {
           <th title="Base attack progression — the best one on each level is what the character's BAB is built from">BAB</th>
           <th class="mid" title="Good Fortitude">Fort</th><th class="mid" title="Good Reflex">Ref</th><th class="mid" title="Good Will">Will</th>
           <th class="num" title="Skill ranks per level">Ranks</th>
-          <th>Archetypes</th><th></th>
+          <th>Archetypes</th>
+          <th title="The sub-systems this class uses (Spheres, Path of War, psionics…)">Systems</th><th></th>
         </tr></thead>
         <tbody>${c.classes.map((x, i) => {
           const auto = Number(x.gestaltLevels) || 0;
@@ -1831,13 +2270,14 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
               ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
             </span>`).join('')}</span>` : ''}${this.#itemText('classes', i, 'archetypes', x.archetypes)}</td>
+          <td class="mid">${sysButton(x, i)}</td>
           ${this.#rowTools('classes', i)}
-        </tr>`;
+        </tr>${sysPicker(x, i)}`;
         }).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${this.#addButton('classes', 'Add class', {
         name: 'New class', hd: 8, bab: 0.75, goodFort: false, goodRef: false,
-        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null,
+        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
       })}</div>
       <div class="fieldgrid" style="margin-top:8px">
         <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
@@ -2800,7 +3240,9 @@ export class CharacterSheetElement extends HTMLElement {
     const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
-      ${e.kind === 'modelled' ? (e.inUse ? '<span class="badge ok">in use</span>' : '<span class="badge">empty</span>') : ''}`;
+      ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
+    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
+      : '<span class="badge">empty</span>') : ''}`;
     const name = (e) => (e.kind === 'system'
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
       : esc(e.label));
@@ -2828,13 +3270,21 @@ export class CharacterSheetElement extends HTMLElement {
       </span>
     </div>`;
 
+    const mode = this.#model.viewMode();
     return `<div class="grid"><section class="panel span2">
-      <h3>Tab bar</h3>
+      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
+        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
+    ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
+          Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
+      </h3>
       <p class="hint">
         The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
         to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact. The default is Overview, Stats, Lore, Skills, Progression, Feats &amp;
-        Mythic, Primordia, Trackers, Equipment; <button data-action="tab-reset">reset to it</button>
+        its data intact. Each view keeps its own bar: the <em>build</em> view starts from
+        Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Primordia, Trackers,
+        Equipment; the <em>session</em> view starts from what comes up at the table -- the
+        tabs above plus every sub-system in use or marked on a class, minus the build
+        machinery. <button data-action="tab-reset">Reset this view's bar</button>
       </p>
       <div class="rowlist tabbar-list">
         ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
@@ -2845,9 +3295,11 @@ export class CharacterSheetElement extends HTMLElement {
       <h3>Hidden tabs</h3>
       <p class="hint">
         Everything else the sheet can show, alphabetically: the rest of the built-in
-        tabs, the modelled sub-systems (Akashic, Maneuvers, Vancian, Psionics, the
-        companions…), and the workbook's own worksheets. <em>In use</em> marks a
-        sub-system that already holds this character's data.
+        tabs, the modelled sub-systems (Spheres &amp; Magic, Crafting, Akashic, Maneuvers,
+        Vancian, Psionics, the companions…), and the workbook's own worksheets.
+        <em>In use</em> marks a sub-system that already holds this character's data;
+        <em>marked</em> means a class on the Overview names the system but its tab is
+        still empty.
       </p>
       <div class="rowlist">
         ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}
@@ -4426,30 +4878,17 @@ export class CharacterSheetElement extends HTMLElement {
    * manager; `has` is what the manager badges as "in use", so a character with
    * veils or a deck can see which of the waiting tabs actually has their data.
    */
+  /**
+   * The sub-system tabs with an "in use" state, keyed by tab id. The data
+   * checks live on the model (`systemTabsInUse` -- Spheres & Magic and
+   * Crafting included); `tagged` says a class on the Overview marks the
+   * system even though nothing is typed into its tab yet.
+   */
   #modelledSystems() {
-    const d = this.#model.data;
-    const rows = [
-      { id: 'akashic', label: 'Akashic', has: !!(d.akashic?.slots || []).length },
-      { id: 'maneuvers', label: 'Maneuvers', has: !!(d.maneuvers?.disciplines || []).length },
-      { id: 'vancian', label: 'Vancian', has: !!(d.vancian?.classes || []).length },
-      { id: 'psionics', label: 'Psionics', has: !!(d.psionics?.classes || []).length },
-      // A deck, or the Card Casting drawback on the tradition, is enough.
-      { id: 'cardcasting', label: 'Cardcasting', has: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled },
-      // Techniques: a catalogue with anything on it; a draft with a name; a dish with anything on the plate.
-      { id: 'techniques', label: 'Technique List', has: !!(d.techniques?.catalogue || []).length },
-      { id: 'autoTechnique', label: 'AutoTechnique', has: !!d.techniques?.draft?.name },
-      { id: 'cooking', label: 'Auto-Cooking', has: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)) },
-      // A character who gains a template later has nothing imported to show, so
-      // the tab is off until it is asked for -- and then offers to start one.
-      { id: 'template', label: 'Template', has: !!(d.templates || []).length },
-      // A companion is in use once it has a name, a master class, or anything
-      // on it; until then the tab waits in the manager like the others.
-      ...COMPANION_KINDS.map((kind) => ({
-        id: kind, label: COMPANION_LABELS[kind], has: companionInUse(kind, d[kind]),
-      })),
-    ];
+    const has = this.#model.systemTabsInUse();
+    const tagged = this.#model.taggedSystemTabs();
     const out = {};
-    for (const r of rows) out[r.id] = r;
+    for (const [id, h] of Object.entries(has)) out[id] = { id, has: h, tagged: tagged.has(id) };
     return out;
   }
 
@@ -8965,6 +9404,24 @@ export class CharacterSheetElement extends HTMLElement {
         if (key === 'formula' || key === 'minFormula') {
           this.#refreshPreview(root, 'add', this.#draft.formula, this.#draft.minFormula);
         }
+        // The full-attack d20 is built for the picked weapon, so the pick
+        // has to rebuild it.
+        if (key === 'fullAttackWeapon') this.#render();
+      });
+    });
+
+    // The word that arms Reset. Toggled in place -- a re-render per keystroke
+    // would drop focus mid-word.
+    root.querySelectorAll('[data-reset-word]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const armed = input.value.trim().toUpperCase() === 'RESET';
+        const btn = root.querySelector('[data-action="reset-confirm"]');
+        if (btn) btn.disabled = !armed;
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && input.value.trim().toUpperCase() === 'RESET') {
+          root.querySelector('[data-action="reset-confirm"]')?.click();
+        }
       });
     });
 
@@ -9814,7 +10271,98 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'tab-reset':
-        this.#model.setTabOrder(DEFAULT_TAB_ORDER);
+        this.#model.resetTabOrder();
+        this.#render();
+        break;
+      case 'view-mode':
+        this.#model.setViewMode(this.#model.viewMode() === 'session' ? 'build' : 'session');
+        this.#render();
+        break;
+      case 'class-systems': {
+        const index = Number(button?.dataset.index);
+        this.#openClassSystems = this.#openClassSystems === index ? null : index;
+        this.#render();
+        break;
+      }
+      case 'class-system-toggle':
+        this.#model.toggleClassSystem(Number(button?.dataset.index), button?.dataset.system);
+        this.#render();
+        break;
+      // The dashboard's condition chips: the picker puts a condition on
+      // ticked (Energy Drain climbs a level per click), × takes it off (it
+      // stays in the build view's grid, unticked).
+      case 'dash-cond-picker':
+        this.#condPickerOpen = !this.#condPickerOpen;
+        this.#render();
+        break;
+      case 'buff-add':
+        this.#openBuff = (this.#model.data.buffs || []).length;
+        this.#model.listAdd('buffs', {
+          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '',
+        });
+        this.#render();
+        break;
+      case 'buff-open': {
+        const index = Number(button?.dataset.index);
+        this.#openBuff = this.#openBuff === index ? null : index;
+        this.#render();
+        break;
+      }
+      case 'dash-cond-on': {
+        const name = button?.dataset.name;
+        if (name) {
+          const conds = this.#model.data.conditions || (this.#model.data.conditions = {});
+          // The sheet may already list this condition under an alias of its
+          // own ("Fatigue" for Fatigued) -- tick that entry, not a twin.
+          const info = conditionInfo(name);
+          const key = (info && Object.keys(conds).find((n) => conditionInfo(n)?.key === info.key)) || name;
+          conds[key] = info?.kind === 'count' ? (Number(conds[key]) || 0) + 1 : true;
+          this.#model.recompute();
+        }
+        this.#render();
+        break;
+      }
+      case 'dash-cond-off': {
+        const name = button?.dataset.name;
+        if (name) {
+          const conds = this.#model.data.conditions || {};
+          conds[name] = conditionInfo(name)?.kind === 'count' ? 0 : false;
+          this.#model.recompute();
+        }
+        this.#render();
+        break;
+      }
+      case 'quick-damage': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.applyDamage(n);
+          this.#historyNote = `Took ${r.taken} damage${r.fromTemp ? ` (${r.fromTemp} to temporary hit points)` : ''}.`;
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-heal': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.applyHealing(n);
+          this.#historyNote = r.healed ? `Healed ${r.healed}.` : 'Already at full hit points.';
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-rest': {
+        const count = this.#model.restRefresh();
+        this.#historyNote = count
+          ? `Rested — ${count} tracker${count === 1 ? '' : 's'} refreshed.`
+          : 'Rested — nothing with a daily refresh was spent.';
+        this.#render();
+        break;
+      }
+      case 'goto-trackers':
+        if (this.#barEntries().some((x) => x.id === 'trackers')) this.#tab = 'trackers';
+        else this.#historyNote = 'The Trackers tab is hidden in this view — show it from the ⚙ manager.';
         this.#render();
         break;
       case 'tech-select':
@@ -10034,8 +10582,23 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'reset':
+        this.#confirmReset = true;
+        this.#render();
+        this.shadowRoot.querySelector('[data-reset-word]')?.focus();
+        break;
+      case 'reset-cancel':
+        this.#confirmReset = false;
+        this.#render();
+        break;
+      case 'reset-confirm': {
+        // The button only exists armed, but check the word anyway -- the DOM
+        // is not the gate, the word is.
+        const word = this.shadowRoot.querySelector('[data-reset-word]')?.value || '';
+        if (word.trim().toUpperCase() !== 'RESET') break;
+        this.#confirmReset = false;
         this.resetToSource();
         break;
+      }
       default:
         break;
     }

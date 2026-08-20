@@ -156,6 +156,82 @@ to send it back to the manager, or **reset** to the default nine. The bar is sav
 with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
 export.
 
+### Session view and build view
+
+The header's **Build view / Session view** button switches between two arrangements
+of the same sheet. The *build* view is everything above. The *session* view is what
+comes up at the table: its bar starts from **Overview, Skills, Feats & Mythic,
+Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
+*marked* on a class (below), and a standing strip under the character's name shows
+the numbers a table asks for mid-fight — **HP, AC (touch/FF) and the three saves**,
+with a ticked condition's adjusted values in place of the base ones.
+
+In the session view the **Overview is a dashboard** rather than the full page:
+
+- **Conditions** — what is on the character as chips; × takes one off, and
+  **+ Add condition** opens the catalogue as short shelves (Fear, Worn down, Held,
+  Addled, Senses, Footing) where a click puts one on already ticked — Energy Drain
+  climbs a level per click.
+- **Buffs** — see below.
+- **Resources** — every tracker as a compact row (its meter, − / + and the count),
+  packed two or three across as the width allows, in the same order as the Trackers
+  tab, which stays the canonical detailed view.
+- **Offense** — melee/ranged/CMB/initiative with their d20 buttons; each weapon's
+  line, whose d20 copies a **full attack** (every iterative, damage and crit); and a
+  Full attack line that names which weapon's damage rides along — pick one from its
+  dropdown when the character carries several. **Expand** brings the full Attack
+  and Weapons panels up in place.
+- **Defense** — AC (touch/FF) and CMD, then **Fortitude, Reflex and Will with their
+  roll buttons**, all buff- and condition-adjusted; Expand brings the armour and
+  save breakdowns up.
+- **Key skills** — the six best by bonus with their roll buttons; Expand lists every
+  trained skill.
+- **Active effects** — a reminder list (name, note, on/off) for what is running.
+  Reminders move no numbers — a bonus with numbers behind it is a **buff**.
+- **Quick actions** — an amount plus **Damage** (temporary HP absorb first),
+  **Heal** (raises current to the max and erases nonlethal alike) and **Rest**
+  (every tracker whose refresh reads as daily goes back to unspent).
+
+Expand states persist with the character; the full Overview is one Build-view click
+away.
+
+### Buffs
+
+Buffs live on the session dashboard and on the build Overview (under Conditions).
+Collapsed, a buff is one line — tick, name, and what it comes to ("+4 Attack ·
++4 AC"); **Edit** opens it into a roomy editor with six full-width dials —
+**Attack, Damage, AC, Saves, Skills, Init** — and a note. A ticked buff rides the
+same machinery as a ticked condition, so every number it moves shows its *now*
+value beside the base — green when it went up — on the strip, the dashboard, the
+Overview and in the d20 copies.
+
+Every dial takes a plain number **or a formula** in the same sandbox as the
+trackers: a Citadel banner's `1 + essence.shoulder` to Attack and AC keeps the
+bonus right as shoulder essence is re-invested, without touching the buff again. A
+broken formula degrades to 0 with the error shown on the row.
+
+The **note** is prose that reads `{…}`: a definition written there — say
+`{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total < 0.5,
+if(hp.current < 0, 2, 1.5), 1)}` — becomes a name the whole sheet reads: a weapon's
+dice, a tracker's maximum, another buff's dial. The definition stands whether the
+buff is ticked or not (a reference must not break when the buff is off); a value
+that should switch says so itself, with `if(…)`.
+
+Each view keeps its own bar (`uiPrefs.tabOrder` and `uiPrefs.sessionTabOrder`): the
+⚙ manager always edits the view you are in, says which one that is, and its reset
+button re-seeds only that view — so hiding Crafting during play never touches the
+build bar, and both arrangements survive a reload and travel with an export.
+
+### Marking a class's systems
+
+On the Overview's **Classes** table, the **Systems** column expands into a row of
+toggles — Spheres of Power, Spheres of Might, Champion of the Spheres, Vancian magic,
+Path of War, Psionics, Akashic, Cardcasting, the three companions, Techniques,
+Cooking, Item crafting. Marking one says "this class plays with that machinery"
+before anything is typed into its tab: the tab shows *marked* in the ⚙ manager and
+joins the session view's bar. Extension-pack classes can carry these tags with them
+(see [Extensions](extensions.md)).
+
 Two tabs are not part of that arrangement and sit after it: **ƒx Formulas** — the
 formula guide, scratchpad and value index, on every character, described in
 [Formulas & trackers](formulas-and-trackers.md#ƒx-formulas-tab) — and **Formula
@@ -166,12 +242,12 @@ is not working.
 
 The manager lists what is off the bar **alphabetically**, in three groups:
 
-- **Hidden tabs** — the rest of the built-in tabs (Spheres & Magic, Crafting,
-  Extras & Notes), the modelled sub-systems (Akashic, Maneuvers, Vancian, Psionics,
+- **Hidden tabs** — the rest of the built-in tabs (Extras & Notes), the modelled
+  sub-systems (Spheres & Magic, Crafting, Akashic, Maneuvers, Vancian, Psionics,
   Template, and the three companions), and the workbook's own worksheets. A
   sub-system that already holds the character's data is badged *in use*, so a
-  character with veils sees which waiting tab has them; **Show** puts a tab at the
-  end of the bar.
+  character with veils sees which waiting tab has them; one a class names without
+  data yet is badged *marked*; **Show** puts a tab at the end of the bar.
 - **Extra — weird systems** — the odd machinery kept out of the way unless a
   character runs on it: **Cardcasting**, the **Technique List** and **AutoTechnique**
   pair, and **Auto-Cooking**.

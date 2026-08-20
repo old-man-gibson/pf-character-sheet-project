@@ -49,10 +49,11 @@ import {
   PREP_STYLE_KEYS, CASTING_SOURCE_KEYS, prepStyle, castingNoun,
   bonusSpellSlots, castableAt, statScore,
   PRIMORDIA_LEVELS, PRIMORDIA_REPEAT_FROM, primordiaTechnique, primordiaGrantsAt, grantCount,
+  GAME_SYSTEMS, BUFF_MOD_KEYS,
 } from './rules.js';
 import {
   COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion, computeCompanion,
-  companionScope,
+  companionScope, companionInUse,
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import {
@@ -3668,6 +3669,26 @@ export class Character {
     // waits in the ⚙ manager. Started from the standard eight; the player
     // rearranges, hides and shows from there.
     if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = [...DEFAULT_TAB_ORDER];
+    // Two views of the same sheet: the build view (everything) and the session
+    // view (what actually comes up at the table). Each keeps its own tab bar;
+    // the session bar is seeded from what the character uses the first time
+    // the view is opened, and is the player's to rearrange from there.
+    if (d.uiPrefs.viewMode !== 'session') d.uiPrefs.viewMode = 'build';
+    if (d.uiPrefs.sessionTabOrder !== undefined && !Array.isArray(d.uiPrefs.sessionTabOrder)) {
+      delete d.uiPrefs.sessionTabOrder;
+    }
+    // The sub-systems a class is marked with (GAME_SYSTEMS ids). An old save
+    // simply has none marked.
+    for (const cls of d.classes || []) {
+      if (cls && typeof cls === 'object' && !Array.isArray(cls.systems)) cls.systems = [];
+    }
+    // Active-effect reminders on the session dashboard: a name, a note and an
+    // on/off tick. They move no numbers -- a buff that should is a buff row --
+    // they just keep "watching the north door" in sight during play.
+    if (!Array.isArray(d.effects)) d.effects = [];
+    // Buffs: named, tickable bonuses whose dials (BUFF_MOD_KEYS) take a number
+    // or a formula, and ride the condition totals so every "now" figure moves.
+    if (!Array.isArray(d.buffs)) d.buffs = [];
     if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
     // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
     if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
@@ -4951,6 +4972,9 @@ export class Character {
     this.#recomputePrimordia();
     this.#recomputeCompanions();
     this.#recomputeTrackers();
+    // After the trackers and sub-systems, so a buff's formula can read them
+    // ("1 + essence.shoulder" follows the essence as it is re-invested).
+    this.#recomputeBuffs();
     this.#emit({ type: 'recompute' });
     return this;
   }
@@ -5326,9 +5350,11 @@ export class Character {
       prefs.hiddenTabs[next] = prefs.hiddenTabs[tab.name];
       delete prefs.hiddenTabs[tab.name];
     }
-    // Its place on the tab bar is keyed by name, so the place follows the name.
-    if (Array.isArray(prefs?.tabOrder)) {
-      prefs.tabOrder = prefs.tabOrder.map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
+    // Its place on the tab bars is keyed by name, so the place follows the name.
+    for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+      if (Array.isArray(prefs?.[listKey])) {
+        prefs[listKey] = prefs[listKey].map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
+      }
     }
     tab.name = next;
     this.recompute();
@@ -5341,25 +5367,218 @@ export class Character {
     if (!tab) return this;
     tabs.splice(index, 1);
     if (this.data.uiPrefs?.hiddenTabs) delete this.data.uiPrefs.hiddenTabs[tab.name];
-    if (Array.isArray(this.data.uiPrefs?.tabOrder)) {
-      this.data.uiPrefs.tabOrder = this.data.uiPrefs.tabOrder.filter((k) => k !== `sys:${tab.name}`);
+    for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+      if (Array.isArray(this.data.uiPrefs?.[listKey])) {
+        this.data.uiPrefs[listKey] = this.data.uiPrefs[listKey].filter((k) => k !== `sys:${tab.name}`);
+      }
     }
     this.recompute();
     return this;
   }
 
-  /* ---------------- the tab bar ---------------- */
+  /* ---------------- the tab bar, in two views ---------------- */
 
-  /** The keys on the tab bar, in order (a copy). */
-  tabOrder() {
-    return [...(this.data.uiPrefs?.tabOrder || DEFAULT_TAB_ORDER)];
+  /** Which view the sheet is in: 'build' (everything) or 'session' (at the table). */
+  viewMode() {
+    return this.data.uiPrefs?.viewMode === 'session' ? 'session' : 'build';
   }
 
-  /** Replace the tab bar wholesale; keys are de-duplicated, order kept. */
+  /**
+   * Switch views. Each view keeps its own tab bar; entering the session view
+   * for the first time seeds its bar from what the character actually uses,
+   * so the first look is already the right one.
+   */
+  setViewMode(mode) {
+    const next = mode === 'session' ? 'session' : 'build';
+    if (!this.data.uiPrefs) this.data.uiPrefs = {};
+    if (next === 'session' && !Array.isArray(this.data.uiPrefs.sessionTabOrder)) {
+      this.data.uiPrefs.sessionTabOrder = this.sessionDefaultTabs();
+    }
+    this.data.uiPrefs.viewMode = next;
+    this.recompute();
+    this.#emit({ type: 'view-mode', mode: next });
+    return this;
+  }
+
+  /**
+   * Which modelled sub-system tabs already hold this character's data, keyed
+   * by tab id -- the single source for the ⚙ manager's "in use"/"empty"
+   * badges and for seeding the session bar.
+   */
+  systemTabsInUse() {
+    const d = this.data;
+    const cr = d.crafting;
+    const trainingSide = (side) => !!side
+      && ((side.classes || []).some((x) => x?.name) || !!side.tradition?.name);
+    const out = {
+      combat: trainingSide(d.training?.combat) || trainingSide(d.training?.magic),
+      crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
+        || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
+      akashic: !!(d.akashic?.slots || []).length,
+      maneuvers: !!(d.maneuvers?.disciplines || []).length,
+      vancian: !!(d.vancian?.classes || []).length,
+      psionics: !!(d.psionics?.classes || []).length,
+      // A deck, or the Card Casting drawback on the tradition, is enough.
+      cardcasting: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled,
+      techniques: !!(d.techniques?.catalogue || []).length,
+      autoTechnique: !!d.techniques?.draft?.name,
+      cooking: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)),
+      template: !!(d.templates || []).length,
+    };
+    for (const kind of COMPANION_KINDS) out[kind] = companionInUse(kind, d[kind]);
+    return out;
+  }
+
+  /** The tab ids lit up by the systems marked on the Classes table. */
+  taggedSystemTabs() {
+    const byId = new Map(GAME_SYSTEMS.map((s) => [s.id, s]));
+    const tagged = new Set();
+    for (const cls of this.data.classes || []) {
+      for (const id of cls?.systems || []) {
+        for (const tabId of byId.get(id)?.tabs || []) tagged.add(tabId);
+      }
+    }
+    return tagged;
+  }
+
+  /** Mark or unmark one class as using one sub-system (a GAME_SYSTEMS id). */
+  toggleClassSystem(index, systemId) {
+    const cls = (this.data.classes || [])[index];
+    if (!cls || typeof cls !== 'object') return this;
+    if (!Array.isArray(cls.systems)) cls.systems = [];
+    const at = cls.systems.indexOf(systemId);
+    if (at >= 0) cls.systems.splice(at, 1);
+    else cls.systems.push(systemId);
+    this.recompute();
+    this.#emit({ type: 'class-system', index, systemId, on: at < 0 });
+    return this;
+  }
+
+  /**
+   * The session bar a character starts from: the tabs that come up at the
+   * table, plus every sub-system that is in use or marked on a class. The
+   * heavy build machinery -- Stats, Progression, the worksheets -- waits in
+   * the ⚙ manager, where it can always be pulled back on.
+   */
+  sessionDefaultTabs() {
+    const inUse = this.systemTabsInUse();
+    const tagged = this.taggedSystemTabs();
+    const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
+    return ['overview', 'skills', ...systems, 'features', 'primordia', 'trackers', 'gear', 'lore'];
+  }
+
+  /** The keys on the active view's tab bar, in order (a copy). */
+  tabOrder() {
+    const prefs = this.data.uiPrefs || {};
+    if (this.viewMode() === 'session') {
+      return [...(prefs.sessionTabOrder || this.sessionDefaultTabs())];
+    }
+    return [...(prefs.tabOrder || DEFAULT_TAB_ORDER)];
+  }
+
+  /** Replace the active view's tab bar wholesale; keys are de-duplicated, order kept. */
   setTabOrder(keys) {
-    this.data.uiPrefs.tabOrder = [...new Set(keys.map(String))];
+    const listKey = this.viewMode() === 'session' ? 'sessionTabOrder' : 'tabOrder';
+    this.data.uiPrefs[listKey] = [...new Set(keys.map(String))];
     this.recompute();
     return this;
+  }
+
+  /** Put the active view's bar back to its default. */
+  resetTabOrder() {
+    return this.setTabOrder(this.viewMode() === 'session'
+      ? this.sessionDefaultTabs() : DEFAULT_TAB_ORDER);
+  }
+
+  /**
+   * Resolve each buff's dials. A dial takes a plain number or a formula in
+   * the tracker sandbox -- "1 + essence.shoulder" keeps a Citadel banner's
+   * bonus right as essence moves -- and the resolved number lands beside the
+   * source (`attackNum`…), exactly as a speed's bonus does. conditionState
+   * reads only the resolved side, so a broken formula degrades to 0 with the
+   * error on the row rather than taking the sheet down.
+   */
+  #recomputeBuffs() {
+    const buffs = this.data.buffs || [];
+    if (!buffs.length) return;
+    const scope = this.scope();
+    for (const b of buffs) {
+      if (!b || typeof b !== 'object') continue;
+      const errs = [];
+      for (const [key] of BUFF_MOD_KEYS) {
+        const raw = b[key];
+        let value = 0;
+        b[`${key}Error`] = null;
+        if (typeof raw === 'string' && raw.trim() !== '') {
+          try {
+            value = Math.floor(Number(evaluateFormula(raw, scope)) || 0);
+          } catch (err) {
+            b[`${key}Error`] = err.message;
+            errs.push(`${key}: ${err.message}`);
+          }
+        } else {
+          value = Math.floor(Number(raw) || 0);
+        }
+        b[`${key}Num`] = value;
+      }
+      b.error = errs.length ? errs.join('; ') : null;
+    }
+  }
+
+  /* ---------------- session quick actions ---------------- */
+
+  /**
+   * Take damage the way the table calls it out: temporary hit points absorb
+   * first, the rest comes off current. No floor -- below zero is the dying
+   * machinery's business, and it already watches `current`.
+   * Returns what actually happened, for the toast that reports it.
+   */
+  applyDamage(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!n) return { taken: 0, fromTemp: 0 };
+    const hp = this.data.hp;
+    const temp = Math.max(0, Number(hp.temp) || 0);
+    const fromTemp = Math.min(temp, n);
+    hp.temp = temp - fromTemp;
+    hp.current = (Number(hp.current) || 0) - (n - fromTemp);
+    this.recompute();
+    this.#emit({ type: 'quick-action', action: 'damage', amount: n });
+    return { taken: n, fromTemp };
+  }
+
+  /**
+   * Heal: current climbs to the maximum, and the same points erase nonlethal
+   * (healing removes nonlethal damage point for point alongside lethal).
+   */
+  applyHealing(amount) {
+    const n = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!n) return { healed: 0 };
+    const hp = this.data.hp;
+    const max = this.hpState.max;
+    const before = Number(hp.current) || 0;
+    hp.current = Math.min(max, before + n);
+    hp.nonlethal = Math.max(0, (Number(hp.nonlethal) || 0) - n);
+    this.recompute();
+    this.#emit({ type: 'quick-action', action: 'heal', amount: n });
+    return { healed: hp.current - before };
+  }
+
+  /**
+   * A night's rest: every tracker whose refresh reads as daily -- "Daily",
+   * "per day", "on rest", "at dawn" -- goes back to unspent (a two-sided
+   * meter to its zero mark). Hit points, spell slots and pools with other
+   * rhythms keep their own rules and are the player's to move.
+   * Returns how many trackers moved.
+   */
+  restRefresh() {
+    let count = 0;
+    for (const t of this.trackers) {
+      if (!/daily|day|rest|dawn|morning|night/i.test(String(t.refresh || ''))) continue;
+      if ((Number(t.current) || 0) !== 0) { t.current = 0; count++; }
+    }
+    if (count) this.recompute();
+    this.#emit({ type: 'quick-action', action: 'rest', count });
+    return count;
   }
 
   /** Put a tab on the bar (at the end, or at `at`) -- a no-op if it is already there. */
@@ -5625,6 +5844,13 @@ export class Character {
       push(`crafting:${i}:notes`, p.notes);
     });
     (d.equipment?.weapons || []).forEach((w, i) => push(`weapon:${i}`, w.special));
+    // A buff's note reads {…} like any prose, so a buff can carry its rule as
+    // a definition -- "{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * …}" --
+    // that weapons and trackers then read by name. The definition stands
+    // whether the buff is ticked or not (a reference must not break when the
+    // buff is off); a value that should switch with something says so itself,
+    // with if(…), exactly as the dials do.
+    (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
     (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
     (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
     // Everything a player writes on a training side reads {…}: the talent
@@ -7992,7 +8218,21 @@ export class Character {
       const count = conditionCount(info, value);
       if (count > 0) active.push({ name, info: info || { key: name, label: name }, count });
     }
-    const totals = conditionTotals(active);
+    // Ticked buffs ride the same totals as conditions: their resolved dials
+    // (recomputeBuffs) are mods, so every "now" figure moves without a second
+    // pipeline. They have no ladder group, so nothing supersedes them.
+    const buffsOn = [];
+    for (const b of c.buffs || []) {
+      if (!b?.on) continue;
+      const bmods = {};
+      for (const [key] of BUFF_MOD_KEYS) {
+        const v = Number(b[`${key}Num`]) || 0;
+        if (v) bmods[key] = v;
+      }
+      const label = String(b.name || '').trim() || 'Buff';
+      buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods }, count: 1 });
+    }
+    const totals = conditionTotals([...active, ...buffsOn]);
     const { mods } = totals;
 
     // Ability modifiers as the conditions leave them, against the temporary
@@ -8082,7 +8322,7 @@ export class Character {
     }
 
     return {
-      active, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+      active, buffsOn: buffsOn.length, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
         || totals.speed !== 1 || !!totals.acVsMelee || !!totals.acVsRanged,
     };

@@ -226,6 +226,29 @@ export function resolveAbility(entry = {}) {
  * cached values in all five exports.
  * ------------------------------------------------------------------ */
 
+/**
+ * The sub-systems a class can be marked with on the Classes table, and the
+ * tabs each one lights up. Marking a class says "this character plays with
+ * that machinery" before any of its data is typed in: the ⚙ manager badges
+ * the tabs and the session view puts them on its bar.
+ */
+export const GAME_SYSTEMS = [
+  { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['combat'] },
+  { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['combat'] },
+  { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['combat'] },
+  { id: 'vancian', label: 'Vancian magic', tabs: ['vancian'] },
+  { id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'] },
+  { id: 'psionics', label: 'Psionics', tabs: ['psionics'] },
+  { id: 'akashic', label: 'Akashic', tabs: ['akashic'] },
+  { id: 'cardcasting', label: 'Cardcasting', tabs: ['cardcasting'] },
+  { id: 'animal-companion', label: 'Animal companion', tabs: ['animalCompanion'] },
+  { id: 'familiar', label: 'Familiar', tabs: ['familiar'] },
+  { id: 'eidolon', label: 'Eidolon', tabs: ['eidolon'] },
+  { id: 'techniques', label: 'Techniques', tabs: ['techniques', 'autoTechnique'] },
+  { id: 'cooking', label: 'Cooking', tabs: ['cooking'] },
+  { id: 'crafting', label: 'Item crafting', tabs: ['crafting'] },
+];
+
 export const CASTING_TYPES = ['Low', 'Mid', 'High'];
 export const PRACTITIONER_TYPES = ['Proficient', 'Adept', 'Expert'];
 
@@ -2038,6 +2061,37 @@ export const SHEET_CONDITIONS = ['blinded', 'cowering', 'dazzled', 'deafened',
   'energyDrain', 'entangled', 'exhausted', 'fatigued', 'frightened', 'grappled',
   'helpless', 'panicked', 'paralyzed', 'pinned', 'prone', 'shaken', 'sickened',
   'stunned'];
+
+/**
+ * How a condition picker shelves the catalogue: one shelf per kind of trouble,
+ * so twenty-odd conditions read as six short columns rather than one long list.
+ * (`group` above is the supersession ladder, a different thing.)
+ */
+export const CONDITION_CATS = ['Fear', 'Worn down', 'Held', 'Addled', 'Senses', 'Footing'];
+const CONDITION_CAT_KEYS = {
+  Fear: ['shaken', 'frightened', 'panicked', 'cowering'],
+  'Worn down': ['fatigued', 'exhausted', 'sickened', 'nauseated', 'energyDrain'],
+  Held: ['grappled', 'pinned', 'entangled', 'helpless', 'paralyzed'],
+  Addled: ['dazed', 'staggered', 'stunned', 'confused', 'unconscious'],
+  Senses: ['blinded', 'dazzled', 'deafened'],
+  Footing: ['prone', 'flatFooted'],
+};
+for (const [cat, keys] of Object.entries(CONDITION_CAT_KEYS)) {
+  for (const key of keys) {
+    const cond = CONDITIONS.find((x) => x.key === key);
+    if (cond) cond.cat = cat;
+  }
+}
+
+/**
+ * The numeric dials a buff can turn, in the order a buff editor shows them.
+ * Each key is one the condition totals already sum, so a ticked buff rides the
+ * same machinery as a ticked condition -- every "now" number moves with it.
+ */
+export const BUFF_MOD_KEYS = [
+  ['attack', 'Attack'], ['damage', 'Damage'], ['ac', 'AC'],
+  ['saves', 'Saves'], ['skills', 'Skills'], ['initiative', 'Init'],
+];
 
 const CONDITION_INDEX = new Map();
 for (const cond of CONDITIONS) {

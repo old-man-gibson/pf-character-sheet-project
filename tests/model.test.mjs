@@ -27,6 +27,7 @@ import {
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
+import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
 let fail = 0;
@@ -2370,6 +2371,138 @@ console.log('the tab bar -- an ordered preference, saved with the character');
   check('rename carries the bar entry', c.tabOrder().includes('sys:Grimoire') && !c.tabOrder().includes('sys:Spellbook'), true);
   c.removeSystemTab(idx);
   check('delete drops the bar entry', c.tabOrder().includes('sys:Grimoire'), false);
+}
+
+console.log('sub-systems in use, marked on classes, and the two views of the bar');
+{
+  const c = new Character(blankDocument({ name: 'Viewy' }));
+
+  // A blank sheet uses nothing -- Spheres & Magic and Crafting included,
+  // which is what the ⚙ manager's empty/in-use badges read.
+  const inUse = c.systemTabsInUse();
+  check('the badge list covers the sphere and crafting tabs too',
+    ['combat', 'crafting'].every((k) => k in inUse), true);
+  check('a blank sheet uses nothing', Object.values(inUse).some(Boolean), false);
+
+  // Data arriving flips a system to in use.
+  c.set('training.magic.tradition.name', 'Fey Adept');
+  check('a named tradition puts Spheres & Magic in use', c.systemTabsInUse().combat, true);
+  c.listAdd('crafting.projects', { name: 'Cloak of Resistance', value: 1000 });
+  check('a crafting project puts Crafting in use', c.systemTabsInUse().crafting, true);
+
+  // Marking a system on a class lights its tabs before any data exists.
+  c.listAdd('classes', {
+    name: 'Warlord', hd: 10, bab: 1, goodFort: true, goodRef: true, goodWill: false,
+    skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
+  });
+  const ci = c.data.classes.length - 1;
+  c.toggleClassSystem(ci, 'path-of-war');
+  c.toggleClassSystem(ci, 'akashic');
+  check('tags land on the class row', c.data.classes[ci].systems, ['path-of-war', 'akashic']);
+  check('tags light their tabs', [...c.taggedSystemTabs()].sort(), ['akashic', 'maneuvers']);
+  c.toggleClassSystem(ci, 'akashic');
+  check('toggling again unmarks', [...c.taggedSystemTabs()], ['maneuvers']);
+
+  // The session view seeds its bar from what is used or marked, and the two
+  // views keep their orders apart from then on.
+  check('starts in the build view', c.viewMode(), 'build');
+  const buildOrder = c.tabOrder();
+  c.setViewMode('session');
+  check('the session bar carries what is in use or marked',
+    ['combat', 'crafting', 'maneuvers'].every((k) => c.tabOrder().includes(k)), true);
+  check('and skips the empty systems and the build machinery',
+    ['vancian', 'akashic', 'stats', 'progression'].some((k) => c.tabOrder().includes(k)), false);
+  c.hideTab('lore');
+  check('hiding in the session view edits the session bar', c.tabOrder().includes('lore'), false);
+  c.setViewMode('build');
+  check('the build bar is untouched', c.tabOrder(), buildOrder);
+  c.setViewMode('session');
+  check('the session bar is remembered, not re-seeded', c.tabOrder().includes('lore'), false);
+  c.resetTabOrder();
+  check('reset re-seeds the session bar from use', c.tabOrder().includes('lore'), true);
+  check('the mode survives a round trip', new Character(c.toJSON()).viewMode(), 'session');
+
+  // A worksheet's place on the session bar follows a rename and goes with a delete.
+  const tab = c.addSystemTab('Rituals');
+  const idx = c.data.sheetTabs.indexOf(tab);
+  c.showTab('sys:Rituals');
+  c.renameSystemTab(idx, 'Rites');
+  check('rename carries the session bar entry',
+    c.tabOrder().includes('sys:Rites') && !c.tabOrder().includes('sys:Rituals'), true);
+  c.removeSystemTab(idx);
+  check('delete drops the session bar entry', c.tabOrder().includes('sys:Rites'), false);
+}
+
+console.log('session quick actions -- damage, healing, and the night\'s rest');
+{
+  const c = new Character(blankDocument({ name: 'Quick', level: 5 }));
+  const max = c.hpState.max;
+
+  c.set('hp.temp', 5);
+  const hit = c.applyDamage(8);
+  check('temporary hit points absorb first', [hit.fromTemp, c.data.hp.temp, c.data.hp.current], [5, 0, max - 3]);
+  c.applyDamage(max);
+  check('damage crosses zero -- dying is watched, not clamped', c.data.hp.current < 0, true);
+
+  c.set('hp.current', max - 10);
+  c.set('hp.nonlethal', 4);
+  const heal = c.applyHealing(6);
+  check('healing raises current and erases nonlethal alike',
+    [heal.healed, c.data.hp.current, c.data.hp.nonlethal], [6, max - 4, 0]);
+  c.applyHealing(100);
+  check('healing stops at the maximum', c.data.hp.current, max);
+
+  // Rest refreshes what reads as daily and leaves other rhythms alone.
+  const daily = c.addTracker({ name: 'Ki', maxFormula: '5', refresh: 'Daily' });
+  const weekly = c.addTracker({ name: 'Favors', maxFormula: '3', refresh: 'per week' });
+  c.updateTracker(daily.id, { current: 4 });
+  c.updateTracker(weekly.id, { current: 2 });
+  check('rest refreshes the daily pool only', [c.restRefresh(),
+    c.trackers.find((t) => t.id === daily.id).current,
+    c.trackers.find((t) => t.id === weekly.id).current], [1, 0, 2]);
+
+  // The dashboard's reminder list is ordinary list data and survives a round trip.
+  c.listAdd('effects', { name: 'Studied Target', note: '+2 vs the marked foe', on: true });
+  check('active-effect reminders round-trip',
+    new Character(c.toJSON()).data.effects, [{ name: 'Studied Target', note: '+2 vs the marked foe', on: true }]);
+}
+
+console.log('buffs -- ticked bonuses riding the condition machinery, dials take formulas');
+{
+  const c = new Character(blankDocument({ name: 'Buffy', level: 6 }));
+  c.listAdd('buffs', {
+    name: 'Haste', on: true, attack: 1, damage: 0, ac: 1, saves: 0, skills: 0, initiative: 0, note: '',
+  });
+  let cs = c.conditionState;
+  check('a ticked buff moves the now numbers',
+    [cs.changed, cs.adjusted.melee - cs.base.melee, cs.adjusted.ac - cs.base.ac], [true, 1, 1]);
+  check('and counts as on', cs.buffsOn, 1);
+  c.setItem('buffs', 0, 'on', false);
+  cs = c.conditionState;
+  check('unticked it moves nothing', [cs.changed, cs.buffsOn], [false, 0]);
+
+  // A dial takes a formula in the tracker sandbox and keeps up with the scope.
+  c.setItem('buffs', 0, 'on', true);
+  c.setItem('buffs', 0, 'attack', '1 + floor(level / 2)');
+  check('a formula dial resolves against the scope', c.data.buffs[0].attackNum, 4);
+  check('and lands on the roll numbers', c.conditionState.adjusted.melee - c.conditionState.base.melee, 4);
+  c.setItem('buffs', 0, 'attack', 'no_such_name');
+  check('a broken dial degrades to 0 with the error on the row',
+    [c.data.buffs[0].attackNum, !!c.data.buffs[0].error], [0, true]);
+
+  // Buffs and conditions add up in the same totals.
+  c.setItem('buffs', 0, 'attack', 2);
+  c.data.conditions = { Shaken: true };
+  c.recompute();
+  check('a +2 buff and shaken (−2) cancel on attacks',
+    c.conditionState.adjusted.melee - c.conditionState.base.melee, 0);
+
+  // A buff's note is prose: a {name = expr} written there is a definition the
+  // whole sheet reads by name -- and it stands whether the buff is ticked.
+  c.setItem('buffs', 0, 'note', '{deathgrip.dmg.max = 2 * (1 + level)}');
+  check('a note definition lands in the inline names', c.inlineNames['deathgrip.dmg.max'], 14);
+  c.setItem('buffs', 0, 'on', false);
+  check('and stands while the buff is off', c.inlineNames['deathgrip.dmg.max'], 14);
 }
 
 console.log('skill misc accepts formulas and named values');

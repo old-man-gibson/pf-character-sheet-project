@@ -228,7 +228,10 @@ opening one makes it the working sheet without making it the saved version, so l
 an old state is not the same as declaring it current. The state you were on is filed
 first, so a restore is itself undoable. **Reset** goes back to the character as converted
 and keeps your named checkpoints, because a Reset pressed by mistake should not be the
-one action you cannot walk back.
+one action you cannot walk back. It also cannot fire from one stray click: the button
+opens a banner that says what goes (the saved version, unsaved edits, automatic
+snapshots) and what stays (your checkpoints, with a count), and the actual Reset stays
+disabled until you type <code>RESET</code> into it.
 
 A "change" is a differing leaf value, not a keystroke: type a wrong number and type it
 back and you have drifted nowhere, and the count says so.

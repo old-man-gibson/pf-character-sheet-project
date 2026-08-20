@@ -34,6 +34,7 @@ A pack carries two kinds of thing:
   "blocks": [
     { "kind": "class", "name": "Barbarian", "hd": 12, "bab": 1, "goodFort": true,
       "skillRanks": 4, "classSkills": ["Acrobatics", "Climb", "…"],
+      "systems": ["path-of-war"],
       "features": [{ "level": 1, "name": "Rage" }, { "level": 2, "name": "Rage power" }] },
     { "kind": "tracker", "name": "Rage rounds", "maxFormula": "4 + con.mod + (level - 1) * 2", "refresh": "per day" },
     { "kind": "race", "name": "Dwarf", "size": "Medium", "speed": 20,
@@ -85,7 +86,11 @@ reads a block's name, its pack, its class and what its features are called and s
 *warrior* finds an archetype that replaces warrior's grace; a block the words name outright
 comes first. A class lands as a
 Classes-table row, its feature names on the Progression tab by level, and the features that
-carry rules text under the class there; its class skills are ticked. A race
+carry rules text under the class there; its class skills are ticked. Its optional `systems`
+tags (`GAME_SYSTEMS` ids in `rules.js` — `"spheres-of-power"`, `"path-of-war"`,
+`"psionics"`, …) land on the row's **Systems** toggles and merge with whatever the player
+already marked, lighting the matching tabs up in the manager and on the session view's
+bar. A race
 sets the race, size and racial ability modifiers, and fills the race-trait rows. A veil is
 shaped in its chakra slot on the Akashic board (essence 0), the first listed slot with room.
 
