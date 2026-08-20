@@ -123,6 +123,10 @@ export const SHEET_CSS = `
   border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
 }
 .buffeditor .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+/* The extra bonuses: a [target, value] pair per chip, addable without limit. */
+.buffbonuses { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 8px; }
+.buffbonus { display: inline-flex; gap: 4px; align-items: center; }
+.buffbonus select { width: auto; max-width: 11rem; }
 .buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .buffhead .bname { font-weight: 620; font-size: 0.9rem; }
 .buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }

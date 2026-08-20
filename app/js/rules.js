@@ -2094,6 +2094,38 @@ export const BUFF_MOD_KEYS = [
   ['saves', 'Saves'], ['skills', 'Skills'], ['initiative', 'Init'],
 ];
 
+/**
+ * Everything else a buff can point an extra bonus at, beyond the six standing
+ * dials. Most are further channels through the condition totals; the special
+ * ones are documented where they are applied:
+ *  - an ability score rides the totals' ability block, so the raised score
+ *    cascades into everything built on its modifier;
+ *  - `size` is steps larger (+1 = one size up) and unpacks into the four
+ *    numbers a step moves -- attack and AC by the size modifier, CMB and CMD
+ *    by the special size modifier -- linear per step, which is exact within
+ *    a step of Medium and an approximation past Huge. Reach and damage dice
+ *    are the player's to move (the Damage dial, a weapon's dice).
+ *  - `dc` and `essence` are shown where DCs and the essence pool are read
+ *    (the strip's cards); they do not re-run investment or slot math.
+ */
+export const BUFF_TARGETS = [
+  ['melee', 'Melee attacks'],
+  ['ranged', 'Ranged attacks'],
+  ['cmb', 'CMB'],
+  ['cmd', 'CMD'],
+  ['fortitude', 'Fortitude'],
+  ['reflex', 'Reflex'],
+  ['will', 'Will'],
+  ['dc', 'Save DCs'],
+  ['abilityChecks', 'Ability checks'],
+  ['hp', 'Max hit points'],
+  ['speed', 'Speed (ft)'],
+  ['str', 'Strength'], ['dex', 'Dexterity'], ['con', 'Constitution'],
+  ['int', 'Intelligence'], ['wis', 'Wisdom'], ['cha', 'Charisma'],
+  ['essence', 'Essence pool'],
+  ['size', 'Size (+1 = one larger)'],
+];
+
 const CONDITION_INDEX = new Map();
 for (const cond of CONDITIONS) {
   for (const name of [cond.key, cond.label, ...(cond.aliases || [])]) {
@@ -2143,8 +2175,9 @@ export function conditionTotals(active) {
   }
 
   const mods = {
-    attack: 0, melee: 0, ranged: 0, damage: 0, ac: 0, cmd: 0, saves: 0,
-    skills: 0, abilityChecks: 0, initiative: 0, hp: 0,
+    attack: 0, melee: 0, ranged: 0, damage: 0, ac: 0, cmb: 0, cmd: 0,
+    saves: 0, fortitude: 0, reflex: 0, will: 0, dc: 0,
+    skills: 0, abilityChecks: 0, initiative: 0, hp: 0, essence: 0, speedFt: 0,
   };
   const ability = {};
   const abilitySet = {};

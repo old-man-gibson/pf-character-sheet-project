@@ -244,6 +244,24 @@ trackers: a Citadel banner's `1 + essence.shoulder` to Attack and AC keeps the
 bonus right as shoulder essence is re-invested, without touching the buff again. A
 broken formula degrades to 0 with the error shown on the row.
 
+**Extra bonuses** reach what the dials do not: **+ Add bonus** in the editor adds a
+[target, value] pair, as many as the buff needs, values taking formulas like the
+dials. Targets: melee or ranged attacks alone, CMB, CMD, a single save, ability
+checks, max hit points, speed (flat feet, applied before a condition halves and
+never granting a movement type the character lacks) — and three special ones:
+
+- **An ability score** (bull's strength as `Strength +4`) rides the same block
+  conditions use, so the raised score cascades into everything built on its
+  modifier — attacks, skills, saves, AC, initiative.
+- **Size** is steps larger (+1 = one size up): attack and AC move by the size
+  modifier, CMB and CMD by the special size modifier (which the plain attack
+  channel rightly skips). Exact within a step of Medium, linear past Huge; reach
+  and damage dice stay yours — the Damage dial and a weapon's dice are where those
+  go.
+- **Save DCs** and **Essence pool** are shown where those numbers are read — the
+  Casting numbers and Veils cards — without re-running slot tables or investment
+  math.
+
 The **note** is prose that reads `{…}`: a definition written there — say
 `{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total < 0.5,
 if(hp.current < 0, 2, 1.5), 1)}` — becomes a name the whole sheet reads: a weapon's

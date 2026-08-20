@@ -5525,21 +5525,28 @@ export class Character {
     for (const b of buffs) {
       if (!b || typeof b !== 'object') continue;
       const errs = [];
-      for (const [key] of BUFF_MOD_KEYS) {
-        const raw = b[key];
-        let value = 0;
-        b[`${key}Error`] = null;
+      const resolve = (raw, name, setError) => {
+        setError(null);
         if (typeof raw === 'string' && raw.trim() !== '') {
           try {
-            value = Math.floor(Number(evaluateFormula(raw, scope)) || 0);
+            return Math.floor(Number(evaluateFormula(raw, scope)) || 0);
           } catch (err) {
-            b[`${key}Error`] = err.message;
-            errs.push(`${key}: ${err.message}`);
+            setError(err.message);
+            errs.push(`${name}: ${err.message}`);
+            return 0;
           }
-        } else {
-          value = Math.floor(Number(raw) || 0);
         }
-        b[`${key}Num`] = value;
+        return Math.floor(Number(raw) || 0);
+      };
+      for (const [key] of BUFF_MOD_KEYS) {
+        b[`${key}Num`] = resolve(b[key], key, (e) => { b[`${key}Error`] = e; });
+      }
+      // The extra bonuses: [target, value] rows pointed at anything the six
+      // dials do not cover. Values take formulas exactly as the dials do.
+      if (!Array.isArray(b.bonuses)) b.bonuses = [];
+      for (const row of b.bonuses) {
+        if (!row || typeof row !== 'object') continue;
+        row.valueNum = resolve(row.value, row.target || 'bonus', (e) => { row.valueError = e; });
       }
       b.error = errs.length ? errs.join('; ') : null;
     }
@@ -8252,12 +8259,33 @@ export class Character {
     for (const b of c.buffs || []) {
       if (!b?.on) continue;
       const bmods = {};
+      const bability = {};
+      const add = (key, v) => { bmods[key] = (bmods[key] || 0) + v; };
       for (const [key] of BUFF_MOD_KEYS) {
         const v = Number(b[`${key}Num`]) || 0;
-        if (v) bmods[key] = v;
+        if (v) add(key, v);
+      }
+      // The extra bonuses. An ability score rides the totals' ability block so
+      // its modifier cascades; `size` (steps larger) unpacks into the four
+      // numbers a step moves; `speed` is flat feet, kept apart from the
+      // multiplier conditions use; the rest are plain channels.
+      for (const row of b.bonuses || []) {
+        const v = Number(row?.valueNum) || 0;
+        if (!v) continue;
+        const t = row.target;
+        if (ABILITIES.includes(t)) bability[t] = (bability[t] || 0) + v;
+        else if (t === 'size') {
+          // A step larger: −1 attack and AC (the size modifier), +1 CMB and
+          // CMD (the special size modifier). The attack channel reaches CMB
+          // too -- rightly, for penalties like shaken -- so CMB takes 2v: v
+          // to cancel the size modifier that does not apply to maneuvers,
+          // and v for the special one that does.
+          add('attack', -v); add('ac', -v); add('cmb', 2 * v); add('cmd', v);
+        } else if (t === 'speed') add('speedFt', v);
+        else if (t) add(t, v);
       }
       const label = String(b.name || '').trim() || 'Buff';
-      buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods }, count: 1 });
+      buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods, ability: bability }, count: 1 });
     }
     const totals = conditionTotals([...active, ...buffsOn]);
     const { mods } = totals;
@@ -8292,15 +8320,15 @@ export class Character {
 
     const mode = (key) => c.attack.modes?.[key] || {};
     const atk = (key) => mods.attack + slot(mode(key).stat1, mode(key).stat2);
-    const sv = (key) => mods.saves + slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
+    const sv = (key) => mods.saves + (mods[key] || 0) + slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
 
     const delta = {
       melee: atk('melee') + mods.melee,
       altMelee: atk('altMelee') + mods.melee,
       ranged: atk('ranged') + mods.ranged,
       altRanged: atk('altRanged') + mods.ranged,
-      cmb: atk('cmb'),
-      altCmb: atk('altCmb'),
+      cmb: atk('cmb') + mods.cmb,
+      altCmb: atk('altCmb') + mods.cmb,
       ac: mods.ac + acAbilityDelta,
       touch: mods.ac + acAbilityDelta,
       flatFooted: mods.ac + (c.defenses.uncannyDodge ? acAbilityDelta : 0),
@@ -8313,6 +8341,10 @@ export class Character {
       abilityChecks: mods.abilityChecks,
       damage: mods.damage,
       hp: mods.hp,
+      // Display-level channels: shown where DCs and the essence pool are
+      // read, without re-running slot tables or investment math.
+      dc: mods.dc,
+      essence: mods.essence,
     };
 
     const base = {
@@ -8338,9 +8370,18 @@ export class Character {
 
     // Speed halves rather than scales: a 35 ft. move at half speed is 15 ft.,
     // not 17.5, so it rounds down to the 5-foot square it is measured in.
+    // A flat bonus (longstrider, a buff's Speed row) is an enhancement to the
+    // base speed, so it goes on before a condition halves the total.
     const speeds = (c.identity.speeds || []).map((sp) => {
       const final = Number(sp.final) || 0;
-      return { type: sp.type, final, adjusted: Math.floor((final * totals.speed) / 5) * 5 };
+      // A flat bonus quickens the speeds the character has; it does not
+      // conjure a fly speed out of an empty row.
+      const bonus = final > 0 ? (mods.speedFt || 0) : 0;
+      return {
+        type: sp.type,
+        final,
+        adjusted: Math.floor(((final + bonus) * totals.speed) / 5) * 5,
+      };
     });
 
     const notes = [];
@@ -8351,7 +8392,7 @@ export class Character {
     return {
       active, buffsOn: buffsOn.length, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
-        || totals.speed !== 1 || !!totals.acVsMelee || !!totals.acVsRanged,
+        || totals.speed !== 1 || !!mods.speedFt || !!totals.acVsMelee || !!totals.acVsRanged,
     };
   }
 

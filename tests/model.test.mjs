@@ -2545,6 +2545,53 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
     new Character(c.toJSON()).data.vancian.prepared.at(-1).note, 'heals {1 + min(5, level)}d8');
 }
 
+console.log('buff extra bonuses -- targets past the six dials');
+{
+  const c = new Character(blankDocument({ name: 'Shifter', level: 6 }));
+  const buff = (bonuses) => {
+    c.data.buffs = [{
+      name: 'Test', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0,
+      note: '', bonuses,
+    }];
+    c.recompute();
+    return c.conditionState;
+  };
+
+  // Plain channels: CMB, CMD, one save, the display-level DC and essence.
+  let cs = buff([{ target: 'cmb', value: 2 }, { target: 'cmd', value: 3 },
+    { target: 'reflex', value: 4 }, { target: 'dc', value: 1 }, { target: 'essence', value: 2 }]);
+  check('cmb, cmd and a single save move',
+    [cs.delta.cmb, cs.delta.cmd, cs.delta.reflex, cs.delta.fortitude], [2, 3, 4, 0]);
+  check('dc and essence ride as display deltas', [cs.delta.dc, cs.delta.essence, cs.changed], [1, 2, true]);
+
+  // An ability score cascades through its modifier (blank sheet: Str 10, melee off Str).
+  cs = buff([{ target: 'str', value: 4 }]);
+  check('+4 Str is +2 melee and +2 CMB through the modifier',
+    [cs.delta.melee, cs.delta.cmb, cs.scores.str], [2, 2, 14]);
+
+  // Size: +1 step larger moves the four numbers a step moves.
+  cs = buff([{ target: 'size', value: 1 }]);
+  check('one size larger: −1 attack and AC, +1 CMB and CMD',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd], [-1, -1, 1, 1]);
+
+  // Speed is flat feet, applied before a condition's halving.
+  c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: 0 }];
+  cs = buff([{ target: 'speed', value: 10 }]);
+  check('+10 ft on a 30 ft move', cs.speeds[0].adjusted, 40);
+  c.data.conditions = { Entangled: true };
+  c.recompute();
+  cs = c.conditionState;
+  check('the bonus goes on before entangled halves', cs.speeds[0].adjusted, 20);
+  c.data.conditions = {};
+
+  // A bonus value takes a formula, and a broken one lands on the row.
+  cs = buff([{ target: 'cmd', value: '1 + floor(level / 3)' }]);
+  check('a formula bonus resolves', cs.delta.cmd, 3);
+  cs = buff([{ target: 'cmd', value: 'no_such' }]);
+  check('a broken bonus degrades to 0 with the error kept',
+    [cs.delta.cmd, !!c.data.buffs[0].bonuses[0].valueError, !!c.data.buffs[0].error], [0, true, true]);
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante

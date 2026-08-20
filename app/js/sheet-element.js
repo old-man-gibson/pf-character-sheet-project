@@ -76,7 +76,7 @@ import {
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
-  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS,
+  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
   conditionTotals, statModDelta,
 } from './rules.js';
 import {
@@ -1540,8 +1540,10 @@ export class CharacterSheetElement extends HTMLElement {
     const t = conditionTotals(cs.active);
     const bits = [];
     const labels = [['attack', 'Attack'], ['melee', 'Melee'], ['ranged', 'Ranged'], ['damage', 'Damage'],
-      ['ac', 'AC'], ['cmd', 'CMD'], ['saves', 'Saves'], ['skills', 'Skills'],
-      ['abilityChecks', 'Ability checks'], ['initiative', 'Init'], ['hp', 'HP']];
+      ['ac', 'AC'], ['cmb', 'CMB'], ['cmd', 'CMD'], ['saves', 'Saves'],
+      ['fortitude', 'Fort'], ['reflex', 'Ref'], ['will', 'Will'], ['dc', 'Save DCs'],
+      ['skills', 'Skills'], ['abilityChecks', 'Ability checks'], ['initiative', 'Init'],
+      ['hp', 'HP'], ['essence', 'Essence'], ['speedFt', 'Speed (ft)']];
     for (const [key, label] of labels) {
       if (t.mods[key]) bits.push(`${label} ${fmt(t.mods[key])}`);
     }
@@ -1606,9 +1608,19 @@ export class CharacterSheetElement extends HTMLElement {
     // Collapsed, a buff is one line: tick, name, what it comes to. Opened, each
     // dial is a full-width formula field with its working, because the formulas
     // worth writing -- nested if(…) off hit points and essence -- need room.
-    const summary = (b) => BUFF_MOD_KEYS
-      .map(([key, label]) => { const v = Number(b[`${key}Num`]) || 0; return v ? `${fmt(v)} ${label}` : ''; })
-      .filter(Boolean).join(' · ') || 'no numbers yet';
+    const targetLabels = new Map(BUFF_TARGETS);
+    const summary = (b) => {
+      const bits = BUFF_MOD_KEYS
+        .map(([key, label]) => { const v = Number(b[`${key}Num`]) || 0; return v ? `${fmt(v)} ${label}` : ''; })
+        .filter(Boolean);
+      for (const row of b.bonuses || []) {
+        const v = Number(row?.valueNum) || 0;
+        if (!v) continue;
+        bits.push(row.target === 'size' ? `${v > 0 ? `+${v}` : v} size`
+          : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
+      }
+      return bits.join(' · ') || 'no numbers yet';
+    };
     const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
       ${this.#itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
     // The cards never move: the editor is its own full-width block under the
@@ -1633,6 +1645,16 @@ export class CharacterSheetElement extends HTMLElement {
     const editor = editing === null ? '' : (() => {
       const b = buffs[editing];
       const i = editing;
+      const bonusRow = (row, j) => `<span class="buffbonus">
+        <select data-item="${list}|${i}|bonuses.${j}.target" data-kind="text" aria-label="What this bonus moves">
+          ${BUFF_TARGETS.map(([key, label]) => `<option value="${key}"${row.target === key ? ' selected' : ''}>${esc(label)}</option>`).join('')}
+        </select>
+        ${this.#exprField(`data-item="${list}|${i}|bonuses.${j}.value"`, row.value, {
+    width: '5.5rem', value: row.valueNum, error: row.valueError, title: 'A number, or a formula — 1 + essence.shoulder',
+  })}
+        <button class="danger" data-action="buff-bonus-remove" data-index="${i}" data-j="${j}"
+          aria-label="Remove this bonus">×</button>
+      </span>`;
       return `<div class="buffeditor">
         <div class="fieldgrid">
           <label class="fld"><span>Buff</span>${this.#itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
@@ -1640,6 +1662,15 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
     .map(([key, label]) => this.#formulaMeta(label.toLowerCase(), b[key])).join('')}
+        <div class="buffbonuses">
+          ${(b.bonuses || []).map(bonusRow).join('')}
+          <button data-action="buff-bonus-add" data-index="${i}">+ Add bonus</button>
+        </div>
+        <p class="hint">Extra bonuses reach what the dials do not: an ability score cascades
+          into everything built on its modifier; <em>Size</em> is steps larger and moves
+          attack, AC, CMB and CMD the way a step does (reach and damage dice stay yours);
+          <em>Save DCs</em> and <em>Essence pool</em> show where those numbers are read.
+          Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
           ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
         <p class="hint">The note reads {…} like prose: a definition written here — say
@@ -1942,6 +1973,15 @@ export class CharacterSheetElement extends HTMLElement {
     </section>`;
   }
 
+  /** A DC as it stands right now: buffed values replace the base, base in the tooltip. */
+  #dcShown(base) {
+    const cs = this.#model.conditionState;
+    const d = cs.changed ? (cs.delta.dc || 0) : 0;
+    if (!d) return `${base ?? 0}`;
+    return `<strong class="adj ${d > 0 ? 'up' : ''}"
+      title="Base ${base ?? 0} — with conditions and buffs">${(Number(base) || 0) + d}</strong>`;
+  }
+
   /** The Spheres casting figures a round actually asks for, with the concentration d20. */
   #dashSpheresCard() {
     const t = this.#model.data.training || {};
@@ -1956,24 +1996,32 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#lineHtml('Concentration', `<span class="rollpair">${fmt(m.concentration ?? 0)}${
         this.#rollButton('concentration', 'magic', 'a concentration check')}</span>`, true)}
       ${this.#line('MSB / MSD', `${fmt(m.msb ?? 0)} / ${m.msd ?? 0}`)}
-      ${this.#line('Save DC', m.globalDC ?? 0)}
+      ${this.#lineHtml('Save DC', this.#dcShown(m.globalDC), true)}
       ${this.#line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}
-      ${t.combat ? this.#line('Practitioner DC', t.combat.practitionerDC ?? 0) : ''}
+      ${t.combat ? this.#lineHtml('Practitioner DC', this.#dcShown(t.combat.practitionerDC), true) : ''}
       <p class="hint">Points spent in play live on their tracker in Resources; the
         talents are on Spheres &amp; Magic.</p>
     </section>`;
   }
 
-  /** Every shaped veil at a glance: slot, essence invested, save DC. */
+  /** Every shaped veil at a glance: slot, essence invested, save DC -- buffed values in place. */
   #dashVeilsCard() {
     const a = this.#model.data.akashic;
+    const cs = this.#model.conditionState;
     const holders = [...(a?.slots || []), ...(a?.kheshig || [])];
     const shaped = holders.flatMap((s) => (s.veils || []).map((v) => ({ slot: s.slot, v })));
+    const dEss = cs.changed ? (cs.delta.essence || 0) : 0;
+    const free = Number(a?.calc?.free) || 0;
+    const total = Number(a?.calc?.total) || 0;
+    const pool = dEss
+      ? `<strong class="adj ${dEss > 0 ? 'up' : ''}" title="Base ${free} free of ${total} — with buffs; investment math stays on the Akashic tab">${free + dEss} free of ${total + dEss}</strong>`
+      : `${free} free of ${total}`;
     return `<section class="panel">
       <h3>Veils shaped ${shaped.length ? `<span class="badge">${shaped.length}</span>` : ''}</h3>
+      ${total || dEss ? this.#lineHtml('Essence', pool, true) : ''}
       <div class="rowlist">${shaped.map(({ slot, v }) => `<div class="statline">
         <span class="label" title="${esc(v.name || '')}">${esc(v.name || '—')} <span class="dim">${esc(slot || '')}</span></span>
-        <span class="value">${Number(v.essence) ? `${v.essence} essence · ` : ''}DC ${v.dc ?? 0}</span>
+        <span class="value">${Number(v.essence) ? `${v.essence} essence · ` : ''}DC ${this.#dcShown(v.dc)}</span>
       </div>`).join('') || '<p class="empty">No veils shaped — the Akashic tab is where they go on.</p>'}</div>
     </section>`;
   }
@@ -10765,10 +10813,29 @@ export class CharacterSheetElement extends HTMLElement {
       case 'buff-add':
         this.#openBuff = (this.#model.data.buffs || []).length;
         this.#model.listAdd('buffs', {
-          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '',
+          name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
         });
         this.#render();
         break;
+      case 'buff-bonus-add': {
+        const b = (this.#model.data.buffs || [])[Number(button?.dataset.index)];
+        if (b) {
+          if (!Array.isArray(b.bonuses)) b.bonuses = [];
+          b.bonuses.push({ target: 'melee', value: 0 });
+          this.#model.recompute();
+        }
+        this.#render();
+        break;
+      }
+      case 'buff-bonus-remove': {
+        const b = (this.#model.data.buffs || [])[Number(button?.dataset.index)];
+        if (b && Array.isArray(b.bonuses)) {
+          b.bonuses.splice(Number(button?.dataset.j), 1);
+          this.#model.recompute();
+        }
+        this.#render();
+        break;
+      }
       case 'buff-open': {
         const index = Number(button?.dataset.index);
         this.#openBuff = this.#openBuff === index ? null : index;
