@@ -1449,12 +1449,14 @@ export class CharacterSheetElement extends HTMLElement {
       .filter(Boolean).join(' · ') || 'no numbers yet';
     const dial = (b, i, [key, label]) => `<label class="fld"><span>${label}</span>
       ${this.#itemExpr(list, i, key, b, { width: '100%', placeholder: '0, or a formula' })}</label>`;
+    // The cards never move: the editor is its own full-width block under the
+    // grid, tied to the open card by the shared highlight.
     const row = (b, i) => {
       const open = this.#openBuff === i;
       return `<div class="buffcard${b.on ? '' : ' off'}${b.error ? ' invalid' : ''}${open ? ' open' : ''}">
         <div class="buffhead">
           ${this.#itemCheck(list, i, 'on', b.on !== false)}
-          ${open ? this.#itemText(list, i, 'name', b.name, 'Citadel banner') : `<span class="bname">${esc(b.name || 'Unnamed buff')}</span>`}
+          <span class="bname">${esc(b.name || 'Unnamed buff')}</span>
           <span class="bsum hint" style="margin:0">${esc(summary(b))}</span>
           ${b.error ? `<span class="badge err" title="${esc(b.error)}">formula problem</span>` : ''}
           <span class="pair" style="margin-left:auto">
@@ -1463,19 +1465,27 @@ export class CharacterSheetElement extends HTMLElement {
             <button class="danger" data-remove="buffs|${i}" aria-label="Remove buff">×</button>
           </span>
         </div>
-        ${open ? `<div class="buffbody">
-          <div class="fieldgrid">${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}</div>
-          ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
-    .map(([key, label]) => this.#formulaMeta(label.toLowerCase(), b[key])).join('')}
-          <label class="fld" style="margin-top:6px"><span>Note</span>
-            ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
-          <p class="hint">The note reads {…} like prose: a definition written here — say
-            <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
-            — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
-            It stands whether the buff is ticked or not; a value that should switch says so itself, with if(…).</p>
-        </div>` : ''}
       </div>`;
     };
+    const editing = buffs[this.#openBuff] ? this.#openBuff : null;
+    const editor = editing === null ? '' : (() => {
+      const b = buffs[editing];
+      const i = editing;
+      return `<div class="buffeditor">
+        <div class="fieldgrid">
+          <label class="fld"><span>Buff</span>${this.#itemText(list, i, 'name', b.name, 'Citadel banner')}</label>
+          ${BUFF_MOD_KEYS.map((k) => dial(b, i, k)).join('')}
+        </div>
+        ${BUFF_MOD_KEYS.filter(([key]) => typeof b[key] === 'string' && b[key].trim() !== '')
+    .map(([key, label]) => this.#formulaMeta(label.toLowerCase(), b[key])).join('')}
+        <label class="fld" style="margin-top:6px"><span>Note</span>
+          ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
+        <p class="hint">The note reads {…} like prose: a definition written here — say
+          <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
+          — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
+          It stands whether the buff is ticked or not; a value that should switch says so itself, with if(…).</p>
+      </div>`;
+    })();
     return `<section class="panel span2">
       <h3>Buffs ${cs.buffsOn ? `<span class="badge ok">${cs.buffsOn} on</span>` : ''}
         <button style="margin-left:auto" data-action="buff-add">+ Add buff</button>
@@ -1483,6 +1493,7 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="bufflist">
         ${buffs.map(row).join('') || '<p class="empty">No buffs yet.</p>'}
       </div>
+      ${editor}
       <p class="hint">A ticked buff rides the same machinery as a condition: attacks, AC,
         saves, skills, initiative and damage all show their <em>now</em> value with it in.
         Every dial takes a number or a formula — <code>1 + essence.shoulder</code> keeps a

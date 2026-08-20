@@ -111,13 +111,18 @@ export const SHEET_CSS = `
 .dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
 .dashtracker .dashmeter { min-width: 3rem; }
 /* Buffs: one line collapsed, a roomy editor open -- long formulas need width. */
-/* Collapsed buffs are one line each, so they pack shoulder to shoulder;
-   only an open editor takes the full row its formulas need. */
+/* Buffs pack shoulder to shoulder and never move: the editor is its own
+   full-width block under the grid, tied to the open card by the highlight. */
 .bufflist { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 8px; }
-.buffcard.open { grid-column: 1 / -1; }
 .buffcard { border: 1px solid var(--cs-line); border-radius: var(--cs-radius); padding: 6px 10px; background: var(--cs-panel-2); }
+.buffcard.open { border-color: var(--cs-edit); }
 .buffcard.invalid { border-color: var(--cs-bad); }
 .buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
+.buffeditor {
+  margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
+  border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
+}
+.buffeditor .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
 .buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .buffhead .bname { font-weight: 620; font-size: 0.9rem; }
 .buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
@@ -125,8 +130,6 @@ export const SHEET_CSS = `
 .effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
 /* The full-attack weapon pick: a name, not a paragraph. */
 .dashboard .statline select { max-width: 10rem; }
-.buffbody { margin-top: 8px; }
-.buffbody .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
 /* One reminder per block: the tick and name on the first line, the note under. */
 .effectlist { display: grid; gap: 8px; }
 .effectrow { display: grid; gap: 4px; }
