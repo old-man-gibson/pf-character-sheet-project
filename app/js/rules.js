@@ -1314,6 +1314,102 @@ export const SIZE_MODIFIERS = {
   Large: -1, Huge: -2, Gargantuan: -4, Colossal: -8,
 };
 
+/* ------------------------------------------------------------------ *
+ * Weapon damage dice under a size change: the official progression
+ * chart and its walking rules (the Paizo FAQ), applied one size step
+ * at a time so multi-step changes read each step's own size and dice.
+ * ------------------------------------------------------------------ */
+
+export const DAMAGE_DICE_CHART = [
+  [1, 1], [1, 2], [1, 3], [1, 4], [1, 6], [1, 8], [1, 10],
+  [2, 6], [2, 8], [3, 6], [3, 8], [4, 6], [4, 8],
+  [6, 6], [6, 8], [8, 6], [8, 8], [12, 6], [12, 8], [16, 6],
+];
+const SIZE_LADDER = ['Fine', 'Diminutive', 'Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan', 'Colossal'];
+const CHART_1D6 = 4;   // "1d6 or less" -- one step up instead of two
+const CHART_1D8 = 5;   // "1d8 or less" -- one step down instead of two
+const chartIdx = (n, d) => DAMAGE_DICE_CHART.findIndex(([cn, cd]) => cn === n && cd === d);
+
+/**
+ * A dice value's place on the chart, remapping what the chart does not list:
+ * Nd4 counts as (N/2)d8 even and ((N+1)/2)d6 odd; Nd12 as 2Nd6; a d6 count
+ * not listed falls to the next lowest listed count as d8s (10d6 -> 8d8); a d8
+ * count not listed rises to the next highest listed count as d6s (5d8 -> 6d6).
+ * Off the chart's ends it clamps; a die the rules never mention returns null
+ * and the value is left as written.
+ */
+function toChart(n, d) {
+  const direct = chartIdx(n, d);
+  if (direct >= 0) return direct;
+  if (d === 4 && n > 1) return n % 2 === 0 ? toChart(n / 2, 8) : toChart((n + 1) / 2, 6);
+  if (d === 12) return toChart(2 * n, 6);
+  if (d === 6) {
+    const counts = DAMAGE_DICE_CHART.filter(([, cd]) => cd === 6).map(([cn]) => cn);
+    const lower = [...counts].reverse().find((c) => c <= n);
+    return lower === undefined ? null : toChart(lower, 8);
+  }
+  if (d === 8) {
+    const counts = DAMAGE_DICE_CHART.filter(([, cd]) => cd === 8).map(([cn]) => cn);
+    const higher = counts.find((c) => c >= n);
+    return higher === undefined ? DAMAGE_DICE_CHART.length - 1 : toChart(higher, 6);
+  }
+  return null;
+}
+
+/**
+ * One dice value ([count, die]) through `steps` size steps (positive =
+ * larger). Each step: up is two chart steps, or one from Small or below or
+ * from 1d6 or less; down is two, or one from Medium or below or from 1d8 or
+ * less; Nd10 (N >= 2) goes to 2Nd8 up and Nd8 down regardless of size.
+ * Returns the new [count, die] ([n, 1] is a flat n), or null when the value
+ * is not one the chart can walk (left as written).
+ */
+export function stepDamageDice(n, d, steps, initialSize = 'Medium') {
+  let count = Math.trunc(Number(n) || 0);
+  let die = Math.trunc(Number(d) || 0);
+  const move = Math.trunc(Number(steps) || 0);
+  if (!move || count <= 0) return null;
+  let size = SIZE_LADDER.indexOf(initialSize);
+  if (size < 0) size = SIZE_LADDER.indexOf('Medium');
+  const dir = move > 0 ? 1 : -1;
+  for (let k = Math.abs(move); k > 0; k--) {
+    if (die === 10 && count >= 2) {
+      count = dir > 0 ? 2 * count : count;
+      die = 8;
+      size += dir;
+      continue;
+    }
+    let idx = toChart(count, die);
+    if (idx === null || idx < 0) return null;
+    if (dir > 0) idx = Math.min(DAMAGE_DICE_CHART.length - 1, idx + (size <= 3 || idx <= CHART_1D6 ? 1 : 2));
+    else idx = Math.max(0, idx - (size <= 4 || idx <= CHART_1D8 ? 1 : 2));
+    [count, die] = DAMAGE_DICE_CHART[idx];
+    size += dir;
+  }
+  return [count, die];
+}
+
+/**
+ * A whole dice map ({die: count}) through a size change. Each component walks
+ * the chart on its own (a mixed "1d8+1d6" steps both); one that steps to the
+ * chart's flat 1 lands in `flat`; one the chart cannot walk stays as written.
+ */
+export function stepDiceMap(map, steps, initialSize = 'Medium') {
+  const dice = {};
+  let flat = 0;
+  for (const [dieKey, count] of Object.entries(map || {})) {
+    const stepped = stepDamageDice(Number(count), Number(dieKey), steps, initialSize);
+    if (!stepped) {
+      if (Number(count)) dice[dieKey] = (dice[dieKey] || 0) + Number(count);
+      continue;
+    }
+    const [n2, d2] = stepped;
+    if (d2 <= 1) flat += n2;
+    else dice[d2] = (dice[d2] || 0) + n2;
+  }
+  return { dice, flat };
+}
+
 export const SIZE_CARRY_MULTIPLIER = {
   Fine: 0.125, Diminutive: 0.25, Tiny: 0.5, Small: 0.75, Medium: 1,
   Large: 2, Huge: 4, Gargantuan: 8, Colossal: 16,

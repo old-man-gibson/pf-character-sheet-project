@@ -77,7 +77,7 @@ import {
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
   PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
   mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
-  conditionTotals, statModDelta,
+  conditionTotals, statModDelta, stepDiceMap, addDice,
 } from './rules.js';
 import {
   COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
@@ -1668,9 +1668,10 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         <p class="hint">Extra bonuses reach what the dials do not: an ability score cascades
           into everything built on its modifier; <em>Size</em> is steps larger and moves
-          attack, AC, CMB and CMD the way a step does (reach and damage dice stay yours);
-          <em>Save DCs</em> and <em>Essence pool</em> show where those numbers are read.
-          Values take formulas, like the dials.</p>
+          attack, AC, CMB and CMD the way a step does — and steps every weapon's own
+          damage dice along the official chart (riders like sneak keep theirs; reach
+          stays yours); <em>Save DCs</em> and <em>Essence pool</em> show where those
+          numbers are read. Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
           ${this.#prose(`data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
         <p class="hint">The note reads {…} like prose: a definition written here — say
@@ -1749,6 +1750,7 @@ export class CharacterSheetElement extends HTMLElement {
       const modeKey = WEAPON_MODE_KEYS[w.attackType];
       const atkDelta = (cs.changed && modeKey && cs.delta[modeKey]) || 0;
       const dmgDelta = (cs.changed && calc && cs.delta.damage) || 0;
+      const grow = (cs.changed && calc && cs.sizeSteps) || 0;
       const baseAtkStr = calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0);
       const atkStr = !atkDelta ? baseAtkStr
         : calc
@@ -1757,16 +1759,24 @@ export class CharacterSheetElement extends HTMLElement {
             : fmt(calc.totalAtk + atkDelta))
           : fmt((Number(w.attackTotal) || 0) + atkDelta);
       const baseDmgStr = calc?.totalDmgStr ?? w.damageTotal ?? '—';
-      const dmgStr = !dmgDelta ? baseDmgStr
-        : diceString(calc.totalDmgDice, calc.totalDmgFlat + dmgDelta)
-          + ((calc.notes || []).length ? ` ${calc.notes.join(' ')}` : '');
+      // A size buff steps the weapon's own dice along the official chart; the
+      // token riders keep theirs, exactly as the rules leave them alone.
+      const sized = grow
+        ? stepDiceMap(calc.baseDmgDice || {}, grow, c.identity?.size)
+        : { dice: calc?.baseDmgDice || {}, flat: 0 };
+      const dmgStr = !(dmgDelta || grow) ? baseDmgStr
+        : diceString(
+          addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
+          calc.totalDmgFlat + dmgDelta + sized.flat,
+        ) + ((calc.notes || []).length ? ` ${calc.notes.join(' ')}` : '');
+      const dmgMoved = dmgDelta || (grow ? 1 : 0);
       const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
       return `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
       <span class="value rollpair"><strong class="${cls(atkDelta)}"
           title="${atkDelta ? esc(`Base ${baseAtkStr} — with conditions and buffs`) : ''}">${esc(atkStr)}</strong>
-        <span class="dashdmg${cls(dmgDelta)}"
-          title="${dmgDelta ? esc(`Base ${baseDmgStr} — with conditions and buffs`) : ''}">${esc(dmgStr)}</span>
+        <span class="dashdmg${cls(dmgMoved)}"
+          title="${dmgMoved ? esc(`Base ${baseDmgStr} — with conditions and buffs${grow ? `, ${Math.abs(grow)} size step${Math.abs(grow) === 1 ? '' : 's'} ${grow > 0 ? 'larger' : 'smaller'}` : ''}`) : ''}">${esc(dmgStr)}</span>
         ${this.#rollButton('weapon', i, `a full attack with ${String(w.name || '').trim() || 'this weapon'} — every iterative, damage and crit`, cs)}</span>
     </div>`;
     };

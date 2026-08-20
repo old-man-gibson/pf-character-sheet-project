@@ -28,6 +28,8 @@ import {
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import { rollSpec } from '../app/js/roll20.js';
 
 let pass = 0;
 let fail = 0;
@@ -2590,6 +2592,54 @@ console.log('buff extra bonuses -- targets past the six dials');
   cs = buff([{ target: 'cmd', value: 'no_such' }]);
   check('a broken bonus degrades to 0 with the error kept',
     [cs.delta.cmd, !!c.data.buffs[0].bonuses[0].valueError, !!c.data.buffs[0].error], [0, true, true]);
+}
+
+console.log('size changes walk the official damage-dice chart');
+{
+  const step = (n, d, s, size = 'Medium') => {
+    const r = stepDamageDice(n, d, s, size);
+    return r ? `${r[0]}${r[1] > 1 ? `d${r[1]}` : ''}` : null;
+  };
+  // The enlarge/reduce table's own values.
+  check('1d6 up from Medium (1d6 or less: one step)', step(1, 6, 1), '1d8');
+  check('1d8 up from Medium (two steps)', step(1, 8, 1), '2d6');
+  check('2d6 up from Medium (greatsword enlarged)', step(2, 6, 1), '3d6');
+  check('1d4 up from Small (small size: one step)', step(1, 4, 1, 'Small'), '1d6');
+  check('1d8 down from Medium (1d8 or less: one step)', step(1, 8, -1), '1d6');
+  check('2d6 down from Medium (medium size: one step)', step(2, 6, -1), '1d10');
+  // The FAQ's own remap examples.
+  check('10d6 reads as 8d8, then two steps up', step(10, 6, 1), '12d8');
+  check('5d8 reads as 6d6, then two steps up', step(5, 8, 1), '8d6');
+  check('2d4 reads as 1d8', step(2, 4, 1), '2d6');
+  check('3d4 reads as 2d6', step(3, 4, 1), '3d6');
+  check('1d12 reads as 2d6', step(1, 12, 1), '3d6');
+  check('2d10 up is 4d8 regardless of size', step(2, 10, 1, 'Small'), '4d8');
+  check('2d10 down is 2d8 regardless of size', step(2, 10, -1, 'Small'), '2d8');
+  // Multi-step changes read each step's own size and dice.
+  check('1d6 up twice from Medium: 1d8 then 2d6', step(1, 6, 2), '2d6');
+  check('the chart floors at 1', step(1, 2, -2), '1');
+  check('an unknown die is left alone', stepDamageDice(2, 3, 1), null);
+  // A map steps per component, and a flat 1 lands in flat.
+  check('a mixed map steps each part on its own (1d8 → 2d6, 1d6 → 1d8)',
+    stepDiceMap({ 8: 1, 6: 1 }, 1, 'Medium'), { dice: { 6: 2, 8: 1 }, flat: 0 });
+  check('stepping down to the flat 1', stepDiceMap({ 2: 1 }, -1, 'Medium'), { dice: {}, flat: 1 });
+
+  // And on a weapon: a size buff steps the dice in the d20 copy.
+  const c = new Character(blankDocument({ name: 'Big', level: 6 }));
+  c.listAdd('equipment.weapons', {
+    name: 'Greatsword', attackType: 'Melee', dice: '2d6', damageAbility: 'Str', abilityMult: 1.5,
+    miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 19, critMult: 'x2',
+    damageType: '', groups: [], special: '', size: '', range: '', handedness: '',
+    familiarity: '', ammunition: '', weight: 0, price: 0, attackOffset: 0,
+  });
+  c.data.buffs = [{
+    name: 'Enlarge', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0,
+    note: '', bonuses: [{ target: 'size', value: 1 }],
+  }];
+  c.recompute();
+  const spec = rollSpec(c.data, 'weapon', 0, c.conditionState);
+  const dmg = spec.rolls.find((r) => r.label === 'Damage');
+  check('an enlarged greatsword rolls 3d6', dmg.formula.startsWith('3d6'), true);
 }
 
 console.log('skill misc accepts formulas and named values');

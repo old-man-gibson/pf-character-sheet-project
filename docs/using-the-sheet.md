@@ -255,9 +255,13 @@ never granting a movement type the character lacks) — and three special ones:
   modifier — attacks, skills, saves, AC, initiative.
 - **Size** is steps larger (+1 = one size up): attack and AC move by the size
   modifier, CMB and CMD by the special size modifier (which the plain attack
-  channel rightly skips). Exact within a step of Medium, linear past Huge; reach
-  and damage dice stay yours — the Damage dial and a weapon's dice are where those
-  go.
+  channel rightly skips) — and every weapon's own damage dice **step along the
+  official progression chart** (1d8 → 2d6 enlarged, 2d6 → 1d10 reduced), with the
+  FAQ's remappings for d4s, d12s, d10 pools and off-chart d6/d8 counts, applied one
+  size step at a time so multi-step changes read each step's own size and dice.
+  Token riders (sneak, flaming) keep their dice, as the rules leave them; reach
+  stays yours. The stepped dice show on the dashboard's weapon lines and ride the
+  d20 copies, damage and crit alike.
 - **Save DCs** and **Essence pool** are shown where those numbers are read — the
   Casting numbers and Veils cards — without re-running slot tables or investment
   math.

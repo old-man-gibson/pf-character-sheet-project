@@ -8256,6 +8256,7 @@ export class Character {
     // (recomputeBuffs) are mods, so every "now" figure moves without a second
     // pipeline. They have no ladder group, so nothing supersedes them.
     const buffsOn = [];
+    let sizeSteps = 0;
     for (const b of c.buffs || []) {
       if (!b?.on) continue;
       const bmods = {};
@@ -8279,8 +8280,10 @@ export class Character {
           // CMD (the special size modifier). The attack channel reaches CMB
           // too -- rightly, for penalties like shaken -- so CMB takes 2v: v
           // to cancel the size modifier that does not apply to maneuvers,
-          // and v for the special one that does.
+          // and v for the special one that does. The steps also step every
+          // weapon's damage dice along the official chart (sizeSteps below).
           add('attack', -v); add('ac', -v); add('cmb', 2 * v); add('cmd', v);
+          sizeSteps += v;
         } else if (t === 'speed') add('speedFt', v);
         else if (t) add(t, v);
       }
@@ -8390,9 +8393,10 @@ export class Character {
     }
 
     return {
-      active, buffsOn: buffsOn.length, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
+      active, buffsOn: buffsOn.length, sizeSteps, ...totals, deltas, scores, delta, base, adjusted, speeds, notes,
       changed: Object.entries(delta).filter(([, v]) => v !== 0).length > 0
-        || totals.speed !== 1 || !!mods.speedFt || !!totals.acVsMelee || !!totals.acVsRanged,
+        || totals.speed !== 1 || !!mods.speedFt || !!sizeSteps
+        || !!totals.acVsMelee || !!totals.acVsRanged,
     };
   }
 
