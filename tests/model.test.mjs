@@ -2522,6 +2522,21 @@ console.log('energy drain -- the full scope of a negative level');
     && info.notes.some((n) => /dies/.test(n)), true);
 }
 
+console.log('maneuver notes -- the player\'s line under a readied maneuver');
+{
+  const c = new Character(blankDocument({ name: 'Blade', level: 5 }));
+  c.listAdd('maneuvers.disciplines', { name: 'Golden Lion', known: ['Demoralizing Roar'] });
+  c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', 'Allies move {5 * floor(level / 2)} ft.');
+  check('the note is stored by name',
+    c.data.maneuvers.disciplines[0].notes['Demoralizing Roar'], 'Allies move {5 * floor(level / 2)} ft.');
+  check('and survives a round trip',
+    new Character(c.toJSON()).data.maneuvers.disciplines[0].notes['Demoralizing Roar'],
+    'Allies move {5 * floor(level / 2)} ft.');
+  c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', '   ');
+  check('an emptied note is removed, not stored blank',
+    'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
+}
+
 console.log('skill misc accepts formulas and named values');
 {
   const c = new Character(load('nico'));   // the vigilante

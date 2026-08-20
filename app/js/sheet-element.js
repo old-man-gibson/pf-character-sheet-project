@@ -495,6 +495,8 @@ export class CharacterSheetElement extends HTMLElement {
   #confirmReset = false;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
+  /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
+  #openManeuverNote = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -1894,9 +1896,11 @@ export class CharacterSheetElement extends HTMLElement {
       </div>`;
     };
     const prepared = (v.prepared || []).map((r, i) => ({ r, i })).filter(({ r }) => r.name);
-    const prow = ({ r, i }) => `<div class="statline">
-      <span class="label" title="${esc(r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
-      <span class="value">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
+    // Spell rows pack into columns, and every row's squares start at the same
+    // left edge -- pip one top-left, filling rightward, whatever the count.
+    const prow = ({ r, i }) => `<div class="dashspell">
+      <span class="sname" title="${esc(r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
+      <span class="suses">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
         || '<span class="dim">—</span>'}</span>
     </div>`;
     return `<section class="panel span2">
@@ -1906,7 +1910,7 @@ export class CharacterSheetElement extends HTMLElement {
           title="Everything spent comes back">New day</button>
       </h3>
       ${classes.map(classRow).join('')}
-      ${prepared.length ? `<div class="rowlist" style="margin-top:6px">${prepared.map(prow).join('')}</div>` : ''}
+      ${prepared.length ? `<div class="dashspells">${prepared.map(prow).join('')}</div>` : ''}
       <p class="hint">Pips spend an anonymous slot; squares spend a prepared casting —
         the Vancian tab holds the tables, DCs and spell lists.</p>
     </section>`;
@@ -1972,20 +1976,30 @@ export class CharacterSheetElement extends HTMLElement {
     </section>`;
   }
 
-  /** What is readied, by discipline -- the ticks live on the Maneuvers tab. */
+  /**
+   * What is readied, by discipline, each with the player's own note under it
+   * (the ✎ on the Maneuvers tab writes it; {…} formulas resolve). The ticks
+   * themselves live on the tab.
+   */
   #dashManeuversCard() {
     const m = this.#model.data.maneuvers;
     const disciplines = (m?.disciplines || [])
-      .map((d) => ({ name: d.name, readied: (d.entries || []).filter((e) => e.known) }))
+      .map((d) => ({ name: d.name, notes: d.notes || {}, readied: (d.entries || []).filter((e) => e.known) }))
       .filter((d) => d.readied.length);
+    const row = (e, notes) => {
+      const note = notes[e.name] || '';
+      return `<div class="statline">
+        <span class="label" title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}">${esc(e.name)}</span>
+        <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
+      </div>
+      ${note ? `<div class="dashtalent mnote" title="${esc(note)}">${hasTokens(note)
+    ? this.#renderedProse(note) : esc(note)}</div>` : ''}`;
+    };
     return `<section class="panel">
       <h3>Readied maneuvers</h3>
       ${disciplines.map((d) => `
         <h4 class="subhead">${esc(d.name)}</h4>
-        <div class="rowlist">${d.readied.map((e) => `<div class="statline">
-          <span class="label" title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}">${esc(e.name)}</span>
-          <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
-        </div>`).join('')}</div>`).join('')
+        <div class="rowlist">${d.readied.map((e) => row(e, d.notes)).join('')}</div>`).join('')
     || '<p class="empty">Nothing readied — tick maneuvers on the Maneuvers tab.</p>'}
     </section>`;
   }
@@ -5686,6 +5700,9 @@ export class CharacterSheetElement extends HTMLElement {
           <div class="dlevel">${lvl ? `Level ${lvl}` : 'Other'}</div>
           ${entries.map((e, ei) => [e, ei]).filter(([e]) => e.level === lvl).map(([e, ei]) => {
     const wiki = wikiUrl(e.name);
+    const note = (d.notes || {})[e.name] || '';
+    const noteKey = `${list}|${e.name}`;
+    const noteOpen = this.#openManeuverNote === noteKey;
     return `
             <label class="mrow${e.known ? ' is-known' : ''}"
               title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}${wiki ? '\n\nRight-click to open the wiki' : ''}"
@@ -5694,7 +5711,11 @@ export class CharacterSheetElement extends HTMLElement {
                 data-ready="${list}|${esc(e.name)}" data-kind="bool">
               <span class="mname">${esc(e.name)}</span>
               <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(e.type))}</span>
-            </label>`;
+              ${e.known ? `<button class="mnote-btn${note ? ' has-note' : ''}" data-mnote-toggle="${esc(noteKey)}"
+                title="${note ? 'Its overview note — click to edit' : 'Give it a note for the overview card — {…} formulas work'}"
+                aria-label="Overview note for ${esc(e.name)}" aria-expanded="${noteOpen}">✎</button>` : ''}
+            </label>
+            ${noteOpen ? `<div class="mnote-edit">${this.#prose(`data-mnote="${esc(noteKey)}"`, note, 2, 'grow')}</div>` : ''}`;
   }).join('')}
         `).join('')}
       </div>`}
@@ -9662,6 +9683,24 @@ export class CharacterSheetElement extends HTMLElement {
         const [path, name] = box.dataset.ready.split('|');
         this.#model.toggleManeuver(path, name, box.checked);
         this.#rerender(box);
+      });
+    });
+
+    // The ✎ on a readied maneuver: its overview note. The button sits inside
+    // the row's label, so its click must not also toggle the readied box.
+    root.querySelectorAll('[data-mnote-toggle]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const key = b.dataset.mnoteToggle;
+        this.#openManeuverNote = this.#openManeuverNote === key ? null : key;
+        this.#render();
+      });
+    });
+    root.querySelectorAll('[data-mnote]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [path, name] = input.dataset.mnote.split('|');
+        this.#model.setManeuverNote(path, name, input.value);
+        this.#render();
       });
     });
 

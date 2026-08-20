@@ -1495,13 +1495,15 @@ function importManeuvers(tab) {
  * discipline the reference tab never listed -- is kept in `custom` so nothing
  * from a sheet is lost.
  */
-function shrinkDiscipline({ name, entries = [], known, custom }) {
+function shrinkDiscipline({ name, entries = [], known, custom, notes }) {
+  // The player's overview notes ride along whichever shape arrives.
+  const keptNotes = notes && typeof notes === 'object' && !Array.isArray(notes) ? { ...notes } : {};
   // Already in the new shape (a saved document, or a discipline just added).
   if (Array.isArray(known)) {
-    return { name, known: [...known], custom: custom ? [...custom] : [] };
+    return { name, known: [...known], custom: custom ? [...custom] : [], notes: keptNotes };
   }
   const granted = new Set(disciplineEntries(name).map((e) => e.name));
-  const out = { name, known: [], custom: [] };
+  const out = { name, known: [], custom: [], notes: keptNotes };
   for (const e of entries) {
     if (e.known) out.known.push(e.name);
     if (!granted.has(e.name)) {
@@ -5142,6 +5144,24 @@ export class Character {
     return this;
   }
 
+  /**
+   * The player's own line on a maneuver -- what the dashboard's Readied
+   * maneuvers card says under the name. Prose, so {…} formulas resolve.
+   * Keyed by the maneuver's name, because the rows themselves live in the
+   * shared catalogue; an emptied note is removed rather than stored blank.
+   */
+  setManeuverNote(path, name, text) {
+    const d = getPath(this.data, path);
+    if (!d) return this;
+    if (!d.notes || typeof d.notes !== 'object' || Array.isArray(d.notes)) d.notes = {};
+    const t = String(text ?? '');
+    if (t.trim()) d.notes[name] = t;
+    else delete d.notes[name];
+    this.recompute();
+    this.#emit({ type: 'maneuver-note', path, name });
+    return this;
+  }
+
   /** Move an item within a list, for reordering rows. */
   listMove(path, index, delta) {
     const arr = this.list(path);
@@ -5851,6 +5871,12 @@ export class Character {
     // buff is off); a value that should switch with something says so itself,
     // with if(…), exactly as the dials do.
     (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
+    // A maneuver's overview note is prose too.
+    (d.maneuvers?.disciplines || []).forEach((disc, di) => {
+      for (const [name, text] of Object.entries(disc.notes || {})) {
+        push(`maneuverNote:${di}:${name}`, text);
+      }
+    });
     (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
     (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
     // Everything a player writes on a training side reads {…}: the talent

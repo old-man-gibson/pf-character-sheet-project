@@ -222,6 +222,13 @@ actually uses; the first change pins the arrangement (`uiPrefs.dashCards`), and
   ticked on the Maneuvers tab), and **Talents** (every sphere talent as a one-line
   entry, full text on hover).
 
+In Spells &amp; slots the prepared list packs into columns, and every row's
+squares hang off the same left edge — the first use is always top-left, spending
+rightward. A readied maneuver can carry **the player's own line** for the
+dashboard: the ✎ on its row (Maneuvers tab) opens a note that reads `{…}` like any
+prose — *"Allies heal `{5 * floor(level / 2)}`"* shows the resolved number under
+the maneuver's name on the card, and keeps up with the level.
+
 ### Buffs
 
 Buffs live on the session dashboard and on the build Overview (under Conditions).
