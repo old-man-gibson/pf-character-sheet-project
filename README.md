@@ -111,8 +111,10 @@ app/js/sheet-element.js the <character-sheet> custom element
 app/js/styles.js        component stylesheet (shadow-scoped)
 tests/                  node test suites
 docs/                   the long-form documentation, one file per area (index below)
-tests/fixtures.mjs      where the suites find real characters to test against (private/)
+tests/fixtures.mjs      where the suites find characters to test against
+tests/fixtures/public/  the invented character a checkout without private/ falls back to
 private/                git-ignored: real characters and their workbooks, if you have them
+.github/workflows/      CI: every suite, on each push and pull request
 ```
 
 Run the tests with:
@@ -121,9 +123,10 @@ Run the tests with:
 node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs
 ```
 
-`model.test` and `convert.test` check the model and the converter against real
-characters, which the repository does not carry; without them they say so and exit 0
-(the other suites run in full). See the next section for where they look.
+Every suite passes in a fresh clone. The ones that sweep a roster fall back to the
+public fixture; `convert.test` needs the source workbooks and so still says what it
+skipped and exits 0, as do the checks written against a named character. See the next
+section for where they look.
 
 ---
 
@@ -147,8 +150,23 @@ private/raw/<id>.xlsx            the workbooks they were converted from
 `tests/fixtures.mjs` is the one place that knows this; set `CHARACTER_FIXTURES` to
 point the suites somewhere else. `model.test.mjs` iterates the roster it finds, so a
 character added to `private/characters/index.json` is tested without being listed
-anywhere else; the checks written by name against the original five skip themselves
-when those five are absent.
+anywhere else.
+
+A checkout without `private/` — a fresh clone, and every CI run — gets the roster in
+`tests/fixtures/public/` instead: one invented twelfth-level character, committed, so
+that the suites which sweep *a roster* keep running rather than standing down. She is
+generated rather than hand-written, because a fixture has to reload to exactly the
+numbers stored on it:
+
+```bash
+node tools/make-public-fixture.mjs           # rewrite her
+node tools/make-public-fixture.mjs --check   # fail if the committed copy is stale
+```
+
+What still needs the real five is what names them: the bulk of `model.test.mjs`, whose
+expected values were read off five particular workbooks, and `convert.test.mjs`, which
+re-converts the `.xlsx` files themselves and so cannot run without them. Both say which
+characters they wanted and exit 0.
 
 To rebuild the private set after a workbook changes:
 

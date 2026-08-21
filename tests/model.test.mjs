@@ -1,11 +1,20 @@
-/** Tests the live model against the real converted characters.
+/** Tests the live model against the converted characters.
  *
- *  Needs the private character fixtures (see tests/fixtures.mjs); without them
- *  it says so and exits 0.
+ *  The suite comes in two halves. The first sweeps whatever roster is in use
+ *  (see tests/fixtures.mjs) and asks only what is true of any character: that
+ *  every derived stat matches the sheet it was imported from, and that the
+ *  skill totals reproduce it. Those run everywhere, against the public fixture
+ *  in a fresh clone.
+ *
+ *  The second half is the bulk of the file, and it names characters: the
+ *  numbers it checks were read off five particular workbooks, so it needs the
+ *  private fixtures. Without them it reports what the sweeps found and exits 0.
  *
  *  Run: node tests/model.test.mjs */
 import { readFileSync } from 'node:fs';
-import { loadCharacter, fixtureIds, requireFixtures } from './fixtures.mjs';
+import {
+  loadCharacter, fixtureIds, missingCharacters, missingNote, CHARACTERS_DIR,
+} from './fixtures.mjs';
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
   setManeuverCatalogue, disciplineEntries,
@@ -57,11 +66,14 @@ const catalogue = merged.maneuvers;
 const castingTables = merged.vancian;
 const psionicTableDoc = merged.psionics;
 
-requireFixtures(['angou', 'bryva', 'narockro', 'nico', 'saburo'], 'model.test');
 const load = loadCharacter;
 // Every character in the fixture roster, so one added to it is tested without
 // anyone having to remember to list it here too.
 const IDS = fixtureIds();
+// The five real characters this suite is mostly written against. They are not
+// in the repository, so a fresh clone gets the public fixture instead and the
+// checks that name a character stand down -- see the gate below.
+const REAL = ['angou', 'bryva', 'narockro', 'nico', 'saburo'];
 
 console.log('import fidelity -- every derived stat must match the source sheet');
 for (const id of IDS) {
@@ -90,6 +102,23 @@ for (const id of IDS) {
     .filter((s, i) => s.bonus !== raw.skills[i].bonus)
     .map((s) => s.name);
   check(`${id} all ${raw.skills.length} skills match`, mismatched, []);
+}
+
+/* ------------------------------------------------------------------ *
+ * Everything above sweeps the roster, whichever roster that is; everything
+ * below names a character and checks a number read off that character's own
+ * workbook -- Angou's 83 spell points, Bryva's Max Dex 3 breastplate, the
+ * Samurai levels Saburo drops. Those numbers are the test, so they cannot be
+ * asked of an invented character: without the real five the suite reports what
+ * it managed and stops here rather than failing 2,000 checks about a character
+ * it does not have.
+ * ------------------------------------------------------------------ */
+const missing = missingCharacters(REAL);
+if (missing.length) {
+  console.log(`\n${pass} passed, ${fail} failed`);
+  console.log(`\nmodel.test: the roster sweeps above ran against ${CHARACTERS_DIR}.`);
+  console.log(`  The rest of the suite is written against the real characters and is skipped -- ${missingNote(missing)}`);
+  process.exit(fail ? 1 : 0);
 }
 
 console.log('live recalculation moves the right numbers by the right amount');

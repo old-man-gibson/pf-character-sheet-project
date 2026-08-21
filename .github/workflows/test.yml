@@ -1,0 +1,71 @@
+# The test suites, on every push and every pull request.
+#
+# There is nothing to install: the app is plain ES modules with no dependencies,
+# and each suite is a Node script that prints "N passed, M failed" and exits
+# non-zero if anything failed. So the job is checkout, a Node, and run them.
+#
+# CI has no `private/` directory -- the real characters belong to their players
+# and are not in the repository -- so the suites that sweep a roster fall back
+# to the committed public fixture (see tests/fixtures.mjs). The checks written
+# against a named character still stand down, and say so in the log.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # Both ends of what the suites are expected to run on, so a change that
+      # depends on a newer Node is caught on the floor version rather than in
+      # someone's checkout.
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Report versions
+        run: node --version
+
+      # The fixture is generated, and a schema change can leave the committed
+      # copy behind its generator. Checking it here means the roster sweeps are
+      # testing what the current model actually produces.
+      - name: Public fixture is up to date
+        run: node tools/make-public-fixture.mjs --check
+
+      # Sequentially, so the output reads in order and a failure is easy to
+      # place. Every suite runs even after one fails, and the job fails at the
+      # end if any of them did -- one red run should tell you about all of them.
+      - name: Run the test suites
+        run: |
+          shopt -s nullglob
+          suites=(tests/*.test.mjs)
+          echo "found ${#suites[@]} test suites"
+          failed=()
+          for suite in "${suites[@]}"; do
+            echo "::group::$suite"
+            if node "$suite"; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error file=$suite::$suite failed"
+              failed+=("$suite")
+            fi
+          done
+          if [ ${#failed[@]} -ne 0 ]; then
+            echo "failed: ${failed[*]}"
+            exit 1
+          fi
+          echo "all ${#suites[@]} suites passed"

@@ -1,0 +1,16 @@
+{
+ "characters": [
+  {
+   "id": "vesna",
+   "name": "Vesna Ashgrove",
+   "race": "Human",
+   "level": 12,
+   "classes": [
+    "Wizard",
+    "Psion"
+   ],
+   "image": null,
+   "file": "vesna.json"
+  }
+ ]
+}
