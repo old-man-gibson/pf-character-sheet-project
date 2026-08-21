@@ -2,6 +2,7 @@
  *  and attaching blocks to a character. Needs no fixtures.
  *  Run: node tests/extensions.test.mjs */
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
@@ -245,9 +246,15 @@ console.log('merge -- later packs win by name, tables concatenate');
 
 console.log('bundled -- the shipped packs load through the index and merge cleanly');
 {
+  // `fileURLToPath` rather than trimming the scheme off by hand: a Windows file
+  // URL is file:///C:/... and a POSIX one file:///home/..., so the same strip
+  // that leaves the first absolute leaves the second relative, and the packs go
+  // missing on every machine but the one this was written on.
   const fetcher = async (url) => {
-    const path = decodeURIComponent(String(url).replace(/^file:\/\/\/?/, ''));
-    try { return { ok: true, json: async () => JSON.parse(readFileSync(path, 'utf8')) }; } catch { return { ok: false }; }
+    try {
+      const body = readFileSync(fileURLToPath(url), 'utf8');
+      return { ok: true, json: async () => JSON.parse(body) };
+    } catch { return { ok: false }; }
   };
   const base = new URL('../', import.meta.url);
   const packs = await loadBundledExtensions(base, { fetcher });
