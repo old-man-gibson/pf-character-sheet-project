@@ -44,15 +44,16 @@ const TYPE_ABBREV = {
 };
 import {
   CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
-  deckManipulationCatalogue, maneuverCatalogue, psionicCurveTotals, psionicTables,
+  deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
+  psionicCurveTotals, psionicTables,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
 import { round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, PREP_STYLES,
-  PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS, SPELL_LEVELS,
-  SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle, skillLabel,
-  wikiUrl,
+  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, MANEUVER_FIELDS,
+  PREP_STYLES, PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS,
+  SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
+  skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
@@ -564,9 +565,12 @@ export function maneuversPanel(model, ctx) {
           ${available.length ? '' : '<span class="hint">Every discipline in the catalogue is trained.</span>'}
         </div>
         <p class="hint" style="margin-top:6px">
-          Tick a maneuver to ready it. <strong>Right-click</strong> one to open its
-          page on the <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>
-          in a new tab.
+          <strong>Tick</strong> a maneuver to ready it — the box alone, so nothing else
+          on the row can toggle it. <strong>Click its name</strong> to read what you wrote
+          down about it, and the ✎ to write it: type, action, range, target, duration,
+          saving throw and description, every one of them taking <code>{…}</code> formulas.
+          <strong>Right-click</strong> a name for its page on the
+          <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>.
         </p>
       </section>
 
@@ -607,27 +611,121 @@ function disciplineColumn(model, ctx, d, i) {
           <div class="dlevel">${lvl ? `Level ${lvl}` : 'Other'}</div>
           ${entries.map((e, ei) => [e, ei]).filter(([e]) => e.level === lvl).map(([e, ei]) => {
     const wiki = wikiUrl(e.name);
-    const note = (d.notes || {})[e.name] || '';
-    const noteKey = `${list}|${e.name}`;
-    const noteOpen = ctx.openManeuverNote === noteKey;
+    const key = `${list}|${e.name}`;
+    const open = ctx.openManeuver === key;
+    const entry = maneuverDetails(d, e.name);
+    const written = maneuverIsWritten(entry);
     return `
-            <label class="mrow${e.known ? ' is-known' : ''}"
-              title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}${wiki ? '\n\nRight-click to open the wiki' : ''}"
-              ${wiki ? `data-wiki="${esc(wiki)}"` : ''}>
-              <input type="checkbox" ${e.known ? 'checked' : ''}
-                data-ready="${list}|${esc(e.name)}" data-kind="bool">
-              <span class="mname">${esc(e.name)}</span>
-              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(e.type))}</span>
-              ${e.known ? `<button class="mnote-btn${note ? ' has-note' : ''}" data-mnote-toggle="${esc(noteKey)}"
-                title="${note ? 'Its overview note — click to edit' : 'Give it a note for the overview card — {…} formulas work'}"
-                aria-label="Overview note for ${esc(e.name)}" aria-expanded="${noteOpen}">✎</button>` : ''}
-            </label>
-            ${noteOpen ? `<div class="mnote-edit">${prose(model, `data-mnote="${esc(noteKey)}"`, note, 2, 'grow')}</div>` : ''}`;
+            <div class="mrow${e.known ? ' is-known' : ''}${open ? ' is-open' : ''}">
+              <label class="mtick" title="${esc(e.known ? `Stop readying ${e.name}` : `Ready ${e.name}`)}">
+                <input type="checkbox" ${e.known ? 'checked' : ''}
+                  data-ready="${list}|${esc(e.name)}" data-kind="bool"
+                  aria-label="Ready ${esc(e.name)}"></label>
+              <button type="button" class="mname" data-mopen="${esc(key)}"
+                ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
+                title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}
+
+Click to ${open ? 'close' : 'open'} it${wiki ? ', right-click for the wiki' : ''}">${esc(e.name)}</button>
+              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type || e.type))}</span>
+              <button class="mnote-btn${written ? ' has-note' : ''}" data-medit="${esc(key)}"
+                title="${written ? 'What you wrote down about it — click to edit' : 'Write down what it does — {…} formulas work'}"
+                aria-label="Edit ${esc(e.name)}" aria-expanded="${open && !!ctx.maneuverEdit}">✎</button>
+            </div>
+            ${open ? maneuverCard(model, ctx, list, e, entry, key, wiki) : ''}`;
   }).join('')}
         `).join('')}
       </div>`}
     </div>`;
   }
+
+/* ------------------------------------------------------------------ *
+ * One maneuver, opened.
+ *
+ * The catalogue ships names only, so everything worth reading here is what
+ * the player wrote: the header block off a stat entry, then the description.
+ * Two faces of the same card -- read it, or fill it in -- because at the
+ * table you are reading it and only ever writing it once.
+ * ------------------------------------------------------------------ */
+
+function maneuverCard(model, ctx, list, e, entry, key, wiki) {
+  const editing = !!ctx.maneuverEdit;
+  const sub = [e.level ? `Level ${e.level}` : '', e.kind === 'stance' ? 'Stance' : 'Maneuver']
+    .filter(Boolean).join(' · ');
+
+  return `<div class="mdetail${editing ? ' is-editing' : ''}">
+      <div class="mdetail-head">
+        <span class="mdetail-name" title="${esc(e.name)}">${esc(e.name)}</span>
+        <span class="mdetail-sub">${esc(sub)}</span>
+        ${wiki ? `<a class="mdetail-wiki" href="${esc(wiki)}" target="_blank" rel="noopener noreferrer"
+          title="Its page on the wiki">wiki ↗</a>` : ''}
+        <button class="tiny" ${editing ? `data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
+          aria-pressed="${editing}"
+          title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
+        <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
+      </div>
+      ${editing ? maneuverCells(model, list, e, entry) : maneuverRead(model, e, entry)}
+    </div>`;
+}
+
+/**
+ * What it says, with the blanks left out.
+ *
+ * A stat entry prints the lines it has; the ones a player never filled in are
+ * not "Target: —", they are simply not part of the maneuver, and a card of
+ * seven em-dashes is a form rather than a rules entry. Type falls back to the
+ * catalogue's, which is the one cell that arrives already answered.
+ */
+function maneuverRead(model, e, entry) {
+  // The type the catalogue already knows does not count as something the
+  // player wrote, or a maneuver nobody has touched would look filled in.
+  const written = maneuverIsWritten(entry);
+  const shown = MANEUVER_FIELDS
+    .map((f) => [f, f.key === 'type' ? (entry.type || e.type || '') : entry[f.key]])
+    .filter(([, v]) => String(v).trim() !== '');
+  const value = (v) => (hasTokens(v) ? renderedProse(model, v) : esc(v));
+  const cells = shown.filter(([f]) => f.key !== 'text');
+  const body = shown.find(([f]) => f.key === 'text');
+  return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
+      <dt>${esc(f.label)}</dt><dd>${value(v)}</dd>`).join('')}</dl>` : ''}
+    ${body ? `<div class="mdetail-text">${value(body[1])}</div>` : ''}
+    ${written ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
+}
+
+/**
+ * The same entry with every cell open.
+ *
+ * Three of them are picked from a list because the rules only allow those
+ * answers; the rest are prose, so a range that scales -- `Close ({= 25 + 5 *
+ * floor(level / 2)} ft.)` -- keeps up with the level instead of going stale
+ * the way a typed number does.
+ */
+function maneuverCells(model, list, e, entry) {
+  const key = `${list}|${e.name}`;
+  const bind = (f) => `data-mfield="${esc(key)}" data-mf="${f.key}" aria-label="${esc(f.label)}"`;
+  const cell = (f) => {
+    // The catalogue already knows the type, so the empty option says so
+    // rather than pretending the cell is blank.
+    const blank = f.key === 'type' && e.type ? `${e.type} — from the catalogue` : '—';
+    const control = f.options
+      ? maneuverSelect(bind(f), entry[f.key], f.options, blank)
+      : prose(model, `${bind(f)}${f.hint ? ` placeholder="${esc(f.hint)}"` : ''}`,
+        entry[f.key], f.lines || 1, 'grow');
+    return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
+  };
+  const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];
+  return `<div class="medit">${lines.map((n) => `<div class="mline">${
+    MANEUVER_FIELDS.filter((f) => f.line === n).map(cell).join('')}</div>`).join('')}</div>`;
+}
+
+/** A picker that keeps an answer its list has never heard of, marked with a *. */
+function maneuverSelect(bindingAttr, value, options, blank) {
+  const pairs = options.map((o) => [o, o]);
+  if (value && !pairs.some(([v]) => v === value)) pairs.push([value, `${value} *`]);
+  const opts = [['', blank], ...pairs]
+    .map(([v, label]) => `<option value="${esc(v)}"${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
+    .join('');
+  return `<select ${bindingAttr} data-kind="text">${opts}</select>`;
+}
 
   /* ---------------- vancian casting ---------------- */
 

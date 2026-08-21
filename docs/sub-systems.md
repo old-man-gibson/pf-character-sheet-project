@@ -403,10 +403,31 @@ still reads 10/11 maneuvers and 4/4 stances with his six per-discipline counts
 homebrew maneuver, a discipline the reference tab never had — is kept on the
 character so nothing from a sheet is lost.
 
-**Right-click a maneuver** to open its page on the campaign wiki
-(<https://metzo.miraheze.org>) in a new tab — left-click still readies it, so the
+Every row is three targets, and each does one thing. The **tick box** readies the
+maneuver and is the only thing that does — it used to be the whole row, so reading a
+maneuver meant hitting the ✎ dead on or readying it by accident. **Clicking the name**
+opens what you wrote about it. The **✎** opens the same card with its cells showing.
+
+The card is the stat entry the catalogue cannot ship. It has seven cells — **type,
+action, range, target, duration, saving throw and DC** — and a **description**, and
+every one of them takes `{…}` formulas, so a range written
+`Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of going
+stale. Reading it, only the cells you filled in are there at all: a maneuver with a
+range and nothing else is a card with a range and nothing else, never a column of
+em-dashes. Type is the one cell that arrives answered, from the catalogue, and the
+picker says so rather than looking blank.
+
+What you write is stored on the discipline under the maneuver's name, because the
+rows themselves belong to the shared catalogue and have nowhere to hang. A
+description on its own is still saved as the plain string it always was, so a
+character who never opens the other cells is byte-for-byte the character it was.
+The dashboard's **Readied maneuvers** card shows the header cells as one line and
+the description under it.
+
+**Right-click a maneuver's name** to open its page on the campaign wiki
+(<https://metzo.miraheze.org>) in a new tab — left-click opens the card, so the
 other button does the looking-up. Hovering a row underlines the name to show there
-is a page behind it.
+is something behind it.
 
 The title is built from the maneuver's own name, with one wrinkle: the catalogue was
 typed in Google Sheets, whose autocorrect turned **93 of the 1,033 names** curly, so

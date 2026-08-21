@@ -1670,6 +1670,42 @@ export function essenceInvested(slots = []) {
 /** Maneuver types the sheet's Type column uses. */
 export const MANEUVER_TYPES = ['Strike', 'Boost', 'Counter', 'Stance', 'Untyped'];
 
+/** How a maneuver is initiated. */
+export const MANEUVER_ACTIONS = ['Full-round', 'Standard', 'Move', 'Swift', 'Immediate', 'Free'];
+
+/** Which save a maneuver calls for, if any. */
+export const MANEUVER_SAVES = ['None', 'Fortitude', 'Reflex', 'Will'];
+
+/**
+ * The cells a maneuver's own entry is made of.
+ *
+ * The catalogue ships names only -- the rules text is somebody's copyright,
+ * so the pack carries what a maneuver is *called* and nothing about what it
+ * does. Which leaves the player to write the parts they actually need at the
+ * table, and this is the shape they write them in: the header block off a
+ * stat entry, in the order a rulebook prints it.
+ *
+ * A cell with `options` is picked from a list; the rest are prose, so
+ * `Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level the way
+ * every other formula on the sheet does. `text` is the description and is
+ * last, because it is the only one that needs the room.
+ *
+ * `line` groups them the way a stat entry prints: what it is, where it
+ * reaches, what it is saved against, and then what it does. Each line still
+ * folds to fewer columns in a narrow discipline, so this is the order they
+ * fold in rather than a fixed grid.
+ */
+export const MANEUVER_FIELDS = [
+  { key: 'type', label: 'Type', options: MANEUVER_TYPES, line: 1 },
+  { key: 'action', label: 'Action', options: MANEUVER_ACTIONS, line: 1 },
+  { key: 'range', label: 'Range', hint: 'Personal, Melee attack, 30 ft.', line: 2 },
+  { key: 'target', label: 'Target', hint: 'One creature', line: 2 },
+  { key: 'duration', label: 'Duration', hint: 'Instantaneous', line: 2 },
+  { key: 'save', label: 'Saving throw', options: MANEUVER_SAVES, line: 3 },
+  { key: 'dc', label: 'DC', hint: '{= 10 + 1 + wis.mod}', line: 3 },
+  { key: 'text', label: 'Description', lines: 4, line: 4 },
+];
+
 /** Where the campaign's rules text lives. */
 export const WIKI_BASE = 'https://metzo.miraheze.org/wiki/';
 

@@ -510,37 +510,102 @@ button.tiny {
   border-top: 1px solid var(--cs-line);
 }
 .discipline-body .dlevel:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+/* Three targets, each its own: the tick readies, the name opens, the pen
+   writes. The row used to be one <label>, so every one of those clicks readied
+   the maneuver and the pen was the only safe thing on it. */
 .mrow {
-  display: flex; align-items: flex-start; gap: 6px; padding: 3px 4px;
-  border-radius: 4px; cursor: pointer; min-width: 0;
+  display: flex; align-items: flex-start; gap: 4px; padding: 3px 4px;
+  border-radius: 4px; min-width: 0;
 }
-/* The overview-note pen on a readied maneuver: quiet until it holds one. */
+/* A bare 13px box is a hard thing to hit, so the tick keeps a little padding
+   around it -- but only a little, since everything outside it now does
+   something else. */
+.mtick {
+  flex: none; display: flex; align-items: flex-start; padding: 1px 3px 3px;
+  margin: -1px 0 0; border-radius: 4px; cursor: pointer;
+}
+.mtick:hover { background: var(--cs-accent-soft); }
+/* The overview pen: quiet until the maneuver holds something. */
 .mnote-btn {
   flex: none; padding: 0 4px; border: 0; background: none; font-size: 0.72rem;
   color: var(--cs-muted); opacity: 0.55; cursor: pointer; line-height: 1.3;
 }
 .mrow:hover .mnote-btn { opacity: 1; }
 .mnote-btn.has-note { color: var(--cs-edit); opacity: 1; }
-.mnote-edit { margin: 0 4px 6px 24px; }
 .mrow:hover { background: var(--cs-accent-soft); }
 /* The global input rule sets width:100%, which would give the tick box the
    whole row and leave the name nothing. */
 .mrow input[type="checkbox"] { flex: none; width: auto; margin: 1px 0 0; }
-.mrow .mname {
-  flex: 1 1 auto; min-width: 0; font-size: 0.78rem; line-height: 1.3;
-  overflow-wrap: anywhere; color: var(--cs-muted);
+/* The name is a button now, and has to be talked out of looking like one. */
+button.mname {
+  flex: 1 1 auto; min-width: 0; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 0.78rem; line-height: 1.3; text-align: left;
+  overflow-wrap: anywhere; color: var(--cs-muted); cursor: pointer;
 }
 .mrow.is-known .mname { color: var(--cs-text); font-weight: 620; }
+.mrow.is-open .mname { color: var(--cs-accent); }
 .mrow .mtype {
   flex: none; font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--cs-muted); opacity: 0.75; padding-top: 2px;
 }
 .mrow .mtype.is-stance { color: var(--cs-accent); opacity: 1; }
-/* A right-click target is invisible, so hovering a row that has a wiki page
-   underlines its name the way a link would. */
-.mrow[data-wiki]:hover .mname {
+/* Hovering the name underlines it, the way anything you can click into does. */
+.mrow:hover .mname, button.mname:focus-visible {
   text-decoration: underline dotted; text-underline-offset: 2px;
 }
+
+/* ---------- one maneuver, opened ----------
+   The stat entry the catalogue cannot ship: what the player wrote about the
+   maneuver, read as a block and edited as a grid of named cells. It sits under
+   its own row inside the discipline column, so it is narrow by design and the
+   cells wrap to whatever the column has. */
+.mdetail {
+  margin: 1px 2px 7px 22px; border: 1px solid var(--cs-line); border-left: 2px solid var(--cs-accent);
+  border-radius: 5px; background: var(--cs-panel);
+}
+.mdetail-head {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  padding: 4px 5px; border-bottom: 1px solid var(--cs-line);
+}
+.mdetail-name { font-size: 0.82rem; font-weight: 650; min-width: 0; overflow-wrap: anywhere; }
+.mdetail-sub {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted); flex: 1 1 auto;
+}
+.mdetail-wiki { font-size: 0.68rem; flex: none; }
+.mdetail-head button.tiny { align-self: center; }
+/* The read face: label and value, the way a rulebook prints a header block.
+   Only the cells that were filled in are here at all, so there is never a
+   column of em-dashes to read past. */
+.mdetail-cells {
+  display: grid; grid-template-columns: auto 1fr; gap: 1px 8px;
+  margin: 0; padding: 5px 6px;
+}
+.mdetail-cells dt {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted); padding-top: 2px;
+}
+.mdetail-cells dd { margin: 0; font-size: 0.78rem; line-height: 1.35; overflow-wrap: anywhere; }
+.mdetail-text {
+  padding: 5px 6px; font-size: 0.78rem; line-height: 1.4;
+  white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid var(--cs-line);
+}
+.mdetail-cells + .mdetail-text { border-top-style: dashed; }
+.mdetail > .empty { margin: 0; padding: 6px; font-size: 0.76rem; }
+/* The write face, a line at a time -- what it is, where it reaches, what it is
+   saved against, what it does. auto-fit rather than a fixed count, so a line
+   of three sits across a wide column and stacks in a narrow one. */
+.medit { display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.mline {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 5px 6px;
+}
+.mcell { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mcell > .k {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted);
+}
+.mcell select { font-size: 0.78rem; padding: 2px 4px; }
+.mcell .prose textarea, .mcell .prose-view { font-size: 0.78rem; }
 
 /* ---------- akashic ----------
    The class blocks want the width (six columns of numbers); the essence pool

@@ -385,8 +385,10 @@ export class CharacterSheetElement extends HTMLElement {
   #confirmReset = false;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
-  /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
-  #openManeuverNote = null;
+  /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
+  #openManeuver = null;
+  /** Whether the open maneuver is showing its cells rather than reading them. */
+  #maneuverEdit = false;
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -1666,12 +1668,17 @@ export class CharacterSheetElement extends HTMLElement {
 
   /**
    * Every sub-system tab lives in ui/panels/subsystems.js. What they need from
-   * the element is the model and the three bits of view state their tabs keep:
-   * which deck view is showing, which maneuver's note is open, and the cards
-   * currently peeked at.
+   * the element is the model and the few bits of view state their tabs keep:
+   * which deck view is showing, which maneuver is open and whether it is being
+   * read or written, and the cards currently peeked at.
    */
   #systemCtx() {
-    return { deckView: this.#deckView, openManeuverNote: this.#openManeuverNote, peek: this.#peek };
+    return {
+      deckView: this.#deckView,
+      openManeuver: this.#openManeuver,
+      maneuverEdit: this.#maneuverEdit,
+      peek: this.#peek,
+    };
   }
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
@@ -3595,41 +3602,79 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // Readying a maneuver adds or removes its name on the discipline. The row
-    // itself belongs to the shared catalogue, so only the name is stored.
+    /*
+     * Readying a maneuver adds or removes its name on the discipline. The row
+     * itself belongs to the shared catalogue, so only the name is stored.
+     *
+     * The name is everything past the first "|", not the second field of a
+     * split: it is whatever a player typed, and a homebrew maneuver with a
+     * pipe in its name must tick the same row the card opens.
+     */
+    const maneuverRef = (key) => [key.slice(0, key.indexOf('|')), key.slice(key.indexOf('|') + 1)];
     root.querySelectorAll('[data-ready]').forEach((box) => {
       box.addEventListener('change', () => {
-        const [path, name] = box.dataset.ready.split('|');
+        const [path, name] = maneuverRef(box.dataset.ready);
         this.#model.toggleManeuver(path, name, box.checked);
         this.#rerender(box);
       });
     });
 
-    // The ✎ on a readied maneuver: its overview note. The button sits inside
-    // the row's label, so its click must not also toggle the readied box.
-    root.querySelectorAll('[data-mnote-toggle]').forEach((b) => {
+    /*
+     * Opening a maneuver. The name reads it, the ✎ writes it, and both are
+     * their own buttons -- the row used to be one big <label>, so a click
+     * anywhere on it readied the maneuver and the ✎ was the only thing you
+     * could safely hit. Now the tick box is the only thing that ticks.
+     *
+     * One maneuver is open at a time, and which one is not saved with the
+     * character: it is a way of reading the tab, not something about the
+     * character.
+     */
+    const showManeuver = (key, edit) => {
+      // Asking for the face that is already up shuts it; asking for the other
+      // one turns the card over instead of closing it.
+      const showing = this.#openManeuver === key && this.#maneuverEdit === edit;
+      this.#openManeuver = showing ? null : key;
+      this.#maneuverEdit = showing ? false : edit;
+      this.#render();
+    };
+    root.querySelectorAll('[data-mopen]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
-        const key = b.dataset.mnoteToggle;
-        this.#openManeuverNote = this.#openManeuverNote === key ? null : key;
-        this.#render();
+        showManeuver(b.dataset.mopen, false);
       });
     });
-    root.querySelectorAll('[data-mnote]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const [path, name] = input.dataset.mnote.split('|');
-        this.#model.setManeuverNote(path, name, input.value);
+    root.querySelectorAll('[data-medit]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        showManeuver(b.dataset.medit, true);
+      });
+    });
+    root.querySelectorAll('[data-mclose]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        this.#openManeuver = null;
+        this.#maneuverEdit = false;
         this.#render();
       });
     });
 
-    // Right-click a maneuver for its rules text. The row is a label whose
-    // left-click readies the maneuver, so the wiki gets the button that was
-    // otherwise unused; the native menu is given up only on these rows.
-    root.querySelectorAll('.mrow[data-wiki]').forEach((row) => {
-      row.addEventListener('contextmenu', (ev) => {
+    // One cell of a maneuver's entry. Which cell rides beside the key rather
+    // than on the end of it, for the same reason the name is read whole.
+    root.querySelectorAll('[data-mfield]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [path, name] = maneuverRef(input.dataset.mfield);
+        this.#model.setManeuverField(path, name, input.dataset.mf, input.value);
+        this.#render();
+      });
+    });
+
+    // Right-click a maneuver for its rules text. Left-click opens what the
+    // player wrote, so the wiki gets the button that was otherwise unused;
+    // the native menu is given up only on these names.
+    root.querySelectorAll('.mname[data-wiki]').forEach((name) => {
+      name.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
-        window.open(row.dataset.wiki, '_blank', 'noopener,noreferrer');
+        window.open(name.dataset.wiki, '_blank', 'noopener,noreferrer');
       });
     });
 
