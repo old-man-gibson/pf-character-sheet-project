@@ -232,8 +232,11 @@ console.log('merge -- later packs win by name, tables concatenate');
     cooking: { entrees: [{ name: 'rice', effect: 'b' }] },
   } });
   const m = mergeTables([a, b]);
-  check('discipline replaced by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 1], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
-  check('later entries win', m.maneuvers.disciplines[0].entries[0].name, 'Y');
+  // A discipline is the one table that adds up rather than replacing: two
+  // packs naming it join maneuver by maneuver, and the later pack's header
+  // still wins (its casing is the one kept).
+  check('same discipline joined by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 2], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
+  check('both packs\' maneuvers are there', m.maneuvers.disciplines[0].entries.map((e) => e.name), ['X', 'Y']);
   check('vancian classes concatenate, spellLevels kept', [m.vancian.classes.map((c) => c.name), m.vancian.spellLevels], [['Cleric', 'Wizard'], ['0', '1st']]);
   check('psionic curve replaced by total', m.psionics.curves, [{ total: 52, points: [1] }]);
   check('cardcasting from the one pack', m.cardcasting.manipulations.length, 1);
@@ -242,6 +245,51 @@ console.log('merge -- later packs win by name, tables concatenate');
   const calls = [];
   registerTables(m, { setManeuverCatalogue: (d) => calls.push(['m', d.disciplines.length]), setCookingTables: (d) => calls.push(['c', d.entrees.length]) });
   check('registrars called with the merged docs, missing ones skipped', calls, [['m', 3], ['c', 1]]);
+
+  /*
+   * The case the joining rule exists for. A player pastes one maneuver off a
+   * wiki page; it is filed under Golden Lion, which the bundled catalogue
+   * already carries thirty-odd of. Under a replace-by-name rule the other
+   * thirty would vanish the moment the pack was switched on.
+   */
+  const pow = normalizeExtension({
+    id: 'pow',
+    name: 'Path of War',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [
+            { level: 1, kind: 'maneuver', name: 'Demoralizing Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Lion\'s Pounce', type: 'Strike' },
+          ],
+        }],
+      },
+    },
+  });
+  const pasted = normalizeExtension({
+    id: 'mine',
+    name: 'Mine',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost',
+            action: 'Swift', text: 'Roars.',
+          }],
+        }],
+      },
+    },
+  });
+  const both = mergeTables([pow, pasted]).maneuvers.disciplines[0];
+  check('one pasted maneuver does not delete the discipline around it',
+    both.entries.map((e) => e.name), ['Demoralizing Roar', 'Encouraging Roar', 'Lion\'s Pounce']);
+  check('and the one it names is the corrected copy',
+    both.entries[1].text, 'Roars.');
+  check('the ones it did not name are untouched',
+    both.entries[0].text, undefined);
 }
 
 console.log('bundled -- the shipped packs load through the index and merge cleanly');
@@ -264,8 +312,62 @@ console.log('bundled -- the shipped packs load through the index and merge clean
   check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length], [30, 34, 5, 33]);
   setManeuverCatalogue(m.maneuvers);
   ok('the catalogue answers by discipline name', disciplineEntries('Broken Blade').length > 0);
+  // The bundled catalogue is names and types only: the rules text of 1,033
+  // publisher maneuvers is not ours to ship, and this is the check that says
+  // so if somebody ever pastes it in.
+  const bundled = disciplineEntries('Broken Blade');
+  ok('every bundled entry has a type', bundled.every((e) => e.type !== ''));
+  check('and no bundled entry carries rules text',
+    bundled.filter((e) => ['action', 'range', 'target', 'duration', 'save', 'dc', 'text']
+      .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');
+{
+  /*
+   * A discipline written in the Extensions editor: names, and the cells the
+   * sheet's maneuver card shows. Nothing between the file and the catalogue
+   * may quietly drop them -- which is exactly what happened before, where
+   * setManeuverCatalogue narrowed every entry to four keys.
+   */
+  const pack = normalizeExtension({
+    id: 'homebrew', name: 'Homebrew',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Iron Tortoise',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+            action: 'Standard', range: 'Melee attack', target: 'One creature',
+            duration: 'Instantaneous', save: 'Fortitude', dc: '{= 10 + 1 + str.mod}',
+            text: 'Slams for {= level}d6.',
+          }],
+        }],
+      },
+    },
+  });
+  const cells = ['type', 'action', 'range', 'target', 'duration', 'save', 'dc', 'text'];
+  check('normalizeExtension keeps them',
+    cells.every((k) => k in pack.provides.maneuvers.disciplines[0].entries[0]), true);
+  const merged = mergeTables([pack]);
+  check('mergeTables keeps them',
+    cells.every((k) => k in merged.maneuvers.disciplines[0].entries[0]), true);
+  registerTables(merged, { setManeuverCatalogue });
+  const entry = disciplineEntries('Iron Tortoise')[0];
+  check('and the catalogue registers them', cells.map((k) => entry[k]), [
+    'Strike', 'Standard', 'Melee attack', 'One creature',
+    'Instantaneous', 'Fortitude', '{= 10 + 1 + str.mod}', 'Slams for {= level}d6.',
+  ]);
+  // A cell the pack left out is a blank string, never undefined -- every
+  // reader treats these as strings and one hole would show as "undefined".
+  registerTables(mergeTables([normalizeExtension({
+    id: 'bare', name: 'Bare',
+    provides: { maneuvers: { disciplines: [{ name: 'Bare', entries: [{ name: 'Thing' }] }] } },
+  })]), { setManeuverCatalogue });
+  check('a cell the pack left out is blank, not missing',
+    cells.map((k) => disciplineEntries('Bare')[0][k]), cells.map(() => ''));
 }
 
 console.log('apply -- blocks land on a blank character through the model');

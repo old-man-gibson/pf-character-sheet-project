@@ -45,6 +45,7 @@ const TYPE_ABBREV = {
 import {
   CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
   deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
+  maneuverOwn,
   psionicCurveTotals, psionicTables,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
@@ -613,8 +614,12 @@ function disciplineColumn(model, ctx, d, i) {
     const wiki = wikiUrl(e.name);
     const key = `${list}|${e.name}`;
     const open = ctx.openManeuver === key;
-    const entry = maneuverDetails(d, e.name);
-    const written = maneuverIsWritten(entry);
+    // Two readings of the same maneuver: what it says (the player's cells over
+    // the catalogue's) and what the player wrote (which is what the pen means,
+    // and all that is ever saved).
+    const entry = maneuverDetails(d, e.name, e);
+    const own = maneuverOwn(d, e.name);
+    const written = maneuverIsWritten(own);
     return `
             <div class="mrow${e.known ? ' is-known' : ''}${open ? ' is-open' : ''}">
               <label class="mtick" title="${esc(e.known ? `Stop readying ${e.name}` : `Ready ${e.name}`)}">
@@ -623,15 +628,15 @@ function disciplineColumn(model, ctx, d, i) {
                   aria-label="Ready ${esc(e.name)}"></label>
               <button type="button" class="mname" data-mopen="${esc(key)}"
                 ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
-                title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}
+                title="${esc(e.name)}${entry.type ? ` — ${esc(entry.type)}` : ''}
 
 Click to ${open ? 'close' : 'open'} it${wiki ? ', right-click for the wiki' : ''}">${esc(e.name)}</button>
-              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type || e.type))}</span>
+              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type))}</span>
               <button class="mnote-btn${written ? ' has-note' : ''}" data-medit="${esc(key)}"
                 title="${written ? 'What you wrote down about it — click to edit' : 'Write down what it does — {…} formulas work'}"
                 aria-label="Edit ${esc(e.name)}" aria-expanded="${open && !!ctx.maneuverEdit}">✎</button>
             </div>
-            ${open ? maneuverCard(model, ctx, list, e, entry, key, wiki) : ''}`;
+            ${open ? maneuverCard(model, ctx, list, e, entry, own, key, wiki) : ''}`;
   }).join('')}
         `).join('')}
       </div>`}
@@ -641,13 +646,18 @@ Click to ${open ? 'close' : 'open'} it${wiki ? ', right-click for the wiki' : ''
 /* ------------------------------------------------------------------ *
  * One maneuver, opened.
  *
- * The catalogue ships names only, so everything worth reading here is what
- * the player wrote: the header block off a stat entry, then the description.
  * Two faces of the same card -- read it, or fill it in -- because at the
  * table you are reading it and only ever writing it once.
+ *
+ * What it says can come from two places. A pack may carry the cells (the
+ * bundled Path of War catalogue carries only the type: the rest is a
+ * publisher's rules text and is not ours to ship, but a player's own pack is
+ * their own content). Anything the player writes on their sheet sits over the
+ * top of that, cell by cell -- so a table ruling scribbled mid-session wins,
+ * and emptying the cell again hands it back to the pack.
  * ------------------------------------------------------------------ */
 
-function maneuverCard(model, ctx, list, e, entry, key, wiki) {
+function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
   const editing = !!ctx.maneuverEdit;
   const sub = [e.level ? `Level ${e.level}` : '', e.kind === 'stance' ? 'Stance' : 'Maneuver']
     .filter(Boolean).join(' · ');
@@ -663,24 +673,20 @@ function maneuverCard(model, ctx, list, e, entry, key, wiki) {
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
         <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, entry) : maneuverRead(model, e, entry)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, entry)}
     </div>`;
 }
 
 /**
  * What it says, with the blanks left out.
  *
- * A stat entry prints the lines it has; the ones a player never filled in are
- * not "Target: —", they are simply not part of the maneuver, and a card of
- * seven em-dashes is a form rather than a rules entry. Type falls back to the
- * catalogue's, which is the one cell that arrives already answered.
+ * A stat entry prints the lines it has; the ones nobody filled in are not
+ * "Target: —", they are simply not part of the maneuver, and a card of seven
+ * em-dashes is a form rather than a rules entry.
  */
-function maneuverRead(model, e, entry) {
-  // The type the catalogue already knows does not count as something the
-  // player wrote, or a maneuver nobody has touched would look filled in.
-  const written = maneuverIsWritten(entry);
+function maneuverRead(model, entry) {
   const shown = MANEUVER_FIELDS
-    .map((f) => [f, f.key === 'type' ? (entry.type || e.type || '') : entry[f.key]])
+    .map((f) => [f, entry[f.key]])
     .filter(([, v]) => String(v).trim() !== '');
   const value = (v) => (hasTokens(v) ? renderedProse(model, v) : esc(v));
   const cells = shown.filter(([f]) => f.key !== 'text');
@@ -688,7 +694,7 @@ function maneuverRead(model, e, entry) {
   return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
       <dt>${esc(f.label)}</dt><dd>${value(v)}</dd>`).join('')}</dl>` : ''}
     ${body ? `<div class="mdetail-text">${value(body[1])}</div>` : ''}
-    ${written ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
+    ${maneuverIsWritten(entry) ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
 }
 
 /**
@@ -698,18 +704,30 @@ function maneuverRead(model, e, entry) {
  * answers; the rest are prose, so a range that scales -- `Close ({= 25 + 5 *
  * floor(level / 2)} ft.)` -- keeps up with the level instead of going stale
  * the way a typed number does.
+ *
+ * A cell holds the player's own answer and nothing else, so that clearing one
+ * really does clear it. What the catalogue says sits behind as the greyed
+ * placeholder -- which is also what the cell falls back to the moment it is
+ * emptied, so the ghost text is a promise rather than a hint.
  */
-function maneuverCells(model, list, e, entry) {
+function maneuverCells(model, list, e, own) {
   const key = `${list}|${e.name}`;
   const bind = (f) => `data-mfield="${esc(key)}" data-mf="${f.key}" aria-label="${esc(f.label)}"`;
   const cell = (f) => {
-    // The catalogue already knows the type, so the empty option says so
-    // rather than pretending the cell is blank.
-    const blank = f.key === 'type' && e.type ? `${e.type} — from the catalogue` : '—';
+    // What the catalogue's own row says for this cell, whether or not the
+    // player has written over it -- because that is what emptying it gives
+    // back, which makes the ghost text a promise rather than a hint.
+    //
+    // A cell the catalogue says nothing about falls back to an example
+    // instead, and the two must not read alike: "Melee attack" is what the
+    // cell *will* say if left alone, "e.g. One creature" is only a suggestion.
+    const under = String(e?.[f.key] ?? '');
+    const ghost = under || (f.hint ? `e.g. ${f.hint}` : '');
     const control = f.options
-      ? maneuverSelect(bind(f), entry[f.key], f.options, blank)
-      : prose(model, `${bind(f)}${f.hint ? ` placeholder="${esc(f.hint)}"` : ''}`,
-        entry[f.key], f.lines || 1, 'grow');
+      ? maneuverSelect(bind(f), own[f.key], f.options,
+        under ? `${under} — from the catalogue` : '—')
+      : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
+        own[f.key], f.lines || 1, 'grow');
     return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
   };
   const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];

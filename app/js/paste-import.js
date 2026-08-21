@@ -179,6 +179,7 @@ export function parsePaste(text) {
   const pages = markWikidotChrome(lines, used);
   const segments = findSegments(lines, used, pages);
   const blocks = [];
+  const maneuvers = [];
   const report = [];
   const nearOf = new Array(lines.length).fill(null);
 
@@ -186,11 +187,17 @@ export function parsePaste(text) {
     const slice = lines.slice(seg.start, seg.end);
     const pre = new Set();
     for (let i = seg.start; i < seg.end; i++) if (used[i]) pre.add(i - seg.start);
-    const reader = { class: readClass, race: readRace, veil: readVeil, archetype: readArchetype }[seg.kind];
+    const reader = {
+      class: readClass, race: readRace, veil: readVeil, archetype: readArchetype,
+      maneuver: readManeuver,
+    }[seg.kind];
     const out = reader(slice, pre);
     for (const i of out.used) used[seg.start + i] = true;
     for (let i = seg.start; i < seg.end; i++) nearOf[i] = { kind: seg.kind, name: out.name };
     blocks.push(...out.blocks);
+    // A maneuver is a catalogue entry, not a block: it goes to the pack's
+    // discipline table rather than onto a character. See readManeuver.
+    maneuvers.push(...(out.maneuvers || []));
     report.push(...out.report);
   }
 
@@ -211,9 +218,9 @@ export function parsePaste(text) {
   for (const l of leftovers) { delete l.gap; l.suggest = suggestFor(l); }
 
   if (!segments.length && leftovers.length) {
-    report.push('Nothing here looked like a class, a race or a veil. Tag the text below, or keep it as a note.');
+    report.push('Nothing here looked like a class, a race, a veil or a maneuver. Tag the text below, or keep it as a note.');
   }
-  return { blocks: blocks.filter(Boolean), report, leftovers };
+  return { blocks: blocks.filter(Boolean), maneuvers, report, leftovers };
 }
 
 /**
@@ -269,6 +276,12 @@ export function findSegments(lines, pre = [], pageStarts = []) {
     } else if (/^Standard Racial Traits$/i.test(t) || /^Ability Score Modifiers?:/i.test(t)) {
       if (!anchors.some((a) => a.kind === 'race' && i - a.at < 40)) anchors.push({ kind: 'race', at: i });
     } else if (/^Chakra Slots?:?$/i.test(t)) anchors.push({ kind: 'veil', at: i });
+    else if (/^Initiation Action:?$/i.test(t) || /^Initiation Action:\s*\S/i.test(t)) {
+      // A martial ability page. Its box is the only one with an initiation
+      // action, and one page holds one maneuver, so this needs no guard
+      // against a second anchor the way a class's hit die does.
+      anchors.push({ kind: 'maneuver', at: i });
+    }
     else if (/^Classes Available$/i.test(t)) {
       // An archetype page: its info box names the class it is for. An option
       // page's box says which option too, and need not mark the class with
@@ -1140,6 +1153,125 @@ export function readVeil(lines, pre = new Set()) {
   return {
     name, blocks: [block], used,
     report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
+  };
+}
+
+/* ---------------- martial abilities ---------------- */
+
+/**
+ * The labels a martial ability's information box uses. `Information` is the
+ * box's own heading, which the wiki chrome pass usually eats already.
+ */
+const MARTIAL_INFO = /^(?:Information|Discipline|Category|Descriptors?|Levels?|Prerequisites?|Initiation Action|Ranges?|Targets?|Area|Effect|Durations?|Saving Throws?|Save|Sources?)$/i;
+
+/** "1 swift action", "1 full-round action" -- the action a maneuver is initiated with. */
+const ACTION_WORDS = [
+  [/full[\s-]?round/i, 'Full-round'], [/standard/i, 'Standard'], [/\bmove\b/i, 'Move'],
+  [/swift/i, 'Swift'], [/immediate/i, 'Immediate'], [/\bfree\b/i, 'Free'],
+];
+const SAVE_ALIASES = {
+  none: 'None', fort: 'Fortitude', fortitude: 'Fortitude',
+  ref: 'Reflex', reflex: 'Reflex', will: 'Will',
+};
+
+/**
+ * A maneuver or stance off a martial ability page.
+ *
+ * Alone among the readers here this does not make a block. A discipline is a
+ * shared *table*, read where it stands rather than copied into a character
+ * (see docs/extensions.md), so what comes back is the catalogue entry and the
+ * name of the discipline it belongs under, and the editor files it there.
+ *
+ * The page is an information box that copies as a label on one line and its
+ * value on the next, except for Range / Target / Duration, which copy as a
+ * small tab-separated table. Then the rules text, which is everything after
+ * the last label the box knows.
+ *
+ * Three of the box's lines have no cell on a maneuver's card -- its
+ * descriptors, its prerequisites and where it was published -- so they are
+ * left out and said to be left out, rather than being wedged into the
+ * description where nothing can find them again.
+ */
+export function readManeuver(lines, pre = new Set()) {
+  const used = new Set(pre);
+  const all = [];
+  lines.forEach((raw, i) => { used.add(i); if (!pre.has(i) && raw.trim()) all.push(raw.trim()); });
+
+  // The page opens "Martial Ability" over the ability's name; failing that,
+  // the name is whatever sits directly above the first label of the box.
+  let at = all.findIndex((l) => /^Martial Abilit(?:y|ies)$/i.test(l));
+  let name = at >= 0 ? (all[at + 1] || '') : '';
+  if (name) at += 2;
+  else {
+    const first = all.findIndex((l) => MARTIAL_INFO.test(l));
+    name = first > 0 ? all[first - 1] : '';
+    at = Math.max(0, first);
+  }
+
+  const info = {};
+  let i = at;
+  for (; i < all.length; i++) {
+    const l = all[i];
+    if (l === name) continue;
+    // "Range<tab>Target<tab>Duration" over its values.
+    if (l.includes('\t')) {
+      const heads = l.split('\t').map((s) => s.trim()).filter(Boolean);
+      if (heads.length && heads.every((h) => MARTIAL_INFO.test(h))) {
+        const vals = (all[i + 1] || '').split('\t').map((s) => s.trim());
+        heads.forEach((h, k) => { info[lower(h)] = vals[k] || ''; });
+        i++;
+        continue;
+      }
+      break;
+    }
+    if (!MARTIAL_INFO.test(l)) break;      // the rules text starts here
+    const next = all[i + 1] || '';
+    if (MARTIAL_INFO.test(next) || next.includes('\t')) { info[lower(l)] = ''; continue; }
+    info[lower(l)] = next;
+    i++;
+  }
+
+  const text = all.slice(i).join('\n');
+  const category = info.category || '';
+  const kind = /stance/i.test(category) ? 'stance' : 'maneuver';
+  const type = category.match(/\(([^)]+)\)/)?.[1]?.trim()
+    || (kind === 'stance' ? 'Stance' : titleCase(category));
+  const rawAction = info['initiation action'] || '';
+  const rawSave = info['saving throw'] || info['saving throws'] || info.save || '';
+  const entry = {
+    level: Number(String(info.level ?? info.levels ?? '').match(/\d+/)?.[0]) || 0,
+    kind,
+    name,
+    type,
+    action: ACTION_WORDS.find(([re]) => re.test(rawAction))?.[1] || rawAction,
+    range: info.range || info.ranges || '',
+    target: info.target || info.targets || info.area || info.effect || '',
+    duration: info.duration || info.durations || '',
+    save: SAVE_ALIASES[lower(rawSave)] ?? rawSave,
+    dc: '',
+    text,
+  };
+
+  // What the box said that a card has nowhere to put.
+  const dropped = [['Descriptors', info.descriptors || info.descriptor],
+    ['Prerequisites', info.prerequisites || info.prerequisite],
+    ['Sources', info.sources || info.source]]
+    .filter(([, v]) => v && !/^none$/i.test(v.trim()))
+    .map(([k]) => k);
+  const discipline = info.discipline || '';
+  const filled = ['type', 'action', 'range', 'target', 'duration', 'save']
+    .filter((k) => entry[k]).length;
+
+  return {
+    name,
+    blocks: [],
+    maneuvers: name ? [{ discipline, entry }] : [],
+    used,
+    report: [name
+      ? `${kind === 'stance' ? 'Stance' : 'Maneuver'} ${name}${discipline ? ` (${discipline}` : ' (no discipline named'}${entry.level ? `, level ${entry.level}` : ''}): `
+        + `${filled} cell${filled === 1 ? '' : 's'}${text ? ' and its description' : ', no description'}.`
+        + (dropped.length ? ` Its ${dropped.join(' and ')} line${dropped.length === 1 ? ' has' : 's have'} no cell on a card and ${dropped.length === 1 ? 'was' : 'were'} left out.` : '')
+      : 'A martial ability box with no name — nothing read.'],
   };
 }
 

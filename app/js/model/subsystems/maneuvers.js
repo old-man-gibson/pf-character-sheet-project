@@ -12,18 +12,28 @@ import { getPath } from '../util.js';
 
 let MANEUVER_CATALOGUE = { disciplines: [] };
 
-/** Register the shared catalogue. Call before constructing a Character. */
+/**
+ * Register the shared catalogue. Call before constructing a Character.
+ *
+ * An entry carries where it sits -- level, kind, name -- and any of the cells
+ * a maneuver's card shows. The bundled Path of War catalogue fills in only
+ * `type`: the rest is a publisher's rules text and is not ours to ship. A
+ * player's own pack is their own content, and may fill in all of it.
+ */
 export function setManeuverCatalogue(doc) {
   const list = Array.isArray(doc?.disciplines) ? doc.disciplines : [];
   MANEUVER_CATALOGUE = {
     disciplines: list.map((d) => ({
       name: String(d.name || ''),
-      entries: (d.entries || []).map((e) => ({
-        level: Number(e.level) || 0,
-        kind: e.kind === 'stance' ? 'stance' : 'maneuver',
-        name: String(e.name || ''),
-        type: String(e.type || ''),
-      })),
+      entries: (d.entries || []).map((e) => {
+        const out = {
+          level: Number(e.level) || 0,
+          kind: e.kind === 'stance' ? 'stance' : 'maneuver',
+          name: String(e.name || ''),
+        };
+        for (const f of MANEUVER_FIELDS) out[f.key] = String(e[f.key] ?? '');
+        return out;
+      }),
     })),
   };
 }
@@ -267,8 +277,15 @@ export function toggleManeuver(model, path, name, ready) {
  * as it always did. Anything more is a record keyed by MANEUVER_FIELDS.
  * ------------------------------------------------------------------ */
 
-/** A maneuver's entry as every reader wants it: one string per field. */
-export function maneuverDetails(discipline, name) {
+/**
+ * What the player wrote themselves, and nothing else. One string per field.
+ *
+ * This is what gets saved and what an edit starts from -- kept apart from
+ * `maneuverDetails` so that opening a cell can never copy the catalogue's
+ * answer into the character. A pack that fixes a typo has to be able to fix
+ * it on every sheet, which it cannot do if the sheets took a copy.
+ */
+export function maneuverOwn(discipline, name) {
   const raw = (discipline?.notes || {})[name];
   const out = {};
   for (const f of MANEUVER_FIELDS) {
@@ -276,6 +293,26 @@ export function maneuverDetails(discipline, name) {
       ? String(raw[f.key] ?? '') : '';
   }
   if (typeof raw === 'string') out.text = raw;
+  return out;
+}
+
+/**
+ * A maneuver's entry as a reader wants it: the player's own cell where they
+ * wrote one, the catalogue's underneath, cell by cell.
+ *
+ * `from` is the catalogue entry, which every caller on the Maneuvers tab
+ * already holds -- `recomputeManeuvers` built the row out of it. Left off, it
+ * is looked up by the discipline's name.
+ */
+export function maneuverDetails(discipline, name, from = null) {
+  const own = maneuverOwn(discipline, name);
+  const shared = from
+    ?? disciplineEntries(discipline?.name).find((e) => e.name === name)
+    ?? null;
+  const out = {};
+  for (const f of MANEUVER_FIELDS) {
+    out[f.key] = own[f.key].trim() !== '' ? own[f.key] : String(shared?.[f.key] ?? '');
+  }
   return out;
 }
 
@@ -300,7 +337,9 @@ export function setManeuverField(model, path, name, field, value) {
   if (!d || !MANEUVER_FIELDS.some((f) => f.key === field)) return model;
   if (!d.notes || typeof d.notes !== 'object' || Array.isArray(d.notes)) d.notes = {};
 
-  const entry = maneuverDetails(d, name);
+  // The player's own cells, never the merged view: writing one must not bank
+  // a copy of whatever the catalogue was saying in the other seven.
+  const entry = maneuverOwn(d, name);
   entry[field] = String(value ?? '');
   const kept = {};
   for (const f of MANEUVER_FIELDS) if (entry[f.key].trim() !== '') kept[f.key] = entry[f.key];

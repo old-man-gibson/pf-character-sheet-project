@@ -408,19 +408,31 @@ maneuver and is the only thing that does — it used to be the whole row, so rea
 maneuver meant hitting the ✎ dead on or readying it by accident. **Clicking the name**
 opens what you wrote about it. The **✎** opens the same card with its cells showing.
 
-The card is the stat entry the catalogue cannot ship. It has seven cells — **type,
-action, range, target, duration, saving throw and DC** — and a **description**, and
-every one of them takes `{…}` formulas, so a range written
-`Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of going
-stale. Reading it, only the cells you filled in are there at all: a maneuver with a
-range and nothing else is a card with a range and nothing else, never a column of
-em-dashes. Type is the one cell that arrives answered, from the catalogue, and the
-picker says so rather than looking blank.
+The card has seven cells — **type, action, range, target, duration, saving throw and
+DC** — and a **description**, and every one of them takes `{…}` formulas, so a range
+written `Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of
+going stale. Reading it, only the cells that were filled in are there at all: a maneuver
+with a range and nothing else is a card with a range and nothing else, never a column of
+em-dashes.
+
+A cell can be filled from either end. **A pack may carry it** — see
+[Extensions](extensions.md#disciplines), where a discipline you write has the same eight
+cells — and **what you type on your own sheet sits over that, cell by cell**. So a table
+ruling wins, the cells beside it still come from the pack, and emptying yours hands that
+cell straight back. In the editor the greyed text says which is which: a plain ghost
+value is what the cell will say if left alone, and one marked *e.g.* is only a
+suggestion.
+
+The bundled Path of War catalogue fills in nothing but the type — its 1,033 names are a
+publisher's and their rules text is not ours to ship — so on those disciplines every
+other cell starts out yours to write.
 
 What you write is stored on the discipline under the maneuver's name, because the
-rows themselves belong to the shared catalogue and have nowhere to hang. A
-description on its own is still saved as the plain string it always was, so a
-character who never opens the other cells is byte-for-byte the character it was.
+rows themselves belong to the shared catalogue and have nowhere to hang. Only the cells
+you actually wrote are saved, which is what lets a corrected pack correct a sheet
+already in play. A description on its own is still saved as the plain string it always
+was, so a character who never opens the other cells is byte-for-byte the character it
+was.
 The dashboard's **Readied maneuvers** card shows the header cells as one line and
 the description under it.
 
