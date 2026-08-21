@@ -184,3 +184,21 @@ export function editLine(label, path, value) {
       <span class="value"><input type="number" value="${Number(value) || 0}" data-set="${path}" style="width:4.2rem" aria-label="${esc(label)}"></span>
     </div>`;
 }
+
+/**
+ * A panel that can be folded down to its heading.
+ *
+ * The button is spliced into the panel's own <h3> rather than wrapped around
+ * it, so a collapsed panel is the same header in the same place -- nothing
+ * moves when it folds, which is the point of folding it.
+ */
+export function collapsible(model, key, panelHtml) {
+  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+  const btn = `<button data-collapse="${key}" title="${collapsed ? 'Expand' : 'Minimize'}" aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
+  if (!collapsed) return panelHtml.replace('</h3>', ` ${btn}</h3>`);
+  // Collapsed: keep only the header line of the panel.
+  const m = panelHtml.match(/<h3[\s\S]*?<\/h3>/);
+  const header = m ? m[0].replace('</h3>', ` ${btn}</h3>`) : btn;
+  const cls = panelHtml.match(/class="panel([^"]*)"/)?.[1] ?? '';
+  return `<section class="panel${cls} collapsed">${header}</section>`;
+}

@@ -155,9 +155,24 @@ export async function seedKitchenTabs() {
 
 const library = () => JSON.parse(localStorage.getItem(LIBRARY_KEY) || '{"characters":[]}').characters;
 
+/**
+ * The picker folds itself down to the open character, and a capture that
+ * dispatches clicks around the header can trip that. So unfold first: the
+ * "▸ N more…" button is the only thing between here and the rest of the roster.
+ */
+function unfoldPicker() {
+  for (let i = 0; i < 3; i++) {
+    const more = [...document.querySelectorAll('header.app .picker button')]
+      .find((b) => /more…$/.test(b.textContent.trim()));
+    if (!more) return;
+    more.click();
+  }
+}
+
 const pickerButton = (id) => {
   const row = library().find((c) => c.id === id);
   if (!row) return null;
+  unfoldPicker();
   return [...document.querySelectorAll('header.app .picker button')]
     .find((b) => b.textContent.trim().startsWith(row.name));
 };
