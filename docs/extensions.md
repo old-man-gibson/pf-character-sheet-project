@@ -16,9 +16,12 @@ A pack carries two kinds of thing:
   (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
   pack's tables are merged at load and registered with the model; a later pack's entry
   replaces an earlier one of the same name, so a player can correct a bundled table by
-  shipping a fixed copy in their own pack. Tables are **not** copied into a character:
-  the sheet reads them where they stand, so a corrected pack corrects every sheet
-  already in play.
+  shipping a fixed copy in their own pack. **A discipline is the exception** — two packs
+  naming the same one join maneuver by maneuver, and only an entry of the same name is
+  replaced, because a discipline is a list of thirty rather than one fact and a pack
+  carrying a single corrected maneuver must not delete the twenty-nine it had no opinion
+  about. Tables are **not** copied into a character: the sheet reads them where they
+  stand, so a corrected pack corrects every sheet already in play.
 - **Blocks** a player attaches to one character: a `class` (hit die, BAB, saves, ranks,
   class skills, features by level), a `race` (size, speed, ability modifiers, traits,
   languages), a single race `trait`, a `feature` (joins a named group on the Template
@@ -257,14 +260,15 @@ Covered by `tests/extensions.test.mjs`.
 
 ## Paste text — reading a rules page into blocks
 
-The editor's **Paste text…** takes a class, a race or a veil copied straight off a rules
-page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot wiki —
-the whole page, several pages one after another) and reads it into blocks. It is a two-stage
+The editor's **Paste text…** takes a class, a race, a veil or a maneuver copied straight off
+a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
+wiki — the whole page, several pages one after another) and reads it into blocks. It is a two-stage
 affair, and the second stage is the point:
 
 1. **Read it.** `app/js/paste-import.js` finds what the paste holds by a handful of anchor
    lines every page uses — *Hit Die* for a class, *Standard Racial Traits* / *Ability Score
-   Modifiers* for a race, *Chakra Slots* for a veil — reaches back for each thing's preamble
+   Modifiers* for a race, *Chakra Slots* for a veil, *Initiation Action* for a maneuver —
+   reaches back for each thing's preamble
    and forward to the next thing, with two blank lines in a row (what a paste of several
    pages has between them) as a hard boundary. A wiki page's chrome — the sign-in and
    search lines over the title, the tab strip, the errata *Notice*, the breadcrumb, and the
@@ -316,20 +320,35 @@ affair, and the second stage is the point:
    sentence instead: the first short line is its name, a *Description* section its flavour,
    `Name (Ex)` title lines (colons allowed) and untyped headings over a paragraph its
    features; the class is left blank for the form (or resolves to the sheet's only class).
+   A **martial ability page** is the one thing that does not become a block. Its box copies as
+   a label on one line and its value on the next, bar *Range / Target / Duration*, which copy
+   as a small tab-separated table; from that come the discipline it belongs under, its level,
+   whether it is a maneuver or a stance and of what type (*Maneuver (Boost)*), the action it
+   is initiated with (*1 swift action* → **Swift**), range, target, duration, saving throw
+   (*Fort* → **Fortitude**, but *Will negates* kept whole — the qualifier is the useful half)
+   and the rules text. Its *Descriptors*, *Prerequisites* and *Sources* lines have no cell on a
+   maneuver's card, so they are left out and the report says so rather than wedging them into
+   the description. What comes back is a **catalogue entry**, not a block, because a
+   discipline is a [shared table](#disciplines): it is filed in the pack's discipline list,
+   where every character who trains that discipline reads it.
 2. **Review.** The panel shows what was read — one line per block, each with a tick to
    drop it — and then **everything the reader did not use**, as stretches of the original
    text with a tag menu on each: *feature of* the class it sat under, *race trait of* the
    race, a trait block, a feature block (in a named group), a note, or leave it out. The
    reader suggests a tag (a `Label: text` line near a class is offered as its feature; page
-   chrome as skippable) and the player decides. **Add N blocks** folds the decisions in:
-   tagged text joins the class or race it was tagged onto, the rest become blocks, and the
-   editor's block forms are where anything gets corrected before Save.
+   chrome as skippable) and the player decides. Maneuvers get a section of their own, each
+   with the discipline it will be filed under as an editable field — a page that never named
+   one is marked, and a maneuver with no discipline is left out and said to be. **Add … to
+   the pack** folds the decisions in: tagged text joins the class or race it was tagged onto,
+   the rest become blocks, maneuvers join their discipline (making it if the pack has none,
+   replacing an entry of the same name so a re-read lands rather than doubling), and the
+   editor's forms are where anything gets corrected before Save.
 
 Nothing is guessed at silently: every line either lands somewhere the report names or comes
 back in the review as text to tag — bar the page tail above, which the report accounts for.
 `tests/paste-import.test.mjs` runs the reader over the three table shapes, both
 feature-prose shapes, the segmentation, the whole Barbarian / Dwarf / Warlord / veil paste,
-a two-page wikidot copy and an option page.
+a two-page wikidot copy, an option page and a martial ability page.
 
 > The engine still carries some publisher names of its own — the Spheres of Power sphere
 > lists in `rules.js` (which drive skill-rank and unarmed logic), the Primordia techniques,

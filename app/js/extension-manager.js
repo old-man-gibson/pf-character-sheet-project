@@ -33,6 +33,8 @@ import { MANEUVER_FIELDS } from './rules.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const lower = (s) => String(s ?? '').trim().toLowerCase();
+
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
 /** A source is a link only when it is one; a book-and-page reads as text. */
@@ -84,6 +86,8 @@ const CSS = `
 .extmgr .abil label { display: flex; flex-direction: column; font-size: 0.7rem; text-transform: uppercase; }
 .extmgr .abil input { width: 3.6rem; }
 .extmgr .err { color: #e0635f; margin: 8px 0; }
+/* An input the apply step cannot use yet -- a maneuver with no discipline named. */
+.extmgr input.needs { border-color: #e0635f; }
 .extmgr .ok { color: #6bbf7b; margin: 8px 0; }
 .extmgr code { background: var(--bg, #111); padding: 1px 4px; border-radius: 3px; }
 .extmgr .paste { margin-top: 10px; }
@@ -266,11 +270,12 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function pasteHtml() {
     if (paste.stage === 'text') {
       return `
-        <p class="hint">Copy a class, a race or a veil off a rules page — the whole page is fine,
-          several pages one after another too — and paste it here. The reader picks out the
-          progression table, hit die, saves, class skills and feature text of a class; the ability
-          modifiers, size, speed, languages and traits of a race; a veil's essence and bind text.
-          Then it shows you what it read, and asks you to tag whatever it could not place.</p>
+        <p class="hint">Copy a class, a race, a veil or a maneuver off a rules page — the whole
+          page is fine, several pages one after another too — and paste it here. The reader picks
+          out the progression table, hit die, saves, class skills and feature text of a class; the
+          ability modifiers, size, speed, languages and traits of a race; a veil's essence and bind
+          text; a martial ability's discipline, level, action, range, target, duration and rules
+          text. Then it shows you what it read, and asks you to tag whatever it could not place.</p>
         <textarea rows="16" data-paste-text placeholder="Barbarian
 Source PRPG Core Rulebook pg. 31
 …
@@ -281,7 +286,7 @@ Hit Die: d12.
           <button data-action="paste-cancel">Back to the form</button>
         </div>`;
     }
-    const { result, keep, tags } = paste;
+    const { result, keep, mkeep, mdisc, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
     const archs = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'archetype' && !b.single && keep[i]);
@@ -318,6 +323,28 @@ Hit Die: d12.
         <span class="what"><strong>${esc(b.name || '(unnamed)')}</strong> <span class="d">${esc(detail(b))}</span></span>
       </div>`).join('') || '<p class="hint">Nothing.</p>'}
 
+      ${result.maneuvers.length ? `
+      <h3>Read into disciplines</h3>
+      <p class="hint">A maneuver joins the pack's discipline catalogue rather than
+        becoming a block — a discipline is a shared table, so every character who trains
+        it sees this. Say which discipline each one belongs under; one that is not in
+        the pack yet is made.</p>
+      ${result.maneuvers.map((m, i) => {
+    const e = m.entry;
+    const cells = ['type', 'action', 'range', 'target', 'duration', 'save']
+      .map((k) => e[k]).filter(Boolean);
+    return `<div class="found ${mkeep[i] ? '' : 'off'}">
+        <label class="sw"><input type="checkbox" data-mkeep="${i}" ${mkeep[i] ? 'checked' : ''}></label>
+        <span class="kind">${e.kind === 'stance' ? 'Stance' : 'Maneuver'}</span>
+        <span class="what"><strong>${esc(e.name || '(unnamed)')}</strong>
+          <span class="d">${esc([e.level ? `level ${e.level}` : '', ...cells].filter(Boolean).join(' · '))}${
+  e.text ? esc(` — ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ' — no description'}</span></span>
+        <input type="text" data-mdisc="${i}" value="${esc(mdisc[i])}"
+          placeholder="Discipline" title="The discipline it is filed under"
+          style="width:11rem"${mdisc[i] ? '' : ' class="needs"'}>
+      </div>`;
+  }).join('')}` : ''}
+
       <h3>Not placed — tag it, or leave it</h3>
       <p class="hint">${result.leftovers.length
     ? 'Stretches of the paste nothing claimed. Say what each is — a feature of the class above it, a race trait, a note — or leave it out. Page chrome and tables of ages and heights are the usual leftovers.'
@@ -337,7 +364,13 @@ Hit Die: d12.
   }).join('')}
 
       <div class="actions">
-        <button class="primary" data-action="paste-apply">Add ${keep.filter(Boolean).length + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length} block(s) to the pack</button>
+        <button class="primary" data-action="paste-apply">${(() => {
+    const blocks = keep.filter(Boolean).length
+      + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length;
+    const mans = mkeep.filter((on, i) => on && String(mdisc[i] || '').trim()).length;
+    const parts = [blocks ? `${blocks} block(s)` : '', mans ? `${mans} maneuver(s)` : ''].filter(Boolean);
+    return `Add ${parts.join(' and ') || 'nothing'} to the pack`;
+  })()}</button>
         <button data-action="paste-back">Back to the text</button>
         <button data-action="paste-cancel">Cancel</button>
       </div>`;
@@ -370,12 +403,52 @@ Hit Die: d12.
       }
       return { choice, name: null, group: null };
     });
-    paste = { stage: 'review', text: paste.text, result, keep: result.blocks.map(() => true), tags };
+    paste = {
+      stage: 'review',
+      text: paste.text,
+      result,
+      keep: result.blocks.map(() => true),
+      // Maneuvers are filed in the pack's discipline table rather than added
+      // as blocks, so they carry their own ticks and the discipline each one
+      // lands under -- which the page names, but not always.
+      mkeep: result.maneuvers.map(() => true),
+      mdisc: result.maneuvers.map((m) => m.discipline || ''),
+      tags,
+    };
     error = null;
     render();
   }
 
   /** Fold the review's decisions into the draft and go back to the form. */
+  /**
+   * File the maneuvers that were ticked into the pack's discipline table.
+   *
+   * A discipline the pack does not carry yet is made; an entry whose name is
+   * already there is replaced, which is how a page re-read after a correction
+   * lands rather than doubling. Returns how many went in.
+   */
+  function applyManeuvers() {
+    const { result, mkeep, mdisc } = paste;
+    let n = 0;
+    result.maneuvers.forEach((m, i) => {
+      const discName = String(mdisc[i] || '').trim();
+      if (!mkeep[i] || !discName || !m.entry.name) return;
+      const list = disciplines();
+      let disc = list.find((d) => lower(d.name) === lower(discName));
+      if (!disc) { disc = { name: discName, entries: [] }; list.push(disc); }
+      if (!Array.isArray(disc.entries)) disc.entries = [];
+      // Only the cells that were read; a blank one is the player's to fill in
+      // on their sheet, and storing it empty would say the pack had answered.
+      const entry = Object.fromEntries(
+        Object.entries(m.entry).filter(([, v]) => v !== '' && v !== null && v !== undefined),
+      );
+      const at = disc.entries.findIndex((e) => lower(e.name) === lower(entry.name));
+      if (at === -1) disc.entries.push(entry); else disc.entries[at] = entry;
+      n++;
+    });
+    return n;
+  }
+
   function pasteApply() {
     const { result, keep, tags } = paste;
     const taken = result.blocks.map((b) => structuredClone(b));
@@ -403,12 +476,24 @@ Hit Die: d12.
     const fresh = [...taken.filter((b, i) => keep[i]).map((b) => normalizeBlock(b)), ...extra].filter(Boolean);
     const first = draft.blocks.length;
     draft.blocks.push(...fresh);
+    const filed = applyManeuvers();
     notice = null;
-    error = fresh.length ? null : 'Nothing was added — every block was unticked and every leftover left out.';
+    error = fresh.length || filed ? null
+      : 'Nothing was added — every block was unticked and every leftover left out.';
+    // A maneuver with no discipline named has nowhere to go, and saying so is
+    // better than dropping it quietly.
+    const homeless = paste.result.maneuvers
+      .filter((m, i) => paste.mkeep[i] && !String(paste.mdisc[i] || '').trim());
+    if (homeless.length) {
+      error = `${homeless.map((m) => m.entry.name).join(', ')} had no discipline named, so ${homeless.length === 1 ? 'it was' : 'they were'} left out. Paste again and fill the discipline in.`;
+    }
     paste = null;
     openBlocks.clear();
+    openDisciplines.clear();
+    openEntries.clear();
     render();
     if (fresh.length) dialog.querySelector(`.block[data-block="${first}"]`)?.scrollIntoView({ block: 'start' });
+    else if (filed) dialog.querySelector('.disc')?.scrollIntoView({ block: 'start' });
   }
 
   /* ---------------- disciplines ---------------- */
@@ -735,6 +820,8 @@ Hit Die: d12.
     q('[data-action="paste-cancel"]')?.addEventListener('click', () => { paste = null; error = null; render(); });
     q('[data-action="paste-apply"]')?.addEventListener('click', pasteApply);
     qa('[data-keep]').forEach((el) => el.addEventListener('change', () => { paste.keep[Number(el.dataset.keep)] = el.checked; render(); }));
+    qa('[data-mkeep]').forEach((el) => el.addEventListener('change', () => { paste.mkeep[Number(el.dataset.mkeep)] = el.checked; render(); }));
+    qa('[data-mdisc]').forEach((el) => el.addEventListener('input', () => { paste.mdisc[Number(el.dataset.mdisc)] = el.value; }));
     qa('[data-tag]').forEach((el) => el.addEventListener('change', () => { paste.tags[Number(el.dataset.tag)].choice = el.value; render(); }));
     qa('[data-tagname]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.tagname)].name = el.value; }));
     qa('[data-taggroup]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.taggroup)].group = el.value; }));

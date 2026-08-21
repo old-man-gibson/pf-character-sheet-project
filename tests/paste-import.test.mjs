@@ -961,6 +961,106 @@ console.log('a plain homebrew archetype document -- no info box, title features 
   ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
 }
 
+console.log('a martial ability page -- the wiki box into a catalogue entry, not a block');
+{
+  /*
+   * A whole-page copy off the Metzofitz wiki. The information box copies as a
+   * label on one line and its value on the next, except Range / Target /
+   * Duration, which copy as a small tab-separated table. A maneuver is the one
+   * thing the reader does not turn into a block: a discipline is a shared
+   * table, so it comes back as the entry and the discipline it belongs under.
+   */
+  const ROAR = `Anonymous
+Library of Metzofitz
+Search
+Search Library of Metzofitz
+Encouraging Roar
+NamespacesPageDiscussionPage actionsReadView sourceHistoryPurge
+Martial Ability
+Encouraging Roar
+Information
+Discipline
+Golden Lion
+Category
+Maneuver (Boost)
+Descriptors
+None
+Level
+1
+Prerequisites
+None
+Initiation Action
+1 swift action
+Range\tTarget\tDuration
+30-ft.\tAllies\tOne round
+Sources
+Path of War, pg. 63
+The disciple lets out shouts of encouragement to bolster his allies in battle.
+
+
+Navigation
+Main page
+Recent changes`;
+
+  const r = parsePaste(ROAR);
+  check('no blocks -- a maneuver is not one', r.blocks.length, 0);
+  check('one maneuver, filed under its discipline',
+    r.maneuvers.map((m) => m.discipline), ['Golden Lion']);
+  check('every cell the box named', r.maneuvers[0].entry, {
+    level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost',
+    action: 'Swift', range: '30-ft.', target: 'Allies', duration: 'One round',
+    save: '', dc: '',
+    text: 'The disciple lets out shouts of encouragement to bolster his allies in battle.',
+  });
+  check('nothing left over', r.leftovers.length, 0);
+  // The three box lines a card has nowhere to put are said to be left out
+  // rather than wedged into the description.
+  ok('the report says what was dropped', /Sources line has no cell/.test(r.report[0]));
+  ok('and what was read', /Maneuver Encouraging Roar \(Golden Lion, level 1\)/.test(r.report[0]));
+
+  // A stance, with a saving throw, and the abbreviations the wiki uses.
+  const STANCE = `Martial Ability
+Iron Shell
+Information
+Discipline
+Iron Tortoise
+Category
+Stance
+Level
+3
+Initiation Action
+1 swift action
+Range\tTarget\tDuration
+Personal\tYou\tStance
+Saving Throw
+Fort
+You raise your shield.`;
+  const s = parsePaste(STANCE).maneuvers[0];
+  check('a stance is read as one', [s.entry.kind, s.entry.type, s.entry.level], ['stance', 'Stance', 3]);
+  check('and its save is spelt out', s.entry.save, 'Fortitude');
+  check('personal range and target', [s.entry.range, s.entry.target], ['Personal', 'You']);
+
+  // A save the list has never heard of is kept as written rather than guessed
+  // at -- "Will negates" is not "Will", and the qualifier is the useful half.
+  const QUALIFIED = `Martial Ability
+Crushing Blow
+Information
+Discipline
+Primal Fury
+Category
+Maneuver (Strike)
+Level
+2
+Initiation Action
+1 standard action
+Saving Throw
+Will negates
+You strike hard.`;
+  const q = parsePaste(QUALIFIED).maneuvers[0];
+  check('a qualified save is kept whole', q.entry.save, 'Will negates');
+  check('and the action normalised', q.entry.action, 'Standard');
+}
+
 console.log('splitChunk -- a leftover as name and text for tagging');
 check('label line', splitChunk("Editor's Note: Discipline Exchanges\nMore text here."), { name: "Editor's Note", type: null, text: 'Discipline Exchanges\nMore text here.' });
 check('typed label', splitChunk('Rage (Ex): A barbarian can rage.'), { name: 'Rage', type: 'Ex', text: 'A barbarian can rage.' });

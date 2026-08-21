@@ -745,10 +745,18 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch }
 
 /**
  * Fold every enabled pack's tables into the one document each registrar
- * expects. Later packs win: a discipline, class or manipulation with the same
- * name (case-insensitively) as an earlier one replaces it, so a player can
- * fix a bundled table by shipping a corrected copy in their own pack without
- * being able to edit the bundled one.
+ * expects. Later packs win: a class or manipulation with the same name
+ * (case-insensitively) as an earlier one replaces it, so a player can fix a
+ * bundled table by shipping a corrected copy in their own pack without being
+ * able to edit the bundled one.
+ *
+ * A **discipline is the exception**: two packs naming the same one add up,
+ * maneuver by maneuver, and only an entry of the same name is replaced. A
+ * discipline is not one fact but a list of thirty, and the ordinary rule
+ * makes a pack carrying a single corrected maneuver delete the twenty-nine it
+ * had no opinion about -- which is what a player does the first time they
+ * paste one maneuver off a wiki page. The cost is that a later pack cannot
+ * *remove* an entry, which nothing has ever wanted to do.
  */
 export function mergeTables(extensions) {
   const out = {
@@ -764,9 +772,22 @@ export function mergeTables(extensions) {
     const i = list.findIndex((x) => lower(x?.[key]) === k);
     if (i === -1) list.push(item); else list[i] = item;
   };
+  /** A discipline joins one already there rather than replacing it. */
+  const upsertDiscipline = (list, disc) => {
+    const k = lower(disc?.name);
+    if (!k) return;
+    const at = list.findIndex((x) => lower(x?.name) === k);
+    if (at === -1) { list.push({ ...disc, entries: [...arr(disc.entries)] }); return; }
+    const entries = [...arr(list[at].entries)];
+    for (const e of arr(disc.entries)) {
+      const j = entries.findIndex((x) => lower(x?.name) === lower(e?.name));
+      if (j === -1) entries.push(e); else entries[j] = e;
+    }
+    list[at] = { ...list[at], ...disc, entries };
+  };
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
-    for (const d of arr(p.maneuvers?.disciplines)) upsert(out.maneuvers.disciplines, d);
+    for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
