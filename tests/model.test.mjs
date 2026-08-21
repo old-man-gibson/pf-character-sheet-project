@@ -17,7 +17,7 @@ import {
 } from './fixtures.mjs';
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
-  setManeuverCatalogue, disciplineEntries,
+  setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
@@ -3015,6 +3015,66 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
   c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', '   ');
   check('an emptied note is removed, not stored blank',
     'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
+
+  /*
+   * The cells beside the description. The catalogue ships names only, so the
+   * action, range, target, duration and save are the player's to write, and
+   * they read {…} the way the description always has.
+   */
+  const disc = () => c.data.maneuvers.disciplines[0];
+  check('nothing written yet', maneuverIsWritten(maneuverDetails(disc(), 'Demoralizing Roar')), false);
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'action', 'Standard');
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'range', '{= 5 * level} ft.');
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'save', 'Will');
+  check('a cell is stored under its own key',
+    disc().notes['Demoralizing Roar'],
+    { action: 'Standard', range: '{= 5 * level} ft.', save: 'Will' });
+  check('and reads back as one entry',
+    maneuverDetails(disc(), 'Demoralizing Roar'),
+    {
+      type: '', action: 'Standard', range: '{= 5 * level} ft.', target: '',
+      duration: '', save: 'Will', dc: '', text: '',
+    });
+  check('something is written now', maneuverIsWritten(maneuverDetails(disc(), 'Demoralizing Roar')), true);
+  check('the cells round-trip',
+    maneuverDetails(new Character(c.toJSON()).data.maneuvers.disciplines[0], 'Demoralizing Roar').range,
+    '{= 5 * level} ft.');
+  // Every cell is prose, so a formula in one is a formula the sheet knows about.
+  check('a formula in a cell is collected',
+    c.proseSources().some((f) => f.path === 'maneuver:0:range:Demoralizing Roar'), true);
+  // The audit says where a formula was written, and a name with a colon in it
+  // ("Lesson I: Balance") must not lose half of itself to the path separator.
+  check('the audit names the cell it came from',
+    describeSource('maneuver:0:range:Lesson I: Balance'), 'Lesson I: Balance, its range');
+  check('and the description by its own name',
+    describeSource('maneuverNote:0:Lesson I: Balance'), 'Lesson I: Balance, its description');
+
+  // A field that is not one of the cells is refused rather than invented.
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'flavour', 'loud');
+  check('an unknown field writes nothing', 'flavour' in disc().notes['Demoralizing Roar'], false);
+
+  /*
+   * A description on its own is still stored as the bare string it always was,
+   * so a character who never opens the other cells round-trips unchanged.
+   */
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar of Command', 'Allies gain {2 + int.mod}');
+  check('description alone stays a plain string',
+    typeof disc().notes['Roar of Command'], 'string');
+  check('and still reads back as an entry',
+    maneuverDetails(disc(), 'Roar of Command').text, 'Allies gain {2 + int.mod}');
+  c.setManeuverField('maneuvers.disciplines.0', 'Roar of Command', 'duration', '1 round');
+  check('a second cell promotes it to a record',
+    disc().notes['Roar of Command'],
+    { duration: '1 round', text: 'Allies gain {2 + int.mod}' });
+  check('the description keeps its own source name',
+    c.proseSources().some((f) => f.path === 'maneuverNote:0:Roar of Command'), true);
+
+  // Emptying the last cell takes the whole entry with it.
+  for (const f of ['action', 'range', 'save']) {
+    c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', f, '');
+  }
+  check('an entry with nothing left is dropped',
+    'Demoralizing Roar' in disc().notes, false);
 
   // A prepared spell's note is prose data too, and survives the round trip.
   c.listAdd('vancian.prepared', {

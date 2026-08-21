@@ -5,6 +5,7 @@
  * and has readied is on the sheet, and the two are matched by name.
  */
 
+import { MANEUVER_FIELDS } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
 import { getPath } from '../util.js';
@@ -156,8 +157,16 @@ export function importManeuvers(tab) {
  * from a sheet is lost.
  */
 export function shrinkDiscipline({ name, entries = [], known, custom, notes }) {
-  // The player's overview notes ride along whichever shape arrives.
-  const keptNotes = notes && typeof notes === 'object' && !Array.isArray(notes) ? { ...notes } : {};
+  // The player's own entries ride along whichever shape arrives. Copied a
+  // level down, because an entry is now a record of its own and a shallow
+  // copy would hand two disciplines the same one.
+  const keptNotes = {};
+  if (notes && typeof notes === 'object' && !Array.isArray(notes)) {
+    for (const [key, entry] of Object.entries(notes)) {
+      keptNotes[key] = entry && typeof entry === 'object' && !Array.isArray(entry)
+        ? { ...entry } : entry;
+    }
+  }
   // Already in the new shape (a saved document, or a discipline just added).
   if (Array.isArray(known)) {
     return { name, known: [...known], custom: custom ? [...custom] : [], notes: keptNotes };
@@ -242,20 +251,75 @@ export function toggleManeuver(model, path, name, ready) {
   return model;
 }
 
+/* ------------------------------------------------------------------ *
+ * What the player writes about a maneuver.
+ *
+ * The catalogue gives a name, a level and a type and stops there, so the
+ * parts a player actually reads at the table -- the action it takes, its
+ * range, what it does -- are theirs to fill in. They are stored on the
+ * discipline under `notes`, keyed by the maneuver's name, because the rows
+ * themselves belong to the shared catalogue and have nowhere to hang.
+ *
+ * Two shapes live in that map, and both are read. A bare string is the
+ * description alone, which is all the map ever held before the other cells
+ * existed and is still what gets written when the description is all there
+ * is -- so a character who never opens the other cells round-trips exactly
+ * as it always did. Anything more is a record keyed by MANEUVER_FIELDS.
+ * ------------------------------------------------------------------ */
+
+/** A maneuver's entry as every reader wants it: one string per field. */
+export function maneuverDetails(discipline, name) {
+  const raw = (discipline?.notes || {})[name];
+  const out = {};
+  for (const f of MANEUVER_FIELDS) {
+    out[f.key] = raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? String(raw[f.key] ?? '') : '';
+  }
+  if (typeof raw === 'string') out.text = raw;
+  return out;
+}
+
 /**
- * The player's own line on a maneuver -- what the dashboard's Readied
- * maneuvers card says under the name. Prose, so {…} formulas resolve.
- * Keyed by the maneuver's name, because the rows themselves live in the
- * shared catalogue; an emptied note is removed rather than stored blank.
+ * Whether an entry says anything at all. Takes the entry rather than the
+ * discipline and the name, so a caller that has already read one -- every row
+ * of the tab has -- is not made to read it twice.
  */
-export function setManeuverNote(model, path, name, text) {
+export function maneuverIsWritten(entry) {
+  return MANEUVER_FIELDS.some((f) => String(entry?.[f.key] ?? '').trim() !== '');
+}
+
+/**
+ * Write one cell of a maneuver's entry. Prose, so {…} formulas resolve.
+ *
+ * An emptied cell is dropped rather than stored blank, and an entry with
+ * nothing left in it is removed outright -- a discipline should not carry a
+ * record of every maneuver somebody clicked on once.
+ */
+export function setManeuverField(model, path, name, field, value) {
   const d = getPath(model.data, path);
-  if (!d) return model;
+  if (!d || !MANEUVER_FIELDS.some((f) => f.key === field)) return model;
   if (!d.notes || typeof d.notes !== 'object' || Array.isArray(d.notes)) d.notes = {};
-  const t = String(text ?? '');
-  if (t.trim()) d.notes[name] = t;
-  else delete d.notes[name];
+
+  const entry = maneuverDetails(d, name);
+  entry[field] = String(value ?? '');
+  const kept = {};
+  for (const f of MANEUVER_FIELDS) if (entry[f.key].trim() !== '') kept[f.key] = entry[f.key];
+  const keys = Object.keys(kept);
+
+  if (!keys.length) delete d.notes[name];
+  else if (keys.length === 1 && keys[0] === 'text') d.notes[name] = kept.text;
+  else d.notes[name] = kept;
+
   model.recompute();
   emit(model, { type: 'maneuver-note', path, name });
   return model;
+}
+
+/**
+ * The player's own line on a maneuver -- what the dashboard's Readied
+ * maneuvers card says under the name. The description cell, under the name
+ * the sheet has always called it.
+ */
+export function setManeuverNote(model, path, name, text) {
+  return setManeuverField(model, path, name, 'text', text);
 }

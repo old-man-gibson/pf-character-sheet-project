@@ -97,7 +97,9 @@ import {
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
-import { recomputeManeuvers, setManeuverNote, toggleManeuver } from './subsystems/maneuvers.js';
+import {
+  recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
+} from './subsystems/maneuvers.js';
 import { primordiaPrereq, primordiaTalents, recomputePrimordia } from './subsystems/primordia.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
 import {
@@ -552,6 +554,7 @@ export class Character {
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
   toggleManeuver(...a) { return toggleManeuver(this, ...a); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
+  setManeuverField(...a) { return setManeuverField(this, ...a); }
 
   // subsystems/psionics.js
   #recomputePsionics(...a) { return recomputePsionics(this, ...a); }

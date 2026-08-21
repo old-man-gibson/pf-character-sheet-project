@@ -62,6 +62,7 @@ import {
   stepDiceMap,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
+import { maneuverDetails } from '../../model.js';
 import {
   THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
 } from '../../tracker-style.js';
@@ -166,8 +167,8 @@ export function renderDashboardPanel(model, ctx) {
     const open = (key) => !!model.data.uiPrefs?.collapsed?.[`dash:${key}`];
     const e = model.data.equipment || {};
     const render = {
-      conditions: () => dashConditionsCard(model, ctx, model, ctx),
-      buffs: () => buffsPanel(model, ctx, model, ctx),
+      conditions: () => dashConditionsCard(model, ctx),
+      buffs: () => buffsPanel(model, ctx),
       resources: () => dashResourcesCard(model),
       vancian: () => dashVancianCard(model),
       psionics: () => dashPsionicsCard(model),
@@ -183,14 +184,14 @@ export function renderDashboardPanel(model, ctx) {
       speed: () => dashSpeedCard(model),
       skills: () => dashSkillsCard(model, open('skills')),
       effects: () => dashEffectsCard(model),
-      quick: () => dashQuickCard(model, ctx, model, ctx),
+      quick: () => dashQuickCard(model, ctx),
     };
     return `<div class="grid dashboard">
       <div class="dashtools span2">
         <button class="linkish" data-action="dash-arrange" aria-expanded="${ctx.dashArrange}">
           ${ctx.dashArrange ? 'Done arranging' : 'Arrange cards'}</button>
       </div>
-      ${ctx.dashArrange ? ctx.dashArrangePanel() : ''}
+      ${ctx.dashArrange ? dashArrangePanel(model) : ''}
       ${dashCardIds(model).map((id) => render[id]?.() || '').join('')}
     </div>`;
   }
@@ -877,29 +878,40 @@ function dashVeilsCard(model) {
   }
 
   /**
-   * What is readied, by discipline, each with the player's own note under it
-   * (the ✎ on the Maneuvers tab writes it; {…} formulas resolve). The ticks
-   * themselves live on the tab.
+   * What is readied, by discipline, each under what the player wrote about it
+   * on the Maneuvers tab ({…} formulas resolve). The ticks themselves live on
+   * the tab.
+   *
+   * Two lines under a name at most: the header cells run together as one, and
+   * the description gets its own. A card that reprinted the whole entry would
+   * be the tab again, and the point of the tab is that it is somewhere else.
    */
 function dashManeuversCard(model) {
     const m = model.data.maneuvers;
     const disciplines = (m?.disciplines || [])
-      .map((d) => ({ name: d.name, notes: d.notes || {}, readied: (d.entries || []).filter((e) => e.known) }))
+      .map((d) => ({ ...d, readied: (d.entries || []).filter((e) => e.known) }))
       .filter((d) => d.readied.length);
-    const row = (e, notes) => {
-      const note = notes[e.name] || '';
+    const shown = (text) => (hasTokens(text) ? renderedProse(model, text) : esc(text));
+    const row = (d, e) => {
+      const entry = maneuverDetails(d, e.name);
+      // A save of "None" is a cell the player answered, not a fact worth a
+      // line here; a DC without one still is.
+      const save = [entry.save === 'None' ? '' : entry.save, entry.dc.trim() ? `DC ${entry.dc}` : '']
+        .filter(Boolean).join(' ');
+      const head = ['action', 'range', 'target', 'duration']
+        .map((k) => entry[k].trim()).concat(save).filter(Boolean);
       return `<div class="statline">
-        <span class="label" title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}">${esc(e.name)}</span>
+        <span class="label" title="${esc(e.name)}${entry.type || e.type ? ` — ${esc(entry.type || e.type)}` : ''}">${esc(e.name)}</span>
         <span class="value dim">${e.kind === 'stance' ? 'stance' : `L${e.level ?? '—'}`}</span>
       </div>
-      ${note ? `<div class="dashtalent mnote" title="${esc(note)}">${hasTokens(note)
-    ? renderedProse(model, note) : esc(note)}</div>` : ''}`;
+      ${head.length ? `<div class="dashtalent mnote">${head.map(shown).join(' · ')}</div>` : ''}
+      ${entry.text ? `<div class="dashtalent mnote" title="${esc(entry.text)}">${shown(entry.text)}</div>` : ''}`;
     };
     return `<section class="panel">
       <h3>Readied maneuvers</h3>
       ${disciplines.map((d) => `
         <h4 class="subhead">${esc(d.name)}</h4>
-        <div class="rowlist">${d.readied.map((e) => row(e, d.notes)).join('')}</div>`).join('')
+        <div class="rowlist">${d.readied.map((e) => row(d, e)).join('')}</div>`).join('')
     || '<p class="empty">Nothing readied — tick maneuvers on the Maneuvers tab.</p>'}
     </section>`;
   }

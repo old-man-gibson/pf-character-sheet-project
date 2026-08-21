@@ -8,7 +8,9 @@
  * added at the destination. See forwardTargets() for what can be aimed at.
  */
 
-import { ABILITIES, FORWARD_FAMILIES, FORWARD_STATS, skillLabel } from '../rules.js';
+import {
+  ABILITIES, FORWARD_FAMILIES, FORWARD_STATS, MANEUVER_FIELDS, skillLabel,
+} from '../rules.js';
 import { COMPANION_KINDS, companionScope } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, renderTokens,
@@ -529,10 +531,20 @@ export function proseSources(model) {
   // buff is off); a value that should switch with something says so itself,
   // with if(…), exactly as the dials do.
   (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
-  // A maneuver's overview note is prose too, and so is a prepared spell's.
+  // Every cell of a maneuver's own entry is prose -- its range as often as
+  // its description, since "Close (25 ft. + 5 ft./2 levels)" is a formula
+  // written out longhand. The description keeps the source name it has always
+  // had, so a formula named in one still answers to `maneuverNote:…` in the
+  // audit; the cells beside it are new and say which they are.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
-    for (const [name, text] of Object.entries(disc.notes || {})) {
-      push(`maneuverNote:${di}:${name}`, text);
+    for (const [name, entry] of Object.entries(disc.notes || {})) {
+      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry); continue; }
+      for (const f of MANEUVER_FIELDS) {
+        // The name goes last in both, because it is the part that can hold a
+        // colon of its own ("Lesson I: Balance") and split the path.
+        push(f.key === 'text' ? `maneuverNote:${di}:${name}` : `maneuver:${di}:${f.key}:${name}`,
+          entry?.[f.key]);
+      }
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));

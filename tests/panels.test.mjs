@@ -15,6 +15,12 @@
  *  are still methods on the element rather than modules (Feats & Mythic, the
  *  Technique List, Auto-Cooking) cannot be reached from here at all.
  *
+ *  Every character is swept four times: folds shut and folds open, in each of
+ *  the two view modes. The open pass is not thoroughness for its own sake — a
+ *  branch that runs only while something is expanded is invisible to the shut
+ *  one, which is how `ctx.dashArrangePanel()` reached players and took the
+ *  whole Overview down for anyone who clicked *Arrange cards*.
+ *
  *  Runs everywhere: the roster it sweeps is the private one when it is there
  *  and the committed public fixture otherwise, plus a blank sheet and a
  *  character with a formula in every kind of prose field, built here.
@@ -33,6 +39,7 @@ import * as trackers from '../app/js/ui/panels/trackers.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel } from '../app/js/ui/panels/skills.js';
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
+import { normalizeStyle } from '../app/js/tracker-style.js';
 
 let pass = 0;
 let fail = 0;
@@ -50,13 +57,15 @@ const ok = (label, actual) => check(label, !!actual, true);
  * put it together -- the shut state of every fold, which is what a sheet
  * opens on.
  */
-const CTX = {
+const shutCtx = () => ({
   overview: {
     condPickerOpen: false, dashArrange: false, draft: {}, openBuff: null, openClassSystems: null,
   },
   combat: { showCells: new Set() },
   gear: { draft: {}, openPosts: new Map(), showAllGear: false },
-  system: { deckView: 'table', openManeuverNote: null, peek: [] },
+  system: {
+    deckView: 'table', maneuverEdit: false, openManeuver: null, peek: [],
+  },
   tracker: {
     draft: {}, editDraft: null, editMeter: null, editTracker: null,
   },
@@ -65,10 +74,63 @@ const CTX = {
     formulaDraft: '', formulaQuery: '', formulaRefOpen: false, tab: 'formulas',
   },
   skills: { showAllSkills: false },
+});
+
+/**
+ * The same state with every fold open, which is the half the shut sweep can
+ * never reach: a branch that only runs while something is expanded renders on
+ * nobody's first look at the tab, so a mistake in one ships. That is exactly
+ * what happened to the dashboard's card arranger -- `ctx.dashArrangePanel()`
+ * for a function that was never on the ctx -- and the tab would not draw at
+ * all for anyone who clicked Arrange cards.
+ *
+ * The lookups are answered rather than populated: a `has()` that always says
+ * yes forces every branch keyed on one open without this file having to know
+ * the table names, post ids and tracker ids each panel invents. The keys
+ * matched with `===` do have to be real, so they are read off the character.
+ */
+const openCtx = (model) => {
+  const d = model.data;
+  const yes = { has: () => true, get: () => true, size: 1 };
+  const disc = (d.maneuvers?.disciplines || [])[0];
+  const firstManeuver = (disc?.entries || [])[0];
+  return {
+    overview: {
+      condPickerOpen: true,
+      dashArrange: true,
+      draft: {},
+      openBuff: (d.buffs || []).length ? 0 : null,
+      openClassSystems: (d.classes || []).length ? 0 : null,
+    },
+    combat: { showCells: yes },
+    gear: { draft: {}, openPosts: yes, showAllGear: true },
+    system: {
+      deckView: 'deck',
+      maneuverEdit: true,
+      openManeuver: firstManeuver ? `maneuvers.disciplines.0|${firstManeuver.name}` : null,
+      peek: [],
+    },
+    tracker: {
+      draft: {},
+      // The element sets these two together, so the harness does too: an
+      // editor open on a tracker with no draft behind it is a state the sheet
+      // cannot be in, and failing on it would be the test's fault.
+      editDraft: {
+        name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null),
+      },
+      editMeter: 'hp',
+      editTracker: (d.customTrackers || [])[0]?.id ?? null,
+    },
+    lore: { menuLists: new Map() },
+    admin: {
+      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaRefOpen: true, tab: 'audit',
+    },
+    skills: { showAllSkills: true },
+  };
 };
 
 /** Every panel that is a module, by the name its tab wears. */
-const PANELS = [
+const panelsWith = (CTX) => [
   ['Overview', (m) => overview.renderOverviewPanel(m, CTX.overview)],
   ['Overview (session dashboard)', (m) => overview.renderDashboardPanel(m, CTX.overview)],
   ['Stats', (m) => renderStatsPanel(m, {})],
@@ -95,6 +157,9 @@ const PANELS = [
   ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX.admin)],
 ];
 
+const CTX = shutCtx();
+const PANELS = panelsWith(CTX);
+
 /** Render one panel, reporting a throw as the failure it is on the page. */
 function renders(who, name, draw, model) {
   let html = null;
@@ -116,10 +181,17 @@ function renders(who, name, draw, model) {
 
 const sweep = (who, model) => {
   for (const [name, draw] of PANELS) renders(who, name, draw, model);
+  // Again with every fold open, which is where a branch can hide.
+  for (const [name, draw] of panelsWith(openCtx(model))) {
+    renders(`${who} (folds open)`, name, draw, model);
+  }
   // The session view puts different panels up; the tab bar is the element's,
   // but which panels the model offers is not.
   model.setViewMode('session');
   for (const [name, draw] of PANELS) renders(`${who} (session view)`, name, draw, model);
+  for (const [name, draw] of panelsWith(openCtx(model))) {
+    renders(`${who} (session view, folds open)`, name, draw, model);
+  }
   model.setViewMode('build');
 };
 

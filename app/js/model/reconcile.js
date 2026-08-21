@@ -98,6 +98,10 @@ export function describeSource(path) {
     case 'familiar': return 'the familiar';
     case 'animalCompanion': return 'the animal companion';
     case 'eidolon': return 'the eidolon';
+    // A maneuver's own entry. The name is last in both because it may hold a
+    // colon ("Lesson I: Balance"), so it is rejoined rather than indexed.
+    case 'maneuverNote': return `${parts.slice(2).join(':')}, its description`;
+    case 'maneuver': return `${parts.slice(3).join(':')}, its ${b}`;
     case 'tab': return `the ${a} tab`;
     case 'tracker': return `the ${a} tracker’s note`;
     default:
