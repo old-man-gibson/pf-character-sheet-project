@@ -69,6 +69,7 @@ import {
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
   ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
+  attackModeAbility,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -371,6 +372,13 @@ const picksAbility = (values) => values.length > 1 && values.every((v) => abilit
  * empty, so the change handler has something to find and repaint.
  */
 const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '');
+
+/**
+ * The same hook where the caller knows the ability rather than the value
+ * naming it -- an attack mode is called "Alt Melee", and which stat it runs
+ * on is a fact about the character rather than about the word.
+ */
+const abKeyAttr = (key) => ` data-ab="${abilityKey(key)}"`;
 
 const round = (v, places = 2) => {
   const f = 10 ** places;
@@ -4988,7 +4996,8 @@ export class CharacterSheetElement extends HTMLElement {
           <button class="danger" data-remove="equipment.weapons|${i}" aria-label="Remove weapon">×</button>
         </div>
         <div class="weapongrid">
-          ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType, WEAPON_ATTACK_TYPES))}
+          ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType,
+            WEAPON_ATTACK_TYPES, '—', (t) => attackModeAbility(this.#model.data, WEAPON_MODE_KEYS[t])))}
           ${this.#field('Enh.', this.#itemNum('equipment.weapons', i, 'enhancement', w.enhancement))}
           ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack)
             + this.#forwardedBadge(`weapon.${i}.attack`))}
@@ -9121,6 +9130,7 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
     return this.#select(path, value, ABILITIES.map((k) => [ABILITY_LABELS[k], ABILITY_LABELS[k]]));
   }
 
+
   /* ----- list rows ----- */
 
   /**
@@ -9189,17 +9199,24 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
   }
 
   /** Options are `value`, `[value, label]` or `[value, label, tooltip]`. */
-  #itemSelect(list, i, field, value, options, blank = '—') {
+  /**
+   * `abOf` colours a picker whose choices are not themselves ability names:
+   * given a choice, it answers which ability that choice runs on. Each option
+   * carries its own answer, so the open list is coded too and the select can
+   * repaint from the option it lands on.
+   */
+  #itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
     const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
     const ab = picksAbility(pairs.map(([v]) => v));
     if (value && !pairs.some(([v]) => String(v) === String(value))) {
       pairs.push([value, `${value} *`]);
     }
+    const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
     const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${abAttr(ab, v)}${
+      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
         String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
       .join('');
-    return `<select data-item="${list}|${i}|${field}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
+    return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
   }
 
   #rowTools(list, i) {
@@ -9671,7 +9688,12 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
     // fresh markup anyway; this is what keeps one that does not -- a slot an
     // extension adds, a new top-level key -- from wearing the old colour.
     root.querySelectorAll('select[data-ab]').forEach((sel) => {
-      sel.addEventListener('change', () => { sel.dataset.ab = abilityKey(sel.value); });
+      sel.addEventListener('change', () => {
+        // The option knows best: a picker whose choices are not ability names
+        // ("Alt Melee") carries the answer on each option instead.
+        const picked = sel.selectedOptions?.[0];
+        sel.dataset.ab = picked?.dataset.ab ?? abilityKey(sel.value);
+      });
     });
 
     /*

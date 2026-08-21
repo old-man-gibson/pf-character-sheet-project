@@ -883,6 +883,15 @@ ABP or level-4 or mythic pick, a companion's attack ability. A dropdown is treat
 an ability picker when its choices *are* abilities, so a slot added later is coloured
 the day it lands rather than the day someone remembers to tag it.
 
+A **weapon's Base** is coloured too, though its choices are attack modes rather than
+abilities: *Alt Melee* wears the colour of whatever ability that mode is keyed to on the
+Overview. It is the one place the two can disagree and the disagreement is the point —
+a finessed rapier reads *Alt Melee* in Dex green beside *Str* in red, which is exactly
+what a finesse weapon is: attacking off one ability and damaging off the other. A mode
+keyed to two abilities takes the primary, since two colours would be no colour at all;
+a mode with only its second slot filled takes that one, because it is still the only
+ability that mode runs on.
+
 Nothing here is a setting: the colours are fixed so that the same red always means
 Strength. They are the workbook's own cell fills, worn thin over the dark theme and
 washed over the light one, with the word inked dark enough to read on either.

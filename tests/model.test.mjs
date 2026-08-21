@@ -22,7 +22,8 @@ import {
   parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels,
   cleanSkillVariant, skillVariantKind, skillLabel, PERFORM_CATEGORIES, performCategory,
   MYTHIC_TIERS, MYTHIC_STAT_TIERS, MYTHIC_TIER_LEVEL, mythicTierGrant,
-  ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal,
+  ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
+  WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
 } from '../app/js/rules.js';
@@ -565,6 +566,49 @@ console.log('the attack totals carry a reconciliation offset, and it is reachabl
   const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and reopening leaves it forwarded, not folded into Other',
     [again.data.attack.totalMelee, again.offsetOf('attack.totalMelee')], [13, 0]);
+}
+
+console.log('which ability an attack mode is read as running on');
+{
+  // A weapon's Base says "Alt Melee"; which stat that runs on is set on the
+  // Overview, two slots away. Anything that has to show one ability -- the
+  // colour on that dropdown -- has to pick just one of the two.
+  const c = { attack: { modes: {
+    melee: { stat1: 'Str', stat2: null },
+    altMelee: { stat1: 'Dex', stat2: '' },
+    ranged: { stat1: 'Int', stat2: 'Wis' },   // both: the primary wins
+    altRanged: { stat1: null, stat2: 'Cha' }, // only the second: still that one
+    cmb: { stat1: '', stat2: '' },            // neither
+    altCmb: { stat1: 'Nonsense', stat2: 'Con' },
+  } } };
+  check('one ability named, that one', attackModeAbility(c, 'melee'), 'str');
+  check('an empty second slot changes nothing', attackModeAbility(c, 'altMelee'), 'dex');
+  check('two named, the primary', attackModeAbility(c, 'ranged'), 'int');
+  check('named in the second slot only, that one', attackModeAbility(c, 'altRanged'), 'cha');
+  check('none named, none', attackModeAbility(c, 'cmb'), '');
+  check('a word that is not an ability is skipped, not shown',
+    attackModeAbility(c, 'altCmb'), 'con');
+  check('a mode that does not exist', attackModeAbility(c, 'nope'), '');
+  check('and no attack block at all', [attackModeAbility({}, 'melee'), attackModeAbility(null, 'melee')], ['', '']);
+
+  // Every choice the weapon's Base offers is a mode this can answer for, so
+  // the dropdown cannot hold a value the colouring does not understand.
+  const byLabel = {
+    Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
+    'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
+  };
+  check('every Base choice names a real mode',
+    WEAPON_ATTACK_TYPES.map((t) => byLabel[t]).filter(Boolean).sort(), ATTACK_MODES.slice().sort());
+
+  // On a real character, the modes the import set.
+  for (const id of IDS) {
+    const ch = new Character(load(id));
+    check(`${id} every mode answers with an ability or nothing`,
+      ATTACK_MODES.every((m) => {
+        const ab = attackModeAbility(ch.data, m);
+        return ab === '' || ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(ab);
+      }), true);
+  }
 }
 
 console.log('dragging a feat -- up its own group, or across into another');
