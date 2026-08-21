@@ -1,0 +1,5210 @@
+{
+ "schemaVersion": 9,
+ "id": "vesna",
+ "source": {
+  "title": "Vesna Ashgrove",
+  "fileId": "",
+  "url": "",
+  "convertedAt": "2026-01-01T00:00:00",
+  "kind": "blank"
+ },
+ "tabs": [
+  {
+   "name": "Character Info",
+   "hidden": false
+  },
+  {
+   "name": "Stats",
+   "hidden": false
+  },
+  {
+   "name": "Planner",
+   "hidden": false
+  },
+  {
+   "name": "Feats",
+   "hidden": false
+  },
+  {
+   "name": "Mythic",
+   "hidden": false
+  },
+  {
+   "name": "Equipment",
+   "hidden": false
+  },
+  {
+   "name": "Background & Lore",
+   "hidden": false
+  },
+  {
+   "name": "Combat Training",
+   "hidden": false
+  },
+  {
+   "name": "Magic Training",
+   "hidden": false
+  },
+  {
+   "name": "Character Info",
+   "hidden": false
+  },
+  {
+   "name": "dataSheet",
+   "hidden": false
+  }
+ ],
+ "identity": {
+  "name": "Vesna Ashgrove",
+  "player": "Public Fixture",
+  "race": "Human",
+  "size": "Medium",
+  "gender": "Female",
+  "age": 34,
+  "variant": null,
+  "heroPoints": {
+   "current": 1,
+   "max": 3
+  },
+  "height": null,
+  "weight": null,
+  "level": 12,
+  "alignment": "Neutral Good",
+  "deity": "None",
+  "specialty": "Scholar",
+  "specialtyFeat": null,
+  "specialtyPerks": [
+   "",
+   ""
+  ],
+  "image": null,
+  "nativeLanguages": null,
+  "downtimeLanguages": null,
+  "intLanguages": null,
+  "linguisticsLanguages": null,
+  "proficiencies": {
+   "familiarities": [],
+   "handedness": [],
+   "groups": [],
+   "weapons": [],
+   "armor": [],
+   "shields": [],
+   "notes": ""
+  },
+  "speeds": [],
+  "mythicPath": null,
+  "mythicTier": 0,
+  "focusStat": null,
+  "guild": null,
+  "primordiaTechnique": null,
+  "languages": [],
+  "languageExtra": 0,
+  "languageSlots": {
+   "int": 8,
+   "linguistics": 0,
+   "extra": 0,
+   "extraError": null,
+   "total": 8,
+   "known": 0
+  },
+  "color": "#6ea8fe"
+ },
+ "abilities": {
+  "str": {
+   "score": 14,
+   "mod": 2,
+   "tempScore": 14,
+   "totalMod": 2,
+   "checkMod": 2,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  },
+  "dex": {
+   "score": 23,
+   "mod": 6,
+   "tempScore": 23,
+   "totalMod": 6,
+   "checkMod": 6,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  },
+  "con": {
+   "score": 18,
+   "mod": 4,
+   "tempScore": 18,
+   "totalMod": 4,
+   "checkMod": 4,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  },
+  "int": {
+   "score": 26,
+   "mod": 8,
+   "tempScore": 26,
+   "totalMod": 8,
+   "checkMod": 8,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  },
+  "wis": {
+   "score": 15,
+   "mod": 2,
+   "tempScore": 15,
+   "totalMod": 2,
+   "checkMod": 2,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  },
+  "cha": {
+   "score": 12,
+   "mod": 1,
+   "tempScore": 12,
+   "totalMod": 1,
+   "checkMod": 1,
+   "sources": {},
+   "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   }
+  }
+ },
+ "statsBuild": {
+  "str": {
+   "pointBuy": 12,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 2,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 14,
+   "resolved": {
+    "enhancement": 0,
+    "rawEnhancement": 0,
+    "enhancementWasted": 0,
+    "total": 14,
+    "temporary": 0,
+    "tempTotal": 14
+   }
+  },
+  "dex": {
+   "pointBuy": 15,
+   "race": 0,
+   "abp": 4,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 4,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 23,
+   "resolved": {
+    "enhancement": 4,
+    "rawEnhancement": 4,
+    "enhancementWasted": 0,
+    "total": 23,
+    "temporary": 0,
+    "tempTotal": 23
+   }
+  },
+  "con": {
+   "pointBuy": 14,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 4,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 18,
+   "resolved": {
+    "enhancement": 0,
+    "rawEnhancement": 0,
+    "enhancementWasted": 0,
+    "total": 18,
+    "temporary": 0,
+    "tempTotal": 18
+   }
+  },
+  "int": {
+   "pointBuy": 17,
+   "race": 2,
+   "abp": 4,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 0,
+   "level4": 3,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 26,
+   "resolved": {
+    "enhancement": 4,
+    "rawEnhancement": 4,
+    "enhancementWasted": 0,
+    "total": 26,
+    "temporary": 0,
+    "tempTotal": 26
+   }
+  },
+  "wis": {
+   "pointBuy": 13,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 2,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 15,
+   "resolved": {
+    "enhancement": 0,
+    "rawEnhancement": 0,
+    "enhancementWasted": 0,
+    "total": 15,
+    "temporary": 0,
+    "tempTotal": 15
+   }
+  },
+  "cha": {
+   "pointBuy": 10,
+   "race": 0,
+   "abp": 0,
+   "gear": 0,
+   "attunement": 0,
+   "inherent": 0,
+   "array": 2,
+   "level4": 0,
+   "mythic": 0,
+   "size": 0,
+   "untyped": 0,
+   "alchemical": 0,
+   "circumstance": 0,
+   "morale": 0,
+   "tempEnhancement": 0,
+   "tempSize": 0,
+   "sheetTotal": 12,
+   "resolved": {
+    "enhancement": 0,
+    "rawEnhancement": 0,
+    "enhancementWasted": 0,
+    "total": 12,
+    "temporary": 0,
+    "tempTotal": 12
+   }
+  }
+ },
+ "pointBuyTable": {
+  "7": -4,
+  "8": -2,
+  "9": -1,
+  "10": 0,
+  "11": 1,
+  "12": 2,
+  "13": 3,
+  "14": 5,
+  "15": 7,
+  "16": 10,
+  "17": 13,
+  "18": 17
+ },
+ "progressionPicks": {
+  "level4": [
+   {
+    "level": 4,
+    "ability": "Int"
+   },
+   {
+    "level": 8,
+    "ability": "Int"
+   },
+   {
+    "level": 12,
+    "ability": "Int"
+   },
+   {
+    "level": 16,
+    "ability": "Dex"
+   },
+   {
+    "level": 20,
+    "ability": "Int"
+   }
+  ],
+  "abp": [
+   {
+    "level": 6,
+    "mental": "Int",
+    "physical": null
+   },
+   {
+    "level": 7,
+    "mental": null,
+    "physical": "Dex"
+   },
+   {
+    "level": 11,
+    "mental": "Int",
+    "physical": null
+   },
+   {
+    "level": 12,
+    "mental": null,
+    "physical": "Dex"
+   }
+  ],
+  "array": [
+   {
+    "level": 8,
+    "slots": [
+     "Con",
+     "Dex",
+     "Wis",
+     "Cha"
+    ]
+   },
+   {
+    "level": 12,
+    "slots": [
+     "Con",
+     "Str",
+     null,
+     "Dex"
+    ]
+   },
+   {
+    "level": 16,
+    "slots": [
+     "Con",
+     null,
+     "Wis",
+     "Cha"
+    ]
+   }
+  ],
+  "arrayNote": null
+ },
+ "hp": {
+  "total": 78,
+  "ability": "Con",
+  "fcb": 0,
+  "ability2": null,
+  "toughness": 0,
+  "initiative": 6,
+  "initAbility": "Dex",
+  "initAbility2": null,
+  "current": 78
+ },
+ "classes": [
+  {
+   "name": "Wizard",
+   "hd": 6,
+   "bab": 0.5,
+   "goodFort": false,
+   "goodRef": false,
+   "goodWill": true,
+   "skillRanks": 2,
+   "archetypes": "",
+   "levelsOverride": null,
+   "systems": [],
+   "gestaltLevels": 12
+  },
+  {
+   "name": "Psion",
+   "hd": 6,
+   "bab": 0.5,
+   "goodFort": false,
+   "goodRef": true,
+   "goodWill": true,
+   "skillRanks": 2,
+   "archetypes": "",
+   "levelsOverride": null,
+   "systems": [],
+   "gestaltLevels": 12
+  }
+ ],
+ "defenses": {
+  "ac": 17,
+  "touch": 16,
+  "flatFooted": 13,
+  "cmd": 24,
+  "ffCmd": 10,
+  "acStat1": "Dex",
+  "acStat2": null,
+  "bonusAC": null,
+  "uncannyDodge": false,
+  "nonTouch": 0,
+  "miscAC": 0,
+  "miscCMD": 0,
+  "spellResistance": null,
+  "dr": null,
+  "weakness": null,
+  "immunities": null,
+  "resistance": null,
+  "acBonuses": {
+   "abpDeflection": 2,
+   "deflection": 0,
+   "abpNatural": 1,
+   "enhancedNatural": 0,
+   "natural": 0,
+   "enhancement": 0,
+   "dodge": 0,
+   "circumstance": 0,
+   "insight": 0,
+   "luck": 0,
+   "morale": 0,
+   "sacred": 0,
+   "profane": 0,
+   "untyped": 0,
+   "size": 0,
+   "template": 0,
+   "sheet": 0
+  },
+  "acBonusErrors": {},
+  "acBonusesResolved": {
+   "abpDeflection": 2,
+   "deflection": 0,
+   "abpNatural": 1,
+   "enhancedNatural": 0,
+   "natural": 0,
+   "enhancement": 0,
+   "dodge": 0,
+   "circumstance": 0,
+   "insight": 0,
+   "luck": 0,
+   "morale": 0,
+   "sacred": 0,
+   "profane": 0,
+   "untyped": 0,
+   "size": 0,
+   "template": 0,
+   "sheet": 0
+  }
+ },
+ "conditions": {
+  "Blinded": 0,
+  "Cowering": 0,
+  "Dazzled": 0,
+  "Deafened": 0,
+  "Energy Drain": 0,
+  "Entangled": 0,
+  "Exhausted": 0,
+  "Fatigued": 0,
+  "Frightened": 0,
+  "Grappled": 0,
+  "Helpless": 0,
+  "Panicked": 0,
+  "Paralyzed": 0,
+  "Pinned": 0,
+  "Prone": 0,
+  "Shaken": 0,
+  "Sickened": 0,
+  "Stunned": 0
+ },
+ "attack": {
+  "bab": 6,
+  "iterative": "+6/+1",
+  "miscBonus": 0,
+  "modes": {
+   "melee": {
+    "value": 0,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "altMelee": {
+    "value": 0,
+    "stat1": "Dex",
+    "stat2": null
+   },
+   "ranged": {
+    "value": 0,
+    "stat1": "Dex",
+    "stat2": null
+   },
+   "altRanged": {
+    "value": 0,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "cmb": {
+    "value": 0,
+    "stat1": "Str",
+    "stat2": null
+   },
+   "altCmb": {
+    "value": 0,
+    "stat1": null,
+    "stat2": null
+   }
+  },
+  "totalMelee": 8,
+  "totalRanged": 12,
+  "totalCmb": 8,
+  "babOverride": null,
+  "babBase": 6
+ },
+ "saves": {
+  "fortitude": {
+   "total": 11,
+   "stat1": "Con",
+   "stat2": null,
+   "base": 4,
+   "bonuses": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   },
+   "bonusErrors": {},
+   "bonusesResolved": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   }
+  },
+  "reflex": {
+   "total": 17,
+   "stat1": "Dex",
+   "stat2": null,
+   "base": 8,
+   "bonuses": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   },
+   "bonusErrors": {},
+   "bonusesResolved": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   }
+  },
+  "will": {
+   "total": 13,
+   "stat1": "Wis",
+   "stat2": null,
+   "base": 8,
+   "bonuses": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   },
+   "bonusErrors": {},
+   "bonusesResolved": {
+    "abpResistance": 3,
+    "resistance": 0,
+    "template": 0,
+    "alchemical": 0,
+    "circumstance": 0,
+    "competence": 0,
+    "enhancement": 0,
+    "insight": 0,
+    "luck": 0,
+    "trait": 0,
+    "morale": 0,
+    "profane": 0,
+    "racial": 0,
+    "sacred": 0,
+    "untyped": 0,
+    "sheet": 0
+   }
+  }
+ },
+ "raceTraits": [
+  {
+   "name": "",
+   "text": ""
+  },
+  {
+   "name": "",
+   "text": ""
+  },
+  {
+   "name": "",
+   "text": ""
+  }
+ ],
+ "skills": [
+  {
+   "name": "Acrobatics",
+   "spec": null,
+   "bonus": 11,
+   "classSkill": true,
+   "totalRanks": 2,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 2,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 2,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Appraise",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Artistry",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Artistry",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Autohypnosis",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Bluff",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Climb",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Str"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Craft",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Craft",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Craft",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Diplomacy",
+   "spec": null,
+   "bonus": 10,
+   "classSkill": true,
+   "totalRanks": 6,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 6,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 6,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Disable Device",
+   "spec": null,
+   "bonus": 6,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Disguise",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Escape Artist",
+   "spec": null,
+   "bonus": 6,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Fly",
+   "spec": null,
+   "bonus": 6,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Handle Animal",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Heal",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Intimidate",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Kn. (arcana)",
+   "spec": null,
+   "bonus": 23,
+   "classSkill": true,
+   "totalRanks": 12,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 12,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 12,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (dungeoneering)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (engineering)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (geography)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (history)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (local)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (martial)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (nature)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (nobility)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (planes)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (psionics)",
+   "spec": null,
+   "bonus": 19,
+   "classSkill": true,
+   "totalRanks": 8,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 8,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 8,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Kn. (religion)",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Linguistics",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Lore",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Lore",
+   "spec": null,
+   "bonus": 8,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Perception",
+   "spec": null,
+   "bonus": 17,
+   "classSkill": true,
+   "totalRanks": 12,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 12,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 12,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Perform",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Perform",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  },
+  {
+   "name": "Profession",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Profession",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Ride",
+   "spec": null,
+   "bonus": 6,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Sense Motive",
+   "spec": null,
+   "bonus": 13,
+   "classSkill": true,
+   "totalRanks": 8,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 8,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 8,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Sleight of Hand",
+   "spec": null,
+   "bonus": 6,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Spellcraft",
+   "spec": null,
+   "bonus": 23,
+   "classSkill": true,
+   "totalRanks": 12,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Int"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 12,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 12,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 8
+  },
+  {
+   "name": "Stealth",
+   "spec": null,
+   "bonus": 13,
+   "classSkill": true,
+   "totalRanks": 4,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Dex"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 4,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 4,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 6
+  },
+  {
+   "name": "Survival",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": false,
+   "abilities": [
+    "Wis"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Swim",
+   "spec": null,
+   "bonus": 2,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": false,
+   "armorPenalty": true,
+   "abilities": [
+    "Str"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 2
+  },
+  {
+   "name": "Use Magic Device",
+   "spec": null,
+   "bonus": 1,
+   "classSkill": false,
+   "totalRanks": 0,
+   "ranks": {},
+   "requiresTraining": true,
+   "armorPenalty": false,
+   "abilities": [
+    "Cha"
+   ],
+   "situational": null,
+   "rankSources": {
+    "bought": 0,
+    "gear": false,
+    "other": false
+   },
+   "importedSpecialty": false,
+   "importedSphereRanks": 0,
+   "boughtError": null,
+   "boughtResolved": 0,
+   "ranksOffset": 0,
+   "specialtyFlag": false,
+   "sphereRanks": 0,
+   "importedBonus": 0,
+   "offset": 0,
+   "miscError": null,
+   "miscResolved": 0,
+   "forwarded": 0,
+   "abilityMod": 1
+  }
+ ],
+ "skillBudget": {
+  "bonusPerLevel": 0,
+  "intPerLevel": 0,
+  "perLevel": 2,
+  "available": 24,
+  "assigned": 64,
+  "remaining": -40,
+  "status": "error"
+ },
+ "carry": {
+  "tiers": [],
+  "antHaul": 1,
+  "strBonus": 0,
+  "quadruped": false,
+  "carried": 8,
+  "light": 58,
+  "medium": 116,
+  "heavy": 174,
+  "offGround": 348,
+  "pushDrag": 870,
+  "carriedOffset": -15
+ },
+ "resources": [
+  {
+   "name": "Arcane Bond",
+   "uses": 0,
+   "total": 1,
+   "refresh": "Daily"
+  },
+  {
+   "name": "Psionic Focus",
+   "uses": 0,
+   "total": 1,
+   "refresh": "per encounter"
+  }
+ ],
+ "wealth": {
+  "currency": "Mana",
+  "baseline": null,
+  "current": 0,
+  "oathOfOfferings": false,
+  "materialCasting": false,
+  "lastOffering": "",
+  "manaPerDay": 0,
+  "sessionMana": 0,
+  "ledger": []
+ },
+ "mythic": {
+  "path": null,
+  "tier": 0,
+  "baseAbilities": [],
+  "abilities": [
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   },
+   {
+    "name": "",
+    "path": "",
+    "featChoice": "",
+    "effect": "",
+    "featEffect": ""
+   }
+  ],
+  "tradition": {
+   "drawback1": null,
+   "drawback2": null,
+   "drawback3": null,
+   "quality": null,
+   "boon1": null,
+   "boon2": null,
+   "boon3": null
+  },
+  "flowingPower": false,
+  "basePathAbility": null,
+  "tierOverride": 0,
+  "bonusHpPerTier": 0,
+  "computedTier": 3
+ },
+ "equipment": {
+  "gear": [
+   {
+    "slot": "Head",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Headband",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Eyes",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Shoulders",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Neck",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Chest",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Body",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Armor",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Belt",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Wrists",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Hands",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Ring 1",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Ring 2",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Feet",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   }
+  ],
+  "other": [
+   {
+    "slot": "Other 1",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 2",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 3",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 4",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 5",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 6",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 7",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   },
+   {
+    "slot": "Other 8",
+    "name": null,
+    "bonuses": [
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     },
+     {
+      "value": null,
+      "type": null
+     }
+    ],
+    "others": [
+     null,
+     null,
+     null,
+     null
+    ],
+    "weight": 0,
+    "cost": 0
+   }
+  ],
+  "armor": {
+   "kind": "Armor",
+   "name": "Mithral Chain Shirt",
+   "acBonus": 4,
+   "maxDex": 4,
+   "acp": 0,
+   "type": "Light",
+   "ghostTouch": false,
+   "spellFailure": 10,
+   "others": [],
+   "weight": 12.5,
+   "cost": 1100,
+   "active": true
+  },
+  "shields": [
+   {
+    "kind": "Shield 1",
+    "name": "Darkwood Buckler",
+    "acBonus": 1,
+    "maxDex": null,
+    "acp": 0,
+    "type": "Light",
+    "ghostTouch": false,
+    "spellFailure": 5,
+    "others": [],
+    "weight": 2.5,
+    "cost": 205,
+    "active": false
+   }
+  ],
+  "weapons": [
+   {
+    "name": "Quarterstaff",
+    "attackType": "Melee",
+    "sheetAttack": 0,
+    "dice": "1d6",
+    "damageAbility": "Str",
+    "abilityMult": 1,
+    "miscDamage": 0,
+    "sheetTotalDamage": 0,
+    "critRange": 1,
+    "critMult": 2,
+    "bonusCritDamage": 0,
+    "damageType": "B",
+    "groups": [
+     "Monk",
+     null,
+     null
+    ],
+    "miscAttack": 0,
+    "special": "",
+    "ammunition": null,
+    "size": "Medium",
+    "range": null,
+    "enhancement": 1,
+    "familiarity": "Simple",
+    "handedness": "Two-Handed",
+    "weight": 4,
+    "price": 2000,
+    "handle": "quarterstaff",
+    "proficient": null,
+    "proficiencyWhy": "",
+    "proficiencySource": null,
+    "diceError": null,
+    "diceResolved": "1d6",
+    "attackOffset": -9,
+    "forwardedAttack": 0,
+    "attackTotal": 0,
+    "miscDamageNum": 0,
+    "miscDamageError": null,
+    "damageBonus": 3,
+    "damageTotal": "1d6+3",
+    "calc": {
+     "baseAtk": 0,
+     "baseDmgDice": {
+      "6": 1
+     },
+     "baseDmgFlat": 3,
+     "baseAvg": 6.5,
+     "notes": [],
+     "atkTokens": [],
+     "dmgTokens": [],
+     "tokAtk": {
+      "dice": {},
+      "flat": 0
+     },
+     "tokDmg": {
+      "dice": {},
+      "flat": 0
+     },
+     "totalAtk": 0,
+     "totalAtkStr": "+0",
+     "tokMultDmg": {
+      "dice": {},
+      "flat": 0
+     },
+     "totalDmgDice": {
+      "6": 1
+     },
+     "totalDmgFlat": 3,
+     "errors": [],
+     "totalDmgStr": "1d6+3",
+     "totalAvg": 6.5,
+     "hasTokens": false,
+     "critMultNum": 2,
+     "critAtk": {
+      "dice": {},
+      "flat": 0
+     },
+     "critTagged": {
+      "dice": {},
+      "flat": 0
+     },
+     "critExtra": {
+      "dice": {},
+      "flat": 0
+     },
+     "hasCritTokens": false,
+     "confirmTotal": 0,
+     "confirmStr": "+0",
+     "critAvg": 13,
+     "critStr": "(1d6+3)×2"
+    },
+    "forwardedDamage": {
+     "plain": 0,
+     "mult": 0,
+     "crit": 0
+    },
+    "useUnarmedDice": false,
+    "proficiency": "",
+    "proficiencyNote": "",
+    "baseWeapon": ""
+   },
+   {
+    "name": "Light Crossbow",
+    "attackType": "Ranged",
+    "sheetAttack": 0,
+    "dice": "1d8",
+    "damageAbility": "",
+    "abilityMult": 0,
+    "miscDamage": 0,
+    "sheetTotalDamage": 0,
+    "critRange": 2,
+    "critMult": 2,
+    "bonusCritDamage": 0,
+    "damageType": "P",
+    "groups": [
+     "Crossbows",
+     null,
+     null
+    ],
+    "miscAttack": 0,
+    "special": "Reloads as a move action",
+    "ammunition": 20,
+    "size": "Medium",
+    "range": 80,
+    "enhancement": 0,
+    "familiarity": "Simple",
+    "handedness": "Two-Handed",
+    "weight": 4,
+    "price": 35,
+    "handle": "light_crossbow",
+    "proficient": null,
+    "proficiencyWhy": "",
+    "proficiencySource": null,
+    "diceError": null,
+    "diceResolved": "1d8",
+    "attackOffset": -12,
+    "forwardedAttack": 0,
+    "attackTotal": 0,
+    "miscDamageNum": 0,
+    "miscDamageError": null,
+    "damageBonus": 0,
+    "damageTotal": "1d8",
+    "calc": {
+     "baseAtk": 0,
+     "baseDmgDice": {
+      "8": 1
+     },
+     "baseDmgFlat": 0,
+     "baseAvg": 4.5,
+     "notes": [],
+     "atkTokens": [],
+     "dmgTokens": [],
+     "tokAtk": {
+      "dice": {},
+      "flat": 0
+     },
+     "tokDmg": {
+      "dice": {},
+      "flat": 0
+     },
+     "totalAtk": 0,
+     "totalAtkStr": "+0",
+     "tokMultDmg": {
+      "dice": {},
+      "flat": 0
+     },
+     "totalDmgDice": {
+      "8": 1
+     },
+     "totalDmgFlat": 0,
+     "errors": [],
+     "totalDmgStr": "1d8",
+     "totalAvg": 4.5,
+     "hasTokens": false,
+     "critMultNum": 2,
+     "critAtk": {
+      "dice": {},
+      "flat": 0
+     },
+     "critTagged": {
+      "dice": {},
+      "flat": 0
+     },
+     "critExtra": {
+      "dice": {},
+      "flat": 0
+     },
+     "hasCritTokens": false,
+     "confirmTotal": 0,
+     "confirmStr": "+0",
+     "critAvg": 9,
+     "critStr": "1d8×2"
+    },
+    "forwardedDamage": {
+     "plain": 0,
+     "mult": 0,
+     "crit": 0
+    },
+    "useUnarmedDice": false,
+    "proficiency": "",
+    "proficiencyNote": "",
+    "baseWeapon": ""
+   }
+  ],
+  "totalWeight": 23,
+  "totalValue": 3340
+ },
+ "training": {
+  "combat": {
+   "classes": [],
+   "tradition": {
+    "name": null,
+    "entries": []
+   },
+   "bonusTalents": [],
+   "sphereBonuses": [],
+   "skillRanks": [],
+   "unarmed": {
+    "sheetDice": null,
+    "talentedKnuckle": false,
+    "brawlersVest": false,
+    "stepIncreases": 0,
+    "sizeIncreases": 0,
+    "usesBoxing": true,
+    "usesBrute": true,
+    "usesOpenHand": true,
+    "usesWrestling": true,
+    "otherSpheres": [],
+    "unorthodoxFeats": 0,
+    "unorthodoxSlots": 0,
+    "asuraEssence": 0,
+    "perSphere": {
+     "Boxing": 0,
+     "Brute": 0,
+     "Open Hand": 0,
+     "Wrestling": 0
+    },
+    "effectiveTalents": 0,
+    "dice": "1d3",
+    "improvedUnarmedStrike": false
+   },
+   "sheetBaseDC": 0,
+   "customizations": [],
+   "tally": {},
+   "tallyOwn": {},
+   "practitionerDC": 13,
+   "sphereRows": []
+  },
+  "magic": {
+   "classes": [],
+   "sphereBonuses": [],
+   "tradition": {
+    "name": null,
+    "drawbacks": [],
+    "boughtOff": []
+   },
+   "bonusTalents": [],
+   "amt": false,
+   "mythicAmt": false,
+   "dcBonus": 0,
+   "clBonus": 0,
+   "msbBonus": 0,
+   "msdBonus": 0,
+   "bonusSP": 0,
+   "sheet": {
+    "boons": 0,
+    "spTier": 0,
+    "totalDC": 0,
+    "totalCL": 0,
+    "totalMSB": 0,
+    "totalMSD": 0,
+    "traditionSP": 0,
+    "totalSP": 0,
+    "classSP": []
+   },
+   "tally": {},
+   "tallyOwn": {},
+   "globalCL": 0,
+   "globalDC": 10,
+   "msb": 0,
+   "msd": 11,
+   "concentration": 0,
+   "drawbackCount": 0,
+   "boughtOffCount": 0,
+   "effectiveDrawbacks": 0,
+   "spTier": 0,
+   "boons": 0,
+   "traditionPools": [],
+   "boonPoints": 0,
+   "traditionSP": 0,
+   "traditionEssence": 0,
+   "castingClassCount": 0,
+   "classSP": [],
+   "totalSP": 0,
+   "spOnEssence": 0,
+   "spShort": 0,
+   "availableSP": 0,
+   "sphereRows": []
+  }
+ },
+ "named": {},
+ "featGroups": [],
+ "backgroundSections": [
+  {
+   "label": "Personality",
+   "text": ""
+  },
+  {
+   "label": "Appearance",
+   "text": ""
+  },
+  {
+   "label": "Likes",
+   "text": ""
+  },
+  {
+   "label": "Dislikes",
+   "text": ""
+  },
+  {
+   "label": "Goals",
+   "text": ""
+  },
+  {
+   "label": "Fears",
+   "text": ""
+  },
+  {
+   "label": "Character Strengths",
+   "text": ""
+  },
+  {
+   "label": "Character Flaws",
+   "text": ""
+  },
+  {
+   "label": "Friends/Family",
+   "text": ""
+  },
+  {
+   "label": "Enemies/Rivals",
+   "text": ""
+  },
+  {
+   "label": "Ez'atian Certifications",
+   "text": ""
+  },
+  {
+   "label": "Additional Information",
+   "text": ""
+  }
+ ],
+ "sheetTabs": [],
+ "crafting": {
+  "baseSpeed": 1000,
+  "speedIncreases": [],
+  "baseCosts": [
+   {
+    "label": "Standard (half market)",
+    "percent": 50
+   },
+   {
+    "label": "Third cost",
+    "percent": 33
+   },
+   {
+    "label": "Quarter cost",
+    "percent": 25
+   }
+  ],
+  "baseCostIndex": 0,
+  "costReductions": [],
+  "discount": 0,
+  "dcPerBypass": 5,
+  "timeBasis": "value",
+  "checkMode": "take10",
+  "checkSkill": null,
+  "checkMisc": 0,
+  "checkRoll": 0,
+  "currency": "mana",
+  "sellerName": "Vesna Ashgrove",
+  "sourceExtras": [],
+  "projects": [
+   {
+    "name": "",
+    "value": 0,
+    "discountOverride": null,
+    "zeroProfit": false,
+    "itemDC": 0,
+    "checkMod": 0,
+    "dcAdjustments": [],
+    "bypassed": [],
+    "dcNotes": "",
+    "resources": "",
+    "notes": "",
+    "buyerName": "",
+    "buyerTag": "",
+    "remaining": "",
+    "valueError": null,
+    "valueNum": 0,
+    "itemDCError": null,
+    "itemDCNum": 0,
+    "calc": {
+     "value": 0,
+     "cost": 0,
+     "basis": 0,
+     "gross": 0,
+     "sale": 0,
+     "net": 0,
+     "discount": 0,
+     "dc": 0,
+     "dcParts": [],
+     "check": 18,
+     "succeeds": true,
+     "days": 0,
+     "daysExact": 0,
+     "craftPost": "**Crafting**: \n**Value**: 0 mana\n**Cost**: 0 mana\n**Profit**: 0 mana\n**DC**: 0\n**Check**: 18\n**Time to Completion**: 0 (0) days\n**Resources used:** \n**Notes/Description**: ",
+     "marketPost": "**Character Name:** Vesna Ashgrove\n**Item:** \n**Market Value:** 0\n**Price Sold:** 0\n**Sold To:**  (@)\n**Gold or Mana Remaining:**  mana"
+    }
+   }
+  ],
+  "calc": {
+   "speedPerDay": 1000,
+   "basePercent": 50,
+   "baseFraction": 0.5,
+   "compounding": 1,
+   "ratio": 0.5,
+   "checkBase": 18,
+   "skill": "Craft",
+   "skillBonus": 8,
+   "roll": 10,
+   "errors": []
+  }
+ },
+ "akashic": {
+  "classes": [],
+  "baseDC": 0,
+  "steadyVeilDC": 0,
+  "essence": {
+   "featTraits": 0,
+   "boon": 0,
+   "radiantDawn": 0,
+   "fcb": 0,
+   "pool": 0
+  },
+  "slots": [],
+  "kheshig": [],
+  "otherReceptacles": [],
+  "sourceExtras": []
+ },
+ "maneuvers": {
+  "possibleManeuvers": 0,
+  "possibleStances": 0,
+  "disciplines": [],
+  "sourceExtras": []
+ },
+ "psionics": {
+  "classes": [
+   {
+    "name": "Psion",
+    "stat": "Int",
+    "stat2": "",
+    "curveTotal": null,
+    "manifesterLevelOverride": null,
+    "powers": []
+   }
+  ],
+  "bonusPoints": 0,
+  "spent": 0,
+  "sourceExtras": []
+ },
+ "cardcasting": {
+  "enabled": false,
+  "castingStat": "",
+  "useD100": false,
+  "cooldown": false,
+  "manaPool": false,
+  "manaGraveyard": false,
+  "mods": {
+   "bleedingHand": 0,
+   "coloredMana": 0,
+   "deckout": false,
+   "exposedGrip": false,
+   "gradualRamp": false,
+   "lifeboundDeck": false,
+   "singleton": false,
+   "stagnantPool": false,
+   "strikableAssets": false,
+   "tightHand": false
+  },
+  "colors": "",
+  "colorSpheres": {
+   "R": [],
+   "B": [],
+   "U": [],
+   "W": [],
+   "G": []
+  },
+  "attunedSpheres": [],
+  "manipulations": [],
+  "manipulationsAvailable": null,
+  "cards": [],
+  "sideboard": [],
+  "harrow": false,
+  "notes": "",
+  "sourceExtras": [],
+  "table": {
+   "active": false,
+   "round": 0,
+   "redraws": 0,
+   "manaPlayed": 0,
+   "deck": [],
+   "hand": [],
+   "play": [],
+   "discard": [],
+   "exile": [],
+   "stun": [],
+   "wounds": [],
+   "death": [],
+   "faceDown": [],
+   "lastTrigger": "",
+   "mana": [],
+   "log": []
+  }
+ },
+ "extras": {
+  "approvals": [],
+  "sourceExtras": []
+ },
+ "notes": [],
+ "familiar": {
+  "name": "",
+  "size": "Tiny",
+  "masterLevelPenalty": 0,
+  "attackAbility": "",
+  "attackBonus": 0,
+  "hp": {
+   "damage": 0,
+   "temp": 0,
+   "bonus": 0
+  },
+  "ac": {
+   "all": 0,
+   "touch": 0,
+   "ff": 0
+  },
+  "cmdOther": 0,
+  "initBonus": 0,
+  "saves": {
+   "fort": {
+    "misc": 0
+   },
+   "ref": {
+    "misc": 0
+   },
+   "will": {
+    "misc": 0
+   }
+  },
+  "speed": {
+   "base": "",
+   "fly": "",
+   "burrow": "",
+   "swim": "",
+   "climb": ""
+  },
+  "skills": [
+   {
+    "name": "Acrobatics",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Appraise",
+    "spec": "",
+    "ability": "Int",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Autohypnosis",
+    "spec": "",
+    "ability": "Wis",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Bluff",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Climb",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Craft",
+    "spec": "",
+    "ability": "Int",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Diplomacy",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Disable Device",
+    "spec": "",
+    "ability": "Dex",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Disguise",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Escape Artist",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Fly",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Handle Animal",
+    "spec": "",
+    "ability": "Cha",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Heal",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Intimidate",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (arcana)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (dungeoneering)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (engineering)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (geography)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (history)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (local)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (martial)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (nature)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (nobility)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (planes)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (psionics)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (religion)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Linguistics",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Perception",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Perform",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Profession",
+    "spec": "",
+    "ability": "Wis",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Ride",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Sense Motive",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Sleight of Hand",
+    "spec": "",
+    "ability": "Dex",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Spellcraft",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Stealth",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Survival",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Swim",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Use Magic Device",
+    "spec": "",
+    "ability": "Cha",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   }
+  ],
+  "attacks": [],
+  "feats": [],
+  "specialQualities": "",
+  "notes": "",
+  "creature": "",
+  "archetypes": "",
+  "specialAbility": "",
+  "abilities": "",
+  "protector": false,
+  "scores": {
+   "str": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "dex": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "con": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "int": {
+    "base": null,
+    "evo": 0,
+    "misc": 0
+   },
+   "wis": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "cha": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   }
+  }
+ },
+ "animalCompanion": {
+  "name": "",
+  "size": "Medium",
+  "masterLevelPenalty": 0,
+  "attackAbility": "Str",
+  "attackBonus": 0,
+  "hp": {
+   "damage": 0,
+   "temp": 0,
+   "bonus": 0
+  },
+  "ac": {
+   "all": 0,
+   "touch": 0,
+   "ff": 0
+  },
+  "cmdOther": 0,
+  "initBonus": 0,
+  "saves": {
+   "fort": {
+    "misc": 0
+   },
+   "ref": {
+    "misc": 0
+   },
+   "will": {
+    "misc": 0
+   }
+  },
+  "speed": {
+   "base": "",
+   "fly": "",
+   "burrow": "",
+   "swim": "",
+   "climb": ""
+  },
+  "skills": [
+   {
+    "name": "Acrobatics",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Climb",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Escape Artist",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Fly",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Intimidate",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Perception",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Stealth",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Survival",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Swim",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   }
+  ],
+  "attacks": [],
+  "feats": [],
+  "specialQualities": "",
+  "notes": "",
+  "levelSource": "class",
+  "masterClass": "",
+  "levelOverride": null,
+  "creature": "",
+  "archetype": "",
+  "bodyType": "",
+  "hpAbility": "Con",
+  "goodSaves": {
+   "fort": true,
+   "ref": true,
+   "will": false
+  },
+  "scores": {
+   "str": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "dex": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "con": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "int": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "wis": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "cha": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   }
+  },
+  "abilityIncreases": [
+   {
+    "level": 4,
+    "ability": ""
+   },
+   {
+    "level": 9,
+    "ability": ""
+   },
+   {
+    "level": 14,
+    "ability": ""
+   },
+   {
+    "level": 20,
+    "ability": ""
+   }
+  ],
+  "tricks": [],
+  "items": {},
+  "slotless": []
+ },
+ "eidolon": {
+  "name": "",
+  "size": "Medium",
+  "masterLevelPenalty": 0,
+  "attackAbility": "Str",
+  "attackBonus": 0,
+  "hp": {
+   "damage": 0,
+   "temp": 0,
+   "bonus": 0
+  },
+  "ac": {
+   "all": 0,
+   "touch": 0,
+   "ff": 0
+  },
+  "cmdOther": 0,
+  "initBonus": 0,
+  "saves": {
+   "fort": {
+    "misc": 0
+   },
+   "ref": {
+    "misc": 0
+   },
+   "will": {
+    "misc": 0
+   }
+  },
+  "speed": {
+   "base": "",
+   "fly": "",
+   "burrow": "",
+   "swim": "",
+   "climb": ""
+  },
+  "skills": [
+   {
+    "name": "Acrobatics",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Appraise",
+    "spec": "",
+    "ability": "Int",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Autohypnosis",
+    "spec": "",
+    "ability": "Wis",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Bluff",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Climb",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Craft",
+    "spec": "",
+    "ability": "Int",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Diplomacy",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Disable Device",
+    "spec": "",
+    "ability": "Dex",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Disguise",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Escape Artist",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Fly",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Handle Animal",
+    "spec": "",
+    "ability": "Cha",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Heal",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Intimidate",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (arcana)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (dungeoneering)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (engineering)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (geography)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (history)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (local)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (martial)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (nature)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (nobility)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (planes)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (psionics)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Kn. (religion)",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Linguistics",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Perception",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Perform",
+    "spec": "",
+    "ability": "Cha",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Profession",
+    "spec": "",
+    "ability": "Wis",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Ride",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Sense Motive",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Sleight of Hand",
+    "spec": "",
+    "ability": "Dex",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Spellcraft",
+    "spec": "",
+    "ability": "Int",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Stealth",
+    "spec": "",
+    "ability": "Dex",
+    "trained": false,
+    "classSkill": true,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Survival",
+    "spec": "",
+    "ability": "Wis",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Swim",
+    "spec": "",
+    "ability": "Str",
+    "trained": false,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   },
+   {
+    "name": "Use Magic Device",
+    "spec": "",
+    "ability": "Cha",
+    "trained": true,
+    "classSkill": false,
+    "ranks": 0,
+    "misc": 0
+   }
+  ],
+  "attacks": [],
+  "feats": [],
+  "specialQualities": "",
+  "notes": "",
+  "masterClass": "",
+  "levelOverride": null,
+  "alignment": "",
+  "baseForm": "",
+  "subtype": "",
+  "hpAbility": "Con",
+  "goodSaves": {
+   "fort": true,
+   "ref": true,
+   "will": false
+  },
+  "scores": {
+   "str": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "dex": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "con": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "int": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "wis": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   },
+   "cha": {
+    "base": 10,
+    "evo": 0,
+    "misc": 0
+   }
+  },
+  "abilityIncreases": [
+   {
+    "level": 5,
+    "ability": ""
+   },
+   {
+    "level": 10,
+    "ability": ""
+   },
+   {
+    "level": 15,
+    "ability": ""
+   }
+  ],
+  "bonusEvoPoints": 0,
+  "evolutions": [],
+  "baseEvolutions": "",
+  "dr": "",
+  "resistances": "",
+  "immunities": ""
+ },
+ "vancian": {
+  "classes": [
+   {
+    "name": "Wizard",
+    "slotType": "",
+    "stat": "Int",
+    "stat2": "",
+    "types": "",
+    "casterLevelOverride": null,
+    "concentration": 0,
+    "spells": [
+     {
+      "level": 0,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 1,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 2,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 3,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 4,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 5,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 6,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 7,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 8,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     },
+     {
+      "level": 9,
+      "perDay": null,
+      "known": null,
+      "used": 0
+     }
+    ]
+   }
+  ],
+  "prepared": [],
+  "sourceExtras": []
+ },
+ "templates": [],
+ "techniques": {
+  "catalogue": [],
+  "selected": "",
+  "draft": {
+   "name": "",
+   "prepend1": "",
+   "prepend2": "",
+   "combatSpheres": [
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "combatTalents": [
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    }
+   ],
+   "magicSpheres": [
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "magicTalents": [
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    }
+   ],
+   "others": [
+    "",
+    "",
+    "",
+    "",
+    ""
+   ],
+   "otherFeatures": [
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    },
+    {
+     "sphere": "",
+     "talent": ""
+    }
+   ],
+   "craftingSkill": "",
+   "range": "",
+   "duration": "",
+   "target": "",
+   "saves": [
+    {
+     "save": "",
+     "type": ""
+    },
+    {
+     "save": "",
+     "type": ""
+    },
+    {
+     "save": "",
+     "type": ""
+    }
+   ],
+   "spellResistance": "",
+   "descriptions": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "extraSp": "",
+   "otherCost": "",
+   "subschool": "",
+   "status": "",
+   "instantInitiation": false,
+   "versatile": 0,
+   "signature": false
+  }
+ },
+ "cooking": {
+  "level": null,
+  "chef": "",
+  "dishName": "",
+  "entrees": [
+   "",
+   ""
+  ],
+  "flavors": [
+   "",
+   "",
+   ""
+  ],
+  "sides": [
+   "",
+   ""
+  ],
+  "aroma": [
+   ""
+  ],
+  "garnish": [
+   ""
+  ]
+ },
+ "specialtySkills": {
+  "knowledge": null,
+  "background": null,
+  "free": null
+ },
+ "traitSlots": {
+  "trait1": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "trait2": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "trait3": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "drawback1": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "trait4": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "drawback2": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "trait5": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "majorDrawback": {
+   "category": null,
+   "text": "",
+   "name": ""
+  },
+  "additional": []
+ },
+ "traitCategories": [],
+ "grantedFeats": {
+  "drawback": {
+   "name": "",
+   "note": ""
+  },
+  "specialty": {
+   "name": "",
+   "note": ""
+  },
+  "others": []
+ },
+ "uiPrefs": {
+  "hiddenTabs": {},
+  "tabOrder": [
+   "overview",
+   "stats",
+   "lore",
+   "skills",
+   "progression",
+   "features",
+   "primordia",
+   "trackers",
+   "gear"
+  ],
+  "viewMode": "build",
+  "collapsed": {
+   "cooking-ref": true,
+   "atk:melee": true,
+   "atk:ranged": true,
+   "atk:cmb": true
+  },
+  "colWidths": {}
+ },
+ "effects": [],
+ "buffs": [],
+ "meterStyles": {},
+ "mythicStatPicks": [],
+ "progression": {
+  "tracks": 2,
+  "levels": [
+   {
+    "level": 1,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 2,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 3,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 4,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 5,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 6,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 7,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 8,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 9,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 10,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 11,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 12,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 13,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 14,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 15,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 16,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 17,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 18,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 19,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   },
+   {
+    "level": 20,
+    "classes": [],
+    "computed": {
+     "hp": 0,
+     "ranks": 0,
+     "fort": 0,
+     "ref": 0,
+     "will": 0
+    }
+   }
+  ],
+  "classFeatures": {}
+ },
+ "primordia": {
+  "picks": {},
+  "alt": {},
+  "notes": ""
+ },
+ "gestalt": {
+  "saves": {
+   "fortitude": {
+    "base": 4,
+    "anyGood": false
+   },
+   "reflex": {
+    "base": 8,
+    "anyGood": true
+   },
+   "will": {
+    "base": 8,
+    "anyGood": true
+   }
+  },
+  "hpPerLevel": 6,
+  "ranksPerLevel": 2,
+  "babPerLevel": 6,
+  "bab": 6
+ },
+ "customTrackers": [
+  {
+   "minFormula": null,
+   "min": 0,
+   "style": null,
+   "id": "arcane_reservoir",
+   "name": "Arcane Reservoir",
+   "maxFormula": "floor(level / 2) + int.mod",
+   "max": 14,
+   "current": 0,
+   "refresh": "Daily",
+   "note": "",
+   "source": "player",
+   "createdAt": "2026-01-01T00:00:00.000Z",
+   "forwardedMax": 0,
+   "forwardedMin": 0,
+   "error": null
+  },
+  {
+   "minFormula": null,
+   "min": 0,
+   "style": null,
+   "id": "focus_points",
+   "name": "Focus Points",
+   "maxFormula": "3",
+   "max": 3,
+   "current": 0,
+   "refresh": "per encounter",
+   "note": "",
+   "source": "player",
+   "createdAt": "2026-01-01T00:00:00.000Z",
+   "forwardedMax": 0,
+   "forwardedMin": 0,
+   "error": null
+  }
+ ],
+ "sheetTrackerState": [
+  {
+   "id": "arcane_bond",
+   "current": 0
+  },
+  {
+   "id": "psionic_focus",
+   "current": 0
+  }
+ ],
+ "traits": []
+}
