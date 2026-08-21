@@ -108,7 +108,8 @@ app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/roll20.js        a row's totals as text a Roll20 chat box will roll
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry
 app/js/sheet-element.js the <character-sheet> custom element
-app/js/styles.js        component stylesheet (shadow-scoped)
+app/js/styles.js        loads the stylesheet and shares it as one adopted sheet
+app/css/sheet.css       the component stylesheet itself (shadow-scoped)
 tests/                  node test suites
 docs/                   the long-form documentation, one file per area (index below)
 tests/fixtures.mjs      where the suites find characters to test against

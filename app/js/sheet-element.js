@@ -51,7 +51,7 @@ import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
   applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype, swapLabel,
 } from './extensions.js';
-import { SHEET_CSS } from './styles.js';
+import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY, FORWARD_BY_DERIVED,
   BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
@@ -569,7 +569,9 @@ export class CharacterSheetElement extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
+    // The stylesheet is adopted once, here: it survives the innerHTML
+    // rewrites a render does, so no render has to put it back.
+    adoptSheetStyles(this.attachShadow({ mode: 'open' }));
   }
 
   /**
@@ -1001,7 +1003,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- rendering ---------------- */
 
   #renderShell() {
-    this.shadowRoot.innerHTML = `<style>${SHEET_CSS}</style><div class="wrap"><p class="empty">Loading…</p></div>`;
+    this.shadowRoot.innerHTML = `${SHEET_LINK}<div class="wrap"><p class="empty">Loading…</p></div>`;
   }
 
   /**
@@ -1030,7 +1032,7 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #fail(msg) {
-    this.shadowRoot.innerHTML = `<style>${SHEET_CSS}</style><div class="wrap"><div class="panel"><h3>Character sheet</h3><p class="empty">${msg}</p></div></div>`;
+    this.shadowRoot.innerHTML = `${SHEET_LINK}<div class="wrap"><div class="panel"><h3>Character sheet</h3><p class="empty">${msg}</p></div></div>`;
   }
 
   /**
@@ -1078,7 +1080,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
 
     this.shadowRoot.innerHTML = `
-      <style>${SHEET_CSS}</style>
+      ${SHEET_LINK}
       <div class="wrap">
         ${this.#header()}
         <nav class="tabs" role="tablist">
