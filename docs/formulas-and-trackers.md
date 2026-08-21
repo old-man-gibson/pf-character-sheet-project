@@ -330,6 +330,8 @@ recompute have anywhere to *put* an arriving bonus:
 | `attack.melee`, `attack.ranged`, `attack.cmb`, `attack` | one attack total, or all three |
 | `damage`, `damage.mult`, `damage.crit` | weapon damage — see below |
 | `weapon.melee.attack`, `weapon.axes.damage`, … | the same, on some weapons only — see below |
+| `speed.land`, `speed.fly`, … | one movement rate — see below |
+| `speed` | every speed the character has |
 | `class.<name>.level` | levels in one class — see below |
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
@@ -389,6 +391,50 @@ slugged name, so a rule written before the row had a handle keeps working.
 
 The character's own `attack.melee`, `attack.ranged` and `attack.cmb` reach the weapon rows
 too. One attack must not read two ways on two panels.
+
+### Movement rates
+
+Each row of the Speed panel publishes itself under the type it is typed into — *Land* is
+`speed.land`, *Fly (average)* is `speed.fly`, the manoeuvrability being a note on the
+speed rather than part of what it is called. The name is printed under the type on the
+row, because a name nobody can see is a name nobody uses. A rate with no type has no
+name: it is not a movement rate yet, and coining one would put a name on the sheet that
+means nothing today and something else tomorrow.
+
+What the name reads is the Final column **before conditions**, exactly as `saves.will`
+and `ac.total` are read before them. What a condition does to it is the dashboard's
+business and the panel's, not a formula's.
+
+**A rate may read the rates above it, and not the ones below.** *Your fly speed is equal
+to your land speed* is a real rule, and it wants writing down rather than copying out:
+
+```
+Fly    base 0    bonus  speed.land
+```
+
+The rows resolve top to bottom and the list of names grows as they do, which is what
+makes a cycle impossible rather than merely unlikely — the same line the inline names
+draw against the skills. Reading downward is refused out loud (*Unknown value
+"speed.fly"*) instead of quietly handing back last time's number.
+
+**Sending a bonus.** Naming a rate outright always lands, because that is how a rule
+*grants* one:
+
+```
+Boots of striding and springing {speed.land += 10}
+Wings {speed.fly += 60}
+Caltrops {speed.land -= 20}
+Fleet {speed.land += floor(level / 4) * 5}
+```
+
+`speed` on its own is **every speed the character has** — the rows reading above zero.
+*+10 ft. to your speeds* must not conjure flight out of an empty Fly row, which is the
+same line a buff's Speed row draws. What arrives is kept beside the bonus that was typed
+into the row rather than folded into it, and shows in gold under the total with its
+source in the tooltip.
+
+A forwarded bonus lands in the rate itself, so a condition that halves movement halves
+it too: entangled with the boots on, a 90-foot walk reads 100 and moves 50.
 
 ### Class levels
 

@@ -964,6 +964,53 @@ tr.future td { opacity: 0.55; }
 .listgrid { display: grid; gap: 5px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
 .listgrid .listrow { margin-bottom: 0; }
 
+/* The name a movement rate answers to in a formula, under the type it is
+   typed into. Shown because a name nobody can see is a name nobody uses --
+   the destination browser lists it too, but this is where it is being read. */
+table.speeds .speedname { margin-top: 2px; font-size: 0.66rem; line-height: 1.2; }
+table.speeds .speedname code { font-family: var(--cs-mono); }
+table.speeds .speedfwd { margin-top: 2px; }
+
+/* Customized weapons: the tracks run across, not down, because choosing
+   between them is the point -- an armiger draws the naginata instead of the
+   handwraps, and the two want to be read side by side. Narrow cards, because
+   each holds a name and a short column of talents and nothing else. */
+.weaponsets { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); }
+.weaponset {
+  border: 1px solid var(--cs-line); border-radius: 6px; padding: 6px 7px;
+  min-width: 0; background: var(--cs-panel-2);
+}
+/* The one in hand. A left edge rather than a fill, so the green on its talent
+   cells still reads as the talent slots being open. */
+.weaponset.drawn { border-color: var(--cs-good); box-shadow: inset 3px 0 0 var(--cs-good); }
+/* Past what this level customizes: kept, greyed, counting for nothing. */
+.weaponset.spare { opacity: 0.5; }
+.weaponhead { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+.weaponhead input[type="text"] { flex: 1; min-width: 0; font-weight: 600; }
+.weaponhead .chk { flex: 0 0 auto; white-space: nowrap; font-size: 0.72rem; color: var(--cs-muted); }
+.weaponset.drawn .weaponhead .chk { color: var(--cs-good); }
+.weaponset table.talents col.sphere { width: 7.6rem; }
+.weaponset table.talents col.talent { width: auto; }
+.weaponset .weapondrawback { margin: 5px 0 0; }
+.weaponset .weapondrawback input[type="text"] { flex: 1; min-width: 0; }
+.weaponset .weapondrawback .chk { flex: 0 0 auto; font-size: 0.72rem; color: var(--cs-muted); }
+/* A sphere the track may not learn at all: nearly always an archetype that
+   widens it and has not been added yet, so the cell is marked and kept rather
+   than emptied. The sheet's gold against the base check's red, because the two
+   are different questions and a reader has to be able to tell which is being
+   asked -- one is a rule broken, the other a setting not made yet. */
+td.offlist select {
+  border-color: var(--cs-formula-strong);
+  background: var(--cs-accent-soft);
+}
+
+/* A talent whose sphere has no base -- on this weapon or on the character.
+   Underlined rather than reddened: it is a rule the sheet is sure of, but the
+   cell is still perfectly editable and is not an error until it is finished. */
+td.needsbase .prose-view, td.needsbase textarea {
+  text-decoration: underline wavy var(--cs-bad); text-underline-offset: 3px;
+}
+
 /* ---------- collapse / system tabs / trait slots / budget ---------- */
 .panel.collapsed { padding-bottom: 8px; opacity: 0.85; }
 .panel > h3 [data-collapse] { margin-left: auto; padding: 1px 8px; }

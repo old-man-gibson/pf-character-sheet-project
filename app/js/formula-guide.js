@@ -46,13 +46,13 @@ const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
 const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon']);
 const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves']);
 const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed']);
-const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class']);
+const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed']);
 
 /** The groups, in the order the browser shows them. */
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
   { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
-  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, mythic tier, base attack bonus, and levels in each class.' },
+  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, movement rates, mythic tier, base attack bonus, and levels in each class.' },
   { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
@@ -77,7 +77,7 @@ export const TARGET_SECTIONS = [
   { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes and the three saves.' },
   { key: 'ability', label: 'Ability scores', blurb: 'The score itself — so everything built on it moves with it.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
-  { key: 'character', label: 'The character', blurb: 'Initiative, and levels in a class.' },
+  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, and levels in a class.' },
   { key: 'tracker', label: 'Trackers', blurb: 'How big a pool is — its max and min, never what is currently in it.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -89,7 +89,7 @@ export function classifyTarget(name) {
   if (head === 'attack') return 'attack';
   if (head === 'skill') return 'skill';
   if (head === 'tracker') return 'tracker';
-  if (head === 'class' || head === 'initiative') return 'character';
+  if (head === 'class' || head === 'initiative' || head === 'speed') return 'character';
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
   return 'other';

@@ -41,6 +41,81 @@ counted once, on the side its **sphere** belongs to, instead of all twenty landi
 both sphere tables. Any class can be blended (or split again) from the Blended
 checkbox on its class head.
 
+**Customized weapons** — talents that arrive on several tracks at once, with one of them
+live. Every other talent source here is a list that grows and they all add up; the
+armiger's is not. She customizes three weapons, each of which learns its own talents, and
+*may only benefit from the talents granted by one customized weapon at a time*. So it is
+`sets` lists that each grow, and a switch saying which is in hand.
+
+Two counting rules describe the whole thing, and they are in the panel head where the
+class table's words were:
+
+| | starts at | goes up at | reads |
+|---|---|---|---|
+| **Weapons** | 3 | `11, 19` | 3 weapons, a fourth at 11th, a fifth at 19th |
+| **Talents each** | 1 | `3, +4` | one each, another at 3rd and every 4 levels after |
+
+A third setting says **which spheres it may teach at all**: martial, magical, or both. A
+customized weapon teaches its wielder to fight with it, so martial is the default and the
+armiger's own is exactly that; the archetype that lets those weapons carry magic says so in
+its own block (`"tracks": {"spheres": "both"}`), because that is a fact about the archetype
+rather than about talent tracks in general. Nothing in the engine knows either name.
+
+`gainsAt` is an ordinary level rule (the same syntax the Progression tab's feature columns
+use), so `3, +4` is 3rd and every fourth level thereafter and the count at any level is the
+start plus every step reached. Those two lines reproduce the armiger's table column for
+column, 1st to 20th, and nothing about weapons is written into the engine: a class block in
+a pack states them under `tracks` (see [Extensions](extensions.md)) and attaching copies
+them onto the character, or they are typed straight into the head.
+
+The weapons are laid out across rather than down, because choosing between them is the
+whole point and because it is how the workbooks wrote it — two columns of a spare tab
+headed *Weapon*. Each card takes a name, its talents with their spheres (from whichever
+lists the track may teach), and a drawback. **Drawn / Stowed** is a radio, one per track.
+
+Three different questions get asked of an armiger's spheres, and they get three different
+answers:
+
+- **What is live** — the class ladders, the bonus talents, the tradition, and whichever
+  weapon is drawn. Drives the Sphere BAB/DC tables and the sphere badges, and changes the
+  moment another weapon comes out.
+- **What she owns in her own right** — the same, with no weapon at all. This is what a
+  prerequisite reads and what the bonus skill ranks pay out on, because a customized weapon
+  grants no skill retraining and its talents may not qualify for feats.
+- **Everything the tracks have granted** — every weapon, drawn or stowed. Unarmed damage
+  reads this one: a die progression is a constant, and the armiger "does not suddenly lose
+  lingering benefits of these talents because they sheathed their knife and drew their
+  sword".
+
+**A sphere off the list is marked, not dropped.** Widening or narrowing the setting is one
+dropdown, and a row already holding a sphere the track may no longer teach keeps it, marked
+in the sheet's gold with the reason on it — it is nearly always an archetype nobody has
+added yet, and throwing the row away would punish the player for the order they did things
+in. Two different marks for two different questions: gold for a setting not made, red for a
+rule broken.
+
+**A talent needs its sphere's base**, on the same weapon or on the character. A row whose
+sphere has neither is underlined in red and says why — the one rule that actually bites in
+play. It is three-valued like every other requirement here: a row with nothing written in
+it yet is unknown, not wrong, and is left alone.
+
+**A drawback opens one more row on that weapon**, which is what a drawback on a
+weapon-granted sphere is for; the tick beside it buys it off and spends the row again.
+
+Rows are opened and folded shut, never emptied. Drop the level and the fifth row on every
+weapon greys out with what was written still on it; a row or a weapon that closed with
+nothing in it was never anything, and goes. The switch always lands on a weapon that
+exists, and stays where it is whenever it can — opening a fourth weapon never changes what
+is drawn.
+
+> A workbook with nowhere to put this put it where it could: Bryva's has an *Armiger
+> customization* block among her **casting** classes — no casting type, no talent rate, not
+> one talent on its rows — and the weapons themselves on a spare corner of the Item
+> Crafting tab. Read as written it is a caster who never cast anything, and it turned up in
+> every list of her classes. An entirely empty training block whose name ends in
+> *customization* is now read as what it is: the block goes and the class it names gets a
+> track, waiting for its two rules.
+
 **Traditions.** Martial: name + granted talents with spheres. Casting: drawbacks and
 bought-off lists ("… x2" counts double; each drawback feat buys off two), with the
 boon math computed live: `effective = drawbacks − 2×feats`, SP tier = min(effective, 5),

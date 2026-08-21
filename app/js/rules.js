@@ -382,6 +382,20 @@ export function sphereSkillLabel(def) {
 }
 
 /**
+ * Is this talent the sphere itself rather than something inside it?
+ *
+ * Sheets write a base sphere as the sphere's own name and the word: "Brute
+ * Sphere", "Guardian Sphere (Patrol)", and now and then a bare "(Base)" in the
+ * style of the skill-rank table. No talent within a sphere is named that way,
+ * which is what makes the reading safe.
+ */
+export function isBasePick(text) {
+  const raw = String(text ?? '').trim();
+  const named = raw.replace(/\([^)]*\)/g, ' ').trim();
+  return /\bspheres?\b/i.test(named) || /^\(?base\)?$/i.test(raw);
+}
+
+/**
  * Does one talent name answer to another? Loosely, because names are typed by
  * hand and come with their choices attached: "Guardian Sphere (Challenge
  * package -4/+2)" carries "Challenge" the same as a bare "Challenge" does, and
@@ -1235,6 +1249,92 @@ export function summariseLevels(levels) {
     else runs.push([l, l]);
   }
   return runs.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(', ');
+}
+
+/* ----- parallel talent tracks (the armiger's customized weapons) ----- */
+
+/**
+ * A class whose talents arrive on several tracks at once, with one of them
+ * live: the armiger's customized weapons.
+ *
+ * Every other talent source on the sheet is a list that grows -- a ladder, a
+ * tradition, the bonus talents -- and they add up. This does not. An armiger
+ * customizes three weapons, each of which learns its own talents, and she
+ * "may only benefit from the talents granted by one customized weapon at a
+ * time". So it is `sets` lists that each grow, and a switch saying which one
+ * is being read.
+ *
+ * Two counting rules describe it, which is how the class table says it in
+ * prose and so how a pack writes it:
+ *
+ *   sets     how many tracks there are          3, another at 11th and 19th
+ *   talents  how many talents each one holds    1, another at 3rd and every 4th
+ *
+ * Each is a starting count plus a level rule naming where the count goes up,
+ * so the whole armiger reads `{ sets: {start: 3, gainsAt: '11, 19'},
+ * talents: {start: 1, gainsAt: '3, +4'} }` and nothing about weapons is
+ * written into the engine.
+ */
+export function normalizeTalentTracks(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  // A rule written as a bare string is its gainsAt; the start comes from the
+  // shape being described, since a track nobody counts still has its first.
+  const rule = (v, fallback) => {
+    const src = typeof v === 'object' && v !== null ? v : { gainsAt: v };
+    const start = Math.floor(Number(src.start));
+    return {
+      start: Number.isFinite(start) ? Math.max(0, start) : fallback,
+      gainsAt: String(src.gainsAt ?? '').trim(),
+    };
+  };
+  return {
+    name: String(spec.name || '').trim() || 'Customized weapon',
+    // What one track *is*, so the panel can call its rows something: a weapon,
+    // a companion, a stance.
+    unit: String(spec.unit || '').trim() || 'weapon',
+    sets: rule(spec.sets, 1),
+    talents: rule(spec.talents, 1),
+    // Which sphere lists the track may learn from. Martial by default: a
+    // customized weapon teaches its wielder to fight with it, and a class
+    // whose weapons teach magic says so -- the armiger's does only with the
+    // archetype that grants it, which is a fact about that archetype and so
+    // lives in its pack rather than in here.
+    spheres: TRACK_SPHERE_SIDES.includes(spec.spheres) ? spec.spheres : 'combat',
+    text: String(spec.text || ''),
+  };
+}
+
+/** The sphere lists a track may draw on, and what each is called. */
+export const TRACK_SPHERE_SIDES = ['combat', 'magic', 'both'];
+export const TRACK_SPHERE_LABELS = {
+  combat: 'Martial only', magic: 'Magical only', both: 'Martial and magical',
+};
+/** The same three in a sentence, where "Martial only spheres" does not read. */
+export const TRACK_SPHERE_NOUNS = {
+  combat: 'martial', magic: 'magical', both: 'martial and magical',
+};
+
+/** The spheres a track may pick from. */
+export function trackSpheres(spec) {
+  if (spec?.spheres === 'both') return BLENDED_SPHERES;
+  if (spec?.spheres === 'magic') return MAGIC_SPHERES;
+  return COMBAT_SPHERES;
+}
+
+/**
+ * What a counting rule has reached by `classLevel`: its start, plus every
+ * level named by `gainsAt` at or below it.
+ *
+ * Zero class levels is zero of everything -- a character who has not taken the
+ * class yet has no tracks, not the starting count of them.
+ */
+export function trackCount(rule, classLevel) {
+  const level = Math.max(0, Math.floor(Number(classLevel) || 0));
+  if (!level) return 0;
+  const start = Math.max(0, Math.floor(Number(rule?.start) || 0));
+  const at = String(rule?.gainsAt ?? '').trim();
+  if (!at) return start;
+  return start + levelRuleLevels(parseLevelRule(at)).filter((l) => l <= level).length;
 }
 
 /* ----- unarmed practitioner damage (dataSheet!F80:L101) ----- */

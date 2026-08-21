@@ -37,6 +37,7 @@ import {
   SAVE_BONUS_TYPES, AC_BONUS_TYPES, abpDefence,
   cleanSkillVariant, skillLabel, skillVariantKind, performCategory,
   spBoonPoints, boonStep, sphereSide, drawbackWeight, unarmedDice, UNARMED_SPHERES,
+  normalizeTalentTracks, trackCount, isBasePick, trackSpheres, TRACK_SPHERE_SIDES,
   TALENTED_KNUCKLE_TALENTS, BRAWLERS_VEST_TALENTS, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL,
   UNORTHODOX_FEAT, UNORTHODOX_SPHERES_PER_FEAT,
   TRAIT_SLOTS, gestaltSaveBase,
@@ -97,6 +98,22 @@ export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec
  */
 /** The name a formula forwards a bonus to a class's effective level under. */
 export const classForwardKey = (name) => `class.${slug(name)}.level`;
+
+/**
+ * The name a formula calls a movement rate by, worked out from its type.
+ *
+ * "Land" is `speed.land` and "Fly (average)" is `speed.fly` -- cut at the
+ * first bracket the way a weapon's name is, because the manoeuvrability is a
+ * note on the speed rather than part of what it is called.
+ *
+ * A row with no type has no name. It is not a movement rate yet, and coining
+ * one for it would put a name on the sheet that means nothing today and means
+ * something else the moment the row is typed into.
+ */
+export function speedForwardKey(sp) {
+  const head = String(sp?.type ?? '').split(/[(,/[]/)[0].trim();
+  return head ? `speed.${slug(head)}` : null;
+}
 
 export function weaponHandle(name) {
   const strip = (v) => String(v ?? '').replace(/['’]/g, '');
@@ -978,6 +995,10 @@ export function disciplineEntries(name) {
  * ------------------------------------------------------------------ */
 
 const normalizeName = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** A talent row nobody has written anything into. */
+const isBlankTalentRow = (row) => !String(row?.talent ?? '').trim()
+  && !String(row?.sphere ?? '').trim() && !String(row?.notes ?? '').trim();
 
 /**
  * Edit distance, abandoned once it cannot come in under `limit`.
@@ -4115,6 +4136,42 @@ export class Character {
     if (d.identity.nativeLanguages === undefined) d.identity.nativeLanguages = null;
     if (d.identity.languageExtra === undefined) d.identity.languageExtra = 0;
 
+    // A workbook with nowhere to put its customized weapons put them where it
+    // could. Bryva's has an "Armiger customization" block sitting among her
+    // casting classes -- no casting type, no talent rate, not one talent on
+    // its twenty rows -- and the weapons themselves on a spare corner of the
+    // Item Crafting tab, headed Weapon. Read as written it is a caster who
+    // never cast anything, and it turns up in every list of her classes.
+    //
+    // It is not one. It is the name of a talent track, so it becomes one: the
+    // empty block goes and the class it names gets a track of its own, waiting
+    // for the two counting rules its pack states.
+    //
+    // Only an entirely empty block is read this way -- anything typed into it
+    // is somebody's data. Hers sits on the extended-level page and so has no
+    // level rows at all, which an extended block never does; empty is empty
+    // either way.
+    const emptyTrainingClass = (cls) => !cls.type && !cls.talentsPerLevel && !cls.mod1 && !cls.mod2
+      && !cls.blended && cls.classLevelsOverride == null
+      && (cls.levels || []).every((lv) => !lv.talent && !lv.sphere && !lv.notes);
+    if (d.training?.combat) {
+      const combat = d.training.combat;
+      if (!Array.isArray(combat.customizations)) combat.customizations = [];
+      for (const sideKey of ['combat', 'magic']) {
+        const side = d.training[sideKey];
+        if (!Array.isArray(side?.classes)) continue;
+        for (let i = side.classes.length - 1; i >= 0; i--) {
+          const cls = side.classes[i];
+          const named = /^(.*?)\s+customi[sz]ations?$/i.exec(String(cls?.name || '').trim());
+          if (!named || !emptyTrainingClass(cls)) continue;
+          const owner = named[1].trim();
+          side.classes.splice(i, 1);
+          if (combat.customizations.some((b) => normalizeName(b.className) === normalizeName(owner))) continue;
+          combat.customizations.push({ className: owner, active: 0, sets: [], spec: null });
+        }
+      }
+    }
+
     // Conditions. A character with none at all gets the standard list to tick;
     // an imported one keeps the workbook's own labels ("Fatigue", "Grapple")
     // because those are what its named ranges and its export use. Values are
@@ -5015,9 +5072,12 @@ export class Character {
   #forwardsEarly() {
     // A class level is early for the same reason an ability score is: the
     // training pass reads it before any prose has been looked at, and the
-    // casting tables it feeds are downstream of that.
+    // casting tables it feeds are downstream of that. A speed is early because
+    // the speeds resolve before the prose too, and because another speed may
+    // be written to read it.
     return Object.entries(this.contributions?.totals || {})
-      .some(([name, value]) => value && (FORWARD_EARLY.has(name) || name.startsWith('class.')));
+      .some(([name, value]) => value
+        && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')));
   }
 
   #computePass() {
@@ -6768,6 +6828,14 @@ export class Character {
     const speeds = this.data.identity?.speeds;
     if (!Array.isArray(speeds) || !speeds.length) return;
     const scope = this.scope();
+    // A speed may read the speeds *above* it, and not the ones below. "Your
+    // fly speed is equal to your land speed" is a real rule and wants saying
+    // that way rather than restating a number that will move; a rule reading
+    // downward would be a cycle waiting to happen. So the rows resolve top to
+    // bottom and the scope grows as they do, which makes the cycle impossible
+    // rather than merely unlikely -- the same line the inline names draw
+    // against the skills.
+    scope.speed = {};
     for (const sp of speeds) {
       sp.bonusError = null;
       let bonus = 0;
@@ -6782,7 +6850,14 @@ export class Character {
         bonus = Number(sp.bonus) || 0;
       }
       sp.bonusNum = bonus;
-      sp.final = (Number(sp.base) || 0) + bonus;
+      // A bonus forwarded here from elsewhere on the sheet is kept beside the
+      // one typed in, never folded into it -- the same way a skill keeps its
+      // Misc and its forwarded amount apart, and for the same reason: the
+      // field has to go on saying what was written in it.
+      sp.handle = speedForwardKey(sp);
+      sp.forwarded = sp.handle ? this.#forwarded(sp.handle) : 0;
+      sp.final = (Number(sp.base) || 0) + bonus + sp.forwarded;
+      if (sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
     }
   }
 
@@ -9108,6 +9183,213 @@ export class Character {
     return count ? { ...t.talents, count } : null;
   }
 
+  /* ---------------- parallel talent tracks ---------------- */
+
+  /**
+   * A class's own levels at or below the character's.
+   *
+   * Not `classLevelCount`, which adds the "counts as levels higher"
+   * forwarding: a talent budget is deliberately not moved by an
+   * effective-level rule, the same line the casting block draws, and for the
+   * same reason -- counting as two levels higher says what the class can do,
+   * not that it was handed two more levels to spend.
+   */
+  #ownClassLevels(className) {
+    const match = closestName(className, this.progressionClasses());
+    if (!match) return 0;
+    const cap = Number(this.data.identity?.level) || 20;
+    return this.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+  }
+
+  /**
+   * Size each parallel talent track, and settle which one is live.
+   *
+   * The counts are computed and never stored, exactly as a class ladder's
+   * granted rows are: taking the next armiger level opens the next weapon and
+   * one more row on every weapon at once, and losing it folds them shut again
+   * with what was written in them still there.
+   *
+   * A weapon carrying a drawback holds one extra row, because that is what a
+   * drawback on a weapon-granted sphere is for; buying it off spends the row
+   * again, which is why the tick is beside the drawback rather than replacing
+   * it.
+   */
+  #recomputeCustomizations(side) {
+    if (!Array.isArray(side.customizations)) side.customizations = [];
+    for (const block of side.customizations) {
+      const spec = normalizeTalentTracks(block.spec) || normalizeTalentTracks({});
+      block.spec = spec;
+      block.classLevels = this.#ownClassLevels(block.className);
+      block.setCount = trackCount(spec.sets, block.classLevels);
+      block.talentCount = trackCount(spec.talents, block.classLevels);
+
+      if (!Array.isArray(block.sets)) block.sets = [];
+      while (block.sets.length < block.setCount) block.sets.push({ weapon: '', talents: [] });
+      block.sets.forEach((set, i) => {
+        // A set past the count is one the character used to be able to keep --
+        // a level lost to a rebuild, an override typed down. It is greyed and
+        // counts for nothing, but it is not thrown away.
+        set.spare = i >= block.setCount;
+        set.drawback = String(set.drawback ?? '');
+        set.boughtOff = !!set.boughtOff;
+        set.bonusTalent = set.drawback.trim() && !set.boughtOff ? 1 : 0;
+        const rows = set.spare ? 0 : block.talentCount + set.bonusTalent;
+        if (!Array.isArray(set.talents)) set.talents = [];
+        while (set.talents.length < rows) set.talents.push({ talent: '', sphere: null, notes: '' });
+        // A row that closed with nothing in it was never anything; one that
+        // closed with a talent written on it is kept and greyed, so a level
+        // typed down by mistake costs nobody their notes.
+        while (set.talents.length > rows && isBlankTalentRow(set.talents[set.talents.length - 1])) {
+          set.talents.pop();
+        }
+        set.talents.forEach((row, ri) => { row.granted = ri < rows; });
+      });
+      // The same for a weapon nobody ever named.
+      while (block.sets.length > block.setCount
+        && block.sets[block.sets.length - 1].spare
+        && !String(block.sets[block.sets.length - 1].weapon || '').trim()
+        && !(block.sets[block.sets.length - 1].talents || []).length) {
+        block.sets.pop();
+      }
+      // The switch must land on a weapon that exists. It stays where it is
+      // whenever it can, so opening a fourth weapon never moves what is drawn.
+      const live = Math.floor(Number(block.active) || 0);
+      block.active = block.setCount ? Math.min(Math.max(0, live), block.setCount - 1) : 0;
+    }
+  }
+
+  /**
+   * Flag the rule that actually bites: a weapon may not learn a talent of a
+   * sphere it has no base in.
+   *
+   * "A customized weapon must possess a base sphere before additional talents
+   * of that sphere may be added unless the armiger possesses that sphere" --
+   * so the question is asked of the weapon first and of the character second,
+   * and the character's half reads `tallyOwn`, since a sphere she only has
+   * from *another* weapon is not one she possesses.
+   *
+   * Three-valued like every other requirement here: a row with no talent
+   * written in it yet is unknown, not wrong, and is left alone.
+   */
+  #checkCustomizationBases(t) {
+    const owned = (sphere) => ((t.combat?.tallyOwn || {})[sphere] || 0) > 0
+      || ((t.magic?.tallyOwn || {})[sphere] || 0) > 0;
+    for (const block of t.combat?.customizations || []) {
+      // What the track may learn from at all. A sphere outside it is flagged
+      // and kept, never dropped: it is nearly always a track whose archetype
+      // has not been added yet, and throwing the row away would lose the
+      // player's work to punish them for the order they did things in.
+      const allowed = new Set(trackSpheres(block.spec));
+      for (const set of block.sets || []) {
+        const bases = new Set((set.talents || [])
+          .filter((r) => r.granted !== false && isBasePick(r.talent))
+          .map((r) => String(r.sphere || '').trim())
+          .filter(Boolean));
+        for (const row of set.talents || []) {
+          const sphere = String(row.sphere || '').trim();
+          row.offList = !!sphere && row.granted !== false && !allowed.has(sphere);
+          row.needsBase = !!sphere && !!String(row.talent || '').trim()
+            && row.granted !== false && !isBasePick(row.talent)
+            && !bases.has(sphere) && !owned(sphere);
+        }
+      }
+    }
+  }
+
+  /**
+   * Start a track for a class, or hand its spec to the one already there.
+   *
+   * A pack's class block carries the spec, and attaching copies it in like
+   * everything else a pack lands, so the character travels without the pack.
+   * Adding the same class twice tunes what is there rather than making a
+   * second block -- a class grants its customizations once.
+   */
+  addCustomization(className, spec = {}) {
+    const t = this.data.training;
+    if (!t?.combat) return null;
+    if (!Array.isArray(t.combat.customizations)) t.combat.customizations = [];
+    const name = String(className ?? '').trim();
+    const at = t.combat.customizations.findIndex((b) => normalizeName(b.className) === normalizeName(name));
+    const block = at === -1
+      ? { className: name, active: 0, sets: [] }
+      : t.combat.customizations[at];
+    block.spec = normalizeTalentTracks(spec) || normalizeTalentTracks({});
+    if (at === -1) t.combat.customizations.push(block);
+    this.recompute();
+    this.#emit({ type: 'customization-add', className: name });
+    return block;
+  }
+
+  /** The track a class grants, or null where it grants none. */
+  customizationFor(className) {
+    return (this.data.training?.combat?.customizations || [])
+      .find((b) => normalizeName(b.className) === normalizeName(className)) || null;
+  }
+
+  /**
+   * Change an existing track's spec, and hand back what it was.
+   *
+   * Only a track that is there: this is the door an archetype comes through,
+   * and an archetype that merely widens the sphere list has no counting rules
+   * of its own to invent one with. The returned spec is what puts it back when
+   * the archetype comes off.
+   */
+  setCustomizationSpec(className, spec) {
+    const block = this.customizationFor(className);
+    if (!block) return null;
+    const before = block.spec ? JSON.parse(JSON.stringify(block.spec)) : null;
+    block.spec = normalizeTalentTracks(spec) || normalizeTalentTracks({});
+    this.recompute();
+    this.#emit({ type: 'customization-spec', className, spec: block.spec });
+    return before;
+  }
+
+  removeCustomization(index) {
+    const list = this.data.training?.combat?.customizations;
+    if (!list?.[index]) return this;
+    list.splice(index, 1);
+    this.recompute();
+    this.#emit({ type: 'customization-remove', index });
+    return this;
+  }
+
+  /**
+   * Edit one of the two counting rules. `key` is 'sets' or 'talents', `field`
+   * its start or the levels it goes up at.
+   */
+  setCustomizationRule(index, key, field, value) {
+    const block = this.data.training?.combat?.customizations?.[index];
+    if (!block) return this;
+    if (!block.spec) block.spec = normalizeTalentTracks({});
+    // Which sphere lists the track may learn from is a property of the track
+    // rather than of either counting rule, so it comes through the same door
+    // with no field of its own.
+    if (key === 'spheres') {
+      if (!TRACK_SPHERE_SIDES.includes(field)) return this;
+      block.spec.spheres = field;
+      this.recompute();
+      this.#emit({ type: 'customization-rule', index, key, field });
+      return this;
+    }
+    if (!['sets', 'talents'].includes(key)) return this;
+    if (field === 'start') block.spec[key].start = Math.max(0, Math.floor(Number(value) || 0));
+    else if (field === 'gainsAt') block.spec[key].gainsAt = String(value ?? '').trim();
+    else return this;
+    this.recompute();
+    this.#emit({ type: 'customization-rule', index, key, field, value });
+    return this;
+  }
+
+  /** Which weapon of a track is live. */
+  setCustomizationActive(index, setIndex) {
+    const block = this.data.training?.combat?.customizations?.[index];
+    if (!block) return this;
+    block.active = Math.max(0, Math.floor(Number(setIndex) || 0));
+    this.recompute();
+    this.#emit({ type: 'customization-active', index, setIndex: block.active });
+    return this;
+  }
+
   /**
    * Count sphere occurrences across a training side's talent sources.
    *
@@ -9115,7 +9397,7 @@ export class Character {
    * technique talents -- the only source that has to know -- are keyed off the
    * caller's `sideKey`.
    */
-  #sphereTally(side, { includeTradition = true, sideKey = null } = {}) {
+  #sphereTally(side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
     const tally = {};
     const bump = (s, n = 1) => {
       if (typeof s === 'string' && s.trim()) tally[s.trim()] = (tally[s.trim()] || 0) + n;
@@ -9143,6 +9425,23 @@ export class Character {
     for (const b of side.bonusTalents || []) bump(b.sphere);
     if (includeTradition) {
       for (const e of side.tradition?.entries || []) bump(e.sphere);
+    }
+    // A parallel track -- an armiger's customized weapon -- is a talent source
+    // with a switch, so it is the one source that has to be told which
+    // question is being asked: what is live right now ('active'), everything
+    // the tracks have been granted ('all'), or nothing of theirs at all
+    // ('none' -- what the character possesses in her own right). A track lives
+    // on the martial side whichever sphere it teaches, so each row lands on
+    // the side its sphere belongs to, the way a blended class's talents do.
+    if (customizations !== 'none') {
+      for (const block of this.data.training?.combat?.customizations || []) {
+        (block.sets || []).forEach((set, i) => {
+          if (set.spare || (customizations === 'active' && i !== block.active)) return;
+          for (const row of set.talents || []) {
+            if (row.granted !== false && sphereSide(row.sphere, 'combat') === sideKey) bump(row.sphere);
+          }
+        });
+      }
     }
     const technique = this.#primordiaTalents();
     if (technique && technique.side === sideKey) bump(technique.sphere, technique.count);
@@ -9263,6 +9562,9 @@ export class Character {
     const level = Number(c.identity.level) || 0;
     const mod = (name) => statMod(c, name, null);
     this.#pairBlended();
+    // Sized before anything counts them, since the tallies below read the rows
+    // this opens.
+    if (t.combat) this.#recomputeCustomizations(t.combat);
 
     for (const sideKey of ['combat', 'magic']) {
       const side = t[sideKey];
@@ -9320,8 +9622,20 @@ export class Character {
         cls.classLevelsCurrent = classLevelsCurrent;
         cls.totalTalents = Math.floor(cum);
       }
+      // Two readings of the same spheres, because two different questions get
+      // asked of them. `tally` is what is live -- the class ladders, the bonus
+      // talents, the tradition, and whichever customized weapon is drawn --
+      // and drives the sphere tables. `tallyOwn` leaves the weapons out
+      // entirely: it is what the character possesses in her own right, which
+      // is what a prerequisite asks about and what the bonus skill ranks pay
+      // out on, since talents from a customized weapon may not qualify for
+      // feats and never grant skill retraining. (There is a third question --
+      // every weapon at once, drawn or stowed -- and the unarmed block below
+      // is the only thing that asks it, so it asks on the spot.)
       side.tally = this.#sphereTally(side, { sideKey });
+      side.tallyOwn = this.#sphereTally(side, { sideKey, customizations: 'none' });
     }
+    this.#checkCustomizationBases(t);
 
     // ----- combat side -----
     if (t.combat) {
@@ -9535,7 +9849,10 @@ export class Character {
     }
 
     for (const [sphere, row] of out) {
-      const total = Number((side?.tally || {})[sphere]) || 0;
+      // The named sources above are the character's own, so the count they are
+      // measured against has to be too -- a customized weapon's talents are
+      // neither named here nor countable as unnamed ones.
+      const total = Number((side?.tallyOwn || side?.tally || {})[sphere]) || 0;
       row.unnamed = Math.max(0, total - row.names.length - row.choices.length);
     }
     return out;
@@ -9556,7 +9873,10 @@ export class Character {
     const t = this.data.training?.combat;
     if (!t) return map;
     const level = Number(this.data.identity.level) || 0;
-    const tally = t.tally || {};
+    // Her own talents, never a customized weapon's: "spheres and talents that
+    // grant skill retraining never grant it when gained via a customized
+    // weapon".
+    const tally = t.tallyOwn || t.tally || {};
     const lightBody = this.data.identity.primordiaTechnique === 'Light Body';
     const known = this.#sphereTalentKnowledge(t, 'combat');
     const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
@@ -9685,8 +10005,14 @@ export class Character {
     delete u.veilEssence;
     // The sheet counts class and bonus talents only, never tradition ones;
     // includeTradition is an explicit player toggle on top of that.
+    //
+    // Every customized weapon counts here, drawn or stowed -- the third of the
+    // three questions the tracks get asked, and the only place that asks it. A
+    // die progression is a constant, and the armiger "does not suddenly lose
+    // lingering benefits of these talents because they sheathed their knife
+    // and drew their sword": the talents are still assigned to the weapon.
     const tally = this.#sphereTally(t, {
-      includeTradition: !!u.includeTradition, sideKey: 'combat',
+      includeTradition: !!u.includeTradition, sideKey: 'combat', customizations: 'all',
     });
 
     const per = {};
@@ -9834,6 +10160,13 @@ export class Character {
         spAvailable: Number(c.training?.magic?.availableSP ?? c.training?.magic?.totalSP) || 0,
       },
       practitioner: { dc: Number(c.training?.combat?.practitionerDC) || 0 },
+      // Movement, under the type each rate is called by: speed.land,
+      // speed.fly. "Half your speed", "equal to your land speed" and "10 ft.
+      // per point of Dex bonus" are all rules about a number that moves with
+      // every feature and buff that touches it, and a sheet that cannot be
+      // asked for it leaves them to be typed in and go stale. Read before
+      // conditions, exactly as the saves and the armour classes are.
+      speed: {},
       unarmed: {
         talents: Number(c.training?.combat?.unarmed?.effectiveTalents) || 0,
         dice: c.training?.combat?.unarmed?.dice || '',
@@ -9902,6 +10235,11 @@ export class Character {
         temp: a.tempScore,
         tempMod: a.totalMod,
       };
+    }
+
+    for (const sp of c.identity?.speeds || []) {
+      const key = speedForwardKey(sp);
+      if (key) s.speed[key.slice('speed.'.length)] = Number(sp.final) || 0;
     }
 
     for (const sk of c.skills) {
@@ -10008,6 +10346,26 @@ export class Character {
         const name = `tracker.${t.id}.${edge}`;
         if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`);
       }
+    }
+
+    // Movement, by the same name the scope publishes it under. The family is
+    // "every speed you have": a row reading zero is a speed the character has
+    // not got, and "+10 ft. to your speeds" must not conjure flight out of an
+    // empty Fly row -- the same line a buff's Speed row draws. Naming the row
+    // outright still lands, because `{speed.fly += 30}` is how a rule *grants*
+    // a fly speed, and it would be a strange sheet that refused to.
+    const moves = [];
+    let anySpeed = false;
+    for (const sp of this.data.identity?.speeds || []) {
+      const name = speedForwardKey(sp);
+      if (!name || expand.has(name)) continue;
+      add(name, `${String(sp.type).trim()} speed`);
+      anySpeed = true;
+      if ((Number(sp.base) || 0) + (Number(sp.bonusNum) || 0) > 0) moves.push(name);
+    }
+    if (anySpeed) {
+      expand.set('speed', moves);
+      list.push({ name: 'speed', label: 'Every speed you have', family: moves });
     }
 
     expand.set('skill', skills);

@@ -496,6 +496,7 @@ export const VALUE_GUIDE = [
   { prefix: 'saves.fortitude, saves.reflex, saves.will', what: 'The three saving throws, as the sheet totals them.', eg: 'saves.will + 2' },
   { prefix: 'attack.melee, attack.ranged, attack.cmb', what: 'The attack numbers.', eg: 'attack.cmb + 4' },
   { prefix: 'skill.<name>', what: 'Any skill total, by its name in lower case with underscores for spaces.', eg: 'skill.perception + 5' },
+  { prefix: 'speed.<type>', what: 'Each movement rate by its type in lower case — speed.land, speed.fly, speed.climb — as the Speed panel totals it, before conditions. A speed may read the speeds listed above it and not the ones below.', eg: 'floor(speed.land / 2)' },
   { prefix: 'mythic.tier', what: 'Mythic tier, and 0 for a character who has none.', eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)' },
   { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Every tracker publishes its numbers under the id shown on its own row. That id never changes when the tracker is renamed, so a formula pointing at one cannot be broken by renaming it.', eg: 'tracker.burn.max - 2' },
   { prefix: 'familiar.*  animalCompanion.*  eidolon.*', what: 'A companion’s own numbers, on a character that has one.', eg: 'eidolon.hd + 2' },

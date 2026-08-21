@@ -61,6 +61,40 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const lower = (s) => str(s).trim().toLowerCase();
 
+/**
+ * One of a talent track's two counting rules, however a pack writes it:
+ * `{start, gainsAt}` in full, a bare number for a count that never moves, or a
+ * bare string for the levels it goes up at from one.
+ */
+/**
+ * A talent-track spec as a pack writes it. A class block states the whole
+ * thing; an archetype block states only the parts it changes, and those are
+ * merged over the class's when it is added.
+ *
+ * `spheres` is passed through as written (combat / magic / both -- the sides
+ * in rules.js); the model is what settles an unknown one, the same way it
+ * settles an unknown `systems` tag, so this layer stays free of the vocabulary.
+ */
+const trackSpec = (v) => {
+  const t = obj(v);
+  const out = {};
+  if (str(t.name).trim()) out.name = str(t.name).trim();
+  if (str(t.unit).trim()) out.unit = str(t.unit).trim();
+  if ('sets' in t) out.sets = countRule(t.sets);
+  if ('talents' in t) out.talents = countRule(t.talents);
+  if (lower(t.spheres)) out.spheres = lower(t.spheres);
+  if (str(t.text)) out.text = str(t.text);
+  return Object.keys(out).length ? out : null;
+};
+
+const countRule = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return { start: num(v, 1), gainsAt: '' };
+  if (typeof v === 'string') return { start: 1, gainsAt: str(v).trim() };
+  const o = obj(v);
+  return { start: num(o.start, 1), gainsAt: str(o.gainsAt).trim() };
+};
+
 /** A stable id from a name: letters, digits and dashes, or '' when there is nothing usable. */
 export function slugId(s) {
   return str(s).toLowerCase().normalize('NFKD')
@@ -89,6 +123,10 @@ export function normalizeBlock(block) {
         // unknown ids are kept -- they still read as tags on the class row.
         systems: arr(b.systems).map(lower).filter(Boolean),
         archetypes: str(b.archetypes),
+        // A class whose talents arrive on several tracks at once, one of them
+        // live -- the armiger's customized weapons. Two counting rules, said
+        // the way the class table says them.
+        tracks: trackSpec(b.tracks),
         features: arr(b.features).map((f) => ({
           level: Math.max(1, Math.min(20, num(f?.level, 1))),
           name: str(f?.name).trim(),
@@ -156,6 +194,12 @@ export function normalizeBlock(block) {
         ...base,
         class: className,
         single: bool(b.single),
+        // What the archetype changes about its class's talent track. The
+        // armiger's customized weapons teach martial spheres; the archetype
+        // that lets them teach magical ones carries
+        // `"tracks": {"spheres": "both"}` and nothing else, because that is
+        // the whole of what it does to them.
+        tracks: trackSpec(b.tracks),
         features,
         stacksWith: stacks.length ? stacks : parseStacksWith(features.map((f) => f.text).join('\n')),
       };
@@ -843,6 +887,9 @@ export function applyBlock(model, rawBlock) {
           for (const a of col.at) model.setClassFeature(block.name, a.feature.level, col.name, a.text);
         }
       }
+      // A track's spec is copied onto the character like everything else a
+      // pack lands, so the sheet travels without the pack behind it.
+      if (block.tracks) model.addCustomization(block.name, block.tracks);
       // Its class skills are the skills a player ticks; tick the ones the sheet has.
       let ticked = 0;
       if (block.classSkills.length) {
@@ -866,7 +913,8 @@ export function applyBlock(model, rawBlock) {
       return `${existing === -1 ? 'Added' : 'Updated'} class ${block.name}`
         + `${block.features.length ? `, ${block.features.length} feature(s) on the Progression tab` : ''}`
         + `${withText.length ? `, ${withText.length} with their text under the class` : ''}`
-        + `${ticked ? `, ${ticked} class skill(s) ticked` : ''}.`;
+        + `${ticked ? `, ${ticked} class skill(s) ticked` : ''}`
+        + `${block.tracks ? ', and its customized weapons on Spheres & Magic' : ''}.`;
     }
     case 'race': {
       model.set('identity.race', block.name);
@@ -1320,6 +1368,15 @@ export function applyArchetype(model, block) {
       }
     }
   }
+  // A track the archetype changes -- the armiger's customized weapons learning
+  // magical spheres beside martial ones. Only ever a change to a track that is
+  // already there: the counting rules belong to the class, and an archetype
+  // that only widens a sphere list has none of its own to invent them from.
+  if (b.tracks) {
+    const track = model.customizationFor(className);
+    if (track) entry.trackSpec = model.setCustomizationSpec(className, { ...track.spec, ...b.tracks });
+    else entry.trackNoTrack = true;
+  }
   const stack = Array.isArray(row.archetypeStack) ? row.archetypeStack : [];
   row.archetypeStack = [...stack, entry];
   const tag = str(row.archetypes).trim();
@@ -1336,6 +1393,8 @@ export function applyArchetype(model, block) {
   if (took.length) parts.push(`replacing ${took.join(', ')}`);
   const altered = [...new Set(b.features.flatMap((f) => f.alters))];
   if (altered.length) parts.push(`altering ${altered.join(', ')}`);
+  if (entry.trackSpec) parts.push(`and changing what its customized ${entry.trackSpec.unit || 'weapon'}s may learn`);
+  if (entry.trackNoTrack) parts.push(`(it changes ${className}'s talent track, which is not on this sheet yet)`);
   if (entry.notFound.length) parts.push(`(${entry.notFound.join(', ')} not on the sheet)`);
   return `${parts.join(', ')}.`;
 }
@@ -1383,6 +1442,8 @@ export function removeArchetype(model, className, name) {
     }
   }
   for (const f of e.removedNotes || []) model.addClassFeatureNote(cls, f);
+  // and a talent track it widened goes back to what the class states
+  if (e.trackSpec) model.setCustomizationSpec(cls, e.trackSpec);
   row.archetypeStack = stack.filter((_, i) => i !== at);
   if (!row.archetypeStack.length) delete row.archetypeStack;
   const tags = str(row.archetypes).split(/,\s*/).map((t) => t.trim()).filter((t) => t && lower(t) !== lower(name));
