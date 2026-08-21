@@ -1676,6 +1676,46 @@ console.log('the mythic ladder -- ten tiers, a feat on the odd ones and an incre
   check('one set of picks, not two', b.data.mythicStatPicks.find((p) => p.tier === 4).ability, 'Int');
   b.setMythicPick(4, 'Con');
   check('restored', b.data.abilities.con.score, con0);
+
+  // Each tier names its path ability and its granted feat, and says what each
+  // of the two does. The effects are prose, so they read {…} like any
+  // description -- and a tier the character has not reached is a plan, so a
+  // bonus written there is not earned yet.
+  for (const id of IDS) {
+    const c = new Character(load(id));
+    check(`${id} every tier has room for both effects`,
+      c.data.mythic.abilities.every((a) => typeof a.effect === 'string' && typeof a.featEffect === 'string'),
+      true);
+  }
+
+  const n = new Character(load('nico'));       // tier 5 of ten
+  const tier = n.data.identity.mythicTier;
+  check('nico is partway up the ladder', tier > 0 && tier < MYTHIC_TIERS.length, true);
+  const bluff = () => n.data.skills.find((s) => s.name === 'Bluff').bonus;
+  const bluffBase = bluff();
+
+  n.setItem('mythic.abilities', tier - 1, 'effect', 'Grace {skill.bluff += 2}');
+  check('a reached tier forwards what its ability does', bluff(), bluffBase + 2);
+  check('and says which tier it came from',
+    n.forwardedInto('skill.bluff').from[0].where, `the tier ${tier} ability’s effect`);
+
+  n.setItem('mythic.abilities', tier - 1, 'featEffect', 'And the feat {skill.bluff += 1}');
+  check('the granted feat forwards on its own', bluff(), bluffBase + 3);
+  check('named apart from the ability beside it',
+    n.forwardedInto('skill.bluff').from.map((f) => f.where),
+    [`the tier ${tier} ability’s effect`, `the tier ${tier} feat’s effect`]);
+
+  n.setItem('mythic.abilities', tier, 'effect', 'Someday {skill.bluff += 100}');
+  check('a tier not reached yet grants nothing', bluff(), bluffBase + 3);
+
+  // A name is not a bonus: the plan is meant to be readable ahead of time, so
+  // a definition written above the tier still publishes.
+  n.setItem('mythic.abilities', MYTHIC_TIERS.length - 1, 'effect', 'Ceiling {mythic_ceiling = 40}');
+  check('but a name written there is still readable', n.inlineNames.mythic_ceiling, 40);
+
+  n.setItem('mythic.abilities', tier - 1, 'effect', '');
+  n.setItem('mythic.abilities', tier - 1, 'featEffect', '');
+  check('and clearing them puts the number back', bluff(), bluffBase);
 }
 
 console.log('structured progression');

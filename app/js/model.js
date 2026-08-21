@@ -3805,7 +3805,14 @@ export class Character {
      */
     if (!Array.isArray(d.mythic.abilities)) d.mythic.abilities = [];
     while (d.mythic.abilities.length < MYTHIC_TIERS.length) {
-      d.mythic.abilities.push({ name: '', path: '', featChoice: '' });
+      d.mythic.abilities.push({ name: '', path: '', featChoice: '', effect: '', featEffect: '' });
+    }
+    // What the path ability and the feat actually do. Prose, so both read
+    // {…} like any other description; a row that predates them gets the
+    // fields empty rather than missing, so every tier has the same shape.
+    for (const a of d.mythic.abilities) {
+      a.effect ??= '';
+      a.featEffect ??= '';
     }
 
     if (!Array.isArray(d.mythicStatPicks)) {
@@ -6034,7 +6041,16 @@ export class Character {
       if (k === 'additional') (slot || []).forEach((t, i) => push(`trait:additional:${i}`, t.text));
       else push(`trait:${k}`, slot?.text);
     }
-    (d.mythic?.abilities || []).forEach((a, i) => push(`mythic:${i}`, a.name));
+    // A tier above the one the character has reached is a plan: its text still
+    // resolves and still shows, but a bonus written there has not been earned.
+    const mythicTier = Number(d.identity?.mythicTier) || 0;
+    (d.mythic?.abilities || []).forEach((a, i) => {
+      const ahead = i + 1 > mythicTier ? { future: true } : null;
+      push(`mythic:${i}`, a.name, null, ahead);
+      push(`mythic:${i}:effect`, a.effect, null, ahead);
+      push(`mythic:${i}:featChoice`, a.featChoice, null, ahead);
+      push(`mythic:${i}:featEffect`, a.featEffect, null, ahead);
+    });
     for (const [lvl, text] of Object.entries(d.primordia?.picks || {})) push(`primordia:${lvl}`, text);
     push('primordia:notes', d.primordia?.notes);
     for (const [k, v] of Object.entries(d.mythic?.tradition || {})) push(`mythicTradition:${k}`, v);
@@ -10741,7 +10757,10 @@ export function describeSource(path) {
     case 'note': return `note ${nth(a)} on Lore`;
     case 'background': return `background section ${nth(a)}`;
     case 'trait': return a === 'additional' ? `additional trait ${nth(b)}` : `${a} trait`;
-    case 'mythic': return `mythic ability ${nth(a)}`;
+    case 'mythic': return b === 'effect' ? `the tier ${nth(a)} ability’s effect`
+      : b === 'featChoice' ? `the tier ${nth(a)} feat`
+        : b === 'featEffect' ? `the tier ${nth(a)} feat’s effect`
+          : `mythic ability ${nth(a)}`;
     case 'mythicTradition': return 'mythic tradition';
     case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;

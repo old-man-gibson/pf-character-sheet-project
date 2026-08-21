@@ -524,6 +524,8 @@ export class CharacterSheetElement extends HTMLElement {
   #dashArrange = false;
   /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
   #openManeuverNote = null;
+  /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
+  #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
   #armedRemove = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
@@ -4805,14 +4807,27 @@ export class CharacterSheetElement extends HTMLElement {
           = <strong>${this.#model.mythicHp}</strong> HP on top of the normal maximum
           (Champion/Guardian 5, Marshal/Trickster 4, Archmage/Hierophant 3).
         </p>
-        <div class="tablewrap" style="margin-top:8px"><table>
+        <div class="tablewrap" style="margin-top:8px"><table class="mythic">
+          <!-- Nine columns, and only two of them prose. The path, the two names
+               and the grant are all a few words, so they are held narrow and the
+               two Effect columns get what is left — folded down to one line
+               each until one is clicked open. -->
+          <colgroup>
+            <col class="tier"><col class="lvl"><col class="mpath"><col class="mname">
+            <col class="meffect"><col class="grants"><col class="mname"><col class="meffect">
+            <col class="mstat">
+          </colgroup>
           <thead><tr>
             <th class="num">Tier</th>
-            <th class="num" title="The character level this tier is reached at">Lvl</th>
-            <th>Ability</th><th>Path</th>
-            <!-- Grants sits beside Choice: the slot and what was taken for it. -->
+            <th class="num" title="The character level this tier is reached at">Level</th>
+            <th>Path</th>
+            <th>Ability</th>
+            <th title="What the path ability does. Formulas work here.">Effect</th>
+            <!-- Grants sits beside the feat's own name and effect: the slot,
+                 then what was taken for it, then what that does. -->
             <th title="What the tier hands over — a feat on odd tiers, a path power on even ones">Grants</th>
-            <th>Choice</th>
+            <th>Name</th>
+            <th title="What the granted feat does. Formulas work here.">Effect</th>
             <th title="+2 to one ability, at every even tier">Stat</th>
           </tr></thead>
           <tbody>${MYTHIC_TIERS.map((t) => {
@@ -4822,10 +4837,12 @@ export class CharacterSheetElement extends HTMLElement {
             return `<tr class="${t > tier ? 'future' : ''}">
               <td class="num">${t}</td>
               <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'name', a.name)}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'path', a.path)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+              <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
               <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-              <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
+              <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
               ${even
                 ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
                 : '<td class="noslot"></td>'}
@@ -4835,10 +4852,14 @@ export class CharacterSheetElement extends HTMLElement {
         <p class="hint">
           Ten tiers, one row each: a mythic feat on the odd ones, a path power and a
           <strong>+2 ability increase</strong> on the even ones — which is why only those
-          rows offer a Stat. <strong>Grants</strong> is what the tier hands over;
-          <strong>Choice</strong> is what you took for it. The same increases are on the
-          <strong>Stats</strong> tab, either place edits the one set. Rows above tier
-          ${tier} are greyed: planned, not counted yet.
+          rows offer a Stat. <strong>Grants</strong> is what the tier hands over,
+          <strong>Name</strong> is what you took for it, and each <strong>Effect</strong>
+          says what that thing does — folded to one line to keep the table readable, so
+          click one to open it and click away to shut it again. Formulas work in both:
+          write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
+          somewhere. The same increases are on the <strong>Stats</strong> tab, either
+          place edits the one set. Rows above tier ${tier} are greyed: planned, not
+          counted yet — and a bonus written in one does not apply until it is reached.
         </p>
       </section>
 
@@ -8382,6 +8403,36 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * A prose field in a table with no room for prose.
+   *
+   * Shut, it is one line of what the field says -- computed, so a formula
+   * shows its value -- cut off with an ellipsis, and the whole of it is on
+   * the tooltip. Clicking opens the real field in place, which grows the row
+   * and pushes the ones below it down; clicking anywhere else, or Escape,
+   * shuts it again.
+   *
+   * Only one is open at a time, and which one is not saved with the
+   * character: it is a way of reading a wide table, not something about the
+   * character.
+   */
+  #foldedProse(key, bindingAttr, value, placeholder = '') {
+    const text = String(value ?? '');
+    if (this.#openCell === key) {
+      return `<div class="foldcell open" data-foldcell-open="${esc(key)}">
+        ${this.#prose(bindingAttr, text, 2, 'grow')}
+      </div>`;
+    }
+    const shown = text.trim()
+      ? (hasTokens(text) ? this.#renderedProse(text) : esc(text))
+      : `<span class="ph">${esc(placeholder)}</span>`;
+    return `<button type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
+      data-foldcell="${esc(key)}"
+      title="${esc(text.trim() ? `${text}
+
+Click to edit.` : PROSE_HINT)}">${shown}</button>`;
+  }
+
+  /**
    * What a computed value in prose says when you point at it.
    *
    * The token's own source, then its working -- because a bare "24" in the
@@ -9023,9 +9074,16 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ----- list rows ----- */
 
-  #itemText(list, i, field, value, placeholder = '') {
-    return `<input type="text" value="${esc(value ?? '')}" data-item="${list}|${i}|${field}"
-      data-kind="text" placeholder="${esc(placeholder)}">`;
+  /**
+   * `title` is for a cell narrow enough to cut its own value off: an input
+   * scrolls rather than showing an ellipsis, so the whole of it has to be
+   * readable from somewhere. Left off where the column is wide enough to
+   * speak for itself, so the tooltip stays a signal.
+   */
+  #itemText(list, i, field, value, placeholder = '', title = false) {
+    const text = String(value ?? '');
+    return `<input type="text" value="${esc(text)}" data-item="${list}|${i}|${field}"
+      data-kind="text" placeholder="${esc(placeholder)}"${title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
   }
 
   #itemNum(list, i, field, value) {
@@ -9334,6 +9392,69 @@ export class CharacterSheetElement extends HTMLElement {
         this.#action(input.dataset.hfield === 'checkpoint' ? 'save-checkpoint' : 'rename-commit');
       });
     });
+  }
+
+  /**
+   * Opening and shutting the folded cells (#foldedProse).
+   *
+   * One listener for the whole sheet rather than one per cell, because a
+   * click has to be able to shut a cell it did not land on. It listens on
+   * `pointerdown` rather than `click` so that opening a second cell while the
+   * first is open is a single click: the press that shuts the old one is the
+   * same press that opens the new one, and by `click` time the button it
+   * landed on would already have been redrawn away.
+   *
+   * The listener goes on `.wrap`, which every render replaces, so it cannot
+   * pile up the way one on the shadow root itself would.
+   */
+  #bindFoldedCells(root) {
+    const wrap = root.querySelector('.wrap');
+    if (!wrap) return;
+    wrap.addEventListener('pointerdown', (e) => {
+      const peek = e.target.closest?.('[data-foldcell]');
+      if (peek) {
+        e.preventDefault();          // focus is placed below, not by the press
+        const key = peek.dataset.foldcell;
+        this.#shutFoldedCell();
+        this.#openCell = key;
+        this.#render();
+        this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
+        return;
+      }
+      if (!this.#openCell || e.target.closest?.('.foldcell.open')) return;
+      this.#shutFoldedCell();
+      this.#render();
+    });
+    // Enter or Space on a shut cell that was tabbed to. A mouse press never
+    // reaches here: it opened the cell on the way down, and by now the button
+    // it landed on has been redrawn away.
+    wrap.addEventListener('click', (e) => {
+      const peek = e.target.closest?.('[data-foldcell]');
+      if (!peek || this.#openCell === peek.dataset.foldcell) return;
+      this.#shutFoldedCell();
+      this.#openCell = peek.dataset.foldcell;
+      this.#render();
+      this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
+    });
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !this.#openCell) return;
+      this.#shutFoldedCell();
+      this.#render();
+    });
+  }
+
+  /**
+   * Shut whatever folded cell is open, keeping what was typed in it.
+   *
+   * A textarea commits on blur, so the field has to be blurred while it is
+   * still in the document -- taking it away first would drop the edit. The
+   * flag is cleared before the blur so that the re-render the commit triggers
+   * already draws the cell shut, rather than opening it again for one frame.
+   */
+  #shutFoldedCell() {
+    const field = this.shadowRoot.querySelector('.foldcell.open textarea');
+    this.#openCell = null;
+    field?.blur();
   }
 
   /**
@@ -9960,6 +10081,8 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rerender(input);
       });
     });
+
+    this.#bindFoldedCells(root);
 
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {

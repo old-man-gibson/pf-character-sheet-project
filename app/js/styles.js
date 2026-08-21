@@ -1968,6 +1968,43 @@ table.racetraits td:first-child { width: 11rem; }
 table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
 
+/* ---------- the mythic ladder ----------
+   Nine columns across one table. Everything but the two Effect columns is a
+   known quantity -- a tier, a level, a path, two names, a grant, an ability --
+   so they are held to their content and the effects share what is left. */
+table.mythic { table-layout: fixed; }
+table.mythic col.tier { width: 3.2rem; }
+table.mythic col.lvl { width: 3.2rem; }
+table.mythic col.mpath { width: 8rem; }
+table.mythic col.mname { width: 8.5rem; }
+table.mythic col.grants { width: 6.5rem; }
+table.mythic col.mstat { width: 6.5rem; }
+table.mythic td { vertical-align: top; }
+table.mythic input[type="text"], table.mythic select { width: 100%; min-width: 0; }
+
+/* ---------- a table cell folded down to one line ----------
+   The shut state is a button holding the field's computed text, clipped with
+   an ellipsis; the tooltip carries the whole of it. It is drawn as the field
+   it stands in for -- same border, same gold formula edge -- because clicking
+   it is how the field is reached, and anything flatter reads as a label. */
+.foldcell.peek {
+  display: block; width: 100%; box-sizing: border-box; margin: 0;
+  padding: 3px 5px; min-height: 26px; text-align: left;
+  font: inherit; font-size: 0.78rem; line-height: 1.35;
+  color: var(--cs-text); background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 5px;
+  box-shadow: inset -2px 0 0 var(--cs-formula);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: text;
+}
+.foldcell.peek:hover { box-shadow: inset -2px 0 0 var(--cs-formula-strong); }
+/* A token inside a shut cell is being read, not pointed at: the cell's own
+   tooltip is what a click-to-open cell should be offering. */
+.foldcell.peek .tok { cursor: inherit; }
+.foldcell.peek .ph { color: var(--cs-muted); font-style: italic; }
+.foldcell.open { display: block; }
+.foldcell.open .prose textarea, .foldcell.open .prose-view { font-size: 0.78rem; }
+
 /* ---------- card casting ----------
    Mana colours are the five a card game uses; a chip is a letter on its
    colour so a row of cards reads at a glance. */

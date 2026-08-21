@@ -230,7 +230,8 @@ everything and the count beside it can be trusted.
 ## Inline formulas in prose
 
 Any descriptive field — class features, template features, notes, background,
-traits, mythic abilities and tradition, weapon special properties, gear notes,
+traits, the mythic ladder's two Effect columns and the mythic tradition, weapon
+special properties, gear notes,
 sphere talents, crafting resources and notes — can carry formulas inside the text:
 
 | Form | Meaning |
