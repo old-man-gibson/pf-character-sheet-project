@@ -316,6 +316,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `damage`, `damage.mult`, `damage.crit` | weapon damage — see below |
 | `weapon.melee.attack`, `weapon.axes.damage`, … | the same, on some weapons only — see below |
 | `class.<name>.level` | levels in one class — see below |
+| `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
@@ -452,6 +453,28 @@ is only part of the type's name.
 Both Stats tables carry a **Fwd** column showing what arrived from elsewhere, with the
 sentence that sent it in the tooltip; **Total** and **Score** include it, so the row adds
 up either way.
+
+**A tracker's range.** `tracker.<id>.max` and `tracker.<id>.min` take bonuses; the pool
+itself does not, because how full a resource is at this moment is play state and nobody's
+to push around. How *big* it is, on the other hand, is exactly the kind of thing a talent
+says:
+
+```
+Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}
+```
+
+written in the Vigilante feature that grants it, rather than typed into the max and left
+to go stale at the next level-up. The tracker's own max formula is untouched — the
+forwarded part shows beside it on the row, in gold, and names the feature that sent it.
+The id is the one on the tracker's own row, which never follows a rename.
+
+**A level you have not reached.** The feature grid is a twenty-level plan, so it holds rows
+for levels the character has not got to yet. Those rows still read and still display —
+being able to look ahead is the point of a plan — and a `{name = …}` written in one is
+still defined, because a name is inert until something asks for it. A **bonus** written in
+one is not applied. A talent taken at 16 adds nothing at 15, and starts adding the moment
+the level is reached; it is not reported as broken in the meantime, because there is
+nothing wrong with it.
 
 **Where a bonus can be written.** Every field that takes `{…}` at all, plus one that takes
 nothing else: a **tracker's note**. A note may not define a name — it is read after the

@@ -550,7 +550,8 @@ export const TOKEN_FORMS = [
     form: '{dest += expr}',
     name: 'Forward a bonus',
     what: 'Works it out, prints it, and adds it to something else — a skill, a save, AC, '
-      + 'an attack, an ability score, a class level, damage on some or all of your weapons. '
+      + 'an attack, an ability score, a class level, a tracker’s maximum, damage on some or '
+      + 'all of your weapons. '
       + 'The rule lives in '
       + 'the feature that grants it instead of '
       + 'being copied into every column it touches. Several destinations at once, separated by '

@@ -3239,6 +3239,58 @@ console.log('forwarded bonuses -- permanent or temporary, and the Stats tab adds
     [str().score, str().tempScore], [strBase, strBase]);
 }
 
+console.log('forwarded bonuses -- a tracker’s range, and a level not reached yet');
+{
+  const c = new Character(load('nico'));   // the vigilante
+  const level = Number(c.data.identity.level) || 0;
+  // The sheet's own Luck pool, given the max it earns rather than a typed one.
+  c.updateTracker('luck', { maxFormula: 'int.mod' });
+  const luck = () => c.trackers.find((x) => x.id === 'luck');
+  const base = luck().max;
+  check('the pool starts at its formula', base, c.data.abilities.int.mod);
+
+  // A class feature at a level already reached applies.
+  c.setClassFeature('Vigilante', level, 'Features',
+    'Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}');
+  const grant = 1 + Math.floor(c.classLevelCount('Vigilante') / 4);
+  check('a feature can raise a tracker’s maximum', luck().max, base + grant);
+  check('and the amount is on the tracker for the view', luck().forwardedMax, grant);
+  check('the formula it was written with is untouched', luck().maxFormula, 'int.mod');
+  check('the pool itself is nobody’s to push around',
+    c.forwardTargets().expand('tracker.luck.current'), null);
+
+  // ...and one written at a level not reached yet does not.
+  c.setClassFeature('Vigilante', level, 'Features', '');
+  c.setClassFeature('Vigilante', level + 1, 'Features',
+    'Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}');
+  check('a talent taken next level is not adding to anything now', luck().max, base);
+  check('and is not reported as broken either -- it is simply not earned yet',
+    c.formulaProblems().length, 0);
+  c.set('identity.level', level + 1);
+  check('reaching the level turns it on', luck().max > base, true);
+  check('and it is worked out at the level now reached',
+    luck().forwardedMax, 1 + Math.floor(c.classLevelCount('Vigilante') / 4));
+  c.set('identity.level', level);
+  check('stepping back turns it off again', luck().max, base);
+
+  // A future level still *reads* -- the plan is meant to be legible ahead of
+  // time, and a name defined there is inert until something asks for it.
+  c.setClassFeature('Vigilante', level + 1, 'Features',
+    '{future_thing = 7} and a bonus {tracker.luck.max += 3}');
+  check('a name written at a future level is still defined', c.inlineNames.future_thing, 7);
+  check('while the bonus beside it waits', luck().max, base);
+
+  // The minimum is a destination too, so a two-sided pool can widen.
+  c.setClassFeature('Vigilante', level + 1, 'Features', '');
+  c.updateTracker('luck', { minFormula: '-2' });
+  const minBase = luck().min;
+  c.setClassFeature('Vigilante', level, 'Features', 'Deeper {tracker.luck.min -= 3}');
+  check('a minimum can be pushed down', luck().min, minBase - 3);
+
+  c.setClassFeature('Vigilante', level, 'Features', '');
+  check('and taking the rule away puts the range back', [luck().max, luck().min], [base, minBase]);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));

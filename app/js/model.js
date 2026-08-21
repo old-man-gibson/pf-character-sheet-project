@@ -5994,18 +5994,25 @@ export class Character {
   proseSources() {
     const d = this.data;
     const out = [];
-    const push = (path, text, scope, forwardsOnly = false) => {
-      if (typeof text === 'string' && hasTokens(text)) out.push({ path, text, scope, forwardsOnly });
+    const push = (path, text, scope, opts = null) => {
+      if (typeof text === 'string' && hasTokens(text)) out.push({ path, text, scope, ...opts });
     };
+    // The feature grid is a twenty-level plan, so it holds rows for levels the
+    // character has not reached. Those are marked: a name defined in one is
+    // inert until something reads it, but a *bonus* written in one would apply
+    // the moment it was typed, and a talent taken at 16 must not be adding to
+    // anything at 15.
+    const level = Number(d.identity?.level) || 0;
     for (const [cls, g] of Object.entries(d.progression?.classFeatures || {})) {
       for (const [lvl, row] of Object.entries(g.byLevel || {})) {
+        const future = Number(lvl) > level ? { future: true } : null;
         for (const [col, value] of Object.entries(row || {})) {
           // A cell shared by two rule groups holds one entry per group.
           if (value && typeof value === 'object') {
             for (const [key, text] of Object.entries(value)) {
-              push(`feature:${cls}:${lvl}:${col}:${key}`, text);
+              push(`feature:${cls}:${lvl}:${col}:${key}`, text, null, future);
             }
-          } else push(`feature:${cls}:${lvl}:${col}`, value);
+          } else push(`feature:${cls}:${lvl}:${col}`, value, null, future);
         }
       }
     }
@@ -6127,7 +6134,9 @@ export class Character {
     // note beside a resource is exactly where a rule that scales with it
     // belongs: "+2 Strength while Burn is 3 or more" is a fact about Burn, and
     // writing it anywhere else means writing Burn's name out again.
-    for (const t of this.trackers || []) push(`tracker:${t.id}:note`, t.note, this.trackerScope(t), true);
+    for (const t of this.trackers || []) {
+      push(`tracker:${t.id}:note`, t.note, this.trackerScope(t), { forwardsOnly: true });
+    }
     return out;
   }
 
@@ -9954,6 +9963,17 @@ export class Character {
       if (!expand.has(name)) add(name, `${cls} levels`);
     }
 
+    // A tracker's range. The pool itself is play state and nobody's to push
+    // around, but how big it is is exactly the kind of thing a class feature
+    // says: "your luck pool increases by 1 for every four levels" belongs in
+    // the talent that grants it, not typed into the max and left to go stale.
+    for (const t of this.trackers || []) {
+      for (const edge of ['max', 'min']) {
+        const name = `tracker.${t.id}.${edge}`;
+        if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`);
+      }
+    }
+
     expand.set('skill', skills);
     list.push({ name: 'skill', label: 'Every skill', family: skills });
     for (const [name, members] of Object.entries(FORWARD_FAMILIES)) {
@@ -10191,11 +10211,16 @@ export class Character {
       const seed = t.source === 'sheet' ? seeds.get(t.id) : null;
       t.edited = !!seed && SHEET_TRACKER_OVERRIDES.some((k) => (t[k] ?? null) !== (seed[k] ?? null));
       const errs = [];
+      // Forwarded first, so a bad max formula still leaves the bonus visible
+      // rather than taking the whole range down with it.
+      t.forwardedMax = this.#forwarded(`tracker.${t.id}.max`);
+      t.forwardedMin = this.#forwarded(`tracker.${t.id}.min`);
       if (t.maxFormula) {
         try { t.max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
       } else {
         t.max = 0;
       }
+      t.max += t.forwardedMax;
       if (t.minFormula) {
         // The max is already computed, so a symmetric meter can be written as
         // `-self.max` instead of repeating the whole max formula.
@@ -10204,6 +10229,7 @@ export class Character {
       } else {
         t.min = 0;
       }
+      t.min += t.forwardedMin;
       if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {
         errs.push(`min (${t.min}) is above max (${t.max})`);
       }

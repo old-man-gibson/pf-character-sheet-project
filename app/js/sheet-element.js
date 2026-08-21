@@ -7489,6 +7489,10 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         ${t.maxFormula ? this.#formulaMeta('max', t.maxFormula) : ''}
         ${t.minFormula ? this.#formulaMeta('min', t.minFormula) : ''}
+        ${['max', 'min'].map((edge) => {
+          const badge = this.#forwardedBadge(`tracker.${t.id}.${edge}`);
+          return badge ? `<div class="tmeta">${esc(edge)} ${badge}</div>` : '';
+        }).join('')}
         ${t.note ? `<div class="tnote">${hasTokens(t.note)
       ? this.#renderedProse(t.note, this.#model.trackerScope(t))
       : esc(t.note)}</div>` : ''}

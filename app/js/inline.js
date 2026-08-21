@@ -164,8 +164,11 @@ export function collectDefinitions(sources) {
  */
 export function collectContributions(sources) {
   const out = [];
-  for (const { path, text, scope } of sources) {
-    if (!hasTokens(text)) continue;
+  for (const { path, text, scope, future } of sources) {
+    // A level the character has not reached yet. Its text still resolves and
+    // still displays -- the plan is meant to be readable ahead of time -- but
+    // a bonus written there has not been earned, so it does not apply.
+    if (future || !hasTokens(text)) continue;
     for (const t of tokenize(text)) {
       if (t.kind === 'push') {
         out.push({
