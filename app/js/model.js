@@ -99,6 +99,22 @@ export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec
 /** The name a formula forwards a bonus to a class's effective level under. */
 export const classForwardKey = (name) => `class.${slug(name)}.level`;
 
+/**
+ * The name a formula calls a movement rate by, worked out from its type.
+ *
+ * "Land" is `speed.land` and "Fly (average)" is `speed.fly` -- cut at the
+ * first bracket the way a weapon's name is, because the manoeuvrability is a
+ * note on the speed rather than part of what it is called.
+ *
+ * A row with no type has no name. It is not a movement rate yet, and coining
+ * one for it would put a name on the sheet that means nothing today and means
+ * something else the moment the row is typed into.
+ */
+export function speedForwardKey(sp) {
+  const head = String(sp?.type ?? '').split(/[(,/[]/)[0].trim();
+  return head ? `speed.${slug(head)}` : null;
+}
+
 export function weaponHandle(name) {
   const strip = (v) => String(v ?? '').replace(/['’]/g, '');
   const head = strip(name).split(/[(&,\/[]/)[0].trim();
@@ -5056,9 +5072,12 @@ export class Character {
   #forwardsEarly() {
     // A class level is early for the same reason an ability score is: the
     // training pass reads it before any prose has been looked at, and the
-    // casting tables it feeds are downstream of that.
+    // casting tables it feeds are downstream of that. A speed is early because
+    // the speeds resolve before the prose too, and because another speed may
+    // be written to read it.
     return Object.entries(this.contributions?.totals || {})
-      .some(([name, value]) => value && (FORWARD_EARLY.has(name) || name.startsWith('class.')));
+      .some(([name, value]) => value
+        && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')));
   }
 
   #computePass() {
@@ -6809,6 +6828,14 @@ export class Character {
     const speeds = this.data.identity?.speeds;
     if (!Array.isArray(speeds) || !speeds.length) return;
     const scope = this.scope();
+    // A speed may read the speeds *above* it, and not the ones below. "Your
+    // fly speed is equal to your land speed" is a real rule and wants saying
+    // that way rather than restating a number that will move; a rule reading
+    // downward would be a cycle waiting to happen. So the rows resolve top to
+    // bottom and the scope grows as they do, which makes the cycle impossible
+    // rather than merely unlikely -- the same line the inline names draw
+    // against the skills.
+    scope.speed = {};
     for (const sp of speeds) {
       sp.bonusError = null;
       let bonus = 0;
@@ -6823,7 +6850,14 @@ export class Character {
         bonus = Number(sp.bonus) || 0;
       }
       sp.bonusNum = bonus;
-      sp.final = (Number(sp.base) || 0) + bonus;
+      // A bonus forwarded here from elsewhere on the sheet is kept beside the
+      // one typed in, never folded into it -- the same way a skill keeps its
+      // Misc and its forwarded amount apart, and for the same reason: the
+      // field has to go on saying what was written in it.
+      sp.handle = speedForwardKey(sp);
+      sp.forwarded = sp.handle ? this.#forwarded(sp.handle) : 0;
+      sp.final = (Number(sp.base) || 0) + bonus + sp.forwarded;
+      if (sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
     }
   }
 
@@ -10126,6 +10160,13 @@ export class Character {
         spAvailable: Number(c.training?.magic?.availableSP ?? c.training?.magic?.totalSP) || 0,
       },
       practitioner: { dc: Number(c.training?.combat?.practitionerDC) || 0 },
+      // Movement, under the type each rate is called by: speed.land,
+      // speed.fly. "Half your speed", "equal to your land speed" and "10 ft.
+      // per point of Dex bonus" are all rules about a number that moves with
+      // every feature and buff that touches it, and a sheet that cannot be
+      // asked for it leaves them to be typed in and go stale. Read before
+      // conditions, exactly as the saves and the armour classes are.
+      speed: {},
       unarmed: {
         talents: Number(c.training?.combat?.unarmed?.effectiveTalents) || 0,
         dice: c.training?.combat?.unarmed?.dice || '',
@@ -10194,6 +10235,11 @@ export class Character {
         temp: a.tempScore,
         tempMod: a.totalMod,
       };
+    }
+
+    for (const sp of c.identity?.speeds || []) {
+      const key = speedForwardKey(sp);
+      if (key) s.speed[key.slice('speed.'.length)] = Number(sp.final) || 0;
     }
 
     for (const sk of c.skills) {
@@ -10300,6 +10346,26 @@ export class Character {
         const name = `tracker.${t.id}.${edge}`;
         if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`);
       }
+    }
+
+    // Movement, by the same name the scope publishes it under. The family is
+    // "every speed you have": a row reading zero is a speed the character has
+    // not got, and "+10 ft. to your speeds" must not conjure flight out of an
+    // empty Fly row -- the same line a buff's Speed row draws. Naming the row
+    // outright still lands, because `{speed.fly += 30}` is how a rule *grants*
+    // a fly speed, and it would be a strange sheet that refused to.
+    const moves = [];
+    let anySpeed = false;
+    for (const sp of this.data.identity?.speeds || []) {
+      const name = speedForwardKey(sp);
+      if (!name || expand.has(name)) continue;
+      add(name, `${String(sp.type).trim()} speed`);
+      anySpeed = true;
+      if ((Number(sp.base) || 0) + (Number(sp.bonusNum) || 0) > 0) moves.push(name);
+    }
+    if (anySpeed) {
+      expand.set('speed', moves);
+      list.push({ name: 'speed', label: 'Every speed you have', family: moves });
     }
 
     expand.set('skill', skills);

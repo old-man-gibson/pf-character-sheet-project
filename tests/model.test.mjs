@@ -15,7 +15,7 @@ import {
   setCookingTables, cookingDish, emptyDish,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
-  parseProficiencyText, normalizeProficiencies, weaponProficient,
+  parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -1250,6 +1250,92 @@ console.log('customized weapons -- what a track may learn');
     [[false, true], 'Veilweaving Sphere (Hands of the Crafter)']);
   b.setCustomizationRule(0, 'spheres', 'nonsense');
   check('a side that is not one changes nothing', cust().spec.spheres, 'combat');
+}
+
+console.log('movement speeds -- readable, and a place to send a bonus');
+{
+  const a = new Character(load('angou'));
+  const at = (type) => a.data.identity.speeds.find((s) => s.type === type);
+  const idx = (type) => a.data.identity.speeds.findIndex((s) => s.type === type);
+
+  check('every rate publishes itself under its type', a.scope().speed,
+    { land: 90, fly: 0, climb: 0, swim: 0 });
+  check('and the names validate', a.scopeNames().filter((n) => n.startsWith('speed.')),
+    ['speed.climb', 'speed.fly', 'speed.land', 'speed.swim']);
+  check('a rate answers to the name it publishes', at('Land').handle, 'speed.land');
+  check('"Fly (average)" is speed.fly — the manoeuvrability is a note, not the name',
+    speedForwardKey({ type: 'Fly (average)' }), 'speed.fly');
+  check('a rate with no type has no name, rather than a name meaning nothing',
+    speedForwardKey({ type: '  ' }), null);
+
+  // A rate may read the rates above it, which is how "equal to your land
+  // speed" is written down instead of copied out.
+  a.setItem('identity.speeds', idx('Fly'), 'bonus', 'speed.land / 2');
+  check('a fly speed written as half the land speed', [at('Fly').bonusNum, at('Fly').final], [45, 45]);
+  a.setItem('identity.speeds', idx('Land'), 'base', 60);
+  check('and it follows when the land speed moves', at('Fly').final, 30);
+  a.setItem('identity.speeds', idx('Land'), 'base', 90);
+  // Downward it may not, and says so rather than reading one pass stale.
+  a.setItem('identity.speeds', idx('Land'), 'bonus', 'speed.fly');
+  check('a rate may not read the rates below it', at('Land').bonusError, 'Unknown value "speed.fly"');
+  a.setItem('identity.speeds', idx('Land'), 'bonus', 0);
+
+  // Destinations.
+  const targets = () => a.forwardTargets().list.filter((t) => t.name.startsWith('speed'));
+  check('every rate is a destination, plus the family',
+    targets().map((t) => t.name),
+    ['speed.land', 'speed.fly', 'speed.climb', 'speed.swim', 'speed']);
+  check('and the family is the speeds she has, not the rows she keeps',
+    targets().find((t) => t.name === 'speed').family, ['speed.land', 'speed.fly']);
+
+  a.setItem('identity.speeds', idx('Fly'), 'bonus', 0);
+  const note = (text) => {
+    const at0 = a.data.notes.length;
+    a.listAdd('notes', { title: 'Test', body: text });
+    return () => a.listRemove('notes', at0);
+  };
+
+  let off = note('Boots of striding and springing: {speed.land += 10}');
+  check('a bonus forwarded to one rate lands beside the typed one, not in it',
+    [at('Land').base, at('Land').bonusNum, at('Land').forwarded, at('Land').final], [90, 0, 10, 100]);
+  check('and the scope reads the total', a.scope().speed.land, 100);
+  off();
+
+  off = note('Longstrider: {speed += 10}');
+  check('the family reaches the speeds she has and no others',
+    a.data.identity.speeds.map((s) => s.final), [100, 0, 0, 0]);
+  off();
+
+  off = note('Wings: {speed.fly += 60}');
+  check('naming a rate outright grants it — that is how a fly speed arrives',
+    a.data.identity.speeds.map((s) => s.final), [90, 60, 0, 0]);
+  off();
+
+  off = note('Caltrops: {speed.land -= 20}');
+  check('a penalty is the same road the other way', at('Land').final, 70);
+  off();
+
+  off = note('Fleet: {speed.land += floor(level / 4) * 5}');
+  check('a forwarded bonus may be a rule rather than a number', at('Land').final, 90 + 25);
+  check('and it says where it came from',
+    (a.forwardedInto('speed.land')?.from || []).map((x) => [x.value, x.expr]),
+    [[25, 'floor(level / 4) * 5']]);
+  off();
+
+  // The two together: a forwarded bonus that another rate is written to read.
+  a.setItem('identity.speeds', idx('Fly'), 'bonus', 'speed.land / 2');
+  off = note('Boots: {speed.land += 10}');
+  check('a rate reading a rate that was forwarded to settles in one recompute',
+    [at('Land').final, at('Fly').final], [100, 50]);
+  off();
+  a.setItem('identity.speeds', idx('Fly'), 'bonus', 0);
+
+  // A condition still halves what arrives, because it arrives in the base.
+  a.set('conditions.Entangled', 1);
+  const csFly = a.conditionState.speeds[idx('Land')];
+  check('entangled halves the rate a bonus was forwarded into',
+    [csFly.final, csFly.adjusted], [90, 45]);
+  a.set('conditions.Entangled', 0);
 }
 
 console.log('specialty skills');

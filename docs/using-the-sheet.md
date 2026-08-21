@@ -169,8 +169,10 @@ of the same sheet. The *build* view is everything above. The *session* view is w
 comes up at the table: its bar starts from **Overview, Skills, Feats & Mythic,
 Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
 *marked* on a class (below), and a standing strip under the character's name shows
-the numbers a table asks for mid-fight — **HP, AC (touch/FF) and the three saves**,
-with a ticked condition's adjusted values in place of the base ones.
+the numbers a table asks for mid-fight — **HP, AC (touch/FF), the three saves and
+how far you move**, with a ticked condition's adjusted values in place of the base
+ones. The movement shown is the fastest rate the character actually has; the rest
+are on its tooltip, since a strip with four of them in it is a table.
 
 In the session view the **Overview is a dashboard** rather than the full page:
 
@@ -196,6 +198,11 @@ In the session view the **Overview is a dashboard** rather than the full page:
 - **Defense** — AC (touch/FF) and CMD, then **Fortitude, Reflex and Will with their
   roll buttons**, all buff- and condition-adjusted; Expand brings the armour and
   save breakdowns up.
+- **Movement** — every rate the character has, with the two multiples anyone reaches
+  for mid-fight beside each: ×2 for a double move (as far as a charge reaches) and ×4
+  for a run. Entangled or exhausted, the halved figure is what shows, with the base in
+  its tooltip. A rate at zero is a row waiting to be filled in rather than a movement
+  rate, so it is not listed.
 - **Key skills** — the six best by bonus with their roll buttons; Expand lists every
   trained skill.
 - **Active effects** — a reminder list (name, note, on/off) for what is running.
@@ -416,6 +423,15 @@ it: that one is written down, so it stays forwarded and shows in gold beside the
 a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up
 with the level. The Final column is the model's and moves the moment either field
 does; formula bonuses appear in the Formula audit like every other player formula.
+
+Each rate also **answers to a name**, shown under the type it is typed into: *Land* is
+`speed.land`, *Fly (average)* is `speed.fly`. A formula anywhere on the character reads
+it, and a feature anywhere sends a bonus to it — `{speed.land += 10}` for the boots,
+`{speed += 10}` for every speed the character has. What arrives is kept beside the
+bonus that was typed in, gold under the total, never folded into the field. A rate with
+no type has no name, and the row says so rather than coining one that would mean
+something else the moment it was filled in. See
+[Movement rates](formulas-and-trackers.md#movement-rates).
 
 **Proficiencies** are lists rather than the workbook's three sentences, in the same
 terms the weapon rows on Equipment carry: **familiarities** (simple, martial, exotic),

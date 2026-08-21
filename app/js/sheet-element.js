@@ -213,6 +213,7 @@ const DASH_CARDS = [
   ['offense', 'Offense'],
   ['defense', 'Defense'],
   ['abilities', 'Ability checks'],
+  ['speed', 'Movement'],
   ['skills', 'Key skills'],
   ['effects', 'Active effects'],
   ['quick', 'Quick actions'],
@@ -1214,6 +1215,25 @@ export class CharacterSheetElement extends HTMLElement {
       Ref ${shown('reflex', s.reflex.total)}
       Will ${shown('will', s.will.total)}
       ${(() => {
+    // How far you can move is asked as often as any of the above, and it is
+    // the one of them a condition is most likely to have halved. The fastest
+    // rate the character actually has is the one shown; the rest are on the
+    // tooltip, because a strip with four movement rates in it is a table.
+    const rows = (c.identity?.speeds || [])
+      .map((sp, i) => ({ sp, adj: (cs.speeds || [])[i] }))
+      .filter(({ sp }) => (Number(sp.final) || 0) > 0);
+    if (!rows.length) return '';
+    const at = ({ sp, adj }) => (adj ? adj.adjusted : Number(sp.final) || 0);
+    const best = rows.reduce((a, b) => (at(b) > at(a) ? b : a));
+    const slowed = cs.changed && best.adj && best.adj.adjusted !== best.adj.final;
+    const all = rows.map((r) => `${r.sp.type || 'Movement'} ${at(r)} ft.`).join(' · ');
+    return `&middot; ${esc(rows.length > 1 ? best.sp.type || 'Speed' : 'Speed')}
+      ${slowed
+    ? `<strong class="adj ${best.adj.adjusted > best.adj.final ? 'up' : ''}"
+        title="${esc(`Base ${best.adj.final} ft. — with ${cs.sources} applied\n${all}`)}">${at(best)} ft.</strong>`
+    : `<strong title="${esc(all)}">${at(best)} ft.</strong>`}`;
+  })()}
+      ${(() => {
     // A changed size is worth a standing word: {size} and the dice follow it.
     const sizeNow = this.#model.sizeNow();
     const base = this.#model.data.identity?.size;
@@ -1456,6 +1476,7 @@ export class CharacterSheetElement extends HTMLElement {
       defense: () => this.#dashDefenseCard(open('defense'))
         + (open('defense') ? `${this.#acPanel()}${this.#savesPanel()}` : ''),
       abilities: () => this.#dashAbilitiesCard(),
+      speed: () => this.#dashSpeedCard(),
       skills: () => this.#dashSkillsCard(open('skills')),
       effects: () => this.#dashEffectsCard(),
       quick: () => this.#dashQuickCard(),
@@ -1485,7 +1506,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
     if (on('combat') && this.#model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'abilities', 'skills', 'effects', 'quick');
+    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects', 'quick');
     return out;
   }
 
@@ -1884,6 +1905,37 @@ export class CharacterSheetElement extends HTMLElement {
       ${save('reflex', 'Reflex')}
       ${save('will', 'Will')}
       <p class="hint">Expand for the armour and save breakdowns by bonus type.</p>
+    </section>`;
+  }
+
+  /**
+   * Movement, as a table asks for it: how far, and how far with a run-up.
+   *
+   * Every rate the character actually has, with whatever a condition has done
+   * to it, and beside each the two multiples anyone reaches for mid-fight. A
+   * rate at zero is not a rate -- it is a row waiting to be filled in, and the
+   * card says that once rather than printing four noughts.
+   */
+  #dashSpeedCard() {
+    const cs = this.#model.conditionState;
+    const rows = (this.#model.data.identity?.speeds || [])
+      .map((sp, i) => ({ sp, adj: (cs.speeds || [])[i] }))
+      .filter(({ sp }) => (Number(sp.final) || 0) > 0);
+    const line = ({ sp, adj }) => {
+      const moved = cs.changed && adj && adj.adjusted !== adj.final;
+      const now = adj ? adj.adjusted : Number(sp.final) || 0;
+      const value = moved
+        ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
+            title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
+        : `<strong>${now} ft.</strong>`;
+      return this.#lineHtml(sp.type || 'Movement',
+        `${value} <span class="dim">×2 ${now * 2} · run ${now * 4}</span>`, true);
+    };
+    return `<section class="panel">
+      <h3>Movement</h3>
+      ${rows.length ? rows.map(line).join('')
+    : '<p class="empty">No movement rates yet — the Speed panel on the build Overview takes them.</p>'}
+      ${rows.length ? '<p class="hint">×2 is a double move, and as far as a charge reaches; run is ×4 — ×3 in heavy armour or under a heavy load.</p>' : ''}
     </section>`;
   }
 
@@ -2566,7 +2618,10 @@ export class CharacterSheetElement extends HTMLElement {
           const adj = cs.speeds[i];
           const slowed = cs.changed && adj && adj.adjusted !== adj.final;
           return `<tr>
-          <td>${this.#itemText('identity.speeds', i, 'type', sp.type, 'Land')}</td>
+          <td>${this.#itemText('identity.speeds', i, 'type', sp.type, 'Land')}
+            <div class="hint speedname">${sp.handle
+    ? `<code>${esc(sp.handle)}</code>`
+    : 'name it to use it in a formula'}</div></td>
           <td class="num">${this.#itemNum('identity.speeds', i, 'base', sp.base)}</td>
           <td class="num">${this.#exprField(`data-item="identity.speeds|${i}|bonus"`, sp.bonus, {
             width: '5.6rem',
@@ -2577,14 +2632,25 @@ export class CharacterSheetElement extends HTMLElement {
           <td class="num total">${slowed
     ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
         title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
-    : `${Number(sp.final) || 0} ft.`}</td>
+    : `${Number(sp.final) || 0} ft.`}${(() => {
+    // Under the total rather than beside it: the panel is one of the narrow
+    // ones, and a badge on the same line pushes the column wider for every
+    // character, including the ones with nothing forwarded anywhere.
+    const badge = this.#forwardedBadge(sp.handle);
+    return badge ? `<div class="speedfwd">${badge}</div>` : '';
+  })()}</td>
           <td class="tools quiet">${this.#rowRemoveButton('identity.speeds', i, `Remove ${sp.type || 'this movement'}`)}</td>
         </tr>`;
         }).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${this.#addButton('identity.speeds', 'Add movement', { type: '', base: 30, bonus: 0 })}</div>
       <p class="hint">Bonus takes a formula, so fast movement can be written as the rule
-        it is — <code>floor(level / 3) * 10</code> — and keep up with the level.</p>
+        it is — <code>floor(level / 3) * 10</code> — and keep up with the level.
+        Each rate answers to the name under its type: a formula anywhere reads
+        <code>speed.land</code>, and a feature elsewhere sends a bonus here with
+        <code>{speed.land += 10}</code> or <code>{speed += 10}</code> for every speed you
+        have. A rate may read the rates above it — a fly speed written
+        <code>speed.land</code> follows the land speed — and not the ones below.</p>
     </section>`;
   }
 

@@ -964,6 +964,13 @@ tr.future td { opacity: 0.55; }
 .listgrid { display: grid; gap: 5px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
 .listgrid .listrow { margin-bottom: 0; }
 
+/* The name a movement rate answers to in a formula, under the type it is
+   typed into. Shown because a name nobody can see is a name nobody uses --
+   the destination browser lists it too, but this is where it is being read. */
+table.speeds .speedname { margin-top: 2px; font-size: 0.66rem; line-height: 1.2; }
+table.speeds .speedname code { font-family: var(--cs-mono); }
+table.speeds .speedfwd { margin-top: 2px; }
+
 /* Customized weapons: the tracks run across, not down, because choosing
    between them is the point -- an armiger draws the naginata instead of the
    handwraps, and the two want to be read side by side. Narrow cards, because
