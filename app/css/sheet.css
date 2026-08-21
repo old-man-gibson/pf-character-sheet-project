@@ -1,0 +1,2586 @@
+/*
+ * sheet.css -- the <character-sheet> component stylesheet.
+ *
+ * Loaded by app/js/styles.js and adopted into the component shadow root, so
+ * nothing here can leak into a host page and nothing on a host page can
+ * restyle the sheet by accident. Colours are driven by the custom properties
+ * declared on :host, which *do* pierce the shadow boundary -- that is the
+ * supported way for a host site to theme an embedded sheet. See
+ * docs/embedding.md for the properties that are public.
+ *
+ * This is plain CSS in a .css file: no build step, no preprocessor, and (unlike
+ * the template literal it used to live in) no character in it that the parser
+ * can mistake for code.
+ */
+:host {
+  --cs-bg: #14161c;
+  --cs-panel: #1c1f27;
+  --cs-panel-2: #232733;
+  /* Half a step from the panel towards the hover colour: enough to follow one
+     row across a wide table, not enough to be a colour in its own right. */
+  --cs-zebra: color-mix(in srgb, var(--cs-panel-2) 50%, var(--cs-panel));
+  --cs-line: #333949;
+  --cs-text: #e6e8ef;
+  --cs-muted: #9aa2b8;
+  --cs-accent: #d4a24a;
+  --cs-accent-soft: rgba(212, 162, 74, 0.14);
+  /* Marks a field that understands formulas; see "which fields compute". */
+  --cs-formula: rgba(212, 162, 74, 0.40);
+  --cs-formula-strong: rgba(212, 162, 74, 0.85);
+  --cs-good: #6bbf7b;
+  --cs-bad: #e0635f;
+  --cs-edit: #6ea8fe;
+  /* Formula source, wherever it is shown. A name is the same gold a computed
+     value wears, so one colour keeps meaning "a value the character supplies";
+     the rest only have to be told apart from it and from each other. */
+  --fx-name: var(--cs-accent);
+  --fx-fn: var(--cs-edit);
+  --fx-number: #8fcf9d;
+  --fx-string: #c9a3e0;
+  --fx-op: var(--cs-muted);
+  /* The six abilities, in the fills the workbook gives them (sheet2!B15:B20).
+     An ability wears its hue wherever the sheet names one, and so does every
+     dropdown that picks an ability -- in the hue of the one it picked. */
+  --ab-str: #ea9999;
+  --ab-dex: #b7e680;
+  --ab-con: #cca677;
+  --ab-int: #ffe599;
+  --ab-wis: #c27ba0;
+  --ab-cha: #a4c2f4;
+  /* How much of that hue each part takes. The fills are pastels drawn for
+     black text on white paper, so the dark theme wears them thin and inks the
+     word in the hue itself; the light theme washes them heavier and darkens
+     the ink towards the text colour. One knob each, set once per theme, and
+     the ink set where the closest-run pairing still clears 4.5:1 -- Wis here,
+     Int on the light theme, the two that sit nearest their own wash. */
+  --ab-wash: 15%;
+  --ab-edge: 55%;
+  --ab-ink: 30%;
+  --cs-radius: 8px;
+  --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  display: block;
+  font-family: var(--cs-font);
+  color: var(--cs-text);
+  background: var(--cs-bg);
+  border-radius: var(--cs-radius);
+  container-type: inline-size;
+  line-height: 1.45;
+  /* A <select>'s open list is drawn by the browser, not by this stylesheet, so
+     it takes its colours from color-scheme. Without this the dark theme gets a
+     white popup with washed-out text. */
+  color-scheme: dark;
+}
+
+:host([theme="light"]) {
+  color-scheme: light;
+  --cs-bg: #f4f5f8;
+  --cs-panel: #ffffff;
+  --cs-panel-2: #eef0f5;
+  --cs-line: #d3d7e0;
+  --cs-text: #1a1d26;
+  --cs-muted: #5c6478;
+  --cs-accent: #9a6b12;
+  --cs-accent-soft: rgba(154, 107, 18, 0.12);
+  --cs-formula: rgba(154, 107, 18, 0.38);
+  --cs-formula-strong: rgba(154, 107, 18, 0.80);
+  --cs-edit: #2563c9;
+  --fx-number: #1f7a43;
+  --fx-string: #6b3fa0;
+  --ab-wash: 38%;
+  --ab-edge: 72%;
+  --ab-ink: 66%;
+}
+
+* { box-sizing: border-box; }
+
+.wrap { padding: 14px; }
+
+/* ---------- header ---------- */
+.head {
+  display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--cs-line);
+}
+.portrait {
+  width: 84px; height: 84px; flex: none; border-radius: var(--cs-radius);
+  object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+}
+/* A real minimum, not zero: when the header buttons would otherwise crush the
+   name and summary into a one-word column (768-1024px), the actions wrap to
+   their own row below instead. */
+.head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
+.name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
+.subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
+/* The session view's standing line: the numbers a table asks for mid-fight,
+   visible on every tab while that view is on. */
+.sessionstrip { display: flex; flex-wrap: wrap; gap: 2px 7px; align-items: baseline; margin-top: 4px; }
+.sessionstrip strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.sessionstrip strong.bad { color: var(--cs-bad); }
+.sessionstrip strong.now { display: inline; font-size: inherit; margin: 0; }
+.sessionstrip .dim { font-size: 0.75rem; }
+.sessionstrip .hptemp { font-size: 0.75rem; }
+.head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- the session dashboard ---------- */
+/* Cards over panels: the same .panel chrome, but each card leads with the
+   one line that answers the common question, and Expand brings the full
+   build-view panel up in place. */
+.dashboard .dashconds { display: flex; flex-wrap: wrap; gap: 6px; }
+.dashboard .cond-pill { font-size: 0.85rem; padding: 3px 6px 3px 10px; gap: 5px; }
+.dashboard .cond-pill input { width: 3rem; }
+/* The condition picker: short shelves, not one long dropdown. */
+.condcats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 10px; margin-top: 10px; }
+.condcat { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.condcat h4 { margin: 0 0 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted); }
+.condcat button { text-align: left; font-size: 0.8rem; }
+.condcat button[disabled] { opacity: 0.5; }
+/* Trackers pack side by side and keep their listed order; the Trackers tab
+   stays the canonical one-per-row read. */
+.dashtrackers { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 2px 18px; }
+.dashtracker { display: grid; grid-template-columns: minmax(5.5rem, max-content) 1fr auto; gap: 8px; align-items: center; padding: 4px 0; min-width: 0; }
+.dashtracker.invalid .tname { color: var(--cs-bad); }
+.dashtracker .tname { font-weight: 620; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 11rem; }
+.dashtracker .dashmeter { min-width: 3rem; }
+/* Buffs: one line collapsed, a roomy editor open -- long formulas need width. */
+/* Buffs pack shoulder to shoulder and never move: the editor is its own
+   full-width block under the grid, tied to the open card by the highlight. */
+.bufflist { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 8px; }
+.buffcard { border: 1px solid var(--cs-line); border-radius: var(--cs-radius); padding: 6px 10px; background: var(--cs-panel-2); }
+.buffcard.open { border-color: var(--cs-edit); }
+.buffcard.invalid { border-color: var(--cs-bad); }
+.buffcard.off .bname, .buffcard.off .bsum { opacity: 0.55; }
+.buffeditor {
+  margin-top: 8px; padding: 8px 10px; background: var(--cs-panel-2);
+  border: 1px solid var(--cs-edit); border-radius: var(--cs-radius);
+}
+.buffeditor .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+/* The extra bonuses: a [target, value] pair per chip, addable without limit. */
+.buffbonuses { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 8px; }
+.buffbonus { display: inline-flex; gap: 4px; align-items: center; }
+.buffbonus select { width: auto; max-width: 11rem; }
+.buffhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.buffhead .bname { font-weight: 620; font-size: 0.9rem; }
+.buffhead > input[type="text"] { flex: 1 1 10rem; min-width: 8rem; max-width: 20rem; width: auto; }
+.buffhead > input[type="checkbox"] { flex: none; width: auto; }
+.effectrow .pair > input[type="checkbox"] { flex: none; width: auto; }
+/* The full-attack weapon pick: a name, not a paragraph. */
+.dashboard .statline select { max-width: 10rem; }
+/* One reminder per block: the tick and name on the first line, the note under. */
+.effectlist { display: grid; gap: 8px; }
+.effectrow { display: grid; gap: 4px; }
+.effectrow .pair > input[type="text"], .effectrow > input[type="text"] { flex: 1; width: 100%; }
+.effectrow.off input[type="text"] { opacity: 0.55; }
+.now.up { color: var(--cs-good); }
+/* The dashboard's own toolbar, and the caster and reference cards. */
+.dashtools { display: flex; justify-content: flex-end; margin: -6px 0; }
+.dashcaster { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 4px 0; }
+.dashcaster .tname { font-weight: 620; font-size: 0.85rem; }
+.dashslots { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; flex: 1; }
+.dashslot { display: inline-flex; gap: 5px; align-items: center; }
+.dashtalent { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 0; }
+.dashtalent.mnote { color: var(--cs-muted); margin: -2px 0 2px; }
+/* The prepared list packs into columns; every row's squares hang off the same
+   left edge, so pip one is always top-left and fills rightward. */
+.dashspells { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0 20px; margin-top: 6px; }
+.dashspell { display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr); gap: 10px; align-items: center; padding: 2px 0; }
+.dashspell .sname { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashspell .suses { justify-self: start; }
+.dashspell .pips.square, .dashspell .pips { margin-top: 0; }
+/* The Vancian spell list: squares hug the right, held clear of the armed ×. */
+.spelllist .spendcell { text-align: right; }
+.spelllist .spendcell .pips.square { margin-left: auto; margin-top: 0; }
+.spelllist td.tools { padding-left: 16px; }
+.spelllist .tools button.armed { font-size: 0.68rem; padding: 2px 6px; }
+/* A number a condition or buff has moved, shown in place of the base. */
+.adj { color: var(--cs-bad); }
+.adj.up { color: var(--cs-good); }
+/* What the ticked conditions add up to, and the rules they carry -- read at
+   the table, so no smaller than the sheet's own text. */
+.condnums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.condnums .tag { font-size: 0.82rem; padding: 2px 8px; }
+.condnotes { margin: 8px 0 0; padding-left: 1.2rem; font-size: 0.85rem; color: var(--cs-text); }
+.condnotes li { margin: 2px 0; }
+.dashstats { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.dashstat { display: inline-flex; gap: 5px; align-items: baseline; font-size: 0.85rem; color: var(--cs-muted); }
+.dashstat strong { color: var(--cs-text); font-variant-numeric: tabular-nums; }
+.dashstat .now { display: inline; margin: 0; }
+.dashdmg { font-weight: 620; font-variant-numeric: tabular-nums; }
+.dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
+.dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
+@media (max-width: 700px) {
+  .dashtracker { grid-template-columns: 1fr auto; }
+  .dashtracker .dashmeter { grid-column: 1 / -1; }
+}
+/* Why an offered file was refused -- stays up until dismissed, because the
+   fix (re-run the converter, pick a different file) happens elsewhere. */
+.importerr {
+  flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start;
+  margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
+  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  border: 1px solid var(--cs-bad); border-radius: 6px;
+}
+.importerr button { margin-left: auto; padding: 0 6px; }
+/* The armed Reset: loud enough to read, dead until the word is typed. */
+.resetconfirm {
+  flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 8px 10px; font-size: 0.8rem;
+  color: var(--cs-text); background: rgba(224, 99, 95, 0.10);
+  border: 1px solid var(--cs-bad); border-radius: 6px;
+}
+.resetconfirm > span:first-child { flex: 1 1 24rem; }
+.resetconfirm strong { color: var(--cs-bad); }
+.resetconfirm .pair { margin-left: auto; }
+
+/* ---------- saving, and going back ---------- */
+/* Work that was never saved, offered rather than assumed: the sheet opens on
+   the saved version, so without this the edits after it look lost. */
+.resume {
+  flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
+  color: var(--cs-edit); background: rgba(110, 168, 254, 0.10);
+  border: 1px solid var(--cs-edit); border-radius: 6px;
+}
+.resume span { flex: 1; min-width: 12ch; }
+/* What just happened -- saved, restored, or why one of those did not work. */
+.histnote {
+  flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start;
+  margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
+  color: var(--cs-muted); background: var(--cs-panel);
+  border: 1px solid var(--cs-line); border-radius: 6px;
+}
+.histnote button { margin-left: auto; padding: 0 6px; }
+
+.history {
+  flex-basis: 100%; margin-top: 8px; padding: 10px 12px;
+  background: var(--cs-panel); border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius); font-size: 0.82rem;
+}
+.histhead {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
+}
+.histmake { display: flex; gap: 6px; margin: 9px 0; flex-wrap: wrap; }
+.histmake input { flex: 1; min-width: 18ch; }
+.histgroup {
+  color: var(--cs-muted); font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: 0.05em; margin: 10px 0 4px;
+}
+.histlist { list-style: none; margin: 0; padding: 0; }
+.histrow {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 5px 0; border-top: 1px solid var(--cs-line);
+}
+.histrow:first-child { border-top: 0; }
+/* A fixed column so a list of times reads as a column and not as ragged prose. */
+.histwhen { flex: none; min-width: 17ch; color: var(--cs-muted); }
+.histwhat { flex: 1; min-width: 10ch; display: flex; gap: 6px; align-items: baseline; }
+.histname { flex: 1; min-width: 12ch; }
+.histsize { color: var(--cs-muted); font-size: 0.75rem; }
+/* Stored before a schema change, so it cannot be opened by this build. */
+.histrow.stale { opacity: 0.6; }
+.histrow.stale .histwhen { text-decoration: line-through; }
+
+@container (max-width: 620px) {
+  .histwhen { min-width: 100%; }
+}
+
+/* ---------- controls ---------- */
+button {
+  font: inherit; font-size: 0.8rem; color: var(--cs-text);
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 6px; padding: 5px 10px; cursor: pointer;
+}
+button:hover { border-color: var(--cs-accent); }
+button[aria-pressed="true"], button.primary {
+  background: var(--cs-accent-soft); border-color: var(--cs-accent); color: var(--cs-accent);
+}
+button.danger:hover { border-color: var(--cs-bad); color: var(--cs-bad); }
+/* Save with nothing to save, and Keep checkpoint with nothing typed. */
+button:disabled { opacity: 0.45; cursor: default; }
+button:disabled:hover { border-color: var(--cs-line); }
+
+input, select, textarea {
+  font: inherit; font-size: 0.85rem; color: var(--cs-text);
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 5px; padding: 4px 7px; width: 100%; min-width: 0;
+}
+/* Belt and braces with color-scheme above: browsers that do paint option rows
+   from CSS get the panel colours rather than inheriting a see-through one. */
+option { background: var(--cs-panel); color: var(--cs-text); }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--cs-edit); outline-offset: -1px; border-color: var(--cs-edit);
+}
+input[type="number"] { text-align: center; }
+textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+input.mono { font-family: var(--cs-mono); font-size: 0.8rem; text-align: left; }
+/* A value that is read, not typed: the same box as a field, in the derived colour. */
+input.ro, input.ro:focus {
+  color: var(--cs-accent); font-weight: 620; text-align: center;
+  background: var(--cs-accent-soft); border-color: var(--cs-accent-soft);
+  outline: none; cursor: default; font-variant-numeric: tabular-nums;
+}
+table.build td.over input, table.build td.over .expr { color: var(--cs-muted); }
+/* A slot the character is still owed: the row carries a soft warning wash. */
+tr.needsfill td { background: rgba(224, 99, 95, 0.07); }
+/* A skill hidden with the eye: shown only under Show all, dimmed, to be reopened. */
+tr.hiddenskill td { opacity: 0.45; }
+tr.hiddenskill td.tools { opacity: 1; }
+button.eye { padding: 2px 6px; line-height: 1; }
+/* The four unarmed spheres, and the two items, two abreast. */
+.unarmed-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
+.unarmed-grid .statline:nth-last-child(-n+2) { border-bottom: 0; }
+button.eye[aria-pressed="true"] { color: var(--cs-muted); }
+tr.needsfill td:first-child { box-shadow: inset 3px 0 0 var(--cs-bad); }
+
+/* ---------- techniques and cooking ---------- */
+.techsheet { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-bottom: 8px; }
+.techsheet th {
+  text-align: left; font-weight: 600; color: var(--cs-muted); font-size: 0.74rem;
+  padding: 3px 8px 3px 0; white-space: nowrap; width: 1%;
+}
+.techsheet td { padding: 2px 3px; vertical-align: middle; }
+.techsheet td input, .techsheet td select { width: 100%; min-width: 5.5rem; }
+.techsheet td.techname input { font-weight: 640; }
+.techsheet tr.talentrow td { padding-bottom: 8px; }
+.talentgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 4px; }
+.talentgrid .talent { display: grid; gap: 2px; }
+.talentgrid .talent select, .talentgrid .talent input { width: 100%; min-width: 0; font-size: 0.76rem; }
+.talentgrid .talent input.ro:placeholder-shown, .talentgrid .talent input.ro[value=""] { opacity: 0.45; }
+.techstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 18px; margin: 6px 0 10px; }
+.techflags { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0; font-size: 0.82rem; }
+.techdesc { display: grid; gap: 6px; margin-top: 6px; }
+.techdesc .ro-text {
+  background: var(--cs-bg); border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 6px 8px; font-size: 0.82rem; white-space: pre-wrap; min-height: 1.6em;
+}
+.techpick { flex-wrap: wrap; gap: 8px; }
+.techpick > select { min-width: 18rem; flex: 1; }
+.techpick .pair input { width: 8rem; }
+textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76rem; line-height: 1.4; }
+.cooksheet td select { min-width: 8rem; }
+.dishlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.dishlist li { border-bottom: 1px solid var(--cs-line); padding-bottom: 6px; font-size: 0.84rem; }
+.dishlist li:last-child { border-bottom: 0; }
+.dishref td.ingname { font-weight: 600; white-space: nowrap; }
+.dishref th { vertical-align: top; text-align: left; color: var(--cs-muted); font-size: 0.74rem; padding-right: 8px; }
+
+/* ---------- wealth ---------- */
+/* The wallet is a short panel wearing a long one's clothes: on hand, what
+   comes in a day, and -- for the two characters who owe one -- the offering.
+   Across the full width it was mostly rule, so it is capped and left where the
+   column starts. */
+.panel.wealth { max-width: 54rem; }
+.wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
+.wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.wealthnums .bigstat .v.neg { color: var(--cs-bad); }
+.wealthfieldcol { display: grid; gap: 9px; }
+.wealthfields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* The offering half, with neither switch on: still readable, no longer
+   writable, and ruled off so it is plain which half it is. */
+.offeringfields { border-top: 1px solid var(--cs-line); padding-top: 8px; }
+.offeringfields.dormant { opacity: 0.5; }
+.offeringfields.dormant input { cursor: not-allowed; }
+.wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+.wealthactions .pair input, .wealthactions .pair select { width: auto; }
+table.ledger { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-top: 6px; }
+table.ledger th { text-align: left; font-weight: 600; color: var(--cs-muted); font-size: 0.72rem; padding: 2px 6px; border-bottom: 1px solid var(--cs-line); }
+table.ledger td { padding: 3px 6px; border-bottom: 1px solid var(--cs-line); }
+table.ledger td.num, table.ledger th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.ledger td.pos { color: var(--cs-good); }
+table.ledger td.neg { color: var(--cs-bad); }
+table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
+
+/* ---------- tabs ---------- */
+.tabs {
+  display: flex; gap: 3px; flex-wrap: wrap;
+  margin: 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
+}
+.tabs button { border-radius: 6px 6px 0 0; }
+/* Rearranging by drag: the tab (or manager row) being carried fades, and the
+   one under the pointer shows which side the drop lands on. */
+.tabs button.dragging, .tabrow.dragging { opacity: 0.4; }
+.tabs button.drop-before { box-shadow: -3px 0 0 0 var(--cs-accent); }
+.tabs button.drop-after { box-shadow: 3px 0 0 0 var(--cs-accent); }
+.tabrow { cursor: grab; }
+.tabrow.drop-before { box-shadow: 0 -2px 0 0 var(--cs-accent); }
+.tabrow.drop-after { box-shadow: 0 2px 0 0 var(--cs-accent); }
+.tabrow .grip { color: var(--cs-muted); font-size: 0.8rem; letter-spacing: -2px; user-select: none; }
+
+/* ---------- layout ---------- */
+/* Panels now hold editable controls rather than plain text, so they need more
+   room than a display-only layout did. */
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+.panel {
+  background: var(--cs-panel); border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius); padding: 11px 12px;
+}
+.panel > h3 {
+  margin: 0 0 9px; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--cs-accent); font-weight: 650;
+}
+.panel.span2 { grid-column: 1 / -1; }
+
+/* ---------- stat blocks ---------- */
+.statline {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 3px 0; border-bottom: 1px dotted var(--cs-line);
+}
+.statline:last-child { border-bottom: 0; }
+.statline .label { color: var(--cs-muted); font-size: 0.82rem; }
+.statline .value { font-weight: 640; font-variant-numeric: tabular-nums; }
+.statline .value.big { font-size: 1.05rem; color: var(--cs-accent); }
+/* A total that does not add up -- more spent than the character has. */
+.statline .value.bad { color: var(--cs-bad); }
+
+.bigstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.bigstat {
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 6px; padding: 7px 6px; text-align: center;
+}
+.bigstat .k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--cs-muted); }
+.bigstat .v { font-size: 1.3rem; font-weight: 680; font-variant-numeric: tabular-nums; }
+.bigstat .sub { font-size: 0.68rem; color: var(--cs-muted); }
+
+/* ---------- header stat strip ----------
+   A row of small readings for a panel that is mostly table underneath, where
+   the full .bigstats grid would spend a third of the screen on six numbers. */
+.statbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+}
+.statbar-fill { flex: 1 1 auto; }
+.ministat {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 5px; padding: 3px 8px;
+}
+.ministat .k {
+  font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted);
+}
+.ministat .v { font-size: 0.95rem; font-weight: 660; font-variant-numeric: tabular-nums; }
+.ministat.warn .v { color: var(--cs-bad); }
+.minifield {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: var(--cs-muted);
+}
+.minifield input { padding: 2px 5px; }
+
+/* ---------- discipline columns ----------
+   Every row is a tick box and a name, so disciplines read side by side rather
+   than stacked full-width. The column still has to be wide enough for the
+   longest maneuver names ("Curse of the Twisted Reflection"), which wrap
+   rather than truncate -- a name you have to hover to read is not readable. */
+.discipline-wrap { overflow: hidden; }
+.disciplines {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  align-items: start;
+}
+.discipline {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  background: var(--cs-panel-2); overflow: hidden; min-width: 0;
+}
+.discipline-head {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 4px 4px 2px; border-bottom: 1px solid var(--cs-line);
+}
+.discipline.is-collapsed .discipline-head { border-bottom: none; }
+.discipline-head .dname {
+  flex: 1 1 auto; min-width: 0; font-weight: 640; font-size: 0.8rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.discipline-head .dcount {
+  font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--cs-muted);
+  flex: none;
+}
+.discipline-head .dcount i { font-style: normal; opacity: 0.5; margin: 0 1px; }
+.disclose {
+  flex: none; padding: 0 3px; min-width: 0; background: none; border: none;
+  color: var(--cs-muted); font-size: 0.75rem; line-height: 1; cursor: pointer;
+}
+button.tiny {
+  flex: none; padding: 1px 5px; font-size: 0.75rem; line-height: 1.2; min-width: 0;
+}
+.discipline-body { padding: 3px 5px 6px; }
+.dlevel {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted); margin: 5px 0 2px; padding-top: 3px;
+  border-top: 1px solid var(--cs-line);
+}
+.discipline-body .dlevel:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+.mrow {
+  display: flex; align-items: flex-start; gap: 6px; padding: 3px 4px;
+  border-radius: 4px; cursor: pointer; min-width: 0;
+}
+/* The overview-note pen on a readied maneuver: quiet until it holds one. */
+.mnote-btn {
+  flex: none; padding: 0 4px; border: 0; background: none; font-size: 0.72rem;
+  color: var(--cs-muted); opacity: 0.55; cursor: pointer; line-height: 1.3;
+}
+.mrow:hover .mnote-btn { opacity: 1; }
+.mnote-btn.has-note { color: var(--cs-edit); opacity: 1; }
+.mnote-edit { margin: 0 4px 6px 24px; }
+.mrow:hover { background: var(--cs-accent-soft); }
+/* The global input rule sets width:100%, which would give the tick box the
+   whole row and leave the name nothing. */
+.mrow input[type="checkbox"] { flex: none; width: auto; margin: 1px 0 0; }
+.mrow .mname {
+  flex: 1 1 auto; min-width: 0; font-size: 0.78rem; line-height: 1.3;
+  overflow-wrap: anywhere; color: var(--cs-muted);
+}
+.mrow.is-known .mname { color: var(--cs-text); font-weight: 620; }
+.mrow .mtype {
+  flex: none; font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--cs-muted); opacity: 0.75; padding-top: 2px;
+}
+.mrow .mtype.is-stance { color: var(--cs-accent); opacity: 1; }
+/* A right-click target is invisible, so hovering a row that has a wiki page
+   underlines its name the way a link would. */
+.mrow[data-wiki]:hover .mname {
+  text-decoration: underline dotted; text-underline-offset: 2px;
+}
+
+/* ---------- akashic ----------
+   The class blocks want the width (six columns of numbers); the essence pool
+   is five short rows, so it sits beside them rather than under a heading of
+   its own. */
+.akashic-head {
+  display: grid; gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 210px);
+  align-items: start;
+}
+.ak-pool table.build th[scope="row"] { font-weight: 500; color: var(--cs-muted); }
+.ak-pool input[type="number"] { width: 100%; }
+
+/* ---------- the essence header ----------
+   What moves during play is how much of the pool is still free, and that is a
+   proportion, so it reads as a bar rather than as another boxed number. The
+   fixed readings sit beside it as tiles and the spell-point exchange at the
+   end, which is what fills a full-width strip that used to hold six chips. */
+.essence-strip {
+  display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px 16px;
+}
+/* The gauge is capped rather than greedy: a bar stretched across the whole
+   strip puts half a metre between "invested" and "free". The tiles take the
+   slack instead, the way the Overview stat row does. */
+.ess-gauge {
+  flex: 0 1 460px; min-width: 250px;
+  display: flex; flex-direction: column; justify-content: center; gap: 5px;
+}
+.ess-head { display: flex; align-items: baseline; gap: 7px; }
+.ess-read { font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ess-read b { font-weight: 700; color: var(--cs-accent); }
+.ess-read i { font-style: normal; opacity: 0.45; margin: 0 2px; font-weight: 400; }
+.ess-gauge.is-over .ess-read b { color: var(--cs-bad); }
+.ess-k {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted);
+}
+.ess-fill { flex: 1 1 auto; }
+.ess-left {
+  font-size: 0.82rem; font-weight: 620; font-variant-numeric: tabular-nums;
+  color: var(--cs-muted);
+}
+.ess-gauge.is-over .ess-left { color: var(--cs-bad); }
+.ess-note { font-size: 0.7rem; color: var(--cs-muted); }
+
+.ess-figs { flex: 1 1 240px; display: flex; gap: 8px; align-items: stretch; }
+.essfig {
+  flex: 1 1 0; min-width: 66px; padding: 4px 9px; text-align: center;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line); border-radius: 6px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.essfig .v { font-size: 1.1rem; font-weight: 680; font-variant-numeric: tabular-nums; }
+.essfig .k {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted);
+}
+.essfig .sub { font-size: 0.64rem; color: var(--cs-muted); opacity: 0.75; }
+
+.ess-sp {
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 5px 10px; border-radius: 6px;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+}
+.ess-sp.is-over { border-color: var(--cs-bad); }
+.ess-sp-k {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted);
+}
+.ess-sp .minifield { font-size: 0.74rem; color: var(--cs-text); }
+.ess-sp-cost { font-size: 0.68rem; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
+.ess-sp.is-over .ess-sp-cost { color: var(--cs-bad); }
+
+/* ---------- a small segmented switch ----------
+   Three or four one-word choices that belong to the panel beside them, so they
+   read as one control rather than as separate buttons. */
+.seg { display: inline-flex; align-items: center; gap: 5px; }
+.seg-k {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted);
+}
+.seg button {
+  padding: 2px 8px; font-size: 0.72rem; border-radius: 0; margin-left: -1px;
+  position: relative;
+}
+.seg button:first-of-type { border-radius: 5px 0 0 5px; margin-left: 0; }
+.seg button:last-of-type { border-radius: 0 5px 5px 0; }
+.seg button[aria-pressed="true"] {
+  background: var(--cs-accent-soft); border-color: var(--cs-accent);
+  color: var(--cs-accent); z-index: 1;
+}
+
+/* Fifteen slots, most empty on any day: narrow cards, not fifteen blocks.
+   The --veil-track property pins how many go on a row; without it they
+   auto-fill. (No backticks in here: the whole sheet is one template literal.) */
+.veils {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--veil-track, 250px), 1fr));
+  align-items: start;
+}
+.veilslot {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  background: var(--cs-panel-2); min-width: 0;
+}
+.veilslot-head {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 4px 4px 2px; border-bottom: 1px solid var(--cs-line);
+}
+.veilslot.is-collapsed .veilslot-head { border-bottom: none; }
+.veilslot-head select { flex: 1 1 auto; min-width: 0; }
+.veilslot-head .klabel {
+  flex: 1 1 auto; min-width: 0; font-weight: 640; font-size: 0.78rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.veilslot-head .vcount {
+  flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums;
+  color: var(--cs-muted);
+}
+.veilslot-head .vcount i { font-style: normal; opacity: 0.5; margin: 0 1px; }
+.veilslot-body { padding: 5px; display: flex; flex-direction: column; gap: 6px; }
+/* A receptacle ticked off for the day: still there, dimmed. */
+.veilslot.is-off .veil { opacity: 0.55; }
+.veilslot.is-off .veil .veilflags { opacity: 1; }
+.veilflags { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.veilflags .chk { font-size: 0.72rem; }
+.veil {
+  border: 1px solid var(--cs-line); border-radius: 5px;
+  padding: 4px; background: var(--cs-panel);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.veil-top { display: flex; align-items: center; gap: 4px; }
+.veil-top > input[type="text"] { flex: 1 1 auto; min-width: 0; font-weight: 620; }
+.veil-top input[type="number"] { width: 3rem; }
+.veil-dc {
+  flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums;
+  color: var(--cs-accent); font-weight: 650; white-space: nowrap;
+}
+/* The description is a real paragraph field: it resolves {…} like any other
+   prose, and stays draggable so a long veil can be opened up. */
+.veil .prose textarea { resize: vertical; min-height: 34px; font-size: 0.76rem; }
+.veil .prose-view { font-size: 0.76rem; min-height: 34px; }
+
+/* ---------- ability colour coding ---------- */
+/*
+ * Everything below keys off the *value* of data-ab rather than the attribute
+ * merely being there: a dropdown that picks an ability carries the attribute
+ * empty until one is picked, which is what leaves it looking like any other.
+ */
+[data-ab="str"] { --ab: var(--ab-str); }
+[data-ab="dex"] { --ab: var(--ab-dex); }
+[data-ab="con"] { --ab: var(--ab-con); }
+[data-ab="int"] { --ab: var(--ab-int); }
+[data-ab="wis"] { --ab: var(--ab-wis); }
+[data-ab="cha"] { --ab: var(--ab-cha); }
+
+/* The name of an ability: the workbook's own coloured cell, kept to a chip so
+   that six of them stacked in a table still read as rows. */
+.abmark[data-ab]:not([data-ab=""]) {
+  display: inline-block; border-left: 3px solid var(--ab); border-radius: 3px;
+  padding: 1px 5px; font-weight: 650;
+  /* Str is a narrower word than Con, and six chips that each hug their own
+     word are six different widths. One width in em, so it holds at whatever
+     size the surrounding table sets. */
+  min-width: 3.2em;
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+}
+/* A dropdown that picks an ability wears what it picked, so which stat a slot
+   runs on is answered before its label is read. */
+select[data-ab]:not([data-ab=""]) {
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
+  border-color: color-mix(in srgb, var(--ab) var(--ab-edge), var(--cs-line));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+  font-weight: 620;
+}
+/* Focus still reads as focus rather than as an ability. */
+select[data-ab]:not([data-ab=""]):focus { border-color: var(--cs-edit); }
+/* And where a browser paints the open list from CSS, the choices are coded
+   too -- the same six colours, in the same order, every time it opens. */
+option[data-ab]:not([data-ab=""]) {
+  background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel));
+  color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
+}
+
+/* ability score rows */
+.abilities { display: grid; gap: 5px; }
+.ability {
+  display: grid; grid-template-columns: 3rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem;
+  gap: 6px; align-items: center;
+}
+.ability .ab { font-weight: 650; font-size: 0.85rem; }
+.ability .mod {
+  text-align: center; font-variant-numeric: tabular-nums; font-weight: 640;
+  background: var(--cs-panel-2); border-radius: 5px; padding: 3px 0; font-size: 0.85rem;
+}
+.ability .mod.temp { color: var(--cs-accent); }
+.ability-head {
+  display: grid; grid-template-columns: 3rem 3.4rem 2.8rem 3.4rem 2.8rem 1.7rem; gap: 6px;
+  font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--cs-muted); margin-bottom: 3px; text-align: center;
+}
+.ability-head span:first-child { text-align: left; }
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
+th {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted); font-weight: 600; position: sticky; top: 0;
+  background: var(--cs-panel); z-index: 1;
+}
+/* Alternating rows, for a table wide enough that an eye can lose its place.
+   Hover is the whole step, so it still reads on a striped row and a plain one
+   alike; a cell with a wash of its own (a group band, a row that wants
+   filling) is translucent, and tints the stripe rather than hiding it. */
+tbody tr:nth-child(even) { background: var(--cs-zebra); }
+tbody tr:hover { background: var(--cs-panel-2); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num {text-align: left}
+td.total { font-weight: 660; color: var(--cs-accent); }
+tr.trained td:first-child { font-weight: 600; }
+tr.untrained { color: var(--cs-muted); }
+
+/* ---------- ability build (Stats tab) ---------- */
+table.build th[scope="row"] {
+  position: sticky; left: 0; background: var(--cs-panel);
+  text-align: left; font-size: 0.8rem; color: var(--cs-text);
+  text-transform: none; letter-spacing: 0; z-index: 2;
+}
+/* Sticky cells paint their own background, so the stripe has to be repeated
+   here or a row would break in two at the freeze. */
+table.build tbody tr:nth-child(even) th[scope="row"] { background: var(--cs-zebra); }
+table.build th { white-space: nowrap; vertical-align: bottom; }
+table.build td { padding: 3px 4px; }
+table.build input[type="number"] { width: 3.2rem; padding: 3px 4px; }
+table.build input:disabled { opacity: 0.4; cursor: not-allowed; }
+table.build select { width: 100%; min-width: 3.6rem; padding: 3px 4px; }
+table.build td.mid .hint { margin-left: 3px; }
+
+/* Permanent and temporary bonuses read as one pair and are edited together, so
+   they sit side by side wherever the sheet is wide enough for both tables --
+   which a 1080p screen is. Narrower, they stack as before. */
+/* minmax(0, 1fr) rather than a bare column: an auto-sized track would take the
+   table's own width as its minimum and push the panel past the viewport
+   instead of letting .tablewrap scroll. */
+.statpair {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The two minimums are what the tables actually measure (their headers do not
+   wrap and their inputs are a fixed width), so neither panel is ever handed
+   less room than its table needs; the breakpoint is where both fit at once. */
+@container (min-width: 1385px) {
+  .statpair { grid-template-columns: minmax(46.5rem, 1.15fr) minmax(37.5rem, 1fr); }
+}
+
+/* ABP and gear are one bonus type sharing one cap: banded together, with the
+   group's own total closing the band. */
+table.build tr.groups th { border-bottom: 0; padding-bottom: 0; height: 1.1em; }
+table.build th.grouphead {
+  text-align: center; color: var(--cs-accent); letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--cs-accent-soft);
+}
+table.build th.grouphead .capnote { color: var(--cs-muted); letter-spacing: 0; }
+table.build .grouped { background: var(--cs-accent-soft); }
+table.build .groupstart { border-left: 1px solid var(--cs-accent-soft); }
+table.build .groupend { border-right: 1px solid var(--cs-accent-soft); }
+table.build td.groupend { font-weight: 660; }
+table.build td.groupend.over { color: var(--cs-bad); }
+/* A level where a track grants nothing: no control, just quiet space. */
+table.build td.noslot { background: transparent; }
+/* Array picks wrap instead of forcing a wide table. */
+.pickgroup { margin-bottom: 9px; }
+.pickgroup.future { opacity: 0.45; }
+.picklvl {
+  display: block; font-size: 0.66rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--cs-muted); margin-bottom: 3px;
+}
+.picks { display: flex; flex-wrap: wrap; gap: 5px; }
+.picks select { flex: 1 1 4.2rem; min-width: 4.2rem; max-width: 7rem; padding: 3px 4px; }
+table.build td.derived {
+  color: var(--cs-accent); font-weight: 620; background: var(--cs-accent-soft);
+  border-radius: 4px;
+}
+table.build tr.future, table.build td.future { opacity: 0.45; }
+table.build tr.costrow td, table.build tr.costrow th {
+  color: var(--cs-muted); font-size: 0.78rem; border-bottom: 0;
+}
+.statline .value.over { color: var(--cs-bad); }
+.hint.warn { color: var(--cs-bad); }
+
+/* ---------- editable fields ---------- */
+.fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.fieldgrid.two { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+label.fld { display: flex; flex-direction: column; gap: 3px; }
+label.fld > span {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
+}
+label.fld.tall textarea { min-height: 58px; }
+/* A value the sheet works out rather than takes -- the mythic tier, the
+   language slots Int grants -- gets the same box as the fields beside it,
+   drawn as read-only, so a computed number is not a stray word under a
+   heading that the eye skips over. */
+label.fld > .value {
+  display: flex; align-items: center; min-height: 1.95rem; box-sizing: border-box;
+  padding: 4px 7px; font-size: 0.85rem; font-weight: 640;
+  font-variant-numeric: tabular-nums; color: var(--cs-accent);
+  background: transparent; border: 1px dashed var(--cs-line); border-radius: 5px;
+  text-transform: none; letter-spacing: 0;
+}
+label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+.pair { display: flex; align-items: center; gap: 5px; }
+.pair input { width: 3.4rem; }
+label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+label.chk input { width: auto; }
+td.mid { text-align: center; }
+td.tools { white-space: nowrap; text-align: right; }
+td.tools button { padding: 2px 6px; font-size: 0.72rem; margin-left: 2px; }
+table input[type="text"] { min-width: 5rem; }
+h3 input.grouptitle {
+  font: inherit; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--cs-accent); background: transparent; border: 1px dashed transparent;
+  width: auto; max-width: 12rem; padding: 1px 4px;
+}
+h3 input.grouptitle:hover { border-color: var(--cs-line); }
+.panel > h3 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.panel > h3 button { margin-left: auto; }
+
+/* ---------- hit points ---------- */
+.hpbar {
+  height: 7px; border-radius: 4px; background: var(--cs-panel-2);
+  overflow: hidden; margin-bottom: 9px;
+}
+.hpfill { height: 100%; background: var(--cs-good); transition: width 0.2s; }
+.hpfill.hurt { background: var(--cs-bad); }
+.hprow { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; }
+.hprow input { width: 4.6rem; font-size: 1.05rem; font-weight: 650; }
+.hpsep { color: var(--cs-muted); }
+/* Temporary points read as a bonus on the total rather than part of it. */
+.hptemp {
+  font-size: 0.82rem; font-weight: 650; color: var(--cs-good);
+  font-variant-numeric: tabular-nums;
+}
+.hpactions { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-top: 9px; }
+.hpactions input { width: 4rem; }
+
+/* ---------- conditions ---------- */
+.condgrid { display: grid; gap: 5px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+label.cond {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  font-size: 0.78rem; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 5px; padding: 3px 4px 3px 8px;
+}
+label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
+
+/* ---------- notes ---------- */
+.notecard.editable { background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 6px; padding: 8px 10px; }
+.noterow { display: flex; gap: 6px; margin-bottom: 5px; }
+
+/* ---------- spheres training ---------- */
+/* The small panels of one training side share a row of their own rather than
+   the page grid's columns. The page grid is shared by both sides, so a side
+   with three panels left a fourth column standing empty; here the row is
+   filled by whatever the side actually has, and the leftover width goes to the
+   panels that asked for it -- the traditions, whose rows are text and a
+   dropdown rather than a number. */
+.sidepanels {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: start;
+}
+/* The caps are what a panel may grow to, not what it wants: any two of them
+   still add up past the row, so a full row never has a gap in it, while a
+   panel left alone on a wrapped row stops before it is stretched across a
+   width its five columns have no use for. */
+.sidepanels > .panel { flex: 1 1 300px; min-width: 0; max-width: 55%; }
+.sidepanels > .panel.wide { flex: 1.5 1 400px; max-width: 70%; }
+.sidepanels > .panel.collapsed { flex: 1 1 240px; }
+
+.trainclass { border: 1px solid var(--cs-line); border-radius: 6px; padding: 9px 10px; margin-bottom: 10px; }
+.trainhead {
+  display: grid; gap: 8px; align-items: end; margin-bottom: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+.trainhead button.danger { justify-self: end; max-width: 3rem; }
+/* Fixed layout so the columns are the widths the colgroup asks for: the level
+   is two digits and the sphere is a dropdown of known names, so neither needs
+   a share of the table. Notes is the column with no width of its own -- it
+   takes whatever the others leave, which is most of it. */
+table.talents { table-layout: fixed; }
+table.talents td { padding: 2px 4px; vertical-align: top; }
+table.talents th { vertical-align: bottom; }
+table.talents input, table.talents select, table.talents textarea { min-width: 0; }
+table.talents col.lvl { width: 2.9rem; }
+table.talents col.sphere { width: 8.75rem; }
+table.talents col.tool { width: 2.8rem; }
+table.talents col.tools { width: 6rem; }
+table.talents col.talent { width: 27%; }
+table.talents.bonus col.talent { width: 23%; }
+table.talents.bonus col.source { width: 14%; }
+/* In a side panel there is no room to spend on a dropdown of known names, and
+   with no notes column there the talent is what the leftover width belongs
+   to -- a fixed share would leave it to the dropdown instead. */
+.sidepanels table.talents col.sphere { width: 8rem; }
+.sidepanels table.talents col.talent { width: auto; }
+/* Mirrors the sheet's conditional formatting: green = this level grants a talent. */
+td.slot-on input, td.slot-on select, td.slot-on textarea, td.slot-on .prose-view {
+  background: rgba(107, 191, 123, 0.10); border-color: rgba(107, 191, 123, 0.45);
+}
+td.slot-off input, td.slot-off select, td.slot-off textarea { opacity: 0.25; background: transparent; }
+/* A blended class spends one pool either way, so its sphere cell says which
+   way each talent went -- the left edge only, so the green "this level grants
+   a talent" fill still reads as itself. */
+td.side-magic select { border-left: 3px solid var(--cs-accent); }
+td.side-combat select { border-left: 3px solid var(--cs-good); }
+table.talents.pools input[type="number"] { width: 100%; text-align: right; }
+table.talents.pools th[colspan] { text-align: right; }
+tr.future td { opacity: 0.55; }
+.subhead {
+  margin: 12px 0 6px; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--cs-muted); font-weight: 650;
+}
+.listrow { display: flex; gap: 5px; margin-bottom: 4px; align-items: start; }
+.listrow input { flex: 1; }
+.listrow .prose { flex: 1; }
+.listrow button.danger { flex: 0 0 auto; }
+.listgrid { display: grid; gap: 5px; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+.listgrid .listrow { margin-bottom: 0; }
+
+/* The name a movement rate answers to in a formula, under the type it is
+   typed into. Shown because a name nobody can see is a name nobody uses --
+   the destination browser lists it too, but this is where it is being read. */
+table.speeds .speedname { margin-top: 2px; font-size: 0.66rem; line-height: 1.2; }
+table.speeds .speedname code { font-family: var(--cs-mono); }
+table.speeds .speedfwd { margin-top: 2px; }
+
+/* Customized weapons: the tracks run across, not down, because choosing
+   between them is the point -- an armiger draws the naginata instead of the
+   handwraps, and the two want to be read side by side. Narrow cards, because
+   each holds a name and a short column of talents and nothing else. */
+.weaponsets { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); }
+.weaponset {
+  border: 1px solid var(--cs-line); border-radius: 6px; padding: 6px 7px;
+  min-width: 0; background: var(--cs-panel-2);
+}
+/* The one in hand. A left edge rather than a fill, so the green on its talent
+   cells still reads as the talent slots being open. */
+.weaponset.drawn { border-color: var(--cs-good); box-shadow: inset 3px 0 0 var(--cs-good); }
+/* Past what this level customizes: kept, greyed, counting for nothing. */
+.weaponset.spare { opacity: 0.5; }
+.weaponhead { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+.weaponhead input[type="text"] { flex: 1; min-width: 0; font-weight: 600; }
+.weaponhead .chk { flex: 0 0 auto; white-space: nowrap; font-size: 0.72rem; color: var(--cs-muted); }
+.weaponset.drawn .weaponhead .chk { color: var(--cs-good); }
+.weaponset table.talents col.sphere { width: 7.6rem; }
+.weaponset table.talents col.talent { width: auto; }
+.weaponset .weapondrawback { margin: 5px 0 0; }
+.weaponset .weapondrawback input[type="text"] { flex: 1; min-width: 0; }
+.weaponset .weapondrawback .chk { flex: 0 0 auto; font-size: 0.72rem; color: var(--cs-muted); }
+/* A sphere the track may not learn at all: nearly always an archetype that
+   widens it and has not been added yet, so the cell is marked and kept rather
+   than emptied. The sheet's gold against the base check's red, because the two
+   are different questions and a reader has to be able to tell which is being
+   asked -- one is a rule broken, the other a setting not made yet. */
+td.offlist select {
+  border-color: var(--cs-formula-strong);
+  background: var(--cs-accent-soft);
+}
+
+/* A talent whose sphere has no base -- on this weapon or on the character.
+   Underlined rather than reddened: it is a rule the sheet is sure of, but the
+   cell is still perfectly editable and is not an error until it is finished. */
+td.needsbase .prose-view, td.needsbase textarea {
+  text-decoration: underline wavy var(--cs-bad); text-underline-offset: 3px;
+}
+
+/* ---------- collapse / system tabs / trait slots / budget ---------- */
+.panel.collapsed { padding-bottom: 8px; opacity: 0.85; }
+.panel > h3 [data-collapse] { margin-left: auto; padding: 1px 8px; }
+tr.lockedslot { opacity: 0.45; }
+tr.lockedslot input, tr.lockedslot select { pointer-events: auto; }
+td.bought { white-space: nowrap; }
+td.bought .xf input { font-size: 0.78rem; }
+
+/* ---------- primordia technique ladder ---------- */
+/* Ten rows, and the middle column is a paragraph of rules rather than a value,
+   so it takes the width and wraps; the level and the pick stay tight. */
+table.primordia { table-layout: fixed; }
+table.primordia th:first-child, table.primordia td:first-child { width: 3rem; }
+table.primordia td.grants { width: 55%; font-size: 0.8rem; line-height: 1.4; }
+table.primordia td.grants .grant { display: block; }
+table.primordia td.grants .grant + .grant { margin-top: 3px; }
+table.primordia td.grants .grant a { color: var(--cs-accent); text-decoration: none; }
+table.primordia td.grants .grant a:hover { text-decoration: underline; }
+/* The "if you already possess it" branch: the grant states both faces, this
+   says which one is live. */
+table.primordia label.chk.alt {
+  margin-top: 3px; font-size: 0.72rem; color: var(--cs-muted); align-items: flex-start;
+}
+table.primordia td.choice input[type="text"], table.primordia td.choice select { width: 100%; }
+/* Reached with nothing written against it: the same dashed outline and edge bar
+   an owed feature slot uses, so one kind of thing looks like one kind of thing. */
+table.primordia td.choice.due input, table.primordia td.choice.due select {
+  border-style: dashed; border-width: 2px; border-color: var(--cs-accent);
+  background: var(--cs-accent-soft);
+}
+table.primordia td.choice.due { box-shadow: inset 3px 0 0 var(--cs-accent); }
+/* Not reached yet: the plan. tr.future already dims the row. */
+table.primordia td.choice.planned input, table.primordia td.choice.planned select {
+  border-style: dotted; background: transparent;
+}
+/* The repeating grant lands on seven rows, so it is stated in full once here
+   and the rows carry the short form. Set off as rules text, not as guidance. */
+p.hint.repeatrule {
+  margin-top: 8px; padding-left: 9px; border-left: 2px solid var(--cs-line);
+  color: var(--cs-text);
+}
+p.hint.repeatrule strong { color: var(--cs-muted); }
+
+/* ---------- typed save / AC bonuses ---------- */
+/* Sixteen columns of small numbers: the headers set the width, so they are the
+   thing to keep tight. The reconciling Sheet column is banded off the rest. */
+table.bonusgrid th { font-size: 0.6rem; letter-spacing: 0.02em; }
+table.bonusgrid td { padding: 2px 3px; }
+table.bonusgrid .xf input { font-size: 0.76rem; text-align: center; }
+table.bonusgrid .xf-view { text-align: center; }
+table.bonusgrid td.total { font-size: 0.95rem; }
+
+/* ---------- skill names and their variants ---------- */
+/* A skill is one name, variant included: the skill itself is a fixed label and
+   the variant an input sitting inside the parentheses it will read with, so the
+   cell shows the whole of "Craft (Weapons and Armor)". Only Artistry, Craft,
+   Lore, Profession and Perform have a slot; an empty one is dashed rather than
+   filled, as an invitation. A skill the player added names itself. */
+/* Capped, or the flexible variant field makes Skill the greediest column in
+   the table and starves Notes. */
+.skillcell { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 18rem; }
+.sname { font-weight: 600; white-space: nowrap; }
+tr.untrained .sname { font-weight: 500; }
+.skillcell input[type="text"] { min-width: 4rem; }
+.variant { display: flex; align-items: center; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.variant::before { content: '('; color: var(--cs-muted); }
+.variant::after { content: ')'; color: var(--cs-muted); }
+.variant input, .variant select {
+  background: var(--cs-accent-soft); border-color: var(--cs-accent);
+}
+.variant.empty input, .variant.empty select {
+  background: transparent; border-style: dashed;
+}
+.novariant { color: var(--cs-muted); white-space: nowrap; }
+
+/* A granted feat's source is the fixed half of the row, so it reads as a label
+   rather than another field. */
+.fsource { font-weight: 620; color: var(--cs-accent); white-space: nowrap; }
+
+/* ---------- weapons ---------- */
+.weapon {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
+}
+.weaponhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 7px; }
+.weaponhead input[type="text"] { flex: 1; font-weight: 640; }
+
+/* Collapsed: the head is the summary -- name, attack, damage, proficiency --
+   which is what a weapon you are not editing has to say. Hidden rather than
+   left unrendered, and hidden with display:none so the fields inside go out
+   of the tab order too rather than becoming a trap for a keyboard. */
+.weapon.collapsed > *:not(.weaponhead) { display: none; }
+.weapon.collapsed .weaponhead { margin-bottom: 0; }
+.wfold {
+  flex: 0 0 auto; width: 1.7rem; min-height: 1.7rem; padding: 0;
+  font-size: 0.82rem; color: var(--cs-muted);
+  background: none; border-color: transparent;
+}
+.wfold:hover, .wfold:focus-visible { color: var(--cs-accent); border-color: var(--cs-line); }
+
+/* The two names a weapon has: the one it is called at the table, and the one
+   a formula calls it by. Side by side while there is room, and the handle
+   drops under the name when there is not -- it is the shorter of the two and
+   the one a reader can do without at a glance. */
+.wnames { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; flex: 1 1 10rem; min-width: 0; }
+.wnames > input[type="text"] { flex: 1 1 10rem; min-width: 0; }
+.whandle { display: flex; align-items: center; gap: 1px; flex: 0 1 auto; }
+.whandle > span { font-family: var(--cs-mono); font-size: 0.68rem; color: var(--cs-muted); }
+.weaponhead .whandle input[type="text"] {
+  flex: 0 0 auto; width: 7rem; font-weight: 500; font-size: 0.72rem; padding: 2px 4px;
+}
+.bigroll {
+  font-size: 1.05rem; font-weight: 680; color: var(--cs-accent);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.bigroll.dmg { color: var(--cs-good); }
+/* Compact, content-sized fields: numbers and short selects stay narrow instead
+   of stretching to fill the card. */
+.weapongrid {
+  display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end;
+  margin-bottom: 6px;
+}
+.weapongrid label.fld { flex: 0 0 auto; }
+.weapongrid input[type="number"] { width: 3.2rem; }
+.weapongrid select { width: auto; min-width: 0; }
+.weapongrid input[type="text"] { width: 7rem; }
+.weapongrid input.w-dice { width: 5.5rem; font-family: var(--cs-mono); }
+.weapongrid input.w-dice.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
+.weapongrid .pair { gap: 3px; }
+.weapongrid .pair select { max-width: 7.5rem; }
+.wsep { flex: 0 0 6px; align-self: stretch; border-left: 1px dotted var(--cs-line); }
+.wcalc {
+  margin-top: 7px; padding: 6px 9px; border-radius: 5px;
+  background: var(--cs-bg); font-variant-numeric: tabular-nums;
+}
+.wcalc .wtotal { font-size: 0.85rem; }
+.wcalc .avg { color: var(--cs-muted); font-size: 0.72rem; margin-left: 5px; }
+.wcalc .crit { color: var(--cs-bad); font-size: 0.8rem; margin-left: 9px; }
+
+/* ---------- item crafting ---------- */
+/* The three setup panels are whole tables of controls, not stat lines, so they
+   need wider columns than the sheet's default three-across grid gives them. */
+.grid.crafting { grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+.craft {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
+}
+.crafthead { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+.crafthead input[type="text"] { flex: 1; font-weight: 640; }
+.craftcols {
+  display: grid; gap: 12px; margin-top: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.craftcols .subhead { margin-top: 0; }
+.craft .wcalc .ok { color: var(--cs-good); font-size: 0.8rem; margin-left: 9px; }
+.craft input.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
+/* Rows in these lists are summed, never ordered, so they carry no ↑/↓ and the
+   name column takes the width that frees up. */
+table.craftlist td { padding: 3px 4px; }
+table.craftlist td.mid, table.craftlist td.tools, table.craftlist td.narrow { width: 1%; }
+table.craftlist input[type="text"] { min-width: 3.5rem; }
+table.craftlist input.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
+table.craftlist select { width: auto; min-width: 5.2rem; padding: 3px 4px; }
+table.craftlist .pair { flex-wrap: nowrap; }
+table.craftlist .pair input { width: 4.2rem; }
+/* The generated posts: monospaced, so what is copied is what Discord shows. */
+details.postbox { margin-top: 8px; }
+details.postbox > summary {
+  cursor: pointer; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--cs-muted);
+  display: flex; align-items: center; gap: 8px;
+}
+details.postbox > summary button { padding: 1px 8px; font-size: 0.7rem; }
+details.postbox textarea {
+  margin-top: 6px; font-family: var(--cs-mono); font-size: 0.78rem;
+  background: var(--cs-bg); resize: vertical;
+}
+
+/* ---------- system tab names ---------- */
+input.tabname {
+  font: inherit; font-size: 0.85rem; background: transparent;
+  border: 1px dashed transparent; padding: 2px 6px; width: auto; min-width: 8rem; max-width: 18rem;
+}
+input.tabname.big {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--cs-accent); font-weight: 650;
+}
+input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
+
+/* ---------- inline formulas in prose ---------- */
+.prose { position: relative; display: block; width: 100%; }
+.prose textarea { display: block; width: 100%; }
+.prose.grow textarea { min-height: 26px; resize: none; overflow: hidden; line-height: 1.35; }
+/* While not editing, the rendered view is the in-flow element (so the row is
+   sized to the computed text) and the textarea is hidden underneath; while
+   editing they swap. */
+.prose.has-tokens:not(.editing) textarea {
+  position: absolute; inset: 0; height: 100% !important; opacity: 0; pointer-events: none;
+}
+.prose-view {
+  display: block; min-height: 26px; padding: 4px 7px; box-sizing: border-box;
+  border: 1px solid var(--cs-line); border-radius: 5px; background: var(--cs-panel-2);
+  font-size: 0.85rem; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  cursor: text; color: var(--cs-text);
+}
+.prose.grow .prose-view { font-size: 0.78rem; padding: 3px 5px; }
+.prose.editing .prose-view { display: none; }
+.tok {
+  border-bottom: 1px dotted var(--cs-accent); color: var(--cs-accent);
+  font-weight: 620; font-variant-numeric: tabular-nums; cursor: help;
+}
+.tok.define { border-bottom-style: solid; }
+/* A forwarded bonus is going somewhere else, and the double rule under it says
+   so at a glance: dotted shows a value, solid names one, double sends one. */
+.tok.push { border-bottom-style: double; border-bottom-width: 3px; }
+.tok.err { color: var(--cs-bad); border-bottom-color: var(--cs-bad); font-weight: 500; }
+
+/* The operator beside a forwarded bonus's destination on the Formulas tab.
+   Shown always, penalty or not, because it is the syntax being taught. */
+.fx-into { color: var(--cs-muted); font-size: 0.78rem; margin-left: 4px; }
+
+/* The same bonus where it lands -- beside the Misc column of a skill, beside
+   the Other column of a save. Small, gold, and never mistaken for a field the
+   reader can type in, because it is not one: it is written somewhere else. */
+.fwd {
+  display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 4px;
+  background: var(--cs-accent-soft);
+  color: var(--cs-accent); font-size: 0.76rem; font-weight: 650;
+  font-variant-numeric: tabular-nums; cursor: help; vertical-align: middle;
+}
+.fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
+
+
+/* ---------- formula fields ---------- */
+/* Same two layers as .prose, for a single-line control: the resolved value is
+   what fills the cell, the source shows in place while the field has focus. */
+.xf { position: relative; display: inline-block; width: var(--xf-w, 5rem); vertical-align: middle; }
+.xf input.xf-src { display: block; width: 100%; min-width: 0; text-align: left; }
+.xf.has-value:not(.editing) input.xf-src {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+}
+.xf-view {
+  display: block; width: 100%; padding: 4px 7px; box-sizing: border-box;
+  border: 1px solid var(--cs-line); border-radius: 5px; background: var(--cs-panel-2);
+  font-size: 0.85rem; line-height: 1.35; cursor: text;
+  color: var(--cs-accent); font-weight: 620; font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted var(--cs-accent); text-underline-offset: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: inherit;
+}
+.xf.editing .xf-view { display: none; }
+.xf.invalid input.xf-src { border-color: var(--cs-bad); color: var(--cs-bad); }
+
+/* ---------- which fields compute ----------
+   Three kinds of field understand formulas: prose that may carry {…} tokens,
+   the single-value expression fields, and the plain formula inputs in the
+   tracker editor. They all wear a soft accent bar down their left edge -- the
+   same gold the resolved values wear (.tok, .xf-view), so one colour means
+   "this is calculated" everywhere. A field without the bar takes text only.
+
+   It is an inset shadow rather than a border colour so it never competes with
+   the focus ring or the red of an invalid field, and it sits inside the 7px
+   padding, so it cannot collide with the text at any field width. The bar is on
+   the RIGHT: the left edge already means "granted at this level" on the
+   Primordia and class-feature grids, and one edge cannot say two things. */
+.prose textarea,
+.prose-view,
+.xf input.xf-src,
+.xf-view,
+input.mono:not(.hexin) {
+  box-shadow: inset -2px 0 0 var(--cs-formula);
+}
+.prose:hover textarea, .prose:hover .prose-view,
+.xf:hover input.xf-src, .xf:hover .xf-view,
+input.mono:not(.hexin):hover {
+  box-shadow: inset -2px 0 0 var(--cs-formula-strong);
+}
+/* Nothing can be typed here, so do not advertise the capability. */
+.prose textarea:disabled, .xf input.xf-src:disabled, input.mono:disabled {
+  box-shadow: none;
+}
+
+/* ---------- template features ---------- */
+.feature {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 8px 10px; margin-bottom: 8px; background: var(--cs-panel-2);
+}
+.featurehead { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+.featurehead input[type="text"] { flex: 1; font-weight: 620; }
+.featurehead select { width: 5.5rem; }
+.featurehead .tools { display: flex; gap: 3px; }
+
+/* A sub-ability sits inside its group, indented and marked down the left edge,
+   because "under Omni-Cooking" is the whole of what it says. */
+.tgroup { border-color: var(--cs-line); }
+.tkids { margin: 8px 0 0 14px; border-left: 2px solid var(--cs-line); padding-left: 10px; }
+.tchild { background: var(--cs-panel); margin-bottom: 6px; }
+.tchild .featurehead input[type="text"] { font-weight: 560; }
+.tadd { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tadd button { font-size: 0.74rem; }
+
+/* Whatever the import could not place: the same dashed blue an owed feature
+   slot uses, because it says the same thing -- something here is waiting on
+   you. Not red: nothing is wrong, it is just not filed yet. */
+.tgroup.temporary { border-color: var(--cs-edit); border-style: dashed; }
+.tgroup.temporary .featurehead input[type="text"] { color: var(--cs-edit); }
+.hint.pending { color: var(--cs-edit); }
+
+/* The grip is the only part of a card that starts a drag, so the fields inside
+   it stay selectable. */
+.grip {
+  cursor: grab; color: var(--cs-muted); user-select: none; padding: 0 2px;
+  font-size: 0.95rem; line-height: 1;
+}
+.grip:hover { color: var(--cs-text); }
+.feature.dragging { opacity: 0.45; }
+.feature.drop-before { box-shadow: 0 -3px 0 -1px var(--cs-accent); }
+.feature.drop-after { box-shadow: 0 3px 0 -1px var(--cs-accent); }
+.feature.drop-into { outline: 2px solid var(--cs-accent); outline-offset: 1px; }
+
+/* Tables inside a feature: a template rarely has one, and then has six. */
+.ttable {
+  border: 1px solid var(--cs-line); border-radius: 6px; margin-top: 8px;
+  padding: 6px 8px; background: var(--cs-panel);
+}
+.ttablehead { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ttablehead input[type="text"] { flex: 1; font-size: 0.78rem; }
+.ttablehead button { font-size: 0.72rem; }
+.ttablehead select { font-size: 0.72rem; max-width: 11rem; padding: 3px 4px; }
+/* Fixed layout so one long "Additional Information" column does not starve the
+   three beside it, and a floor under the whole table so a narrow screen
+   scrolls the wrapper instead of crushing every column to a few characters. */
+table.tmpltable { table-layout: fixed; min-width: 30rem; }
+table.tmpltable th, table.tmpltable td { padding: 2px 3px; vertical-align: top; }
+table.tmpltable th { position: static; }
+table.tmpltable th.tools { width: 5.4rem; }
+table.tmpltable .colhead { display: flex; gap: 2px; align-items: center; }
+table.tmpltable .colhead input[type="text"] {
+  min-width: 4rem; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 2px 4px;
+}
+table.tmpltable .colhead button { padding: 0 4px; }
+table.tmpltable .prose textarea { font-size: 0.78rem; padding: 3px 5px; }
+/* Showing every stored cell: the merge markers are the point, so they are not
+   hidden behind the usual muted styling. */
+table.tmpltable.raw td { background: var(--cs-panel-2); }
+.ttablehead button[aria-pressed="true"] { border-color: var(--cs-edit); color: var(--cs-edit); }
+
+/* ---------- raw sheet grids ---------- */
+table.gridtab td { padding: 2px 3px; }
+table.gridtab input[type="text"] { min-width: 6.5rem; font-size: 0.78rem; padding: 3px 5px; }
+table.prog select { min-width: 8rem; padding: 3px 5px; }
+table.prog td.derived { min-width: 2.6rem; text-align: right; }
+table.prog th .colname {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--cs-muted); background: transparent; border: 1px dashed transparent;
+  min-width: 6rem; padding: 1px 4px;
+}
+table.prog th .colname:hover { border-color: var(--cs-line); }
+
+/* ---------- class feature groups: resizable columns, multi-line cells ---------- */
+/* Groups pack side by side while they fit the viewport; a group whose columns
+   grow too wide wraps onto its own row. Sizes come from the tables' explicit
+   column widths, so dragging a column reflows the packing live. */
+.featgroups {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
+  margin-top: 12px;
+}
+.featgroups .panel.featpanel { flex: 0 1 auto; min-width: 250px; max-width: 100%; }
+.featgroups .panel.collapsed { flex: 0 1 auto; }
+table.featgrid { table-layout: fixed; }
+table.featgrid td.featcell { vertical-align: top; padding: 2px 3px; }
+table.featgrid th { position: relative; overflow: hidden; }
+table.featgrid th .colname {
+  flex: 1; min-width: 0; font-size: 0.66rem; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--cs-muted); background: transparent;
+  border: 1px dashed transparent; padding: 1px 4px;
+}
+table.featgrid th .colname:hover { border-color: var(--cs-line); }
+/* A rule group under the column name: swatch, name, levels, remove. Several
+   may share a column, which is why each carries its own colour. */
+table.featgrid th .rulegroup {
+  display: flex; align-items: center; gap: 2px; margin-top: 2px;
+  border-left: 3px solid var(--gc); padding-left: 3px;
+}
+table.featgrid th .rulegroup input[type="color"] {
+  flex: none; width: 14px; height: 14px; padding: 0; border: 0;
+  border-radius: 3px; background: transparent; cursor: pointer;
+}
+table.featgrid th .rulegroup input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+table.featgrid th .rulegroup input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 3px; }
+table.featgrid th .rulegroup .gname, table.featgrid th .rulegroup .grule {
+  min-width: 0; font-size: 0.62rem; text-transform: none; letter-spacing: 0;
+  background: transparent; border: 1px dashed transparent; padding: 0 3px;
+}
+table.featgrid th .rulegroup .gname { flex: 1 1 45%; color: var(--gc); font-weight: 640; }
+table.featgrid th .rulegroup .grule { flex: 1 1 55%; font-family: var(--cs-mono); color: var(--cs-muted); }
+table.featgrid th .rulegroup input:hover, table.featgrid th .rulegroup input:focus { border-color: var(--cs-line); }
+table.featgrid th .rulegroup .grule.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+table.featgrid th .rulegroup button { flex: none; padding: 0 3px; font-size: 0.7rem; line-height: 1.2; }
+table.featgrid th .addgroup {
+  width: 100%; margin-top: 2px; padding: 1px 4px; font-size: 0.6rem;
+  text-transform: none; letter-spacing: 0; color: var(--cs-muted);
+  background: transparent; border-style: dashed;
+}
+.badge.due { background: var(--cs-accent-soft); color: var(--cs-accent); border-color: var(--cs-accent); }
+textarea.cfeat, input.cfeat {
+  width: 100%; min-height: 26px; font-size: 0.78rem; line-height: 1.35; padding: 3px 5px;
+}
+textarea.cfeat {
+  resize: none; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+}
+/* A cell picking from a menu a pack provides. Still a box to type in -- the
+   arrow only says there is a list behind it. */
+input.cfeat.pick { text-overflow: ellipsis; }
+/* An entry taken below the level it asks for: said, not stopped. */
+table.featgrid .ffield input.cfeat.pick.early {
+  border-color: var(--cs-accent); border-style: dashed; color: var(--cs-accent);
+}
+table.featgrid th .colmenu {
+  width: 100%; margin-top: 2px; padding: 1px 3px; font-size: 0.6rem;
+  text-transform: none; letter-spacing: 0; color: var(--cs-muted);
+  background: transparent; border: 1px dashed var(--cs-line);
+}
+table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+/* What a class's features do, folded under its ladder. */
+.cfnotes { margin-top: 10px; border-top: 1px solid var(--cs-line); padding-top: 8px; }
+.cfnotes .notehead {
+  width: 100%; text-align: left; padding: 2px 6px; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
+  background: transparent; border: 0;
+}
+.cfnotes .notehead:hover { color: var(--cs-text); }
+.cfnote { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
+.cfnote > .pair { gap: 4px; }
+.cfnote .notename { flex: 1; min-width: 0; font-weight: 600; }
+.cfnote select { flex: none; width: 4rem; }
+
+/* The block shelf's find bar: the kind buttons, then a box to type in. */
+.extfind { flex-wrap: wrap; gap: 4px; }
+.extfind input[type="search"] { flex: 1 1 12rem; min-width: 8rem; }
+/* A menu layered over the one above, which an archetype put there. */
+table.featgrid th span.colmenu.layered {
+  display: block; border-style: solid; border-color: var(--cs-accent);
+  color: var(--cs-accent); text-align: left;
+}
+/* A cell holds one field per rule group granting at that level. Where two
+   groups land on the same level the fields stack, each keeping its own colour
+   and its own state, rather than competing for a single box. */
+table.featgrid td .ffield { display: block; }
+table.featgrid td.stacked .ffield + .ffield { margin-top: 5px; }
+/* Which rule group a field belongs to. */
+table.featgrid td .ftag {
+  display: block; font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--gc); font-weight: 650; line-height: 1.3; padding-left: 2px;
+}
+table.featgrid td .ftag.orphan { color: var(--cs-accent); text-decoration: line-through; }
+/* A granted level is tinted in its group's colour -- green by default, which
+   is the same green the sphere-talent grid uses. Unruled columns stay neutral,
+   exactly as they rendered before rules existed.
+
+   Every rule names both layers of the field: one holding an inline formula
+   shows its .prose-view instead of the textarea, and would otherwise be the one
+   uncoloured cell in a coloured column. */
+table.featgrid .ffield.slot-on textarea.cfeat,
+table.featgrid .ffield.slot-on input.cfeat,
+table.featgrid .ffield.slot-on .prose-view {
+  background: var(--gc-soft); border-color: var(--gc);
+}
+/* Reached and still empty: a slot you owe. Loud enough to find by scanning. */
+table.featgrid .ffield.slot-on.due textarea.cfeat,
+table.featgrid .ffield.slot-on.due input.cfeat,
+table.featgrid .ffield.slot-on.due .prose-view {
+  border-style: dashed; border-width: 2px; background: var(--gc-soft);
+}
+table.featgrid .ffield.slot-on.due { box-shadow: inset 3px 0 0 var(--gc); }
+/* Empty but not reached yet: the plan, not a chore. tr.future already dims it. */
+table.featgrid .ffield.slot-on.planned textarea.cfeat,
+table.featgrid .ffield.slot-on.planned input.cfeat,
+table.featgrid .ffield.slot-on.planned .prose-view { border-style: dotted; background: transparent; }
+table.featgrid .ffield.slot-off textarea.cfeat,
+table.featgrid .ffield.slot-off input.cfeat,
+table.featgrid .ffield.slot-off .prose-view {
+  opacity: 0.3; background: transparent; border-style: dashed;
+}
+/* Text stranded outside every rule stays legible and flagged, never hidden. */
+table.featgrid .ffield.slot-off.kept textarea.cfeat,
+table.featgrid .ffield.slot-off.kept input.cfeat,
+table.featgrid .ffield.slot-off.kept .prose-view {
+  opacity: 0.75; border-style: solid; border-color: var(--cs-accent);
+}
+/* The computed values inside a coloured field take the group's colour too, so
+   it reads as one thing rather than accent-on-tint. */
+table.featgrid .ffield.slot-on .prose-view .tok {
+  color: var(--gc); border-bottom-color: var(--gc);
+}
+.col-resizer {
+  position: absolute; top: 0; right: 0; width: 9px; height: 100%;
+  cursor: col-resize; z-index: 3; touch-action: none;
+  border-right: 2px solid transparent;
+}
+.col-resizer:hover, .col-resizer.dragging { border-right-color: var(--cs-edit); }
+
+/* ---------- linked picks ---------- */
+table.build td.linked {
+  color: var(--cs-muted); font-size: 0.8rem; white-space: nowrap;
+}
+
+/* ---------- trackers ---------- */
+.tracker {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 6px; padding: 8px 10px; margin-bottom: 7px;
+}
+.tracker.invalid { border-color: var(--cs-bad); }
+.tracker .tname { font-weight: 620; font-size: 0.88rem; }
+.tracker .tmeta { font-size: 0.72rem; color: var(--cs-muted); font-family: var(--cs-mono); }
+.tracker .terr { font-size: 0.72rem; color: var(--cs-bad); }
+/* The note is the tracker's readout, so it is ordinary prose rather than the
+   monospace a formula source gets: the numbers inside it are already resolved,
+   and .tok paints those. */
+.tracker .tnote { font-size: 0.76rem; color: var(--cs-text); margin: 2px 0 1px; white-space: pre-wrap; }
+.tracker .tnote-edit { margin-top: 2px; }
+/* The character colour sits under the Details fields rather than inside the
+   grid: sixteen swatches plus a hex box need the width of the panel. */
+.charcolor { margin-top: 9px; padding-top: 9px; border-top: 1px dotted var(--cs-line); }
+.charcolor .hint { flex-basis: 100%; }
+.tracker .tnote-edit > span:first-child {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
+}
+.tracker-controls { display: flex; align-items: center; gap: 5px; }
+.tracker-controls input { width: 3.6rem; }
+.tracker-controls input.neg { color: var(--cs-bad); font-weight: 640; }
+.tracker.editing { grid-template-columns: 1fr; }
+.pool { font-variant-numeric: tabular-nums; font-weight: 640; white-space: nowrap; }
+.pips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 5px; }
+.pip {
+  width: 12px; height: 12px; border-radius: 3px;
+  border: 1px solid var(--cs-line); background: transparent; padding: 0; cursor: pointer;
+}
+.pip.used { background: var(--cs-accent); border-color: var(--cs-accent); }
+/* Two-sided meters: the negative side fills in the "bad" colour, growing
+   leftwards from a zero mark that sits between the two halves. */
+.pip.neg.used { background: var(--cs-bad); border-color: var(--cs-bad); }
+.pip.zero {
+  width: 5px; height: 16px; border-radius: 2px; margin: 0 2px;
+  background: var(--cs-muted); border-color: var(--cs-muted); opacity: 0.7;
+}
+.pip.zero:hover { opacity: 1; }
+
+/* Squares shape: the same pips packed two-by-two rather than in a line, for a
+   pool small enough to read at a glance — a prepared spell's handful of uses.
+   Past four it gives up and prints the count instead. */
+.pips.square {
+  display: grid; grid-template-columns: repeat(2, auto);
+  width: max-content; gap: 3px; margin-top: 5px;
+}
+.pipcount {
+  display: inline-flex; align-items: baseline; gap: 1px; margin-top: 5px;
+  padding: 0 5px; border: 1px solid var(--cs-line); border-radius: 4px;
+  font-variant-numeric: tabular-nums; font-weight: 640; line-height: 1.5;
+}
+.pipcount .of { font-size: 0.78em; font-weight: 400; opacity: 0.65; }
+.style-preview .pipcount { margin-top: 0; }
+
+/* Bar shape: a continuous track. Zone bands sit behind the fill; the parts of
+   the fill inside a zone are painted over in the zone's colour. */
+.bar {
+  position: relative; height: 14px; margin-top: 6px; border-radius: 4px;
+  border: 1px solid var(--cs-line); background: var(--cs-bg); overflow: hidden;
+}
+.bar[data-bar] { cursor: pointer; }
+.bar .band, .bar .fill, .bar .seg { position: absolute; top: 0; bottom: 0; }
+.bar .fill { background: var(--cs-accent); }
+.bar .zero-line {
+  position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px;
+  background: var(--cs-muted);
+}
+
+/* ---------- built-in meters ----------
+   Hit points and essence borrow the tracker's shapes, and add what a tracker
+   has no use for: layers over the track for capacity that was borrowed rather
+   than granted, a marked stretch for damage that is only counting, and an
+   alarm state for a bar that has nothing left to fill. */
+/* The layers overlay the bar rather than sitting inside it, so the meter takes
+   the spacing off the bar and the two boxes coincide -- the layers then inset
+   by the border and line up with the fill whatever the bar's height. */
+.meter { position: relative; margin-top: 6px; }
+.meter .bar { margin-top: 0; }
+.meter .mlayers {
+  position: absolute; top: 1px; bottom: 1px; left: 1px; right: 1px;
+  pointer-events: none; border-radius: 3px; overflow: hidden;
+}
+.meter .mlayer { position: absolute; top: 0; bottom: 0; }
+/* Borrowed capacity: hatched, so it reads as provisional whether or not the
+   fill has reached it, and edged where the granted pool ends. */
+.meter .mlayer.over {
+  border-left: 2px solid var(--cs-muted);
+  background-image: repeating-linear-gradient(135deg,
+    rgba(255, 255, 255, 0.20) 0 3px, transparent 3px 7px);
+}
+:host([theme="light"]) .meter .mlayer.over {
+  background-image: repeating-linear-gradient(135deg,
+    rgba(0, 0, 0, 0.16) 0 3px, transparent 3px 7px);
+}
+/* Nonlethal: struck across the fill it has caught up with. */
+.meter .mlayer.mark {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 6px);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+:host([theme="light"]) .meter .mlayer.mark {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 6px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+/* Below zero there is no fill left to colour, so the track itself carries the
+   warning: a red ground and a glow, both scaled by --alert, which runs from 0
+   at zero hit points to 1 at the threshold where the character dies. */
+.meter.is-alert .bar {
+  background: color-mix(in srgb, var(--cs-bad) calc(18% + 52% * var(--alert, 0)), var(--cs-bg));
+  border-color: var(--cs-bad);
+  box-shadow: 0 0 calc(3px + 13px * var(--alert, 0)) rgba(224, 99, 95, calc(0.25 + 0.6 * var(--alert, 0)));
+}
+.meter.alert-fill .fill { background: var(--cs-bad) !important; }
+.meter.is-alert.alert-fill .bar { box-shadow: 0 0 8px rgba(224, 99, 95, 0.45); }
+/* The same two layers as pips: borrowed steps are outlined rather than solid,
+   marked ones keep their colour under a strike. */
+.pip.is-over { background: transparent !important; border-style: dashed; }
+.pip.is-mark {
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 5px);
+}
+.meter-style { margin: 8px 0; display: grid; gap: 7px; }
+/* A meter is a readout, not a control, unless something binds a click to it --
+   the power point pool does, whatever shape it has been restyled to. */
+.meter .clickable { cursor: pointer; }
+
+/* Tracker style editor */
+.tstyle { display: grid; gap: 7px; padding: 8px 10px; border: 1px dashed var(--cs-line); border-radius: 6px; }
+.tstyle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.tstyle-row select { width: auto; max-width: 16rem; }
+.tlabel { font-size: 0.72rem; color: var(--cs-muted); min-width: 6.2rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+.swatch {
+  width: 18px; height: 18px; padding: 0; border-radius: 4px;
+  border: 1px solid var(--cs-line); cursor: pointer;
+}
+.swatch[aria-pressed="true"] { outline: 2px solid var(--cs-edit); outline-offset: 1px; }
+.swatch.none {
+  background: var(--cs-panel-2);
+  background-image: linear-gradient(135deg, transparent 44%, var(--cs-muted) 44%, var(--cs-muted) 56%, transparent 56%);
+}
+.swatch.none[style*="background"] { background-image: none; }
+input.hexin { width: 5.6rem; }
+input.hexin.bad { border-color: var(--cs-bad); outline-color: var(--cs-bad); }
+input[type="color"] {
+  width: 28px; height: 24px; padding: 1px 2px; border-radius: 5px; cursor: pointer;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+}
+.zone-row { display: grid; grid-template-columns: 1fr 1fr auto 5.6rem 1fr auto; gap: 5px; align-items: center; }
+.zone-row input.hexin { width: 100%; }
+.style-preview .pips { margin-top: 0; }
+.style-preview .bar { margin-top: 0; }
+.style-preview .pip { cursor: default; }
+
+/* ---------- formula editor ---------- */
+.formrow { display: grid; gap: 7px; grid-template-columns: 1fr; margin-bottom: 8px; }
+.formrow .cols { display: grid; grid-template-columns: 1.1fr 2fr 1.6fr 0.8fr; gap: 7px; }
+.hint { font-size: 0.72rem; color: var(--cs-muted); }
+.hint code {
+  font-family: var(--cs-mono); background: var(--cs-panel-2);
+  padding: 1px 4px; border-radius: 3px; color: var(--cs-text);
+}
+.preview { font-size: 0.78rem; font-family: var(--cs-mono); padding: 5px 8px; border-radius: 5px; }
+.preview.ok { background: rgba(107, 191, 123, 0.12); color: var(--cs-good); }
+.preview.err { background: rgba(224, 99, 95, 0.12); color: var(--cs-bad); }
+
+/* ---------- audit ---------- */
+.audit-row {
+  border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 9px 11px; margin-bottom: 7px; background: var(--cs-panel-2);
+}
+.audit-row.error { border-color: var(--cs-bad); }
+.audit-formula {
+  font-family: var(--cs-mono); font-size: 0.8rem; background: var(--cs-bg);
+  padding: 5px 8px; border-radius: 4px; margin: 5px 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+.badge {
+  display: inline-block; font-size: 0.66rem; padding: 1px 6px; border-radius: 10px;
+  border: 1px solid var(--cs-line); color: var(--cs-muted); margin-left: 6px;
+}
+.badge.ok { color: var(--cs-good); border-color: var(--cs-good); }
+.badge.err { color: var(--cs-bad); border-color: var(--cs-bad); }
+.badge.player { color: var(--cs-edit); border-color: var(--cs-edit); }
+
+.tag {
+  display: inline-block; font-family: var(--cs-mono); font-size: 0.72rem;
+  background: var(--cs-bg); border: 1px solid var(--cs-line);
+  border-radius: 3px; padding: 0 5px; margin: 2px 3px 0 0;
+}
+
+/* ---------- misc ---------- */
+.empty { color: var(--cs-muted); font-size: 0.85rem; font-style: italic; padding: 6px 0; }
+.notecard { margin-bottom: 10px; }
+.notecard h4 { margin: 0 0 4px; font-size: 0.8rem; color: var(--cs-accent); }
+.notecard p { margin: 0; font-size: 0.83rem; white-space: pre-wrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  font-size: 0.76rem; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 12px; padding: 2px 9px;
+}
+.dirty { color: var(--cs-edit); }
+.rowlist { display: grid; gap: 6px; }
+.rowlist .item { border-bottom: 1px solid var(--cs-line); padding-bottom: 5px; }
+.rowlist .item:last-child { border-bottom: 0; }
+.rowlist .item .t { font-size: 0.85rem; font-weight: 600; }
+.rowlist .item .d { font-size: 0.78rem; color: var(--cs-muted); }
+/* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
+.pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
+.pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
+  border: 1px solid var(--cs-accent); color: var(--cs-accent); background: rgba(212,162,74,0.10); white-space: nowrap; }
+.pill button { font: inherit; font-size: 0.8rem; line-height: 1; padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; opacity: 0.7; }
+.pill button:hover { opacity: 1; color: #e0635f; }
+/* The extension shelf on the manager: one heading per pack above its blocks. */
+.rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
+
+@container (max-width: 560px) {
+  /* Narrower than a single crafting column: one panel per row, tables scroll. */
+  .grid.crafting { grid-template-columns: 1fr; }
+  /* The temporary pair goes; the score, the modifier and the die stay. */
+  .ability, .ability-head { grid-template-columns: 2.8rem 3.4rem 2.6rem 1.7rem; }
+  .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
+  .head { flex-wrap: wrap; }
+  .formrow .cols { grid-template-columns: 1fr 1fr; }
+  .zone-row { grid-template-columns: 1fr 1fr auto; }
+  .zone-row input.hexin { width: 5.6rem; }
+}
+
+/* ---------- overview supergroups ----------
+   Hit points, armour and saves are one question -- how hard am I to put down
+   -- and attack and speed another, so each set sits inside a labelled band
+   rather than scattered through the grid. The band is a grid of its own so a
+   narrow screen still stacks its panels. */
+.supergroup {
+  grid-column: 1 / -1;
+  border: 1px solid var(--cs-line); border-radius: var(--cs-radius);
+  padding: 10px 12px 12px; background: var(--cs-panel-2);
+  position: relative;
+}
+.supergroup-title {
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--cs-accent); font-weight: 700; margin: 0 0 9px 2px;
+}
+.supergroup-body {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  align-items: start;
+}
+/* Attack, speed and proficiencies read as one row: what you swing with, how
+   fast you get there, and what you are allowed to hold. Attack and speed are
+   short tables and were being stretched to half the band each; three tracks
+   gives them their measure and hands the spare width to the proficiency chips,
+   which are the only thing here that wants it.
+
+   Under about a thousand pixels three tracks stop fitting, and the band falls
+   back to what it was: the pair side by side with proficiencies full width. */
+.supergroup-body.offenses {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
+}
+@container (max-width: 1040px) {
+  .supergroup-body.offenses { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+  .supergroup-body.offenses > .panel.proficiencies { grid-column: 1 / -1; }
+}
+/* Two panels that read as one row: the wide one takes what is left after
+   the narrow one has its measure. Details beside the ability scores, and the
+   conditions beside carrying capacity. Narrow screens stack them. */
+.pairrow {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 900px) {
+  .pairrow { grid-template-columns: minmax(0, 1fr) minmax(320px, 24rem); }
+  .pairrow.wide-first { grid-template-columns: minmax(0, 1fr) minmax(300px, 22rem); }
+}
+.pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
+@container (min-width: 900px) {
+  .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* ---------- the class table ----------
+   Fixed columns, because the two that were growing to fill are the two with
+   nothing to show: Ranks is one digit and Levels is two, while Archetypes is a
+   sentence -- so the spare width goes to the sentence and the numbers keep
+   their measure. Both numeric fields fill their column, which is what puts the
+   box under its own right-aligned heading.
+
+   The Levels box is a read-out first: when nothing is typed in it the
+   placeholder is the Planner's own count for that class, so it is drawn as the
+   value it is rather than as the ghost of one. */
+table.classes { table-layout: fixed; }
+table.classes col.cls { width: 12rem; }
+table.classes col.lvl { width: 4.4rem; }
+table.classes col.hd { width: 3.1rem; }
+table.classes col.bab { width: 4.6rem; }
+table.classes col.save { width: 3rem; }
+table.classes col.ranks { width: 4.2rem; }
+table.classes col.tools { width: 6.2rem; }
+table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
+table.classes td input[type="text"] { width: 100%; min-width: 0; }
+table.classes td.num input[type="number"] { width: 100%; text-align: right; }
+/* A field whose value is computed and whose box is the override: the number
+   showing is the placeholder, so it is drawn as the value it is. */
+input.autonum.auto::placeholder { color: var(--cs-accent); opacity: 1; font-weight: 620; }
+
+/* Languages: a wrap of small chips, each a grip, a field and its cross. The
+   drop marker is on the left or right edge, because the list runs across. */
+.langlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lang {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line); border-radius: 6px;
+  padding: 2px 3px 2px 4px;
+}
+.lang input[type="text"] { width: 9rem; min-width: 6rem; padding: 2px 5px; }
+.lang .grip { font-size: 0.8rem; letter-spacing: -2px; padding: 0 1px; }
+.lang.dragging { opacity: 0.4; }
+.lang.drop-before { box-shadow: -3px 0 0 0 var(--cs-accent); }
+.lang.drop-after { box-shadow: 3px 0 0 0 var(--cs-accent); }
+/* Folded: the whole list on one line, in a box that can be selected and a
+   button that saves the selecting. */
+.langcopy { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
+.langcopy input.ro { flex: 1; min-width: 0; }
+
+/* Proficiencies: rows of toggle chips, weapons on the left, armor and shields
+   on the right, and the specific weapons as a chip list like the languages.
+
+   The panel is its own container, so the two columns fall to one when the
+   PANEL is narrow rather than when the whole sheet is -- which is what the
+   query meant all along, and what lets this sit in a third of a row. */
+.panel.proficiencies { container-type: inline-size; }
+.profgrid { display: grid; gap: 4px 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+@container (max-width: 460px) { .profgrid { grid-template-columns: 1fr; } }
+.profcol h4 {
+  margin: 6px 0 4px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--cs-muted); font-weight: 700;
+}
+.profcol h4 + h4 { margin-top: 10px; }
+.profrow { display: flex; gap: 6px; align-items: flex-start; padding: 4px 0; border-bottom: 1px solid var(--cs-line); }
+.profrow:last-child { border-bottom: 0; }
+.profrow .tlabel { padding-top: 4px; flex: 0 0 5.4rem; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+button.chip-toggle { padding: 1px 7px; font-size: 0.74rem; border-radius: 999px; }
+.proflist { margin-top: 0; }
+.proflist .lang input[type="text"] { width: 7rem; min-width: 5rem; }
+/* Specific weapons, folded: the caret keeps its place at the head of the body
+   column so the labels down the left still line up. */
+/* The named weapons take the panel's whole width, and their label sits above
+   them rather than beside them -- a column of label plus a column of chips is
+   two narrow columns, and the chips are the part that needs the room. */
+.profrow.profwide {
+  display: block; border-top: 1px solid var(--cs-line); border-bottom: 0;
+  margin-top: 4px; padding-top: 7px;
+}
+.profrow.profwide .tlabel {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  padding-top: 0; margin-bottom: 5px;
+}
+.profrow.profwide .profweaponbody { display: block; }
+.profweaponbody { display: flex; gap: 4px; align-items: flex-start; min-width: 0; flex: 1; }
+.profweaponbody .disclose { padding-top: 3px; }
+.profweaponbody .langlist { flex: 1; min-width: 0; }
+/* Opened, the named weapons are a grid rather than a ragged wrap: a race's
+   dozen reads as a list that way, and as a staircase the other. */
+.profweaponbody .proflist {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 5px; align-items: start;
+}
+.profweaponbody .proflist .lang { min-width: 0; }
+.profweaponbody .proflist .lang input[type="text"] { width: 100%; min-width: 0; }
+.profweaponbody .proflist > button { grid-column: 1 / -1; justify-self: start; }
+.profnamed { padding-top: 4px; font-size: 0.78rem; color: var(--cs-text); }
+.weaponhead .badge.nonprof { white-space: nowrap; }
+table.perks td:first-child { width: 100%; }
+label.fld .xf { width: 100%; }
+.pairrow > .panel.details .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+/* The conditioned reading, under a base that a ticked condition has moved. */
+.now {
+  display: block; font-size: 0.68rem; font-weight: 640; color: var(--cs-bad);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.02em; margin-top: 1px;
+}
+.statline .value .now { display: inline; margin-left: 6px; }
+.bigstat.has-now .sub { margin-bottom: 0; }
+.bigstat .now { margin-top: 2px; }
+.ability .mod.conditioned { color: var(--cs-bad); }
+
+/* Selectors in the saves and armour tables were squeezed to three letters;
+   these give them a real width and let the tables scroll rather than crush. */
+table.saves select, table.defense select { min-width: 4.6rem; padding: 3px 5px; }
+table.saves td, table.defense td { white-space: nowrap; }
+.statline .value.pair select { min-width: 4.6rem; }
+.statline .value.pair .hint { margin: 0 2px; }
+
+/* Speed: base is a real field, bonus a formula field, and Final is the model's.
+   The four movement types are a fixed list that nobody reorders, so the row
+   keeps only its cross -- and that only while the pointer is on the row, which
+   is what gives the table back the width it was scrolling for. */
+table.speeds input[type="text"] { min-width: 4.4rem; }
+table.speeds td.num input[type="number"] { width: 4.4rem; }
+table.speeds td.total { white-space: nowrap; }
+td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
+td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
+tr:hover > td.tools.quiet button,
+td.tools.quiet button:focus-visible { opacity: 1; }
+
+/* Bonus skill ranks: what each row asks for, beside the row. A requirement the
+   sheet could confirm is stated plainly; one it could not is underlined the way
+   an unresolved thing is elsewhere, and the tick is the player's answer. */
+table.sphereranks .req { color: var(--cs-muted); font-size: 0.7rem; line-height: 1.25; }
+table.sphereranks td { vertical-align: top; }
+table.sphereranks .req.unsure,
+.hint .req.unsure {
+  color: var(--cs-edit); text-decoration: underline dotted currentColor;
+  text-underline-offset: 2px;
+}
+
+/* The progression header's "Fill column…": an action wearing a picker's
+   clothes, so it is quiet until wanted and never looks like a value. */
+select.fillcol {
+  display: block; width: 100%; margin-top: 3px; font-size: 0.7rem;
+  padding: 2px 3px; color: var(--cs-muted); text-transform: none; letter-spacing: 0;
+}
+select.fillcol:hover, select.fillcol:focus { color: var(--cs-text); }
+
+/* ---------- conditions ----------
+   Three to a row, which is what the standard eighteen want: six rows of three
+   is the whole list in one look, where an auto-filled grid put four or five to
+   a row and ran the effects together. The panel is its own container so the
+   count falls with the panel rather than with the window. */
+.panel.conditions { container-type: inline-size; }
+.panel.conditions .condgrid {
+  display: grid; gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@container (max-width: 560px) { .panel.conditions .condgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 400px) { .panel.conditions .condgrid { grid-template-columns: minmax(0, 1fr); } }
+label.cond {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  column-gap: 7px; row-gap: 0;
+  font-size: 0.8rem; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
+  border-radius: 6px; padding: 5px 6px 5px 8px; cursor: pointer;
+}
+label.cond input[type="checkbox"] { width: auto; margin: 0; grid-row: 1 / span 2; }
+label.cond .cname { font-weight: 620; line-height: 1.2; }
+label.cond .ceffect {
+  grid-column: 2; font-size: 0.68rem; color: var(--cs-muted); line-height: 1.25;
+}
+label.cond .tiny {
+  grid-column: 3; grid-row: 1 / span 2; opacity: 0; transition: opacity 0.12s;
+}
+label.cond:hover .tiny, label.cond:focus-within .tiny { opacity: 1; }
+label.cond.on { border-color: var(--cs-bad); }
+label.cond.on .cname { color: var(--cs-bad); }
+label.cond.on .ceffect { color: var(--cs-text); }
+label.cond.beaten { opacity: 0.6; }
+label.cond.beaten .cname { text-decoration: line-through; }
+label.cond.count input[type="number"] { grid-column: 3; grid-row: 1 / span 2; }
+label.cond.count { grid-template-columns: 1fr auto; }
+label.cond.count .cname, label.cond.count .ceffect { grid-column: 1; }
+label.cond.count input[type="number"] { grid-column: 2; }
+.condsummary {
+  margin-top: 9px; padding: 7px 9px; border-radius: 6px;
+  background: var(--cs-panel-2); border: 1px solid var(--cs-line); font-size: 0.8rem;
+}
+.condsummary .tag { margin: 0 3px 2px 0; }
+.condsummary ul { margin: 5px 0 0 1.1em; padding: 0; }
+.condsummary li { margin: 1px 0; }
+
+/* ---------- traits ----------
+   Character traits and race traits are two lists that belong under one
+   heading, side by side when the width is there. */
+.traitpair { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@container (min-width: 1200px) {
+  .traitpair { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+}
+h4.subhead {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 7px; font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--cs-muted); font-weight: 650;
+}
+h4.subhead .hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* Four columns, three of them known quantities: the slot is a fixed label, the
+   category comes off a list, and a trait's name is a few words. Only the
+   effect is prose, so only the effect grows. */
+table.traits { table-layout: fixed; }
+table.traits col.slot { width: 7.4rem; }
+table.traits col.cat { width: 8.6rem; }
+table.traits col.tname { width: 12.5rem; }
+table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
+table.traits td { vertical-align: top; }
+table.racetraits td:first-child { width: 11rem; }
+table.racetraits td:first-child input { min-width: 8rem; }
+td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
+
+/* ---------- feat groups ----------
+   Two columns rather than a row of panels. The left one is a single panel of
+   sections -- the granted feats, then every group after the first -- and the
+   right one is the first group standing on its own, because the level-up list
+   is the one a character actually fills and it needs the height. The band is
+   .pairrow.even, which already stacks the two under about 900px.
+
+   A section after the first is ruled off at the top: three tables down one
+   panel with nothing between them read as one long table. */
+.featmain .featsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--cs-line); }
+.featmain h4.subhead { margin-bottom: 7px; }
+/* The group name is an h3-sized field by default; in a subhead it takes the
+   subhead's own measure so the two sit on one line. */
+h4.subhead input.grouptitle {
+  font: inherit; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--cs-accent); background: transparent; border: 1px dashed transparent;
+  width: auto; max-width: 12rem; padding: 1px 4px; font-weight: 650;
+}
+h4.subhead input.grouptitle:hover { border-color: var(--cs-line); }
+h4.subhead button.danger { margin-left: auto; padding: 1px 6px; font-size: 0.7rem; }
+
+/* The add-group line sits under both columns, so starting a group is never a
+   panel standing in the row with nothing in it. */
+.addgroup {
+  grid-column: 1 / -1; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.addgroup .hint { flex: 1; min-width: 16rem; margin: 0; }
+
+/* The grip column is as narrow as the handle in it; the row's own tools lost
+   their arrows to the drag, so one cross is all that is left on the right. */
+table.feats th.grip, table.feats td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
+table.feats tr.dragging { opacity: 0.4; }
+/* Border-collapse eats a shadow on the row itself, so the line that says where
+   the drop lands is drawn inside the cells. */
+table.feats tr.drop-before > td { box-shadow: inset 0 3px 0 -1px var(--cs-accent); }
+table.feats tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent); }
+table.feats tr.featempty td { cursor: default; }
+
+/* ---------- the mythic ladder ----------
+   Nine columns across one table. Everything but the two Effect columns is a
+   known quantity -- a tier, a level, a path, two names, a grant, an ability --
+   so they are held to their content and the effects share what is left. */
+table.mythic { table-layout: fixed; }
+table.mythic col.tier { width: 3.2rem; }
+table.mythic col.lvl { width: 3.2rem; }
+table.mythic col.mpath { width: 8rem; }
+table.mythic col.mname { width: 8.5rem; }
+table.mythic col.grants { width: 6.5rem; }
+table.mythic col.mstat { width: 6.5rem; }
+table.mythic td { vertical-align: top; }
+table.mythic input[type="text"], table.mythic select { width: 100%; min-width: 0; }
+
+/* ---------- a table cell folded down to one line ----------
+   The shut state is a button holding the field's computed text, clipped with
+   an ellipsis; the tooltip carries the whole of it. It is drawn as the field
+   it stands in for -- same border, same gold formula edge -- because clicking
+   it is how the field is reached, and anything flatter reads as a label. */
+.foldcell.peek {
+  display: block; width: 100%; box-sizing: border-box; margin: 0;
+  padding: 3px 5px; min-height: 26px; text-align: left;
+  font: inherit; font-size: 0.78rem; line-height: 1.35;
+  color: var(--cs-text); background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 5px;
+  box-shadow: inset -2px 0 0 var(--cs-formula);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: text;
+}
+.foldcell.peek:hover { box-shadow: inset -2px 0 0 var(--cs-formula-strong); }
+/* A token inside a shut cell is being read, not pointed at: the cell's own
+   tooltip is what a click-to-open cell should be offering. */
+.foldcell.peek .tok { cursor: inherit; }
+.foldcell.peek .ph { color: var(--cs-muted); font-style: italic; }
+.foldcell.open { display: block; }
+.foldcell.open .prose textarea, .foldcell.open .prose-view { font-size: 0.78rem; }
+
+/* ---------- card casting ----------
+   Mana colours are the five a card game uses; a chip is a letter on its
+   colour so a row of cards reads at a glance. */
+.mana { display: inline-flex; gap: 2px; vertical-align: middle; }
+.mana .chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; border-radius: 50%; font-size: 0.66rem; font-weight: 700;
+  border: 1px solid rgba(0,0,0,0.25); color: #1a1d26;
+}
+.mana .chip.R { background: #e8a08a; }
+.mana .chip.B { background: #b8b0c8; }
+.mana .chip.U { background: #9fc4ea; }
+.mana .chip.W { background: #f3edcf; }
+.mana .chip.G { background: #a6d3a8; }
+.mana .chip.none { background: transparent; color: var(--cs-muted); border-style: dashed; }
+/* Deck manipulations: one panel per group in a grid of their own, wide enough
+   for the rule text under each pick. */
+/* Not a grid but columns, so the groups stack: General fills one column and
+   the shorter groups pile up in the next rather than each taking a row. */
+.grid.manipgrid { grid-column: 1 / -1; display: block; columns: 440px; column-gap: 12px; }
+.grid.manipgrid > .panel { break-inside: avoid; page-break-inside: avoid; margin: 0 0 12px; }
+table.manips td { vertical-align: top; }
+table.manips td.what { min-width: 14rem; }
+table.manips td.what > .pair { display: flex; }
+table.manips td.what > .pair input[type="text"] { flex: 1; min-width: 8rem; }
+table.manips td.what .prose.note { margin-top: 3px; }
+table.manips td.what .prose.note textarea, table.manips td.what .prose.note .prose-view { font-size: 0.76rem; color: var(--cs-muted); }
+table.manips td.what .rule { margin: 3px 0 0; font-size: 0.72rem; line-height: 1.35; color: var(--cs-muted); }
+table.manips tr.unmet td.what > .pair input[type="text"] { border-color: var(--cs-bad); }
+table.manips td.tools select { width: 5.2rem; font-size: 0.72rem; padding: 3px 2px; }
+table.manips td.tools { white-space: nowrap; }
+select.manip-pick option { font-size: 0.85rem; }
+
+/* A card, drawn as a card. The frame is the cost colour; the bars and the text
+   box are card-stock light in either theme, as printed cards are. */
+.cardgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; margin-top: 8px; }
+.mcard {
+  --frame: #4a4f5a; --frame-dark: #2d3038; --stock: #f4efe4; --ink: #1a1d26;
+  --frame-bg: var(--frame);
+  display: flex; flex-direction: column; gap: 4px; padding: 7px 7px 6px;
+  border-radius: 12px; background: var(--frame-bg); border: 1px solid var(--frame-dark);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.08);
+  color: var(--ink); min-width: 0;
+}
+.mcard.R { --frame: #a4402f; --frame-dark: #6a2418; --stock: #f6e5de; }
+.mcard.B { --frame: #4a4356; --frame-dark: #26212e; --stock: #e6e1ec; }
+.mcard.U { --frame: #2f5f92; --frame-dark: #1a3656; --stock: #dfe9f5; }
+.mcard.W { --frame: #b8ad84; --frame-dark: #7f7550; --stock: #f8f5e8; }
+.mcard.G { --frame: #3a6d43; --frame-dark: #1f4326; --stock: #e2eedf; }
+/* Artifacts -- veilweaving, outside sphere magic -- wear the blue-grey. */
+.mcard.A { --frame: #93a3b3; --frame-dark: #5a6a78; --stock: #eef2f5; }
+.mcard.A .art { background:
+    radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.22), transparent 55%),
+    linear-gradient(160deg, #6f7f8d, #b3c0cb 55%, #5a6a78); }
+.mcard.multi { border-color: rgba(0,0,0,0.45); }
+.mcard.multi .bar, .mcard.multi .text, .mcard.multi .art { border-color: rgba(0,0,0,0.4); }
+.mcard.multi .art { background:
+    radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.14), transparent 55%),
+    linear-gradient(160deg, var(--frame-dark), var(--frame-dark-2, var(--frame-dark))); }
+.mcard .bar {
+  display: flex; align-items: center; gap: 4px; padding: 2px 5px;
+  background: var(--stock); border: 1px solid var(--frame-dark); border-radius: 6px; color: var(--ink);
+}
+.mcard .bar input, .mcard .bar select {
+  background: transparent; border: 0; border-radius: 3px; padding: 1px 3px; color: var(--ink);
+  font-size: 0.82rem; min-width: 0; width: auto; flex: 1;
+}
+.mcard .bar input::placeholder { color: rgba(26,29,38,0.45); }
+.mcard .bar input:focus, .mcard .bar select:focus { outline: 2px solid var(--cs-edit); outline-offset: -1px; background: rgba(255,255,255,0.6); }
+.mcard .bar.title input.name { font-weight: 700; font-size: 0.92rem; }
+.mcard .bar.title .cost { display: inline-flex; align-items: center; gap: 1px; flex: none; margin-left: auto; }
+.mcard .bar.title .cost input { width: 2.1rem; text-align: right; font-weight: 700; flex: none; }
+.mcard .bar.title .cost input.colorpick {
+  flex: none; width: 2.6rem; text-align: center; font-weight: 700; padding: 1px 2px;
+  border-radius: 4px; background: rgba(0,0,0,0.06); font-size: 0.72rem; letter-spacing: 0.05em;
+}
+.mcard .bar.title .cost .mana { flex: none; }
+.mcard .bar.sub { padding: 0 5px; font-size: 0.74rem; color: rgba(26,29,38,0.8); border-color: transparent; background: rgba(255,255,255,0.35); }
+.mcard .bar.sub input, .mcard .bar.sub select { font-size: 0.74rem; padding: 0 3px; color: inherit; }
+.mcard .bar.sub select { flex: none; width: 4.2rem; }
+.mcard .bar.sub input { width: 3rem; flex: none; }
+.mcard .art {
+  aspect-ratio: 5 / 3.6; border-radius: 4px; border: 1px solid var(--frame-dark); overflow: hidden;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.14), transparent 55%),
+    linear-gradient(160deg, var(--frame-dark), var(--frame) 60%, var(--frame-dark));
+}
+.mcard .art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mcard .bar.type input { font-size: 0.78rem; font-weight: 600; }
+.mcard .bar.type .dash { color: rgba(26,29,38,0.55); flex: none; }
+.mcard .text {
+  flex: 1; min-height: 6.4rem; padding: 5px 6px; border-radius: 6px;
+  background: var(--stock); border: 1px solid var(--frame-dark); color: var(--ink);
+}
+.mcard .text .prose textarea, .mcard .text .prose-view {
+  background: transparent; border: 0; color: var(--ink); font-size: 0.82rem; line-height: 1.35; padding: 0;
+  min-height: 5.8rem; box-shadow: none;
+}
+.mcard .text .prose.grow .prose-view { font-size: 0.82rem; padding: 0; }
+.mcard .text .prose textarea:focus { outline: 2px solid var(--cs-edit); outline-offset: 2px; }
+.mcard .text .prose .tok { color: #6a4a08; }
+.mcard .foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.72rem; color: #f4efe4; }
+.mcard .foot input[type="text"].short { width: 3rem; padding: 1px 4px; font-size: 0.72rem; }
+.mcard .foot input[type="number"] { width: 2.6rem; padding: 1px 2px; font-size: 0.72rem; }
+.mcard .foot .chk { color: inherit; font-size: 0.72rem; }
+.mcard .foot .roll { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0.9; }
+.mcard .foot.last { flex-wrap: nowrap; }
+.mcard .foot .tools { margin-left: auto; gap: 2px; flex: none; }
+.mcard .foot .tools button { padding: 0 5px; font-size: 0.72rem; line-height: 1.4; }
+/* The table: the two faces of the tab, and the zones a card can sit in. */
+.subtabs { display: flex; gap: 4px; margin: 0 0 12px; }
+.subtabs button { border-radius: 6px; }
+.subtabs button[aria-pressed="true"] { border-color: var(--cs-accent); color: var(--cs-accent); background: var(--cs-accent-soft); }
+.tablectl { flex-wrap: wrap; gap: 6px; }
+.zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px; margin-top: 6px; }
+.mcard.mini { padding: 5px 5px 4px; gap: 3px; border-radius: 9px; font-size: 0.78rem; }
+.mcard.mini .bar { padding: 1px 5px; }
+.mcard.mini .bar.title { gap: 4px; }
+.mcard.mini .bar.title .name { font-weight: 700; font-size: 0.82rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcard.mini .bar.title .cost { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; flex: none; }
+.mcard.mini .bar.title .cost b { font-size: 0.82rem; }
+.mcard.mini .art { aspect-ratio: 5 / 2.2; }
+.mcard.mini .bar.type { font-size: 0.7rem; font-weight: 600; }
+.mcard.mini .text { min-height: 0; padding: 4px 6px; font-size: 0.75rem; line-height: 1.3; max-height: 5.4rem; overflow: auto; }
+.mcard.mini .text .tok { color: #6a4a08; }
+.mcard.mini .foot { gap: 4px; flex-wrap: wrap; }
+.mcard.mini .foot .tools { margin-left: auto; flex: 1 1 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 3px; }
+.mcard.mini .foot .tools > * { flex: none; }
+.mcard.mini .foot .tools button { padding: 1px 6px; font-size: 0.7rem; }
+.mcard.mini .foot .badge { font-size: 0.62rem; }
+.mcard.mini.tapped { opacity: 0.55; transform: rotate(-3deg); }
+select.movesel { width: auto; max-width: 5.6rem; font-size: 0.68rem; padding: 1px 3px; background: rgba(0,0,0,0.25); color: #f4efe4; border-color: transparent; }
+.zonelist select.movesel, .manacard select.movesel { background: var(--cs-panel-2); color: var(--cs-text); border-color: var(--cs-line); }
+.manazone { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.manacard {
+  --frame: #4a4f5a; --frame-bg: var(--frame);
+  display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 8px;
+  background: var(--frame-bg); color: #f4efe4; border: 1px solid rgba(0,0,0,0.35); font-size: 0.75rem;
+}
+.manacard .mname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manacard button { padding: 1px 6px; font-size: 0.7rem; }
+.manacard.tapped { opacity: 0.5; }
+.manacard.tapped .mname { text-decoration: line-through; }
+.zonelist { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.zonerow { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 6px; background: var(--cs-panel-2); font-size: 0.78rem; }
+.zonerow .zname { font-weight: 600; white-space: nowrap; }
+.zonerow .zsub { flex: 1; min-width: 0; color: var(--cs-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zonerow .tools button { padding: 1px 6px; font-size: 0.7rem; }
+.deckback {
+  width: 92px; height: 128px; border-radius: 9px; margin-top: 6px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.4rem; color: rgba(255,255,255,0.75);
+  background: repeating-linear-gradient(45deg, #2b3140 0 6px, #343b4d 6px 12px); border: 2px solid var(--cs-line);
+  box-shadow: 2px 2px 0 var(--cs-panel-2), 4px 4px 0 var(--cs-line);
+}
+/* The field: hand across; in play three quarters with the deck beside it;
+   mana on the left, discard over exile on the right; the log across. */
+.tablefield { grid-column: 1 / -1; display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tablefield .f-hand, .tablefield .f-log { grid-column: 1 / -1; }
+.tablefield .f-play { grid-column: span 3; }
+.tablefield .f-deck { grid-column: span 1; }
+.tablefield .f-mana { grid-column: span 2; }
+.tablefield .f-piles { grid-column: span 2; display: flex; flex-direction: column; gap: 12px; }
+@container (max-width: 900px) {
+  .tablefield { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tablefield .f-play { grid-column: 1 / -1; }
+  .tablefield .f-deck { grid-column: 1 / -1; }
+}
+@container (max-width: 560px) {
+  .tablefield { grid-template-columns: minmax(0, 1fr); }
+  .tablefield .f-mana, .tablefield .f-piles { grid-column: 1 / -1; }
+}
+.zone.one { grid-template-columns: minmax(0, 1fr); }
+.mcard.mini.trap { --frame: #3a3f4c; --frame-dark: #23272f; }
+.mcard.mini.trap .trapback {
+  aspect-ratio: 5 / 3; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-weight: 700; color: rgba(255,255,255,0.8); text-align: center; line-height: 1.2;
+  background: repeating-linear-gradient(45deg, #2b3140 0 6px, #343b4d 6px 12px); border: 1px solid var(--frame-dark);
+}
+.mcard.mini.trap .trapback small { font-weight: 400; font-size: 0.7rem; opacity: 0.8; }
+.kw {
+  display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 0.72em; font-weight: 700; letter-spacing: 0.02em;
+  background: rgba(26,29,38,0.12); border: 1px solid rgba(26,29,38,0.25); color: #1a1d26; vertical-align: 1px;
+}
+.tablehead .badge.roll { text-transform: none; letter-spacing: 0; }
+.tablehead .hint.trig { margin: 6px 0 0; color: var(--cs-accent); font-weight: 600; }
+.kw.trig { background: rgba(212,162,74,0.25); border-color: rgba(154,107,18,0.5); }
+.mcard.mini .text { white-space: pre-line; }
+.tablehead .badge.roll b { color: var(--cs-accent); }
+/* The drawback ladder, compact: two abreast, rules clamped to two lines. */
+.modgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 18px; }
+.modrow.compact { padding: 4px 0; }
+.modrow.compact .what strong { font-size: 0.86rem; }
+.hint.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 0.72rem; line-height: 1.3; }
+ul.tablelog { margin: 0; padding: 0 0 0 1.1rem; font-size: 0.78rem; color: var(--cs-muted); }
+ul.tablelog li:first-child { color: var(--cs-text); }
+.mcard input.arturl { flex: 1; font-size: 0.68rem; padding: 1px 5px; opacity: 0.75; background: rgba(0,0,0,0.18); border-color: transparent; color: #f4efe4; }
+.mcard input.arturl::placeholder { color: rgba(244,239,228,0.6); }
+.mcard input.arturl:focus { opacity: 1; }
+.deckcheck li { margin: 2px 0; }
+.tally { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
+.tally .t { display: inline-flex; gap: 6px; align-items: center; font-size: 0.85rem; }
+.tally .t .n { font-weight: 650; font-variant-numeric: tabular-nums; }
+.modrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 5px 0; border-top: 1px solid var(--cs-line); }
+.modrow:first-child { border-top: 0; }
+.modrow .what { min-width: 0; }
+.modrow .what .hint { margin: 2px 0 0; }
+.spheres { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; }
+.spheres .pair { gap: 3px; }
+.spheres input[type="text"] { width: 8rem; }
+.spheres button.primary { flex: none; width: auto; }
+
+/* ---------- formula source, wherever it is shown ----------
+   One set of colours for formula text everywhere: the Formulas tab, a
+   tracker's max under its row, the audit. A name wears the same gold a
+   computed value does, so the colour keeps its one meaning across the sheet.
+   fx-unknown is a name or a function the character cannot supply, marked
+   where it is written rather than only in an error message underneath. */
+.fx-code {
+  font-family: var(--cs-mono); font-size: 0.78rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+.fx-name { color: var(--fx-name); }
+.fx-fn { color: var(--fx-fn); }
+.fx-number { color: var(--fx-number); font-variant-numeric: tabular-nums; }
+.fx-string { color: var(--fx-string); }
+.fx-op { color: var(--fx-op); }
+.fx-bracket { color: var(--cs-text); opacity: 0.75; }
+.fx-bad, .fx-unknown {
+  color: var(--cs-bad); text-decoration: underline wavy var(--cs-bad);
+  text-underline-offset: 3px; cursor: help;
+}
+
+/* ---------- the Formulas tab ---------- */
+.fx-intro .hint { max-width: 78ch; font-size: 0.78rem; }
+.fx-search, .fx-try {
+  width: 100%; margin-top: 8px; font-family: var(--cs-mono); font-size: 0.82rem;
+}
+.fx-try { box-shadow: inset -2px 0 0 var(--cs-formula-strong); }
+
+/* The working: what was written, what it becomes, what it comes to. Rows of
+   label and code, so the eye runs down the substitution rather than across. */
+.fx-working {
+  margin-top: 9px; border: 1px solid var(--cs-line); border-radius: 6px;
+  background: var(--cs-bg); padding: 7px 9px;
+}
+.fx-step {
+  display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px;
+  align-items: baseline; padding: 3px 0;
+}
+.fx-step + .fx-step { border-top: 1px dashed var(--cs-line); }
+.fx-label {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--cs-muted); text-align: right;
+}
+.fx-step.out .fx-answer {
+  color: var(--cs-accent); font-weight: 700; font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+.fx-step.bad .fx-code { color: var(--cs-bad); }
+.fx-reads {
+  margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--cs-line);
+  font-size: 0.7rem; color: var(--cs-muted);
+}
+button.fx-pick { cursor: pointer; color: var(--cs-text); }
+button.fx-pick:hover { border-color: var(--cs-accent); }
+button.fx-pick .fx-val {
+  margin-left: 5px; color: var(--cs-accent); font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+button.fx-pick.fx-unknown { color: var(--cs-bad); border-color: var(--cs-bad); text-decoration: none; }
+
+.fx-starters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+button.fx-starter {
+  font-family: var(--cs-mono); font-size: 0.74rem; padding: 4px 8px;
+  background: var(--cs-bg); border: 1px dashed var(--cs-line); cursor: pointer;
+}
+button.fx-starter:hover { border-color: var(--cs-accent); border-style: solid; }
+
+/* The index of readable names: one family per fold, values beside the names. */
+.fx-group { margin-bottom: 4px; }
+.fx-group > summary { cursor: pointer; font-size: 0.8rem; padding: 3px 0; }
+.fx-group > summary .hint { font-size: 0.7rem; }
+.fx-names {
+  display: grid; gap: 4px; margin: 6px 0 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+button.fx-name-chip {
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+  font-family: var(--cs-mono); font-size: 0.72rem; text-align: left;
+  padding: 3px 7px; background: var(--cs-bg); border: 1px solid var(--cs-line); cursor: pointer;
+}
+button.fx-name-chip:hover { border-color: var(--cs-accent); }
+button.fx-name-chip .n { color: var(--fx-name); overflow: hidden; text-overflow: ellipsis; }
+button.fx-name-chip .v {
+  color: var(--cs-text); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* A destination chip. Its right-hand half is a label rather than a value, so
+   it is not tabular and is allowed to wrap; the copy is confirmed on the chip
+   itself, because a toast for something this small is more interruption than
+   the action was worth. */
+button.fx-name-chip.fx-target .v {
+  color: var(--cs-muted); font-weight: 500; font-family: var(--cs-sans, inherit);
+  white-space: normal; text-align: right;
+}
+button.fx-name-chip.fx-target { align-items: center; }
+button.fx-name-chip.fx-target.copied { border-color: var(--cs-accent); }
+button.fx-name-chip.fx-target.copied .v { visibility: hidden; }
+button.fx-name-chip.fx-target.copied::after {
+  content: attr(data-copied); position: absolute; right: 7px;
+  color: var(--cs-accent); font-weight: 650; font-size: 0.7rem;
+}
+button.fx-name-chip.fx-target { position: relative; }
+
+/* Formulas already on the character. */
+.fx-row {
+  border: 1px solid var(--cs-line); border-radius: 6px; background: var(--cs-panel-2);
+  padding: 7px 9px; margin-bottom: 6px;
+}
+.fx-row.bad { border-color: var(--cs-bad); }
+.fx-rowhead { display: flex; gap: 6px; align-items: baseline; font-size: 0.82rem; }
+.fx-rowval {
+  margin-left: auto; color: var(--cs-accent); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+code.fx-rowsrc {
+  display: block; margin-top: 4px; padding: 4px 7px; border-radius: 4px;
+  background: var(--cs-bg); cursor: pointer;
+}
+code.fx-rowsrc:hover { outline: 1px solid var(--cs-accent); }
+.fx-err { margin-top: 4px; font-size: 0.72rem; color: var(--cs-bad); }
+
+/* The reference, folded away under the working parts of the tab. */
+.fx-ref > details > summary { cursor: pointer; list-style-position: outside; }
+.fx-ref summary h3 {
+  margin: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--cs-accent); font-weight: 650;
+}
+.fx-forms { display: grid; gap: 9px; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.fx-form { border: 1px solid var(--cs-line); border-radius: 6px; padding: 8px 9px; background: var(--cs-panel-2); }
+.fx-form .hint { margin: 4px 0; }
+code.fx-formcode { display: block; color: var(--cs-accent); font-weight: 650; font-size: 0.85rem; }
+.fx-formname { font-size: 0.78rem; font-weight: 650; margin-top: 2px; }
+code.fx-formeg { display: block; color: var(--cs-muted); }
+.fx-walk { display: grid; gap: 8px; margin-top: 10px; }
+.fx-walkstep { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: 8px; font-size: 0.82rem; }
+.fx-walkstep .fx-stepno {
+  width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--cs-accent-soft); color: var(--cs-accent); font-size: 0.72rem; font-weight: 700;
+}
+.fx-walkstep .hint { margin: 3px 0 0; }
+.fx-walkstep code.fx-code { display: inline-block; background: var(--cs-bg); padding: 1px 5px; border-radius: 3px; }
+.fx-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.fx-table td { padding: 5px 6px; border-top: 1px solid var(--cs-line); vertical-align: top; }
+.fx-table tr:first-child td { border-top: 0; }
+.fx-op-cell, .fx-fam { white-space: nowrap; }
+.fx-op-cell code, .fx-fam code { color: var(--cs-accent); }
+.fx-fam { max-width: 15rem; white-space: normal; }
+.fx-fngroup { margin-bottom: 10px; }
+.fx-fngroup h4 {
+  margin: 0 0 5px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted);
+}
+.fx-fn-row {
+  display: grid; gap: 3px 12px; padding: 6px 0; border-top: 1px solid var(--cs-line);
+  grid-template-columns: minmax(11rem, 1fr) minmax(0, 2.2fr) minmax(9rem, 1fr);
+  align-items: baseline;
+}
+code.fx-sig { color: var(--fx-fn); font-weight: 650; }
+.fx-fn-what { font-size: 0.78rem; }
+code.fx-eg {
+  display: inline-block; background: var(--cs-bg); border: 1px solid var(--cs-line);
+  border-radius: 4px; padding: 2px 6px; cursor: pointer;
+}
+code.fx-eg:hover { border-color: var(--cs-accent); }
+.fx-eg-val {
+  margin-left: 7px; padding-left: 7px; border-left: 1px solid var(--cs-line);
+  color: var(--cs-accent); font-weight: 650; font-variant-numeric: tabular-nums;
+}
+
+
+/* ---------- what needs attention ----------
+   Sits above the formulas, and only when there is something in it. A cycle,
+   a duplicate, a taken name and an orphan are each one entry naming every
+   place involved, rather than each place complaining on its own. */
+.fx-problems { border-color: var(--cs-bad); }
+.fx-problem {
+  border: 1px solid var(--cs-line); border-left: 3px solid var(--cs-bad);
+  border-radius: 6px; background: var(--cs-panel-2); padding: 7px 10px; margin-bottom: 7px;
+}
+.fx-problemhead { display: flex; gap: 7px; align-items: baseline; flex-wrap: wrap; }
+.fx-problemhead .badge { margin-left: 0; }
+code.fx-problemname { color: var(--cs-accent); font-weight: 650; font-size: 0.82rem; }
+.fx-problem .hint { margin: 4px 0 6px; }
+.fx-places { display: grid; gap: 3px; }
+.fx-place {
+  display: grid; grid-template-columns: 5.5rem minmax(6rem, 1fr) minmax(0, 2fr) auto;
+  gap: 8px; align-items: baseline; font-size: 0.76rem;
+  padding: 3px 6px; border-radius: 4px; background: var(--cs-bg);
+}
+.fx-place.inforce { outline: 1px solid var(--cs-accent); }
+.fx-placelabel {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted);
+}
+.fx-place.inforce .fx-placelabel { color: var(--cs-accent); }
+.fx-placewhere { color: var(--cs-text); }
+.fx-place code.fx-code { cursor: pointer; }
+.fx-place code.fx-code:hover { outline: 1px solid var(--cs-accent); border-radius: 3px; }
+.fx-placeval {
+  color: var(--cs-accent); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right;
+}
+
+@container (max-width: 560px) {
+  .fx-place { grid-template-columns: 1fr; gap: 2px; }
+}
+
+/* A tracker's own formulas, under its row. */
+.tmeta code.fx-code { font-size: 0.72rem; }
+/* A button that reads as part of the sentence it sits in. */
+button.linkish {
+  display: inline; padding: 0; border: 0; background: none; font: inherit;
+  color: var(--cs-accent); text-decoration: underline dotted; cursor: pointer;
+}
+button.linkish:hover { text-decoration-style: solid; }
+
+@container (max-width: 560px) {
+  .fx-step { grid-template-columns: 1fr; gap: 2px; }
+  .fx-label { text-align: left; }
+  .fx-fn-row { grid-template-columns: 1fr; }
+}
+/* ---------- roll buttons ---------- */
+/* A die beside a number, the same size wherever it lands -- a table row, a stat
+   line, a weapon head. Quiet until it is pointed at, because there is one on
+   every skill and forty lit buttons would be a wall rather than a table. */
+button.d20 {
+  flex: none; padding: 2px 4px; line-height: 0; border-radius: 5px;
+  background: transparent; border-color: transparent; color: var(--cs-muted);
+}
+button.d20:hover, button.d20:focus-visible {
+  color: var(--cs-accent); border-color: var(--cs-accent); background: var(--cs-accent-soft);
+}
+.d20icon {
+  width: 14px; height: 14px; display: block;
+  fill: none; stroke: currentColor; stroke-width: 8;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+/* The total and its die read as one thing, and the pair still sits against the
+   right edge of a numeric cell the way the number alone used to. */
+.rollpair { display: inline-flex; align-items: center; gap: 3px; }
+.statline .value button.d20 { margin-left: 6px; vertical-align: middle; }
+tr.untrained button.d20, tr.hiddenskill button.d20 { opacity: 0.6; }
+/* In a field the pair is the control: the box keeps the row's width and the
+   die sits beside it rather than under the label. */
+label.fld > .rollpair { display: flex; }
+label.fld > .rollpair > input { flex: 1; min-width: 0; }
+/* On a glance tile the die goes in the corner, so one tile having one does not
+   make that tile taller than the eight beside it. */
+.bigstat { position: relative; }
+.bigstat button.d20 { position: absolute; top: 3px; right: 3px; }
+
+/* ---------- the copied roll ---------- */
+/* Over the sheet rather than in it: copying a roll happens mid-play, and
+   nothing under the pointer should move because of it. The slot is a sticky
+   strip of no height, so the card floats at the top of whatever part of the
+   sheet is on screen and the table below it never shifts. */
+.rollslot { position: sticky; top: 6px; height: 0; z-index: 40; }
+.rolltoast {
+  position: absolute; top: 0; right: 0; width: min(32rem, 100%);
+  background: var(--cs-panel); border: 1px solid var(--cs-accent);
+  border-radius: var(--cs-radius); padding: 8px 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.rolltoast.failed { border-color: var(--cs-bad); }
+.rollhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.rollhead strong { font-size: 0.82rem; color: var(--cs-accent); }
+.rolltoast.failed .rollhead strong { color: var(--cs-bad); }
+.rollhead .hint { flex: 1; min-width: 8ch; }
+.rollformats { display: flex; gap: 3px; }
+.rollformats button { padding: 1px 7px; font-size: 0.7rem; }
+button.rollclose { padding: 0 6px; line-height: 1.3; }
+textarea.rolltext {
+  font-family: var(--cs-mono); font-size: 0.72rem; min-height: 0;
+  background: var(--cs-panel-2); color: var(--cs-text);
+}
+.rolltoast kbd {
+  font-family: var(--cs-mono); background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 3px;
+}
+.rolltoast p.hint { margin: 5px 0 0; }

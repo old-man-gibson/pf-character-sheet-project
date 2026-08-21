@@ -56,3 +56,14 @@ saying how much of a hue the background, the border and the word each take. See
 *[Ability colours](using-the-sheet.md#ability-colours)*.
 
 There is no build step and no runtime dependency — plain ES modules.
+
+One thing to keep together: the component fetches its stylesheet, `app/css/sheet.css`,
+at load time, resolved relative to `app/js/styles.js` rather than to the host page. So
+`app/css/` has to be served alongside `app/js/` — copying the `js` folder somewhere on
+its own leaves the sheet unstyled. If the sheet is served from another origin, that
+origin needs CORS headers on the `.css` as well as on the modules, and a host page with
+a `Content-Security-Policy` needs that origin in `connect-src` (for the fetch) and
+`style-src` (for the fallback `<link>`, which is used only when the fetch fails).
+
+The stylesheet is parsed once per page and adopted by every `<character-sheet>` on it,
+so a page with several sheets pays for the CSS once.
