@@ -134,8 +134,12 @@ export function tokenScope(model, local) {
 export function renderedProse(model, text, local = null) {
   // Built once for the whole field rather than per token: scope() walks
   // every tracker, skill and companion, and a field may hold dozens of them.
+  // The memoiser is *not* called tokenScope: as a method it called
+  // `this.#tokenScope` and the two names could not collide, but here they
+  // would, and a helper that shadows the function it means to call recurses
+  // until the stack gives out -- which is a blank tab, not an error message.
   let scope = null;
-  const tokenScope = () => (scope ??= tokenScope(model, local));
+  const scopeOnce = () => (scope ??= tokenScope(model, local));
   return model.renderProse(text, local).map((seg) => {
     if (seg.kind === 'text') return esc(seg.text);
     if (seg.error) {
@@ -147,6 +151,6 @@ export function renderedProse(model, text, local = null) {
     // else, and a bare "2" in the middle of a sentence does not say whether
     // the sentence is helping or hurting.
     const shown = seg.kind === 'push' ? fmt(seg.value) : formatValue(seg.value);
-    return `<span class="tok ${seg.kind}" title="${esc(tokenTitle(model, seg, tokenScope(model)))}">${esc(shown)}</span>`;
+    return `<span class="tok ${seg.kind}" title="${esc(tokenTitle(model, seg, scopeOnce()))}">${esc(shown)}</span>`;
   }).join('');
 }

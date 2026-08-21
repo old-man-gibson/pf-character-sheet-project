@@ -1158,7 +1158,45 @@ export class CharacterSheetElement extends HTMLElement {
     </div>`;
   }
 
+  /**
+   * The panel for the tab that is up -- and, if drawing it throws, a panel
+   * saying so instead.
+   *
+   * `#render()` builds the whole shadow root from one string, so an exception
+   * anywhere in a panel takes the *render* down, not the panel: the old markup
+   * stays on screen and the tab that was clicked simply never opens. That is
+   * the worst shape a bug can have here, because nothing on the page says
+   * anything is wrong. One helper shadowing the function it meant to call cost
+   * a day of exactly that (see ui/prose.js). Caught here, the same bug is one
+   * tab showing what went wrong while the rest of the sheet keeps working.
+   */
   #panel() {
+    try {
+      return this.#panelHtml();
+    } catch (err) {
+      // The console still gets the stack -- this is a bug report, not a
+      // condition to handle, and whoever is fixing it needs the trace.
+      console.error(`character-sheet: the ${this.#tab} tab failed to draw`, err);
+      return `<div class="grid"><section class="panel span2">
+        <h3>This tab could not be drawn</h3>
+        <p class="empty">Something in the <strong>${esc(this.#tabLabel())}</strong> tab threw
+          while it was being drawn, so the sheet is showing this instead of nothing.
+          Your character is untouched — every other tab still works, and so does Export JSON.</p>
+        <p class="hint"><code>${esc(err?.message || String(err))}</code></p>
+        <p class="hint">If a formula on this tab is the cause, the <strong>ƒx Formulas</strong>
+          tab lists every one on the character. The browser console has the full trace.</p>
+      </section></div>`;
+    }
+  }
+
+  /** What the tab bar calls the tab that is up, for a message about it. */
+  #tabLabel() {
+    if (this.#tab === 'systabs') return 'tab manager';
+    return this.#tabEntries().find((t) => t.id === this.#tab)?.label
+      || TABS.find(([id]) => id === this.#tab)?.[1] || this.#tab;
+  }
+
+  #panelHtml() {
     if (this.#tab.startsWith('sys-')) return this.#systemPanel(Number(this.#tab.slice(4)));
     switch (this.#tab) {
       case 'stats': return this.#statsPanel();
