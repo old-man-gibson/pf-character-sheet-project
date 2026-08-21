@@ -3175,6 +3175,70 @@ console.log('weapon handles -- the short name a formula calls a weapon by');
     [false, false, true, false, false]);
 }
 
+console.log('forwarded bonuses -- permanent or temporary, and the Stats tab adds up either way');
+{
+  const { tokenize } = await import('../app/js/inline.js');
+
+  check('a plain type is permanent', tokenize('{str.score += 2 as size}')[0].temporary, false);
+  check('temp. says when', tokenize('{str.score += 2 as temp.size}')[0].temporary, true);
+  check('and keeps the whole string as its type, so the two do not share a slot',
+    tokenize('{str.score += 2 as temp.size}')[0].type, 'temp.size');
+  check('"as temp" on its own is untyped', tokenize('{str.score += 2 as temp}')[0].type, '');
+  check('...but still temporary', tokenize('{str.score += 2 as temp}')[0].temporary, true);
+
+  const c = new Character(load('narockro'));
+  const str = () => c.data.abilities.str;
+  const strBase = str().score;
+  const build = () => c.data.statsBuild.str.resolved;
+
+  // Permanent: the score itself moves, and so does everything built on it.
+  c.setClassFeature('Warlord', 1, 'Features', 'Inherent {str.score += 4 as size}');
+  check('a permanent bonus moves the score', str().score, strBase + 4);
+  check('and the working score with it', str().tempScore, strBase + 4);
+  check('the build columns are left alone', build().total, strBase);
+  check('so the two must be read from the ability, not the build',
+    [str().score !== build().total, str().tempScore !== build().tempTotal], [true, true]);
+  check('and the split says which table it belongs in',
+    str().forwarded, { permanent: 4, temporary: 0, total: 4 });
+
+  // Temporary: only the working score moves, which is the sheet's own rule for
+  // its Temporary Bonuses table.
+  c.setClassFeature('Warlord', 1, 'Features', 'Overflow {str.score += 4 as temp.size}');
+  check('a temporary bonus leaves the score alone', str().score, strBase);
+  check('but moves the working score', str().tempScore, strBase + 4);
+  check('which is what every derived number is built from',
+    str().totalMod, Math.floor((strBase + 4 - 10) / 2));
+  check('and it lands in the temporary half of the split',
+    str().forwarded, { permanent: 0, temporary: 4, total: 4 });
+
+  // The two are different slots, so a permanent and a temporary size bonus add
+  // rather than the larger winning -- exactly as the sheet's own two Size
+  // columns do.
+  c.setClassFeature('Warlord', 1, 'Features',
+    'Both {str.score += 4 as size} {str.score += 2 as temp.size}');
+  check('permanent and temporary size are different bonuses',
+    [str().score, str().tempScore], [strBase + 4, strBase + 6]);
+  check('while two of the same kind are not',
+    (() => {
+      c.setClassFeature('Warlord', 2, 'Features', '{str.score += 1 as temp.size}');
+      const v = str().tempScore;
+      c.setClassFeature('Warlord', 2, 'Features', '');
+      return v;
+    })(), strBase + 6);
+
+  // The view reads one of the two halves.
+  check('the permanent column shows only the permanent part',
+    c.forwardedInto('str.score', 'permanent').total, 4);
+  check('and the temporary column only the temporary part',
+    c.forwardedInto('str.score', 'temporary').total, 2);
+  check('with nothing forwarded to an untouched ability',
+    c.forwardedInto('dex.score', 'permanent'), null);
+
+  c.setClassFeature('Warlord', 1, 'Features', '');
+  check('and taking the rule away puts the score back',
+    [str().score, str().tempScore], [strBase, strBase]);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));

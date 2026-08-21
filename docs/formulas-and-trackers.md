@@ -318,7 +318,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `class.<name>.level` | levels in one class — see below |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
-| `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity |
+| `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
 
 Anything else is refused and **said so**, in *Needs attention* and beside the formula,
 with the two mistakes told apart because the fixes differ: `skill.bluf` *is not something
@@ -327,7 +327,9 @@ read, but the sheet has nowhere to put a bonus to it* (a real name, no slot). Ne
 one moves a number, and neither one throws.
 
 An ability score lands *beside* the Stats tab build rather than in it: the columns there
-go on adding up to the number they add up to, and the forwarded part shows separately.
+go on adding up to the number they add up to, and the forwarded part shows in a **Fwd**
+column of its own — in the permanent table or the temporary one, depending on what the
+bonus said it was.
 
 **Damage, and the weapons a rule applies to.** Damage does not live on the character, it
 lives on each weapon, so a damage destination is really two questions: *how much* and
@@ -430,6 +432,26 @@ This settles forwarded bonuses against **each other**. A size bonus typed into t
 tab's own Size column, or a save's Morale row, is a different number in a different place,
 and the sheet adds both — those columns are where a bonus you are not deriving from a rule
 belongs, and putting the same bonus in both places counts it twice.
+
+**Permanent or temporary.** An ability score is the one number the sheet asks this of, and
+it keeps a table for each answer: a permanent bonus moves the score, a temporary one moves
+only the **Temp Score** every derived number is built from. Put `temp.` on the front of
+the type and the bonus lands in the second table instead of the first:
+
+```
+Inherent bonus {str.score += 4 as size}.
+Elemental Overflow, while burning {str.score += 4 as temp.size}.
+```
+
+`as temp` on its own says *when* and not *what kind*, so it is untyped and temporary — two
+of them stack, the way two untyped bonuses do. A permanent size bonus and a temporary one
+are different bonuses and both count, exactly as the sheet's own two Size columns do.
+Anywhere other than an ability score there is no temporary half to land in, and `temp.`
+is only part of the type's name.
+
+Both Stats tables carry a **Fwd** column showing what arrived from elsewhere, with the
+sentence that sent it in the tooltip; **Total** and **Score** include it, so the row adds
+up either way.
 
 **Where a bonus can be written.** Every field that takes `{…}` at all, plus one that takes
 nothing else: a **tracker's note**. A note may not define a name — it is read after the

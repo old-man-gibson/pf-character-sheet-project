@@ -41,7 +41,12 @@ const TARGET_RE = /^target\./;
 // rulebook says it: "a +2 size bonus to Strength". A trailing word after the
 // whole expression, because the type belongs to the bonus rather than to any
 // one of the destinations it may be aimed at.
-const AS_RE = /\s+as\s+([A-Za-z][A-Za-z0-9_-]*)\s*$/;
+//
+// "as temp.size" is the same bonus said to be a temporary one, which is a
+// question the sheet asks of an ability score and keeps two columns for: a
+// permanent bonus moves the score, a temporary one moves only the working
+// score every derived number is built from.
+const AS_RE = /\s+as\s+([A-Za-z][A-Za-z0-9_.-]*)\s*$/;
 
 /** Split prose into text and token segments. */
 export function tokenize(text) {
@@ -74,12 +79,21 @@ function parseTargets(left, { keyword = false } = {}) {
   return parts.map((p) => p.replace(TARGET_RE, ''));
 }
 
-/** Split "expr as size" into the expression and the bonus type it declares. */
+/** Split "expr as temp.size" into the expression, its type, and when it applies. */
 function parseType(expr) {
   const m = AS_RE.exec(expr);
-  return m
-    ? { expr: expr.slice(0, m.index).trim(), type: m[1].toLowerCase() }
-    : { expr: expr.trim(), type: '' };
+  const raw = m ? m[1].toLowerCase() : '';
+  const temporary = raw === 'temp' || raw.startsWith('temp.');
+  return {
+    expr: m ? expr.slice(0, m.index).trim() : expr.trim(),
+    // "as temp" on its own says *when*, not *what kind*, so it is untyped and
+    // two of them stack the way two untyped bonuses do. "as temp.size" keeps
+    // the whole string as its type, which is what makes a temporary size bonus
+    // a different thing from a permanent one -- the sheet has a column for
+    // each, and they add.
+    type: raw === 'temp' ? '' : raw,
+    temporary,
+  };
 }
 
 function parseToken(inner, raw) {
@@ -155,7 +169,14 @@ export function collectContributions(sources) {
     for (const t of tokenize(text)) {
       if (t.kind === 'push') {
         out.push({
-          targets: t.targets, sign: t.sign, expr: t.expr, type: t.type || '', path, scope, raw: t.raw,
+          targets: t.targets,
+          sign: t.sign,
+          expr: t.expr,
+          type: t.type || '',
+          temporary: !!t.temporary,
+          path,
+          scope,
+          raw: t.raw,
         });
       }
     }

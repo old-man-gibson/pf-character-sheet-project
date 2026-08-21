@@ -95,6 +95,9 @@ export const skillForwardKey = (s) => `skill.${slug(s.spec ? `${s.name} ${s.spec
  * It is only the default. The row has a field for it, and what a player writes
  * there wins.
  */
+/** The name a formula forwards a bonus to a class's effective level under. */
+export const classForwardKey = (name) => `class.${slug(name)}.level`;
+
 export function weaponHandle(name) {
   const strip = (v) => String(v ?? '').replace(/['’]/g, '');
   const head = strip(name).split(/[(&,\/[]/)[0].trim();
@@ -4229,12 +4232,17 @@ export class Character {
         if (a) {
           // A bonus forwarded here goes on top of what the build resolves to,
           // never into it: the columns on the Stats tab have to go on adding
-          // up to the number they add up to. Added rather than remembered, so
-          // the second recompute pass lands on the same answer as the first
-          // -- `r` is worked out afresh from the entry every time.
-          a.forwarded = this.#forwarded(`${key}.score`);
-          a.score = r.total + a.forwarded;
-          a.tempScore = r.tempTotal + a.forwarded;
+          // up to the number they add up to, so the forwarded part is a column
+          // of its own beside them. Added rather than remembered, so the second
+          // recompute pass lands on the same answer as the first -- `r` is
+          // worked out afresh from the entry every time.
+          //
+          // Permanent and temporary part ways here, exactly as the build's own
+          // two tables do: a permanent bonus moves the score, a temporary one
+          // moves only the working score.
+          a.forwarded = this.#forwardedSplit(`${key}.score`);
+          a.score = r.total + a.forwarded.permanent;
+          a.tempScore = r.tempTotal + a.forwarded.total;
           applied.add(key);
         }
       }
@@ -4247,7 +4255,8 @@ export class Character {
       // forwarded bonus rides the working score instead of being written into
       // it -- adding it to a stored number twice is exactly the drift the
       // two-pass recompute exists to avoid.
-      const loose = applied.has(key) ? 0 : (a.forwarded = this.#forwarded(`${key}.score`));
+      if (!applied.has(key)) a.forwarded = this.#forwardedSplit(`${key}.score`);
+      const loose = applied.has(key) ? 0 : a.forwarded.total;
       a.mod = abilityMod(a.score);
       // A blank temp score means "same as base".
       if (!a.tempScore) a.tempScore = a.score;
@@ -9941,7 +9950,7 @@ export class Character {
     // `{class.legendary_kineticist.level += 2}` can never mean two different
     // classes.
     for (const cls of this.classNames()) {
-      const name = `class.${slug(cls)}.level`;
+      const name = classForwardKey(cls);
       if (!expand.has(name)) add(name, `${cls} levels`);
     }
 
@@ -10011,26 +10020,51 @@ export class Character {
   }
 
   /**
+   * The same total, split by when it applies.
+   *
+   * Only ability scores ask this, and they ask it because the sheet does: a
+   * permanent bonus moves the score, a temporary one moves only the working
+   * score every derived number is built from, and the Stats tab keeps a table
+   * for each. Everywhere else the two are the same number and the split is
+   * ignored.
+   */
+  #forwardedSplit(name) {
+    const counted = this.contributions?.countedAt?.[name];
+    const out = { permanent: 0, temporary: 0, total: 0 };
+    for (const e of this.contributions?.by?.[name] || []) {
+      if (e.error || !e.value) continue;
+      if (counted && !counted.has(e)) continue;
+      out[e.temporary ? 'temporary' : 'permanent'] += e.value;
+      out.total += e.value;
+    }
+    return out;
+  }
+
+  /**
    * What is arriving at one destination, and from where -- the view a number
    * owes its reader when part of it was decided somewhere else entirely.
    *
    * Returns null when nothing is forwarded there, so a caller can leave the
    * display alone rather than render an empty explanation of nothing.
    */
-  forwardedInto(name) {
-    const total = this.#forwarded(name);
+  forwardedInto(name, only = '') {
+    const want = only === 'permanent' ? false : only === 'temporary' ? true : null;
+    const split = this.#forwardedSplit(name);
+    const total = want === null ? this.#forwarded(name)
+      : (want ? split.temporary : split.permanent);
     const counted = this.contributions?.countedAt?.[name];
     // Superseded bonuses stay on the list. A size bonus that lost to a bigger
     // size bonus has not gone away -- it is the reason the bigger one is not
     // adding to it -- and a reader who cannot see it will write it in again.
     const from = (this.contributions?.by?.[name] || [])
-      .filter((e) => e.value)
+      .filter((e) => e.value && (want === null || !!e.temporary === want))
       .map((e) => ({
         where: describeSource(e.path),
         value: e.value,
         expr: e.expr,
         sign: e.sign,
         type: e.type,
+        temporary: !!e.temporary,
         counts: !counted || counted.has(e),
       }));
     return from.length ? { total, from } : null;

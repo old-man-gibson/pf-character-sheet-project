@@ -555,7 +555,8 @@ export const TOKEN_FORMS = [
       + 'the feature that grants it instead of '
       + 'being copied into every column it touches. Several destinations at once, separated by '
       + 'commas; -= for a penalty; end with "as size" (or morale, luck, …) and it will not '
-      + 'stack with another bonus of that type. "target.bluff = …" says the same thing the long way.',
+      + 'stack with another bonus of that type, or "as temp.size" to make it a temporary '
+      + 'one. "target.bluff = …" says the same thing the long way.',
     eg: 'Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}.',
   },
 ];

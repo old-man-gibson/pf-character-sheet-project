@@ -45,6 +45,7 @@ import {
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
+  classForwardKey,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -2818,8 +2819,8 @@ export class CharacterSheetElement extends HTMLElement {
    * worse than the copied formulas it replaced -- so the amount sits next to
    * the field it is added to, and points back at the sentence that sent it.
    */
-  #forwardedBadge(name, tag = '') {
-    const f = name ? this.#model.forwardedInto(name) : null;
+  #forwardedBadge(name, tag = '', only = '') {
+    const f = name ? this.#model.forwardedInto(name, only) : null;
     if (!f) return '';
     // A superseded bonus stays on the list, marked. It is the reason the one
     // above it is not adding to it, and a reader who cannot see it will write
@@ -3132,12 +3133,13 @@ export class CharacterSheetElement extends HTMLElement {
                   ? `<th class="num grouphead" colspan="${g.cols.length + (g.sum ? 1 : 0)}" title="${esc(g.hint || '')}">
                        ${esc(g.label)}${g.cap ? ` <span class="capnote">max +${g.cap}</span>` : ''}</th>`
                   : `<th colspan="${g.cols.length}"></th>`)).join('')}
-                <th></th>
+                <th colspan="2"></th>
               </tr>
               <tr>
                 <th></th>
                 ${groups.map((g) => `${g.cols.map(([, label], i) => `<th class="num ${band(g, i)}">${esc(label)}</th>`).join('')}${
                   g.sum ? '<th class="num grouped groupend" title="What the group actually contributes after its cap">Used</th>' : ''}`).join('')}
+                <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
                 <th class="num">Total</th>
               </tr>
             </thead>
@@ -3151,7 +3153,8 @@ export class CharacterSheetElement extends HTMLElement {
                       title="${r.enhancementWasted
     ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
     : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`}">${r[g.sum] ?? 0}</td>` : ''}`).join('')}
-                  <td class="num total">${r.total ?? 0}</td>
+                  <td class="num">${this.#forwardedBadge(`${ab}.score`, '', 'permanent') || '—'}</td>
+                  <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;
               }).join('')}
               <tr class="costrow">
@@ -3159,7 +3162,7 @@ export class CharacterSheetElement extends HTMLElement {
                 <td class="num">${pb.total}</td>
                 ${permCols.slice(1).map(() => '<td></td>').join('')}
                 ${groups.filter((g) => g.sum).map(() => '<td></td>').join('')}
-                <td></td>
+                <td></td><td></td>
               </tr>
             </tbody>
           </table>
@@ -3192,10 +3195,11 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="tablewrap">
           <table class="build">
             <thead>
-              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 4}"></th></tr>
+              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
+                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.score += 2 as temp.size} somewhere else on the sheet">Fwd</th>
                 <th class="num" title="Everything the temporary columns add up to">Temp</th>
                 <th class="num" title="Temporary score, used by every derived stat">Score</th>
                 <th class="num">Mod</th>
@@ -3208,8 +3212,10 @@ export class CharacterSheetElement extends HTMLElement {
                 return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                  <td class="num">${r.temporary ? fmt(r.temporary) : '—'}</td>
-                  <td class="num total">${r.tempTotal ?? 0}</td>
+                  <td class="num">${this.#forwardedBadge(`${ab}.score`, '', 'temporary') || '—'}</td>
+                  <td class="num">${r.temporary || a.forwarded?.temporary
+                    ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0)) : '—'}</td>
+                  <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
                   <td class="num total">${fmt(a.totalMod)}</td>
                 </tr>`;
               }).join('')}
@@ -3218,7 +3224,10 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         <p class="hint">
           Temporary bonuses feed the Temp Score used by every derived stat;
-          the permanent Total is left untouched.
+          the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
+          written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
+          for a permanent one, <code>as temp.size</code> for a temporary one — and points
+          back at the sentence that sent it.
         </p>
       </section>
       </div>
@@ -4005,6 +4014,7 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
                 data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${this.#forwardedBadge(classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
           <label class="fld"><span>Blended</span>
@@ -4097,6 +4107,7 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
                 data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${this.#forwardedBadge(classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
           <label class="fld"><span>Blended</span>
