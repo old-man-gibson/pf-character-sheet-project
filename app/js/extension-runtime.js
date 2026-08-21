@@ -16,8 +16,8 @@
  */
 
 import {
-  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
-  setOptionCatalogues,
+  setManeuverCatalogue, setSphereCatalogue, setVancianTables, setPsionicTables,
+  setCardcastingTables, setCookingTables, setOptionCatalogues,
 } from './model.js';
 import {
   extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
@@ -25,7 +25,8 @@ import {
 } from './extensions.js';
 
 const REGISTRARS = {
-  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
+  setManeuverCatalogue, setSphereCatalogue, setVancianTables, setPsionicTables,
+  setCardcastingTables, setCookingTables,
 };
 
 class ExtensionRuntime extends EventTarget {

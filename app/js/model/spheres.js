@@ -21,6 +21,95 @@ import { primordiaTalents } from './subsystems/primordia.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { closestName, normalizeName, slug } from './util.js';
 
+/* ------------------------------------------------------------------ *
+ * The sphere catalogue.
+ *
+ * What a sphere *is* -- its base abilities and every talent in it -- is
+ * content, so it arrives in an extension pack like the discipline catalogue
+ * and is read where it stands rather than copied onto a character. The sheet
+ * has always let a talent be typed in free-hand and still does; this is what
+ * lets it eventually offer the list instead, and what makes a talent's tags
+ * (`(counter)`, `(stance)`) and its source (`[3PP]`, `[Apoc]`) available to
+ * anything that wants to search or filter by them.
+ *
+ * Note that `rules.js` still hard-codes the *names* of the spheres, because
+ * skill-rank and unarmed logic key off them. This catalogue is the other
+ * half -- their contents -- and the two are not yet joined up.
+ * ------------------------------------------------------------------ */
+
+let SPHERE_CATALOGUE = { spheres: [] };
+
+/** Register the shared catalogue. Call before constructing a Character. */
+export function setSphereCatalogue(doc) {
+  const list = Array.isArray(doc?.spheres) ? doc.spheres : [];
+  SPHERE_CATALOGUE = {
+    spheres: list.map((s) => ({
+      name: String(s.name || ''),
+      // 'combat' or 'magic', the two sides the sheet already counts
+      // separately; '' when a page never said.
+      kind: s.kind === 'combat' || s.kind === 'magic' ? s.kind : '',
+      description: String(s.description || ''),
+      abilities: (s.abilities || []).map((a) => ({
+        name: String(a.name || ''), text: String(a.text || ''),
+      })),
+      talents: (s.talents || []).map((t) => ({
+        name: String(t.name || ''),
+        group: String(t.group || ''),
+        tags: (t.tags || []).map(String),
+        sources: (t.sources || []).map(String),
+        prerequisites: String(t.prerequisites || ''),
+        text: String(t.text || ''),
+      })),
+    })),
+  };
+}
+
+export function sphereCatalogue() {
+  return SPHERE_CATALOGUE;
+}
+
+/** One sphere by name, however it was capitalised. */
+export function sphereEntry(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  return SPHERE_CATALOGUE.spheres.find((s) => s.name.trim().toLowerCase() === key) || null;
+}
+
+/** Every talent a sphere holds, or all of them when no sphere is named. */
+export function sphereTalents(name = null) {
+  if (name === null) {
+    return SPHERE_CATALOGUE.spheres.flatMap((s) => s.talents.map((t) => ({ ...t, sphere: s.name })));
+  }
+  const s = sphereEntry(name);
+  return s ? s.talents.map((t) => ({ ...t, sphere: s.name })) : [];
+}
+
+/**
+ * Talents carrying a tag or a source, case-insensitively -- every `(counter)`
+ * across every sphere, or everything a table wants to rule out because it
+ * came from `[3PP]`. Both lists are searched, since which of the two a wiki
+ * wrote a label in is its business rather than the reader's.
+ */
+export function talentsTagged(tag) {
+  const key = String(tag || '').trim().toLowerCase();
+  if (!key) return [];
+  return sphereTalents().filter((t) => [...t.tags, ...t.sources]
+    .some((x) => String(x).trim().toLowerCase() === key));
+}
+
+/** Every tag and source in the catalogue, with how many talents carry each. */
+export function talentTagCounts() {
+  const out = new Map();
+  for (const t of sphereTalents()) {
+    for (const x of [...t.tags, ...t.sources]) {
+      const k = String(x).trim();
+      if (k) out.set(k, (out.get(k) || 0) + 1);
+    }
+  }
+  return [...out.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, count]) => ({ tag, count }));
+}
+
 /** A talent row nobody has written anything into. */
 const isBlankTalentRow = (row) => !String(row?.talent ?? '').trim()
   && !String(row?.sphere ?? '').trim() && !String(row?.notes ?? '').trim();

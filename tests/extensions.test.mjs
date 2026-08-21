@@ -15,6 +15,7 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+  setSphereCatalogue, sphereEntry, talentsTagged,
 } from '../app/js/model.js';
 import { blankDocument } from '../app/js/convert.js';
 
@@ -322,6 +323,53 @@ console.log('bundled -- the shipped packs load through the index and merge clean
       .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('spheres -- a whole sphere as a shared table, tags and all');
+{
+  const sphere = {
+    name: 'Boxing',
+    kind: 'combat',
+    description: 'Boxers specialize in fighting with their fists.',
+    abilities: [{ name: 'Counter Punch', text: 'You may ready an action.' }],
+    talents: [
+      { name: 'Clinch', group: 'Counter Talents', tags: ['counter'], sources: [], prerequisites: '', text: 'Grapple.' },
+      { name: 'Elongated Step', group: 'Boxing Talents', tags: ['stance'], sources: ['3PP'], prerequisites: '', text: 'Reach.' },
+    ],
+  };
+  const pack = normalizeExtension({ id: 'som', name: 'SoM', provides: { spheres: { spheres: [sphere] } } });
+  const merged = mergeTables([pack]);
+  check('the sphere survives the merge', merged.spheres.spheres.map((s) => s.name), ['Boxing']);
+  check('a pack of spheres counts as spheres',
+    describeSummary({ tables: { spheres: 2 }, blocks: {} }), '2 spheres');
+
+  const calls = [];
+  registerTables(merged, { setSphereCatalogue: (d) => calls.push(d.spheres.length) });
+  check('and reaches its registrar', calls, [1]);
+
+  setSphereCatalogue(merged.spheres);
+  check('read back by name, however it was capitalised',
+    sphereEntry('boxing').talents.length, 2);
+  check('unknown sphere is null', sphereEntry('Nowhere'), null);
+  // The tags are what a table filters on -- both kinds are searched, since
+  // which of the two a wiki wrote a label in is its business, not ours.
+  check('found by a rules tag', talentsTagged('counter').map((t) => t.name), ['Clinch']);
+  check('and by a source tag', talentsTagged('3PP').map((t) => t.name), ['Elongated Step']);
+  check('case does not count', talentsTagged('3pp').length, 1);
+  check('a talent knows its sphere', talentsTagged('counter')[0].sphere, 'Boxing');
+
+  /*
+   * A sphere replaces a sphere of the same name outright -- unlike a
+   * discipline, which joins. One page is the whole sphere, so a later pack
+   * carrying it means a corrected copy of all of it, not an addition to it.
+   */
+  const fixed = normalizeExtension({
+    id: 'fix',
+    name: 'Fix',
+    provides: { spheres: { spheres: [{ ...sphere, talents: [sphere.talents[0]] }] } },
+  });
+  check('a later pack replaces the sphere whole',
+    mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');

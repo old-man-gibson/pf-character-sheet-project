@@ -3,6 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
+  splitTalentName,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -959,6 +960,175 @@ console.log('a plain homebrew archetype document -- no info box, title features 
   check('"At level 20"', f('Axiomatic').level, 20);
   ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
   ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
+}
+
+console.log('a sphere page -- the table of contents is the parse');
+{
+  /*
+   * A Spheres of Might page, cut down but keeping every shape that matters:
+   * the side menu (which lists other spheres, and must not be mistaken for
+   * content), the breadcrumb that says which wiki this is, the table of
+   * contents that names every heading, a base ability, a table, and talents
+   * across three groups carrying both kinds of tag.
+   *
+   * The page runs its contents straight into the article with no blank line
+   * between, which used to cost the sphere's own description.
+   */
+  const BOXING = `site-name
+.wikidot.com
+Share on twitter Facebook Delicious Digg Reddit RedditExplore »
+
+Spheres of Power Wiki
+A Quick Reference Site
+Home
+Combat Spheres
+
+Boxing
+Brute
+Wrestling
+
+Page tags
+
+home
+Boxing
+Spheres of Power Wiki Home Page » Spheres Of Might » Boxing
+Fold
+Table of Contents
+Counter Punch
+Table: Practitioner Unarmed Damage
+Boxing Talents
+Corkscrew Set Up
+Elongated Step (stance) [3PP]
+Read the Rhythm [utility]
+Counter Talents
+Clinch (counter)
+Disarming Jab (counter) [Apoc]
+Legendary Talents
+Chasing Assault
+Wiggling Kitten, Lunging Lion (stance) [Catgirl HB]
+Boxers specialize in fighting with their fists, using their punches and upper bodies to batter their way across the battlefield.
+All practitioners of the Boxing sphere gain the following ability:
+
+Counter Punch
+You may ready an action to make an attack with a light melee weapon.
+
+You can apply a single talent with the (counter) tag to a counter punch.
+
+Table: Practitioner Unarmed Damage
+Level\tDamage (Medium Practitioner)
+1-3 talents\t1d4
+4-7 talents\t1d6
+Boxing Talents
+Corkscrew Set Up
+As a part of readying an action to perform a counter punch, you can make an attack roll.
+
+Elongated Step (stance) [3PP]
+At the start of your turn, you can spend a swift action to use this talent.
+
+Read the Rhythm [utility]
+As a move action, you can select one creature within 40 ft. of yourself.
+
+Counter Talents
+Clinch (counter)
+Whenever you successfully attack with your counter punch, you may attempt to grapple.
+
+Disarming Jab (counter) [Apoc]
+Source: Spheres Apocrypha: Pugilists
+
+Whenever you successfully attack with your counter punch, you can make a disarm attempt.
+
+Legendary Talents
+Chasing Assault
+Prerequisites: Boxing sphere, counter punch ability, Launching Uppercut.
+
+Whenever you launch a hostile creature into the air, you may make an Acrobatics check.
+
+Wiggling Kitten, Lunging Lion (stance) [Catgirl HB]
+Prerequisites: Acrobatics 3 ranks, Athletics sphere ((leap) package), Boxing sphere (Gazelle Punch).
+
+While in this stance, you may attempt an Acrobatics check to jump.
+
+Spheres of Might by Drop Dead Studios
+Classes
+Armiger\tBlacksmith\tCommander
+Help  | Terms of Service  | Privacy Powered by Wikidot.com
+This website uses cookies. See the Legal & OGL page for important information.`;
+
+  const r = parsePaste(BOXING);
+  check('no blocks -- a sphere is a shared table', r.blocks.length, 0);
+  const s = r.spheres[0];
+  check('the sphere, and which side of the line it is on', [s.name, s.kind], ['Boxing', 'combat']);
+  // The description used to be eaten by the contents, which ran to the next
+  // blank line and there is not one.
+  ok('its own description survives the contents above it', /^Boxers specialize/.test(s.description));
+  ok('and the line under it', /gain the following ability:$/.test(s.description));
+  check('base abilities, tables among them',
+    s.abilities.map((a) => a.name), ['Counter Punch', 'Table: Practitioner Unarmed Damage']);
+  ok('a base ability keeps its paragraphs', /\n\n/.test(s.abilities[0].text));
+  ok('a table keeps its rows', /1-3 talents\t1d4/.test(s.abilities[1].text));
+
+  check('every talent, in page order, by group',
+    s.talents.map((t) => `${t.group}: ${t.name}`), [
+      'Boxing Talents: Corkscrew Set Up',
+      'Boxing Talents: Elongated Step',
+      'Boxing Talents: Read the Rhythm',
+      'Counter Talents: Clinch',
+      'Counter Talents: Disarming Jab',
+      'Legendary Talents: Chasing Assault',
+      'Legendary Talents: Wiggling Kitten, Lunging Lion',
+    ]);
+
+  /*
+   * The tags, which are the point of reading a sphere at all. A (…) tag is a
+   * rule the talent carries; a […] tag is nearly always which book it came
+   * from -- but [utility] is a rule written in brackets, so the few of those
+   * are named rather than guessed at.
+   */
+  const t = (n) => s.talents.find((x) => x.name === n);
+  check('a parenthesised tag is a rule', [t('Clinch').tags, t('Clinch').sources], [['counter'], []]);
+  check('a bracketed one is a source', [t('Elongated Step').tags, t('Elongated Step').sources], [['stance'], ['3PP']]);
+  check('unless it is one of the rules written that way',
+    [t('Read the Rhythm').tags, t('Read the Rhythm').sources], [['utility'], []]);
+  check('both kinds at once, and the name left clean',
+    [t('Wiggling Kitten, Lunging Lion').tags, t('Wiggling Kitten, Lunging Lion').sources],
+    [['stance'], ['Catgirl HB']]);
+  // A Source: line says the same as an [Apoc] tag but says which book, so it
+  // joins rather than replaces.
+  check('a Source line joins the sources', t('Disarming Jab').sources, ['Apoc', 'Spheres Apocrypha: Pugilists']);
+  ok('and leaves the text', /^Whenever you successfully/.test(t('Disarming Jab').text));
+
+  check('prerequisites come off the top of the text',
+    t('Chasing Assault').prerequisites, 'Boxing sphere, counter punch ability, Launching Uppercut.');
+  ok('and the text starts after them', /^Whenever you launch/.test(t('Chasing Assault').text));
+  // The nested parens inside a prerequisite are not a tag: only a name's
+  // trailing ones are read that way.
+  ok('a prerequisite keeps its own brackets',
+    /Athletics sphere \(\(leap\) package\)/.test(t('Wiggling Kitten, Lunging Lion').prerequisites));
+
+  ok('the report counts what was read', /Sphere Boxing \(combat\): 2 base abilities, 7 talents in 3 group/.test(r.report[0]));
+  // The side menu lists two dozen other spheres; none of them is content.
+  check('nothing but the wikidot banner is left over',
+    r.leftovers.map((l) => l.text), ['site-name']);
+}
+
+console.log('splitTalentName -- tags off a name, both kinds');
+check('rules tag', splitTalentName('Clinch (counter)'), { name: 'Clinch', tags: ['counter'], sources: [] });
+check('source tag', splitTalentName('Hair Trigger [Apoc]'), { name: 'Hair Trigger', tags: [], sources: ['Apoc'] });
+check('both, in page order', splitTalentName('Floating Butterfly (stance) [Youxia HB]'), { name: 'Floating Butterfly', tags: ['stance'], sources: ['Youxia HB'] });
+check('no tags at all', splitTalentName('Gazelle Punch'), { name: 'Gazelle Punch', tags: [], sources: [] });
+check('a comma in the name is not a tag', splitTalentName('Wiggling Kitten, Lunging Lion'), { name: 'Wiggling Kitten, Lunging Lion', tags: [], sources: [] });
+
+console.log('a class page is not a sphere page -- the heading shape overlaps');
+{
+  // "…\tSpecial\tCombat Talents" is a class table's header row, not a group
+  // heading, and a class page has no Spheres breadcrumb to vouch for one.
+  const r = parsePaste(`Blacksmith
+Spheres of Power Wiki Home Page » Classes » Blacksmith
+Hit Die: d10.
+Class Level\tBase Attack Bonus\tFort Save\tSpecial\tCombat Talents
+1st\t+1\t+2\tCombat training\t1`);
+  check('no sphere read off a class page', r.spheres.length, 0);
+  check('the class still is', r.blocks.map((b) => `${b.kind}:${b.name}`), ['class:Blacksmith']);
 }
 
 console.log('a martial ability page -- the wiki box into a catalogue entry, not a block');

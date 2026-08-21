@@ -11,9 +11,9 @@ in it, and a table's content travels separately.
 
 A pack carries two kinds of thing:
 
-- **Shared tables** the whole app reads — a discipline catalogue (`maneuvers`), casting
-  tables (`vancian`), manifesting curves (`psionics`), deck manipulations
-  (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
+- **Shared tables** the whole app reads — a discipline catalogue (`maneuvers`), a sphere
+  catalogue (`spheres`), casting tables (`vancian`), manifesting curves (`psionics`), deck
+  manipulations (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
   pack's tables are merged at load and registered with the model; a later pack's entry
   replaces an earlier one of the same name, so a player can correct a bundled table by
   shipping a fixed copy in their own pack. **A discipline is the exception** — two packs
@@ -116,6 +116,45 @@ The bundled Path of War catalogue fills in nothing but the type. That is not a
 limitation of the format — it is that its 1,033 maneuver names are a publisher's, and
 their rules text is not ours to ship. A pack of your own homebrew has nothing to hold
 back.
+
+### Spheres
+
+A whole sphere — its description, its base abilities and every talent in it — is a shared
+table too, under `provides.spheres.spheres`. There is no form for one: a sphere is forty
+talents deep and arrives whole off a wiki page, so **Paste text…** is how one gets in, and
+the editor's **Spheres** list is for seeing what a pack holds and taking a sphere back out.
+Unlike a discipline, a later pack naming the same sphere **replaces** it: one page is the
+whole sphere, so a corrected copy is a copy of all of it.
+
+```json
+{ "name": "Boxing", "kind": "combat",
+  "description": "Boxers specialize in fighting with their fists…",
+  "abilities": [{ "name": "Counter Punch", "text": "…" }],
+  "talents": [
+    { "name": "Clinch", "group": "Counter Talents",
+      "tags": ["counter"], "sources": [], "prerequisites": "", "text": "…" },
+    { "name": "Elongated Step", "group": "Boxing Talents",
+      "tags": ["stance"], "sources": ["3PP"], "prerequisites": "", "text": "…" }
+  ] }
+```
+
+**The two kinds of tag are kept apart, because they answer different questions.** A `(…)`
+tag is a **rule** the talent carries — `(counter)` is a talent a counter punch can apply,
+`(stance)` one you take a stance in — and lands in `tags`. A `[…]` tag is nearly always
+**provenance** — `[3PP]`, `[Apoc]`, `[Youxia HB]`, `[EO3]` — and lands in `sources`, which
+is what a table filters on when it rules content in or out. Nearly always: a few rules tags
+are written in brackets too (`[utility]`), so those are named in the reader rather than
+guessed at. A talent's own `Source:` line joins `sources` as well, since it says which book
+where the tag only says which shelf.
+
+`sphereEntry(name)`, `sphereTalents(name)`, `talentsTagged(tag)` and `talentTagCounts()`
+read the registered catalogue; `talentsTagged` searches both lists, since which of the two
+a wiki wrote a label in is its business rather than a caller's.
+
+> The sheet does not yet *use* this. A talent is still typed in free-hand on the Spheres
+> &amp; Magic tab, and `rules.js` still hard-codes the sphere **names** (skill-rank and
+> unarmed logic key off them). This catalogue is the other half — their contents — and
+> joining the two up is the next step.
 
 A class's own feature text lands **under the class**, on the Progression tab beneath its
 ladder — *What they do*, one entry per distinct feature however many levels grant it, an
@@ -260,15 +299,16 @@ Covered by `tests/extensions.test.mjs`.
 
 ## Paste text — reading a rules page into blocks
 
-The editor's **Paste text…** takes a class, a race, a veil or a maneuver copied straight off
-a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
+The editor's **Paste text…** takes a class, a race, a veil, a sphere or a maneuver copied
+straight off a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
 wiki — the whole page, several pages one after another) and reads it into blocks. It is a two-stage
 affair, and the second stage is the point:
 
 1. **Read it.** `app/js/paste-import.js` finds what the paste holds by a handful of anchor
    lines every page uses — *Hit Die* for a class, *Standard Racial Traits* / *Ability Score
-   Modifiers* for a race, *Chakra Slots* for a veil, *Initiation Action* for a maneuver —
-   reaches back for each thing's preamble
+   Modifiers* for a race, *Chakra Slots* for a veil, *Initiation Action* for a maneuver, the
+   first *X Talents* heading on a page whose breadcrumb says Spheres of Power or Might for a
+   sphere — reaches back for each thing's preamble
    and forward to the next thing, with two blank lines in a row (what a paste of several
    pages has between them) as a hard boundary. A wiki page's chrome — the sign-in and
    search lines over the title, the tab strip, the errata *Notice*, the breadcrumb, and the
@@ -331,6 +371,17 @@ affair, and the second stage is the point:
    the description. What comes back is a **catalogue entry**, not a block, because a
    discipline is a [shared table](#disciplines): it is filed in the pack's discipline list,
    where every character who trains that discipline reads it.
+   A **sphere page** is read from its **table of contents**, which is the whole trick: the
+   contents name, in order and spelt exactly as they appear below, every heading the article
+   has — the base abilities, the tables, each *X Talents* group and every talent under it —
+   so the body needs no guessing at all about which short line is a talent's name and which is
+   the first line of a paragraph, the question that makes every other reader here as careful
+   as it is. Each talent keeps its group, its `(rules)` and `[source]` tags
+   ([above](#spheres)), a leading *Prerequisites:* or *Source:* line lifted out of its text,
+   and the rest as its text; what sits above the first group is the sphere's description and
+   its base abilities. It is [a shared table](#spheres) too, so it is filed rather than
+   blocked. (A class page has *X Talents* headings of its own — a table's *Combat Talents*
+   column — which is why the breadcrumb has to vouch for a sphere page first.)
 2. **Review.** The panel shows what was read — one line per block, each with a tick to
    drop it — and then **everything the reader did not use**, as stretches of the original
    text with a tag menu on each: *feature of* the class it sat under, *race trait of* the
@@ -338,19 +389,23 @@ affair, and the second stage is the point:
    reader suggests a tag (a `Label: text` line near a class is offered as its feature; page
    chrome as skippable) and the player decides. Maneuvers get a section of their own, each
    with the discipline it will be filed under as an editable field — a page that never named
-   one is marked, and a maneuver with no discipline is left out and said to be. **Add … to
-   the pack** folds the decisions in: tagged text joins the class or race it was tagged onto,
-   the rest become blocks, maneuvers join their discipline (making it if the pack has none,
-   replacing an entry of the same name so a re-read lands rather than doubling), and the
-   editor's forms are where anything gets corrected before Save.
+   one is marked, and a maneuver with no discipline is left out and said to be. Spheres get a
+   section of their own too, each showing its groups and the tags its talents carry. **Add …
+   to the pack** folds the decisions in: tagged text joins the class or race it was tagged
+   onto, the rest become blocks, maneuvers join their discipline (making it if the pack has
+   none, replacing an entry of the same name so a re-read lands rather than doubling),
+   spheres replace any of the same name, and the editor's forms are where anything gets
+   corrected before Save.
 
 Nothing is guessed at silently: every line either lands somewhere the report names or comes
 back in the review as text to tag — bar the page tail above, which the report accounts for.
 `tests/paste-import.test.mjs` runs the reader over the three table shapes, both
 feature-prose shapes, the segmentation, the whole Barbarian / Dwarf / Warlord / veil paste,
-a two-page wikidot copy, an option page and a martial ability page.
+a two-page wikidot copy, an option page, a martial ability page and a sphere page.
 
 > The engine still carries some publisher names of its own — the Spheres of Power sphere
 > lists in `rules.js` (which drive skill-rank and unarmed logic), the Primordia techniques,
-> the mythic path names — and those are the next thing to lift into packs.
+> the mythic path names — and those are the next thing to lift into packs. The `spheres`
+> table above is the first half of that: what a sphere *contains* now travels in a pack,
+> even though what the spheres are *called* does not yet.
 

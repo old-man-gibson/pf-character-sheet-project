@@ -110,7 +110,7 @@ const CSS = `
    are rows inside it, each of which opens into the cells a maneuver's card
    shows on the sheet. Three levels, so each one is kept as flat as it can be. */
 .extmgr .disc > .head input[type=text] { flex: 1; font-weight: 600; }
-.extmgr .disc > .head .meta { font-size: 0.74rem; opacity: 0.65; white-space: nowrap; }
+.extmgr .disc > .head .meta, .extmgr .block > .head .meta { font-size: 0.74rem; opacity: 0.65; white-space: nowrap; }
 .extmgr .ents { margin-top: 8px; }
 .extmgr .lvl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 8px 0 2px; }
 .extmgr .ent { border-top: 1px solid var(--line, #333); padding: 4px 0; }
@@ -215,9 +215,11 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function editorHtml() {
     const d = draft;
     const s = summarize(d);
-    // Disciplines have an editor of their own below; the rest of the tables
-    // are big, regular and usually built by a tool, so they stay JSON.
-    const otherTables = Object.keys(d.provides).filter((k) => k !== 'maneuvers');
+    // Disciplines and spheres have sections of their own below; the rest of
+    // the tables are big, regular and usually built by a tool, so they stay
+    // JSON.
+    const OWN_SECTION = new Set(['maneuvers', 'spheres']);
+    const otherTables = Object.keys(d.provides).filter((k) => !OWN_SECTION.has(k));
     const otherCounts = Object.fromEntries(otherTables.map((k) => [k, s.tables[k]]));
     return `
       <h2>${draftIsNew ? 'New extension' : `Edit — ${esc(d.name)}`}</h2>
@@ -245,11 +247,12 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         </div>
 
         ${disciplinesHtml()}
+        ${spheresHtml()}
 
         <h3>Other shared tables</h3>
         <p class="hint">${otherTables.length
     ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}, edited in the JSON view.`
-    : `A pack can also carry ${TABLE_KINDS.filter((k) => k !== 'maneuvers').map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
+    : `A pack can also carry ${TABLE_KINDS.filter((k) => !OWN_SECTION.has(k)).map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
 
         <h3>Blocks</h3>
         <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
@@ -286,7 +289,7 @@ Hit Die: d12.
           <button data-action="paste-cancel">Back to the form</button>
         </div>`;
     }
-    const { result, keep, mkeep, mdisc, tags } = paste;
+    const { result, keep, mkeep, mdisc, skeep, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
     const archs = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'archetype' && !b.single && keep[i]);
@@ -322,6 +325,23 @@ Hit Die: d12.
         <span class="kind">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
         <span class="what"><strong>${esc(b.name || '(unnamed)')}</strong> <span class="d">${esc(detail(b))}</span></span>
       </div>`).join('') || '<p class="hint">Nothing.</p>'}
+
+      ${result.spheres.length ? `
+      <h3>Read into spheres</h3>
+      <p class="hint">A whole sphere, read off its page's table of contents. Like a
+        discipline it joins the pack's shared tables rather than becoming a block.</p>
+      ${result.spheres.map((sp, i) => {
+    const groups = [...new Set(sp.talents.map((t) => t.group))];
+    const tags = [...new Set(sp.talents.flatMap((t) => [...t.tags, ...t.sources]))];
+    return `<div class="found ${skeep[i] ? '' : 'off'}">
+        <label class="sw"><input type="checkbox" data-skeep="${i}" ${skeep[i] ? 'checked' : ''}></label>
+        <span class="kind">${esc(sp.kind || 'sphere')}</span>
+        <span class="what"><strong>${esc(sp.name || '(unnamed)')}</strong>
+          <span class="d">${esc([`${sp.abilities.length} base abilities`,
+    `${sp.talents.length} talents`, groups.join(', ')].filter(Boolean).join(' · '))}${
+  tags.length ? esc(` — tags: ${tags.join(', ')}`) : ''}</span></span>
+      </div>`;
+  }).join('')}` : ''}
 
       ${result.maneuvers.length ? `
       <h3>Read into disciplines</h3>
@@ -368,7 +388,9 @@ Hit Die: d12.
     const blocks = keep.filter(Boolean).length
       + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length;
     const mans = mkeep.filter((on, i) => on && String(mdisc[i] || '').trim()).length;
-    const parts = [blocks ? `${blocks} block(s)` : '', mans ? `${mans} maneuver(s)` : ''].filter(Boolean);
+    const sphs = skeep.filter(Boolean).length;
+    const parts = [blocks ? `${blocks} block(s)` : '', sphs ? `${sphs} sphere(s)` : '',
+      mans ? `${mans} maneuver(s)` : ''].filter(Boolean);
     return `Add ${parts.join(' and ') || 'nothing'} to the pack`;
   })()}</button>
         <button data-action="paste-back">Back to the text</button>
@@ -413,6 +435,7 @@ Hit Die: d12.
       // lands under -- which the page names, but not always.
       mkeep: result.maneuvers.map(() => true),
       mdisc: result.maneuvers.map((m) => m.discipline || ''),
+      skeep: result.spheres.map(() => true),
       tags,
     };
     error = null;
@@ -449,6 +472,20 @@ Hit Die: d12.
     return n;
   }
 
+  /** File the spheres that were ticked; one of the same name is replaced. */
+  function applySpheres() {
+    const { result, skeep } = paste;
+    let n = 0;
+    result.spheres.forEach((sp, i) => {
+      if (!skeep[i] || !sp.name) return;
+      const list = spheres();
+      const at = list.findIndex((x) => lower(x.name) === lower(sp.name));
+      if (at === -1) list.push(sp); else list[at] = sp;
+      n++;
+    });
+    return n;
+  }
+
   function pasteApply() {
     const { result, keep, tags } = paste;
     const taken = result.blocks.map((b) => structuredClone(b));
@@ -476,7 +513,7 @@ Hit Die: d12.
     const fresh = [...taken.filter((b, i) => keep[i]).map((b) => normalizeBlock(b)), ...extra].filter(Boolean);
     const first = draft.blocks.length;
     draft.blocks.push(...fresh);
-    const filed = applyManeuvers();
+    const filed = applyManeuvers() + applySpheres();
     notice = null;
     error = fresh.length || filed ? null
       : 'Nothing was added — every block was unticked and every leftover left out.';
@@ -601,6 +638,43 @@ Hit Die: d12.
           <code>Close ({= 25 + 5 * floor(level / 2)} ft.)</code> keeps up with the level.</div>
       </div>` : ''}
     </div>`;
+  }
+
+  /* ---------------- spheres ---------------- */
+
+  /**
+   * The spheres a pack carries, as a list rather than a form.
+   *
+   * A sphere is forty talents deep and arrives whole off a wiki page, so
+   * there is nothing here worth typing by hand -- **Paste text…** is how one
+   * gets in. What the list is for is seeing what a pack holds and taking a
+   * sphere back out, with the tags its talents carry summarised because that
+   * is the part anything downstream will want to filter on.
+   */
+  function spheresHtml() {
+    const list = draft.provides.spheres?.spheres || [];
+    if (!list.length) {
+      return `<h3>Spheres</h3>
+        <p class="hint">None. <strong>Paste text…</strong> reads a whole sphere off its page
+          on the Spheres of Power or Spheres of Might wiki — its base abilities, every talent
+          by group, and the <code>(counter)</code> / <code>[3PP]</code> tags each one carries.</p>`;
+    }
+    return `<h3>Spheres</h3>
+      <p class="hint">Read off a wiki page and kept whole. Re-paste a page to replace one.</p>
+      ${list.map((sp, i) => {
+    const groups = [...new Set((sp.talents || []).map((t) => t.group).filter(Boolean))];
+    const tags = [...new Set((sp.talents || []).flatMap((t) => [...(t.tags || []), ...(t.sources || [])]))];
+    return `<div class="block" data-sphere="${i}">
+        <div class="head">
+          <span class="kind">${esc(sp.kind || 'sphere')}</span>
+          <span class="title">${esc(sp.name || '(unnamed)')}</span>
+          <span class="meta">${esc(`${(sp.abilities || []).length} base · ${(sp.talents || []).length} talents`)}</span>
+          <button class="danger" data-sremove="${i}" title="Remove this sphere">×</button>
+        </div>
+        <div class="land">${esc(groups.join(' · ') || 'no groups')}${
+  tags.length ? esc(` — tags: ${tags.join(', ')}`) : ''}</div>
+      </div>`;
+  }).join('')}`;
   }
 
   function blockHtml(b, i) {
@@ -821,6 +895,7 @@ Hit Die: d12.
     q('[data-action="paste-apply"]')?.addEventListener('click', pasteApply);
     qa('[data-keep]').forEach((el) => el.addEventListener('change', () => { paste.keep[Number(el.dataset.keep)] = el.checked; render(); }));
     qa('[data-mkeep]').forEach((el) => el.addEventListener('change', () => { paste.mkeep[Number(el.dataset.mkeep)] = el.checked; render(); }));
+    qa('[data-skeep]').forEach((el) => el.addEventListener('change', () => { paste.skeep[Number(el.dataset.skeep)] = el.checked; render(); }));
     qa('[data-mdisc]').forEach((el) => el.addEventListener('input', () => { paste.mdisc[Number(el.dataset.mdisc)] = el.value; }));
     qa('[data-tag]').forEach((el) => el.addEventListener('change', () => { paste.tags[Number(el.dataset.tag)].choice = el.value; render(); }));
     qa('[data-tagname]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.tagname)].name = el.value; }));
@@ -898,6 +973,10 @@ Hit Die: d12.
       openEntries.clear();
       render();
     }));
+    qa('[data-sremove]').forEach((el) => el.addEventListener('click', () => {
+      spheres().splice(Number(el.dataset.sremove), 1);
+      render();
+    }));
     q('[data-action="add-discipline"]')?.addEventListener('click', () => {
       const list = disciplines();
       list.push({ name: '', entries: [] });
@@ -948,6 +1027,15 @@ Hit Die: d12.
       draft.provides.maneuvers.disciplines = [];
     }
     return draft.provides.maneuvers.disciplines;
+  }
+
+  /** The draft's sphere list, made if it is not there yet. */
+  function spheres() {
+    if (!draft.provides.spheres || typeof draft.provides.spheres !== 'object') {
+      draft.provides.spheres = { spheres: [] };
+    }
+    if (!Array.isArray(draft.provides.spheres.spheres)) draft.provides.spheres.spheres = [];
+    return draft.provides.spheres.spheres;
   }
 
   /**
