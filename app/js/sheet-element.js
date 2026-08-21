@@ -53,6 +53,11 @@ import {
 } from './extensions.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
+  esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
+} from './ui/html.js';
+import * as fields from './ui/fields.js';
+import * as rows from './ui/rows.js';
+import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY, FORWARD_BY_DERIVED,
   BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
   BUILD_DERIVED_KEYS, PROWESS_TRACKS, ABP_LEVELS, ARRAY_LEVELS, LEVEL4_LEVELS,
@@ -110,8 +115,6 @@ import {
  */
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
-const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 3 + con.mod) '
-  + 'instead of a number.';
 
 /**
  * The die on a roll button: a hexagon -- a d20's silhouette -- with the face
@@ -190,9 +193,6 @@ const MODELLED_TAB_IDS = new Set([
 const WEIRD_TAB_LABELS = new Set(['cardcasting', 'technique list', 'autotechnique', 'auto-cooking']);
 const isWeirdTab = (label) => WEIRD_TAB_LABELS.has(String(label || '').trim().toLowerCase());
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
 
 /**
  * The session dashboard's building blocks, in their default order. The blocks
@@ -254,7 +254,6 @@ function loadSharedTables() {
   return extensionRuntime.load(new URL('../../', import.meta.url));
 }
 
-const val = (v) => (v === null || v === undefined || v === '' ? '—' : esc(v));
 
 /** The base attack progressions a class can run, as the rules name them. */
 const BAB_RATES = [[1, 'full'], [0.75, '&frac34;'], [0.5, '&frac12;'], [0, 'none']];
@@ -349,38 +348,6 @@ function slotSpend({ path, total, left, shape = 'pips', name = 'slot' }) {
   }</span>`;
 }
 
-/** The six abilities as the pick selectors label them. */
-const ABILITY_LABELS_LIST = ABILITIES.map((k) => ABILITY_LABELS[k]);
-
-/** The ability a value names ('Str' -> 'str'), or '' if it names none. */
-const abilityKey = (value) => {
-  const k = String(value ?? '').trim().toLowerCase();
-  return ABILITIES.includes(k) ? k : '';
-};
-
-/**
- * Is this list of choices abilities -- all six, or one track's three?
- *
- * Asked of the options rather than declared at each of the two dozen call
- * sites, because an ability slot goes by a different name at nearly every one
- * (a save's stat, a weapon's damage ability, a card's suit) while the choices
- * are always these. So a slot written tomorrow is coloured the day it lands.
- */
-const picksAbility = (values) => values.length > 1 && values.every((v) => abilityKey(v));
-
-/**
- * The hook a dropdown and its options hang their colour on; see "ability
- * colour coding" in the stylesheet. It stays on a picker with nothing picked,
- * empty, so the change handler has something to find and repaint.
- */
-const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '');
-
-/**
- * The same hook where the caller knows the ability rather than the value
- * naming it -- an attack mode is called "Alt Melee", and which stat it runs
- * on is a fact about the character rather than about the word.
- */
-const abKeyAttr = (key) => ` data-ab="${abilityKey(key)}"`;
 
 const round = (v, places = 2) => {
   const f = 10 ** places;
@@ -2879,9 +2846,7 @@ export class CharacterSheetElement extends HTMLElement {
     </section>`;
   }
 
-  #field(label, control) {
-    return `<label class="fld"><span>${esc(label)}</span>${control}</label>`;
-  }
+  #field(label, control) { return fields.field(label, control); }
 
   /* ----- the import offset, as a field -----
    * AC, touch, flat-footed, CMD and the three saves all carry a reconciliation
@@ -9276,222 +9241,72 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
   /* ---------------- field helpers ----------------
    * Every control carries the model path it writes to, so the bind step is
    * one generic listener per input kind rather than per field.
+   *
+   * The builders themselves live in ui/fields.js and ui/rows.js, where the
+   * panel modules can reach them too. What stays here is one line each: the
+   * private name the several hundred call sites in this file already use, and
+   * -- for the three that need it -- the bit of element state they cannot see
+   * from outside the class.
    */
 
-  #text(path, value, placeholder = '') {
-    return `<input type="text" value="${esc(value ?? '')}" data-set="${path}"
-      data-kind="text" placeholder="${esc(placeholder)}">`;
-  }
+  #text(path, value, placeholder = '') { return fields.text(path, value, placeholder); }
 
-  #num(path, value, extra = '') {
-    return `<input type="number" value="${Number(value) || 0}" data-set="${path}"
-      data-kind="number" ${extra}>`;
-  }
+  #num(path, value, extra = '') { return fields.num(path, value, extra); }
 
-  /** A value that is read, not typed: same box as a field, but shown as derived. */
-  #roField(value, title = '', extra = '') {
-    return `<input type="text" class="ro" value="${esc(value ?? '')}" readonly tabindex="-1"
-      ${title ? `title="${esc(title)}"` : ''} ${extra}>`;
-  }
+  #roField(value, title = '', extra = '') { return fields.roField(value, title, extra); }
 
-  #area(path, value, rows = 3) {
-    return `<textarea data-set="${path}" data-kind="text" rows="${rows}">${esc(value ?? '')}</textarea>`;
-  }
+  #area(path, value, rowCount = 3) { return fields.area(path, value, rowCount); }
 
-  /** `title` is for a rule the switch obeys but should not be labelled with. */
-  #check(path, value, label = '', title = '') {
-    return `<label class="chk"${title ? ` title="${esc(title)}"` : ''}><input type="checkbox" ${value ? 'checked' : ''}
-      data-set="${path}" data-kind="bool">${label ? `<span>${esc(label)}</span>` : ''}</label>`;
-  }
+  #check(path, value, label = '', title = '') { return fields.check(path, value, label, title); }
 
-  /** `blank: null` for a choice that must be made -- no empty option at all. */
-  #select(path, value, options, blank = '—') {
-    const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
-    const ab = picksAbility(pairs.map(([v]) => v));
-    // Keep a value the option list doesn't know (e.g. a magic sphere recorded
-    // in a combat column) instead of silently blanking it.
-    if (value && !pairs.some(([v]) => String(v) === String(value))) {
-      pairs.push([value, `${value} *`]);
-    }
-    const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label]) => `<option value="${esc(v)}"${abAttr(ab, v)}${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
-      .join('');
-    return `<select data-set="${path}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
-  }
+  #select(path, value, options, blank = '—') { return fields.select(path, value, options, blank); }
 
-  /** Ability-stat picker, used by the AC / attack / save stat slots. */
-  #abilitySelect(path, value) {
-    return this.#select(path, value, ABILITIES.map((k) => [ABILITY_LABELS[k], ABILITY_LABELS[k]]));
-  }
+  #abilitySelect(path, value) { return fields.abilitySelect(path, value); }
 
 
   /* ----- list rows ----- */
 
-  /**
-   * `title` is for a cell narrow enough to cut its own value off: an input
-   * scrolls rather than showing an ellipsis, so the whole of it has to be
-   * readable from somewhere. Left off where the column is wide enough to
-   * speak for itself, so the tooltip stays a signal.
-   */
   #itemText(list, i, field, value, placeholder = '', title = false) {
-    const text = String(value ?? '');
-    return `<input type="text" value="${esc(text)}" data-item="${list}|${i}|${field}"
-      data-kind="text" placeholder="${esc(placeholder)}"${title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
+    return rows.itemText(list, i, field, value, placeholder, title);
   }
 
-  #itemNum(list, i, field, value) {
-    return `<input type="number" value="${Number(value) || 0}" data-item="${list}|${i}|${field}" data-kind="number">`;
-  }
+  #itemNum(list, i, field, value) { return rows.itemNum(list, i, field, value); }
 
-  #itemCheck(list, i, field, value) {
-    return `<input type="checkbox" ${value ? 'checked' : ''} data-item="${list}|${i}|${field}" data-kind="bool">`;
-  }
+  #itemCheck(list, i, field, value) { return rows.itemCheck(list, i, field, value); }
 
-  /**
-   * A field whose value may be written as a formula (`level * 100`, `int.mod`,
-   * a name defined in prose) rather than typed as a number.
-   *
-   * Same two-layer trick as the prose fields, for the same reason: a cell full
-   * of source with the answer parked beside it reads as neither. The resolved
-   * value is what sits in the cell, the raw source appears in place the moment
-   * the field is clicked or tabbed into, and both layers carry the one binding
-   * so this is still a plain data-item/data-set control.
-   *
-   * `value` is the resolved result; pass null to keep the raw text showing (a
-   * literal `1d8`, an unresolvable formula).
-   */
-  #exprField(bindingAttr, raw, {
-    kind = 'expr', width = '5rem', placeholder = '', title = '', value = null, error = null,
-  } = {}) {
-    const src = raw ?? '';
-    const isFormula = typeof src === 'string' && src.trim() !== '';
-    const view = isFormula && !error && value !== null && value !== undefined && value !== '';
-    const explain = `${src} = ${value}`;
-    return `<span class="xf${view ? ' has-value' : ''}${error ? ' invalid' : ''}" style="--xf-w:${width}">
-      <input type="text" class="xf-src${isFormula ? ' mono' : ''}" value="${esc(src)}"
-        ${bindingAttr} data-kind="${kind}" placeholder="${esc(placeholder)}"
-        title="${esc(error || (view ? explain : title) || EXPR_HINT)}">
-      ${view ? `<span class="xf-view" title="${esc(explain)} — click to edit">${esc(value)}</span>` : ''}
-    </span>`;
-  }
+  #exprField(bindingAttr, raw, opts = {}) { return rows.exprField(bindingAttr, raw, opts); }
 
-  /**
-   * A number a player may write as a formula instead (`level * 100`).
-   *
-   * The model resolves it in the same sandbox as the trackers and writes the
-   * result into `<field>Num`, so the cell can show what it currently means and
-   * a bad formula is flagged here as well as in the Formula Audit.
-   */
-  #itemExpr(list, i, field, obj, { width = '5rem', placeholder = '' } = {}) {
-    return this.#exprField(`data-item="${list}|${i}|${field}"`, obj[field], {
-      width,
-      placeholder,
-      value: obj[`${field}Num`],
-      error: obj[`${field}Error`],
-      title: 'A number, or a formula like level * 100',
-    });
-  }
+  #itemExpr(list, i, field, obj, opts = {}) { return rows.itemExpr(list, i, field, obj, opts); }
 
-  /** Options are `value`, `[value, label]` or `[value, label, tooltip]`. */
-  /**
-   * `abOf` colours a picker whose choices are not themselves ability names:
-   * given a choice, it answers which ability that choice runs on. Each option
-   * carries its own answer, so the open list is coded too and the select can
-   * repaint from the option it lands on.
-   */
   #itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
-    const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
-    const ab = picksAbility(pairs.map(([v]) => v));
-    if (value && !pairs.some(([v]) => String(v) === String(value))) {
-      pairs.push([value, `${value} *`]);
-    }
-    const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
-    const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
-        String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
-      .join('');
-    return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
+    return rows.itemSelect(list, i, field, value, options, blank, abOf);
   }
 
-  #rowTools(list, i) {
-    return `<td class="tools">
-      <button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
-      <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
-    </td>`;
-  }
+  #rowTools(list, i) { return rows.rowTools(list, i); }
 
-  /** Tools for a list whose rows are summed, so their order means nothing. */
-  #rowRemove(list, i) {
-    return `<td class="tools">
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
-    </td>`;
-  }
+  #rowRemove(list, i) { return rows.rowRemove(list, i); }
 
-  /**
-   * A × that asks twice: the first click arms it (it says so), the second
-   * removes. For rows a stray click would genuinely hurt to lose.
-   */
+  /** Which × is armed is element state, so it is handed over here. */
   #rowRemoveArmed(list, i, what = 'row') {
-    const key = `${list}|${i}`;
-    const armed = this.#armedRemove === key;
-    return `<td class="tools">
-      <button class="danger${armed ? ' armed' : ''}" data-remove-armed="${key}"
-        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
-        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>
-    </td>`;
+    return rows.rowRemoveArmed(list, i, what, this.#armedRemove);
   }
 
-  /** Prose rendered to plain text -- for a title, where markup cannot go. */
-  #proseText(text) {
-    if (!hasTokens(text)) return String(text ?? '');
-    return this.#model.renderProse(text).map((seg) => (seg.kind === 'text' ? seg.text
-      : seg.error ? `{${seg.error}}` : formatValue(seg.value))).join('');
-  }
+  /** Resolving tokens needs the model, so it is handed over here. */
+  #proseText(text) { return rows.proseText(this.#model, text); }
 
-  /**
-   * A number a condition or buff has moved, shown in place of the base --
-   * red down, green up, with the base and what moved it in the tooltip.
-   * The plain base when nothing moved it; the same read on every view.
-   */
-  #movedInline(cs, key, base, format = fmt) {
-    const d = cs.changed ? (cs.delta[key] || 0) : 0;
-    if (!d) return `${format(base)}`;
-    return `<strong class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</strong>`;
-  }
+  #movedInline(cs, key, base, format = fmt) { return rows.movedInline(cs, key, base, format); }
 
-  #addButton(list, label, template) {
-    return `<button class="primary" data-add="${list}" data-template="${esc(JSON.stringify(template))}">+ ${esc(label)}</button>`;
-  }
+  #addButton(list, label, template) { return rows.addButton(list, label, template); }
 
-  /** `now` is the conditioned reading, shown under the base when it differs. */
-  #bigStat(k, v, sub, now = '', roll = '') {
-    // `v` as {html} is trusted markup -- a moved value shown in the base's place.
-    const shown = v && typeof v === 'object' && 'html' in v ? v.html : esc(v);
-    return `<div class="bigstat${now ? ' has-now' : ''}"><div class="k">${esc(k)}</div><div class="v">${shown}</div><div class="sub">${sub || '&nbsp;'}</div>${now}${roll}</div>`;
-  }
+  #bigStat(k, v, sub, now = '', roll = '') { return rows.bigStat(k, v, sub, now, roll); }
 
-  /** A stat for a header strip: one line, sized to read rather than to fill. */
-  #miniStat(k, v, title = '') {
-    return `<span class="ministat"${title ? ` title="${esc(title)}"` : ''}>
-      <span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></span>`;
-  }
+  #miniStat(k, v, title = '') { return rows.miniStat(k, v, title); }
 
-  #line(label, value, big = false) {
-    return `<div class="statline"><span class="label">${esc(label)}</span><span class="value ${big ? 'big' : ''}">${val(value)}</span></div>`;
-  }
+  #line(label, value, big = false) { return rows.line(label, value, big); }
 
-  /** A stat line whose value is markup of our own making, not a value to escape. */
-  #lineHtml(label, html, big = false) {
-    return `<div class="statline"><span class="label">${esc(label)}</span><span class="value ${big ? 'big' : ''}">${html}</span></div>`;
-  }
+  #lineHtml(label, html, big = false) { return rows.lineHtml(label, html, big); }
 
-  #editLine(label, path, value) {
-    return `<div class="statline">
-      <span class="label">${esc(label)}</span>
-      <span class="value"><input type="number" value="${Number(value) || 0}" data-set="${path}" style="width:4.2rem" aria-label="${esc(label)}"></span>
-    </div>`;
-  }
+  #editLine(label, path, value) { return rows.editLine(label, path, value); }
 
   /* ---------------- rolling ---------------- */
 
