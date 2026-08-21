@@ -68,7 +68,7 @@ import {
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
-  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, attackModeTotal,
+  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -2490,6 +2490,7 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="tablewrap" style="margin-top:8px"><table class="attackmodes">
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
+          ${this.#sheetBonusHead()}
           <th>Ability</th><th>2nd ability</th></tr></thead>
         <tbody>${ATTACK_MODES.map((k) => {
           const alt = ALT_ATTACK_OF[k];
@@ -2507,10 +2508,17 @@ export class CharacterSheetElement extends HTMLElement {
             aria-expanded="${!shut}" title="${esc(shut
     ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
+          // An alternate is the base attack with one ability swapped, so it
+          // is already carrying the base's Other -- editing it here would be
+          // editing the same number twice.
+          const other = alt
+            ? `<td class="num"><span class="hint" title="${esc(`Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}">as ${esc(ATTACK_MODE_LABELS[alt].toLowerCase())}</span></td>`
+            : this.#sheetBonusCell(ATTACK_MODE_KEY[k]);
           return `
           <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
             <td class="num total"><span class="rollpair">${this.#movedInline(cs, k, total)}${
   this.#rollButton('mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
+            ${other}
             <td>${this.#abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
             <td>${this.#abilitySelect(`attack.modes.${k}.stat2`, c.attack.modes[k]?.stat2)}</td>
           </tr>`;
@@ -2522,6 +2530,7 @@ export class CharacterSheetElement extends HTMLElement {
         ability in the slot — Dex for a finessed blade, Wis for a monk's fist — so it
         carries the same BAB, misc and size, and the same import reconciliation. Each one
         folds into the attack it belongs to; the caret says what is under it.</p>
+      ${this.#sheetBonusHint('a weapon’s enhancement, a size bonus, anything a talent added')}
     </section>`;
   }
 

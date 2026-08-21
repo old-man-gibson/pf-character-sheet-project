@@ -22,6 +22,7 @@ import {
   parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels,
   cleanSkillVariant, skillVariantKind, skillLabel, PERFORM_CATEGORIES, performCategory,
   MYTHIC_TIERS, MYTHIC_STAT_TIERS, MYTHIC_TIER_LEVEL, mythicTierGrant,
+  ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
 } from '../app/js/rules.js';
@@ -505,6 +506,65 @@ console.log('list editing');
   const gi = c.data.featGroups.length - 1;
   c.listAdd(`featGroups.${gi}.entries`, { name: 'Works', detail: '' });
   check('awkward group name still addressable', c.data.featGroups[gi].entries[0].name, 'Works');
+}
+
+console.log('the attack totals carry a reconciliation offset, and it is reachable');
+{
+  // What the workbook said its attack bonus was, against what this sheet can
+  // work out from BAB and the ability in the slot. The difference is the
+  // offset, and it used to have nowhere at all to show: AC and the saves each
+  // had an Other column, attack had none, so an imported figure nobody could
+  // account for could not be found or corrected either.
+  const doc = blankDocument({ id: 'atk', name: 'Atk' });
+  doc.identity.level = 15;
+  doc.attack = {
+    ...doc.attack,
+    bab: 11,
+    babOverride: 11,
+    miscBonus: 0,
+    totalMelee: 38,
+    totalRanged: 44,
+    totalCmb: 38,
+    modes: {
+      melee: { value: -1, stat1: 'Str', stat2: null },
+      altMelee: { value: 5, stat1: 'Dex', stat2: null },
+      ranged: { value: 5, stat1: 'Dex', stat2: null },
+      altRanged: { value: -1, stat1: 'Str', stat2: null },
+      cmb: { value: -1, stat1: 'Str', stat2: null },
+      altCmb: { value: 5, stat1: 'Dex', stat2: null },
+    },
+  };
+  // Nico's own scores, so the arithmetic below is his: Str 9 is -1 in the
+  // melee slot and Dex 20 is +5 in the ranged one.
+  doc.statsBuild.str = { ...doc.statsBuild.str, pointBuy: 9, sheetTotal: 9 };
+  doc.statsBuild.dex = { ...doc.statsBuild.dex, pointBuy: 20, sheetTotal: 20 };
+  const c = new Character(doc);
+  check('the imported figure is kept', c.data.attack.totalMelee, 38);
+  check('and the part it cannot account for is the offset', c.offsetOf('attack.totalMelee'), 28);
+  check('each mode carries its own', [c.offsetOf('attack.totalRanged'), c.offsetOf('attack.totalCmb')], [28, 28]);
+  check('every real mode has a key to file it under',
+    [ATTACK_MODE_KEY.melee, ATTACK_MODE_KEY.ranged, ATTACK_MODE_KEY.cmb],
+    ['attack.totalMelee', 'attack.totalRanged', 'attack.totalCmb']);
+  check('and an alternate has none of its own',
+    ATTACK_MODES.filter((m) => ATTACK_MODE_KEY[m]), ['melee', 'ranged', 'cmb']);
+
+  // Clearing it puts the total back to what the visible parts come to, and the
+  // alternate follows, because it is that total with one ability swapped.
+  c.setOffset('attack.totalMelee', 0);
+  check('cleared, melee is BAB and the ability in the slot', c.data.attack.totalMelee, 11 - 1);
+  check('and the alternate follows it', attackModeTotal(c.data, 'altMelee'), 11 + 5);
+  check('the other two are untouched', [c.data.attack.totalRanged, c.data.attack.totalCmb], [44, 38]);
+  c.setOffset('attack.totalMelee', 28);
+  check('and it can be put back', c.data.attack.totalMelee, 38);
+
+  // A bonus forwarded here is not an offset: it is written down and visible,
+  // so it must not be swallowed into one when the document is reopened.
+  c.setOffset('attack.totalMelee', 0);
+  c.setClassFeature(c.data.classes[0]?.name || 'Fighter', 1, 'Features', 'Aim {attack.melee += 3}');
+  check('a forwarded bonus lands', c.data.attack.totalMelee, 10 + 3);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and reopening leaves it forwarded, not folded into Other',
+    [again.data.attack.totalMelee, again.offsetOf('attack.totalMelee')], [13, 0]);
 }
 
 console.log('dragging a feat -- up its own group, or across into another');
