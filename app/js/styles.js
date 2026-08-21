@@ -1968,6 +1968,44 @@ table.racetraits td:first-child { width: 11rem; }
 table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
 
+/* ---------- feat groups ----------
+   Two columns rather than a row of panels. The left one is a single panel of
+   sections -- the granted feats, then every group after the first -- and the
+   right one is the first group standing on its own, because the level-up list
+   is the one a character actually fills and it needs the height. The band is
+   .pairrow.even, which already stacks the two under about 900px.
+
+   A section after the first is ruled off at the top: three tables down one
+   panel with nothing between them read as one long table. */
+.featmain .featsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--cs-line); }
+.featmain h4.subhead { margin-bottom: 7px; }
+/* The group name is an h3-sized field by default; in a subhead it takes the
+   subhead's own measure so the two sit on one line. */
+h4.subhead input.grouptitle {
+  font: inherit; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--cs-accent); background: transparent; border: 1px dashed transparent;
+  width: auto; max-width: 12rem; padding: 1px 4px; font-weight: 650;
+}
+h4.subhead input.grouptitle:hover { border-color: var(--cs-line); }
+h4.subhead button.danger { margin-left: auto; padding: 1px 6px; font-size: 0.7rem; }
+
+/* The add-group line sits under both columns, so starting a group is never a
+   panel standing in the row with nothing in it. */
+.addgroup {
+  grid-column: 1 / -1; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.addgroup .hint { flex: 1; min-width: 16rem; margin: 0; }
+
+/* The grip column is as narrow as the handle in it; the row's own tools lost
+   their arrows to the drag, so one cross is all that is left on the right. */
+table.feats th.grip, table.feats td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
+table.feats tr.dragging { opacity: 0.4; }
+/* Border-collapse eats a shadow on the row itself, so the line that says where
+   the drop lands is drawn inside the cells. */
+table.feats tr.drop-before > td { box-shadow: inset 0 3px 0 -1px var(--cs-accent); }
+table.feats tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent); }
+table.feats tr.featempty td { cursor: default; }
+
 /* ---------- the mythic ladder ----------
    Nine columns across one table. Everything but the two Effect columns is a
    known quantity -- a tier, a level, a path, two names, a grant, an ability --

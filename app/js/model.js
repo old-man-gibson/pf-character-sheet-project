@@ -5364,6 +5364,26 @@ export class Character {
   }
 
   /**
+   * Move an item out of one list and into another, for dragging a row from
+   * one group's table to a different group's.
+   *
+   * `to` counts the destination as it is now, the same way `listMoveTo` does.
+   * Moving within one list is that method's job and is handed straight to it,
+   * so a caller that cannot tell the two apart -- a drop handler reading two
+   * paths off the DOM -- does not have to.
+   */
+  listMoveInto(fromPath, from, toPath, to) {
+    if (fromPath === toPath) return this.listMoveTo(fromPath, from, to);
+    const src = this.list(fromPath);
+    if (from < 0 || from >= src.length) return this;
+    const dest = this.list(toPath);
+    const [item] = src.splice(from, 1);
+    dest.splice(Math.max(0, Math.min(dest.length, to)), 0, item);
+    this.recompute();
+    return this;
+  }
+
+  /**
    * Edit one field of one item in a list section.
    *
    * Some field names come from spreadsheet headers and can contain dots, so an

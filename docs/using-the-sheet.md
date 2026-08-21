@@ -38,9 +38,14 @@ and anything downstream recalculates immediately.
   hidden behind a **Show all** toggle.
 - *Combat & Magic* — the sphere, talent, veil and maneuver grids, cell by cell, with
   rows addable and removable.
-- *Feats & Mythic* — granted feats (drawback, specialty, oaths, attunement) and the
-  feats you chose, by group, plus add, rename, reorder and delete groups;
-  classes with hit die, saves and skill ranks; mythic path, tier and abilities.
+- *Feats & Mythic* — two columns. On the left, one **Feats** panel holding the granted
+  feats (drawback, specialty, oaths, attunement) and then every group after the first,
+  each a section of it; on the right, the **first group** — the level-up list — standing
+  on its own, because it is the one that fills up. Groups can be added, renamed and
+  deleted. A feat is reordered by dragging it by the grip at the left of its row — up
+  and down its own group, or onto another group to move it there — and deleted with the
+  × at the right.
+  Also: classes with hit die, saves and skill ranks; mythic path, tier and abilities.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
@@ -62,7 +67,8 @@ off Strength and his alt CMB off Wisdom. Change the selector and the total moves
 this as prose. Add a weapon and its attack bonus and iteratives follow your BAB, ability
 scores and size automatically.
 
-Rows can be reordered with ↑ / ↓ and removed with ×. Every change is saved as you make
+Rows can be reordered with ↑ / ↓ and removed with × — except a feat, which is dragged
+by its grip instead. Every change is saved as you make
 it, and **Save** marks the version the sheet opens on — see
 [Saving, and going back](importing-and-saving.md#saving-and-going-back). **Reset** returns the character to the
 converted sheet, **Export JSON** downloads the current state and **Import JSON** brings
@@ -706,10 +712,10 @@ Race traits sit beside them in their own list — see [The Overview](#the-overvi
 
 ## Granted feats
 
-Some feats are not picked at a level — something hands them over — and those live in
-one panel on Feats & Mythic, **source first and the feat second**, because that is the
-order they are read in: you know what granted it and are answering with which feat you
-took.
+Some feats are not picked at a level — something hands them over — and those open the
+**Feats** panel on Feats & Mythic, **source first and the feat second**, because that is
+the order they are read in: you know what granted it and are answering with which feat
+you took. The smaller feat groups are sections of the same panel, underneath.
 
 | Source | Feat |
 |---|---|

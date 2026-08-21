@@ -4704,7 +4704,7 @@ export class CharacterSheetElement extends HTMLElement {
    * is no feat to name; Specialty is mandatory, so it is always there. Oath and
    * Attunement feats sit in the same list, each naming its own source.
    */
-  #grantedFeatsPanel() {
+  #grantedFeatsSection() {
     const c = this.#model.data;
     const g = c.grantedFeats || { others: [] };
     const major = c.traitSlots?.majorDrawback || {};
@@ -4720,8 +4720,9 @@ export class CharacterSheetElement extends HTMLElement {
       <td>${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
     </tr>`;
 
-    return `<section class="panel span2">
-      <h3>Granted feats</h3>
+    return `<h4 class="subhead">Granted feats
+        <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
+      </h4>
       <div class="tablewrap"><table>
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
@@ -4749,8 +4750,38 @@ export class CharacterSheetElement extends HTMLElement {
         <strong>${esc(c.primordia.calc.technique)}</strong>) live on the
         <strong>Primordia</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
-      </p>
-    </section>`;
+      </p>`;
+  }
+
+  /**
+   * A feat group's heading: its name, how many it holds, and the × that
+   * removes the whole group. The same three whether the group is the panel on
+   * the right or a section stacked on the left, so the two cannot drift.
+   */
+  #featGroupTitle(group, g) {
+    return `<input class="grouptitle" type="text" value="${esc(group.name)}"
+        data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
+      <span class="badge">${group.entries.length}</span>
+      <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+  }
+
+  /** One group's feats: the table and the button that adds a row to it. */
+  #featGroupTable(group, g) {
+    return `<div class="tablewrap"><table class="feats">
+        <thead><tr><th class="grip"></th><th>Feat</th><th>Source / level</th><th></th></tr></thead>
+        <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
+          <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
+          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
+          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          ${this.#rowRemove(`featGroups.${g}.entries`, i)}
+        </tr>`).join('')}
+        ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
+          <td colspan="4" class="empty">No feats here yet — add one, or drag one in.</td>
+        </tr>`}</tbody>
+      </table></div>
+      <div style="margin-top:8px">
+        ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '' })}
+      </div>`;
   }
 
   #featuresPanel() {
@@ -4758,36 +4789,43 @@ export class CharacterSheetElement extends HTMLElement {
     const feats = c.feats || {};
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
-    return `<div class="grid">
-      ${this.#grantedFeatsPanel()}
-      ${(c.featGroups || []).map((group, g) => `
-        <section class="panel">
-          <h3>
-            <input class="grouptitle" type="text" value="${esc(group.name)}"
-              data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
-            <span class="badge">${group.entries.length}</span>
-            <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>
-          </h3>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Feat</th><th>Source / level</th><th></th></tr></thead>
-            <tbody>${group.entries.map((f, i) => `<tr>
-              <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
-              <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-              ${this.#rowTools(`featGroups.${g}.entries`, i)}
-            </tr>`).join('')}</tbody>
-          </table></div>
-          <div style="margin-top:8px">
-            ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '' })}
-          </div>
-        </section>`).join('')}
+    /*
+     * The feats read as two columns, not four panels. On the left, everything
+     * that arrives in ones and twos: the feats something handed over, then the
+     * smaller groups, each a section of the one panel. On the right, the group
+     * a character actually fills -- the level-up list -- standing beside them
+     * at its own height, because eight rows beside three sections of one or
+     * two is what balances the row.
+     *
+     * The right-hand column is the FIRST group, not the biggest: a layout that
+     * rearranged itself as feats were added would be worse than one that is
+     * merely arbitrary, and first is where the import puts the level-up list.
+     */
+    const groups = c.featGroups || [];
+    const featured = groups[0]
+      ? `<section class="panel featgroup">
+          <h3>${this.#featGroupTitle(groups[0], 0)}</h3>
+          ${this.#featGroupTable(groups[0], 0)}
+        </section>`
+      : '';
+    const main = `<section class="panel span2 featmain">
+      <h3>Feats</h3>
+      ${this.#grantedFeatsSection()}
+      ${groups.slice(1).map((group, i) => `<div class="featsection">
+        <h4 class="subhead">${this.#featGroupTitle(group, i + 1)}</h4>
+        ${this.#featGroupTable(group, i + 1)}
+      </div>`).join('')}
+    </section>`;
 
-      <section class="panel">
-        <h3>New feat group</h3>
-        <p class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up, Oaths, Attunement, Class, and so on.</p>
-        <div style="margin-top:8px">
-          ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
-        </div>
-      </section>
+    return `<div class="grid">
+      ${featured ? `<div class="pairrow even">${main}${featured}</div>` : main}
+      <div class="addgroup">
+        ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
+        <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
+          Oaths, Attunement, Class, and so on. The first group stands on the right; the rest
+          stack under the granted feats. Drag a feat by its grip to reorder it, or onto
+          another group to move it there.</span>
+      </div>
 
       <section class="panel span2">
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
@@ -10022,6 +10060,7 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
 
     this.#bindTemplateDrag(root);
     this.#bindLanguageDrag(root);
+    this.#bindFeatDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -10753,6 +10792,81 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
         clear();
         this.#model.listMoveTo('identity.languages', from, to);
         from = null;
+        this.#render();
+      });
+    });
+  }
+
+  /**
+   * Dragging a feat: up and down its own group, or across into another.
+   *
+   * The row carries the fields, so only the grip starts a drag -- otherwise a
+   * player could not select the text in a feat's name. Everything about where
+   * a drop would land is worked out from the row under the pointer: which
+   * group it belongs to, and which half of it the pointer is in. An empty
+   * group keeps one placeholder row for exactly this reason, so it is
+   * something a feat can be dropped onto rather than a gap that refuses.
+   */
+  #bindFeatDrag(root) {
+    const rows = [...root.querySelectorAll('[data-featdrop]')];
+    if (!rows.length) return;
+    const parse = (el) => (el?.dataset.featdrop || '').split('|').map(Number);
+    const entries = (g) => `featGroups.${g}.entries`;
+    const clear = () => rows.forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+    let from = null;                       // [group, index] being dragged
+    const after = (e, el) => {
+      const box = el.getBoundingClientRect();
+      return e.clientY > box.top + box.height / 2;
+    };
+    // Where a drop at this point lands: the row under the pointer decides the
+    // group, and which half of it decides the side. An empty group's
+    // placeholder is always position 0, whichever half it was hit on.
+    const targetOf = (e) => {
+      const row = e.target.closest?.('[data-featdrop]');
+      if (!from || !row) return null;
+      const [g, i] = parse(row);
+      if (row.classList.contains('featempty')) return { row, g, to: 0, side: 'drop-before' };
+      const past = after(e, row);
+      return { row, g, to: i + (past ? 1 : 0), side: past ? 'drop-after' : 'drop-before' };
+    };
+
+    root.querySelectorAll('[data-featgrip]').forEach((grip) => {
+      const row = grip.closest('[data-featdrop]');
+      if (!row) return;
+      grip.addEventListener('pointerdown', () => { row.draggable = true; });
+      grip.addEventListener('pointerup', () => { row.draggable = false; });
+    });
+
+    rows.forEach((row) => {
+      row.addEventListener('dragstart', (e) => {
+        from = parse(row);
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag with nothing on the transfer.
+        e.dataTransfer.setData('text/plain', row.dataset.featdrop);
+      });
+      row.addEventListener('dragend', () => {
+        row.draggable = false;
+        row.classList.remove('dragging');
+        from = null;
+        clear();
+      });
+      row.addEventListener('dragover', (e) => {
+        const t = targetOf(e);
+        if (!t || t.row.classList.contains('dragging')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clear();
+        t.row.classList.add(t.side);
+      });
+      row.addEventListener('drop', (e) => {
+        const t = targetOf(e);
+        if (!t) return;
+        e.preventDefault();
+        const [g, i] = from;
+        clear();
+        from = null;
+        this.#model.listMoveInto(entries(g), i, entries(t.g), t.to);
         this.#render();
       });
     });

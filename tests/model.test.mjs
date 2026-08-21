@@ -507,6 +507,51 @@ console.log('list editing');
   check('awkward group name still addressable', c.data.featGroups[gi].entries[0].name, 'Works');
 }
 
+console.log('dragging a feat -- up its own group, or across into another');
+{
+  const c = new Character(blankDocument({ id: 'drag', name: 'Drag' }));
+  c.data.featGroups = [
+    { name: 'A', entries: [{ name: 'one', detail: '' }, { name: 'two', detail: '' }, { name: 'three', detail: '' }] },
+    { name: 'B', entries: [{ name: 'four', detail: '' }] },
+    { name: 'C', entries: [] },
+  ];
+  const A = 'featGroups.0.entries';
+  const B = 'featGroups.1.entries';
+  const C = 'featGroups.2.entries';
+  const names = (path) => c.list(path).map((f) => f.name);
+
+  // Within one group this is listMoveTo, and `to` counts the list as it is
+  // now: dropping below "three" is 3 even though the row came from above it.
+  c.listMoveInto(A, 0, A, 3);
+  check('a feat dropped below the last one lands last', names(A), ['two', 'three', 'one']);
+  c.listMoveInto(A, 2, A, 0);
+  check('and dropped above the first, first', names(A), ['one', 'two', 'three']);
+  c.listMoveInto(A, 1, A, 1);
+  check('dropped where it already was, nothing moves', names(A), ['one', 'two', 'three']);
+
+  // Across groups it leaves one list and joins the other at the point named.
+  c.listMoveInto(A, 1, B, 0);
+  check('it leaves the group it came from', names(A), ['one', 'three']);
+  check('and arrives where it was dropped', names(B), ['two', 'four']);
+
+  // An empty group is a place a feat can be dropped, which is the whole
+  // reason its table keeps a row to drop onto.
+  c.listMoveInto(B, 1, C, 0);
+  check('an empty group takes one', names(C), ['four']);
+  check('leaving the other with what is left', names(B), ['two']);
+
+  // Past the end of the destination, or before its start, still lands.
+  c.listMoveInto(C, 0, A, 99);
+  check('a drop past the end lands last', names(A), ['one', 'three', 'four']);
+  c.listMoveInto(A, 2, B, -5);
+  check('and before the start, first', names(B), ['four', 'two']);
+
+  // An index that is not there moves nothing at all.
+  const before = [names(A), names(B), names(C)];
+  c.listMoveInto(A, 9, B, 0);
+  check('an index off the end of the source is refused', [names(A), names(B), names(C)], before);
+}
+
 console.log('hit points at the table');
 {
   const c = new Character(load('bryva'));
