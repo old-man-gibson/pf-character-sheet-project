@@ -12,6 +12,8 @@
  *   theme  "dark" (default) or "light"
  *   storage-key  localStorage key for edits; omit to disable persistence
  *   snapshot-every  changes between automatic snapshots (default 20)
+ *   hotkeys  "off" stops the sheet claiming Ctrl+K on the host page (see
+ *            #onDocumentKey and docs/embedding.md)
  *
  * Properties / methods
  *   .character = {...}      load a document directly, no fetch
@@ -59,6 +61,7 @@ import * as fields from './ui/fields.js';
 import * as rows from './ui/rows.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
+import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import * as combat from './ui/panels/combat.js';
 import * as subsystems from './ui/panels/subsystems.js';
@@ -146,6 +149,18 @@ function readRollFormat() {
 function writeRollFormat(format) {
   try { globalThis.localStorage?.setItem(ROLL_FORMAT_KEY, format); } catch { /* not fatal */ }
 }
+
+/**
+ * The palette's three numbers: how many rows a page of results is, what one
+ * costs in pixels (for PageUp/PageDown, which have to guess), and how many
+ * picks it remembers. The recent list is held for the session rather than
+ * saved -- one browser holds many characters, and a palette that opens on
+ * somebody else's last five choices would be worse than one that opens on the
+ * character's own vitals.
+ */
+const PALETTE_PAGE = 40;
+const PALETTE_ROW_PX = 46;
+const PALETTE_RECENT = 8;
 
 const TABS = [
   ['overview', 'Overview'],
@@ -308,6 +323,20 @@ function controlKey(input) {
   return attr;
 }
 
+/**
+ * Is this element one somebody is typing into?
+ *
+ * Asked of a key that would otherwise be swallowed -- Ctrl+K from the host
+ * page, `/` on the sheet -- so that a shortcut never eats a keystroke meant
+ * for a field.
+ */
+function isTypingIn(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
 export class CharacterSheetElement extends HTMLElement {
   static observedAttributes = ['src', 'role', 'theme'];
 
@@ -389,6 +418,36 @@ export class CharacterSheetElement extends HTMLElement {
    * storage falls back to the field's own value for the session.
    */
   #rollFormat = readRollFormat();
+  /**
+   * The search palette (Ctrl+K).
+   *
+   * The <dialog> is built once per opening and kept here rather than looked up,
+   * because a render throws every node in the shadow root away and this one has
+   * to survive it: the reference keeps it alive with its listeners, and the
+   * render puts it back (see the end of #render). Everything else is what the
+   * open palette is showing -- the index it searched, the rows it found, and
+   * where the selection sits.
+   */
+  #palette = null;
+  #paletteIndex = null;
+  #paletteRows = [];
+  #paletteAt = 0;
+  #paletteShown = 0;
+  #paletteTerms = [];
+  #paletteFrame = 0;
+  #paletteReturn = null;    // what had focus when it opened
+  /** The last few things picked, newest first: an empty box opens on them. */
+  #paletteRecent = [];
+  /**
+   * A tab reached from the palette that is not on the bar.
+   *
+   * Search can find something on a tab this view has hidden -- most of the
+   * sheet is hidden in the session view -- and hiding a tab should not put its
+   * contents out of reach. So the bar grows a guest entry for as long as you
+   * are on it, and drops it the moment you leave. View state, not a tab order:
+   * nothing is written to the character.
+   */
+  #visitTab = null;
 
   constructor() {
     super();
@@ -408,16 +467,43 @@ export class CharacterSheetElement extends HTMLElement {
     this.#render();
   };
 
+  /**
+   * Ctrl+K from anywhere on the page.
+   *
+   * Inside the sheet the shadow root's own handler is enough; this is what
+   * catches the shortcut when focus is on the host page -- the picker, the
+   * body, a heading -- which is where it usually is when someone reaches for
+   * search. It stays a good guest about it: a host that handles the key first
+   * and calls preventDefault keeps it, a host page's own text field keeps it,
+   * and `hotkeys="off"` turns it off outright (see docs/embedding.md).
+   */
+  #onDocumentKey = (e) => {
+    if (e.defaultPrevented || !this.#model) return;
+    if (this.getAttribute('hotkeys') === 'off') return;
+    if (e.key?.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    // The path, not `contains`: an event from inside the shadow root is
+    // retargeted at the host, and `contains` cannot see across the boundary.
+    const path = e.composedPath?.() || [];
+    const inside = path.includes(this);
+    // Typing somewhere else on the page: leave the key to whoever is typing.
+    if (!inside && isTypingIn(path[0] ?? e.target)) return;
+    e.preventDefault();
+    this.#togglePalette();
+  };
+
   connectedCallback() {
     if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
     this.#renderShell();
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
+    this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
   }
 
   disconnectedCallback() {
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
+    this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
+    this.#closePalette();
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -457,6 +543,10 @@ export class CharacterSheetElement extends HTMLElement {
    * two minutes later -- it is in the history like any other earlier state.
    */
   async #adopt(doc) {
+    // A palette left open over an import would be searching the character that
+    // just left, and so would its list of recent picks.
+    this.#closePalette();
+    this.#paletteRecent = [];
     // The shared tables -- the maneuver catalogue, casting and power-point
     // tables, deck manipulations, the iron chef's ingredients -- have to be in
     // place before the model is built, whichever way the document arrived. Once
@@ -896,6 +986,12 @@ export class CharacterSheetElement extends HTMLElement {
   #render() {
     if (!this.#model) return;
     const bar = this.#barEntries();
+    // A tab the search took you to that this view's bar does not carry rides
+    // along as a guest, so the panel it holds can actually be shown.
+    if (this.#visitTab && this.#visitTab.id !== this.#tab) this.#visitTab = null;
+    if (this.#visitTab && !bar.some((e) => e.id === this.#visitTab.id)) {
+      bar.push({ ...this.#visitTab, kind: 'visiting' });
+    }
     // The guide sits last on every bar, and the audit after it for an admin.
     bar.push({ key: 'formulas', id: 'formulas', label: 'ƒx Formulas', kind: 'core' });
     if (this.isAdmin) bar.push({ key: 'audit', id: 'audit', label: 'Formula Audit', kind: 'core' });
@@ -909,7 +1005,8 @@ export class CharacterSheetElement extends HTMLElement {
         <nav class="tabs" role="tablist">
           ${bar.map((e) => `
             <button role="tab" data-tab="${e.id}" data-tabkey="${esc(e.key)}" aria-pressed="${this.#tab === e.id}"
-              ${FIXED_TABS.has(e.key) ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
+              ${e.kind === 'visiting' ? 'class="visiting" title="Not on this view’s bar — search took you here"' : ''}
+              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
           `).join('')}
           <button role="tab" data-tab="systabs" aria-pressed="${this.#tab === 'systabs'}" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
@@ -918,6 +1015,9 @@ export class CharacterSheetElement extends HTMLElement {
       </div>`;
     this.#applyCharacterColor();
     this.#bind();
+    // The palette outlives the markup around it: innerHTML dropped it, and the
+    // node (with its listeners) is still here to be put back.
+    if (this.#palette) this.shadowRoot.append(this.#palette);
   }
 
   #header() {
@@ -943,6 +1043,7 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#sessionStrip()}
         </div>
         <div class="head-actions">
+          ${this.#searchButton()}
           ${this.#viewModeButton()}
           ${this.#formulaButton()}
           <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
@@ -998,6 +1099,18 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="reset-cancel">Keep everything</button>
       </span>
     </div>`;
+  }
+
+  /**
+   * The way in for anyone who does not know the shortcut -- which is everyone,
+   * the first time. It wears the shortcut so the second time it is not needed.
+   */
+  #searchButton() {
+    return `<button class="searchbtn" data-action="palette"
+      title="Search this character — skills, feats, gear, spells, anything (Ctrl+K)">
+      <svg class="cmdk-glass" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>
+      </svg>Search<kbd>Ctrl K</kbd></button>`;
   }
 
   /** The Session/Build switch: which view of the sheet is showing. */
@@ -2399,6 +2512,295 @@ export class CharacterSheetElement extends HTMLElement {
     });
   }
 
+  /* ---------------- the search palette ---------------- */
+
+  /**
+   * Open the palette, or shut it if it is already up.
+   *
+   * The index is built here, on the way in: a couple of milliseconds on the
+   * heaviest character in the roster, against the certainty that what it holds
+   * is what the sheet holds right now. Keeping one in step with every edit
+   * would cost more and could still be wrong.
+   */
+  #openPalette() {
+    if (!this.#model) return;
+    if (this.#palette) {
+      if (this.#palette.open) return;
+      // The browser shut it without us hearing about it (Esc reaches the
+      // dialog directly). Tidy the node away before putting up another.
+      this.#closePalette();
+    }
+    const dlg = this.ownerDocument.createElement('dialog');
+    dlg.className = 'cmdk';
+    dlg.innerHTML = palette.paletteHtml({
+      placeholder: `Search ${this.#model.data.identity?.name || 'this character'}…`,
+    });
+    this.#palette = dlg;
+    this.#paletteIndex = palette.buildIndex(this.#model, {
+      tabs: this.#tabEntries(), isAdmin: this.isAdmin,
+    });
+    this.#paletteReturn = this.shadowRoot.activeElement;
+    this.shadowRoot.append(dlg);
+    this.#bindPalette(dlg);
+    dlg.showModal();
+    this.#paletteSearch('');
+    const input = dlg.querySelector('.cmdk-input');
+    input?.focus();
+    input?.select();
+  }
+
+  #closePalette() {
+    const dlg = this.#palette;
+    if (!dlg) return;
+    // Cleared first: closing the dialog fires `close`, which comes back here.
+    this.#palette = null;
+    this.#paletteIndex = null;
+    this.#paletteRows = [];
+    this.#paletteTerms = [];
+    cancelAnimationFrame(this.#paletteFrame);
+    if (dlg.open) dlg.close();
+    dlg.remove();
+    const back = this.#paletteReturn;
+    this.#paletteReturn = null;
+    if (back?.isConnected) back.focus?.();
+  }
+
+  #togglePalette() {
+    if (this.#palette?.open) this.#closePalette();
+    else this.#openPalette();
+  }
+
+  /**
+   * Everything the open palette listens to.
+   *
+   * All of it hangs off the dialog, which is thrown away when it closes, so
+   * nothing here has to be taken down and nothing accumulates over a session's
+   * worth of openings.
+   */
+  #bindPalette(dlg) {
+    const input = dlg.querySelector('.cmdk-input');
+    const list = dlg.querySelector('.cmdk-list');
+
+    // Typing redraws the list and nothing else -- not the panel behind it, not
+    // even the input -- and does it once per frame however fast the typing is.
+    input.addEventListener('input', () => {
+      cancelAnimationFrame(this.#paletteFrame);
+      this.#paletteFrame = requestAnimationFrame(() => this.#paletteSearch(input.value));
+    });
+
+    input.addEventListener('keydown', (e) => {
+      const page = Math.max(1, Math.floor(list.clientHeight / PALETTE_ROW_PX) - 1);
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); this.#paletteMove(1, true); break;
+        case 'ArrowUp': e.preventDefault(); this.#paletteMove(-1, true); break;
+        case 'PageDown': e.preventDefault(); this.#paletteMove(page, false); break;
+        case 'PageUp': e.preventDefault(); this.#paletteMove(-page, false); break;
+        case 'Home': e.preventDefault(); this.#paletteMove(-1e6, false); break;
+        case 'End': e.preventDefault(); this.#paletteMove(1e6, false); break;
+        case 'Enter':
+          e.preventDefault();
+          this.#paletteChoose(this.#paletteAt, { roll: e.ctrlKey || e.metaKey });
+          break;
+        default: break;
+      }
+    });
+
+    list.addEventListener('click', (e) => {
+      const row = e.target.closest?.('.cmdk-row');
+      if (!row) return;
+      this.#paletteChoose(Number(row.dataset.i), { roll: !!e.target.closest('.cmdk-roll') });
+    });
+
+    // Hover follows the mouse, but only once the mouse has actually moved:
+    // arrowing a row under a resting cursor must not hand the selection back.
+    let last = null;
+    list.addEventListener('pointermove', (e) => {
+      if (last && last[0] === e.clientX && last[1] === e.clientY) return;
+      last = [e.clientX, e.clientY];
+      const row = e.target.closest?.('.cmdk-row');
+      if (row) this.#paletteSelect(Number(row.dataset.i), { scroll: false });
+    });
+
+    // More rows arrive as you reach them; the first frame draws one screenful.
+    list.addEventListener('scroll', () => {
+      if (list.scrollTop + list.clientHeight > list.scrollHeight - PALETTE_ROW_PX * 4) {
+        this.#paletteGrow();
+      }
+    });
+
+    dlg.querySelector('[data-cmdk-close]')?.addEventListener('click', () => this.#closePalette());
+    // A click on the backdrop lands on the dialog itself, never on its box.
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) this.#closePalette(); });
+    // Esc is the browser's to handle, and it fires both of these on the way
+    // out. Either one is enough; taking both means a browser that skips the
+    // second still leaves the sheet in a state that knows the palette is gone.
+    dlg.addEventListener('cancel', () => this.#closePalette());
+    dlg.addEventListener('close', () => this.#closePalette());
+  }
+
+  /** Run the query and redraw the list under the box. */
+  #paletteSearch(query) {
+    if (!this.#palette) return;
+    const found = palette.searchIndex(this.#paletteIndex, query, { recent: this.#paletteRecent });
+    this.#paletteRows = found.rows;
+    this.#paletteTerms = found.terms;
+    this.#paletteAt = 0;
+    this.#paletteShown = Math.min(found.rows.length, PALETTE_PAGE);
+    const list = this.#palette.querySelector('.cmdk-list');
+    list.innerHTML = found.rows.length
+      ? palette.resultsHtml(found.rows.slice(0, this.#paletteShown), found.terms, { at: 0 })
+      : palette.emptyHtml(found.query, found.scope);
+    list.scrollTop = 0;
+    this.#paletteFoot(found.total);
+  }
+
+  /** Draw the next page of a long result list. */
+  #paletteGrow() {
+    const rows = this.#paletteRows;
+    if (!this.#palette || this.#paletteShown >= rows.length) return;
+    const from = this.#paletteShown;
+    const to = Math.min(rows.length, from + PALETTE_PAGE);
+    this.#palette.querySelector('.cmdk-list')
+      .insertAdjacentHTML('beforeend', palette.resultsHtml(
+        rows.slice(from, to), this.#paletteTerms, { at: this.#paletteAt, from },
+      ));
+    this.#paletteShown = to;
+    this.#paletteFoot();
+  }
+
+  /**
+   * Move the selection.
+   *
+   * Rows are not redrawn to move it -- two class changes are -- which is what
+   * keeps holding an arrow key down smooth on a list of hundreds.
+   */
+  #paletteMove(delta, wrap) {
+    const n = this.#paletteRows.length;
+    if (!n) return;
+    let next = this.#paletteAt + delta;
+    if (wrap) next = (next + n) % n;
+    this.#paletteSelect(Math.max(0, Math.min(n - 1, next)));
+  }
+
+  #paletteSelect(i, { scroll = true } = {}) {
+    if (!this.#palette || i === this.#paletteAt || !this.#paletteRows[i]) return;
+    while (i >= this.#paletteShown && this.#paletteShown < this.#paletteRows.length) this.#paletteGrow();
+    const list = this.#palette.querySelector('.cmdk-list');
+    list.querySelector(`.cmdk-row[data-i="${this.#paletteAt}"]`)?.setAttribute('aria-selected', 'false');
+    const row = list.querySelector(`.cmdk-row[data-i="${i}"]`);
+    row?.setAttribute('aria-selected', 'true');
+    this.#paletteAt = i;
+    if (scroll) row?.scrollIntoView({ block: 'nearest' });
+    this.#paletteFoot();
+  }
+
+  /** The line along the bottom: what Enter would do, and how much matched. */
+  #paletteFoot(total = null) {
+    const dlg = this.#palette;
+    if (!dlg) return;
+    if (total !== null) dlg.dataset.total = String(total);
+    const count = Number(dlg.dataset.total) || 0;
+    const entry = this.#paletteRows[this.#paletteAt] || null;
+    dlg.querySelector('[data-cmdk-count]').textContent = palette.countText(this.#paletteShown, count);
+    dlg.querySelector('[data-cmdk-primary]').textContent = entry?.action ? 'Run' : 'Jump';
+    dlg.classList.toggle('has-roll', !!entry?.roll);
+    dlg.querySelector('.cmdk-input')
+      ?.setAttribute('aria-activedescendant', entry ? `cmdk-o-${this.#paletteAt}` : '');
+  }
+
+  /**
+   * Take the row: jump to it, run it, or roll it.
+   *
+   * The palette always closes first. A roll's toast and a jump's landing are
+   * both behind the dialog, and showing neither of them is not much of an
+   * answer to having chosen.
+   */
+  #paletteChoose(i, { roll = false } = {}) {
+    const entry = this.#paletteRows[i];
+    if (!entry) return;
+    this.#paletteRecent = [entry.id, ...this.#paletteRecent.filter((id) => id !== entry.id)]
+      .slice(0, PALETTE_RECENT);
+    this.#closePalette();
+    if (roll && entry.roll) {
+      this.#copyRoll(entry.roll.kind, entry.roll.ref, entry.roll.what);
+      return;
+    }
+    if (entry.action) {
+      this.#action(entry.action);
+      return;
+    }
+    this.#paletteJump(entry);
+  }
+
+  /**
+   * Land on what was chosen: the right tab, the section it hides in opened,
+   * and the row itself lit up for a moment so the eye has somewhere to go.
+   */
+  #paletteJump(entry) {
+    if (entry.tab) {
+      const known = this.#tabEntries().find((t) => t.id === entry.tab);
+      const onBar = this.#barEntries().some((t) => t.id === entry.tab)
+        || FIXED_TABS.has(entry.tab) || entry.tab === 'systabs';
+      this.#visitTab = onBar || !known ? null : { ...known };
+      this.#tab = entry.tab;
+    }
+    // A collapsed panel renders none of its rows, so there would be nothing to
+    // land on. Opening it is the same edit the ▸ button makes.
+    const collapsed = this.#model.data.uiPrefs?.collapsed;
+    if (entry.expand && collapsed?.[entry.expand]) {
+      collapsed[entry.expand] = false;
+      this.#model.recompute();
+    }
+    this.#render();
+    const el = this.#findOnPanel(entry);
+    if (!el) return;
+    const row = el.closest('tr, li, .buffcard, .weaponset, .trainclass, .dashtracker, .trackerrow, '
+      + '.card, .fx-row, .featcard, .panel') || el;
+    row.classList.add('cmdk-found');
+    setTimeout(() => row.classList.remove('cmdk-found'), 2000);
+    const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    el.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+    // Landing in the field itself means the next keystroke edits the thing you
+    // went looking for -- but only where that field is really a field.
+    if (isTypingIn(el) && !el.disabled && !el.readOnly) el.focus({ preventScroll: true });
+  }
+
+  /**
+   * Find the entry on the panel that is now up.
+   *
+   * A selector first, where the panel writes one this can count on. Failing
+   * that, the text: nearly everything on this sheet is an input holding the
+   * words that were searched for, and matching on those keeps the jump working
+   * through markup changes that would break any selector.
+   */
+  #findOnPanel(entry) {
+    const root = this.shadowRoot;
+    for (const sel of entry.sel || []) {
+      // A selector built around a value the character supplies (a tracker's id)
+      // can be malformed on a hand-edited document; falling through to the text
+      // is a worse jump, not a broken one.
+      let hit = null;
+      try { hit = root.querySelector(sel); } catch { /* not a selector */ }
+      if (hit) return hit;
+    }
+    const wanted = String(entry.find || '').trim().toLowerCase();
+    if (!wanted) return null;
+    const body = root.querySelector('.body') || root;
+    let loose = null;
+    for (const f of body.querySelectorAll('input, textarea, select')) {
+      const value = String(f.value ?? '').trim().toLowerCase();
+      if (!value) continue;
+      if (value === wanted) return f;
+      if (!loose && value.includes(wanted)) loose = f;
+    }
+    for (const el of body.querySelectorAll('td, th, li, h3, h4, strong, label, summary, .tname, .sname')) {
+      const value = el.textContent.trim().toLowerCase();
+      if (value === wanted) return el;
+      if (!loose && value.length < 200 && value.includes(wanted)) loose = el;
+    }
+    return loose;
+  }
+
   /* ---------------- events ---------------- */
 
   /**
@@ -3172,6 +3574,16 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindFoldedCells(root);
+
+    // `/` opens the search, the way it does everywhere else -- but only when
+    // it is not a character being typed into a field. It rides on `.wrap`,
+    // which every render replaces, so it cannot pile up.
+    root.querySelector('.wrap')?.addEventListener('keydown', (e) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingIn(e.composedPath?.()[0] ?? e.target)) return;
+      e.preventDefault();
+      this.#openPalette();
+    });
 
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -4068,6 +4480,13 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'theme':
         this.setAttribute('theme', this.getAttribute('theme') === 'light' ? 'dark' : 'light');
+        break;
+      case 'palette':
+        this.#togglePalette();
+        break;
+      case 'palette-tabs':
+        this.#tab = 'systabs';
+        this.#render();
         break;
       case 'formulas':
         this.#tab = 'formulas';

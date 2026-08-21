@@ -108,6 +108,7 @@ app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/roll20.js        a row's totals as text a Roll20 chat box will roll
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry
 app/js/sheet-element.js the <character-sheet> custom element
+app/js/ui/palette.js    the Ctrl+K search palette: the character as searchable rows
 app/js/styles.js        loads the stylesheet and shares it as one adopted sheet
 app/css/sheet.css       the component stylesheet itself (shadow-scoped)
 tests/                  node test suites
@@ -121,7 +122,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/panels.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the
@@ -185,7 +186,7 @@ is what the converter's `extraTabs` capture is for.
 
 | | |
 |---|---|
-| [Using the sheet](docs/using-the-sheet.md) | How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar. |
+| [Using the sheet](docs/using-the-sheet.md) | How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, the tab bar, and the Ctrl+K search palette. |
 | [Equipment & progression](docs/equipment-and-progression.md) | The gear list and what it feeds, the Item Crafting calculator, mythic tiers and paths, the Progression tab (column rule groups, schedules, owed slots), and templates. |
 | [Sub-systems](docs/sub-systems.md) | The modelled sub-systems, each read once off its worksheet: Spheres & Magic training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions. |
 | [Formulas & trackers](docs/formulas-and-trackers.md) | The **ƒx Formulas** tab (scratchpad, value index, in-app guide), the sandboxed formula language: `{name = expr}` and `{dest += expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
