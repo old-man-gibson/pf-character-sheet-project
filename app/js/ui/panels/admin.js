@@ -32,7 +32,7 @@ export function renderFormulaPanel(model, ctx) {
       inlineNames: model.inlineNames || {},
       audit,
       problems: model.formulaProblems(audit),
-      forwarded: forwardedRows(model, model),
+      forwarded: forwardedRows(model),
       targets: model.forwardTargetList || [],
       draft: ctx.formulaDraft,
       query: ctx.formulaQuery,
@@ -73,7 +73,7 @@ function brokenFormulas(model) {
    * findable from anywhere, which is what the count is for.
    */
 export function formulaButton(model, ctx) {
-    const broken = brokenFormulas(model, model);
+    const broken = brokenFormulas(model);
     return `<button data-action="formulas" aria-pressed="${ctx.tab === 'formulas'}"
       class="${broken ? 'danger' : ''}"
       title="${broken

@@ -188,14 +188,44 @@ async function select(id) {
   return host;
 }
 
-/** The view toggle is a button, not a setter, so press it until it lands. */
+/**
+ * The view toggle is a button, not a setter, so press it until it lands.
+ *
+ * And then wait for the bar to catch up: the model reports the new mode
+ * before the re-render has replaced the tabs, and a capture that starts in
+ * that gap records one view's panel under the other view's tab list.
+ */
 async function setView(host, want) {
   for (let i = 0; i < 3; i++) {
-    if (host.model.viewMode() === want) return true;
+    if (host.model.viewMode() === want) break;
     const btn = host.shadowRoot.querySelector('[data-action="view-mode"]');
     if (!btn) return false;
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
-    await wait(120);
+    await wait(150);
+  }
+  if (host.model.viewMode() !== want) return false;
+  // Then hold it. A character whose saved preference is the *other* view
+  // restores that preference a moment after it loads, which puts the mode back
+  // and leaves the capture recording one view's panels under the other's tabs.
+  // So settle, and if it drifted, press again.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const expected = host.model.tabOrder().join(',');
+    let settled = false;
+    for (let i = 0; i < 10; i++) {
+      const shown = [...host.shadowRoot.querySelectorAll('nav.tabs button')]
+        .map((b) => b.dataset.tab)
+        .filter((t) => t && !['formulas', 'audit', 'systabs'].includes(t))
+        .join(',');
+      if (shown === expected) { settled = true; break; }
+      await wait(80);
+    }
+    await wait(150);
+    if (settled && host.model.viewMode() === want) return true;
+    const btn = host.shadowRoot.querySelector('[data-action="view-mode"]');
+    if (host.model.viewMode() !== want && btn) {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      await wait(150);
+    }
   }
   return host.model.viewMode() === want;
 }

@@ -64,7 +64,7 @@ export function renderCombatPanel(model, ctx) {
         <div class="sidepanels">
           ${wrap('combat-tradition', combatTraditionPanel(model, t.combat))}
           ${wrap('unarmed', unarmedPanel(t.combat))}
-          ${wrap('sphere-skills', sphereSkillPanel(model, model))}
+          ${wrap('sphere-skills', sphereSkillPanel(model))}
           ${wrap('combat-spheres', sphereBonusPanel('combat', t.combat))}
         </div>` : ''}
       ${t.magic ? `
@@ -114,7 +114,7 @@ function trainingSide(model, sideKey, side) {
         return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
-            ${itemSelect(list, ci, 'name', cls.name, classNames(model, model))}</label>
+            ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
           <label class="fld"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
           <label class="fld"><span>Talents / level</span>
@@ -219,7 +219,7 @@ function customizationPanel(model, blocks) {
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
-            ${itemSelect('training.combat.customizations', bi, 'className', block.className, classNames(model, model))}</label>
+            ${itemSelect('training.combat.customizations', bi, 'className', block.className, classNames(model))}</label>
           ${rule('sets', `${Unit}s`)}
           ${rule('talents', 'Talents each')}
           <label class="fld"><span>Spheres</span>
@@ -334,7 +334,7 @@ function blendedPanel(model, pairs) {
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
-            ${itemSelect(list, owner.index, 'name', cls.name, classNames(model, model))}</label>
+            ${itemSelect(list, owner.index, 'name', cls.name, classNames(model))}</label>
           <label class="fld"><span>Talents / level</span>
             ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
           ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}

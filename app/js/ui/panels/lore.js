@@ -13,6 +13,7 @@
 import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
+import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
 import { addButton, itemText, rowTools } from '../rows.js';
 import { same } from '../format.js';

@@ -367,7 +367,7 @@ function akashicSlotsPanel(model, a) {
         <span class="badge">${shaped} shaped</span>
         <span class="badge">${slots.length} slots</span>
         <span class="pair" style="margin-left:auto">
-          ${veilColumnsControl(model, model)}
+          ${veilColumnsControl(model)}
           <button data-collapse="veil:showEmpty" aria-pressed="${showEmpty}">
             ${showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`}
           </button>
@@ -380,7 +380,7 @@ function akashicSlotsPanel(model, a) {
         is the base DC plus the essence invested in it. A description may carry
         <code>{name = expr}</code> formulas, the same as anywhere else.</p>
       ${shown.length
-    ? `<div class="veils"${veilGridStyle(model, model)}>${shown.map(({ s, i }) => veilSlotCard(model, list, s, i)).join('')}</div>`
+    ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, list, s, i)).join('')}</div>`
     : '<p class="empty">No veils shaped.</p>'}
     </section>`;
   }
@@ -394,7 +394,7 @@ function akashicSlotsPanel(model, a) {
    * player's and it persists with the character.
    */
 function veilColumnsControl(model) {
-    const cols = veilColumns(model, model);
+    const cols = veilColumns(model);
     return `<span class="seg" role="group" aria-label="Veil cards per row">
       <span class="seg-k">Per row</span>
       ${[[0, 'Auto'], [3, '3'], [4, '4'], [5, '5']].map(([n, label]) => `
@@ -415,7 +415,7 @@ function veilColumns(model) {
    * keeps rounding from fitting one column more than was asked for.
    */
 function veilGridStyle(model) {
-    const n = veilColumns(model, model);
+    const n = veilColumns(model);
     if (!n) return '';
     return ` style="--veil-track:max(230px, calc((100% - ${(n - 1) * 8}px) / ${n} - 0.5px))"`;
   }
@@ -477,7 +477,7 @@ function akashicKheshigPanel(model, a) {
       <h3>Kheshig receptacles</h3>
       <p class="hint">A weapon or armour veil takes the slot it names rather than
         occupying one of its own.</p>
-      <div class="veils"${veilGridStyle(model, model)}>
+      <div class="veils"${veilGridStyle(model)}>
         ${(a.kheshig || []).map((r, i) => `<div class="veilslot">
           <div class="veilslot-head">
             <span class="klabel" title="${esc(r.label)}">${esc(r.label.replace(' (Kheshig)', ''))}</span>
@@ -505,7 +505,7 @@ function akashicReceptaclesPanel(model, a) {
       <h3>Other receptacles <span class="badge">${rows.length}</span></h3>
       <p class="hint">Anything holding essence that is not one of the slots above.
         Their essence counts against the day's pool the same way a veil's does.</p>
-      ${rows.length ? `<div class="veils"${veilGridStyle(model, model)}>
+      ${rows.length ? `<div class="veils"${veilGridStyle(model)}>
         ${rows.map((r, i) => `<div class="veilslot${ticks && !r.active ? ' is-off' : ''}">
           <div class="veilslot-body">
             <div class="veil">

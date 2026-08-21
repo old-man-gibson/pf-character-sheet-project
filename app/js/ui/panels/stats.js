@@ -184,10 +184,10 @@ export function renderStatsPanel(model, ctx) {
       </section>
       </div>
 
-      ${defenceBonusPanel(model, model)}
-      ${abpPicksPanel(model, model)}
-      ${milestonePicksPanel(model, model)}
-      ${arrayPicksPanel(model, model)}
+      ${defenceBonusPanel(model)}
+      ${abpPicksPanel(model)}
+      ${milestonePicksPanel(model)}
+      ${arrayPicksPanel(model)}
     </div>`;
 }
 

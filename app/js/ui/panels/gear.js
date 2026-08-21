@@ -17,6 +17,8 @@
 
 import { weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
+import { roField } from '../fields.js';
+import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
 import { group, pct, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
@@ -576,5 +578,101 @@ function craftExtrasPanel(cr) {
           ${rowTools(list, ri)}
         </tr>`).join('')}
       </tbody></table></div>
+    </section>`;
+  }
+
+/* ----- wealth: what the character owns and what it came to ----- */
+
+  /**
+   * The wallet on the Overview: current mana, the offering owed under the Oath
+   * of Offerings and for material casting (the workbook's own sums), what is
+   * left after it, and the ledger every reward, spend and offering is written
+   * to. "Record" is the hook a session-reward automation will call; "Make
+   * offering" pays what is owed and starts the count over.
+   *
+   * Most of this panel is the offering, and most characters owe no offering.
+   * What everyone has -- what is on hand, what comes in a day -- stays in the
+   * open; the four fields that only mean something under the Oath or the
+   * upkeep are grouped, and go dead when neither switch is on, so a character
+   * with neither cannot half-fill a ledger they will never pay from.
+   *
+   * The two switches say what they cost on hover rather than in the row. A
+   * formula printed beside a checkbox reads as its label, and neither of these
+   * is a label: they are the rules the Owed figure above is already showing
+   * the answer to.
+   */
+export function wealthPanel(model, ctx) {
+    const v = model.wealthView();
+    const n = (x) => Number(x || 0).toLocaleString('en-US');
+    const draft = { amount: ctx.draft.wealthAmount ?? '', label: ctx.draft.wealthLabel ?? '', kind: ctx.draft.wealthKind || 'session' };
+    const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
+    const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
+    // Dead rather than gone: the numbers stay readable, and the moment either
+    // switch goes on they are fields again with whatever was in them.
+    const off = v.due ? '' : ' disabled';
+    const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
+    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} a caster level every whole month — ${n(v.castingPerMonth)} a month at caster level ${v.casterLevel}.`;
+    return `<section class="panel span2 wealth">
+      <h3>Wealth
+        <span class="badge">${esc(v.currency)}</span>
+        ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="What the next offering comes to today">owed ${n(v.expected.total)}</span>` : ''}
+      </h3>
+      <div class="wealthgrid">
+        <div class="wealthnums">
+          <div class="bigstat"><div class="k">On hand</div><div class="v">${n(v.current)}</div><div class="sub">${esc(v.currency)}</div></div>
+          ${v.due ? `<div class="bigstat"><div class="k">Owed</div><div class="v">${n(v.expected.total)}</div>
+            <div class="sub">${[
+    v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
+    v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
+  ].filter(Boolean).join(' · ')}</div></div>
+          <div class="bigstat"><div class="k">After offering</div><div class="v ${v.after < 0 ? 'neg' : ''}">${n(v.after)}</div>
+            <div class="sub">${v.lastOffering ? `${v.days} day${v.days === 1 ? '' : 's'} since ${esc(v.lastOffering)}` : 'no offering recorded'}</div></div>` : ''}
+        </div>
+        <div class="wealthfieldcol">
+          <div class="fieldgrid wealthfields">
+            ${field('Current mana', num('wealth.current', v.current))}
+            ${field('Mana / day', num('wealth.manaPerDay', v.manaPerDay))}
+            <label class="fld"><span>Oath of Offerings</span>${check('wealth.oathOfOfferings', v.oathOfOfferings, '', oathRule)}</label>
+            <label class="fld"><span>Material Casting</span>${check('wealth.materialCasting', v.materialCasting, '', castingRule)}</label>
+          </div>
+          <div class="offeringfields${v.due ? '' : ' dormant'}"${v.due ? ''
+    : ' title="Only the Oath of Offerings and material casting are paid this way — tick one to fill these in."'}>
+            <div class="fieldgrid wealthfields">
+              ${field('Baseline after last offering', `<input type="number" value="${v.baseline === null ? '' : v.baseline}" data-set="wealth.baseline" data-kind="number-or-null" placeholder="—" title="The balance recorded after the last offering"${off}>`)}
+              ${field('OoO / day', roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
+              ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"${off}>`)}
+              ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, `min="0" title="Mana earned in sessions since the last offering; the oath takes half"${off}`))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wealthactions">
+        <span class="pair">
+          <select data-draft="wealthKind" aria-label="Kind">
+            ${['session', 'reward', 'spend', 'adjust'].map((k) => `<option value="${k}" ${draft.kind === k ? 'selected' : ''}>${kindLabel[k]}</option>`).join('')}
+          </select>
+          <input type="number" data-draft="wealthAmount" value="${esc(draft.amount)}" placeholder="amount" style="width:6.5rem" aria-label="Amount">
+          <input type="text" data-draft="wealthLabel" value="${esc(draft.label)}" placeholder="label (e.g. Session 12 reward)" style="width:15rem" aria-label="Label">
+          <button class="primary" data-action="wealth-record" title="Write it to the ledger and move the wallet">Record</button>
+        </span>
+        <span class="pair" style="margin-left:auto">
+          <button data-action="wealth-offering" ${v.due && v.expected.total > 0 ? '' : 'disabled'}
+            title="Pay ${n(v.expected.total)}: the balance after it becomes the new baseline, today the last offering, session mana back to 0">Make offering (${n(v.expected.total)})</button>
+        </span>
+      </div>
+      <p class="hint">
+        A <em>session</em> line is session income: it goes on the wallet and, under the oath,
+        half of it is owed at the next offering; a <em>spend</em> is taken off the wallet. Formulas can read <code>mana.current</code>,
+        <code>mana.expected</code> and <code>mana.after</code>.
+      </p>
+      ${ledger.length ? `<div class="tablewrap"><table class="ledger">
+        <thead><tr><th>Date</th><th>What</th><th class="num">Amount</th><th></th></tr></thead>
+        <tbody>${ledger.slice(0, 12).map((l) => `<tr>
+          <td>${esc(l.date)}</td>
+          <td>${esc(l.label)} <span class="badge">${kindLabel[l.kind] || l.kind}</span></td>
+          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${l.amount > 0 ? '+' : ''}${n(l.amount)}</td>
+          <td class="tools"><button class="danger" data-action="wealth-remove" data-index="${l.i}" title="Remove this line and undo it" aria-label="Remove">×</button></td>
+        </tr>`).join('')}</tbody>
+      </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? '' : 's'} kept.</p>` : ''}</div>` : ''}
     </section>`;
   }

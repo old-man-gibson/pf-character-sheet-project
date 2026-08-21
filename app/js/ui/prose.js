@@ -147,6 +147,6 @@ export function renderedProse(model, text, local = null) {
     // else, and a bare "2" in the middle of a sentence does not say whether
     // the sentence is helping or hurting.
     const shown = seg.kind === 'push' ? fmt(seg.value) : formatValue(seg.value);
-    return `<span class="tok ${seg.kind}" title="${esc(tokenTitle(model, seg, tokenScope(model, model)))}">${esc(shown)}</span>`;
+    return `<span class="tok ${seg.kind}" title="${esc(tokenTitle(model, seg, tokenScope(model)))}">${esc(shown)}</span>`;
   }).join('');
 }
