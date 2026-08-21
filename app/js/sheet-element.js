@@ -59,6 +59,7 @@ import * as fields from './ui/fields.js';
 import * as rows from './ui/rows.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
+import * as combat from './ui/panels/combat.js';
 import * as subsystems from './ui/panels/subsystems.js';
 import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -228,17 +229,7 @@ const DASH_CARD_LABELS = new Map(DASH_CARDS);
  * pip shape draws nothing and a meter falls back to its bar.
  */
 
-/** What a template feature's type means, on the dropdown that sets it. */
-const TEMPLATE_TYPE_HINTS = {
-  Ex: 'Extraordinary — not magical, works in an antimagic field',
-  Su: 'Supernatural — magical, but no spell resistance or concentration',
-  Sp: 'Spell-like — as a spell, subject to spell resistance',
-};
 
-/** A table starts as two named columns and a row, which is enough to type into. */
-const NEW_TEMPLATE_TABLE = () => ({
-  caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
-});
 
 /**
  * Register the shared reference tables once: the discipline catalogue, the
@@ -3006,1152 +2997,18 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- combat & magic ---------------- */
 
-  /**
-   * Each side reads top to bottom as one story: the classes and what they
-   * learned, the talents that came from elsewhere, then the numbers that fall
-   * out of both. The first two are full width because their tables are; the
-   * rest share a row of their own, which is why they sit in a `.sidepanels`
-   * strip rather than in the page grid. In the page grid a side with three
-   * panels left the fourth column of the shared four empty, and a side with
-   * four squeezed all of them into a quarter each.
-   */
-  #combatPanel() {
-    const t = this.#model.data.training || {};
-    const wrap = (key, html) => this.#collapsible(key, html);
-    const blended = this.#model.blendedClasses();
-    return `<div class="grid">
-      ${blended.length ? wrap('blended-training', this.#blendedPanel(blended)) : ''}
-      ${t.combat ? `
-        ${wrap('combat-training', this.#trainingSide('combat', t.combat))}
-        ${(t.combat.customizations || []).length
-    ? wrap('customized-weapons', this.#customizationPanel(t.combat.customizations)) : ''}
-        ${wrap('combat-bonus', this.#bonusTalentPanel('combat', t.combat))}
-        <div class="sidepanels">
-          ${wrap('combat-tradition', this.#combatTraditionPanel(t.combat))}
-          ${wrap('unarmed', this.#unarmedPanel(t.combat))}
-          ${wrap('sphere-skills', this.#sphereSkillPanel())}
-          ${wrap('combat-spheres', this.#sphereBonusPanel('combat', t.combat))}
-        </div>` : ''}
-      ${t.magic ? `
-        ${wrap('magic-training', this.#trainingSide('magic', t.magic))}
-        ${wrap('magic-bonus', this.#bonusTalentPanel('magic', t.magic))}
-        <div class="sidepanels">
-          ${wrap('magic-tradition', this.#magicTraditionPanel(t.magic))}
-          ${wrap('magic-globals', this.#magicGlobalsPanel(t.magic))}
-          ${wrap('magic-spheres', this.#sphereBonusPanel('magic', t.magic))}
-        </div>` : ''}
-    </div>`;
-  }
-
-  /**
-   * Wrap a panel so its body can be minimized. The collapsed state lives in
-   * uiPrefs and persists with the character.
-   */
+  /** Folding a panel down to its heading; the builder is in ui/rows.js. */
   #collapsible(key, panelHtml) { return rows.collapsible(this.#model, key, panelHtml); }
 
-  /* ----- prose fields -----
-   * The two-layer prose control and everything that renders a token live in
-   * ui/prose.js, because two dozen panels put one somewhere. These pass on
-   * what the module cannot see: the model, and which folded cell is open.
-   */
+  /** Spheres & Magic and Templates live in ui/panels/combat.js. */
+  #combatCtx() { return { showCells: this.#showCells }; }
 
-  #prose(...a) { return prose.prose(this.#model, ...a); }
+  #combatPanel() { return combat.renderCombatPanel(this.#model, this.#combatCtx()); }
 
-  #itemArea(...a) { return prose.itemArea(this.#model, ...a); }
+  #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#combatCtx()); }
 
-  #foldedProse(...a) { return prose.foldedProse(this.#model, { openCell: this.#openCell }, ...a); }
-
-  #renderedProse(...a) { return prose.renderedProse(this.#model, ...a); }
-
-  #tokenScope(...a) { return prose.tokenScope(this.#model, ...a); }
-
-  #tokenTitle(...a) { return prose.tokenTitle(this.#model, ...a); }
-
-  #targetLabels(...a) { return prose.targetLabels(this.#model, ...a); }
-
-
-  /**
-   * Extras & Notes: the workbook's scratch page, as a tab. Notes to jot on,
-   * the Approvals table (what was applied for, who approved it, the link),
-   * and whatever else the worksheet held, kept as an editable grid.
-   */
-  #systemPanel(index) {
-    const tab = (this.#model.data.sheetTabs || [])[index];
-    if (!tab) return '<div class="grid"><section class="panel"><p class="empty">Missing tab.</p></section></div>';
-    return `<div class="grid">
-      <section class="panel span2" style="padding-bottom:4px">
-        <h3>
-          <input type="text" class="tabname big" value="${esc(tab.name)}" data-systab-name="${index}" aria-label="Tab name">
-          <span class="pair" style="margin-left:auto">
-            <button data-action="add-system-column" data-index="${index}">+ Column</button>
-            <button data-action="tab-hide" data-key="sys:${esc(tab.name)}">Hide tab</button>
-          </span>
-        </h3>
-        <p class="hint">${tab.hidden ? 'This worksheet was hidden in the source workbook. ' : ''}
-          ${tab.custom ? 'Custom tab — a free grid for anything the sheet doesn\'t model. '
-    : 'Cell-for-cell from the workbook. '}Every cell is editable; rows and columns can be added.
-          Cells accept inline formulas like <code>{name = expr}</code>.</p>
-      </section>
-      ${this.#gridTab(index, tab)}
-    </div>`;
-  }
-
-  /**
-   * The ⚙ manager: the tab bar as a list to rearrange, then everything that
-   * is off it -- alphabetical, so a tab is found by name rather than by where
-   * the workbook happened to put it -- with the odd sub-systems in a corner
-   * of their own. Worksheets can be renamed, deleted or added here too.
-   */
-  #systemManagerPanel() {
-    const entries = this.#tabEntries();
-    const bar = this.#barEntries();
-    const onBar = new Set(bar.map((e) => e.key));
-    const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-    const off = entries.filter((e) => !onBar.has(e.key)).sort(byLabel);
-    const hidden = off.filter((e) => !e.weird);
-    const weird = off.filter((e) => e.weird);
-    const all = (this.#model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
-
-    const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
-      ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
-      ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
-      ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
-    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
-      : '<span class="badge">empty</span>') : ''}`;
-    const name = (e) => (e.kind === 'system'
-      ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
-      : esc(e.label));
-    const del = (e) => (e.kind === 'system'
-      ? `<button class="danger" data-action="delete-system" data-index="${e.index}"
-           title="Delete this tab and its data" aria-label="Delete tab">×</button>` : '');
-
-    const barRow = (e, i) => `<div class="item statline tabrow" draggable="true" data-tabkey="${esc(e.key)}">
-      <span class="label pair" style="flex:1">
-        <span class="grip" aria-hidden="true">⋮⋮</span>
-        ${name(e)} ${badges(e)}
-      </span>
-      <span class="value pair">
-        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} left" title="Move left">↑</button>
-        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="1" ${i === bar.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} right" title="Move right">↓</button>
-        <button data-action="tab-hide" data-key="${esc(e.key)}" ${bar.length === 1 ? 'disabled' : ''}>Hide</button>
-        ${del(e)}
-      </span>
-    </div>`;
-    const offRow = (e) => `<div class="item statline">
-      <span class="label pair" style="flex:1">${name(e)} ${badges(e)}</span>
-      <span class="value pair">
-        <button data-action="tab-show" data-key="${esc(e.key)}">Show</button>
-        ${del(e)}
-      </span>
-    </div>`;
-
-    const mode = this.#model.viewMode();
-    return `<div class="grid"><section class="panel span2">
-      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
-        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
-    ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
-          Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
-      </h3>
-      <p class="hint">
-        The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
-        to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact. Each view keeps its own bar: the <em>build</em> view starts from
-        Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Primordia, Trackers,
-        Equipment; the <em>session</em> view starts from what comes up at the table -- the
-        tabs above plus every sub-system in use or marked on a class, minus the build
-        machinery. <button data-action="tab-reset">Reset this view's bar</button>
-      </p>
-      <div class="rowlist tabbar-list">
-        ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Hidden tabs</h3>
-      <p class="hint">
-        Everything else the sheet can show, alphabetically: the rest of the built-in
-        tabs, the modelled sub-systems (Spheres &amp; Magic, Crafting, Akashic, Maneuvers,
-        Vancian, Psionics, the companions…), and the workbook's own worksheets.
-        <em>In use</em> marks a sub-system that already holds this character's data;
-        <em>marked</em> means a class on the Overview names the system but its tab is
-        still empty.
-      </p>
-      <div class="rowlist">
-        ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Extra — weird systems</h3>
-      <p class="hint">
-        The unusual machinery: casting off a deck, and a workbook's technique list
-        and its auto-technique sheet. Off the bar unless the character uses them.
-      </p>
-      <div class="rowlist">
-        ${weird.map(offRow).join('') || '<p class="empty">All of these are on the bar.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Worksheets</h3>
-      <p class="hint">
-        Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
-        Rename any worksheet by typing over its name above; × deletes one and its data.
-      </p>
-      <div class="pair">
-        <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(this.#draft.newSystem || '')}" style="max-width:16rem">
-        <button class="primary" data-action="add-system">+ Add system tab</button>
-      </div>
-      ${this.#confirmDelete !== null ? `<p class="hint warn">
-        Delete “${esc(all[this.#confirmDelete]?.tab.name)}” and all its rows?
-        <button class="danger" data-action="delete-system-confirm">Delete</button>
-        <button data-action="delete-system-cancel">Keep</button></p>` : ''}
-    </section>
-    ${this.#extensionBlocksPanel()}</div>`;
-  }
-
-  /**
-   * The building blocks the enabled extension packs offer -- a class, a race,
-   * a feature, a tracker -- each with a button that copies it into this
-   * character. The packs themselves are managed by the host page; this is
-   * only the shelf.
-   */
-  #extensionBlocksPanel() {
-    const packs = extensionRuntime.active();
-    const blocks = extensionRuntime.blocks();
-    const kinds = [...new Set(blocks.map((b) => b.kind))];
-    const filter = kinds.includes(this.#extFilter) ? this.#extFilter : '';
-    const byKind = filter ? blocks.filter((b) => b.kind === filter) : blocks;
-    // A pack of thirty archetypes is a list to search, not one to scroll. The
-    // words are looked for in the block's name, its pack and what it is for,
-    // so "warrior" finds an archetype that replaces warrior's grace.
-    const words = this.#extSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const haystack = (b) => [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
-      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
-      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
-    const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
-    const byPack = new Map();
-    for (const b of shown) {
-      if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
-      byPack.get(b.extId).blocks.push(b);
-    }
-    // Searching looks through what a block is for as well as what it is called,
-    // so "warrior" finds an archetype that replaces warrior's grace. A block
-    // the words name outright comes first all the same.
-    if (words.length) {
-      const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
-      for (const p of byPack.values()) p.blocks.sort((a, b) => Number(named(b)) - Number(named(a)));
-    }
-    const detail = (b) => {
-      switch (b.kind) {
-        case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
-        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
-        case 'template': return `${b.features.length} feature(s)`;
-        case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
-        case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
-        case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
-        case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
-        case 'archetype': {
-          // "warriors grace@10" is how a swap of one grant is filed; here it reads.
-          const rep = [...new Set(b.features.flatMap((f) => f.replaces))].map(swapLabel);
-          const alt = [...new Set(b.features.flatMap((f) => f.alters))].map(swapLabel);
-          return [`for ${b.class || 'its class'}`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : '',
-            b.stacksWith.length ? `combines with ${b.stacksWith.join(', ')}` : ''].filter(Boolean).join(' · ');
-        }
-        default: return '';
-      }
-    };
-    // An archetype's button says whether it can go on right now, and why not.
-    const gate = (b) => {
-      if (b.kind !== 'archetype') return { on: true, why: '' };
-      const s = archetypeStatus(this.#model, b);
-      if (s.ok) return { on: true, why: '' };
-      if (s.reason === 'applied') return { on: false, why: 'on the sheet' };
-      if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
-      return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
-    };
-    const rows = [...byPack.entries()].map(([id, p]) => `
-      <h4 class="ext-pack">${esc(p.name)}</h4>
-      ${p.blocks.map((b) => { const g = gate(b); return `<div class="item statline">
-        <span class="label pair" style="flex:1">
-          <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
-          <strong>${esc(b.name || '(unnamed)')}</strong>
-          <span class="hint" style="margin:0">${esc(detail(b))}</span>
-        </span>
-        <span class="value pair">
-          ${g.why ? `<span class="hint ${/^blocked/.test(g.why) ? 'warn' : ''}" style="margin:0">${esc(g.why)}</span>` : ''}
-          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
-            title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
-        </span>
-      </div>`; }).join('')}`).join('');
-
-    return `<section class="panel span2">
-      <h3>Extensions — building blocks</h3>
-      <p class="hint">
-        What the enabled extension packs offer this character: ${packs.length
-    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
-    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet — a class into
-        the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
-        onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
-        from the page's <em>Extensions</em> button.
-      </p>
-      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
-        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
-        <input type="search" data-ext-search="1" value="${esc(this.#extSearch)}" spellcheck="false"
-          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
-          title="By name, pack, class, or what a block's features are called and replace">
-        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
-      </p>` : ''}
-      <div class="rowlist">
-        ${rows || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
-    : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
-      </div>
-    </section>`;
-  }
-
-  /* ----- training class blocks with per-level talent slots ----- */
-
-  #classNames() {
-    const names = new Set(this.#model.data.classes.map((x) => x.name).filter(Boolean));
-    for (const side of Object.values(this.#model.data.training || {})) {
-      for (const cls of side?.classes || []) if (cls.name) names.add(cls.name);
-    }
-    return [...names];
-  }
-
-  #trainingSide(sideKey, side) {
-    const isMagic = sideKey === 'magic';
-    const title = isMagic ? 'Magic training' : 'Combat training';
-    const spheres = isMagic ? MAGIC_SPHERES : COMBAT_SPHERES;
-    const types = isMagic ? CASTING_TYPES : PRACTITIONER_TYPES;
-    const tplOptions = Object.keys(TALENT_RATES);
-    const list = `training.${sideKey}.classes`;
-    // A blended class trains both ways off one pool of talents; it has a group
-    // of its own above, and appears here only as the note that says so.
-    const classes = (side.classes || []).filter((x) => !x.extended && !x.blended);
-    const extended = (side.classes || []).filter((x) => x.extended && !x.blended);
-    const blended = (side.classes || []).filter((x) => x.blended);
-
-    return `<section class="panel span2">
-      <h3>${title}</h3>
-      ${classes.map((cls, rawIndex) => {
-        const ci = (side.classes || []).indexOf(cls);
-        return `<div class="trainclass">
-        <div class="trainhead">
-          <label class="fld"><span>Class</span>
-            ${this.#itemSelect(list, ci, 'name', cls.name, this.#classNames())}</label>
-          <label class="fld"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
-            ${this.#itemSelect(list, ci, 'type', cls.type, types)}</label>
-          <label class="fld"><span>Talents / level</span>
-            ${this.#itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
-          <label class="fld"><span>${isMagic ? 'Casting score' : 'Practitioner mod'}</span>
-            ${this.#itemSelect(list, ci, 'mod1', cls.mod1, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
-          <label class="fld"><span>2nd score</span>
-            ${this.#itemSelect(list, ci, 'mod2', cls.mod2, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
-              ${this.#forwardedBadge(classForwardKey(cls.name))}
-              <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
-            </span></label>
-          <label class="fld"><span>Blended</span>
-            <label class="chk" title="This class learns ${isMagic ? 'martial' : 'magical'} talents from the same pool — give it a group of its own that draws on both sphere lists.">
-              <input type="checkbox" data-blend="${sideKey}|${ci}">
-              <span class="hint">also ${isMagic ? 'martial' : 'magical'}</span></label></label>
-          <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
-        </div>
-        <div class="tablewrap"><table class="talents">
-          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
-          <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
-          <tbody>${(cls.levels || []).map((lv, li) => {
-            const on = !!lv.granted;
-            const slots = `${list}.${ci}.levels`;
-            const state = on ? 'slot-on' : 'slot-off';
-            // The running talent count used to be a column of its own; it says
-            // the same thing as a tooltip on the level it belongs to.
-            const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}`
-              : `Level ${lv.level} grants no talent`;
-            return `<tr class="${lv.future ? 'future' : ''}">
-              <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${this.#prose(
-    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, 1, 'grow')}</td>
-              <td class="${state}">
-                ${on ? this.#itemSelect(slots, li, 'sphere', lv.sphere, spheres)
-                  : '<select disabled><option></option></select>'}
-              </td>
-              <td class="${state}">${this.#prose(
-    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>
-      </div>`;
-      }).join('')}
-      ${extended.length ? `<p class="hint">Also counted as ${isMagic ? 'casting' : 'practitioner'} classes:
-        ${extended.map((x) => esc(x.name)).join(', ')} (extended-level page).</p>` : ''}
-      ${blended.length ? `<p class="hint">Also counted as ${isMagic ? 'casting' : 'practitioner'} classes:
-        ${blended.map((x) => esc(x.name)).join(', ')} — blended, so their talents are
-        listed once under <strong>Blended training</strong> and counted here by sphere.</p>` : ''}
-      <div style="margin-top:8px">
-        <button class="primary" data-action="add-training-class" data-side="${sideKey}">+ Add class</button>
-        ${isMagic ? '' : `<button data-action="add-customization"
-          title="For a class whose talents arrive on several tracks at once, one of them live — an armiger's customized weapons">+ Customized weapons</button>`}
-      </div>
-      <p class="hint">
-        A level's talent fields unlock when that level grants a talent — from the class's
-        levels in the Planner and the Talents/level rate (Type drives ${isMagic ? 'caster level' : 'practitioner level'}
-        separately, for classes where the two differ). Set Class levels to override a sparse Planner.
-      </p>
-    </section>`;
-  }
-
-  /**
-   * Customized weapons: several talent tracks side by side, one of them drawn.
-   *
-   * Laid out across rather than down because choosing between them is the
-   * whole point of the feature -- an armiger picks up the naginata *instead
-   * of* the handwraps -- and because it is how the workbook wrote it, two
-   * columns of a spare tab headed Weapon.
-   *
-   * The two counting rules sit in the head as the class table words them, so
-   * what the sheet is doing is on the page: three weapons, another at 11th and
-   * 19th; one talent each, another at 3rd and every 4 levels after.
-   */
-  #customizationPanel(blocks) {
-    return `<section class="panel span2">
-      <h3>Customized weapons <span class="badge">${blocks.length}</span></h3>
-      ${blocks.map((block, bi) => {
-    const list = `training.combat.customizations.${bi}.sets`;
-    const rule = (key, label) => `<label class="fld"><span>${label}</span>
-        <span class="pair">
-          <input type="number" min="0" value="${block.spec?.[key]?.start ?? 1}" style="width:3.2rem"
-            data-custrule="${bi}|${key}|start" aria-label="${label} to begin with">
-          <span class="hint">then at</span>
-          <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
-            data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
-            aria-label="Levels ${label.toLowerCase()} goes up at">
-        </span></label>`;
-    // What one track is called, so a class that customizes something other
-    // than weapons reads as itself: the pack's `unit` names the rows and the
-    // count beside them.
-    const unit = block.spec?.unit || 'weapon';
-    const Unit = unit.charAt(0).toUpperCase() + unit.slice(1);
-    // Which sphere lists this track learns from. Martial by default -- a
-    // customized weapon teaches its wielder to fight with it -- and widened by
-    // the archetype that says so, which is why it is a field here and not a
-    // rule in the engine.
-    const spheres = trackSpheres(block.spec);
-    return `<div class="trainclass">
-        <div class="trainhead">
-          <label class="fld"><span>Class</span>
-            ${this.#itemSelect('training.combat.customizations', bi, 'className', block.className, this.#classNames())}</label>
-          ${rule('sets', `${Unit}s`)}
-          ${rule('talents', 'Talents each')}
-          <label class="fld"><span>Spheres</span>
-            <select data-custspheres="${bi}"
-              title="What a ${esc(unit)} may teach. Martial unless an archetype widens it.">
-              ${TRACK_SPHERE_SIDES.map((k) => `<option value="${k}"${
-    (block.spec?.spheres || 'combat') === k ? ' selected' : ''}>${esc(TRACK_SPHERE_LABELS[k])}</option>`).join('')}
-            </select></label>
-          <label class="fld"><span>Grants</span>
-            <span class="pair">${this.#roField(`${block.setCount} × ${block.talentCount}`,
-    `${block.className || 'This class'} ${block.classLevels}: ${block.setCount} customized weapon(s), `
-    + `${block.talentCount} talent(s) on each`, 'style="width:4.2rem"')}
-              <span class="hint">at level ${block.classLevels}</span></span></label>
-          <button class="danger" data-remove-customization="${bi}" title="Remove these ${esc(unit)}s">×</button>
-        </div>
-        ${block.spec?.text ? `<p class="hint">${esc(block.spec.text)}</p>` : ''}
-        <div class="weaponsets">
-          ${(block.sets || []).map((set, si) => this.#weaponSet(block, bi, si, set, list, spheres, Unit)).join('')}
-        </div>
-      </div>`;
-  }).join('')}
-      <div style="margin-top:8px">
-        <button class="primary" data-action="add-customization">+ Add customized weapons</button>
-      </div>
-      <p class="hint">
-        Only the drawn weapon's talents are live: they reach the sphere tables and the
-        sphere badges, and change the moment you draw something else. They never pay
-        bonus skill ranks and never answer a prerequisite — a customized weapon grants
-        no skill retraining, and its talents may not qualify for feats. Constant
-        benefits stay put: unarmed damage counts every weapon's talents, drawn or
-        stowed. A talent needs its sphere's base on the same weapon, unless the
-        character has that sphere in her own right. Which spheres a weapon may teach at
-        all is the <strong>Spheres</strong> setting above: martial, unless an archetype
-        widens it. One outside that list is marked in gold rather than thrown away,
-        since it is nearly always an archetype nobody has added yet.
-      </p>
-    </section>`;
-  }
-
-  /** One weapon: what it is, what it teaches, and whether it is in hand. */
-  #weaponSet(block, bi, si, set, list, spheres, Unit = 'Weapon') {
-    const rows = set.talents || [];
-    const talents = `${list}.${si}.talents`;
-    const live = !set.spare && si === block.active;
-    return `<div class="weaponset${live ? ' drawn' : ''}${set.spare ? ' spare' : ''}">
-      <div class="weaponhead">
-        <label class="chk" title="${set.spare ? 'Past what this level customizes' : `Draw this ${esc(Unit.toLowerCase())} — its talents go live and the others stop`}">
-          <input type="radio" name="cust-${bi}" data-custactive="${bi}|${si}"
-            ${live ? 'checked' : ''}${set.spare ? ' disabled' : ''}>
-          <span>${live ? 'Drawn' : set.spare ? 'Spare' : 'Stowed'}</span></label>
-        ${this.#itemText(list, si, 'weapon', set.weapon, `${Unit} ${si + 1}`, true)}
-      </div>
-      <table class="talents">
-        <colgroup><col class="talent"><col class="sphere"></colgroup>
-        <tbody>${rows.map((row, ri) => {
-    const on = row.granted !== false;
-    const state = on ? 'slot-on' : 'slot-off';
-    const side = on && row.sphere ? sphereSide(row.sphere, 'combat') : null;
-    const bonus = on && ri >= block.talentCount;
-    return `<tr>
-          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
-      ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
-      : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
-            ${this.#prose(`data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, 1, 'grow')}</td>
-          <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
-      ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
-        + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
-        + 'Widen it above, or add the archetype that does.')}"` : ''}>
-            ${on ? this.#itemSelect(talents, ri, 'sphere', row.sphere, spheres)
-      : '<select disabled><option></option></select>'}</td>
-        </tr>`;
-  }).join('')}</tbody>
-      </table>
-      <div class="listrow weapondrawback">
-        ${this.#itemText(list, si, 'drawback', set.drawback, 'Drawback…', true)}
-        <label class="chk" title="Bought off — which costs the talent it bought">
-          ${this.#itemCheck(list, si, 'boughtOff', set.boughtOff)}<span>off</span></label>
-      </div>
-    </div>`;
-  }
-
-  /**
-   * Classes that train both ways: one pool of talents, two progressions.
-   *
-   * The workbook keeps such a class as a block on each tab holding the same
-   * talents twice, which read as two classes that had each learned everything.
-   * Here it is one group. The pool is sized by the practitioner-side talent
-   * rate that owns it, each level picks from both sphere lists, and where each
-   * talent lands -- the martial tables or the magical ones -- follows the
-   * sphere rather than which tab the block came off.
-   */
-  #blendedPanel(pairs) {
-    const tplOptions = Object.keys(TALENT_RATES);
-    const abilities = ABILITIES.map((k) => ABILITY_LABELS[k]);
-    const head = (half, label, types) => {
-      if (!half) return `<label class="fld"><span>${label} type</span><select disabled><option>—</option></select></label>`;
-      const list = `training.${half.side}.classes`;
-      return `<label class="fld"><span>${label} type</span>
-          ${this.#itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
-        <label class="fld"><span>${label === 'Casting' ? 'Casting score' : 'Practitioner mod'}</span>
-          ${this.#itemSelect(list, half.index, 'mod1', half.cls.mod1, abilities)}</label>`;
-    };
-
-    return `<section class="panel span2">
-      <h3>Blended training <span class="badge">${pairs.length}</span></h3>
-      ${pairs.map(({ name, owner, twin }) => {
-    const list = `training.${owner.side}.classes`;
-    const cls = owner.cls;
-    const martial = owner.side === 'combat' ? owner : twin;
-    const casting = owner.side === 'magic' ? owner : twin;
-    const counts = this.#blendedCounts(cls);
-    return `<div class="trainclass">
-        <div class="trainhead">
-          <label class="fld"><span>Class</span>
-            ${this.#itemSelect(list, owner.index, 'name', cls.name, this.#classNames())}</label>
-          <label class="fld"><span>Talents / level</span>
-            ${this.#itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
-          ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}
-          ${head(casting, 'Casting', CASTING_TYPES)}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
-              ${this.#forwardedBadge(classForwardKey(cls.name))}
-              <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
-            </span></label>
-          <label class="fld"><span>Blended</span>
-            <label class="chk" title="Untick to split this back into separate combat and magic classes.">
-              <input type="checkbox" checked data-blend="${owner.side}|${owner.index}">
-              <span class="hint">${counts.combat} martial · ${counts.magic} magical</span></label></label>
-        </div>
-        <div class="tablewrap"><table class="talents">
-          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
-          <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
-          <tbody>${(cls.levels || []).map((lv, li) => {
-      const on = !!lv.granted;
-      const slots = `${list}.${owner.index}.levels`;
-      const state = on ? 'slot-on' : 'slot-off';
-      const side = on ? sphereSide(lv.sphere) : null;
-      const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
-        side ? ` — counts as ${side === 'magic' ? 'magical' : 'martial'}` : ''}`
-        : `Level ${lv.level} grants no talent`;
-      return `<tr class="${lv.future ? 'future' : ''}">
-              <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${this.#prose(
-        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, 1, 'grow')}</td>
-              <td class="${state}${side ? ` side-${side}` : ''}">
-                ${on ? this.#itemSelect(slots, li, 'sphere', lv.sphere, BLENDED_SPHERES)
-        : '<select disabled><option></option></select>'}
-              </td>
-              <td class="${state}">${this.#prose(
-        `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
-            </tr>`;
-    }).join('')}</tbody>
-        </table></div>
-      </div>`;
-  }).join('')}
-      <p class="hint">
-        One pool of talents, spent either way: the sphere on each row decides whether the
-        talent counts toward Sphere BAB / DC or Sphere CL / DC. Each side keeps its own
-        type and ability score above, because a blended class rarely advances at the same
-        rate as both.
-      </p>
-    </section>`;
-  }
-
-  /** How a blended class's talents so far divide between the two sides. */
-  #blendedCounts(cls) {
-    const counts = { combat: 0, magic: 0 };
-    for (const lv of cls.levels || []) {
-      if (!lv.granted || lv.future) continue;
-      const side = sphereSide(lv.sphere);
-      if (side) counts[side] += 1;
-    }
-    return counts;
-  }
-
-  /* ----- traditions ----- */
-
-  #combatTraditionPanel(t) {
-    const list = 'training.combat.tradition.entries';
-    return `<section class="panel wide">
-      <h3>Martial tradition</h3>
-      <label class="fld"><span>Tradition</span>
-        ${this.#text('training.combat.tradition.name', t.tradition?.name)}</label>
-      <div class="tablewrap" style="margin-top:6px"><table class="talents">
-        <colgroup><col class="talent"><col class="sphere"><col class="tool"></colgroup>
-        <thead><tr><th>Grants</th><th>Sphere</th><th></th></tr></thead>
-        <tbody>${(t.tradition?.entries || []).map((e, i) => `<tr>
-          <td>${this.#prose(`data-item="${list}|${i}|talent"`, e.talent, 1, 'grow')}</td>
-          <td>${this.#itemSelect(list, i, 'sphere', e.sphere, COMBAT_SPHERES)}</td>
-          ${this.#rowRemove(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${this.#addButton(list, 'Add entry', { talent: '', sphere: null })}</div>
-      ${this.#line('Practitioner base DC', t.practitionerDC)}
-    </section>`;
-  }
-
-  /**
-   * Talents from anywhere but a class's own ladder — a feat, an item, a
-   * template. Its own group under the class blocks rather than a corner of the
-   * tradition panel: a tradition grants talents because of what the character
-   * is, and these arrive for unrelated reasons, so the rows want a Source and
-   * the width to write it in.
-   */
-  #bonusTalentPanel(sideKey, side) {
-    const isMagic = sideKey === 'magic';
-    const list = `training.${sideKey}.bonusTalents`;
-    const rows = side.bonusTalents || [];
-    return `<section class="panel span2">
-      <h3>Bonus ${isMagic ? 'magic' : 'combat'} talents
-        ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      <div class="tablewrap"><table class="talents bonus">
-        <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
-        <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr>
-          <td>${this.#prose(`data-item="${list}|${i}|talent"`, e.talent, 1, 'grow')}</td>
-          <td>${this.#itemSelect(list, i, 'sphere', e.sphere, isMagic ? MAGIC_SPHERES : COMBAT_SPHERES)}</td>
-          <td>${this.#itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
-          <td>${this.#prose(`data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
-          ${this.#rowTools(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${this.#addButton(list, 'Add talent', {
-    talent: '', sphere: null, source: '', notes: '',
-  })}</div>
-    </section>`;
-  }
-
-  #magicTraditionPanel(m) {
-    const tr = m.tradition || {};
-    const dlist = 'training.magic.tradition.drawbacks';
-    const blist = 'training.magic.tradition.boughtOff';
-    // Drawbacks read {…} like prose: "Expensive Locus ({locus = 22500} mana)"
-    // is a drawback and a number the rest of the sheet can spend.
-    const textRow = (lst, v, i) => `<div class="listrow">
-      ${this.#prose(`data-item="${lst}|${i}|self"`, v, 1, 'grow')}
-      <button class="danger" data-remove="${lst}|${i}" aria-label="Remove">×</button>
-    </div>`;
-    // A drawback is a few words, and a tradition can run to twenty of them, so
-    // they sit as many to a row as the panel is wide enough for rather than
-    // one per line down a column of mostly empty space.
-    const textList = (lst, items) => (items.length
-      ? `<div class="listgrid">${items.map((d, i) => textRow(lst, d, i)).join('')}</div>`
-      : '<p class="empty">None.</p>');
-    return `<section class="panel wide">
-      <h3>Casting tradition</h3>
-      <label class="fld"><span>Tradition</span>${this.#text('training.magic.tradition.name', tr.name)}</label>
-
-      <h4 class="subhead">Drawbacks <span class="badge">${m.drawbackCount ?? 0} total</span></h4>
-      ${textList(dlist, tr.drawbacks || [])}
-      <div>${this.#addButton(dlist, 'Add drawback', '')}</div>
-      <p class="hint">Write “… x2” on a drawback taken twice — it counts double.
-        Formulas work here too: “Expensive Locus ({locus = 22500} mana)”.</p>
-
-      <h4 class="subhead">Bought off with drawback feats <span class="badge">${m.boughtOffCount ?? 0}</span></h4>
-      ${textList(blist, tr.boughtOff || [])}
-      <div>${this.#addButton(blist, 'Add bought-off drawback', '')}</div>
-
-      <div class="statline" style="margin-top:8px"><span class="label">Effective drawbacks</span>
-        <span class="value">${m.drawbackCount ?? 0} − 2×${m.boughtOffCount ?? 0} = ${m.effectiveDrawbacks ?? 0}</span></div>
-      ${this.#line('Boons', m.boons ?? 0, true)}
-      ${this.#boonSplit(m)}
-      <p class="hint">
-        The ladder is 1 → 1+level/6, 2 → 1+level/3, 3 → level/2, 4 → 1+level/1.5,
-        5 → level, and tops out there; each boon grants the step it adds to the one
-        below it. Spell points are granted per casting class
-        (${m.castingClassCount ?? 0}); essence is one pool, and lands on the Akashic
-        tab as the Essence Boon.
-      </p>
-      <div class="statline"><span class="label">Advanced Magic Training</span>
-        <span class="value">${this.#check('training.magic.amt', m.amt)}</span></div>
-      <div class="statline"><span class="label">Mythic AMT</span>
-        <span class="value">${this.#check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
-    </section>`;
-  }
-
-  /**
-   * What each boon was spent on. A boon is a choice the player makes, not a
-   * number that falls out of the drawback count, so each one gets its own row:
-   * spell points for the casting pool, or essence for the veilweaving one.
-   */
-  /**
-   * How each tradition pool was spent: so many of its steps as spell points,
-   * the rest as essence. Two fields rather than a choice per step, because
-   * what a step is worth depends only on how many are taken, not on which.
-   */
-  #boonSplit(m) {
-    const pools = m.traditionPools || [];
-    if (!pools.length) {
-      return `${this.#line('Tradition SP granted', 0, true)}
-        <p class="hint">Nothing to spend yet — a tradition grants a boon per drawback
-          left after the drawback feats have bought theirs off.</p>`;
-    }
-    const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
-      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}"
-      aria-label="${esc(p.label)} — steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
-
-    return `<h4 class="subhead">Granted, and how it was spent</h4>
-      <div class="tablewrap"><table class="talents pools">
-        <colgroup><col class="talent"><col class="tool"><col class="sphere"><col class="tool"><col class="sphere"></colgroup>
-        <thead><tr><th>Pool</th>
-          <th class="num" colspan="2">As spell points</th>
-          <th class="num" colspan="2">As essence</th></tr></thead>
-        <tbody>${pools.map((p) => `<tr>
-          <td>${esc(p.label)} <span class="badge">${p.points}</span></td>
-          <td class="num">${steps(p, p.spSteps, 'sp')}</td>
-          <td class="num total">${p.sp} SP</td>
-          <td class="num">${steps(p, p.essenceSteps, 'essence')}</td>
-          <td class="num total">${p.essence}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <p class="hint">Steps, not points: each pool's steps add back up to its ladder
-        however they are split.</p>
-      ${this.#line('Tradition SP granted', m.traditionSP ?? 0, true)}
-      ${this.#line('Essence granted', m.traditionEssence ?? 0, true)}`;
-  }
-
-  #magicGlobalsPanel(m) {
-    const hint = (mine, sheet) => (sheet && mine !== sheet
-      ? `<span class="badge err" title="The Google Sheet cached a different value">sheet: ${esc(sheet)}</span>` : '');
-    const s = m.sheet || {};
-    return `<section class="panel">
-      <h3>Casting numbers</h3>
-      <div class="statline"><span class="label">Caster level</span>
-        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}</span></div>
-      ${this.#editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
-      <div class="statline"><span class="label">Global DC</span>
-        <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}</span></div>
-      ${this.#editLine('DC bonus', 'training.magic.dcBonus', m.dcBonus)}
-      <div class="statline"><span class="label">MSB</span><span class="value">${m.msb} ${hint(m.msb, s.totalMSB)}</span></div>
-      ${this.#editLine('MSB bonus', 'training.magic.msbBonus', m.msbBonus)}
-      <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}</span></div>
-      ${this.#editLine('MSD bonus', 'training.magic.msdBonus', m.msdBonus)}
-      ${this.#lineHtml('Concentration', `<span class="rollpair">d20+${m.concentration}${
-        this.#rollButton('concentration', 'magic', 'a concentration check')}</span>`)}
-
-      <h4 class="subhead">Spell points</h4>
-      ${(m.classSP || []).map((x) => this.#line(`${x.name}`, x.sp)).join('')}
-      ${this.#editLine('Bonus SP', 'training.magic.bonusSP', m.bonusSP)}
-      ${this.#line('Tradition SP', m.traditionSP ?? 0)}
-      <div class="statline"><span class="label">Total SP</span>
-        <span class="value big">${m.totalSP} ${hint(m.totalSP, s.totalSP)}</span></div>
-      ${m.spOnEssence ? `
-      <div class="statline"><span class="label">Condensed to essence
-        <span class="badge">${m.spOnEssence / SP_PER_TEMP_ESSENCE} temp essence</span></span>
-        <span class="value">−${m.spOnEssence}</span></div>
-      <div class="statline"><span class="label">Available to cast with</span>
-        <span class="value big${m.spShort ? ' bad' : ''}">${m.availableSP}</span></div>
-      <p class="hint${m.spShort ? ' warn' : ''}">
-        ${m.spShort
-    ? `Condensing that much essence costs ${m.spOnEssence} points and there are only ${m.totalSP}: ${m.spShort} short. Edit it on the Akashic tab.`
-    : `${SP_PER_TEMP_ESSENCE} spell points make 1 temporary essence, set on the Akashic tab.`}
-      </p>` : ''}
-      <p class="hint">Class SP = class levels + casting ability modifier.</p>
-    </section>`;
-  }
-
-  /* ----- sphere bonuses / skill ranks / unarmed ----- */
-
-  #sphereBonusPanel(sideKey, side) {
-    const rows = side.sphereRows || [];
-    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus);
-    const isMagic = sideKey === 'magic';
-    const list = `training.${sideKey}.sphereBonuses`;
-    const render = (r) => {
-      const i = (side.sphereBonuses || []).findIndex((x) => x.sphere === r.sphere);
-      return `<tr>
-        <td>${esc(r.sphere)}</td>
-        <td class="num">${r.talents || ''}</td>
-        <td class="num">${this.#itemNum(list, i, isMagic ? 'clBonus' : 'rankBonus', isMagic ? r.clBonus : r.rankBonus)}</td>
-        <td class="num">${this.#itemNum(list, i, 'dcBonus', r.dcBonus)}</td>
-        <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
-      </tr>`;
-    };
-    return `<section class="panel">
-      <h3>${isMagic ? 'Sphere CL / DC' : 'Sphere BAB / DC'}</h3>
-      <div class="tablewrap"><table>
-        <thead><tr><th>Sphere</th><th class="num">Talents</th>
-          <th class="num">${isMagic ? 'CL+' : 'Rank+'}</th><th class="num">DC+</th>
-          <th class="num">${isMagic ? 'CL / DC' : 'BAB / DC'}</th></tr></thead>
-        <tbody>${active.map(render).join('')}</tbody>
-      </table></div>
-      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres</summary>
-        <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
-      </details>
-      ${!isMagic ? '<p class="hint">Alchemy keys off Craft (alchemy) ranks; Beastmastery off Handle Animal / Ride.</p>' : ''}
-    </section>`;
-  }
-
-  /**
-   * Bonus skill ranks, for the skills that have any coming.
-   *
-   * The block is seventeen rows of which a character has two or three: the
-   * rest ask for a sphere they have no talent in, or for a package they did
-   * not take, and a row that can only ever read zero is not information. What
-   * is left is the rows their talents can reach -- shown whether or not the
-   * switch is on, because the switch is the point of them -- and a character
-   * with none of those is told so in a sentence instead of in a table of
-   * noughts.
-   *
-   * **From** is what the row wants. Where the sheet can see the talent it says
-   * so and the row is automatic; where the sphere still holds talents nobody
-   * has written down -- a Primordia technique's picks from 7th level, most
-   * often -- the row is marked and the switch decides, because a talent this
-   * sheet cannot see is not a talent the character does not have. Naming them
-   * on the Primordia tab settles those rows one way or the other.
-   */
-  #sphereSkillPanel() {
-    const list = 'training.combat.skillRanks';
-    // The index is the row's place in the stored list, which the filter must
-    // not renumber: it is what every field on the row binds to.
-    const rows = (this.#model.trainingSkillRanks || [])
-      .map((r, i) => ({ ...r, i }))
-      .filter((r) => r.state !== 'unmet' || r.current > 0);
-    if (!rows.length) {
-      return `<section class="panel">
-        <h3>Bonus skill ranks from spheres</h3>
-        <p class="empty">This character has no talents that grant bonus ranks.</p>
-      </section>`;
-    }
-    const anyUnsure = rows.some((r) => r.state === 'unknown');
-    return `<section class="panel">
-      <h3>Bonus skill ranks from spheres</h3>
-      <div class="tablewrap"><table class="sphereranks">
-        <thead><tr><th></th><th>Skill</th>
-          <th class="num">Talents</th><th class="num">Ranks</th></tr></thead>
-        <tbody>${rows.map((r) => `<tr class="${r.current ? 'trained' : 'untrained'}">
-          <td class="mid">${this.#itemCheck(list, r.i, 'enabled', r.enabled)}</td>
-          <td>${esc(r.skill)}
-            <div class="req${r.state === 'unknown' ? ' unsure' : ''}"
-              title="${esc(r.state === 'met'
-    ? `${r.requirement} — found on this character.`
-    : `${r.requirement} — the sphere is here, but it still holds talents nobody has named. Write them in on the Primordia tab and this row answers itself; until then the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
-          <td class="num">${r.talents || ''}</td>
-          <td class="num total">${r.current || ''}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <p class="hint">
-        5 ranks per talent in the associated sphere, capped at level; these flow
-        into the Spheres column of the Skills tab automatically. A row appears
-        only when what it asks for — the sphere for a <em>Base</em> row, the named
-        package or talent otherwise — is on the character.
-        ${anyUnsure ? 'A <span class="req unsure">dotted</span> requirement is one the sheet cannot yet confirm: '
-    + 'the sphere is there and still holds talents nobody has written down — a technique\'s picks from 7th '
-    + 'level, usually. Name them on the <strong>Primordia</strong> tab and the row answers itself; '
-    + 'until then the tick is yours to make.' : ''}
-      </p>
-    </section>`;
-  }
-
-  #unarmedPanel(t) {
-    const u = t.unarmed || {};
-    const per = u.perSphere || {};
-    const base = 'training.combat.unarmed';
-    const chk = (label, path, value, count) => `<div class="statline">
-      <span class="label">${label} <span class="badge">${count ?? 0} talents</span></span>
-      <span class="value">${this.#check(path, value)}</span></div>`;
-    // Unorthodox Unarmed Training: two sphere picks per feat on the character.
-    const slots = Number(u.unorthodoxSlots) || 0;
-    const picks = u.otherSpheres || [];
-    const unorthodox = slots ? `<div class="fld" style="margin-top:6px"><span>Unorthodox Unarmed Training spheres
-        <span class="badge">${u.unorthodoxFeats || 0} feat${u.unorthodoxFeats === 1 ? '' : 's'} · ${slots} picks</span></span>
-      <div class="picks">${Array.from({ length: slots }, (_, i) => this.#select(`${base}.otherSpheres.${i}`, picks[i] || '', COMBAT_SPHERES.filter((s) => !UNARMED_SPHERES.includes(s)))).join('')}</div>
-      </div>`
-      : '<p class="hint">Unorthodox Unarmed Training, once taken as a feat, gives two more sphere picks here — two per time it is taken.</p>';
-    return `<section class="panel">
-      <h3>Unarmed damage</h3>
-      <div class="bigstats" style="margin-bottom:8px">
-        ${this.#bigStat('Dice', u.dice ?? '—', `${u.effectiveTalents ?? 0} effective talents`)}
-      </div>
-      <div class="unarmed-grid">
-        ${chk('Boxing', `${base}.usesBoxing`, u.usesBoxing, per.Boxing)}
-        ${chk('Brute', `${base}.usesBrute`, u.usesBrute, per.Brute)}
-        ${chk('Open Hand', `${base}.usesOpenHand`, u.usesOpenHand, per['Open Hand'])}
-        ${chk('Wrestling', `${base}.usesWrestling`, u.usesWrestling, per.Wrestling)}
-      </div>
-      ${unorthodox}
-      <div class="unarmed-grid" style="margin-top:6px">
-        <div class="statline" title="Counts as ${TALENTED_KNUCKLE_TALENTS} virtual talents">
-          <span class="label">Talented Knuckle <span class="badge">+${TALENTED_KNUCKLE_TALENTS}</span></span>
-          <span class="value">${this.#check(`${base}.talentedKnuckle`, u.talentedKnuckle)}</span></div>
-        <div class="statline" title="Counts as ${BRAWLERS_VEST_TALENTS} virtual talents">
-          <span class="label">Brawler's Vest <span class="badge">+${BRAWLERS_VEST_TALENTS}</span></span>
-          <span class="value">${this.#check(`${base}.brawlersVest`, u.brawlersVest)}</span></div>
-      </div>
-      ${u.asuraEssence ? `<div class="statline" title="The essence invested in the Bands of the Asura veil, ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents a point">
-        <span class="label">Bands of the Asura <span class="badge">${u.asuraEssence} essence</span></span>
-        <span class="value">+${u.asuraEssence * ASURA_TALENTS_PER_ESSENCE} talents</span></div>` : ''}
-      ${this.#editLine('Extra effective talents', `${base}.extraTalents`, u.extraTalents ?? 0)}
-      ${this.#editLine('Step increases (+1 die step)', `${base}.stepIncreases`, u.stepIncreases)}
-      ${this.#editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}
-      <div class="statline"><span class="label">Count tradition talents too</span>
-        <span class="value">${this.#check('training.combat.unarmed.includeTradition', u.includeTradition)}</span></div>
-      ${u.improvedUnarmedStrike ? '<p class="hint">Gains Improved Unarmed Strike (1+ unarmed-sphere talents).</p>' : ''}
-      <div class="statline"><span class="label">Class has its own unarmed progression</span>
-        <span class="value">${this.#check('training.combat.unarmed.nativeProgression', u.nativeProgression)}</span></div>
-      ${u.nativeProgression ? '<p class="hint warn">Native progression: treat unarmed strikes as one size larger with 3+ talents instead of using this table.</p>' : ''}
-    </section>`;
-  }
-
-  /* ----- templates -----
-   *
-   * A template is a list of features, each a title, a type and its text, and
-   * each able to carry sub-abilities and tables -- which is how the source
-   * sheets are written: Omni-Cooking has four blocks under it and two of them
-   * are tables. Groups reorder by dragging, and so do sub-abilities, which can
-   * also be dragged into another group. What a sub-ability cannot do is leave
-   * its group for the top level: it hangs off the feature above it.
-   */
-
-  #templatePanel() {
-    const templates = this.#model.data.templates || [];
-    const blankTemplate = {
-      tab: null, name: 'Template', link: null, approvalLink: null, features: [],
-    };
-    const blankAbility = { name: '', type: null, text: '', tables: [], children: [] };
-    if (!templates.length) {
-      return `<div class="grid"><section class="panel span2">
-        <h3>Template</h3>
-        <p class="hint">A template's features live here — a name, whether each is
-          extraordinary, supernatural or spell-like, its text, and any tables or
-          sub-abilities it grants.</p>
-        <div style="margin-top:8px">${this.#addButton('templates', 'Add template', blankTemplate)}</div>
-      </section></div>`;
-    }
-    return `<div class="grid">${templates.map((tp, ti) => {
-      const features = tp.features || [];
-      return `<section class="panel span2">
-        <h3>
-          ${this.#text(`templates.${ti}.name`, tp.name ?? tp.tab ?? 'Template', 'Template name')}
-          ${tp.tab ? `<span class="badge">from “${esc(tp.tab)}”</span>` : ''}
-          <button class="danger" data-remove="templates|${ti}" title="Remove template" aria-label="Remove template">×</button>
-        </h3>
-        <div class="fieldgrid two">
-          ${this.#field('Template link', this.#text(`templates.${ti}.link`, tp.link))}
-          ${this.#field('Approval link', this.#text(`templates.${ti}.approvalLink`, tp.approvalLink))}
-        </div>
-        <div class="tmpl" data-tmpl="${ti}">
-          ${features.map((f, fi) => this.#templateGroup(ti, fi, f, features.length)).join('')}
-        </div>
-        <div style="margin-top:8px">
-          ${this.#addButton(`templates.${ti}.features`, 'Add ability', blankAbility)}
-        </div>
-      </section>`;
-    }).join('')}
-    </div>`;
-  }
-
-  /** One template feature: the group head, its tables and its sub-abilities. */
-  #templateGroup(ti, fi, f, total) {
-    const list = `templates.${ti}.features`;
-    const path = `${list}.${fi}`;
-    const kids = f.children || [];
-    return `<article class="feature tgroup${f.temporary ? ' temporary' : ''}" data-tdrop="${ti}|${fi}|-1">
-      <div class="featurehead">
-        ${this.#grip(ti, fi, -1, 'Drag to reorder this ability')}
-        ${this.#itemText(list, fi, 'name', f.name, 'Ability name')}
-        ${this.#itemSelect(list, fi, 'type', f.type, TEMPLATE_TYPES.map((t) => [t, t, TEMPLATE_TYPE_HINTS[t]]))}
-        <span class="tools">
-          <button data-move="${list}|${fi}|-1" title="Move up" aria-label="Move up" ${fi === 0 ? 'disabled' : ''}>↑</button>
-          <button data-move="${list}|${fi}|1" title="Move down" aria-label="Move down" ${fi === total - 1 ? 'disabled' : ''}>↓</button>
-          <button class="danger" data-remove="${list}|${fi}" title="Remove ability" aria-label="Remove ability">×</button>
-        </span>
-      </div>
-      ${f.temporary ? `<p class="hint pending">Temporary — the import could not place these cells
-        under a feature, so they were kept here rather than dropped. Move what they say into
-        abilities of their own, and delete this once it is empty.</p>` : ''}
-      ${this.#itemArea(list, fi, 'text', f.text, 4)}
-      ${this.#templateTables(ti, path, f)}
-      ${kids.length ? `<div class="tkids">
-        ${kids.map((c, ci) => this.#templateChild(ti, fi, ci, c, {
-    first: fi === 0 && ci === 0,
-    last: fi === total - 1 && ci === kids.length - 1,
-  })).join('')}
-      </div>` : ''}
-      <div class="tadd">
-        ${this.#addButton(`${path}.children`, 'Sub-ability', { name: '', type: null, text: '', tables: [] })}
-        ${this.#addButton(`${path}.tables`, 'Table', NEW_TEMPLATE_TABLE())}
-      </div>
-    </article>`;
-  }
-
-  /**
-   * A sub-ability: the same card, indented, and never above its group head.
-   *
-   * Its ↑ / ↓ carry on into the neighbouring ability rather than stopping at
-   * the ends of their own group, so a sub-ability can be moved between groups
-   * without a mouse. They are only disabled where there is no ability left to
-   * move into.
-   */
-  #templateChild(ti, fi, ci, c, { first, last }) {
-    const list = `templates.${ti}.features.${fi}.children`;
-    const path = `${list}.${ci}`;
-    return `<article class="feature tchild" data-tdrop="${ti}|${fi}|${ci}">
-      <div class="featurehead">
-        ${this.#grip(ti, fi, ci, 'Drag to reorder, or into another ability')}
-        ${this.#itemText(list, ci, 'name', c.name, 'Sub-ability name')}
-        ${this.#itemSelect(list, ci, 'type', c.type, TEMPLATE_TYPES.map((t) => [t, t, TEMPLATE_TYPE_HINTS[t]]))}
-        <span class="tools">
-          <button data-tnudge="${ti}|${fi}|${ci}|-1" title="Move up (into the ability above, at the top)"
-            aria-label="Move up" ${first ? 'disabled' : ''}>↑</button>
-          <button data-tnudge="${ti}|${fi}|${ci}|1" title="Move down (into the ability below, at the bottom)"
-            aria-label="Move down" ${last ? 'disabled' : ''}>↓</button>
-          <button class="danger" data-remove="${list}|${ci}" title="Remove sub-ability" aria-label="Remove sub-ability">×</button>
-        </span>
-      </div>
-      ${this.#itemArea(list, ci, 'text', c.text, 3)}
-      ${this.#templateTables(ti, path, c)}
-      <div class="tadd">${this.#addButton(`${path}.tables`, 'Table', NEW_TEMPLATE_TABLE())}</div>
-    </article>`;
-  }
-
-  #grip(ti, fi, ci, title) {
-    return `<span class="grip" data-tgrip="${ti}|${fi}|${ci}" title="${esc(title)}"
-      role="button" tabindex="-1" aria-hidden="true">⠿</span>`;
-  }
-
-  /**
-   * The abilities of a template, as somewhere a table can be moved to.
-   *
-   * Where a table is drawn on the sheet says which feature it is under, and
-   * that is not always what it means -- Bryva's spell-school table is written
-   * beside Temporal Haze and belongs to Omni-Cooking.
-   */
-  #templateHomes(ti) {
-    const out = [];
-    (this.#model.data.templates?.[ti]?.features || []).forEach((f, fi) => {
-      const label = (n, fallback) => (String(n || '').trim() || fallback);
-      out.push([`templates.${ti}.features.${fi}`, label(f.name, `Ability ${fi + 1}`)]);
-      (f.children || []).forEach((c, ci) => {
-        out.push([`templates.${ti}.features.${fi}.children.${ci}`,
-          `↳ ${label(c.name, `Sub-ability ${ci + 1}`)}`]);
-      });
-    });
-    return out;
-  }
-
-  /**
-   * The tables a feature carries.
-   *
-   * Every cell is a growing prose field rather than a one-line input: these
-   * hold rules text ("consumer gains 2 temporary hit points per 1 by which the
-   * dish beats the cooking DC"), and they resolve {…} like any other prose.
-   *
-   * Cells merge by what is written in them -- `-----` joins the cell to its
-   * left, `|||||` the cell above -- and a merged cell is not drawn, so the
-   * **Cells** toggle shows the grid as it is stored when a merge needs undoing
-   * or adjusting. See `mergeLayout` in rules.js for how the spans are worked
-   * out; nothing about them is stored.
-   */
-  #templateTables(ti, path, f) {
-    const homes = this.#templateHomes(ti).filter(([p]) => p !== path);
-    return (f.tables || []).map((t, bi) => {
-      const table = `${path}.tables.${bi}`;
-      const rows = `${table}.rows`;
-      const width = (t.columns || []).length;
-      const raw = this.#showCells.has(table);
-      const grid = (t.rows || []).map((row) => Array.from({ length: width },
-        (_, ci) => row.cells?.[ci] ?? null));
-      const body = raw ? null : mergeLayout(grid);
-      const head = raw ? null : mergeLayout([t.columns || []])[0];
-      const span = (s) => (s.colspan > 1 ? ` colspan="${s.colspan}"` : '')
-        + (s.rowspan > 1 ? ` rowspan="${s.rowspan}"` : '');
-      return `<div class="ttable">
-        <div class="ttablehead">
-          ${this.#text(`${table}.caption`, t.caption, 'Table caption (optional)')}
-          ${homes.length ? `<select data-tmove="${path}|${bi}" title="Move this table to another ability">
-            <option value="">Move to…</option>
-            ${homes.map(([p, label]) => `<option value="${p}">${esc(label)}</option>`).join('')}
-          </select>` : ''}
-          <button data-cells="${table}" aria-pressed="${raw}"
-            title="Show every cell as it is stored, merge markers and all">Cells</button>
-          <button data-action="add-template-column" data-path="${table}">+ Column</button>
-          <button class="danger" data-remove="${path}.tables|${bi}" title="Remove table">Remove table</button>
-        </div>
-        ${raw ? `<p class="hint">Every cell, as stored. Type <code>-----</code> in a cell to
-          merge it into the one on its left, or <code>|||||</code> to merge it into the one
-          above; clear it again to split them.</p>` : ''}
-        <div class="tablewrap"><table class="tmpltable${raw ? ' raw' : ''}">
-          <thead><tr>
-            ${(t.columns || []).map((c, ci) => (head && !head[ci] ? '' : `<th${head ? span(head[ci]) : ''}>
-              <span class="colhead">
-                ${this.#text(`${table}.columns.${ci}`, c, `Column ${ci + 1}`)}
-                <button class="danger" data-action="remove-template-column" data-path="${table}"
-                  data-col="${ci}" title="Remove column" aria-label="Remove column">×</button>
-              </span>
-            </th>`)).join('')}
-            <th class="tools"></th>
-          </tr></thead>
-          <tbody>
-            ${(t.rows || []).map((row, ri) => `<tr>
-              ${Array.from({ length: width }, (_, ci) => (body && !body[ri][ci] ? '' : `<td${
-  body ? span(body[ri][ci]) : ''}>${
-  this.#prose(`data-item="${rows}|${ri}|cells.${ci}"`, row.cells?.[ci], 1, 'grow')}</td>`)).join('')}
-              ${this.#rowTools(rows, ri)}
-            </tr>`).join('')}
-          </tbody>
-        </table></div>
-        <div class="tadd">
-          ${this.#addButton(rows, 'Row', { cells: Array.from({ length: width }, () => null) })}
-        </div>
-      </div>`;
-    }).join('');
-  }
+  /** The class names, which the action dispatcher needs when adding a track. */
+  #classNames(...a) { return combat.classNames(this.#model, ...a); }
 
   /* ---------------- feats & mythic ---------------- */
 
@@ -4890,6 +3747,268 @@ export class CharacterSheetElement extends HTMLElement {
   #forwardedRows(...a) { return admin.forwardedRows(this.#model, ...a); }
 
   /* ---------------- small helpers ---------------- */
+
+  /* ----- prose fields -----
+   * The two-layer prose control and everything that renders a token live in
+   * ui/prose.js, because two dozen panels put one somewhere. These pass on
+   * what the module cannot see: the model, and which folded cell is open.
+   */
+
+  #prose(...a) { return prose.prose(this.#model, ...a); }
+
+  #itemArea(...a) { return prose.itemArea(this.#model, ...a); }
+
+  #foldedProse(...a) { return prose.foldedProse(this.#model, { openCell: this.#openCell }, ...a); }
+
+  #renderedProse(...a) { return prose.renderedProse(this.#model, ...a); }
+
+  #tokenScope(...a) { return prose.tokenScope(this.#model, ...a); }
+
+  #tokenTitle(...a) { return prose.tokenTitle(this.#model, ...a); }
+
+  #targetLabels(...a) { return prose.targetLabels(this.#model, ...a); }
+
+
+  /**
+   * Extras & Notes: the workbook's scratch page, as a tab. Notes to jot on,
+   * the Approvals table (what was applied for, who approved it, the link),
+   * and whatever else the worksheet held, kept as an editable grid.
+   */
+  #systemPanel(index) {
+    const tab = (this.#model.data.sheetTabs || [])[index];
+    if (!tab) return '<div class="grid"><section class="panel"><p class="empty">Missing tab.</p></section></div>';
+    return `<div class="grid">
+      <section class="panel span2" style="padding-bottom:4px">
+        <h3>
+          <input type="text" class="tabname big" value="${esc(tab.name)}" data-systab-name="${index}" aria-label="Tab name">
+          <span class="pair" style="margin-left:auto">
+            <button data-action="add-system-column" data-index="${index}">+ Column</button>
+            <button data-action="tab-hide" data-key="sys:${esc(tab.name)}">Hide tab</button>
+          </span>
+        </h3>
+        <p class="hint">${tab.hidden ? 'This worksheet was hidden in the source workbook. ' : ''}
+          ${tab.custom ? 'Custom tab — a free grid for anything the sheet doesn\'t model. '
+    : 'Cell-for-cell from the workbook. '}Every cell is editable; rows and columns can be added.
+          Cells accept inline formulas like <code>{name = expr}</code>.</p>
+      </section>
+      ${this.#gridTab(index, tab)}
+    </div>`;
+  }
+
+  /**
+   * The ⚙ manager: the tab bar as a list to rearrange, then everything that
+   * is off it -- alphabetical, so a tab is found by name rather than by where
+   * the workbook happened to put it -- with the odd sub-systems in a corner
+   * of their own. Worksheets can be renamed, deleted or added here too.
+   */
+  #systemManagerPanel() {
+    const entries = this.#tabEntries();
+    const bar = this.#barEntries();
+    const onBar = new Set(bar.map((e) => e.key));
+    const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+    const off = entries.filter((e) => !onBar.has(e.key)).sort(byLabel);
+    const hidden = off.filter((e) => !e.weird);
+    const weird = off.filter((e) => e.weird);
+    const all = (this.#model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
+
+    const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
+      ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
+      ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
+      ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
+    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
+      : '<span class="badge">empty</span>') : ''}`;
+    const name = (e) => (e.kind === 'system'
+      ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
+      : esc(e.label));
+    const del = (e) => (e.kind === 'system'
+      ? `<button class="danger" data-action="delete-system" data-index="${e.index}"
+           title="Delete this tab and its data" aria-label="Delete tab">×</button>` : '');
+
+    const barRow = (e, i) => `<div class="item statline tabrow" draggable="true" data-tabkey="${esc(e.key)}">
+      <span class="label pair" style="flex:1">
+        <span class="grip" aria-hidden="true">⋮⋮</span>
+        ${name(e)} ${badges(e)}
+      </span>
+      <span class="value pair">
+        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} left" title="Move left">↑</button>
+        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="1" ${i === bar.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} right" title="Move right">↓</button>
+        <button data-action="tab-hide" data-key="${esc(e.key)}" ${bar.length === 1 ? 'disabled' : ''}>Hide</button>
+        ${del(e)}
+      </span>
+    </div>`;
+    const offRow = (e) => `<div class="item statline">
+      <span class="label pair" style="flex:1">${name(e)} ${badges(e)}</span>
+      <span class="value pair">
+        <button data-action="tab-show" data-key="${esc(e.key)}">Show</button>
+        ${del(e)}
+      </span>
+    </div>`;
+
+    const mode = this.#model.viewMode();
+    return `<div class="grid"><section class="panel span2">
+      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
+        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
+    ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
+          Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
+      </h3>
+      <p class="hint">
+        The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
+        to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
+        its data intact. Each view keeps its own bar: the <em>build</em> view starts from
+        Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Primordia, Trackers,
+        Equipment; the <em>session</em> view starts from what comes up at the table -- the
+        tabs above plus every sub-system in use or marked on a class, minus the build
+        machinery. <button data-action="tab-reset">Reset this view's bar</button>
+      </p>
+      <div class="rowlist tabbar-list">
+        ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
+      </div>
+    </section>
+
+    <section class="panel span2">
+      <h3>Hidden tabs</h3>
+      <p class="hint">
+        Everything else the sheet can show, alphabetically: the rest of the built-in
+        tabs, the modelled sub-systems (Spheres &amp; Magic, Crafting, Akashic, Maneuvers,
+        Vancian, Psionics, the companions…), and the workbook's own worksheets.
+        <em>In use</em> marks a sub-system that already holds this character's data;
+        <em>marked</em> means a class on the Overview names the system but its tab is
+        still empty.
+      </p>
+      <div class="rowlist">
+        ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}
+      </div>
+    </section>
+
+    <section class="panel span2">
+      <h3>Extra — weird systems</h3>
+      <p class="hint">
+        The unusual machinery: casting off a deck, and a workbook's technique list
+        and its auto-technique sheet. Off the bar unless the character uses them.
+      </p>
+      <div class="rowlist">
+        ${weird.map(offRow).join('') || '<p class="empty">All of these are on the bar.</p>'}
+      </div>
+    </section>
+
+    <section class="panel span2">
+      <h3>Worksheets</h3>
+      <p class="hint">
+        Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
+        Rename any worksheet by typing over its name above; × deletes one and its data.
+      </p>
+      <div class="pair">
+        <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(this.#draft.newSystem || '')}" style="max-width:16rem">
+        <button class="primary" data-action="add-system">+ Add system tab</button>
+      </div>
+      ${this.#confirmDelete !== null ? `<p class="hint warn">
+        Delete “${esc(all[this.#confirmDelete]?.tab.name)}” and all its rows?
+        <button class="danger" data-action="delete-system-confirm">Delete</button>
+        <button data-action="delete-system-cancel">Keep</button></p>` : ''}
+    </section>
+    ${this.#extensionBlocksPanel()}</div>`;
+  }
+
+  /**
+   * The building blocks the enabled extension packs offer -- a class, a race,
+   * a feature, a tracker -- each with a button that copies it into this
+   * character. The packs themselves are managed by the host page; this is
+   * only the shelf.
+   */
+  #extensionBlocksPanel() {
+    const packs = extensionRuntime.active();
+    const blocks = extensionRuntime.blocks();
+    const kinds = [...new Set(blocks.map((b) => b.kind))];
+    const filter = kinds.includes(this.#extFilter) ? this.#extFilter : '';
+    const byKind = filter ? blocks.filter((b) => b.kind === filter) : blocks;
+    // A pack of thirty archetypes is a list to search, not one to scroll. The
+    // words are looked for in the block's name, its pack and what it is for,
+    // so "warrior" finds an archetype that replaces warrior's grace.
+    const words = this.#extSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const haystack = (b) => [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
+      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
+      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
+    const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
+    const byPack = new Map();
+    for (const b of shown) {
+      if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
+      byPack.get(b.extId).blocks.push(b);
+    }
+    // Searching looks through what a block is for as well as what it is called,
+    // so "warrior" finds an archetype that replaces warrior's grace. A block
+    // the words name outright comes first all the same.
+    if (words.length) {
+      const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
+      for (const p of byPack.values()) p.blocks.sort((a, b) => Number(named(b)) - Number(named(a)));
+    }
+    const detail = (b) => {
+      switch (b.kind) {
+        case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
+        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
+        case 'template': return `${b.features.length} feature(s)`;
+        case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
+        case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
+        case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
+        case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
+        case 'archetype': {
+          // "warriors grace@10" is how a swap of one grant is filed; here it reads.
+          const rep = [...new Set(b.features.flatMap((f) => f.replaces))].map(swapLabel);
+          const alt = [...new Set(b.features.flatMap((f) => f.alters))].map(swapLabel);
+          return [`for ${b.class || 'its class'}`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : '',
+            b.stacksWith.length ? `combines with ${b.stacksWith.join(', ')}` : ''].filter(Boolean).join(' · ');
+        }
+        default: return '';
+      }
+    };
+    // An archetype's button says whether it can go on right now, and why not.
+    const gate = (b) => {
+      if (b.kind !== 'archetype') return { on: true, why: '' };
+      const s = archetypeStatus(this.#model, b);
+      if (s.ok) return { on: true, why: '' };
+      if (s.reason === 'applied') return { on: false, why: 'on the sheet' };
+      if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
+      return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
+    };
+    const rows = [...byPack.entries()].map(([id, p]) => `
+      <h4 class="ext-pack">${esc(p.name)}</h4>
+      ${p.blocks.map((b) => { const g = gate(b); return `<div class="item statline">
+        <span class="label pair" style="flex:1">
+          <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
+          <strong>${esc(b.name || '(unnamed)')}</strong>
+          <span class="hint" style="margin:0">${esc(detail(b))}</span>
+        </span>
+        <span class="value pair">
+          ${g.why ? `<span class="hint ${/^blocked/.test(g.why) ? 'warn' : ''}" style="margin:0">${esc(g.why)}</span>` : ''}
+          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
+            title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
+        </span>
+      </div>`; }).join('')}`).join('');
+
+    return `<section class="panel span2">
+      <h3>Extensions — building blocks</h3>
+      <p class="hint">
+        What the enabled extension packs offer this character: ${packs.length
+    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
+    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet — a class into
+        the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
+        onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
+        from the page's <em>Extensions</em> button.
+      </p>
+      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
+        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
+        <input type="search" data-ext-search="1" value="${esc(this.#extSearch)}" spellcheck="false"
+          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
+          title="By name, pack, class, or what a block's features are called and replace">
+        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
+      </p>` : ''}
+      <div class="rowlist">
+        ${rows || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
+    : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
+      </div>
+    </section>`;
+  }
+
 
   /* ---------------- field helpers ----------------
    * Every control carries the model path it writes to, so the bind step is
