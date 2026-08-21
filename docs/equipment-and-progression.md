@@ -168,9 +168,12 @@ button:
 plus the marketplace post with the buyer, the price sold and what you have left.
 
 > Bryva's tab also carried an Armiger customisation block beside the calculator
-> (`M2:S9`) that is hers alone. It is not modelled, but it is not dropped either —
-> unclaimed cells are kept verbatim in a *From the source tab* grid at the bottom.
-> On the other four sheets nothing is left over.
+> (`M2:S9`) that is hers alone — a weapon name and the talents it grants, twice over.
+> Those cells are not read into the model, but they are not dropped either: they are
+> kept verbatim in a *From the source tab* grid at the bottom, and there is now
+> somewhere to put them — [Customized weapons](sub-systems.md#spheres--magic-training)
+> on the Spheres & Magic tab is that block modelled. On the other four sheets nothing
+> is left over.
 
 Everything above is verified against Bryva's filled-in sheet in `tests/model.test.mjs`:
 10,000 mana of progress a day, a 0.45 value : craft ratio, a 90,000 cost on a 200,000

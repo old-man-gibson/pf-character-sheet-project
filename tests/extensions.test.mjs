@@ -79,6 +79,92 @@ check('looksLikeExtension', [looksLikeExtension({ format: EXTENSION_FORMAT }), l
   check('feature type normalised', f.type, 'Ex');
   check('unknown kind is null', normalizeBlock({ kind: 'spell' }), null);
 }
+{
+  // A class whose talents arrive on several tracks at once. The pack states
+  // the two counting rules and nothing else; the sheet does the rest.
+  const t = normalizeBlock({
+    kind: 'class',
+    name: 'Armiger',
+    hd: 10,
+    bab: 1,
+    goodFort: true,
+    goodRef: true,
+    skillRanks: 4,
+    tracks: { name: 'Customized weapon', unit: 'weapon', sets: { start: 3, gainsAt: '11, 19' }, talents: { start: 1, gainsAt: '3, +4' } },
+  });
+  check('a class block carries its talent tracks',
+    [t.tracks.name, t.tracks.unit, t.tracks.sets, t.tracks.talents],
+    ['Customized weapon', 'weapon', { start: 3, gainsAt: '11, 19' }, { start: 1, gainsAt: '3, +4' }]);
+  const shorthand = normalizeBlock({ kind: 'class', name: 'X', tracks: { sets: 2, talents: '4, +4' } });
+  check('a bare number is a count that never moves; a bare string is where it goes up from one',
+    [shorthand.tracks.sets, shorthand.tracks.talents],
+    [{ start: 2, gainsAt: '' }, { start: 1, gainsAt: '4, +4' }]);
+  check('a class that grants none has none',
+    normalizeBlock({ kind: 'class', name: 'Y' }).tracks, null);
+
+  const c = new Character(blankDocument({ name: 'Bryva', level: 11 }));
+  for (let l = 1; l <= 11; l++) c.setProgressionClass(l, 0, 'Armiger');
+  const said = applyBlock(c, t);
+  check('attaching says where the weapons landed', /customized weapons/.test(said), true);
+  const cust = c.data.training.combat.customizations[0];
+  check('and the character carries the spec, not a pointer at the pack',
+    [cust.className, cust.spec.sets.gainsAt, cust.setCount, cust.talentCount],
+    ['Armiger', '11, 19', 4, 4]);
+}
+
+{
+  // An archetype that changes what its class's talent track may learn, and
+  // nothing else about it. The armiger's customized weapons teach martial
+  // spheres; the archetype that lets them teach magical ones is where that
+  // fact belongs, so it is one line of its block rather than a rule in the
+  // engine.
+  const CLASS = {
+    kind: 'class', name: 'Armiger', hd: 10, bab: 1, goodFort: true, goodRef: true, skillRanks: 4,
+    tracks: {
+      name: 'Customized weapon',
+      unit: 'weapon',
+      sets: { start: 3, gainsAt: '11, 19' },
+      talents: { start: 1, gainsAt: '3, +4' },
+      spheres: 'combat',
+    },
+  };
+  const ARCHETYPE = {
+    kind: 'archetype', name: 'Antiquarian', class: 'Armiger', tracks: { spheres: 'Both' },
+    features: [{ level: 1, name: 'Relic lore', text: 'This replaces quick change.' }],
+  };
+  check('a class block carries the sphere side of its track',
+    normalizeBlock(CLASS).tracks.spheres, 'combat');
+  check('an archetype block carries only what it changes, cased as the sheet reads it',
+    normalizeBlock(ARCHETYPE).tracks, { spheres: 'both' });
+  check('and one that changes nothing about the track carries none',
+    normalizeBlock({ kind: 'archetype', name: 'Plain', class: 'Armiger' }).tracks, null);
+
+  const c = new Character(blankDocument({ name: 'Vessa', level: 12 }));
+  for (let l = 1; l <= 12; l++) c.setProgressionClass(l, 0, 'Armiger');
+  applyBlock(c, CLASS);
+  const track = () => c.data.training.combat.customizations[0];
+  check('the class lands its track, martial', [track().spec.spheres, track().setCount, track().talentCount],
+    ['combat', 4, 4]);
+
+  const said = applyBlock(c, ARCHETYPE);
+  check('adding the archetype says it touched the weapons', /customized weapons/.test(said), true);
+  check('and widens the track without touching the counting rules',
+    [track().spec.spheres, track().setCount, track().talentCount], ['both', 4, 4]);
+
+  removeArchetype(c, 'Armiger', 'Antiquarian');
+  check('taking it off puts the track back the way the class states it',
+    [track().spec.spheres, track().setCount, track().talentCount], ['combat', 4, 4]);
+
+  // An archetype whose class has no track on the sheet says so rather than
+  // inventing counting rules it does not have.
+  const bare = new Character(blankDocument({ name: 'Noone', level: 5 }));
+  for (let l = 1; l <= 5; l++) bare.setProgressionClass(l, 0, 'Armiger');
+  applyBlock(bare, { kind: 'class', name: 'Armiger', hd: 10, bab: 1, skillRanks: 4 });
+  const alone = applyBlock(bare, ARCHETYPE);
+  check('it reports the track it cannot find', /talent track, which is not on this sheet/.test(alone), true);
+  check('and makes none up', (bare.data.training?.combat?.customizations || []).length, 0);
+}
+
 check('parseReplaces: one', parseReplaces('Text. This racial trait replaces hatred.'), ['hatred']);
 check('parseReplaces: and', parseReplaces('This replaces defensive training and hatred.'), ['defensive training', 'hatred']);
 check('parseReplaces: oxford list', parseReplaces('This racial trait replaces greed, hatred, stonecunning, and weapon familiarity.'), ['greed', 'hatred', 'stonecunning', 'weapon familiarity']);

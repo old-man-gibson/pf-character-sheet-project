@@ -71,7 +71,8 @@ import {
   ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
   attackModeAbility,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
-  BLENDED_SPHERES, sphereSide, conditionInfo,
+  BLENDED_SPHERES, sphereSide, conditionInfo, trackSpheres, TRACK_SPHERE_SIDES, TRACK_SPHERE_LABELS,
+  TRACK_SPHERE_NOUNS,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
   TALENTED_KNUCKLE_TALENTS, BRAWLERS_VEST_TALENTS, ASURA_TALENTS_PER_ESSENCE,
   VEIL_SLOTS, ESSENCE_SOURCES, SP_PER_TEMP_ESSENCE,
@@ -3723,6 +3724,8 @@ export class CharacterSheetElement extends HTMLElement {
       ${blended.length ? wrap('blended-training', this.#blendedPanel(blended)) : ''}
       ${t.combat ? `
         ${wrap('combat-training', this.#trainingSide('combat', t.combat))}
+        ${(t.combat.customizations || []).length
+    ? wrap('customized-weapons', this.#customizationPanel(t.combat.customizations)) : ''}
         ${wrap('combat-bonus', this.#bonusTalentPanel('combat', t.combat))}
         <div class="sidepanels">
           ${wrap('combat-tradition', this.#combatTraditionPanel(t.combat))}
@@ -4076,6 +4079,8 @@ export class CharacterSheetElement extends HTMLElement {
         listed once under <strong>Blended training</strong> and counted here by sphere.</p>` : ''}
       <div style="margin-top:8px">
         <button class="primary" data-action="add-training-class" data-side="${sideKey}">+ Add class</button>
+        ${isMagic ? '' : `<button data-action="add-customization"
+          title="For a class whose talents arrive on several tracks at once, one of them live — an armiger's customized weapons">+ Customized weapons</button>`}
       </div>
       <p class="hint">
         A level's talent fields unlock when that level grants a talent — from the class's
@@ -4083,6 +4088,127 @@ export class CharacterSheetElement extends HTMLElement {
         separately, for classes where the two differ). Set Class levels to override a sparse Planner.
       </p>
     </section>`;
+  }
+
+  /**
+   * Customized weapons: several talent tracks side by side, one of them drawn.
+   *
+   * Laid out across rather than down because choosing between them is the
+   * whole point of the feature -- an armiger picks up the naginata *instead
+   * of* the handwraps -- and because it is how the workbook wrote it, two
+   * columns of a spare tab headed Weapon.
+   *
+   * The two counting rules sit in the head as the class table words them, so
+   * what the sheet is doing is on the page: three weapons, another at 11th and
+   * 19th; one talent each, another at 3rd and every 4 levels after.
+   */
+  #customizationPanel(blocks) {
+    return `<section class="panel span2">
+      <h3>Customized weapons <span class="badge">${blocks.length}</span></h3>
+      ${blocks.map((block, bi) => {
+    const list = `training.combat.customizations.${bi}.sets`;
+    const rule = (key, label) => `<label class="fld"><span>${label}</span>
+        <span class="pair">
+          <input type="number" min="0" value="${block.spec?.[key]?.start ?? 1}" style="width:3.2rem"
+            data-custrule="${bi}|${key}|start" aria-label="${label} to begin with">
+          <span class="hint">then at</span>
+          <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
+            data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
+            aria-label="Levels ${label.toLowerCase()} goes up at">
+        </span></label>`;
+    // What one track is called, so a class that customizes something other
+    // than weapons reads as itself: the pack's `unit` names the rows and the
+    // count beside them.
+    const unit = block.spec?.unit || 'weapon';
+    const Unit = unit.charAt(0).toUpperCase() + unit.slice(1);
+    // Which sphere lists this track learns from. Martial by default -- a
+    // customized weapon teaches its wielder to fight with it -- and widened by
+    // the archetype that says so, which is why it is a field here and not a
+    // rule in the engine.
+    const spheres = trackSpheres(block.spec);
+    return `<div class="trainclass">
+        <div class="trainhead">
+          <label class="fld"><span>Class</span>
+            ${this.#itemSelect('training.combat.customizations', bi, 'className', block.className, this.#classNames())}</label>
+          ${rule('sets', `${Unit}s`)}
+          ${rule('talents', 'Talents each')}
+          <label class="fld"><span>Spheres</span>
+            <select data-custspheres="${bi}"
+              title="What a ${esc(unit)} may teach. Martial unless an archetype widens it.">
+              ${TRACK_SPHERE_SIDES.map((k) => `<option value="${k}"${
+    (block.spec?.spheres || 'combat') === k ? ' selected' : ''}>${esc(TRACK_SPHERE_LABELS[k])}</option>`).join('')}
+            </select></label>
+          <label class="fld"><span>Grants</span>
+            <span class="pair">${this.#roField(`${block.setCount} × ${block.talentCount}`,
+    `${block.className || 'This class'} ${block.classLevels}: ${block.setCount} customized weapon(s), `
+    + `${block.talentCount} talent(s) on each`, 'style="width:4.2rem"')}
+              <span class="hint">at level ${block.classLevels}</span></span></label>
+          <button class="danger" data-remove-customization="${bi}" title="Remove these ${esc(unit)}s">×</button>
+        </div>
+        ${block.spec?.text ? `<p class="hint">${esc(block.spec.text)}</p>` : ''}
+        <div class="weaponsets">
+          ${(block.sets || []).map((set, si) => this.#weaponSet(block, bi, si, set, list, spheres, Unit)).join('')}
+        </div>
+      </div>`;
+  }).join('')}
+      <div style="margin-top:8px">
+        <button class="primary" data-action="add-customization">+ Add customized weapons</button>
+      </div>
+      <p class="hint">
+        Only the drawn weapon's talents are live: they reach the sphere tables and the
+        sphere badges, and change the moment you draw something else. They never pay
+        bonus skill ranks and never answer a prerequisite — a customized weapon grants
+        no skill retraining, and its talents may not qualify for feats. Constant
+        benefits stay put: unarmed damage counts every weapon's talents, drawn or
+        stowed. A talent needs its sphere's base on the same weapon, unless the
+        character has that sphere in her own right. Which spheres a weapon may teach at
+        all is the <strong>Spheres</strong> setting above: martial, unless an archetype
+        widens it. One outside that list is marked in gold rather than thrown away,
+        since it is nearly always an archetype nobody has added yet.
+      </p>
+    </section>`;
+  }
+
+  /** One weapon: what it is, what it teaches, and whether it is in hand. */
+  #weaponSet(block, bi, si, set, list, spheres, Unit = 'Weapon') {
+    const rows = set.talents || [];
+    const talents = `${list}.${si}.talents`;
+    const live = !set.spare && si === block.active;
+    return `<div class="weaponset${live ? ' drawn' : ''}${set.spare ? ' spare' : ''}">
+      <div class="weaponhead">
+        <label class="chk" title="${set.spare ? 'Past what this level customizes' : `Draw this ${esc(Unit.toLowerCase())} — its talents go live and the others stop`}">
+          <input type="radio" name="cust-${bi}" data-custactive="${bi}|${si}"
+            ${live ? 'checked' : ''}${set.spare ? ' disabled' : ''}>
+          <span>${live ? 'Drawn' : set.spare ? 'Spare' : 'Stowed'}</span></label>
+        ${this.#itemText(list, si, 'weapon', set.weapon, `${Unit} ${si + 1}`, true)}
+      </div>
+      <table class="talents">
+        <colgroup><col class="talent"><col class="sphere"></colgroup>
+        <tbody>${rows.map((row, ri) => {
+    const on = row.granted !== false;
+    const state = on ? 'slot-on' : 'slot-off';
+    const side = on && row.sphere ? sphereSide(row.sphere, 'combat') : null;
+    const bonus = on && ri >= block.talentCount;
+    return `<tr>
+          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
+      ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
+      : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
+            ${this.#prose(`data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, 1, 'grow')}</td>
+          <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
+      ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
+        + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
+        + 'Widen it above, or add the archetype that does.')}"` : ''}>
+            ${on ? this.#itemSelect(talents, ri, 'sphere', row.sphere, spheres)
+      : '<select disabled><option></option></select>'}</td>
+        </tr>`;
+  }).join('')}</tbody>
+      </table>
+      <div class="listrow weapondrawback">
+        ${this.#itemText(list, si, 'drawback', set.drawback, 'Drawback…', true)}
+        <label class="chk" title="Bought off — which costs the talent it bought">
+          ${this.#itemCheck(list, si, 'boughtOff', set.boughtOff)}<span>off</span></label>
+      </div>
+    </div>`;
   }
 
   /**
@@ -10091,6 +10217,38 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
       });
     });
 
+    // Drawing a weapon moves every sphere number on the tab, so the tab is
+    // redrawn rather than the radio.
+    root.querySelectorAll('[data-custactive]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        const [block, set] = radio.dataset.custactive.split('|');
+        this.#model.setCustomizationActive(Number(block), Number(set));
+        this.#render();
+      });
+    });
+    // Widening or narrowing what a track may learn changes every sphere
+    // dropdown under it, so the tab is redrawn.
+    root.querySelectorAll('[data-custspheres]').forEach((select) => {
+      select.addEventListener('change', () => {
+        this.#model.setCustomizationRule(Number(select.dataset.custspheres), 'spheres', select.value);
+        this.#render();
+      });
+    });
+    // A counting rule opens and shuts rows under the panel it is typed in.
+    root.querySelectorAll('[data-custrule]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [block, key, field] = input.dataset.custrule.split('|');
+        this.#model.setCustomizationRule(Number(block), key, field, input.value);
+        this.#render();
+      });
+    });
+    root.querySelectorAll('[data-remove-customization]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.#model.removeCustomization(Number(button.dataset.removeCustomization));
+        this.#render();
+      });
+    });
+
     this.#bindTemplateDrag(root);
     this.#bindLanguageDrag(root);
     this.#bindFeatDrag(root);
@@ -11036,6 +11194,16 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
             level: i + 1, talent: null, sphere: null, notes: null,
           })),
         });
+        this.#render();
+        break;
+      }
+      case 'add-customization': {
+        // Named after whichever class on the sheet has none yet, since that is
+        // nearly always the one meant; blank when they all have.
+        const taken = new Set((this.#model.data.training?.combat?.customizations || [])
+          .map((b) => String(b.className || '')));
+        const first = this.#classNames().find((n) => !taken.has(n)) || '';
+        this.#model.addCustomization(first, { sets: { start: 1 }, talents: { start: 1 } });
         this.#render();
         break;
       }

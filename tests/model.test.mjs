@@ -19,7 +19,8 @@ import {
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
-  parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels,
+  parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels, trackCount, isBasePick,
+  trackSpheres, normalizeTalentTracks, TRACK_SPHERE_SIDES, COMBAT_SPHERES, MAGIC_SPHERES,
   cleanSkillVariant, skillVariantKind, skillLabel, PERFORM_CATEGORIES, performCategory,
   MYTHIC_TIERS, MYTHIC_STAT_TIERS, MYTHIC_TIER_LEVEL, mythicTierGrant,
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
@@ -1076,6 +1077,179 @@ console.log('unarmed practitioner damage');
   c.set('training.combat.unarmed.usesOpenHand', false);
   check('toggling Open Hand off removes its talents', u().effectiveTalents, 16);
   c.set('training.combat.unarmed.usesOpenHand', true);
+}
+
+console.log('customized weapons -- parallel talent tracks with one of them live');
+{
+  // The armiger's own numbers, as a pack states them and nowhere else: three
+  // weapons, a fourth at 11th and a fifth at 19th; one talent per weapon,
+  // another at 3rd and every four levels after.
+  const ARMIGER = {
+    name: 'Customized weapon',
+    unit: 'weapon',
+    sets: { start: 3, gainsAt: '11, 19' },
+    talents: { start: 1, gainsAt: '3, +4' },
+  };
+
+  // The whole class table, column for column, out of two counting rules.
+  const table = [[1, 3, 1], [2, 3, 1], [3, 3, 2], [4, 3, 2], [5, 3, 2], [6, 3, 2],
+    [7, 3, 3], [8, 3, 3], [9, 3, 3], [10, 3, 3], [11, 4, 4], [12, 4, 4], [13, 4, 4],
+    [14, 4, 4], [15, 4, 5], [16, 4, 5], [17, 4, 5], [18, 4, 5], [19, 5, 6], [20, 5, 6]];
+  check('the armiger table, from its two rules',
+    table.map(([l]) => [l, trackCount(ARMIGER.sets, l), trackCount(ARMIGER.talents, l)]), table);
+  check('no levels in the class is no weapons at all', trackCount(ARMIGER.sets, 0), 0);
+  check('a base sphere is written as the sphere, and reads as one',
+    ['Brute Sphere', 'Guardian Sphere (Patrol)', '(Base)', 'Iai Slash'].map(isBasePick),
+    [true, true, true, false]);
+
+  const b = new Character(load('bryva'));
+  const cust = () => b.data.training.combat.customizations[0];
+  const combat = () => b.data.training.combat;
+  const block = b.addCustomization('Armiger', ARMIGER);
+  check('Bryva is an armiger 16: four weapons, five talents each',
+    [block.classLevels, block.setCount, block.talentCount], [16, 4, 5]);
+  check('so four sets of five rows are open',
+    cust().sets.map((s) => s.talents.filter((r) => r.granted).length), [5, 5, 5, 5]);
+
+  const fill = (i, weapon, rows) => {
+    b.setItem('training.combat.customizations.0.sets', i, 'weapon', weapon);
+    rows.forEach(([talent, sphere], ri) => {
+      const list = 'training.combat.customizations.0.sets.' + i + '.talents';
+      b.setItem(list, ri, 'talent', talent);
+      b.setItem(list, ri, 'sphere', sphere);
+    });
+  };
+  // The weapon her workbook actually wrote, in the block its Item Crafting tab
+  // carried beside the calculator, and a martial one to switch to.
+  fill(0, 'Handwraps 1', [['Veilweaving Sphere (Hands of the Crafter)', 'Veilweaving'],
+    ['Bind Hands Chakra', 'Veilweaving'], ['Capacity Increase', 'Veilweaving'],
+    ['Capacity Increase', 'Veilweaving'], ['Capacity Increase', 'Veilweaving']]);
+  fill(1, 'Naginata', [['Brute Sphere', 'Brute'], ['Bear Hug', 'Brute'],
+    ['Powerful Throw', 'Brute'], ['Vicious Strike', 'Brute'], ['Stolen Inches', 'Scoundrel']]);
+
+  // One weapon at a time: the live tally follows the switch, and what she owns
+  // in her own right never moves.
+  const own = () => combat().tallyOwn.Brute || 0;
+  const live = () => combat().tally.Brute || 0;
+  check('handwraps drawn: only her own Brute talent is live', [live(), own()], [1, 1]);
+  b.setCustomizationActive(0, 1);
+  check('naginata drawn: its four join it', [live(), own()], [5, 1]);
+  check('and the Scoundrel it grants is live without being hers',
+    [combat().tally.Scoundrel || 0, combat().tallyOwn.Scoundrel || 0], [1, 0]);
+
+  // A weapon may not learn a talent of a sphere it has no base in -- unless the
+  // armiger possesses that sphere herself.
+  const flags = (i) => cust().sets[i].talents.map((r) => !!r.needsBase);
+  check('Brute talents sit under the Brute sphere the weapon bought',
+    flags(1).slice(0, 4), [false, false, false, false]);
+  check('the Scoundrel talent has a base nowhere, and says so', flags(1)[4], true);
+  check('the handwraps bought Veilweaving, so their talents are fine',
+    flags(0), [false, false, false, false, false]);
+  b.setItem('training.combat.customizations.0.sets.1.talents', 4, 'sphere', 'Duelist');
+  check('Duelist is hers from her tradition, so the weapon needs no base in it',
+    flags(1)[4], false);
+  b.setItem('training.combat.customizations.0.sets.1.talents', 4, 'sphere', 'Scoundrel');
+
+  // Skill ranks read what she owns, never what she is holding: the Sleight of
+  // Hand row asks for Scoundrel, the naginata is granting it, and the row still
+  // reads unmet.
+  const sleight = () => b.trainingSkillRanks.find((r) => r.skill === 'Sleight of Hand');
+  check('a weapon-granted Scoundrel sphere pays no Sleight of Hand ranks',
+    [sleight().state, sleight().talents, sleight().current], ['unmet', 0, 0]);
+
+  // Unarmed damage is a constant, and does not fold up when the weapon does.
+  const u = () => combat().unarmed;
+  b.set('training.combat.unarmed.usesBrute', true);
+  const drawn = [u().perSphere.Brute, u().effectiveTalents];
+  check('the naginata’s Brute talents reach the unarmed die', drawn[0], 5);
+  b.setCustomizationActive(0, 0);
+  check('and sheathing it does not shrink that die',
+    [u().perSphere.Brute, u().effectiveTalents], drawn);
+  check('though the sphere table it also feeds does follow the switch', live(), 1);
+
+  // A drawback on a weapon-granted sphere buys a talent; buying it off spends it.
+  const rows = (i) => cust().sets[i].talents.filter((r) => r.granted).length;
+  b.setItem('training.combat.customizations.0.sets', 1, 'drawback', 'Sphere-specific drawback');
+  check('a drawback opens a sixth row on that weapon alone', [rows(1), rows(0)], [6, 5]);
+  b.setItem('training.combat.customizations.0.sets', 1, 'boughtOff', true);
+  check('buying it off spends the row again', rows(1), 5);
+  b.setItem('training.combat.customizations.0.sets', 1, 'drawback', '');
+  b.setItem('training.combat.customizations.0.sets', 1, 'boughtOff', false);
+
+  // Rows are opened and folded shut, never emptied. The fourth weapon carries
+  // something; the level then comes down under it.
+  fill(3, 'Trident', [['Lancer Sphere', 'Lancer']]);
+  b.setCustomizationActive(0, 3);
+  b.set('identity.level', 10);
+  check('at armiger 10 the fourth weapon is spare and every row on it shut',
+    [cust().setCount, cust().talentCount, cust().sets.length, cust().sets[3].spare],
+    [3, 3, 4, true]);
+  check('what was written on it is still there, greyed',
+    [cust().sets[3].weapon, cust().sets[3].talents[0].talent, cust().sets[3].talents[0].granted],
+    ['Trident', 'Lancer Sphere', false]);
+  check('the switch comes back to a weapon that exists', cust().active, 2);
+  check('and a spare weapon is live for nothing',
+    [combat().tally.Brute || 0, combat().tally.Lancer || 0], [1, 3]);
+  b.set('identity.level', 16);
+  check('back at 16 the fourth weapon and the fifth rows return',
+    [cust().setCount, cust().talentCount, cust().sets[3].spare], [4, 5, false]);
+  check('with the naginata written as it was',
+    cust().sets[1].talents.filter((r) => r.granted).map((r) => r.talent),
+    ['Brute Sphere', 'Bear Hug', 'Powerful Throw', 'Vicious Strike', 'Stolen Inches']);
+
+  // A weapon nobody ever named is not something to keep.
+  b.setCustomizationRule(0, 'sets', 'start', 2);
+  check('three weapons, and the empty third simply goes',
+    [cust().setCount, cust().sets.length], [3, 4]);
+  b.setCustomizationRule(0, 'sets', 'start', 3);
+
+  // The spec is the character's own once it has landed, and stays editable.
+  b.addCustomization('Armiger', ARMIGER);
+  check('and a class grants its customizations once, however often it is added',
+    combat().customizations.length, 1);
+  b.removeCustomization(0);
+  check('the whole track comes off again', combat().customizations.length, 0);
+}
+
+console.log('customized weapons -- what a track may learn');
+{
+  const ARMIGER = { sets: { start: 3, gainsAt: '11, 19' }, talents: { start: 1, gainsAt: '3, +4' } };
+  const b = new Character(load('bryva'));
+  const cust = () => b.data.training.combat.customizations[0];
+  const block = b.addCustomization('Armiger', ARMIGER);
+
+  // A customized weapon teaches its wielder to fight with it. A class whose
+  // weapons teach magic says so, which is a fact about that class.
+  check('a track learns martial spheres unless it says otherwise', block.spec.spheres, 'combat');
+  check('and that is what its rows are offered', trackSpheres(block.spec), COMBAT_SPHERES);
+  check('a spec naming a side that is not one lands on martial',
+    normalizeTalentTracks({ spheres: 'wizardry' }).spheres, 'combat');
+  check('the three sides, and what each is called',
+    TRACK_SPHERE_SIDES.map((k) => trackSpheres({ spheres: k }).length),
+    [COMBAT_SPHERES.length, MAGIC_SPHERES.length, COMBAT_SPHERES.length + MAGIC_SPHERES.length]);
+
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  [['Brute Sphere', 'Brute'], ['Veilweaving Sphere (Hands of the Crafter)', 'Veilweaving']]
+    .forEach(([talent, sphere], ri) => {
+      b.setItem(list, ri, 'talent', talent);
+      b.setItem(list, ri, 'sphere', sphere);
+    });
+  const flags = () => cust().sets[0].talents.slice(0, 2).map((r) => !!r.offList);
+  check('a magical sphere on a martial track is flagged, and kept',
+    [flags(), cust().sets[0].talents[1].sphere], [[false, true], 'Veilweaving']);
+  check('but it is still counted where its sphere belongs, on the side it belongs to',
+    b.data.training.magic.tally.Veilweaving, 1);
+
+  b.setCustomizationRule(0, 'spheres', 'both');
+  check('widened, both lists are on offer', trackSpheres(cust().spec).length,
+    COMBAT_SPHERES.length + MAGIC_SPHERES.length);
+  check('and nothing is off the list any more', flags(), [false, false]);
+  b.setCustomizationRule(0, 'spheres', 'combat');
+  check('narrowed again, the row is flagged again and still says what it said',
+    [flags(), cust().sets[0].talents[1].talent],
+    [[false, true], 'Veilweaving Sphere (Hands of the Crafter)']);
+  b.setCustomizationRule(0, 'spheres', 'nonsense');
+  check('a side that is not one changes nothing', cust().spec.spheres, 'combat');
 }
 
 console.log('specialty skills');

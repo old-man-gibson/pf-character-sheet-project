@@ -36,6 +36,14 @@ A pack carries two kinds of thing:
       "skillRanks": 4, "classSkills": ["Acrobatics", "Climb", "…"],
       "systems": ["path-of-war"],
       "features": [{ "level": 1, "name": "Rage" }, { "level": 2, "name": "Rage power" }] },
+    { "kind": "class", "name": "Armiger", "hd": 10, "bab": 1, "goodFort": true, "goodRef": true,
+      "skillRanks": 4,
+      "tracks": { "name": "Customized weapon", "unit": "weapon", "spheres": "combat",
+        "sets":    { "start": 3, "gainsAt": "11, 19" },
+        "talents": { "start": 1, "gainsAt": "3, +4" } } },
+    { "kind": "archetype", "name": "Antiquarian", "class": "Armiger",
+      "tracks": { "spheres": "both" },
+      "features": [{ "level": 1, "name": "Relic lore", "text": "This replaces quick change." }] },
     { "kind": "tracker", "name": "Rage rounds", "maxFormula": "4 + con.mod + (level - 1) * 2", "refresh": "per day" },
     { "kind": "race", "name": "Dwarf", "size": "Medium", "speed": 20,
       "abilityMods": { "con": 2, "wis": 2, "cha": -2 },
@@ -79,6 +87,24 @@ templates. A sheet written by an earlier version, which put a class's text there
 across on its next load: a group named for a class, carrying no template link, every one of
 its features named on that class's ladder, and the class holding no text of its own yet.
 Anything less exact is a template and stays one.
+
+**A class whose talents arrive on several tracks at once** — an armiger's customized
+weapons — says so under `tracks`, as two counting rules: how many tracks there are, and how
+many talents each of them holds. Each is a `start` plus a `gainsAt` level rule naming where
+the count goes up, which is how a class table words it in prose. The example above is the
+whole armiger: three weapons and a fourth at 11th and a fifth at 19th, one talent each and
+another at 3rd and every four levels after. A bare number is a count that never moves
+(`"sets": 2`), a bare string is where it goes up from one (`"talents": "4, +4"`). `spheres`
+is `combat` (the default), `magic` or `both`. Attaching
+copies the rules onto the character like everything else a pack lands, and the weapons
+themselves live on Spheres & Magic (see
+[Customized weapons](sub-systems.md#spheres--magic-training)).
+
+**An archetype may change a track**, and carries only the parts it changes: the one that
+lets an armiger's customized weapons teach magic is `"tracks": {"spheres": "both"}` and
+nothing else, merged over what the class states when the archetype is added and put back
+when it comes off. An archetype whose class has no track on the sheet says so rather than
+inventing the counting rules it has none of.
 
 **On the sheet**, the ⚙ manager's *Extensions — building blocks* shelf lists every block
 the enabled packs offer, filterable by kind and searchable, each with **+ Add**. The search
