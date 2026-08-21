@@ -38,9 +38,9 @@ export function prose(model, bindingAttr, value, rows = 3, extraClass = '', loca
   // is what says how. Set on the wrapper so it covers both layers, and the
   // rendered view's own title still wins while it is showing.
   return `<span class="prose ${rendered ? 'has-tokens' : ''} ${extraClass}" title="${esc(PROSE_HINT)}">
-    <textarea ${bindingAttr} data-kind="text" rows="${rows}" spellcheck="false">${esc(text)}</textarea>
-    ${rendered ? `<span class="prose-view" title="Click to edit the formulas">${rendered}</span>` : ''}
-  </span>`;
+      <textarea ${bindingAttr} data-kind="text" rows="${rows}" spellcheck="false">${esc(text)}</textarea>
+      ${rendered ? `<span class="prose-view" title="Click to edit the formulas">${rendered}</span>` : ''}
+    </span>`;
 }
 
 /**
@@ -60,17 +60,17 @@ export function foldedProse(model, ctx, key, bindingAttr, value, placeholder = '
   const text = String(value ?? '');
   if (ctx.openCell === key) {
     return `<div class="foldcell open" data-foldcell-open="${esc(key)}">
-      ${prose(model, bindingAttr, text, 2, 'grow')}
-    </div>`;
+        ${prose(model, bindingAttr, text, 2, 'grow')}
+      </div>`;
   }
   const shown = text.trim()
     ? (hasTokens(text) ? renderedProse(model, text) : esc(text))
     : `<span class="ph">${esc(placeholder)}</span>`;
   return `<button type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
-    data-foldcell="${esc(key)}"
-    title="${esc(text.trim() ? `${text}
+      data-foldcell="${esc(key)}"
+      title="${esc(text.trim() ? `${text}
 
-Click to edit.` : PROSE_HINT)}">${shown}</button>`;
+  Click to edit.` : PROSE_HINT)}">${shown}</button>`;
 }
 
 /**

@@ -53,12 +53,12 @@ export function renderStatsPanel(model, ctx) {
       // On or off, worth +2. An imported value that is neither says so
       // rather than being silently rounded away by the checkbox.
       return `<td class="mid ${banding}">
-        <input type="checkbox" ${v ? 'checked' : ''} data-build="${ab}|attunement" data-kind="bool"
-          aria-label="${ABILITY_LABELS[ab]} attunement"
-          ${unlocked ? `title="+${ATTUNEMENT_BONUS} when attuned"`
+          <input type="checkbox" ${v ? 'checked' : ''} data-build="${ab}|attunement" data-kind="bool"
+            aria-label="${ABILITY_LABELS[ab]} attunement"
+            ${unlocked ? `title="+${ATTUNEMENT_BONUS} when attuned"`
   : `disabled title="Attunement unlocks at level ${ATTUNEMENT_MIN_LEVEL}"`}>
-        ${v && v !== ATTUNEMENT_BONUS ? `<span class="hint">${fmt(v)}</span>` : ''}
-      </td>`;
+          ${v && v !== ATTUNEMENT_BONUS ? `<span class="hint">${fmt(v)}</span>` : ''}
+        </td>`;
     }
     return `<td class="num ${banding}"><input type="number" value="${v}" data-build="${ab}|${key}"></td>`;
   };
@@ -66,129 +66,129 @@ export function renderStatsPanel(model, ctx) {
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
 
   return `<div class="grid">
-    <div class="statpair">
-    <section class="panel">
-      <h3>Permanent bonuses
-        ${BUILD_OPTIONAL_KEYS.map((k) => {
+      <div class="statpair">
+      <section class="panel">
+        <h3>Permanent bonuses
+          ${BUILD_OPTIONAL_KEYS.map((k) => {
           const label = allCols.find(([key]) => key === k)?.[1] || k;
           const on = showOptional[k];
           return `<button data-buildcol="${k}" aria-pressed="${on}"
-            title="${on ? 'Hide' : 'Show'} the ${esc(label)} column">${on ? 'Hide' : 'Show'} ${esc(label)}</button>`;
+              title="${on ? 'Hide' : 'Show'} the ${esc(label)} column">${on ? 'Hide' : 'Show'} ${esc(label)}</button>`;
         }).join('')}
-      </h3>
-      <div class="tablewrap">
-        <table class="build">
-          <thead>
-            <tr class="groups">
-              <th></th>
-              ${groups.map((g) => (g.label
+        </h3>
+        <div class="tablewrap">
+          <table class="build">
+            <thead>
+              <tr class="groups">
+                <th></th>
+                ${groups.map((g) => (g.label
                 ? `<th class="num grouphead" colspan="${g.cols.length + (g.sum ? 1 : 0)}" title="${esc(g.hint || '')}">
-                     ${esc(g.label)}${g.cap ? ` <span class="capnote">max +${g.cap}</span>` : ''}</th>`
+                       ${esc(g.label)}${g.cap ? ` <span class="capnote">max +${g.cap}</span>` : ''}</th>`
                 : `<th colspan="${g.cols.length}"></th>`)).join('')}
-              <th colspan="2"></th>
-            </tr>
-            <tr>
-              <th></th>
-              ${groups.map((g) => `${g.cols.map(([, label], i) => `<th class="num ${band(g, i)}">${esc(label)}</th>`).join('')}${
+                <th colspan="2"></th>
+              </tr>
+              <tr>
+                <th></th>
+                ${groups.map((g) => `${g.cols.map(([, label], i) => `<th class="num ${band(g, i)}">${esc(label)}</th>`).join('')}${
                 g.sum ? '<th class="num grouped groupend" title="What the group actually contributes after its cap">Used</th>' : ''}`).join('')}
-              <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
-              <th class="num">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ABILITIES.map((ab) => {
+                <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ABILITIES.map((ab) => {
               const r = build[ab].resolved || {};
               return `<tr>
-                <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
-                ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
+                  <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
+                  ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
                   g.sum ? `<td class="num grouped groupend total ${r.enhancementWasted ? 'over' : ''}"
-                    title="${r.enhancementWasted
+                      title="${r.enhancementWasted
   ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
   : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`}">${r[g.sum] ?? 0}</td>` : ''}`).join('')}
-                <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'permanent') || '—'}</td>
-                <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
-              </tr>`;
+                  <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'permanent') || '—'}</td>
+                  <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
+                </tr>`;
             }).join('')}
-            <tr class="costrow">
-              <th scope="row">Cost</th>
-              <td class="num">${pb.total}</td>
-              ${permCols.slice(1).map(() => '<td></td>').join('')}
-              ${groups.filter((g) => g.sum).map(() => '<td></td>').join('')}
-              <td></td><td></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="statline" style="margin-top:8px">
-        <span class="label">Point-buy spend</span>
-        <span class="value ${pb.total > pb.budget ? 'over' : ''}">
-          ${pb.total} / ${pb.budget}
-          ${pb.total > pb.budget ? ` (${pb.total - pb.budget} over)` : ''}
-        </span>
-      </div>
-      <p class="hint">
-        Per ability: ${ABILITIES.map((a) => `${ABILITY_LABELS[a]} ${pb.per[a] >= 0 ? '' : ''}${pb.per[a]}`).join(' &middot; ')}
-      </p>
-      <p class="hint">
-        <strong>ABP</strong>, <strong>Array</strong> and <strong>Level/4</strong> are
-        filled in from the picks below and cannot be typed over.
-        <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}, and unlocks at
-        level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
-      </p>
-      ${over.length ? `<p class="hint warn">
-        Over the enhancement cap on ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>
-        (${build[a].resolved.rawEnhancement} → ${ENHANCEMENT_CAP},
-        ${build[a].resolved.enhancementWasted} wasted)`).join(', ')}.
-      </p>` : ''}
-    </section>
+              <tr class="costrow">
+                <th scope="row">Cost</th>
+                <td class="num">${pb.total}</td>
+                ${permCols.slice(1).map(() => '<td></td>').join('')}
+                ${groups.filter((g) => g.sum).map(() => '<td></td>').join('')}
+                <td></td><td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="statline" style="margin-top:8px">
+          <span class="label">Point-buy spend</span>
+          <span class="value ${pb.total > pb.budget ? 'over' : ''}">
+            ${pb.total} / ${pb.budget}
+            ${pb.total > pb.budget ? ` (${pb.total - pb.budget} over)` : ''}
+          </span>
+        </div>
+        <p class="hint">
+          Per ability: ${ABILITIES.map((a) => `${ABILITY_LABELS[a]} ${pb.per[a] >= 0 ? '' : ''}${pb.per[a]}`).join(' &middot; ')}
+        </p>
+        <p class="hint">
+          <strong>ABP</strong>, <strong>Array</strong> and <strong>Level/4</strong> are
+          filled in from the picks below and cannot be typed over.
+          <strong>Attuned</strong> is a single +${ATTUNEMENT_BONUS}, and unlocks at
+          level ${ATTUNEMENT_MIN_LEVEL}${unlocked ? '' : ' (locked)'}.
+        </p>
+        ${over.length ? `<p class="hint warn">
+          Over the enhancement cap on ${over.map((a) => `<strong>${ABILITY_LABELS[a]}</strong>
+          (${build[a].resolved.rawEnhancement} → ${ENHANCEMENT_CAP},
+          ${build[a].resolved.enhancementWasted} wasted)`).join(', ')}.
+        </p>` : ''}
+      </section>
 
-    <section class="panel">
-      <h3>Temporary bonuses</h3>
-      <div class="tablewrap">
-        <table class="build">
-          <thead>
-            <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
-            <tr>
-              <th></th>
-              ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
-              <th class="num" title="Bonuses forwarded here as temporary ones — written {str.score += 2 as temp.size} somewhere else on the sheet">Fwd</th>
-              <th class="num" title="Everything the temporary columns add up to">Temp</th>
-              <th class="num" title="Temporary score, used by every derived stat">Score</th>
-              <th class="num">Mod</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ABILITIES.map((ab) => {
+      <section class="panel">
+        <h3>Temporary bonuses</h3>
+        <div class="tablewrap">
+          <table class="build">
+            <thead>
+              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
+              <tr>
+                <th></th>
+                ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
+                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.score += 2 as temp.size} somewhere else on the sheet">Fwd</th>
+                <th class="num" title="Everything the temporary columns add up to">Temp</th>
+                <th class="num" title="Temporary score, used by every derived stat">Score</th>
+                <th class="num">Mod</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ABILITIES.map((ab) => {
               const r = build[ab].resolved || {};
               const a = c.abilities[ab];
               return `<tr>
-                <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
-                ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'temporary') || '—'}</td>
-                <td class="num">${r.temporary || a.forwarded?.temporary
+                  <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
+                  ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
+                  <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'temporary') || '—'}</td>
+                  <td class="num">${r.temporary || a.forwarded?.temporary
                   ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0)) : '—'}</td>
-                <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
-                <td class="num total">${fmt(a.totalMod)}</td>
-              </tr>`;
+                  <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
+                  <td class="num total">${fmt(a.totalMod)}</td>
+                </tr>`;
             }).join('')}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint">
+          Temporary bonuses feed the Temp Score used by every derived stat;
+          the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
+          written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
+          for a permanent one, <code>as temp.size</code> for a temporary one — and points
+          back at the sentence that sent it.
+        </p>
+      </section>
       </div>
-      <p class="hint">
-        Temporary bonuses feed the Temp Score used by every derived stat;
-        the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
-        written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
-        for a permanent one, <code>as temp.size</code> for a temporary one — and points
-        back at the sentence that sent it.
-      </p>
-    </section>
-    </div>
 
-    ${defenceBonusPanel(model, model)}
-    ${abpPicksPanel(model, model)}
-    ${milestonePicksPanel(model, model)}
-    ${arrayPicksPanel(model, model)}
-  </div>`;
+      ${defenceBonusPanel(model, model)}
+      ${abpPicksPanel(model, model)}
+      ${milestonePicksPanel(model, model)}
+      ${arrayPicksPanel(model, model)}
+    </div>`;
 }
 
 /**
@@ -238,13 +238,13 @@ function defenceBonusPanel(model) {
     const title = off ? `title="${flags.touch === false ? 'Armour-side: touch attacks ignore it' : 'Lost when flat-footed'}"` : '';
     if (abpOf[key]) {
       return `<td class="num${groupClass(key)}" ${title}>
-        ${roField(resolved?.[key] ?? 0, `From the ABP ladder at level ${c.identity.level}. With the typed bonus beside it, the pair stops at +${ABP_DEFENCE_CAP}.`)}</td>`;
+          ${roField(resolved?.[key] ?? 0, `From the ABP ladder at level ${c.identity.level}. With the typed bonus beside it, the pair stops at +${ABP_DEFENCE_CAP}.`)}</td>`;
     }
     const pairTitle = typedOf[key]
       ? ` Counts with the ABP bonus beside it up to +${ABP_DEFENCE_CAP} in all; past +${ABP_DEFENCE_CAP} on its own, it stands alone.` : '';
     const over = typedOf[key] && abpGroupTotal(resolved?.[typedOf[key]], resolved?.[key]) < (Number(resolved?.[typedOf[key]]) || 0) + (Number(resolved?.[key]) || 0);
     return `<td class="num${groupClass(key)}${over ? ' over' : ''}" ${title}>
-      ${exprField(bind(key), block?.[key] ?? 0, {
+        ${exprField(bind(key), block?.[key] ?? 0, {
         width: '4.4rem',
         value: resolved?.[key],
         error: errors?.[key],
@@ -253,51 +253,51 @@ function defenceBonusPanel(model) {
   }).join('');
 
   const head = (types) => types.map(([key, label, flags]) => `<th class="num${groupClass(key)}"
-    ${flags?.touch === false ? 'title="Not counted against touch attacks"'
+      ${flags?.touch === false ? 'title="Not counted against touch attacks"'
   : flags?.flatFooted === false ? 'title="Not counted while flat-footed"' : ''}>${esc(label)}${typedOf[key] ? `<span class="capnote"> ≤ +${ABP_DEFENCE_CAP}</span>` : ''}</th>`).join('');
 
   return `<section class="panel span2">
-    <h3>Save &amp; AC bonuses</h3>
-    <div class="tablewrap"><table class="build bonusgrid">
-      <thead><tr><th></th><th class="num">Total</th>${head(SAVE_BONUS_TYPES)}</tr></thead>
-      <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => {
+      <h3>Save &amp; AC bonuses</h3>
+      <div class="tablewrap"><table class="build bonusgrid">
+        <thead><tr><th></th><th class="num">Total</th>${head(SAVE_BONUS_TYPES)}</tr></thead>
+        <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => {
         const s = c.saves[k];
         return `<tr>
-          <th scope="row">${label}</th>
-          <td class="num total" title="Base ${s.base} + ability + these">${fmt(s.total)}</td>
-          ${cells(s.bonuses, s.bonusesResolved, s.bonusErrors, SAVE_BONUS_TYPES,
+            <th scope="row">${label}</th>
+            <td class="num total" title="Base ${s.base} + ability + these">${fmt(s.total)}</td>
+            ${cells(s.bonuses, s.bonusesResolved, s.bonusErrors, SAVE_BONUS_TYPES,
             (key) => `data-set="saves.${k}.bonuses.${key}"`)}
-        </tr>`;
+          </tr>`;
       }).join('')}</tbody>
-    </table></div>
-    <div class="tablewrap" style="margin-top:10px"><table class="build bonusgrid">
-      <thead><tr><th></th><th class="num">Total</th>${head(AC_BONUS_TYPES)}</tr></thead>
-      <tbody><tr>
-        <th scope="row">AC</th>
-        <td class="num total" title="Touch ${c.defenses.touch} · flat-footed ${c.defenses.flatFooted}">${c.defenses.ac}</td>
-        ${cells(c.defenses.acBonuses, c.defenses.acBonusesResolved, c.defenses.acBonusErrors,
+      </table></div>
+      <div class="tablewrap" style="margin-top:10px"><table class="build bonusgrid">
+        <thead><tr><th></th><th class="num">Total</th>${head(AC_BONUS_TYPES)}</tr></thead>
+        <tbody><tr>
+          <th scope="row">AC</th>
+          <td class="num total" title="Touch ${c.defenses.touch} · flat-footed ${c.defenses.flatFooted}">${c.defenses.ac}</td>
+          ${cells(c.defenses.acBonuses, c.defenses.acBonusesResolved, c.defenses.acBonusErrors,
           AC_BONUS_TYPES, (key) => `data-set="defenses.acBonuses.${key}"`)}
-      </tr></tbody>
-    </table></div>
-    <p class="hint">
-      Each cell takes a number or a formula, so a conditional bonus can be written as
-      the rule it is — Force Redirection's
-      <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code> keeps up when BAB moves,
-      where a typed-in number would not. Formulas read abilities, level, BAB and any
-      name defined in prose, and show in the GM's Formula Audit.
-    </p>
-    <p class="hint">
-      Natural-armour and enhancement bonuses do not count against <strong>touch</strong>,
-      and dodge is lost while <strong>flat-footed</strong> — both follow from the column,
-      so all three numbers move together. The three <strong>ABP</strong> columns follow the
-      character's level along the progression's ladder and are not typed; each is paired
-      with the typed bonus of the same kind (resistance, deflection, enhanced natural
-      armour), and the pair adds up to at most +${ABP_DEFENCE_CAP} — unless the typed side is
-      past +${ABP_DEFENCE_CAP} by itself, in which case it stands alone.
-      <strong>Sheet</strong> is what the source total held beyond the columns the export
-      could read; it is an ordinary field, and starts at 0 on a character built here.
-    </p>
-  </section>`;
+        </tr></tbody>
+      </table></div>
+      <p class="hint">
+        Each cell takes a number or a formula, so a conditional bonus can be written as
+        the rule it is — Force Redirection's
+        <code>min(str.mod - dex.mod, 3 + floor(bab / 2))</code> keeps up when BAB moves,
+        where a typed-in number would not. Formulas read abilities, level, BAB and any
+        name defined in prose, and show in the GM's Formula Audit.
+      </p>
+      <p class="hint">
+        Natural-armour and enhancement bonuses do not count against <strong>touch</strong>,
+        and dodge is lost while <strong>flat-footed</strong> — both follow from the column,
+        so all three numbers move together. The three <strong>ABP</strong> columns follow the
+        character's level along the progression's ladder and are not typed; each is paired
+        with the typed bonus of the same kind (resistance, deflection, enhanced natural
+        armour), and the pair adds up to at most +${ABP_DEFENCE_CAP} — unless the typed side is
+        past +${ABP_DEFENCE_CAP} by itself, in which case it stands alone.
+        <strong>Sheet</strong> is what the source total held beyond the columns the export
+        could read; it is an ordinary field, and starts at 0 on a character built here.
+      </p>
+    </section>`;
 }
 
 
@@ -308,43 +308,43 @@ function milestonePicksPanel(model) {
   const level4 = (l) => (c.progressionPicks?.level4 || []).find((p) => p.level === l) || {};
   const rows = Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length);
   return `<section class="panel">
-    <h3>Level/4 &amp; mythic increases</h3>
-    <div class="tablewrap"><table class="build">
-      <thead>
-        <tr class="groups">
-          <th class="num grouphead" colspan="2">Level/4 <span class="capnote">+1</span></th>
-          <th class="num grouphead grouped groupstart" colspan="2">Mythic <span class="capnote">+2</span></th>
-        </tr>
-        <tr>
-          <th class="num">Lvl</th><th>Ability</th>
-          <th class="num grouped groupstart">Tier</th><th class="grouped groupend">Ability</th>
-        </tr>
-      </thead>
-      <tbody>${Array.from({ length: rows }, (_, i) => {
+      <h3>Level/4 &amp; mythic increases</h3>
+      <div class="tablewrap"><table class="build">
+        <thead>
+          <tr class="groups">
+            <th class="num grouphead" colspan="2">Level/4 <span class="capnote">+1</span></th>
+            <th class="num grouphead grouped groupstart" colspan="2">Mythic <span class="capnote">+2</span></th>
+          </tr>
+          <tr>
+            <th class="num">Lvl</th><th>Ability</th>
+            <th class="num grouped groupstart">Tier</th><th class="grouped groupend">Ability</th>
+          </tr>
+        </thead>
+        <tbody>${Array.from({ length: rows }, (_, i) => {
         // One milestone pair per row: its number, then its ability.
         const pair = (milestone, reached, control, band) => (milestone === undefined
           ? `<td class="noslot ${band}"></td><td class="noslot ${band}"></td>`
           : `<td class="num ${band} ${reached ? '' : 'future'}">${milestone}</td>
-             <td class="${band} ${reached ? '' : 'future'}">${control}</td>`);
+               <td class="${band} ${reached ? '' : 'future'}">${control}</td>`);
         const l = LEVEL4_LEVELS[i];
         const t = MYTHIC_STAT_TIERS[i];
         return `<tr>
-          ${pair(l, l <= level, l === undefined ? ''
+            ${pair(l, l <= level, l === undefined ? ''
             : pickSelect('level4', l, 0, level4(l).ability, ABILITY_LABELS_LIST, false), '')}
-          ${pair(t, t <= tier, t === undefined ? ''
+            ${pair(t, t <= tier, t === undefined ? ''
             : pickSelect('mythicStat', t, 0, mythicPickAt(model, t), ABILITY_LABELS_LIST, false),
           'grouped')}
-        </tr>`;
+          </tr>`;
       }).join('')}</tbody>
-    </table></div>
-    <p class="hint">
-      <strong>Level/4</strong> is +1 at every fourth level. <strong>Mythic</strong> is
-      +2 at every even tier — the same increases as the ladder on
-      <strong>Feats &amp; Mythic</strong>, either place edits the one set.
-      Currently level ${level}, tier ${tier}; anything past that is greyed and does not
-      count yet.
-    </p>
-  </section>`;
+      </table></div>
+      <p class="hint">
+        <strong>Level/4</strong> is +1 at every fourth level. <strong>Mythic</strong> is
+        +2 at every even tier — the same increases as the ladder on
+        <strong>Feats &amp; Mythic</strong>, either place edits the one set.
+        Currently level ${level}, tier ${tier}; anything past that is greyed and does not
+        count yet.
+      </p>
+    </section>`;
 }
 
 /** The ability picked for one mythic tier's +2, if any. */
@@ -375,10 +375,10 @@ function abpPicksPanel(model) {
   const picks = c.progressionPicks?.abp || [];
   const at = (l) => picks.find((p) => p.level === l) || {};
   return `<section class="panel">
-    <h3>ABP — Mental &amp; Physical Prowess</h3>
-    <div class="tablewrap"><table class="build">
-      <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
-      <tbody>${ABP_LEVELS.map((l) => {
+      <h3>ABP — Mental &amp; Physical Prowess</h3>
+      <div class="tablewrap"><table class="build">
+        <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
+        <tbody>${ABP_LEVELS.map((l) => {
         const row = at(l);
         const future = l > level;
         // A track that gains nothing at this level has no slot at all, so
@@ -390,24 +390,24 @@ function abpPicksPanel(model) {
           const src = abpSourceLevel(track, l);
           if (src !== l) {
             return `<td class="linked" title="Raises the level ${src} choice">
-              ${val(at(src)[track])} <span class="badge">from ${src}</span></td>`;
+                ${val(at(src)[track])} <span class="badge">from ${src}</span></td>`;
           }
           return `<td>${pickSelect('abp', l, track, row[track], allowed, false)}</td>`;
         };
         return `<tr class="${future ? 'future' : ''}">
-          <td class="num">${l}</td>
-          ${cell('mental', PROWESS_TRACKS.mental)}
-          ${cell('physical', PROWESS_TRACKS.physical)}
-        </tr>`;
+            <td class="num">${l}</td>
+            ${cell('mental', PROWESS_TRACKS.mental)}
+            ${cell('physical', PROWESS_TRACKS.physical)}
+          </tr>`;
       }).join('')}</tbody>
-    </table></div>
-    <p class="hint">
-      +2 each. The two tracks advance on different levels, so most rows offer a
-      choice on one side only. Levels 11 and 12 raise the ability chosen at 6 and 7
-      rather than offering a new choice. Rows above level ${level} are greyed: they
-      are planned but do not count toward the score yet.
-    </p>
-  </section>`;
+      </table></div>
+      <p class="hint">
+        +2 each. The two tracks advance on different levels, so most rows offer a
+        choice on one side only. Levels 11 and 12 raise the ability chosen at 6 and 7
+        rather than offering a new choice. Rows above level ${level} are greyed: they
+        are planned but do not count toward the score yet.
+      </p>
+    </section>`;
 }
 
 
@@ -419,21 +419,21 @@ function arrayPicksPanel(model) {
   // Laid out as wrapping groups rather than a table: four picks side by side
   // needs more width than this column has, and a table would just overflow.
   return `<section class="panel">
-    <h3>Optional array</h3>
-    <p class="hint warn" style="margin-top:0">
-      Bought separately, with Primordia shards — these do not come with the level.
-    </p>
-    ${ARRAY_LEVELS.map((l) => {
+      <h3>Optional array</h3>
+      <p class="hint warn" style="margin-top:0">
+        Bought separately, with Primordia shards — these do not come with the level.
+      </p>
+      ${ARRAY_LEVELS.map((l) => {
       const row = at(l);
       const slots = ARRAY_SLOTS[l] || [];
       return `<div class="pickgroup ${l > level ? 'future' : ''}">
-        <span class="picklvl">Level ${l}</span>
-        <div class="picks">
-          ${slots.map((slot) => pickSelect('array', l, slot, row.slots?.[slot], ABILITY_LABELS_LIST, false)).join('')}
-        </div>
-      </div>`;
+          <span class="picklvl">Level ${l}</span>
+          <div class="picks">
+            ${slots.map((slot) => pickSelect('array', l, slot, row.slots?.[slot], ABILITY_LABELS_LIST, false)).join('')}
+          </div>
+        </div>`;
     }).join('')}
-    <p class="hint">+2 each — four picks at 8, three at 12 and 16.${c.progressionPicks?.arrayNote
+      <p class="hint">+2 each — four picks at 8, three at 12 and 16.${c.progressionPicks?.arrayNote
       ? ` Sheet note: ${esc(String(c.progressionPicks.arrayNote).replace(/^Array \(Optional\)\s*/, '').replace(/\s+/g, ' '))}` : ''}</p>
-  </section>`;
+    </section>`;
 }

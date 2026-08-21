@@ -29,48 +29,48 @@ export function renderTrackersPanel(model, ctx) {
   const preview = previewBox(model, 'add', draft.formula, draft.minFormula);
 
   return `<div class="grid">
-    <section class="panel span2">
-      <h3>Resource trackers</h3>
-      ${trackers.length ? trackers.map((t) => trackerRow(model, ctx, t)).join('') : '<p class="empty">No trackers yet.</p>'}
-    </section>
+      <section class="panel span2">
+        <h3>Resource trackers</h3>
+        ${trackers.length ? trackers.map((t) => trackerRow(model, ctx, t)).join('') : '<p class="empty">No trackers yet.</p>'}
+      </section>
 
-    <section class="panel span2">
-      <h3>Add a tracker</h3>
-      <div class="formrow">
-        <div class="cols">
-          <input data-draft="name" placeholder="Name (e.g. Mythic Power)" value="${esc(draft.name)}">
-          <input class="mono" data-draft="formula" placeholder="Max, as a formula (e.g. 3 + mythic.tier * 2)" value="${esc(draft.formula)}">
-          <input class="mono" data-draft="minFormula" placeholder="Min (optional, e.g. -floor(qi.max / 2))" value="${esc(draft.minFormula || '')}">
-          <input data-draft="refresh" placeholder="Refresh (Daily)" value="${esc(draft.refresh)}">
+      <section class="panel span2">
+        <h3>Add a tracker</h3>
+        <div class="formrow">
+          <div class="cols">
+            <input data-draft="name" placeholder="Name (e.g. Mythic Power)" value="${esc(draft.name)}">
+            <input class="mono" data-draft="formula" placeholder="Max, as a formula (e.g. 3 + mythic.tier * 2)" value="${esc(draft.formula)}">
+            <input class="mono" data-draft="minFormula" placeholder="Min (optional, e.g. -floor(qi.max / 2))" value="${esc(draft.minFormula || '')}">
+            <input data-draft="refresh" placeholder="Refresh (Daily)" value="${esc(draft.refresh)}">
+          </div>
+          ${preview}
+          <input data-draft="note" placeholder="Note (optional) — {= self.current * level} reads the pool as it fills"
+            value="${esc(draft.note || '')}" aria-label="Note">
+          <div><button class="primary" data-action="add-tracker">Add tracker</button></div>
         </div>
-        ${preview}
-        <input data-draft="note" placeholder="Note (optional) — {= self.current * level} reads the pool as it fills"
-          value="${esc(draft.note || '')}" aria-label="Note">
-        <div><button class="primary" data-action="add-tracker">Add tracker</button></div>
-      </div>
-      <p class="hint">
-        Formulas are plain text and are never executed as code — they are parsed and
-        evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.
-        Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
-        <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
-        <code>mod</code> <code>iterations</code>.
-        <button data-action="formulas" class="linkish"
-          title="The guide, a scratchpad, and every value with its current number"
-          >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
-        value this character can read with what it is worth now.
-      </p>
-      <p class="hint">
-        <strong>Min</strong> is 0 unless you give it a formula. A negative min makes a two-sided
-        meter that swings below zero — e.g. max <code>floor((burn.max + qi.max) / 4)</code>
-        and min <code>-floor((burn.max + qi.max) / 4)</code> for a ±7 pool. Custom trackers
-        can be edited later with ✎.
-      </p>
-      <details>
-        <summary class="hint" style="cursor:pointer">Available values (${names.length})</summary>
-        <div style="margin-top:6px">${names.map((n) => `<span class="tag">${esc(n)}</span>`).join('')}</div>
-      </details>
-    </section>
-  </div>`;
+        <p class="hint">
+          Formulas are plain text and are never executed as code — they are parsed and
+          evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.
+          Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
+          <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
+          <code>mod</code> <code>iterations</code>.
+          <button data-action="formulas" class="linkish"
+            title="The guide, a scratchpad, and every value with its current number"
+            >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
+          value this character can read with what it is worth now.
+        </p>
+        <p class="hint">
+          <strong>Min</strong> is 0 unless you give it a formula. A negative min makes a two-sided
+          meter that swings below zero — e.g. max <code>floor((burn.max + qi.max) / 4)</code>
+          and min <code>-floor((burn.max + qi.max) / 4)</code> for a ±7 pool. Custom trackers
+          can be edited later with ✎.
+        </p>
+        <details>
+          <summary class="hint" style="cursor:pointer">Available values (${names.length})</summary>
+          <div style="margin-top:6px">${names.map((n) => `<span class="tag">${esc(n)}</span>`).join('')}</div>
+        </details>
+      </section>
+    </div>`;
 }
 
 /**
@@ -123,37 +123,37 @@ function trackerRow(model, ctx, t) {
     : '';
 
   return `<div class="tracker ${t.error ? 'invalid' : ''} ${twoSided ? 'two-sided' : ''}">
-    <div>
-      <div class="tname">${esc(t.name)}
-        ${t.source === 'player' ? '<span class="badge player">custom</span>'
+      <div>
+        <div class="tname">${esc(t.name)}
+          ${t.source === 'player' ? '<span class="badge player">custom</span>'
   : `<span class="badge">from sheet${t.edited ? ', edited' : ''}</span>`}
-        ${protectedTracker ? '<span class="badge" title="Every character has Mythic Power from level 8">required</span>' : ''}
-        ${t.refresh ? `<span class="badge">${esc(t.refresh)}</span>` : ''}
-        ${draining ? '<span class="badge">drains</span>' : ''}
-        ${stateBadge}
-      </div>
-      ${t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
-      ${t.minFormula ? formulaMeta(model, 'min', t.minFormula) : ''}
-      ${['max', 'min'].map((edge) => {
+          ${protectedTracker ? '<span class="badge" title="Every character has Mythic Power from level 8">required</span>' : ''}
+          ${t.refresh ? `<span class="badge">${esc(t.refresh)}</span>` : ''}
+          ${draining ? '<span class="badge">drains</span>' : ''}
+          ${stateBadge}
+        </div>
+        ${t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
+        ${t.minFormula ? formulaMeta(model, 'min', t.minFormula) : ''}
+        ${['max', 'min'].map((edge) => {
         const badge = forwardedBadge(model, `tracker.${t.id}.${edge}`);
         return badge ? `<div class="tmeta">${esc(edge)} ${badge}</div>` : '';
       }).join('')}
-      ${t.note ? `<div class="tnote">${hasTokens(t.note)
+        ${t.note ? `<div class="tnote">${hasTokens(t.note)
     ? renderedProse(t.note, model.trackerScope(t))
     : esc(t.note)}</div>` : ''}
-      ${t.error ? `<div class="terr">${esc(t.error)}</div>` : ''}
-      ${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}
-    </div>
-    <div class="tracker-controls">
-      <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${minusLabel}">−</button>
-      <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
-        aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
-      <span class="pool">${range}</span>
-      <button data-tracker-step="${t.id}" data-delta="1" aria-label="${plusLabel}">+</button>
-      <button data-tracker-edit="${t.id}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
-      ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${t.id}" aria-label="Remove ${esc(t.name)}">×</button>`}
-    </div>
-  </div>`;
+        ${t.error ? `<div class="terr">${esc(t.error)}</div>` : ''}
+        ${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}
+      </div>
+      <div class="tracker-controls">
+        <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${minusLabel}">−</button>
+        <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
+          aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
+        <span class="pool">${range}</span>
+        <button data-tracker-step="${t.id}" data-delta="1" aria-label="${plusLabel}">+</button>
+        <button data-tracker-edit="${t.id}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
+        ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${t.id}" aria-label="Remove ${esc(t.name)}">×</button>`}
+      </div>
+    </div>`;
 }
 
 /**
@@ -209,13 +209,13 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
     const shownValue = draining ? max - cur : cur;
     const title = twoSided ? signed(cur) : `${shownValue} of ${max}`;
     return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-bar="${t.id}"` : ''}
-        title="${esc(title)}${interactive ? ' — click to set' : ''}">
-      ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
-        ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
-      ${fill}
-      ${layout.segments.map((s) => `<div class="seg" style="left:${pct(s.from)};width:${pct(s.to - s.from)};background:${s.color}"></div>`).join('')}
-      ${layout.zero !== null ? `<div class="zero-line" style="left:${pct(layout.zero)}"></div>` : ''}
-    </div>`;
+          title="${esc(title)}${interactive ? ' — click to set' : ''}">
+        ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
+          ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
+        ${fill}
+        ${layout.segments.map((s) => `<div class="seg" style="left:${pct(s.from)};width:${pct(s.to - s.from)};background:${s.color}"></div>`).join('')}
+        ${layout.zero !== null ? `<div class="zero-line" style="left:${pct(layout.zero)}"></div>` : ''}
+      </div>`;
   }
 
   /*
@@ -230,7 +230,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
     const label = `${sq.lit} of ${max}${draining ? ' left' : ' used'}`;
     if (sq.mode === 'number') {
       return `<div class="pipcount" title="${esc(label)}" style="color:${colour};border-color:${colour}">
-        ${sq.lit}<span class="of">/${max}</span></div>`;
+          ${sq.lit}<span class="of">/${max}</span></div>`;
     }
     const tag = interactive ? 'button' : 'span';
     return `<div class="pips square" title="${esc(label)}">${
@@ -241,9 +241,9 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         // `data-n` is the pip's own number; the click handler converts it for
         // a draining tracker and spends one when the last lit pip is clicked.
         return `<${tag} class="pip ${on ? 'used' : ''}" style="${paint}"
-          ${interactive ? `data-pip="${t.id}" data-n="${n}"` : ''}
-          title="${esc(`${n} of ${max}`)}"
-          aria-label="Set ${esc(t.name)} to ${n}"></${tag}>`;
+            ${interactive ? `data-pip="${t.id}" data-n="${n}"` : ''}
+            title="${esc(`${n} of ${max}`)}"
+            aria-label="Set ${esc(t.name)} to ${n}"></${tag}>`;
       }).join('')
     }</div>`;
   }
@@ -255,7 +255,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   const tag = interactive ? 'button' : 'span';
   const remaining = max - cur;
   const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pip="${t.id}" data-n="0"` : ''} title="0"
-    aria-label="Set ${esc(t.name)} to 0"></${tag}>`;
+      aria-label="Set ${esc(t.name)} to 0"></${tag}>`;
   return `<div class="pips">${steps.map((k, i) => {
     const lit = twoSided ? (k > 0 ? cur >= k : cur <= k)
       : draining ? k <= min + remaining : cur >= k;
@@ -272,7 +272,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
       : '';
     const label = `${twoSided ? signed(k) : `${k} of ${max}`}${zone?.label ? ` · ${zone.label}` : ''}${layerLabel ? ` · ${layerLabel}` : ''}`;
     const pip = `<${tag} class="pip ${k < 0 ? 'neg' : ''} ${lit ? 'used' : ''} ${marks}" ${interactive ? `data-pip="${t.id}" data-n="${k}"` : ''}
-        style="${paint}" title="${esc(label)}" aria-label="Set ${esc(t.name)} to ${twoSided ? signed(k) : k}"></${tag}>`;
+          style="${paint}" title="${esc(label)}" aria-label="Set ${esc(t.name)} to ${twoSided ? signed(k) : k}"></${tag}>`;
     // The zero mark sits between the last negative pip and the first positive one.
     const markBefore = twoSided && k > 0 && (i === 0 || steps[i - 1] < 0);
     const markAfter = twoSided && k < 0 && i === steps.length - 1;
@@ -314,7 +314,7 @@ export function meterVisual(spec, { interactive = false } = {}) {
     layers = (spec.layers || []).map((l) => {
       const band = trackBand(l.from, l.to, min, max);
       return band ? `<div class="mlayer ${esc(l.kind)}" style="left:${pct(band.from)};width:${pct(band.to - band.from)}"
-        title="${esc(l.label || '')}"></div>` : '';
+          title="${esc(l.label || '')}"></div>` : '';
     }).join('');
   }
 
@@ -328,15 +328,15 @@ export function meterVisual(spec, { interactive = false } = {}) {
   const classes = ['meter', spec.id];
   if (alert > 0) classes.push('is-alert', ...(spec.alertFill ? ['alert-fill'] : []));
   return `<div class="${esc(classes.join(' '))}"${alert > 0 ? ` style="--alert:${alert.toFixed(3)}"` : ''}>
-    ${visual}${layers ? `<div class="mlayers">${layers}</div>` : ''}
-  </div>`;
+      ${visual}${layers ? `<div class="mlayers">${layers}</div>` : ''}
+    </div>`;
 }
 
 /** The ✎ that opens a meter's style editor, and closes it again. */
 export function meterStyleButton(ctx, key) {
   const open = ctx.editMeter === key;
   return `<button class="tiny" data-meter-edit="${key}" aria-pressed="${open}"
-    style="margin-left:auto" title="${open ? 'Done' : 'Change how this is drawn'}">${open ? 'Done' : '✎ Style'}</button>`;
+      style="margin-left:auto" title="${open ? 'Done' : 'Change how this is drawn'}">${open ? 'Done' : '✎ Style'}</button>`;
 }
 
 /**
@@ -352,14 +352,14 @@ export function meterStyleEditor(model, ctx, key) {
   const spec = model.meterSpec(key);
   if (!spec) return '';
   return `<div class="meter-style">
-    <div class="tstyle" data-tstyle-for="${esc(key)}">${trackerStyleEditor(model, ctx, spec)}</div>
-    <div class="pair">
-      <button class="primary" data-action="save-meter" data-key="${esc(key)}">Save</button>
-      <button data-action="cancel-meter">Cancel</button>
-      <button data-action="reset-meter" data-key="${esc(key)}"
-        title="Back to the bar every character starts with">Reset to default</button>
-    </div>
-  </div>`;
+      <div class="tstyle" data-tstyle-for="${esc(key)}">${trackerStyleEditor(model, ctx, spec)}</div>
+      <div class="pair">
+        <button class="primary" data-action="save-meter" data-key="${esc(key)}">Save</button>
+        <button data-action="cancel-meter">Cancel</button>
+        <button data-action="reset-meter" data-key="${esc(key)}"
+          title="Back to the bar every character starts with">Reset to default</button>
+      </div>
+    </div>`;
 }
 
 /**
@@ -388,24 +388,24 @@ function meterPipClass(k, layers) {
 function trackerEditRow(model, ctx, t) {
   const d = ctx.editDraft;
   return `<div class="tracker editing">
-    <div class="formrow" style="margin:0">
-      <div class="cols">
-        <input data-tedit="name" placeholder="Name" value="${esc(d.name)}" aria-label="Tracker name">
-        <input class="mono" data-tedit="maxFormula" placeholder="Max, as a formula" value="${esc(d.maxFormula)}" aria-label="Max formula">
-        <input class="mono" data-tedit="minFormula" placeholder="Min (optional)" value="${esc(d.minFormula)}" aria-label="Min formula">
-        <input data-tedit="refresh" placeholder="Refresh" value="${esc(d.refresh)}" aria-label="Refresh">
+      <div class="formrow" style="margin:0">
+        <div class="cols">
+          <input data-tedit="name" placeholder="Name" value="${esc(d.name)}" aria-label="Tracker name">
+          <input class="mono" data-tedit="maxFormula" placeholder="Max, as a formula" value="${esc(d.maxFormula)}" aria-label="Max formula">
+          <input class="mono" data-tedit="minFormula" placeholder="Min (optional)" value="${esc(d.minFormula)}" aria-label="Min formula">
+          <input data-tedit="refresh" placeholder="Refresh" value="${esc(d.refresh)}" aria-label="Refresh">
+        </div>
+        ${previewBox(model, 'edit', d.maxFormula, d.minFormula)}
+        ${trackerNoteField(model, t, d.note)}
+        ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker — your
+          changes are saved against it, and Reset restores the sheet’s version.</p>` : ''}
+        <div class="tstyle" data-tstyle-for="${t.id}">${trackerStyleEditor(model, ctx, t)}</div>
+        <div style="display:flex;gap:6px">
+          <button class="primary" data-action="save-tracker" data-id="${t.id}">Save</button>
+          <button data-action="cancel-tracker">Cancel</button>
+        </div>
       </div>
-      ${previewBox(model, 'edit', d.maxFormula, d.minFormula)}
-      ${trackerNoteField(model, t, d.note)}
-      ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker — your
-        changes are saved against it, and Reset restores the sheet’s version.</p>` : ''}
-      <div class="tstyle" data-tstyle-for="${t.id}">${trackerStyleEditor(model, ctx, t)}</div>
-      <div style="display:flex;gap:6px">
-        <button class="primary" data-action="save-tracker" data-id="${t.id}">Save</button>
-        <button data-action="cancel-tracker">Cancel</button>
-      </div>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 /**
@@ -421,18 +421,18 @@ function trackerEditRow(model, ctx, t) {
 function trackerNoteField(model, t, value) {
   const facts = Object.keys(model.trackerScope(t).self);
   return `<label class="fld tall tnote-edit">
-    <span>Note — shown under the tracker, formulas resolve as it fills</span>
-    ${prose(`data-tedit="note"`, value, 2, '', model.trackerScope(t))}
-    <span class="hint">
-      <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
-      Elsewhere on the character the same numbers are
-      <code>tracker.${esc(t.id)}.max</code> and friends — that id is fixed when the
-      tracker is created and does not follow a rename.<br>
-      Burn, for example: <code>Nonlethal {= self.current * level}, +{= self.current} to DCs</code>.
-      A <code>{name = …}</code> written here shows its value but is not published to the rest
-      of the character, because a note reads the pool rather than defining it.
-    </span>
-  </label>`;
+      <span>Note — shown under the tracker, formulas resolve as it fills</span>
+      ${prose(`data-tedit="note"`, value, 2, '', model.trackerScope(t))}
+      <span class="hint">
+        <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
+        Elsewhere on the character the same numbers are
+        <code>tracker.${esc(t.id)}.max</code> and friends — that id is fixed when the
+        tracker is created and does not follow a rename.<br>
+        Burn, for example: <code>Nonlethal {= self.current * level}, +{= self.current} to DCs</code>.
+        A <code>{name = …}</code> written here shows its value but is not published to the rest
+        of the character, because a note reads the pool rather than defining it.
+      </span>
+    </label>`;
 }
 
 /**
@@ -447,64 +447,64 @@ export function trackerStyleEditor(model, ctx, t) {
   // styled can actually read: a tracker knows its own max, a meter does not.
   const zoneExample = t.zoneExample || 'self.max * 0.3';
   const zoneRows = s.zones.map((z, i) => `
-    <div class="zone-row">
-      <input class="mono" data-zone="${i}|from" placeholder="from (e.g. 0)" value="${esc(z.from)}" aria-label="Zone ${i + 1} from">
-      <input class="mono" data-zone="${i}|to" placeholder="to (e.g. ${esc(zoneExample)})" value="${esc(z.to)}" aria-label="Zone ${i + 1} to">
-      <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} colour">
-      <input class="mono hexin" data-zone="${i}|color" value="${esc(z.color)}" aria-label="Zone ${i + 1} hex" maxlength="7">
-      <input data-zone="${i}|label" placeholder="label (optional)" value="${esc(z.label)}" aria-label="Zone ${i + 1} label">
-      <button class="danger" data-zone-remove="${i}" aria-label="Remove zone ${i + 1}">×</button>
-    </div>`).join('');
+      <div class="zone-row">
+        <input class="mono" data-zone="${i}|from" placeholder="from (e.g. 0)" value="${esc(z.from)}" aria-label="Zone ${i + 1} from">
+        <input class="mono" data-zone="${i}|to" placeholder="to (e.g. ${esc(zoneExample)})" value="${esc(z.to)}" aria-label="Zone ${i + 1} to">
+        <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} colour">
+        <input class="mono hexin" data-zone="${i}|color" value="${esc(z.color)}" aria-label="Zone ${i + 1} hex" maxlength="7">
+        <input data-zone="${i}|label" placeholder="label (optional)" value="${esc(z.label)}" aria-label="Zone ${i + 1} label">
+        <button class="danger" data-zone-remove="${i}" aria-label="Remove zone ${i + 1}">×</button>
+      </div>`).join('');
 
   return `
-    <div class="tstyle-row">
-      <span class="tlabel">Shape</span>
-      <select data-tstyle="shape" aria-label="Shape">
-        <option value="pips" ${s.shape === 'pips' ? 'selected' : ''}>Pips</option>
-        <option value="bar" ${s.shape === 'bar' ? 'selected' : ''}>Bar</option>
-        <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares — a small block, then a count</option>
-      </select>
-      <span class="tlabel">Fill</span>
-      <select data-tstyle="fill" aria-label="Fill direction" ${twoSided ? 'disabled title="Two-sided meters always show their position"' : ''}>
-        <option value="spent" ${s.fill === 'spent' ? 'selected' : ''}>Fills up as it is spent</option>
-        <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains — shows what is left</option>
-      </select>
-    </div>
-    ${colorField('color', s.color, { label: twoSided ? 'Colour (above 0)' : 'Colour', none: 'Theme accent', noneCss: THEME_ACCENT.css })}
-    ${colorField('gradientTo', s.gradientTo, { label: 'Fade to', none: 'No gradient', noneCss: null })}
-    ${twoSided ? colorField('negativeColor', s.negativeColor, { label: 'Colour (below 0)', none: 'Theme red', noneCss: THEME_NEGATIVE.css }) : ''}
-    ${twoSided ? colorField('negativeGradientTo', s.negativeGradientTo, { label: 'Fade to (below 0)', none: 'No gradient', noneCss: null }) : ''}
-    <div class="tstyle-row" style="align-items:flex-start">
-      <span class="tlabel" style="padding-top:5px">Zones</span>
-      <div style="flex:1;display:grid;gap:5px">
-        ${zoneRows}
-        <div><button data-add-zone>+ Zone</button>
-          <span class="hint">Highlight a value or range in its own colour. Bounds are formulas —
-            <code>floor(${esc(zoneExample)})</code> for a band a third of the way up — and a labelled zone
-            shows its name on the ${t.meter ? 'meter' : 'tracker'} while the value sits in it.</span></div>
+      <div class="tstyle-row">
+        <span class="tlabel">Shape</span>
+        <select data-tstyle="shape" aria-label="Shape">
+          <option value="pips" ${s.shape === 'pips' ? 'selected' : ''}>Pips</option>
+          <option value="bar" ${s.shape === 'bar' ? 'selected' : ''}>Bar</option>
+          <option value="squares" ${s.shape === 'squares' ? 'selected' : ''}>Squares — a small block, then a count</option>
+        </select>
+        <span class="tlabel">Fill</span>
+        <select data-tstyle="fill" aria-label="Fill direction" ${twoSided ? 'disabled title="Two-sided meters always show their position"' : ''}>
+          <option value="spent" ${s.fill === 'spent' ? 'selected' : ''}>Fills up as it is spent</option>
+          <option value="remaining" ${s.fill === 'remaining' ? 'selected' : ''}>Drains — shows what is left</option>
+        </select>
       </div>
-    </div>
-    <div class="tstyle-row">
-      <span class="tlabel">Preview</span>
-      <div class="style-preview" style="flex:1">${stylePreviewHtml(model, ctx, t)}</div>
-    </div>`;
+      ${colorField('color', s.color, { label: twoSided ? 'Colour (above 0)' : 'Colour', none: 'Theme accent', noneCss: THEME_ACCENT.css })}
+      ${colorField('gradientTo', s.gradientTo, { label: 'Fade to', none: 'No gradient', noneCss: null })}
+      ${twoSided ? colorField('negativeColor', s.negativeColor, { label: 'Colour (below 0)', none: 'Theme red', noneCss: THEME_NEGATIVE.css }) : ''}
+      ${twoSided ? colorField('negativeGradientTo', s.negativeGradientTo, { label: 'Fade to (below 0)', none: 'No gradient', noneCss: null }) : ''}
+      <div class="tstyle-row" style="align-items:flex-start">
+        <span class="tlabel" style="padding-top:5px">Zones</span>
+        <div style="flex:1;display:grid;gap:5px">
+          ${zoneRows}
+          <div><button data-add-zone>+ Zone</button>
+            <span class="hint">Highlight a value or range in its own colour. Bounds are formulas —
+              <code>floor(${esc(zoneExample)})</code> for a band a third of the way up — and a labelled zone
+              shows its name on the ${t.meter ? 'meter' : 'tracker'} while the value sits in it.</span></div>
+        </div>
+      </div>
+      <div class="tstyle-row">
+        <span class="tlabel">Preview</span>
+        <div class="style-preview" style="flex:1">${stylePreviewHtml(model, ctx, t)}</div>
+      </div>`;
 }
 
 /** One colour control: a "none" swatch, the 16 suggestions, a hex field and a native picker. */
 function colorField(field, value, { label, none, noneCss }) {
   const noneStyle = noneCss ? `background:${noneCss}` : '';
   return `<div class="tstyle-row">
-    <span class="tlabel">${esc(label)}</span>
-    <div class="swatches" role="group" aria-label="${esc(label)}">
-      <button class="swatch none" data-swatch="${field}" data-hex="" style="${noneStyle}"
-        title="${esc(none)}" aria-label="${esc(none)}" aria-pressed="${value ? 'false' : 'true'}"></button>
-      ${TRACKER_PALETTE.map(([hex, name]) => `<button class="swatch" data-swatch="${field}" data-hex="${hex}"
-        style="background:${hex}" title="${esc(name)} ${hex}" aria-label="${esc(name)}"
-        aria-pressed="${value === hex ? 'true' : 'false'}"></button>`).join('')}
-    </div>
-    <input class="mono hexin" data-hexin="${field}" value="${esc(value || '')}" placeholder="#rrggbb" maxlength="7" aria-label="${esc(label)} hex">
-    <input type="color" data-hexpick="${field}" value="${esc(value || (noneCss ? THEME_ACCENT.hex : '#888888'))}" aria-label="${esc(label)} picker">
-  </div>`;
+      <span class="tlabel">${esc(label)}</span>
+      <div class="swatches" role="group" aria-label="${esc(label)}">
+        <button class="swatch none" data-swatch="${field}" data-hex="" style="${noneStyle}"
+          title="${esc(none)}" aria-label="${esc(none)}" aria-pressed="${value ? 'false' : 'true'}"></button>
+        ${TRACKER_PALETTE.map(([hex, name]) => `<button class="swatch" data-swatch="${field}" data-hex="${hex}"
+          style="background:${hex}" title="${esc(name)} ${hex}" aria-label="${esc(name)}"
+          aria-pressed="${value === hex ? 'true' : 'false'}"></button>`).join('')}
+      </div>
+      <input class="mono hexin" data-hexin="${field}" value="${esc(value || '')}" placeholder="#rrggbb" maxlength="7" aria-label="${esc(label)} hex">
+      <input type="color" data-hexpick="${field}" value="${esc(value || (noneCss ? THEME_ACCENT.hex : '#888888'))}" aria-label="${esc(label)} picker">
+    </div>`;
 }
 
 /** The tracker or meter as it would look with the draft style (zone formulas resolved live). */
