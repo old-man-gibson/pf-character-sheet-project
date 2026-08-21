@@ -187,10 +187,22 @@ ring, 110,000 gross, a sale at cost, 20 days, and a take-10 check of 56.
   mythic feat on the odd ones, a path power and the +2 ability increase on the even
   ones. So the sheet's column reads Feat 1, RP Power 1, Feat 2, RP Power 2 … and the
   table says so — **Grants** is a label, because what a tier hands over is not the
-  player's choice; **Choice** is what they took for it; and **Stat** appears on the
+  player's choice; **Name** is what they took for it; and **Stat** appears on the
   even rows only, rather than five empty cells pretending otherwise. Tiers above the
   current one are greyed, the way the progression planner greys levels you have not
   reached. Each row also shows the level its tier arrives at.
+- **The path ability and the granted feat each get a name and an effect.** Nine
+  columns across: Tier, Level, Path, Ability, Effect, Grants, Name, Effect, Stat.
+  Both **Effect** columns are prose and read [inline formulas](formulas-and-trackers.md#inline-formulas-in-prose),
+  so a path power worth `{= tier * 2}`, or one that forwards `{skill.bluff += 2}`,
+  is written where the power is rather than copied to the field it lands on. A
+  bonus written in a tier the character has not reached does not apply until they
+  reach it — the same rule the progression planner follows.
+- **The effects fold.** Nine columns leave no room for prose, so each Effect cell
+  shows one line, cut off with an ellipsis, and the whole of it on the tooltip.
+  Click one (or tab to it and press Enter) and it opens in place, pushing the rows
+  below it down; click anywhere else, or press Escape, and it shuts again. One is
+  open at a time, and which one is not saved with the character.
 - **Bonus HP/tier** adds `bonus × tier` on top of the normal maximum (Champion/
   Guardian 5, Marshal/Trickster 4, Archmage/Hierophant 3). Imported at 0 so existing
   totals don't shift until the player sets it; the HP panel shows the split.

@@ -68,7 +68,8 @@ import {
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
   ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
-  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, attackModeTotal,
+  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
+  attackModeAbility,
   CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
   BLENDED_SPHERES, sphereSide, conditionInfo,
   ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
@@ -88,6 +89,7 @@ import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
 import {
   formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
+  targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
 import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
@@ -371,6 +373,13 @@ const picksAbility = (values) => values.length > 1 && values.every((v) => abilit
  */
 const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '');
 
+/**
+ * The same hook where the caller knows the ability rather than the value
+ * naming it -- an attack mode is called "Alt Melee", and which stat it runs
+ * on is a fact about the character rather than about the word.
+ */
+const abKeyAttr = (key) => ` data-ab="${abilityKey(key)}"`;
+
 const round = (v, places = 2) => {
   const f = 10 ** places;
   return Math.round((Number(v) || 0) * f) / f;
@@ -524,6 +533,8 @@ export class CharacterSheetElement extends HTMLElement {
   #dashArrange = false;
   /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
   #openManeuverNote = null;
+  /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
+  #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
   #armedRemove = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
@@ -2488,6 +2499,7 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="tablewrap" style="margin-top:8px"><table class="attackmodes">
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
+          ${this.#sheetBonusHead()}
           <th>Ability</th><th>2nd ability</th></tr></thead>
         <tbody>${ATTACK_MODES.map((k) => {
           const alt = ALT_ATTACK_OF[k];
@@ -2505,10 +2517,17 @@ export class CharacterSheetElement extends HTMLElement {
             aria-expanded="${!shut}" title="${esc(shut
     ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
+          // An alternate is the base attack with one ability swapped, so it
+          // is already carrying the base's Other -- editing it here would be
+          // editing the same number twice.
+          const other = alt
+            ? `<td class="num"><span class="hint" title="${esc(`Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}">as ${esc(ATTACK_MODE_LABELS[alt].toLowerCase())}</span></td>`
+            : this.#sheetBonusCell(ATTACK_MODE_KEY[k]);
           return `
           <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
             <td class="num total"><span class="rollpair">${this.#movedInline(cs, k, total)}${
   this.#rollButton('mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
+            ${other}
             <td>${this.#abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
             <td>${this.#abilitySelect(`attack.modes.${k}.stat2`, c.attack.modes[k]?.stat2)}</td>
           </tr>`;
@@ -2520,6 +2539,7 @@ export class CharacterSheetElement extends HTMLElement {
         ability in the slot — Dex for a finessed blade, Wis for a monk's fist — so it
         carries the same BAB, misc and size, and the same import reconciliation. Each one
         folds into the attack it belongs to; the caret says what is under it.</p>
+      ${this.#sheetBonusHint('a weapon’s enhancement, a size bonus, anything a talent added')}
     </section>`;
   }
 
@@ -4702,7 +4722,7 @@ export class CharacterSheetElement extends HTMLElement {
    * is no feat to name; Specialty is mandatory, so it is always there. Oath and
    * Attunement feats sit in the same list, each naming its own source.
    */
-  #grantedFeatsPanel() {
+  #grantedFeatsSection() {
     const c = this.#model.data;
     const g = c.grantedFeats || { others: [] };
     const major = c.traitSlots?.majorDrawback || {};
@@ -4718,8 +4738,9 @@ export class CharacterSheetElement extends HTMLElement {
       <td>${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
     </tr>`;
 
-    return `<section class="panel span2">
-      <h3>Granted feats</h3>
+    return `<h4 class="subhead">Granted feats
+        <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
+      </h4>
       <div class="tablewrap"><table>
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
@@ -4747,8 +4768,38 @@ export class CharacterSheetElement extends HTMLElement {
         <strong>${esc(c.primordia.calc.technique)}</strong>) live on the
         <strong>Primordia</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
-      </p>
-    </section>`;
+      </p>`;
+  }
+
+  /**
+   * A feat group's heading: its name, how many it holds, and the × that
+   * removes the whole group. The same three whether the group is the panel on
+   * the right or a section stacked on the left, so the two cannot drift.
+   */
+  #featGroupTitle(group, g) {
+    return `<input class="grouptitle" type="text" value="${esc(group.name)}"
+        data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
+      <span class="badge">${group.entries.length}</span>
+      <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+  }
+
+  /** One group's feats: the table and the button that adds a row to it. */
+  #featGroupTable(group, g) {
+    return `<div class="tablewrap"><table class="feats">
+        <thead><tr><th class="grip"></th><th>Feat</th><th>Source / level</th><th></th></tr></thead>
+        <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
+          <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
+          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
+          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          ${this.#rowRemove(`featGroups.${g}.entries`, i)}
+        </tr>`).join('')}
+        ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
+          <td colspan="4" class="empty">No feats here yet — add one, or drag one in.</td>
+        </tr>`}</tbody>
+      </table></div>
+      <div style="margin-top:8px">
+        ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '' })}
+      </div>`;
   }
 
   #featuresPanel() {
@@ -4756,36 +4807,43 @@ export class CharacterSheetElement extends HTMLElement {
     const feats = c.feats || {};
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
-    return `<div class="grid">
-      ${this.#grantedFeatsPanel()}
-      ${(c.featGroups || []).map((group, g) => `
-        <section class="panel">
-          <h3>
-            <input class="grouptitle" type="text" value="${esc(group.name)}"
-              data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
-            <span class="badge">${group.entries.length}</span>
-            <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>
-          </h3>
-          <div class="tablewrap"><table>
-            <thead><tr><th>Feat</th><th>Source / level</th><th></th></tr></thead>
-            <tbody>${group.entries.map((f, i) => `<tr>
-              <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
-              <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-              ${this.#rowTools(`featGroups.${g}.entries`, i)}
-            </tr>`).join('')}</tbody>
-          </table></div>
-          <div style="margin-top:8px">
-            ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '' })}
-          </div>
-        </section>`).join('')}
+    /*
+     * The feats read as two columns, not four panels. On the left, everything
+     * that arrives in ones and twos: the feats something handed over, then the
+     * smaller groups, each a section of the one panel. On the right, the group
+     * a character actually fills -- the level-up list -- standing beside them
+     * at its own height, because eight rows beside three sections of one or
+     * two is what balances the row.
+     *
+     * The right-hand column is the FIRST group, not the biggest: a layout that
+     * rearranged itself as feats were added would be worse than one that is
+     * merely arbitrary, and first is where the import puts the level-up list.
+     */
+    const groups = c.featGroups || [];
+    const featured = groups[0]
+      ? `<section class="panel featgroup">
+          <h3>${this.#featGroupTitle(groups[0], 0)}</h3>
+          ${this.#featGroupTable(groups[0], 0)}
+        </section>`
+      : '';
+    const main = `<section class="panel span2 featmain">
+      <h3>Feats</h3>
+      ${this.#grantedFeatsSection()}
+      ${groups.slice(1).map((group, i) => `<div class="featsection">
+        <h4 class="subhead">${this.#featGroupTitle(group, i + 1)}</h4>
+        ${this.#featGroupTable(group, i + 1)}
+      </div>`).join('')}
+    </section>`;
 
-      <section class="panel">
-        <h3>New feat group</h3>
-        <p class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up, Oaths, Attunement, Class, and so on.</p>
-        <div style="margin-top:8px">
-          ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
-        </div>
-      </section>
+    return `<div class="grid">
+      ${featured ? `<div class="pairrow even">${main}${featured}</div>` : main}
+      <div class="addgroup">
+        ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
+        <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
+          Oaths, Attunement, Class, and so on. The first group stands on the right; the rest
+          stack under the granted feats. Drag a feat by its grip to reorder it, or onto
+          another group to move it there.</span>
+      </div>
 
       <section class="panel span2">
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
@@ -4805,14 +4863,27 @@ export class CharacterSheetElement extends HTMLElement {
           = <strong>${this.#model.mythicHp}</strong> HP on top of the normal maximum
           (Champion/Guardian 5, Marshal/Trickster 4, Archmage/Hierophant 3).
         </p>
-        <div class="tablewrap" style="margin-top:8px"><table>
+        <div class="tablewrap" style="margin-top:8px"><table class="mythic">
+          <!-- Nine columns, and only two of them prose. The path, the two names
+               and the grant are all a few words, so they are held narrow and the
+               two Effect columns get what is left — folded down to one line
+               each until one is clicked open. -->
+          <colgroup>
+            <col class="tier"><col class="lvl"><col class="mpath"><col class="mname">
+            <col class="meffect"><col class="grants"><col class="mname"><col class="meffect">
+            <col class="mstat">
+          </colgroup>
           <thead><tr>
             <th class="num">Tier</th>
-            <th class="num" title="The character level this tier is reached at">Lvl</th>
-            <th>Ability</th><th>Path</th>
-            <!-- Grants sits beside Choice: the slot and what was taken for it. -->
+            <th class="num" title="The character level this tier is reached at">Level</th>
+            <th>Path</th>
+            <th>Ability</th>
+            <th title="What the path ability does. Formulas work here.">Effect</th>
+            <!-- Grants sits beside the feat's own name and effect: the slot,
+                 then what was taken for it, then what that does. -->
             <th title="What the tier hands over — a feat on odd tiers, a path power on even ones">Grants</th>
-            <th>Choice</th>
+            <th>Name</th>
+            <th title="What the granted feat does. Formulas work here.">Effect</th>
             <th title="+2 to one ability, at every even tier">Stat</th>
           </tr></thead>
           <tbody>${MYTHIC_TIERS.map((t) => {
@@ -4822,10 +4893,12 @@ export class CharacterSheetElement extends HTMLElement {
             return `<tr class="${t > tier ? 'future' : ''}">
               <td class="num">${t}</td>
               <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'name', a.name)}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'path', a.path)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+              <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
               <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-              <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice)}</td>
+              <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
+              <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
               ${even
                 ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
                 : '<td class="noslot"></td>'}
@@ -4835,10 +4908,14 @@ export class CharacterSheetElement extends HTMLElement {
         <p class="hint">
           Ten tiers, one row each: a mythic feat on the odd ones, a path power and a
           <strong>+2 ability increase</strong> on the even ones — which is why only those
-          rows offer a Stat. <strong>Grants</strong> is what the tier hands over;
-          <strong>Choice</strong> is what you took for it. The same increases are on the
-          <strong>Stats</strong> tab, either place edits the one set. Rows above tier
-          ${tier} are greyed: planned, not counted yet.
+          rows offer a Stat. <strong>Grants</strong> is what the tier hands over,
+          <strong>Name</strong> is what you took for it, and each <strong>Effect</strong>
+          says what that thing does — folded to one line to keep the table readable, so
+          click one to open it and click away to shut it again. Formulas work in both:
+          write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
+          somewhere. The same increases are on the <strong>Stats</strong> tab, either
+          place edits the one set. Rows above tier ${tier} are greyed: planned, not
+          counted yet — and a bonus written in one does not apply until it is reached.
         </p>
       </section>
 
@@ -4919,7 +4996,8 @@ export class CharacterSheetElement extends HTMLElement {
           <button class="danger" data-remove="equipment.weapons|${i}" aria-label="Remove weapon">×</button>
         </div>
         <div class="weapongrid">
-          ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType, WEAPON_ATTACK_TYPES))}
+          ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType,
+            WEAPON_ATTACK_TYPES, '—', (t) => attackModeAbility(this.#model.data, WEAPON_MODE_KEYS[t])))}
           ${this.#field('Enh.', this.#itemNum('equipment.weapons', i, 'enhancement', w.enhancement))}
           ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack)
             + this.#forwardedBadge(`weapon.${i}.attack`))}
@@ -8382,6 +8460,36 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * A prose field in a table with no room for prose.
+   *
+   * Shut, it is one line of what the field says -- computed, so a formula
+   * shows its value -- cut off with an ellipsis, and the whole of it is on
+   * the tooltip. Clicking opens the real field in place, which grows the row
+   * and pushes the ones below it down; clicking anywhere else, or Escape,
+   * shuts it again.
+   *
+   * Only one is open at a time, and which one is not saved with the
+   * character: it is a way of reading a wide table, not something about the
+   * character.
+   */
+  #foldedProse(key, bindingAttr, value, placeholder = '') {
+    const text = String(value ?? '');
+    if (this.#openCell === key) {
+      return `<div class="foldcell open" data-foldcell-open="${esc(key)}">
+        ${this.#prose(bindingAttr, text, 2, 'grow')}
+      </div>`;
+    }
+    const shown = text.trim()
+      ? (hasTokens(text) ? this.#renderedProse(text) : esc(text))
+      : `<span class="ph">${esc(placeholder)}</span>`;
+    return `<button type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
+      data-foldcell="${esc(key)}"
+      title="${esc(text.trim() ? `${text}
+
+Click to edit.` : PROSE_HINT)}">${shown}</button>`;
+  }
+
+  /**
    * What a computed value in prose says when you point at it.
    *
    * The token's own source, then its working -- because a bare "24" in the
@@ -8888,6 +8996,7 @@ export class CharacterSheetElement extends HTMLElement {
       audit,
       problems: this.#model.formulaProblems(audit),
       forwarded: this.#forwardedRows(),
+      targets: this.#model.forwardTargetList || [],
       draft: this.#formulaDraft,
       query: this.#formulaQuery,
       refOpen: this.#formulaRefOpen,
@@ -9021,11 +9130,19 @@ export class CharacterSheetElement extends HTMLElement {
     return this.#select(path, value, ABILITIES.map((k) => [ABILITY_LABELS[k], ABILITY_LABELS[k]]));
   }
 
+
   /* ----- list rows ----- */
 
-  #itemText(list, i, field, value, placeholder = '') {
-    return `<input type="text" value="${esc(value ?? '')}" data-item="${list}|${i}|${field}"
-      data-kind="text" placeholder="${esc(placeholder)}">`;
+  /**
+   * `title` is for a cell narrow enough to cut its own value off: an input
+   * scrolls rather than showing an ellipsis, so the whole of it has to be
+   * readable from somewhere. Left off where the column is wide enough to
+   * speak for itself, so the tooltip stays a signal.
+   */
+  #itemText(list, i, field, value, placeholder = '', title = false) {
+    const text = String(value ?? '');
+    return `<input type="text" value="${esc(text)}" data-item="${list}|${i}|${field}"
+      data-kind="text" placeholder="${esc(placeholder)}"${title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
   }
 
   #itemNum(list, i, field, value) {
@@ -9082,17 +9199,24 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /** Options are `value`, `[value, label]` or `[value, label, tooltip]`. */
-  #itemSelect(list, i, field, value, options, blank = '—') {
+  /**
+   * `abOf` colours a picker whose choices are not themselves ability names:
+   * given a choice, it answers which ability that choice runs on. Each option
+   * carries its own answer, so the open list is coded too and the select can
+   * repaint from the option it lands on.
+   */
+  #itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
     const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
     const ab = picksAbility(pairs.map(([v]) => v));
     if (value && !pairs.some(([v]) => String(v) === String(value))) {
       pairs.push([value, `${value} *`]);
     }
+    const mark = (v) => (abOf ? abKeyAttr(abOf(v)) : abAttr(ab, v));
     const opts = (blank === null ? pairs : [['', blank], ...pairs])
-      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${abAttr(ab, v)}${
+      .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
         String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
       .join('');
-    return `<select data-item="${list}|${i}|${field}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
+    return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
   }
 
   #rowTools(list, i) {
@@ -9337,6 +9461,69 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Opening and shutting the folded cells (#foldedProse).
+   *
+   * One listener for the whole sheet rather than one per cell, because a
+   * click has to be able to shut a cell it did not land on. It listens on
+   * `pointerdown` rather than `click` so that opening a second cell while the
+   * first is open is a single click: the press that shuts the old one is the
+   * same press that opens the new one, and by `click` time the button it
+   * landed on would already have been redrawn away.
+   *
+   * The listener goes on `.wrap`, which every render replaces, so it cannot
+   * pile up the way one on the shadow root itself would.
+   */
+  #bindFoldedCells(root) {
+    const wrap = root.querySelector('.wrap');
+    if (!wrap) return;
+    wrap.addEventListener('pointerdown', (e) => {
+      const peek = e.target.closest?.('[data-foldcell]');
+      if (peek) {
+        e.preventDefault();          // focus is placed below, not by the press
+        const key = peek.dataset.foldcell;
+        this.#shutFoldedCell();
+        this.#openCell = key;
+        this.#render();
+        this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
+        return;
+      }
+      if (!this.#openCell || e.target.closest?.('.foldcell.open')) return;
+      this.#shutFoldedCell();
+      this.#render();
+    });
+    // Enter or Space on a shut cell that was tabbed to. A mouse press never
+    // reaches here: it opened the cell on the way down, and by now the button
+    // it landed on has been redrawn away.
+    wrap.addEventListener('click', (e) => {
+      const peek = e.target.closest?.('[data-foldcell]');
+      if (!peek || this.#openCell === peek.dataset.foldcell) return;
+      this.#shutFoldedCell();
+      this.#openCell = peek.dataset.foldcell;
+      this.#render();
+      this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
+    });
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !this.#openCell) return;
+      this.#shutFoldedCell();
+      this.#render();
+    });
+  }
+
+  /**
+   * Shut whatever folded cell is open, keeping what was typed in it.
+   *
+   * A textarea commits on blur, so the field has to be blurred while it is
+   * still in the document -- taking it away first would drop the edit. The
+   * flag is cleared before the blur so that the re-render the commit triggers
+   * already draws the cell shut, rather than opening it again for one frame.
+   */
+  #shutFoldedCell() {
+    const field = this.shadowRoot.querySelector('.foldcell.open textarea');
+    this.#openCell = null;
+    field?.blur();
+  }
+
+  /**
    * Redraw the header alone.
    *
    * `gentle` is for the redraw that follows an edit rather than a click. That one
@@ -9501,7 +9688,12 @@ export class CharacterSheetElement extends HTMLElement {
     // fresh markup anyway; this is what keeps one that does not -- a slot an
     // extension adds, a new top-level key -- from wearing the old colour.
     root.querySelectorAll('select[data-ab]').forEach((sel) => {
-      sel.addEventListener('change', () => { sel.dataset.ab = abilityKey(sel.value); });
+      sel.addEventListener('change', () => {
+        // The option knows best: a picker whose choices are not ability names
+        // ("Alt Melee") carries the answer on each option instead.
+        const picked = sel.selectedOptions?.[0];
+        sel.dataset.ab = picked?.dataset.ab ?? abilityKey(sel.value);
+      });
     });
 
     /*
@@ -9901,6 +10093,7 @@ export class CharacterSheetElement extends HTMLElement {
 
     this.#bindTemplateDrag(root);
     this.#bindLanguageDrag(root);
+    this.#bindFeatDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -9960,6 +10153,8 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rerender(input);
       });
     });
+
+    this.#bindFoldedCells(root);
 
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -10466,6 +10661,11 @@ export class CharacterSheetElement extends HTMLElement {
           valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length, q,
         );
       }
+      const targetSection = root.querySelector('[data-fx-section="targets"]');
+      if (targetSection) {
+        const targets = this.#model.forwardTargetList || [];
+        targetSection.outerHTML = targetsHtml(targetGroups(targets, q), targets.length, q);
+      }
       this.#bindFormulaInserts(root);
     };
 
@@ -10511,6 +10711,42 @@ export class CharacterSheetElement extends HTMLElement {
    * expression); a whole formula replaces what is there.
    */
   #bindFormulaInserts(root) {
+    // A destination chip copies its whole token rather than typing into the
+    // try-it box: a destination is written to, not read, so most of them
+    // would not evaluate there at all.
+    root.querySelectorAll('[data-fx-copy]').forEach((el) => {
+      if (el.dataset.fxBound) return;
+      el.dataset.fxBound = '1';
+      el.addEventListener('click', async () => {
+        const text = el.dataset.fxCopy;
+        const mark = (label) => {
+          el.classList.add('copied');
+          el.setAttribute('data-copied', label);
+          setTimeout(() => {
+            if (!el.isConnected) return;
+            el.classList.remove('copied');
+            el.removeAttribute('data-copied');
+          }, 1400);
+        };
+        try {
+          await navigator.clipboard.writeText(text);
+          mark('copied');
+          return;
+        } catch { /* no permission, or no clipboard at all -- fall through */ }
+        // No clipboard. Select the name where it is on screen instead, so the
+        // reader can take it with Ctrl+C -- "press Ctrl+C" has to be true when
+        // it is said, and it is only true once something is selected.
+        const name = el.querySelector('.n') || el;
+        const sel = this.shadowRoot.getSelection?.() ?? document.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        mark(sel ? 'press Ctrl+C' : 'copy it by hand');
+      });
+    });
     root.querySelectorAll('[data-fx-insert]').forEach((el) => {
       if (el.dataset.fxBound) return;
       el.dataset.fxBound = '1';
@@ -10630,6 +10866,81 @@ export class CharacterSheetElement extends HTMLElement {
         clear();
         this.#model.listMoveTo('identity.languages', from, to);
         from = null;
+        this.#render();
+      });
+    });
+  }
+
+  /**
+   * Dragging a feat: up and down its own group, or across into another.
+   *
+   * The row carries the fields, so only the grip starts a drag -- otherwise a
+   * player could not select the text in a feat's name. Everything about where
+   * a drop would land is worked out from the row under the pointer: which
+   * group it belongs to, and which half of it the pointer is in. An empty
+   * group keeps one placeholder row for exactly this reason, so it is
+   * something a feat can be dropped onto rather than a gap that refuses.
+   */
+  #bindFeatDrag(root) {
+    const rows = [...root.querySelectorAll('[data-featdrop]')];
+    if (!rows.length) return;
+    const parse = (el) => (el?.dataset.featdrop || '').split('|').map(Number);
+    const entries = (g) => `featGroups.${g}.entries`;
+    const clear = () => rows.forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+    let from = null;                       // [group, index] being dragged
+    const after = (e, el) => {
+      const box = el.getBoundingClientRect();
+      return e.clientY > box.top + box.height / 2;
+    };
+    // Where a drop at this point lands: the row under the pointer decides the
+    // group, and which half of it decides the side. An empty group's
+    // placeholder is always position 0, whichever half it was hit on.
+    const targetOf = (e) => {
+      const row = e.target.closest?.('[data-featdrop]');
+      if (!from || !row) return null;
+      const [g, i] = parse(row);
+      if (row.classList.contains('featempty')) return { row, g, to: 0, side: 'drop-before' };
+      const past = after(e, row);
+      return { row, g, to: i + (past ? 1 : 0), side: past ? 'drop-after' : 'drop-before' };
+    };
+
+    root.querySelectorAll('[data-featgrip]').forEach((grip) => {
+      const row = grip.closest('[data-featdrop]');
+      if (!row) return;
+      grip.addEventListener('pointerdown', () => { row.draggable = true; });
+      grip.addEventListener('pointerup', () => { row.draggable = false; });
+    });
+
+    rows.forEach((row) => {
+      row.addEventListener('dragstart', (e) => {
+        from = parse(row);
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag with nothing on the transfer.
+        e.dataTransfer.setData('text/plain', row.dataset.featdrop);
+      });
+      row.addEventListener('dragend', () => {
+        row.draggable = false;
+        row.classList.remove('dragging');
+        from = null;
+        clear();
+      });
+      row.addEventListener('dragover', (e) => {
+        const t = targetOf(e);
+        if (!t || t.row.classList.contains('dragging')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clear();
+        t.row.classList.add(t.side);
+      });
+      row.addEventListener('drop', (e) => {
+        const t = targetOf(e);
+        if (!t) return;
+        e.preventDefault();
+        const [g, i] = from;
+        clear();
+        from = null;
+        this.#model.listMoveInto(entries(g), i, entries(t.g), t.to);
         this.#render();
       });
     });

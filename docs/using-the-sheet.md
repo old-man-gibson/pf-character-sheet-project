@@ -38,9 +38,14 @@ and anything downstream recalculates immediately.
   hidden behind a **Show all** toggle.
 - *Combat & Magic* — the sphere, talent, veil and maneuver grids, cell by cell, with
   rows addable and removable.
-- *Feats & Mythic* — granted feats (drawback, specialty, oaths, attunement) and the
-  feats you chose, by group, plus add, rename, reorder and delete groups;
-  classes with hit die, saves and skill ranks; mythic path, tier and abilities.
+- *Feats & Mythic* — two columns. On the left, one **Feats** panel holding the granted
+  feats (drawback, specialty, oaths, attunement) and then every group after the first,
+  each a section of it; on the right, the **first group** — the level-up list — standing
+  on its own, because it is the one that fills up. Groups can be added, renamed and
+  deleted. A feat is reordered by dragging it by the grip at the left of its row — up
+  and down its own group, or onto another group to move it there — and deleted with the
+  × at the right.
+  Also: classes with hit die, saves and skill ranks; mythic path, tier and abilities.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
@@ -62,7 +67,8 @@ off Strength and his alt CMB off Wisdom. Change the selector and the total moves
 this as prose. Add a weapon and its attack bonus and iteratives follow your BAB, ability
 scores and size automatically.
 
-Rows can be reordered with ↑ / ↓ and removed with ×. Every change is saved as you make
+Rows can be reordered with ↑ / ↓ and removed with × — except a feat, which is dragged
+by its grip instead. Every change is saved as you make
 it, and **Save** marks the version the sheet opens on — see
 [Saving, and going back](importing-and-saving.md#saving-and-going-back). **Reset** returns the character to the
 converted sheet, **Export JSON** downloads the current state and **Import JSON** brings
@@ -393,7 +399,18 @@ on each says what is underneath it (*Show the alternate — Wis, +36*). An alter
 not a second sum:
 it is its own mode's total with one modifier swapped for the other, so it shares the
 BAB, the misc bonus, the size modifier and the import reconciliation, and cannot drift
-from the number above it.
+from the number above it. Its **Other** cell says *as melee* for the same reason — the
+offset it carries belongs to the attack above it, and editing it in two places would be
+editing one number twice.
+
+**Other** on an attack row is the import reconciliation made visible: what the source
+workbook's own attack cell claimed, less what this sheet can work out from BAB and the
+ability in the slot. A workbook that added a weapon's enhancement, a size bonus or a
+talent through a formula the export could not carry leaves the difference here. It is
+the same column the AC and save tables have, and for the same reason — left hidden it
+is the only place those bonuses live, so an attack bonus nobody can account for could
+be neither found nor corrected. A bonus this sheet forwards itself is *not* folded into
+it: that one is written down, so it stays forwarded and shows in gold beside the field.
 
 **Speed** takes its bonus as a formula, because that is where class features land:
 a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up
@@ -706,10 +723,10 @@ Race traits sit beside them in their own list — see [The Overview](#the-overvi
 
 ## Granted feats
 
-Some feats are not picked at a level — something hands them over — and those live in
-one panel on Feats & Mythic, **source first and the feat second**, because that is the
-order they are read in: you know what granted it and are answering with which feat you
-took.
+Some feats are not picked at a level — something hands them over — and those open the
+**Feats** panel on Feats & Mythic, **source first and the feat second**, because that is
+the order they are read in: you know what granted it and are answering with which feat
+you took. The smaller feat groups are sections of the same panel, underneath.
 
 | Source | Feat |
 |---|---|
@@ -865,6 +882,15 @@ weapon's damage ability, the casting and manifesting stats, a suit in the deck, 
 ABP or level-4 or mythic pick, a companion's attack ability. A dropdown is treated as
 an ability picker when its choices *are* abilities, so a slot added later is coloured
 the day it lands rather than the day someone remembers to tag it.
+
+A **weapon's Base** is coloured too, though its choices are attack modes rather than
+abilities: *Alt Melee* wears the colour of whatever ability that mode is keyed to on the
+Overview. It is the one place the two can disagree and the disagreement is the point —
+a finessed rapier reads *Alt Melee* in Dex green beside *Str* in red, which is exactly
+what a finesse weapon is: attacking off one ability and damaging off the other. A mode
+keyed to two abilities takes the primary, since two colours would be no colour at all;
+a mode with only its second slot filled takes that one, because it is still the only
+ability that mode runs on.
 
 Nothing here is a setting: the colours are fixed so that the same red always means
 Strength. They are the workbook's own cell fills, worn thin over the dark theme and

@@ -54,6 +54,20 @@ trackers, the character, abilities, health/armour/saves, attack, skills, magic a
 sub-systems, companions — are folded until asked for, because a character publishes
 around 250 names and an alphabetical wall of them is a list, not an answer.
 
+**Bonuses you can send** — the same index for the other direction: every destination
+`{… += …}` accepts on this character, grouped the same way, each with what it means.
+**Weapons and damage** is first, because it is the half nobody can discover unaided —
+every other destination is a number printed in a column somewhere, so a reader at least
+knows it exists, while a weapon's damage channel is named nowhere on the sheet. Clicking
+a row copies the whole token (`{weapon.melee.damage += 2}`), ready to paste into the feat
+or talent that grants it; where the clipboard is refused, the name is selected on screen
+instead so Ctrl+C still works. They are not offered to the scratchpad, because a
+destination is written to rather than read and most of them will not resolve there — a
+search for `damage` returns *0 of 287* readable values and a dozen destinations, which is
+the distinction the panel exists to make. Under the list, the grammar the enumeration
+cannot teach: `weapon.<which>.<what>`, and why a shape matching nothing today is still
+right.
+
 **Reference** — folded away underneath, because it is the part you need once: the four
 token forms, a three-step walk-through of making a value and giving it pips, where
 formulas work, every operator, every built-in function, what the built-in name families
@@ -230,7 +244,8 @@ everything and the count beside it can be trusted.
 ## Inline formulas in prose
 
 Any descriptive field — class features, template features, notes, background,
-traits, mythic abilities and tradition, weapon special properties, gear notes,
+traits, the mythic ladder's two Effect columns and the mythic tradition, weapon
+special properties, gear notes,
 sphere talents, crafting resources and notes — can carry formulas inside the text:
 
 | Form | Meaning |

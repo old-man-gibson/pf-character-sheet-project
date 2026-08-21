@@ -62,6 +62,60 @@ export const VALUE_SECTIONS = [
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
+/**
+ * The groups the destination browser shows, in order.
+ *
+ * Weapons and damage come first because they are the half of forwarding a
+ * player cannot discover any other way: every other destination is a number
+ * printed somewhere on the sheet, so a reader at least knows it exists. A
+ * weapon's damage channel is named nowhere, matches by shape or group as well
+ * as by weapon, and is the one thing here that has to be taught.
+ */
+export const TARGET_SECTIONS = [
+  { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage on the weapon rows — all of them, one kind of them, or one weapon.' },
+  { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
+  { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes and the three saves.' },
+  { key: 'ability', label: 'Ability scores', blurb: 'The score itself — so everything built on it moves with it.' },
+  { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
+  { key: 'character', label: 'The character', blurb: 'Initiative, and levels in a class.' },
+  { key: 'tracker', label: 'Trackers', blurb: 'How big a pool is — its max and min, never what is currently in it.' },
+  { key: 'other', label: 'Everything else', blurb: '' },
+];
+
+/** Which group a destination belongs to. */
+export function classifyTarget(name) {
+  const head = String(name).split('.')[0];
+  if (head === 'weapon' || head === 'damage') return 'weapon';
+  if (head === 'attack') return 'attack';
+  if (head === 'skill') return 'skill';
+  if (head === 'tracker') return 'tracker';
+  if (head === 'class' || head === 'initiative') return 'character';
+  if (ABILITY_KEYS.has(head)) return 'ability';
+  if (DEFENCE_KEYS.has(head)) return 'defence';
+  return 'other';
+}
+
+/**
+ * Every place a bonus may be sent, grouped and searchable.
+ *
+ * A destination that stands for several ("all saves", "every skill") carries
+ * how many it reaches, because that is the difference between the two rows a
+ * reader is choosing between.
+ */
+export function targetGroups(list, query = '') {
+  const q = String(query || '').trim().toLowerCase();
+  const buckets = new Map(TARGET_SECTIONS.map((sec) => [sec.key, []]));
+  for (const t of list || []) {
+    if (q && !t.name.toLowerCase().includes(q) && !String(t.label).toLowerCase().includes(q)) continue;
+    buckets.get(classifyTarget(t.name)).push({
+      name: t.name, label: t.label, reaches: t.family ? t.family.length : 0,
+    });
+  }
+  return TARGET_SECTIONS
+    .map((sec) => ({ ...sec, items: buckets.get(sec.key) }))
+    .filter((sec) => sec.items.length);
+}
+
 /** Which family a dotted name belongs to. */
 export function classify(name, inlineNames = {}) {
   if (Object.prototype.hasOwnProperty.call(inlineNames, name)) return 'mine';
@@ -181,6 +235,52 @@ export function browserHtml(groups, total, query) {
       </button>`).join('')}</div>
     </details>`).join('')
     : `<p class="empty">No value on this character matches “${esc(query)}”.</p>`}
+  </section>`;
+}
+
+/**
+ * The searchable index of everywhere a bonus may be sent.
+ *
+ * The other half of the values browser, and the half that was missing: a name
+ * you can read is printed somewhere on the sheet, so a player at least knows
+ * to look for it, but a destination is invisible until someone says it exists.
+ * A weapon's damage was reachable all along and simply undiscoverable.
+ *
+ * These do not go in the try-it box. It evaluates an expression and a
+ * destination is not one -- most of them cannot be read at all -- so clicking
+ * copies the whole token instead, ready to paste into the feature that grants
+ * it.
+ */
+export function targetsHtml(groups, total, query) {
+  const shown = groups.reduce((n, g) => n + g.items.length, 0);
+  return `<section class="panel span2" data-fx-section="targets">
+    <h3>Bonuses you can send
+      <span class="badge">${query ? `${shown} of ${total}` : `${total}`}</span>
+    </h3>
+    <p class="hint">Every destination <code>{… += …}</code> accepts on this character. Click one
+      to copy the whole token — paste it into the feat, talent or feature that grants the bonus
+      and it lands here, showing in gold beside the field. A destination is written to, not read:
+      these names are not values and will not resolve in the box above.</p>
+    ${shown ? groups.map((g) => `<details class="fx-group" ${query ? 'open' : ''}>
+      <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
+        ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
+      <div class="fx-names">${g.items.map((it) => `<button type="button" class="fx-name-chip fx-target"
+        data-fx-copy="{${esc(it.name)} += 2}"
+        title="${esc(`{${it.name} += 2} — ${it.label}${it.reaches ? ` (reaches ${it.reaches})` : ''}. Click to copy.`)}">
+        <span class="n">${esc(it.name)}</span><span class="v">${esc(it.label)}</span>
+        ${it.reaches ? `<span class="badge">${it.reaches}</span>` : ''}
+      </button>`).join('')}</div>
+    </details>`).join('')
+    : `<p class="empty">No destination on this character matches “${esc(query)}”.</p>`}
+    <p class="hint"><strong>A weapon destination is a shape, not a list.</strong>
+      <code>weapon.&lt;which&gt;.&lt;what&gt;</code> — where <em>which</em> is
+      <code>melee</code>, <code>ranged</code> or <code>cmb</code>, a weapon group
+      (<code>heavy_blades</code>), or one weapon’s own short name, and <em>what</em> is
+      <code>attack</code>, <code>damage</code>, <code>damage.crit</code> (on a crit only) or
+      <code>damage.mult</code> (multiplied by the crit). Leave <em>which</em> out to reach every
+      weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A shape that matches
+      nothing today is still right — <code>{weapon.ranged.damage += 2}</code> on a character
+      carrying no bow starts working the day one is bought.</p>
   </section>`;
 }
 
@@ -549,17 +649,19 @@ export function referenceHtml(scope, open) {
  * @param {object}   o.scope        the character's formula scope
  * @param {object}   o.inlineNames  the {name = …} the player defined
  * @param {object[]} o.audit        model.audit() rows
+ * @param {object[]} o.targets      model.forwardTargetList -- every {… += …} destination
  * @param {string}   o.draft        what is in the try-it box
  * @param {string}   o.query        what is in the search box
  * @param {boolean}  o.refOpen      whether the reference is unfolded
  */
 export function formulaPanelHtml({
   names, scope, inlineNames = {}, audit = [], problems = [], forwarded = [],
-  draft = '', query = '', refOpen = false,
+  targets = [], draft = '', query = '', refOpen = false,
 }) {
   const known = new Set(names);
   const groups = valueGroups(names, scope, inlineNames, query);
   const total = names.length;
+  const tgroups = targetGroups(targets, query);
   return `<div class="grid fx-tab">
     <section class="panel span2 fx-intro">
       <h3>Formulas</h3>
@@ -567,14 +669,15 @@ export function formulaPanelHtml({
         max, in a field, or inside braces in the middle of a sentence. The sheet keeps it up to
         date: change your Wisdom and everything that read it moves. You can name your own values
         and build on them, and everything you write stays as text you (and your GM) can read.</p>
-      <input class="fx-search" data-fx-query placeholder="Search values and formulas — wis, tracker.burn, floor"
-        value="${esc(query)}" aria-label="Search values and formulas" spellcheck="false">
+      <input class="fx-search" data-fx-query placeholder="Search values, destinations and formulas — wis, damage, tracker.burn"
+        value="${esc(query)}" aria-label="Search values, destinations and formulas" spellcheck="false">
     </section>
     ${problemsHtml(problems)}
     ${scratchpadHtml(draft, scope, known)}
     ${myFormulasHtml(audit, query)}
     ${forwardedHtml(forwarded, query)}
     ${browserHtml(groups, total, query)}
+    ${targets.length ? targetsHtml(tgroups, targets.length, query) : ''}
     ${referenceHtml(scope, refOpen)}
   </div>`;
 }

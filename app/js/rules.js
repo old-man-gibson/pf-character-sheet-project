@@ -2549,6 +2549,34 @@ export const ATTACK_MODE_LABELS = {
 const MODE_TOTAL_KEYS = { melee: 'totalMelee', ranged: 'totalRanged', cmb: 'totalCmb' };
 /** Which stored total an alternate is the alternate of. */
 export const ALT_ATTACK_OF = { altMelee: 'melee', altRanged: 'ranged', altCmb: 'cmb' };
+/**
+ * The DERIVED key each real attack mode's total is stored under -- which is
+ * also the key its reconciliation offset is filed against, so a screen that
+ * wants to show that offset can find it from the mode alone. Alternates are
+ * absent on purpose: an alternate has no offset of its own, it carries the
+ * one belonging to the attack it is an alternate of.
+ */
+export const ATTACK_MODE_KEY = Object.fromEntries(
+  Object.entries(MODE_TOTAL_KEYS).map(([mode, key]) => [mode, `attack.${key}`]));
+
+/**
+ * The one ability an attack mode is read as running on.
+ *
+ * A mode may name two, and they add together -- but two colours is no colour
+ * at all, so anything that has to pick one takes the first that is set: the
+ * primary where both are, and whichever is there where only one is, because a
+ * mode filled in the second slot alone still runs on exactly that ability.
+ * Empty for a mode that names none, and for one that is not a mode.
+ */
+export function attackModeAbility(c, mode) {
+  const slot = c?.attack?.modes?.[mode];
+  if (!slot) return '';
+  const key = (name) => {
+    const k = String(name ?? '').trim().toLowerCase();
+    return ABILITIES.includes(k) ? k : '';
+  };
+  return key(slot.stat1) || key(slot.stat2);
+}
 
 /**
  * The total for any attack mode, alternates included.

@@ -22,6 +22,8 @@ import {
   parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels,
   cleanSkillVariant, skillVariantKind, skillLabel, PERFORM_CATEGORIES, performCategory,
   MYTHIC_TIERS, MYTHIC_STAT_TIERS, MYTHIC_TIER_LEVEL, mythicTierGrant,
+  ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
+  WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
 } from '../app/js/rules.js';
@@ -505,6 +507,153 @@ console.log('list editing');
   const gi = c.data.featGroups.length - 1;
   c.listAdd(`featGroups.${gi}.entries`, { name: 'Works', detail: '' });
   check('awkward group name still addressable', c.data.featGroups[gi].entries[0].name, 'Works');
+}
+
+console.log('the attack totals carry a reconciliation offset, and it is reachable');
+{
+  // What the workbook said its attack bonus was, against what this sheet can
+  // work out from BAB and the ability in the slot. The difference is the
+  // offset, and it used to have nowhere at all to show: AC and the saves each
+  // had an Other column, attack had none, so an imported figure nobody could
+  // account for could not be found or corrected either.
+  const doc = blankDocument({ id: 'atk', name: 'Atk' });
+  doc.identity.level = 15;
+  doc.attack = {
+    ...doc.attack,
+    bab: 11,
+    babOverride: 11,
+    miscBonus: 0,
+    totalMelee: 38,
+    totalRanged: 44,
+    totalCmb: 38,
+    modes: {
+      melee: { value: -1, stat1: 'Str', stat2: null },
+      altMelee: { value: 5, stat1: 'Dex', stat2: null },
+      ranged: { value: 5, stat1: 'Dex', stat2: null },
+      altRanged: { value: -1, stat1: 'Str', stat2: null },
+      cmb: { value: -1, stat1: 'Str', stat2: null },
+      altCmb: { value: 5, stat1: 'Dex', stat2: null },
+    },
+  };
+  // Nico's own scores, so the arithmetic below is his: Str 9 is -1 in the
+  // melee slot and Dex 20 is +5 in the ranged one.
+  doc.statsBuild.str = { ...doc.statsBuild.str, pointBuy: 9, sheetTotal: 9 };
+  doc.statsBuild.dex = { ...doc.statsBuild.dex, pointBuy: 20, sheetTotal: 20 };
+  const c = new Character(doc);
+  check('the imported figure is kept', c.data.attack.totalMelee, 38);
+  check('and the part it cannot account for is the offset', c.offsetOf('attack.totalMelee'), 28);
+  check('each mode carries its own', [c.offsetOf('attack.totalRanged'), c.offsetOf('attack.totalCmb')], [28, 28]);
+  check('every real mode has a key to file it under',
+    [ATTACK_MODE_KEY.melee, ATTACK_MODE_KEY.ranged, ATTACK_MODE_KEY.cmb],
+    ['attack.totalMelee', 'attack.totalRanged', 'attack.totalCmb']);
+  check('and an alternate has none of its own',
+    ATTACK_MODES.filter((m) => ATTACK_MODE_KEY[m]), ['melee', 'ranged', 'cmb']);
+
+  // Clearing it puts the total back to what the visible parts come to, and the
+  // alternate follows, because it is that total with one ability swapped.
+  c.setOffset('attack.totalMelee', 0);
+  check('cleared, melee is BAB and the ability in the slot', c.data.attack.totalMelee, 11 - 1);
+  check('and the alternate follows it', attackModeTotal(c.data, 'altMelee'), 11 + 5);
+  check('the other two are untouched', [c.data.attack.totalRanged, c.data.attack.totalCmb], [44, 38]);
+  c.setOffset('attack.totalMelee', 28);
+  check('and it can be put back', c.data.attack.totalMelee, 38);
+
+  // A bonus forwarded here is not an offset: it is written down and visible,
+  // so it must not be swallowed into one when the document is reopened.
+  c.setOffset('attack.totalMelee', 0);
+  c.setClassFeature(c.data.classes[0]?.name || 'Fighter', 1, 'Features', 'Aim {attack.melee += 3}');
+  check('a forwarded bonus lands', c.data.attack.totalMelee, 10 + 3);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and reopening leaves it forwarded, not folded into Other',
+    [again.data.attack.totalMelee, again.offsetOf('attack.totalMelee')], [13, 0]);
+}
+
+console.log('which ability an attack mode is read as running on');
+{
+  // A weapon's Base says "Alt Melee"; which stat that runs on is set on the
+  // Overview, two slots away. Anything that has to show one ability -- the
+  // colour on that dropdown -- has to pick just one of the two.
+  const c = { attack: { modes: {
+    melee: { stat1: 'Str', stat2: null },
+    altMelee: { stat1: 'Dex', stat2: '' },
+    ranged: { stat1: 'Int', stat2: 'Wis' },   // both: the primary wins
+    altRanged: { stat1: null, stat2: 'Cha' }, // only the second: still that one
+    cmb: { stat1: '', stat2: '' },            // neither
+    altCmb: { stat1: 'Nonsense', stat2: 'Con' },
+  } } };
+  check('one ability named, that one', attackModeAbility(c, 'melee'), 'str');
+  check('an empty second slot changes nothing', attackModeAbility(c, 'altMelee'), 'dex');
+  check('two named, the primary', attackModeAbility(c, 'ranged'), 'int');
+  check('named in the second slot only, that one', attackModeAbility(c, 'altRanged'), 'cha');
+  check('none named, none', attackModeAbility(c, 'cmb'), '');
+  check('a word that is not an ability is skipped, not shown',
+    attackModeAbility(c, 'altCmb'), 'con');
+  check('a mode that does not exist', attackModeAbility(c, 'nope'), '');
+  check('and no attack block at all', [attackModeAbility({}, 'melee'), attackModeAbility(null, 'melee')], ['', '']);
+
+  // Every choice the weapon's Base offers is a mode this can answer for, so
+  // the dropdown cannot hold a value the colouring does not understand.
+  const byLabel = {
+    Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
+    'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
+  };
+  check('every Base choice names a real mode',
+    WEAPON_ATTACK_TYPES.map((t) => byLabel[t]).filter(Boolean).sort(), ATTACK_MODES.slice().sort());
+
+  // On a real character, the modes the import set.
+  for (const id of IDS) {
+    const ch = new Character(load(id));
+    check(`${id} every mode answers with an ability or nothing`,
+      ATTACK_MODES.every((m) => {
+        const ab = attackModeAbility(ch.data, m);
+        return ab === '' || ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(ab);
+      }), true);
+  }
+}
+
+console.log('dragging a feat -- up its own group, or across into another');
+{
+  const c = new Character(blankDocument({ id: 'drag', name: 'Drag' }));
+  c.data.featGroups = [
+    { name: 'A', entries: [{ name: 'one', detail: '' }, { name: 'two', detail: '' }, { name: 'three', detail: '' }] },
+    { name: 'B', entries: [{ name: 'four', detail: '' }] },
+    { name: 'C', entries: [] },
+  ];
+  const A = 'featGroups.0.entries';
+  const B = 'featGroups.1.entries';
+  const C = 'featGroups.2.entries';
+  const names = (path) => c.list(path).map((f) => f.name);
+
+  // Within one group this is listMoveTo, and `to` counts the list as it is
+  // now: dropping below "three" is 3 even though the row came from above it.
+  c.listMoveInto(A, 0, A, 3);
+  check('a feat dropped below the last one lands last', names(A), ['two', 'three', 'one']);
+  c.listMoveInto(A, 2, A, 0);
+  check('and dropped above the first, first', names(A), ['one', 'two', 'three']);
+  c.listMoveInto(A, 1, A, 1);
+  check('dropped where it already was, nothing moves', names(A), ['one', 'two', 'three']);
+
+  // Across groups it leaves one list and joins the other at the point named.
+  c.listMoveInto(A, 1, B, 0);
+  check('it leaves the group it came from', names(A), ['one', 'three']);
+  check('and arrives where it was dropped', names(B), ['two', 'four']);
+
+  // An empty group is a place a feat can be dropped, which is the whole
+  // reason its table keeps a row to drop onto.
+  c.listMoveInto(B, 1, C, 0);
+  check('an empty group takes one', names(C), ['four']);
+  check('leaving the other with what is left', names(B), ['two']);
+
+  // Past the end of the destination, or before its start, still lands.
+  c.listMoveInto(C, 0, A, 99);
+  check('a drop past the end lands last', names(A), ['one', 'three', 'four']);
+  c.listMoveInto(A, 2, B, -5);
+  check('and before the start, first', names(B), ['four', 'two']);
+
+  // An index that is not there moves nothing at all.
+  const before = [names(A), names(B), names(C)];
+  c.listMoveInto(A, 9, B, 0);
+  check('an index off the end of the source is refused', [names(A), names(B), names(C)], before);
 }
 
 console.log('hit points at the table');
@@ -1676,6 +1825,46 @@ console.log('the mythic ladder -- ten tiers, a feat on the odd ones and an incre
   check('one set of picks, not two', b.data.mythicStatPicks.find((p) => p.tier === 4).ability, 'Int');
   b.setMythicPick(4, 'Con');
   check('restored', b.data.abilities.con.score, con0);
+
+  // Each tier names its path ability and its granted feat, and says what each
+  // of the two does. The effects are prose, so they read {…} like any
+  // description -- and a tier the character has not reached is a plan, so a
+  // bonus written there is not earned yet.
+  for (const id of IDS) {
+    const c = new Character(load(id));
+    check(`${id} every tier has room for both effects`,
+      c.data.mythic.abilities.every((a) => typeof a.effect === 'string' && typeof a.featEffect === 'string'),
+      true);
+  }
+
+  const n = new Character(load('nico'));       // tier 5 of ten
+  const tier = n.data.identity.mythicTier;
+  check('nico is partway up the ladder', tier > 0 && tier < MYTHIC_TIERS.length, true);
+  const bluff = () => n.data.skills.find((s) => s.name === 'Bluff').bonus;
+  const bluffBase = bluff();
+
+  n.setItem('mythic.abilities', tier - 1, 'effect', 'Grace {skill.bluff += 2}');
+  check('a reached tier forwards what its ability does', bluff(), bluffBase + 2);
+  check('and says which tier it came from',
+    n.forwardedInto('skill.bluff').from[0].where, `the tier ${tier} ability’s effect`);
+
+  n.setItem('mythic.abilities', tier - 1, 'featEffect', 'And the feat {skill.bluff += 1}');
+  check('the granted feat forwards on its own', bluff(), bluffBase + 3);
+  check('named apart from the ability beside it',
+    n.forwardedInto('skill.bluff').from.map((f) => f.where),
+    [`the tier ${tier} ability’s effect`, `the tier ${tier} feat’s effect`]);
+
+  n.setItem('mythic.abilities', tier, 'effect', 'Someday {skill.bluff += 100}');
+  check('a tier not reached yet grants nothing', bluff(), bluffBase + 3);
+
+  // A name is not a bonus: the plan is meant to be readable ahead of time, so
+  // a definition written above the tier still publishes.
+  n.setItem('mythic.abilities', MYTHIC_TIERS.length - 1, 'effect', 'Ceiling {mythic_ceiling = 40}');
+  check('but a name written there is still readable', n.inlineNames.mythic_ceiling, 40);
+
+  n.setItem('mythic.abilities', tier - 1, 'effect', '');
+  n.setItem('mythic.abilities', tier - 1, 'featEffect', '');
+  check('and clearing them puts the number back', bluff(), bluffBase);
 }
 
 console.log('structured progression');
