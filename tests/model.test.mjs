@@ -2770,6 +2770,527 @@ console.log('skill misc accepts formulas and named values');
   check('restored', bluff().bonus, base);
 }
 
+console.log('forwarded bonuses -- a rule written once, added everywhere it applies');
+{
+  const { tokenize } = await import('../app/js/inline.js');
+
+  // Grammar. The new form has to earn its place without moving any of the old
+  // ones: a definition is still a definition and a comparison is still a
+  // comparison, whatever punctuation they happen to contain.
+  const push = tokenize('{skill.bluff += 4}')[0];
+  check('push token', push.kind, 'push');
+  check('push target', push.targets, ['skill.bluff']);
+  check('push expr', push.expr, '4');
+  check('push sign', push.sign, 1);
+  check('a penalty', tokenize('{ac.total -= 2}')[0].sign, -1);
+  check('several destinations at once',
+    tokenize('{skill.bluff, skill.diplomacy += level}')[0].targets, ['skill.bluff', 'skill.diplomacy']);
+  check('the long spelling means the same', tokenize('{target.skill.bluff = 4}')[0].targets, ['skill.bluff']);
+  check('and is still a push', tokenize('{target.skill.bluff = 4}')[0].kind, 'push');
+  check('a definition is still a definition', tokenize('{qi.max = wis.mod + level}')[0].kind, 'define');
+  check('">=" is not an operator here', tokenize('{= a >= 3}')[0].kind, 'value');
+  check('"a + b = c" is still a value', tokenize('{a + b = c}')[0].kind, 'value');
+
+  const c = new Character(load('nico'));   // the vigilante, and Social Grace
+  const level = Number(c.data.identity.level) || 0;
+  const skill = (name) => c.data.skills.find((s) => s.name === name);
+  const bluffBase = skill('Bluff').bonus;
+  const bluffMiscBase = skill('Bluff').miscResolved;
+  const diploBase = skill('Diplomacy').bonus;
+  const willBase = c.data.saves.will.total;
+  const acBase = c.data.defenses.ac;
+  const touchBase = c.data.defenses.touch;
+  const meleeBase = c.data.attack.totalMelee;
+  const initBase = c.data.hp.initiative;
+  const hpBase = c.hpMax;
+
+  // The rule as it is actually written: one sentence in the feature that
+  // grants it, naming the skills it was taken for.
+  c.setClassFeature('Vigilante', 1, 'Features',
+    'Mythic Social Grace {skill.bluff, skill.diplomacy += if(level >= 4, 4 + if(level >= 8, level, 0), 0)}');
+  const grace = 4 + level;
+  check('one token, two skills', [skill('Bluff').bonus, skill('Diplomacy').bonus],
+    [bluffBase + grace, diploBase + grace]);
+  check('the amount is exposed on the row', skill('Bluff').forwarded, grace);
+  check('and the Misc column still says what was typed', skill('Bluff').miscResolved, bluffMiscBase);
+  check('the destination knows where it came from',
+    c.forwardedInto('skill.bluff').from.map((f) => f.value), [grace]);
+  check('and by what rule', c.forwardedInto('skill.bluff').from[0].expr,
+    'if(level >= 4, 4 + if(level >= 8, level, 0), 0)');
+
+  // It is a rule, not a number, so it moves when the character does.
+  c.set('identity.level', 3);
+  check('nothing below the level it starts at', skill('Bluff').forwarded, 0);
+  check('and nothing shown at the destination either', c.forwardedInto('skill.bluff'), null);
+  c.set('identity.level', 6);
+  check('the first step', skill('Bluff').forwarded, 4);
+  c.set('identity.level', level);
+
+  // Every other kind of destination, including the ones totalled before the
+  // prose that feeds them is read.
+  c.setClassFeature('Vigilante', 2, 'Features',
+    'Steady {saves.will += 2} {ac += 1} {attack.melee -= 1} {initiative += 3} {hp.total += level}');
+  check('a save', c.data.saves.will.total, willBase + 2);
+  check('AC, and the family reaches touch as well',
+    [c.data.defenses.ac, c.data.defenses.touch], [acBase + 1, touchBase + 1]);
+  check('an attack, downwards', c.data.attack.totalMelee, meleeBase - 1);
+  check('initiative', c.data.hp.initiative, initBase + 3);
+  check('max hit points', c.hpMax, hpBase + level);
+
+  // Recomputing must be a fixed point: the second pass reuses the amounts the
+  // first arrived at, so nothing climbs by repeating the sum.
+  const settled = [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac, c.hpMax];
+  c.recompute(); c.recompute(); c.recompute();
+  check('recompute settles',
+    [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac, c.hpMax], settled);
+
+  // ...and so must saving and reopening. The saved document carries the moved
+  // totals, so a reconciliation offset that swallowed a forwarded bonus would
+  // add it again on every load and the sheet would drift a little each time.
+  let again = c;
+  for (let i = 0; i < 3; i++) again = new Character(again.toJSON());
+  check('and so does reopening the document',
+    [again.data.skills.find((s) => s.name === 'Bluff').bonus, again.data.saves.will.total,
+      again.data.defenses.ac, again.hpMax], settled);
+
+  // Two features aimed at the same number both count, and both are findable.
+  c.setClassFeature('Vigilante', 3, 'Features', 'Resolve {saves.will += 1}');
+  check('bonuses stack', c.data.saves.will.total, willBase + 3);
+  check('and each is named', c.forwardedInto('saves.will').from.length, 2);
+
+  // A bonus may be written in terms of a name the character defines.
+  c.setClassFeature('Vigilante', 4, 'Features',
+    'Familiarity {skill_familiarity = 4 + floor(level / 5)} {skill.stealth += skill_familiarity}');
+  check('a bonus can read a name', c.forwardedInto('skill.stealth').total, 4 + Math.floor(level / 5));
+
+  // Nowhere to land. Two different mistakes, told apart, and neither thrown.
+  c.setClassFeature('Vigilante', 5, 'Features', '{skill.bluf += 3} {caster.level += 1}');
+  const misdirected = c.formulaProblems().filter((p) => p.kind === 'misdirected');
+  check('both are reported', misdirected.length, 2);
+  check('a misspelt destination',
+    /is not something a bonus can be forwarded to/.test(
+      misdirected.find((p) => /bluf/.test(p.name)).detail), true);
+  check('a readable value with nowhere to put a bonus',
+    /you can read, but the sheet has nowhere to put a bonus/.test(
+      misdirected.find((p) => /caster/.test(p.name)).detail), true);
+  check('and neither one moves a number', skill('Bluff').forwarded, grace);
+
+  // A formula that does not work is reported against where it is written.
+  c.setClassFeature('Vigilante', 6, 'Features', '{saves.reflex += floor(}');
+  check('a broken bonus is caught, not thrown',
+    c.contributions.errors.some((e) => e.path === 'feature:Vigilante:6:Features'), true);
+
+  for (const lvl of [1, 2, 3, 4, 5, 6]) c.setClassFeature('Vigilante', lvl, 'Features', '');
+  check('removing the rules puts every number back',
+    [skill('Bluff').bonus, c.data.saves.will.total, c.data.defenses.ac,
+      c.data.attack.totalMelee, c.data.hp.initiative, c.hpMax],
+    [bluffBase, willBase, acBase, meleeBase, initBase, hpBase]);
+}
+
+console.log('forwarded bonuses -- ability scores, bonus types, and the note beside a resource');
+{
+  const { tokenize } = await import('../app/js/inline.js');
+
+  check('a bonus can name its type', tokenize('{str.score += 2 as size}')[0].type, 'size');
+  check('and the type is not part of the expression', tokenize('{str.score += 2 as size}')[0].expr, '2');
+  check('the type belongs to the whole token, not one destination',
+    tokenize('{skill.bluff, skill.diplomacy += level as morale}')[0].type, 'morale');
+  check('a penalty can be typed too', tokenize('{ac -= 2 as size}')[0].sign, -1);
+  check('untyped is the default', tokenize('{str.score += 2}')[0].type, '');
+  check('"as" outside a bonus is just text', tokenize('{= a as b}')[0].kind, 'value');
+
+  const c = new Character(load('narockro'));   // the kineticist, and Burn
+  const str = () => c.data.abilities.str.score;
+  const strBase = str();
+  const meleeBase = c.data.attack.totalMelee;
+  const cmdBase = c.data.defenses.cmd;
+  const climbBase = c.data.skills.find((s) => s.name === 'Climb').bonus;
+  const carryBase = c.data.carry.heavy;
+
+  // An ability score is not a total but the thing a dozen totals are built
+  // from, so one bonus has to move all of them without naming any.
+  c.setClassFeature('Legendary Kineticist', 1, 'Features', 'Overflow {str.score += 4}');
+  check('the score moves', str(), strBase + 4);
+  check('and so does everything built on it',
+    [c.data.attack.totalMelee, c.data.defenses.cmd,
+      c.data.skills.find((s) => s.name === 'Climb').bonus],
+    [meleeBase + 2, cmdBase + 2, climbBase + 2]);
+  check('carrying capacity included', c.data.carry.heavy > carryBase, true);
+  check('the build columns still add up to what they add up to',
+    c.data.statsBuild.str.resolved.total, strBase);
+
+  // Reopening must not drift: the imported totals were saved with the bonus in
+  // them, and an offset that swallowed it would leave the rule doing nothing.
+  let again = c;
+  for (let i = 0; i < 3; i++) again = new Character(again.toJSON());
+  check('and reopening the document keeps it',
+    [again.data.abilities.str.score, again.data.attack.totalMelee, again.data.defenses.cmd],
+    [strBase + 4, meleeBase + 2, cmdBase + 2]);
+
+  // Types. Two of a kind do not stack; the largest wins and the loser stays on
+  // the list, because it is the reason the winner is not adding to it.
+  c.setClassFeature('Legendary Kineticist', 2, 'Features',
+    'Kinetic form {str.score += 2 as size} Enlarge {str.score += 4 as size} '
+    + 'Rage {str.score += 4 as morale} Trait {str.score += 1}');
+  check('largest of each type, and untyped all of them', str(), strBase + 4 + 4 + 4 + 1);
+  const into = c.forwardedInto('str.score');
+  check('every bonus is still listed', into.from.length, 5);
+  check('and the superseded one says so',
+    into.from.filter((f) => !f.counts).map((f) => [f.value, f.type]), [[2, 'size']]);
+  check('a penalty of a type is not the same slot as a bonus of it', (() => {
+    c.setClassFeature('Legendary Kineticist', 3, 'Features', '{str.score -= 1 as size}');
+    const v = str();
+    c.setClassFeature('Legendary Kineticist', 3, 'Features', '');
+    return v;
+  })(), strBase + 4 + 4 + 4 + 1 - 1);
+  c.setClassFeature('Legendary Kineticist', 2, 'Features', '');
+
+  // The note beside a resource is where a rule that scales with it belongs.
+  // It may not define a name -- it is read after the trackers it reads -- but
+  // a bonus is not a name.
+  c.setClassFeature('Legendary Kineticist', 1, 'Features', '');
+  c.addTracker({ name: 'Burn', maxFormula: '3 + con.mod' });
+  c.updateTracker('burn', { note: 'Overflow {str.score += if(self.current >= 3, 2, 0) as size}' });
+  c.updateTracker('burn', { current: 0 });
+  check('below the threshold, nothing', str(), strBase);
+  c.updateTracker('burn', { current: 5 });
+  check('over it, the bonus', str(), strBase + 2);
+  check('and it is named by where it was written',
+    c.forwardedInto('str.score').from[0].where, 'the burn tracker’s note');
+  check('a name written in a note is still not published',
+    (() => {
+      c.updateTracker('burn', { note: '{burn_share = 3}' });
+      return c.inlineNames.burn_share;
+    })(), undefined);
+  c.updateTracker('burn', { note: '' });
+  check('and removing it puts the score back', str(), strBase);
+}
+
+// The same slugging the model names a weapon or a group under.
+const slugify = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'x';
+
+console.log('forwarded bonuses -- damage, and the weapons a rule applies to');
+{
+  const c = new Character(load('narockro'));   // three weapons: two melee, one veil
+  const w = (i) => c.data.equipment.weapons[i];
+  const melee = c.data.equipment.weapons
+    .map((x, i) => ({ x, i }))
+    .filter(({ x }) => /melee/i.test(String(x.attackType || '')))
+    .map(({ i }) => i);
+  check('the fixture has melee weapons to aim at', melee.length > 0, true);
+  const atkBase = c.data.equipment.weapons.map((x) => x.attackTotal);
+  const flatBase = c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat);
+  const critBase = c.data.equipment.weapons.map((x) => x.calc.critAvg);
+
+  // Damage with no weapon named reaches every weapon; the three keywords are
+  // the same three the [[…]] tokens already use.
+  c.setClassFeature('Warlord', 1, 'Features', 'Everywhere {damage += 2}');
+  check('every weapon takes it',
+    c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat),
+    flatBase.map((v) => v + 2));
+  check('and it is a rider, so a crit does not multiply it',
+    c.data.equipment.weapons[0].calc.critAvg, critBase[0] + 2);
+
+  c.setClassFeature('Warlord', 1, 'Features', 'Like the weapon {damage.mult += 2}');
+  check('mult damage lands on every hit as well',
+    c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat),
+    flatBase.map((v) => v + 2));
+  check('but multiplies on a crit',
+    c.data.equipment.weapons[0].calc.critAvg,
+    critBase[0] + 2 * c.data.equipment.weapons[0].calc.critMultNum);
+
+  c.setClassFeature('Warlord', 1, 'Features', 'Only on a crit {damage.crit += 6}');
+  check('crit damage is not there on an ordinary hit',
+    c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat), flatBase);
+  check('and is multiplied when it is',
+    c.data.equipment.weapons[0].calc.critAvg,
+    critBase[0] + 6 * c.data.equipment.weapons[0].calc.critMultNum);
+
+  // Which weapons: by how they are used, by fighter group, by name.
+  c.setClassFeature('Warlord', 1, 'Features', 'Weapon Focus {weapon.melee.attack += 1}');
+  check('only the melee rows move',
+    c.data.equipment.weapons.map((x, i) => x.attackTotal - atkBase[i]),
+    atkBase.map((_, i) => (melee.includes(i) ? 1 : 0)));
+  check('and a weapon shape that matches nothing today is not an error',
+    (() => {
+      c.setClassFeature('Warlord', 2, 'Features', '{weapon.ranged.damage += 4}');
+      const bad = c.contributions.errors.length;
+      c.setClassFeature('Warlord', 2, 'Features', '');
+      return bad;
+    })(), 0);
+
+  const group = (w(0).groups || []).filter(Boolean)[0];
+  check('the fixture weapon carries a group', !!group, true);
+  c.setClassFeature('Warlord', 1, 'Features', `Group {weapon.${slugify(group)}.damage += 5}`);
+  check('a group picks out the weapons in it',
+    c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat - flatBase[c.data.equipment.weapons.indexOf(x)]),
+    c.data.equipment.weapons.map((x) => ((x.groups || []).includes(group) ? 5 : 0)));
+
+  c.setClassFeature('Warlord', 1, 'Features', `One row {weapon.${slugify(w(1).name)}.attack += 7}`);
+  check('and one weapon can be named on its own',
+    c.data.equipment.weapons.map((x, i) => x.attackTotal - atkBase[i]),
+    atkBase.map((_, i) => (i === 1 ? 7 : 0)));
+
+  // A selector that names no group and no weapon is a misspelling, and says so.
+  c.setClassFeature('Warlord', 1, 'Features', '{weapon.trebuchets.damage += 9}');
+  check('a made-up selector is reported',
+    c.contributions.errors.some((e) => /trebuchets/.test(e.error)), true);
+
+  // The character's own attack totals reach the weapon rows: one attack must
+  // not read two ways on two panels.
+  c.setClassFeature('Warlord', 1, 'Features', 'Inspire {attack.melee += 3}');
+  check('a character-wide melee bonus is on the weapon rows too',
+    c.data.equipment.weapons.map((x, i) => x.attackTotal - atkBase[i]),
+    atkBase.map((_, i) => (melee.includes(i) ? 3 : 0)));
+  check('and on the Attack panel, by the same amount',
+    c.data.attack.totalMelee - c.data.attack.totalRanged,
+    (() => {
+      c.setClassFeature('Warlord', 1, 'Features', '');
+      const gap = c.data.attack.totalMelee - c.data.attack.totalRanged;
+      c.setClassFeature('Warlord', 1, 'Features', 'Inspire {attack.melee += 3}');
+      return gap + 3;
+    })());
+
+  c.setClassFeature('Warlord', 1, 'Features', '');
+  check('and taking the rules away puts the weapons back',
+    [c.data.equipment.weapons.map((x) => x.attackTotal),
+      c.data.equipment.weapons.map((x) => x.calc.totalDmgFlat)],
+    [atkBase, flatBase]);
+}
+
+console.log('class levels -- readable by name, and raisable by a rule');
+{
+  const c = new Character(load('narockro'));   // Warlord 10 / Legendary Kineticist 11 / Incanter 1
+  const names = c.classNames();
+  check('both lists are read, the table first',
+    names.includes('Warlord') && names.includes('Legendary Kineticist'), true);
+
+  // Readable, under the same slug a skill would use.
+  const scope = c.scope();
+  check('a class publishes its levels', scope.class.legendary_kineticist.level,
+    c.classLevelCount('Legendary Kineticist'));
+  check('gestalt classes each get their own count',
+    [scope.class.warlord.level, scope.class.incanter.level],
+    [c.classLevelCount('Warlord'), c.classLevelCount('Incanter')]);
+  check('and the index lists them', c.scopeNames().includes('class.warlord.level'), true);
+  check('a formula can read one',
+    c.renderProse('{= class.warlord.level}').find((s) => s.kind === 'value').value,
+    c.classLevelCount('Warlord'));
+
+  // Raisable: "counts as two levels higher" is a rule about this number.
+  const kin = () => c.classLevelCount('Legendary Kineticist');
+  const kinBase = kin();
+  const clBase = c.data.training.magic.globalCL;
+  const talentsBase = (c.data.training.magic.classes || []).map((x) => x.totalTalents);
+  c.setClassFeature('Legendary Kineticist', 1, 'Features',
+    'Practiced {class.legendary_kineticist.level += 2}');
+  check('the effective level moves', kin(), kinBase + 2);
+  check('and reading it back agrees', c.scope().class.legendary_kineticist.level, kinBase + 2);
+  check('the levels actually taken do not', c.classLevelsIn('Legendary Kineticist').length,
+    c.data.progression.levels.filter((r) => (r.classes || []).includes('Legendary Kineticist')).length);
+  check('nor does the talent budget',
+    (c.data.training.magic.classes || []).map((x) => x.totalTalents), talentsBase);
+  check('caster level follows, at the class’s own rate',
+    c.data.training.magic.globalCL >= clBase, true);
+
+  // Reopening must not drift, and the rule must be reversible.
+  let again = c;
+  for (let i = 0; i < 3; i++) again = new Character(again.toJSON());
+  check('and reopening the document keeps it',
+    again.classLevelCount('Legendary Kineticist'), kinBase + 2);
+
+  // A class the character has no levels in takes nothing: an effective level
+  // is a multiplier on a class you have, not a way to acquire one.
+  c.setClassFeature('Legendary Kineticist', 2, 'Features', '{class.wizard.level += 4}');
+  check('a class that is not there is reported',
+    c.contributions.errors.some((e) => /class\.wizard\.level/.test(e.error)), true);
+  c.setClassFeature('Legendary Kineticist', 2, 'Features', '');
+
+  c.setClassFeature('Legendary Kineticist', 1, 'Features', '');
+  check('taking the rule away puts the level back', kin(), kinBase);
+  check('and the caster level with it', c.data.training.magic.globalCL, clBase);
+}
+
+console.log('weapon handles -- the short name a formula calls a weapon by');
+{
+  const { weaponHandle } = await import('../app/js/model.js');
+
+  // The default is the name cut where the bookkeeping starts.
+  check('a name written for the table becomes one written for a formula',
+    weaponHandle("Chef's Knife (Bastard Sword) & Cutting Board"), 'chefs_knife');
+  check('brackets cut it', weaponHandle('Carving Fork (Trident)'), 'carving_fork');
+  check('an ampersand cuts it', weaponHandle('Mic & Cord'), 'mic');
+  check('a plain name is left alone', weaponHandle('Guitar Axe'), 'guitar_axe');
+  check('apostrophes go rather than becoming an underscore',
+    weaponHandle("Chef's Knife").includes('_s'), false);
+  check('a name that is all brackets still gets something',
+    weaponHandle('(Unnamed)'), 'unnamed');
+  check('and an empty one does too', weaponHandle(''), 'weapon');
+
+  const c = new Character(load('bryva'));   // five kitchen implements, all parenthesised
+  check('every weapon gets one', c.weaponHandles().length, c.data.equipment.weapons.length);
+  check('and they are short enough to type', c.weaponHandles()[0], 'chefs_knife');
+  check('the row carries it for the view', c.data.equipment.weapons[0].handle, 'chefs_knife');
+
+  const flat = () => c.data.equipment.weapons.map((w) => w.calc.totalDmgFlat);
+  const base = flat();
+  const full = c.data.equipment.weapons[1].name.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  c.setClassFeature('Blacksmith', 1, 'Features',
+    `Short {weapon.chefs_knife.damage += 5} and long {weapon.${full}.damage += 3}`);
+  check('a weapon answers to its handle, and to its whole name as well',
+    flat().map((v, i) => v - base[i]), [5, 3, 0, 0, 0]);
+
+  // The field on the row wins, and what is typed there is slugged.
+  c.setItem('equipment.weapons', 0, 'id', 'Big Knife');
+  check('a typed handle replaces the derived one', c.weaponHandles()[0], 'big_knife');
+  check('and the old one stops matching', flat()[0] - base[0], 0);
+  c.setClassFeature('Blacksmith', 1, 'Features', 'Renamed {weapon.big_knife.damage += 5}');
+  check('while the new one works', flat().map((v, i) => v - base[i]), [5, 0, 0, 0, 0]);
+  check('the weapon keeps the name it is called at the table',
+    /Chef/.test(c.data.equipment.weapons[0].name), true);
+
+  // Two weapons must never share a handle, or one bonus would land on both.
+  c.setItem('equipment.weapons', 1, 'id', 'Big Knife');
+  check('a collision is numbered rather than shared',
+    c.weaponHandles().slice(0, 2), ['big_knife', 'big_knife2']);
+  check('and the bonus still lands on one weapon only',
+    flat().map((v, i) => v - base[i]), [5, 0, 0, 0, 0]);
+
+  // Blanking the field falls back to the name again.
+  c.setItem('equipment.weapons', 0, 'id', '');
+  c.setItem('equipment.weapons', 1, 'id', '');
+  check('an empty field goes back to the derived handle',
+    c.weaponHandles(), ['chefs_knife', 'spatula', 'carving_fork', 'tenderizers', 'tongs']);
+  c.setClassFeature('Blacksmith', 1, 'Features', '');
+  check('and nothing is left behind', flat(), base);
+
+  // Folding a weapon away is a view preference the character keeps, the way a
+  // hidden skill is -- collapse the four you are not using and they stay that
+  // way next time the sheet is opened.
+  c.setItem('equipment.weapons', 2, 'collapsed', true);
+  check('a folded weapon survives a round trip',
+    new Character(c.toJSON()).data.equipment.weapons.map((w) => !!w.collapsed),
+    [false, false, true, false, false]);
+}
+
+console.log('forwarded bonuses -- permanent or temporary, and the Stats tab adds up either way');
+{
+  const { tokenize } = await import('../app/js/inline.js');
+
+  check('a plain type is permanent', tokenize('{str.score += 2 as size}')[0].temporary, false);
+  check('temp. says when', tokenize('{str.score += 2 as temp.size}')[0].temporary, true);
+  check('and keeps the whole string as its type, so the two do not share a slot',
+    tokenize('{str.score += 2 as temp.size}')[0].type, 'temp.size');
+  check('"as temp" on its own is untyped', tokenize('{str.score += 2 as temp}')[0].type, '');
+  check('...but still temporary', tokenize('{str.score += 2 as temp}')[0].temporary, true);
+
+  const c = new Character(load('narockro'));
+  const str = () => c.data.abilities.str;
+  const strBase = str().score;
+  const build = () => c.data.statsBuild.str.resolved;
+
+  // Permanent: the score itself moves, and so does everything built on it.
+  c.setClassFeature('Warlord', 1, 'Features', 'Inherent {str.score += 4 as size}');
+  check('a permanent bonus moves the score', str().score, strBase + 4);
+  check('and the working score with it', str().tempScore, strBase + 4);
+  check('the build columns are left alone', build().total, strBase);
+  check('so the two must be read from the ability, not the build',
+    [str().score !== build().total, str().tempScore !== build().tempTotal], [true, true]);
+  check('and the split says which table it belongs in',
+    str().forwarded, { permanent: 4, temporary: 0, total: 4 });
+
+  // Temporary: only the working score moves, which is the sheet's own rule for
+  // its Temporary Bonuses table.
+  c.setClassFeature('Warlord', 1, 'Features', 'Overflow {str.score += 4 as temp.size}');
+  check('a temporary bonus leaves the score alone', str().score, strBase);
+  check('but moves the working score', str().tempScore, strBase + 4);
+  check('which is what every derived number is built from',
+    str().totalMod, Math.floor((strBase + 4 - 10) / 2));
+  check('and it lands in the temporary half of the split',
+    str().forwarded, { permanent: 0, temporary: 4, total: 4 });
+
+  // The two are different slots, so a permanent and a temporary size bonus add
+  // rather than the larger winning -- exactly as the sheet's own two Size
+  // columns do.
+  c.setClassFeature('Warlord', 1, 'Features',
+    'Both {str.score += 4 as size} {str.score += 2 as temp.size}');
+  check('permanent and temporary size are different bonuses',
+    [str().score, str().tempScore], [strBase + 4, strBase + 6]);
+  check('while two of the same kind are not',
+    (() => {
+      c.setClassFeature('Warlord', 2, 'Features', '{str.score += 1 as temp.size}');
+      const v = str().tempScore;
+      c.setClassFeature('Warlord', 2, 'Features', '');
+      return v;
+    })(), strBase + 6);
+
+  // The view reads one of the two halves.
+  check('the permanent column shows only the permanent part',
+    c.forwardedInto('str.score', 'permanent').total, 4);
+  check('and the temporary column only the temporary part',
+    c.forwardedInto('str.score', 'temporary').total, 2);
+  check('with nothing forwarded to an untouched ability',
+    c.forwardedInto('dex.score', 'permanent'), null);
+
+  c.setClassFeature('Warlord', 1, 'Features', '');
+  check('and taking the rule away puts the score back',
+    [str().score, str().tempScore], [strBase, strBase]);
+}
+
+console.log('forwarded bonuses -- a tracker’s range, and a level not reached yet');
+{
+  const c = new Character(load('nico'));   // the vigilante
+  const level = Number(c.data.identity.level) || 0;
+  // The sheet's own Luck pool, given the max it earns rather than a typed one.
+  c.updateTracker('luck', { maxFormula: 'int.mod' });
+  const luck = () => c.trackers.find((x) => x.id === 'luck');
+  const base = luck().max;
+  check('the pool starts at its formula', base, c.data.abilities.int.mod);
+
+  // A class feature at a level already reached applies.
+  c.setClassFeature('Vigilante', level, 'Features',
+    'Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}');
+  const grant = 1 + Math.floor(c.classLevelCount('Vigilante') / 4);
+  check('a feature can raise a tracker’s maximum', luck().max, base + grant);
+  check('and the amount is on the tracker for the view', luck().forwardedMax, grant);
+  check('the formula it was written with is untouched', luck().maxFormula, 'int.mod');
+  check('the pool itself is nobody’s to push around',
+    c.forwardTargets().expand('tracker.luck.current'), null);
+
+  // ...and one written at a level not reached yet does not.
+  c.setClassFeature('Vigilante', level, 'Features', '');
+  c.setClassFeature('Vigilante', level + 1, 'Features',
+    'Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}');
+  check('a talent taken next level is not adding to anything now', luck().max, base);
+  check('and is not reported as broken either -- it is simply not earned yet',
+    c.formulaProblems().length, 0);
+  c.set('identity.level', level + 1);
+  check('reaching the level turns it on', luck().max > base, true);
+  check('and it is worked out at the level now reached',
+    luck().forwardedMax, 1 + Math.floor(c.classLevelCount('Vigilante') / 4));
+  c.set('identity.level', level);
+  check('stepping back turns it off again', luck().max, base);
+
+  // A future level still *reads* -- the plan is meant to be legible ahead of
+  // time, and a name defined there is inert until something asks for it.
+  c.setClassFeature('Vigilante', level + 1, 'Features',
+    '{future_thing = 7} and a bonus {tracker.luck.max += 3}');
+  check('a name written at a future level is still defined', c.inlineNames.future_thing, 7);
+  check('while the bonus beside it waits', luck().max, base);
+
+  // The minimum is a destination too, so a two-sided pool can widen.
+  c.setClassFeature('Vigilante', level + 1, 'Features', '');
+  c.updateTracker('luck', { minFormula: '-2' });
+  const minBase = luck().min;
+  c.setClassFeature('Vigilante', level, 'Features', 'Deeper {tracker.luck.min -= 3}');
+  check('a minimum can be pushed down', luck().min, minBase - 3);
+
+  c.setClassFeature('Vigilante', level, 'Features', '');
+  check('and taking the rule away puts the range back', [luck().max, luck().min], [base, minBase]);
+}
+
 console.log('round-trips through JSON');
 {
   const c = new Character(load('bryva'));

@@ -44,7 +44,8 @@ import {
   CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_LEVEL, optionCatalogues,
+  MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
+  classForwardKey,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -52,7 +53,7 @@ import {
 } from './extensions.js';
 import { SHEET_CSS } from './styles.js';
 import {
-  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
+  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY, FORWARD_BY_DERIVED,
   BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
   BUILD_DERIVED_KEYS, PROWESS_TRACKS, ABP_LEVELS, ARRAY_LEVELS, LEVEL4_LEVELS,
   ENHANCEMENT_CAP, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, MENTAL_PROWESS_LEVELS,
@@ -85,7 +86,9 @@ import {
 } from './companions.js';
 import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
-import { formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, valueGroups } from './formula-guide.js';
+import {
+  formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
+} from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
 import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
 import {
@@ -2804,7 +2807,30 @@ export class CharacterSheetElement extends HTMLElement {
 
   #sheetBonusCell(key) {
     return `<td class="num"><input type="number" value="${this.#model.offsetOf(key)}"
-      data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"></td>`;
+      data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"
+      >${this.#forwardedBadge(FORWARD_BY_DERIVED[key])}</td>`;
+  }
+
+  /**
+   * A forwarded bonus, shown where it lands.
+   *
+   * Half of forwarding is arriving; the other half is being findable
+   * afterwards. A number that grew by 24 with nothing beside it to say why is
+   * worse than the copied formulas it replaced -- so the amount sits next to
+   * the field it is added to, and points back at the sentence that sent it.
+   */
+  #forwardedBadge(name, tag = '', only = '') {
+    const f = name ? this.#model.forwardedInto(name, only) : null;
+    if (!f) return '';
+    // A superseded bonus stays on the list, marked. It is the reason the one
+    // above it is not adding to it, and a reader who cannot see it will write
+    // it in again by hand.
+    const from = f.from
+      .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''} from ${x.where}`
+        + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${x.counts ? '' : `  (does not stack with the other ${x.type})`}`)
+      .join('\n');
+    return `<span class="fwd" title="Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
+      + `${fmt(f.total)}${tag ? ` <em>${esc(tag)}</em>` : ''}</span>`;
   }
 
   #sheetBonusHint(examples) {
@@ -2838,13 +2864,16 @@ export class CharacterSheetElement extends HTMLElement {
       ${this.#meterStyleEditor('hp')}
       <div class="hprow">
         ${this.#num('hp.current', hp.current)}<span class="hpsep">/</span>
-        <span class="value" title="Base maximum + mythic bonus">${hp.max}</span>
+        <span class="value" title="Base maximum + mythic bonus + anything forwarded here">${hp.max}</span>
         ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, spent first">+${hp.temp}</span>` : ''}
       </div>
       <div class="fieldgrid two">
         ${this.#field('Base maximum', this.#num('hp.total', this.#model.data.hp.total))}
         ${this.#field('Mythic bonus', `<span class="value">+${this.#model.mythicHp}</span>`)}
       </div>
+      ${this.#model.forwardedInto('hp.total')
+        ? `<div class="fieldgrid two">${this.#field('Forwarded',
+          `<span class="value">${this.#forwardedBadge('hp.total')}</span>`)}</div>` : ''}
       <div class="fieldgrid two">
         ${this.#field('Temporary', this.#num('hp.temp', hp.temp))}
         ${this.#field('Nonlethal', this.#num('hp.nonlethal', hp.nonlethal))}
@@ -3104,12 +3133,13 @@ export class CharacterSheetElement extends HTMLElement {
                   ? `<th class="num grouphead" colspan="${g.cols.length + (g.sum ? 1 : 0)}" title="${esc(g.hint || '')}">
                        ${esc(g.label)}${g.cap ? ` <span class="capnote">max +${g.cap}</span>` : ''}</th>`
                   : `<th colspan="${g.cols.length}"></th>`)).join('')}
-                <th></th>
+                <th colspan="2"></th>
               </tr>
               <tr>
                 <th></th>
                 ${groups.map((g) => `${g.cols.map(([, label], i) => `<th class="num ${band(g, i)}">${esc(label)}</th>`).join('')}${
                   g.sum ? '<th class="num grouped groupend" title="What the group actually contributes after its cap">Used</th>' : ''}`).join('')}
+                <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
                 <th class="num">Total</th>
               </tr>
             </thead>
@@ -3123,7 +3153,8 @@ export class CharacterSheetElement extends HTMLElement {
                       title="${r.enhancementWasted
     ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
     : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`}">${r[g.sum] ?? 0}</td>` : ''}`).join('')}
-                  <td class="num total">${r.total ?? 0}</td>
+                  <td class="num">${this.#forwardedBadge(`${ab}.score`, '', 'permanent') || '—'}</td>
+                  <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;
               }).join('')}
               <tr class="costrow">
@@ -3131,7 +3162,7 @@ export class CharacterSheetElement extends HTMLElement {
                 <td class="num">${pb.total}</td>
                 ${permCols.slice(1).map(() => '<td></td>').join('')}
                 ${groups.filter((g) => g.sum).map(() => '<td></td>').join('')}
-                <td></td>
+                <td></td><td></td>
               </tr>
             </tbody>
           </table>
@@ -3164,10 +3195,11 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="tablewrap">
           <table class="build">
             <thead>
-              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 4}"></th></tr>
+              <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
+                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.score += 2 as temp.size} somewhere else on the sheet">Fwd</th>
                 <th class="num" title="Everything the temporary columns add up to">Temp</th>
                 <th class="num" title="Temporary score, used by every derived stat">Score</th>
                 <th class="num">Mod</th>
@@ -3180,8 +3212,10 @@ export class CharacterSheetElement extends HTMLElement {
                 return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                  <td class="num">${r.temporary ? fmt(r.temporary) : '—'}</td>
-                  <td class="num total">${r.tempTotal ?? 0}</td>
+                  <td class="num">${this.#forwardedBadge(`${ab}.score`, '', 'temporary') || '—'}</td>
+                  <td class="num">${r.temporary || a.forwarded?.temporary
+                    ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0)) : '—'}</td>
+                  <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
                   <td class="num total">${fmt(a.totalMod)}</td>
                 </tr>`;
               }).join('')}
@@ -3190,7 +3224,10 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         <p class="hint">
           Temporary bonuses feed the Temp Score used by every derived stat;
-          the permanent Total is left untouched.
+          the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
+          written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
+          for a permanent one, <code>as temp.size</code> for a temporary one — and points
+          back at the sentence that sent it.
         </p>
       </section>
       </div>
@@ -3565,7 +3602,7 @@ export class CharacterSheetElement extends HTMLElement {
                   value: s.miscResolved,
                   error: s.miscError,
                   title: 'Number or formula, e.g. int.mod, skill_familiarity, floor(level/2)',
-                })}</td>
+                })}${this.#forwardedBadge(skillForwardKey(s))}</td>
                 <td class="mid">${this.#itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
                 <td>${this.#itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
@@ -3590,7 +3627,9 @@ export class CharacterSheetElement extends HTMLElement {
           <strong>Spheres</strong> comes from the training tab's talent counts.
           <strong>Misc</strong> holds flat bonuses from gear, traits and the like — a number, or a
           formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name defined
-          in prose like <code>skill_familiarity</code>.
+          in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus
+          <em>forwarded</em> here from a feature that wrote
+          <code>{skill.bluff += …}</code> — point at it to see which one.
         </p>
         <p class="hint">
           Only ${VARIANT_SKILLS.map((v) => `<strong>${esc(v)}</strong>`).join(', ')} and
@@ -3975,6 +4014,7 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
                 data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${this.#forwardedBadge(classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
           <label class="fld"><span>Blended</span>
@@ -4067,6 +4107,7 @@ export class CharacterSheetElement extends HTMLElement {
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
                 data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${this.#forwardedBadge(classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
           <label class="fld"><span>Blended</span>
@@ -4854,9 +4895,20 @@ export class CharacterSheetElement extends HTMLElement {
     const cs = this.#model.conditionState;
     return `<section class="panel span2">
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
-      ${weapons.map((w, i) => `<div class="weapon">
+      ${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
         <div class="weaponhead">
-          ${this.#itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
+          <button class="wfold" data-action="toggle-weapon" data-index="${i}"
+            aria-expanded="${!w.collapsed}"
+            title="${w.collapsed ? 'Open this weapon' : 'Collapse this weapon'}"
+            aria-label="${w.collapsed ? 'Open' : 'Collapse'} ${esc(String(w.name || '').trim() || 'weapon')}"
+            >${w.collapsed ? '▸' : '▾'}</button>
+          <span class="wnames">
+            ${this.#itemText('equipment.weapons', i, 'name', w.name, 'Weapon name')}
+            <label class="whandle" title="What a formula calls this weapon — {weapon.${esc(w.handle || '')}.damage += 2}. Clear it and it goes back to the weapon's own name, cut at the first bracket.">
+              <span>weapon.</span><input type="text" class="mono" value="${esc(w.handle ?? '')}"
+                data-item="equipment.weapons|${i}|id" data-kind="text"
+                placeholder="${esc(weaponHandle(w.name))}" aria-label="Formula name"></label>
+          </span>
           <span class="bigroll" title="Attack including {{…}} tokens">${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</span>
           <span class="bigroll dmg" title="Damage including [[…]] tokens">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
           ${w.proficient === false ? `<span class="badge err nonprof"
@@ -4869,7 +4921,8 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="weapongrid">
           ${this.#field('Base', this.#itemSelect('equipment.weapons', i, 'attackType', w.attackType, WEAPON_ATTACK_TYPES))}
           ${this.#field('Enh.', this.#itemNum('equipment.weapons', i, 'enhancement', w.enhancement))}
-          ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack))}
+          ${this.#field('Misc', this.#itemNum('equipment.weapons', i, 'miscAttack', w.miscAttack)
+            + this.#forwardedBadge(`weapon.${i}.attack`))}
           ${this.#field('Adj.', this.#itemNum('equipment.weapons', i, 'attackOffset', w.attackOffset))}
           <span class="wsep"></span>
           ${this.#field('Dice', `<span class="pair">
@@ -4891,7 +4944,10 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#field('×', `<input type="number" value="${w.abilityMult ?? 1}" step="0.5" min="0"
             data-item="equipment.weapons|${i}|abilityMult" data-kind="number" style="width:3.2rem"
             title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
-          ${this.#field('Misc dmg', this.#itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' }))}
+          ${this.#field('Misc dmg', this.#itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' })
+            + this.#forwardedBadge(`weapon.${i}.damage`)
+            + this.#forwardedBadge(`weapon.${i}.damage.mult`, 'mult')
+            + this.#forwardedBadge(`weapon.${i}.damage.crit`, 'crit'))}
           <span class="wsep"></span>
           ${this.#field('Crit', this.#itemNum('equipment.weapons', i, 'critRange', w.critRange))}
           ${this.#field('Mult', this.#itemSelect('equipment.weapons', i, 'critMult', w.critMult, WEAPON_CRIT_MULTS))}
@@ -7433,6 +7489,10 @@ export class CharacterSheetElement extends HTMLElement {
         </div>
         ${t.maxFormula ? this.#formulaMeta('max', t.maxFormula) : ''}
         ${t.minFormula ? this.#formulaMeta('min', t.minFormula) : ''}
+        ${['max', 'min'].map((edge) => {
+          const badge = this.#forwardedBadge(`tracker.${t.id}.${edge}`);
+          return badge ? `<div class="tmeta">${esc(edge)} ${badge}</div>` : '';
+        }).join('')}
         ${t.note ? `<div class="tnote">${hasTokens(t.note)
       ? this.#renderedProse(t.note, this.#model.trackerScope(t))
       : esc(t.note)}</div>` : ''}
@@ -8336,8 +8396,26 @@ export class CharacterSheetElement extends HTMLElement {
         ? `{${seg.name}} — defined as ${workingLine(def.expr, scope)}`
         : `{${seg.name}}`;
     }
+    // A forwarded bonus says where it goes before it says how it was worked
+    // out: the number is standing in a sentence about something else, and
+    // "+24" there means nothing at all until you know it is Bluff's.
+    if (seg.kind === 'push') {
+      const op = seg.sign < 0 ? '-=' : '+=';
+      const as = seg.type ? ` as ${seg.type}` : '';
+      return `${fmt(seg.value)}${seg.type ? ` ${seg.type}` : ''} to ${this.#targetLabels(seg.targets)} — `
+        + `{${seg.targets.join(', ')} ${op} …${as}} ${workingLine(seg.expr, scope)}`;
+    }
     const label = seg.kind === 'define' ? `{${seg.name} = …}` : '{= …}';
     return `${label} ${workingLine(seg.expr, scope)}`;
+  }
+
+  /** Destination names as a reader would say them: "Bluff and Diplomacy". */
+  #targetLabels(targets) {
+    const byName = new Map((this.#model.forwardTargetList || []).map((t) => [t.name, t.label]));
+    const names = targets.map((t) => byName.get(t) || t);
+    return names.length > 1
+      ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+      : names[0] || '';
   }
 
   /**
@@ -8373,7 +8451,10 @@ export class CharacterSheetElement extends HTMLElement {
           : seg.kind === 'ref' ? `{${seg.name}}` : `{= ${seg.expr}}`;
         return `<span class="tok err" title="${esc(label)} — ${esc(seg.error)}">${esc(seg.raw)}</span>`;
       }
-      const shown = formatValue(seg.value);
+      // A bonus always shows its sign. It is a change to a number somewhere
+      // else, and a bare "2" in the middle of a sentence does not say whether
+      // the sentence is helping or hurting.
+      const shown = seg.kind === 'push' ? fmt(seg.value) : formatValue(seg.value);
       return `<span class="tok ${seg.kind}" title="${esc(this.#tokenTitle(seg, tokenScope()))}">${esc(shown)}</span>`;
     }).join('');
   }
@@ -8806,10 +8887,24 @@ export class CharacterSheetElement extends HTMLElement {
       inlineNames: this.#model.inlineNames || {},
       audit,
       problems: this.#model.formulaProblems(audit),
+      forwarded: this.#forwardedRows(),
       draft: this.#formulaDraft,
       query: this.#formulaQuery,
       refOpen: this.#formulaRefOpen,
     });
+  }
+
+  /** Every forwarded bonus, as the tab lists them: destination, amount, source. */
+  #forwardedRows() {
+    return (this.#model.contributions?.entries || []).map((e) => ({
+      to: this.#targetLabels(e.targets),
+      value: e.value,
+      expr: e.expr,
+      type: e.type,
+      where: describeSource(e.path),
+      error: e.error,
+      dropped: e.dropped,
+    }));
   }
 
   /**
@@ -10358,9 +10453,13 @@ export class CharacterSheetElement extends HTMLElement {
       const q = this.#formulaQuery;
       const names = this.#model.scopeNames();
       const formulaSection = root.querySelector('[data-fx-section="formulas"]');
+      const forwardedSection = root.querySelector('[data-fx-section="forwarded"]');
       const valueSection = root.querySelector('[data-fx-section="values"]');
       if (formulaSection) {
         formulaSection.outerHTML = myFormulasHtml(this.#model.audit(), q);
+      }
+      if (forwardedSection) {
+        forwardedSection.outerHTML = forwardedHtml(this.#forwardedRows(), q);
       }
       if (valueSection) {
         valueSection.outerHTML = browserHtml(
@@ -10792,6 +10891,13 @@ export class CharacterSheetElement extends HTMLElement {
         this.#showAllSkills = !this.#showAllSkills;
         this.#render();
         break;
+      case 'toggle-weapon': {
+        const i = Number(button?.dataset.index);
+        const w = this.#model.data.equipment?.weapons?.[i];
+        if (w) this.#model.setItem('equipment.weapons', i, 'collapsed', !w.collapsed);
+        this.#render();
+        break;
+      }
       case 'toggle-skill-hidden': {
         const i = Number(button?.dataset.index);
         const s = this.#model.data.skills?.[i];

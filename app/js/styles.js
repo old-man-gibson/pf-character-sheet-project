@@ -1048,8 +1048,33 @@ tr.untrained .sname { font-weight: 500; }
   border: 1px solid var(--cs-line); border-radius: 6px;
   padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
 }
-.weaponhead { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+.weaponhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 7px; }
 .weaponhead input[type="text"] { flex: 1; font-weight: 640; }
+
+/* Collapsed: the head is the summary -- name, attack, damage, proficiency --
+   which is what a weapon you are not editing has to say. Hidden rather than
+   left unrendered, and hidden with display:none so the fields inside go out
+   of the tab order too rather than becoming a trap for a keyboard. */
+.weapon.collapsed > *:not(.weaponhead) { display: none; }
+.weapon.collapsed .weaponhead { margin-bottom: 0; }
+.wfold {
+  flex: 0 0 auto; width: 1.7rem; min-height: 1.7rem; padding: 0;
+  font-size: 0.82rem; color: var(--cs-muted);
+  background: none; border-color: transparent;
+}
+.wfold:hover, .wfold:focus-visible { color: var(--cs-accent); border-color: var(--cs-line); }
+
+/* The two names a weapon has: the one it is called at the table, and the one
+   a formula calls it by. Side by side while there is room, and the handle
+   drops under the name when there is not -- it is the shorter of the two and
+   the one a reader can do without at a glance. */
+.wnames { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; flex: 1 1 10rem; min-width: 0; }
+.wnames > input[type="text"] { flex: 1 1 10rem; min-width: 0; }
+.whandle { display: flex; align-items: center; gap: 1px; flex: 0 1 auto; }
+.whandle > span { font-family: var(--cs-mono); font-size: 0.68rem; color: var(--cs-muted); }
+.weaponhead .whandle input[type="text"] {
+  flex: 0 0 auto; width: 7rem; font-weight: 500; font-size: 0.72rem; padding: 2px 4px;
+}
 .bigroll {
   font-size: 1.05rem; font-weight: 680; color: var(--cs-accent);
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -1151,7 +1176,26 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
   font-weight: 620; font-variant-numeric: tabular-nums; cursor: help;
 }
 .tok.define { border-bottom-style: solid; }
+/* A forwarded bonus is going somewhere else, and the double rule under it says
+   so at a glance: dotted shows a value, solid names one, double sends one. */
+.tok.push { border-bottom-style: double; border-bottom-width: 3px; }
 .tok.err { color: var(--cs-bad); border-bottom-color: var(--cs-bad); font-weight: 500; }
+
+/* The operator beside a forwarded bonus's destination on the Formulas tab.
+   Shown always, penalty or not, because it is the syntax being taught. */
+.fx-into { color: var(--cs-muted); font-size: 0.78rem; margin-left: 4px; }
+
+/* The same bonus where it lands -- beside the Misc column of a skill, beside
+   the Other column of a save. Small, gold, and never mistaken for a field the
+   reader can type in, because it is not one: it is written somewhere else. */
+.fwd {
+  display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 4px;
+  background: var(--cs-accent-soft);
+  color: var(--cs-accent); font-size: 0.76rem; font-weight: 650;
+  font-variant-numeric: tabular-nums; cursor: help; vertical-align: middle;
+}
+.fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
+
 
 /* ---------- formula fields ---------- */
 /* Same two layers as .prose, for a single-line control: the resolved value is

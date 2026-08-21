@@ -1,6 +1,6 @@
 # Inline formulas and custom trackers
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The **ƒx Formulas** tab, the sandboxed formula language: `{name = expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The **ƒx Formulas** tab, the sandboxed formula language: `{name = expr}` and `{dest += expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe._
 
 ---
 
@@ -54,7 +54,7 @@ trackers, the character, abilities, health/armour/saves, attack, skills, magic a
 sub-systems, companions — are folded until asked for, because a character publishes
 around 250 names and an alphabetical wall of them is a list, not an answer.
 
-**Reference** — folded away underneath, because it is the part you need once: the three
+**Reference** — folded away underneath, because it is the part you need once: the four
 token forms, a three-step walk-through of making a value and giving it pips, where
 formulas work, every operator, every built-in function, what the built-in name families
 mean, and the rules that are not guessable (a name cannot take one the sheet already
@@ -129,7 +129,7 @@ flagged — and the guide gives them a table of their own for the same reason.
 
 ## When names go wrong
 
-Four things can go wrong with a set of names, and all four are reported the same way:
+Five things can go wrong with a set of names, and all five are reported the same way:
 once, as a problem, in **Needs attention** on the Formulas tab — not as several formulas
 each complaining about the others. Every one of them is also flagged in red where it is
 written.
@@ -199,6 +199,28 @@ are identical. A name that *is* defined but is not working — one caught in a l
 whose formula does not parse — is never called an orphan; it has a definition, and that
 definition has its own entry.
 
+### A bonus that goes nowhere
+
+A [forwarded bonus](#forwarded-bonuses--a-rule-written-once) aimed at something that
+cannot take one fails more quietly than any of the above: the sentence still reads
+perfectly, the number in it is still right, and the destination is simply never told. So
+it is reported, and the two ways of getting it wrong are told apart, because the fixes
+differ:
+
+```
+Bonus goes nowhere   skill.bluf +=
+  "skill.bluf" is not something a bonus can be forwarded to.
+  written in   Vigilante 5, Features    {skill.bluf += 3}
+
+Bonus goes nowhere   caster.level +=
+  "caster.level" is a value you can read, but the sheet has nowhere to put a bonus to it.
+  written in   note 1 on Lore           {caster.level += 1}
+```
+
+The first is a misspelling, fixed in the token. The second is not the player's mistake at
+all: the name is real and readable, it just has no slot for an arriving bonus, and the
+list of names that do is in [Forwarded bonuses](#forwarded-bonuses--a-rule-written-once).
+
 Anything else that does not work — a tracker max that does not parse, a skill formula
 reading something it may not — is listed alongside them, so **Needs attention** really is
 everything and the count beside it can be trusted.
@@ -216,6 +238,7 @@ sphere talents, crafting resources and notes — can carry formulas inside the t
 | `{= expr}` | inline value: evaluates and displays the result |
 | `{name = expr}` | **named** value: evaluates, displays, and defines `name` for use anywhere on the character |
 | `{name}` | reference: displays a previously named value |
+| `{dest += expr}` | **forwarded** bonus: evaluates, displays, and adds the answer to `dest` — a skill, a save, AC, an attack, an ability score. `as size` on the end gives it a type |
 
 **Which fields take them.** A field that understands formulas carries a soft gold
 bar down its **right** edge — the same gold the computed values wear — and says so
@@ -251,6 +274,247 @@ gives the pool pips. Cycles, duplicates, names nothing defines and bad reference
 inline in red, in **Needs attention** on the Formulas tab and in the GM's Formula Audit;
 a definition can never take the name of a built-in like `level`, and is told so rather
 than being refused quietly. See [When names go wrong](#when-names-go-wrong).
+
+### Forwarded bonuses — a rule written once
+
+The three forms above all **publish**: they work a number out and leave it somewhere for
+something else to come and read. That is the wrong way round for half of what a character
+sheet actually contains. *Mythic Social Grace adds your tier to the skills Social Grace
+picked* is one sentence in the rulebook; written as a definition it becomes one formula
+in the feature and a copy of it pasted into the Misc column of every skill it touches,
+where nothing says where it came from and nothing moves the other five when the rule is
+read again.
+
+The fourth form pushes instead:
+
+```
+Mythic Social Grace {skill.bluff, skill.diplomacy += if(level >= 4, 4 + if(level >= 8, level, 0), 0)}
+```
+
+The expression on the right is worked out exactly as any other formula is, and the answer
+is **added to the destinations named on the left**. Several destinations, separated by
+commas, because the point of the form is not writing the same expression twice; `-=` for
+a penalty. `{target.skill.bluff = …}` says the same thing the long way, for anyone who
+would rather name the destination than lean on two characters of punctuation.
+
+The token still shows its value where it is written — `+19`, signed, because a bonus that
+does not say which way it goes is not saying much — and carries a double underline rather
+than the dotted one a plain value wears. Hovering it names the destination and shows the
+working.
+
+**Where it lands.** Reading and writing are not the same list. Several hundred names
+publish themselves to a formula; only the totals the sheet rebuilds from their parts each
+recompute have anywhere to *put* an arriving bonus:
+
+| Destination | What it is |
+|---|---|
+| `skill.bluff`, `skill.craft_weapons_and_armor`, … | one skill, by the same slugged name a formula reads it under |
+| `skill` | every skill |
+| `saves.fortitude`, `saves.reflex`, `saves.will`, `saves` | one save, or all three |
+| `ac.total`, `ac.touch`, `ac.flatFooted`, `ac.cmd`, `ac` | one armour class, or the three that are armour classes (not CMD) |
+| `attack.melee`, `attack.ranged`, `attack.cmb`, `attack` | one attack total, or all three |
+| `damage`, `damage.mult`, `damage.crit` | weapon damage — see below |
+| `weapon.melee.attack`, `weapon.axes.damage`, … | the same, on some weapons only — see below |
+| `class.<name>.level` | levels in one class — see below |
+| `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
+| `initiative` | initiative |
+| `hp.total` | maximum hit points |
+| `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
+
+Anything else is refused and **said so**, in *Needs attention* and beside the formula,
+with the two mistakes told apart because the fixes differ: `skill.bluf` *is not something
+a bonus can be forwarded to* (a misspelling), while `caster.level` *is a value you can
+read, but the sheet has nowhere to put a bonus to it* (a real name, no slot). Neither
+one moves a number, and neither one throws.
+
+An ability score lands *beside* the Stats tab build rather than in it: the columns there
+go on adding up to the number they add up to, and the forwarded part shows in a **Fwd**
+column of its own — in the permanent table or the temporary one, depending on what the
+bonus said it was.
+
+**Damage, and the weapons a rule applies to.** Damage does not live on the character, it
+lives on each weapon, so a damage destination is really two questions: *how much* and
+*which weapons*. The channels are the three the `[[…]]` tokens already use, because they
+are the same three rules written a different way:
+
+| Channel | When it applies |
+|---|---|
+| `damage` | every hit, added once on a crit — the ordinary rider (flaming, sneak attack) |
+| `damage.mult` | every hit, and multiplied on a crit — damage that behaves like the weapon's own |
+| `damage.crit` | a confirmed crit only, and multiplied |
+| `weapon.<sel>.attack` | to hit, and to the confirmation roll |
+
+Written bare — `{damage += 2}`, `{damage.crit += 6}` — a bonus reaches **every** weapon.
+Put a selector in front of it and it reaches only some:
+
+```
+Weapon Focus {weapon.melee.attack += 1}
+Deadly Aim {weapon.ranged.damage += 4}
+Axe specialist {weapon.axes.damage += 2}
+That one knife {weapon.chefs_knife.damage.mult += 1d6}
+```
+
+A selector is **`melee`, `ranged` or `cmb`** (matched against the row's attack type), a
+**fighter weapon group** written on the row, or a **single weapon's handle**. A selector
+that names no group and no weapon on the character is a misspelling and is reported as
+one; a shape that simply matches nothing today — `weapon.ranged` on a character carrying
+no bow — is not, because the rule is right and will apply the moment one is bought.
+
+**A weapon's handle** is the short name a formula calls it by, and it is a field in the
+weapon's own header, beside its name and prefixed `weapon.` so it reads as what you would
+type. A weapon's
+*name* is written for the table, not for a formula — *Chef's Knife (Bastard Sword) &
+Cutting Board* is the joke, the statistics and the off-hand all in one string — so the
+default is that name cut at the first bracket, ampersand or comma, with the apostrophes
+dropped: **`chefs_knife`**. Fill the field in and what you write wins, slugged the same
+way, so *Big Knife* becomes `big_knife`; blank it and it goes back to following the name.
+Two weapons never share one — the second gets a number — because a bonus aimed at a handle
+two weapons answered to would land on both. A weapon also still answers to its whole
+slugged name, so a rule written before the row had a handle keeps working.
+
+The character's own `attack.melee`, `attack.ranged` and `attack.cmb` reach the weapon rows
+too. One attack must not read two ways on two panels.
+
+### Class levels
+
+`class.<name>.level` is how many levels of one class the character has, under the same
+slugging skills use — *Legendary Kineticist* is `class.legendary_kineticist`, and the
+**The character** family in *Values you can read* lists every one of them with its number
+beside it, which is the place to check the spelling. On a gestalt build each side is
+counted separately, so a rule that scales off one class of three can say so:
+
+```
+Elemental Overflow is {= floor(class.legendary_kineticist.level / 5)} points of burn.
+```
+
+`level` is the character's level and always was; this is the class's. Writing the number
+in by hand instead goes stale at the next level-up, which is the whole thing this language
+exists to stop.
+
+It is also a **destination**, because "counts as two levels higher" is a rule about
+exactly this number:
+
+```
+Practiced Kineticist {class.legendary_kineticist.level += 2}
+```
+
+What that moves, and what it deliberately does not:
+
+- **Moves**: the class's effective level everywhere it is read — the Vancian and psionic
+  blocks that name the class, a companion's master level, `class.<name>.level` itself, and
+  the sphere **caster level** and **magic skill bonus**, each at that class's own rate. Two
+  class levels on a mid-caster is one caster level, which is what the boost is worth and
+  not what the CL Bonus field would give.
+- **Does not move**: the levels actually taken. Hit dice, base saves and BAB are built
+  from which class ran at which character level, and so are the sphere **talent budget**
+  and **spell points**. "Counts as two levels higher" is a rule about what a class can do,
+  not about being handed two more levels' worth of it. A flat caster-level bonus that is
+  not a class-level bonus already has its own field on the Magic Training tab.
+
+A class the character has no levels in is refused rather than conjured: an effective level
+is a multiplier on a class you have.
+
+**Saying what kind of bonus it is.** End the expression with `as <type>` and the bonus
+stops stacking with another of the same type at the same destination:
+
+```
+Kinetic form {str.score += 2 as size}. Enlarge person {str.score += 4 as size}.
+```
+
+is **+4**, not +6 — the largest bonus of each type counts, and the largest penalty, and
+untyped bonuses all count as they always did. The one that lost stays on the list where
+the number is explained, marked *does not stack with the other size*, because it is the
+reason the winner is not adding to it and a reader who cannot see it will write it in
+again by hand. The type is a stacking key and nothing else, so a house type works exactly
+as a printed one does; `as size`, `as morale`, `as luck`, `as competence` all read the way
+the rulebook says them.
+
+This settles forwarded bonuses against **each other**. A size bonus typed into the Stats
+tab's own Size column, or a save's Morale row, is a different number in a different place,
+and the sheet adds both — those columns are where a bonus you are not deriving from a rule
+belongs, and putting the same bonus in both places counts it twice.
+
+**Permanent or temporary.** An ability score is the one number the sheet asks this of, and
+it keeps a table for each answer: a permanent bonus moves the score, a temporary one moves
+only the **Temp Score** every derived number is built from. Put `temp.` on the front of
+the type and the bonus lands in the second table instead of the first:
+
+```
+Inherent bonus {str.score += 4 as size}.
+Elemental Overflow, while burning {str.score += 4 as temp.size}.
+```
+
+`as temp` on its own says *when* and not *what kind*, so it is untyped and temporary — two
+of them stack, the way two untyped bonuses do. A permanent size bonus and a temporary one
+are different bonuses and both count, exactly as the sheet's own two Size columns do.
+Anywhere other than an ability score there is no temporary half to land in, and `temp.`
+is only part of the type's name.
+
+Both Stats tables carry a **Fwd** column showing what arrived from elsewhere, with the
+sentence that sent it in the tooltip; **Total** and **Score** include it, so the row adds
+up either way.
+
+**A tracker's range.** `tracker.<id>.max` and `tracker.<id>.min` take bonuses; the pool
+itself does not, because how full a resource is at this moment is play state and nobody's
+to push around. How *big* it is, on the other hand, is exactly the kind of thing a talent
+says:
+
+```
+Improved Luck {tracker.luck.max += 1 + floor(class.vigilante.level / 4)}
+```
+
+written in the Vigilante feature that grants it, rather than typed into the max and left
+to go stale at the next level-up. The tracker's own max formula is untouched — the
+forwarded part shows beside it on the row, in gold, and names the feature that sent it.
+The id is the one on the tracker's own row, which never follows a rename.
+
+**A level you have not reached.** The feature grid is a twenty-level plan, so it holds rows
+for levels the character has not got to yet. Those rows still read and still display —
+being able to look ahead is the point of a plan — and a `{name = …}` written in one is
+still defined, because a name is inert until something asks for it. A **bonus** written in
+one is not applied. A talent taken at 16 adds nothing at 15, and starts adding the moment
+the level is reached; it is not reported as broken in the meantime, because there is
+nothing wrong with it.
+
+**Where a bonus can be written.** Every field that takes `{…}` at all, plus one that takes
+nothing else: a **tracker's note**. A note may not define a name — it is read after the
+trackers it reads, so the name would be a pass behind — but a bonus is not a name, and the
+note beside a resource is exactly where a rule that scales with it belongs:
+
+```
+Burn                                        ●●●○○○○○○○○○○
+  Elemental Overflow {str.score += if(self.current >= 3, 2, 0) as size}
+```
+
+`self.*` works there as it does in any tracker note, so the rule can read its own pool
+without naming it.
+
+**Where it shows.** Half of forwarding is arriving; the other half is being findable
+afterwards, because the column that used to hold the rule no longer does. So the amount
+sits in gold beside the field it lands on — the **Misc** column of the skill, the
+**Other** column of the save — and points back at the sentence that sent it:
+
+```
+Forwarded here
++2 from note 1 on Lore — += 2
++2 from Vigilante 4, Features — += 2
+```
+
+and the Formulas tab grows a **Forwarded bonuses** panel listing every one of them by
+destination, amount and source. Two features aimed at the same number both count, and
+both are named.
+
+**What a bonus may read.** Anything the character publishes, and any `{name = …}` the
+character defines — `{skill.stealth += skill_familiarity}` works. The one direction that
+does not exist is the reverse: a *name* may not be written in terms of a bonus. Names are
+resolved first and bonuses second, so nothing can loop.
+
+**How it is worked out.** A forwarded bonus is written in prose, and prose is read late —
+long after the saves and AC it may be aimed at have been totalled. So the sheet is worked
+out, the bonuses are read off it, and it is worked out again with them in hand. Twice,
+and never a third time: the second pass reuses the amounts the first arrived at, so a
+bonus can never chase its own destination round a loop. A character with no forwarded
+bonuses, or none aimed earlier than the skills, costs exactly what it always did.
 
 **Dice from names.** A weapon's Dice field accepts a reference — `{kinetic.fist}`
 (or `[[kinetic.fist]]` / `{= …}`) — beside literal dice. A number-valued name is
@@ -325,9 +589,12 @@ reads *"Nonlethal 60. Overflow +1. 0 left — overheating."* at 3 burn on a leve
 character, and every number moves the instant a pip is clicked. The note is edited in the
 ✎ editor (Enter is a newline there, not Save) and shown resolved on the row.
 
-A note is a readout, not a definition site: a `{name = …}` written in one displays its
-value but is **not** published to the rest of the character, because the note is
-evaluated after the trackers it reads. Put character-wide names in a class feature or a
+A note is a readout and a place to write a rule, but not a definition site: a
+`{name = …}` written in one displays its value but is **not** published to the rest of the
+character, because the note is evaluated after the trackers it reads. A
+[forwarded bonus](#forwarded-bonuses--a-rule-written-once) is a different matter and does
+work there — a bonus is not a name, and `{str.score += if(self.current >= 3, 2, 0) as size}`
+on the Burn tracker is exactly where that rule belongs. Put character-wide names in a class feature or a
 note on Lore & Notes instead. Every token in a tracker note appears in the GM's Formula
 Audit with what it reads and what it currently evaluates to.
 

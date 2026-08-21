@@ -19,6 +19,18 @@ The worksheet's four systems, separated and computed:
   catch-all. Size/groups/handedness/familiarity/crit-mult are dropdowns; the ability
   multiplier is free (×3 and beyond allowed).
 
+  **A card folds.** The chevron beside the name collapses the weapon to its header —
+  name, handle, attack, damage, proficiency — which is everything a weapon you are not
+  editing has to say, and the state is kept per weapon on the character. A collapsed
+  card's fields leave the tab order with it.
+
+  **The handle** sits in that header next to the name, prefixed `weapon.` so it reads as
+  the thing you would type: it is what a rule elsewhere on the sheet aims at this weapon
+  by — `{weapon.chefs_knife.damage += 2}`. It defaults to the weapon's name cut at the
+  first bracket or ampersand, which is where a name written for the table stops and its
+  bookkeeping begins; write your own and it wins, clear it and the default comes back.
+  See [Forwarded bonuses](formulas-and-trackers.md#forwarded-bonuses--a-rule-written-once).
+
   **Damage/to-hit tokens**: write `{{…}}` in special properties to add to hit and
   `[[…]]` to add damage — dice, sandbox formulas, or both (`[[2d6 + con.mod]]`,
   `{{2}}`, `{{1d4}}`). A `{name}` you defined in prose works inside one too
