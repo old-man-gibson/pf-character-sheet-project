@@ -88,6 +88,7 @@ import { evaluateFormula, analyse, resolvePath } from './formula.js';
 import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
 import {
   formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
+  targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
 import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
@@ -8986,6 +8987,7 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
       audit,
       problems: this.#model.formulaProblems(audit),
       forwarded: this.#forwardedRows(),
+      targets: this.#model.forwardTargetList || [],
       draft: this.#formulaDraft,
       query: this.#formulaQuery,
       refOpen: this.#formulaRefOpen,
@@ -10637,6 +10639,11 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
           valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length, q,
         );
       }
+      const targetSection = root.querySelector('[data-fx-section="targets"]');
+      if (targetSection) {
+        const targets = this.#model.forwardTargetList || [];
+        targetSection.outerHTML = targetsHtml(targetGroups(targets, q), targets.length, q);
+      }
       this.#bindFormulaInserts(root);
     };
 
@@ -10682,6 +10689,42 @@ Click to edit.` : PROSE_HINT)}">${shown}</button>`;
    * expression); a whole formula replaces what is there.
    */
   #bindFormulaInserts(root) {
+    // A destination chip copies its whole token rather than typing into the
+    // try-it box: a destination is written to, not read, so most of them
+    // would not evaluate there at all.
+    root.querySelectorAll('[data-fx-copy]').forEach((el) => {
+      if (el.dataset.fxBound) return;
+      el.dataset.fxBound = '1';
+      el.addEventListener('click', async () => {
+        const text = el.dataset.fxCopy;
+        const mark = (label) => {
+          el.classList.add('copied');
+          el.setAttribute('data-copied', label);
+          setTimeout(() => {
+            if (!el.isConnected) return;
+            el.classList.remove('copied');
+            el.removeAttribute('data-copied');
+          }, 1400);
+        };
+        try {
+          await navigator.clipboard.writeText(text);
+          mark('copied');
+          return;
+        } catch { /* no permission, or no clipboard at all -- fall through */ }
+        // No clipboard. Select the name where it is on screen instead, so the
+        // reader can take it with Ctrl+C -- "press Ctrl+C" has to be true when
+        // it is said, and it is only true once something is selected.
+        const name = el.querySelector('.n') || el;
+        const sel = this.shadowRoot.getSelection?.() ?? document.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        mark(sel ? 'press Ctrl+C' : 'copy it by hand');
+      });
+    });
     root.querySelectorAll('[data-fx-insert]').forEach((el) => {
       if (el.dataset.fxBound) return;
       el.dataset.fxBound = '1';

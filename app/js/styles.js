@@ -2340,6 +2340,23 @@ button.fx-name-chip .v {
   color: var(--cs-text); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
+/* A destination chip. Its right-hand half is a label rather than a value, so
+   it is not tabular and is allowed to wrap; the copy is confirmed on the chip
+   itself, because a toast for something this small is more interruption than
+   the action was worth. */
+button.fx-name-chip.fx-target .v {
+  color: var(--cs-muted); font-weight: 500; font-family: var(--cs-sans, inherit);
+  white-space: normal; text-align: right;
+}
+button.fx-name-chip.fx-target { align-items: center; }
+button.fx-name-chip.fx-target.copied { border-color: var(--cs-accent); }
+button.fx-name-chip.fx-target.copied .v { visibility: hidden; }
+button.fx-name-chip.fx-target.copied::after {
+  content: attr(data-copied); position: absolute; right: 7px;
+  color: var(--cs-accent); font-weight: 650; font-size: 0.7rem;
+}
+button.fx-name-chip.fx-target { position: relative; }
+
 /* Formulas already on the character. */
 .fx-row {
   border: 1px solid var(--cs-line); border-radius: 6px; background: var(--cs-panel-2);

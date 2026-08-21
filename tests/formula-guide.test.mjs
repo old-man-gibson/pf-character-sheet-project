@@ -4,6 +4,7 @@ import { Character } from '../app/js/model.js';
 import {
   classify, valueGroups, formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml,
   scratchpadHtml, referenceHtml, problemsHtml, VALUE_SECTIONS,
+  classifyTarget, targetGroups, targetsHtml, TARGET_SECTIONS,
 } from '../app/js/formula-guide.js';
 
 let pass = 0;
@@ -245,6 +246,86 @@ const clean = new Character({
 check('nothing wrong, nothing reported', clean.formulaProblems(), []);
 check('and the name resolves', clean.inlineNames['my.pool'], 5);
 check('a name quoted after being defined is not an orphan', clean.orphans(), []);
+
+console.log('where a bonus can be sent -- the half a reader cannot see on the sheet');
+{
+  // Every destination is invisible until something says it exists: a value is
+  // printed in a column somewhere, a destination is printed nowhere at all.
+  const targets = [
+    { name: 'damage', label: 'Damage, every weapon' },
+    { name: 'damage.crit', label: 'Damage on a crit only, every weapon' },
+    { name: 'weapon.attack', label: 'Attack, every weapon' },
+    { name: 'weapon.melee.damage', label: 'Damage, melee' },
+    { name: 'weapon.rapier.damage.mult', label: 'Damage, multiplied on a crit, rapier' },
+    { name: 'attack.melee', label: 'Melee attack' },
+    { name: 'attack', label: 'All attack', family: ['attack.melee', 'attack.ranged', 'attack.cmb'] },
+    { name: 'skill.bluff', label: 'Bluff' },
+    { name: 'skill', label: 'Every skill', family: ['skill.bluff', 'skill.perception'] },
+    { name: 'saves.will', label: 'Will' },
+    { name: 'hp.total', label: 'Max hit points' },
+    { name: 'str.score', label: 'Strength' },
+    { name: 'initiative', label: 'Initiative' },
+    { name: 'class.rogue.level', label: 'Rogue levels' },
+    { name: 'tracker.luck.max', label: 'Luck max' },
+  ];
+
+  check('damage and every weapon shape land together',
+    ['damage', 'damage.crit', 'weapon.attack', 'weapon.melee.damage', 'weapon.rapier.damage.mult']
+      .map(classifyTarget),
+    ['weapon', 'weapon', 'weapon', 'weapon', 'weapon']);
+  check('the attack numbers are their own group',
+    ['attack', 'attack.melee'].map(classifyTarget), ['attack', 'attack']);
+  check('and the rest go where a reader would look for them',
+    ['skill.bluff', 'saves.will', 'hp.total', 'str.score', 'initiative',
+      'class.rogue.level', 'tracker.luck.max'].map(classifyTarget),
+    ['skill', 'defence', 'defence', 'ability', 'character', 'character', 'tracker']);
+
+  const groups = targetGroups(targets);
+  check('weapons and damage come first, because they are the unguessable ones',
+    groups[0].key, 'weapon');
+  check('every destination is filed somewhere',
+    groups.reduce((n, g) => n + g.items.length, 0), targets.length);
+  check('an empty group is not shown',
+    groups.every((g) => g.items.length > 0), true);
+  check('the groups keep the declared order',
+    groups.map((g) => g.key),
+    TARGET_SECTIONS.map((sec) => sec.key).filter((k) => groups.some((g) => g.key === k)));
+
+  // One that stands for several says how many, because that is the whole
+  // difference between the two rows a reader is choosing between.
+  const attack = groups.find((g) => g.key === 'attack').items;
+  check('a family says what it reaches', attack.find((i) => i.name === 'attack').reaches, 3);
+  check('a single destination reaches nothing extra',
+    attack.find((i) => i.name === 'attack.melee').reaches, 0);
+
+  // Searching by name and by label alike -- "damage" is in both, but a player
+  // hunting for their rapier will type the weapon, not the channel.
+  // Four of the five weapon rows: weapon.attack is a weapon row without being a damage one.
+  check('search by name', targetGroups(targets, 'damage').reduce((n, g) => n + g.items.length, 0), 4);
+  check('search by label', targetGroups(targets, 'rapier').map((g) => g.items.map((i) => i.name)),
+    [['weapon.rapier.damage.mult']]);
+  check('a search that matches nothing yields no groups', targetGroups(targets, 'zzz'), []);
+
+  const html = targetsHtml(targetGroups(targets), targets.length, '');
+  check('the section is findable for the search to replace',
+    html.includes('data-fx-section="targets"'), true);
+  check('every chip copies a whole token, not a bare name',
+    [...html.matchAll(/data-fx-copy="([^"]*)"/g)].every((m) => /^\{.+ \+= .+\}$/.test(m[1])), true);
+  check('there is one chip per destination',
+    [...html.matchAll(/data-fx-copy="/g)].length, targets.length);
+  check('none of them is offered to the try-it box, which cannot read a destination',
+    html.includes('data-fx-insert'), false);
+  check('the weapon grammar is taught, not just enumerated',
+    html.includes('weapon.&lt;which&gt;.&lt;what&gt;'), true);
+  check('a no-match search says so', targetsHtml(targetGroups(targets, 'zzz'), targets.length, 'zzz')
+    .includes('No destination'), true);
+
+  // On the whole tab, and only when the character has somewhere to send one.
+  const withTargets = formulaPanelHtml({ names, scope, inlineNames, audit, targets });
+  check('the tab carries the destinations', withTargets.includes('Bonuses you can send'), true);
+  check('and leaves them out when there are none',
+    formulaPanelHtml({ names, scope, inlineNames, audit }).includes('Bonuses you can send'), false);
+}
 
 console.log('every insertable carries the text it inserts');
 const inserts = [...panel.matchAll(/data-fx-insert="([^"]*)"/g)].map((m) => m[1]);
