@@ -893,7 +893,7 @@ function dashManeuversCard(model) {
       .filter((d) => d.readied.length);
     const shown = (text) => (hasTokens(text) ? renderedProse(model, text) : esc(text));
     const row = (d, e) => {
-      const entry = maneuverDetails(d, e.name);
+      const entry = maneuverDetails(d, e.name, e);
       // A save of "None" is a cell the player answered, not a fact worth a
       // line here; a DC without one still is.
       const save = [entry.save === 'None' ? '' : entry.save, entry.dc.trim() ? `DC ${entry.dc}` : '']

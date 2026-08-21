@@ -16,7 +16,9 @@ A pack carries two kinds of thing:
   (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
   pack's tables are merged at load and registered with the model; a later pack's entry
   replaces an earlier one of the same name, so a player can correct a bundled table by
-  shipping a fixed copy in their own pack.
+  shipping a fixed copy in their own pack. Tables are **not** copied into a character:
+  the sheet reads them where they stand, so a corrected pack corrects every sheet
+  already in play.
 - **Blocks** a player attaches to one character: a `class` (hit die, BAB, saves, ranks,
   class skills, features by level), a `race` (size, speed, ability modifiers, traits,
   languages), a single race `trait`, a `feature` (joins a named group on the Template
@@ -72,13 +74,45 @@ pack on or off (bundled ones too — the choice is remembered), **Export** one a
 `.json` to share, **Import** a file, paste JSON, or drop a pack anywhere on the page —
 the page tells a pack from a character by its `format` line, and the sheet's own Import
 button hands a pack up the same way. **+ New extension** opens the editor: the header
-fields, then blocks as one small form each (features and traits are typed one per line
-— `1: Fast movement, Rage`, `Darkvision: text`), or the whole document as JSON. **Copy
+fields, then the discipline catalogue (below) and blocks as one small form each (features
+and traits are typed one per line — `1: Fast movement, Rage`, `Darkvision: text`), or the
+whole document as JSON. The other four tables are big, regular and usually built by a
+tool, so they stay JSON-only. **Copy
 to mine** clones a bundled pack into an editable local one; **From this character…**
 lifts the open sheet's classes, race, feature groups and trackers into a new pack, which
 is how something built by hand gets shared. A pack imported with the same id as one
 already here replaces it (that is how a friend's rev 2 lands); a local pack cannot take
 a bundled pack's id.
+
+### Disciplines
+
+The one shared table with a form of its own, because it is the one a player writes by
+hand rather than generating with a tool. Under **Disciplines** in the editor: name the
+discipline, add maneuvers and stances under it, and for each of them fill in as much of
+its card as you want to — type, action, range, target, duration, saving throw, DC and a
+description, the same eight cells the sheet's Maneuvers tab shows. A saved pack puts the
+discipline in the sheet's *Train a discipline…* dropdown beside the bundled thirty, and
+everything under it can be readied.
+
+Every cell reads `{…}` formulas when the sheet draws it, so a pack can write
+`Close ({= 25 + 5 * floor(level / 2)} ft.)` once and have it come out right on every
+character who trains the discipline. What the pack cannot do is *define* a name or
+forward a bonus: only the character's own prose is collected for that, so a `{…}` in a
+pack cell shows a value and nothing more. It also never reaches the Formula Audit, which
+lists what this character wrote — a pack's formula is fixed in the pack.
+
+**What a player writes on their sheet sits over the pack, cell by cell.** A ruling made
+at the table goes in the cell and wins; the cells beside it still come from the pack;
+emptying it hands that cell straight back. Only the cells actually written are saved
+with the character, which is what lets a corrected pack correct a sheet already in play.
+In the editor's cells the greyed text tells you which is which: a plain ghost value
+(*Melee attack*) is what the cell will say if left alone, and one marked *e.g.* is only
+a suggestion.
+
+The bundled Path of War catalogue fills in nothing but the type. That is not a
+limitation of the format — it is that its 1,033 maneuver names are a publisher's, and
+their rules text is not ours to ship. A pack of your own homebrew has nothing to hold
+back.
 
 A class's own feature text lands **under the class**, on the Progression tab beneath its
 ladder — *What they do*, one entry per distinct feature however many levels grant it, an

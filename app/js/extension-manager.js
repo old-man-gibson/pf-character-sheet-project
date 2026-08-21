@@ -28,6 +28,7 @@ import {
   describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter,
 } from './extensions.js';
 import { parsePaste, splitChunk } from './paste-import.js';
+import { MANEUVER_FIELDS } from './rules.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -101,6 +102,20 @@ const CSS = `
 .extmgr .left .top input[type=text] { width: 12rem; }
 .extmgr .left pre { margin: 6px 0 0; white-space: pre-wrap; font: inherit; font-size: 0.78rem; opacity: 0.85; max-height: 7.5em; overflow: auto; }
 .extmgr .left.skip pre { opacity: 0.4; }
+/* The discipline editor. A discipline is a block-shaped card; its maneuvers
+   are rows inside it, each of which opens into the cells a maneuver's card
+   shows on the sheet. Three levels, so each one is kept as flat as it can be. */
+.extmgr .disc > .head input[type=text] { flex: 1; font-weight: 600; }
+.extmgr .disc > .head .meta { font-size: 0.74rem; opacity: 0.65; white-space: nowrap; }
+.extmgr .ents { margin-top: 8px; }
+.extmgr .lvl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 8px 0 2px; }
+.extmgr .ent { border-top: 1px solid var(--line, #333); padding: 4px 0; }
+.extmgr .ent > .top { display: flex; gap: 6px; align-items: center; }
+.extmgr .ent > .top input[type=number] { width: 3.4rem; }
+.extmgr .ent > .top select { width: 6.5rem; }
+.extmgr .ent > .top input.nm { flex: 1; min-width: 0; }
+.extmgr .ent > .top button { padding: 1px 8px; }
+.extmgr .ent .cells { margin: 6px 0 8px 10px; padding-left: 10px; border-left: 2px solid var(--accent, #d4a24a); }
 `;
 
 export function mountExtensionManager(dialog, { say = () => {}, currentCharacter = () => null } = {}) {
@@ -114,6 +129,8 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let showPaste = false;
   let confirmRemove = null;
   const openBlocks = new Set();
+  const openDisciplines = new Set();   // discipline index
+  const openEntries = new Set();       // "<discipline>|<entry>", whose cells are showing
   /**
    * The paste importer's two stages inside the editor: `text` (a box to
    * paste into) and `review` (what was read, and the rest to tag). Null when
@@ -193,8 +210,11 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
   function editorHtml() {
     const d = draft;
-    const tables = Object.keys(d.provides);
     const s = summarize(d);
+    // Disciplines have an editor of their own below; the rest of the tables
+    // are big, regular and usually built by a tool, so they stay JSON.
+    const otherTables = Object.keys(d.provides).filter((k) => k !== 'maneuvers');
+    const otherCounts = Object.fromEntries(otherTables.map((k) => [k, s.tables[k]]));
     return `
       <h2>${draftIsNew ? 'New extension' : `Edit — ${esc(d.name)}`}</h2>
       <p class="hint">A pack has a header (who wrote it, where it came from), any shared
@@ -220,10 +240,12 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
           <label class="wide">Description <textarea class="prose" rows="2" data-h="description">${esc(d.description)}</textarea></label>
         </div>
 
-        <h3>Shared tables</h3>
-        <p class="hint">${tables.length
-    ? `This pack provides ${esc(describeSummary({ tables: s.tables, blocks: {} }))}. Tables are edited in the JSON view.`
-    : `None. A pack can carry ${TABLE_KINDS.map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
+        ${disciplinesHtml()}
+
+        <h3>Other shared tables</h3>
+        <p class="hint">${otherTables.length
+    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}, edited in the JSON view.`
+    : `A pack can also carry ${TABLE_KINDS.filter((k) => k !== 'maneuvers').map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
 
         <h3>Blocks</h3>
         <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
@@ -387,6 +409,113 @@ Hit Die: d12.
     openBlocks.clear();
     render();
     if (fresh.length) dialog.querySelector(`.block[data-block="${first}"]`)?.scrollIntoView({ block: 'start' });
+  }
+
+  /* ---------------- disciplines ---------------- */
+
+  /**
+   * The discipline catalogue, as a form rather than as JSON.
+   *
+   * A discipline grants everything in it, so a player who writes one here is
+   * writing what every character who trains it will see: the maneuvers and
+   * stances by level, and for each of them the cells its card shows on the
+   * sheet. Those cells are optional -- the bundled Path of War catalogue fills
+   * in only the type, because the rest is a publisher's rules text -- but a
+   * pack of your own homebrew has nothing to hold back.
+   */
+  function disciplinesHtml() {
+    const list = draft.provides.maneuvers?.disciplines || [];
+    return `
+      <h3>Disciplines</h3>
+      <p class="hint">Each one arrives on the sheet's Maneuvers tab under
+        <em>Train a discipline…</em>, and everything under it can be readied.
+        Cells left blank here are the player's to fill in on their own sheet;
+        cells you fill in show for everyone, and a player who writes over one
+        is writing over it for their character only.</p>
+      ${list.map((x, i) => disciplineHtml(x, i)).join('')
+        || '<p class="hint">None yet.</p>'}
+      <div class="actions" style="margin-top:6px">
+        <button data-action="add-discipline">+ Add discipline</button>
+      </div>`;
+  }
+
+  function disciplineHtml(disc, i) {
+    const open = openDisciplines.has(i);
+    const entries = disc.entries || [];
+    const stances = entries.filter((e) => e.kind === 'stance').length;
+    const count = [
+      `${entries.length - stances} maneuver${entries.length - stances === 1 ? '' : 's'}`,
+      stances ? `${stances} stance${stances === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' · ');
+
+    return `<div class="block disc" data-disc="${i}">
+      <div class="head">
+        <input type="text" data-d="${i}" data-k="name" value="${esc(disc.name || '')}"
+          placeholder="Discipline name" maxlength="80" aria-label="Discipline name">
+        <span class="meta">${esc(count)}</span>
+        <button data-dopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
+        <button class="danger" data-dremove="${i}" title="Remove this discipline">×</button>
+      </div>
+      ${open ? `<div class="body">${entriesHtml(entries, i)}</div>` : ''}
+    </div>`;
+  }
+
+  /** Its maneuvers, grouped by level the way the sheet groups them. */
+  function entriesHtml(entries, di) {
+    const rows = entries.map((e, ei) => [e, ei]);
+    const levels = [...new Set(entries.map((e) => Number(e.level) || 0))].sort((a, b) => a - b);
+    return `<div class="ents">
+      ${rows.length ? levels.map((lvl) => `
+        <div class="lvl">${lvl ? `Level ${lvl}` : 'Other'}</div>
+        ${rows.filter(([e]) => (Number(e.level) || 0) === lvl)
+    .map(([e, ei]) => entryHtml(e, di, ei)).join('')}`).join('')
+    : '<p class="hint">Nothing in it yet.</p>'}
+      <div class="actions" style="margin-top:8px">
+        <button data-add-entry="${di}" data-kind="maneuver">+ Add maneuver</button>
+        <button data-add-entry="${di}" data-kind="stance">+ Add stance</button>
+      </div>
+    </div>`;
+  }
+
+  function entryHtml(e, di, ei) {
+    const key = `${di}|${ei}`;
+    const open = openEntries.has(key);
+    const filled = MANEUVER_FIELDS.filter((f) => String(e[f.key] ?? '').trim() !== '').length;
+    return `<div class="ent" data-ent="${esc(key)}">
+      <div class="top">
+        <input type="number" data-e="${esc(key)}" data-k="level" value="${esc(e.level ?? 0)}"
+          min="0" max="9" step="1" aria-label="Level" title="Level it is granted at">
+        <select data-e="${esc(key)}" data-k="kind" aria-label="Maneuver or stance">
+          <option value="maneuver" ${e.kind === 'stance' ? '' : 'selected'}>Maneuver</option>
+          <option value="stance" ${e.kind === 'stance' ? 'selected' : ''}>Stance</option>
+        </select>
+        <input type="text" class="nm" data-e="${esc(key)}" data-k="name" value="${esc(e.name || '')}"
+          placeholder="Name" maxlength="120" aria-label="Name">
+        <button data-eopen="${esc(key)}" aria-expanded="${open}"
+          title="${filled ? `${filled} of ${MANEUVER_FIELDS.length} cells filled in` : 'No cells filled in'}">${open ? 'Done' : `Cells${filled ? ` ${filled}` : ''}`}</button>
+        <button class="danger" data-eremove="${esc(key)}" title="Remove">×</button>
+      </div>
+      ${open ? `<div class="cells"><div class="fields">${MANEUVER_FIELDS.map((f) => {
+    if (f.options) {
+      return `<label>${esc(f.label)}
+          <select data-e="${esc(key)}" data-k="${f.key}">
+            <option value="">—</option>
+            ${f.options.map((o) => `<option value="${esc(o)}" ${e[f.key] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+          </select></label>`;
+    }
+    if (f.lines) {
+      return `<label class="wide">${esc(f.label)}
+          <textarea class="prose" rows="${f.lines}" data-e="${esc(key)}" data-k="${f.key}"
+            placeholder="What it does. {…} formulas work on the sheet.">${esc(e[f.key] || '')}</textarea></label>`;
+    }
+    return `<label>${esc(f.label)}
+        <input type="text" data-e="${esc(key)}" data-k="${f.key}" value="${esc(e[f.key] || '')}"
+          placeholder="${esc(f.hint || '')}"></label>`;
+  }).join('')}</div>
+        <div class="land">Every cell reads <code>{…}</code> formulas on the sheet, so
+          <code>Close ({= 25 + 5 * floor(level / 2)} ft.)</code> keeps up with the level.</div>
+      </div>` : ''}
+    </div>`;
   }
 
   function blockHtml(b, i) {
@@ -646,6 +775,66 @@ Hit Die: d12.
       openBlocks.clear();
       render();
     }));
+    /* ---- disciplines ---- */
+    qa('[data-d]').forEach((el) => el.addEventListener('input', () => {
+      const disc = disciplines()[Number(el.dataset.d)];
+      if (disc) disc[el.dataset.k] = el.value;
+    }));
+    qa('[data-e]').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      const [di, ei] = el.dataset.e.split('|').map(Number);
+      const entry = disciplines()[di]?.entries?.[ei];
+      if (!entry) return;
+      entry[el.dataset.k] = el.dataset.k === 'level' ? Number(el.value) || 0 : el.value;
+      // Moving a maneuver to another level regroups the list, and the cell
+      // count on its own button changes as cells are filled in.
+      if (el.dataset.k === 'level') render();
+    }));
+    qa('[data-dopen]').forEach((el) => el.addEventListener('click', () => {
+      const i = Number(el.dataset.dopen);
+      if (openDisciplines.has(i)) openDisciplines.delete(i); else openDisciplines.add(i);
+      render();
+    }));
+    qa('[data-dremove]').forEach((el) => el.addEventListener('click', () => {
+      disciplines().splice(Number(el.dataset.dremove), 1);
+      openDisciplines.clear();
+      openEntries.clear();
+      render();
+    }));
+    qa('[data-eopen]').forEach((el) => el.addEventListener('click', () => {
+      const key = el.dataset.eopen;
+      if (openEntries.has(key)) openEntries.delete(key); else openEntries.add(key);
+      render();
+    }));
+    qa('[data-eremove]').forEach((el) => el.addEventListener('click', () => {
+      const [di, ei] = el.dataset.eremove.split('|').map(Number);
+      disciplines()[di]?.entries?.splice(ei, 1);
+      openEntries.clear();
+      render();
+    }));
+    q('[data-action="add-discipline"]')?.addEventListener('click', () => {
+      const list = disciplines();
+      list.push({ name: '', entries: [] });
+      openDisciplines.clear();
+      openDisciplines.add(list.length - 1);
+      render();
+      dialog.querySelector(`.disc[data-disc="${list.length - 1}"] input`)?.focus();
+    });
+    qa('[data-add-entry]').forEach((el) => el.addEventListener('click', () => {
+      const di = Number(el.dataset.addEntry);
+      const disc = disciplines()[di];
+      if (!disc) return;
+      // A new one lands at the level of the last one written, which is the
+      // level somebody filling in a discipline is usually still on.
+      const last = disc.entries[disc.entries.length - 1];
+      disc.entries.push({
+        level: Number(last?.level) || 1, kind: el.dataset.kind, name: '',
+        ...(el.dataset.kind === 'stance' ? { type: 'Stance' } : {}),
+      });
+      openEntries.clear();
+      render();
+      dialog.querySelector(`.ent[data-ent="${di}|${disc.entries.length - 1}"] input.nm`)?.focus();
+    }));
+
     q('[data-action="add-block"]')?.addEventListener('click', () => {
       const kind = q('[data-newkind]').value;
       draft.blocks.push(normalizeBlock({ kind, name: '' }));
@@ -656,6 +845,22 @@ Hit Die: d12.
     });
     q('[data-action="save"]')?.addEventListener('click', save);
     q('[data-action="cancel"]')?.addEventListener('click', () => { view = 'list'; draft = null; error = null; render(); });
+  }
+
+  /**
+   * The draft's discipline list, made if it is not there yet.
+   *
+   * A pack carries `provides.maneuvers` only once it has a discipline in it,
+   * so an empty table is never written into a pack that has no use for one.
+   */
+  function disciplines() {
+    if (!draft.provides.maneuvers || typeof draft.provides.maneuvers !== 'object') {
+      draft.provides.maneuvers = { disciplines: [] };
+    }
+    if (!Array.isArray(draft.provides.maneuvers.disciplines)) {
+      draft.provides.maneuvers.disciplines = [];
+    }
+    return draft.provides.maneuvers.disciplines;
   }
 
   /**
@@ -709,6 +914,10 @@ Hit Die: d12.
       try {
         const doc = JSON.parse(jsonText);
         draft = normalizeExtension(doc);
+        // Every fold is keyed by index, and the JSON may have moved them.
+        openBlocks.clear();
+        openDisciplines.clear();
+        openEntries.clear();
         asJson = false; error = null;
       } catch (err) {
         error = `The JSON does not parse — ${err.message}. Fix it, or Cancel to drop the edit.`;
@@ -722,6 +931,8 @@ Hit Die: d12.
     draftIsNew = isNew;
     asJson = false; jsonText = ''; error = null; notice = null; paste = null;
     openBlocks.clear();
+    openDisciplines.clear();
+    openEntries.clear();
     view = 'edit';
     render();
     dialog.querySelector('[data-h="name"]')?.focus();

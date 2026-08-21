@@ -18,6 +18,7 @@ import {
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
+  maneuverOwn,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
@@ -3017,25 +3018,33 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
     'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
 
   /*
-   * The cells beside the description. The catalogue ships names only, so the
+   * The cells beside the description. The bundled catalogue fills in only the
+   * type -- the rest is a publisher's rules text -- so on this discipline the
    * action, range, target, duration and save are the player's to write, and
    * they read {…} the way the description always has.
    */
   const disc = () => c.data.maneuvers.disciplines[0];
-  check('nothing written yet', maneuverIsWritten(maneuverDetails(disc(), 'Demoralizing Roar')), false);
+  check('nothing written yet', maneuverIsWritten(maneuverOwn(disc(), 'Demoralizing Roar')), false);
   c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'action', 'Standard');
   c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'range', '{= 5 * level} ft.');
   c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'save', 'Will');
   check('a cell is stored under its own key',
     disc().notes['Demoralizing Roar'],
     { action: 'Standard', range: '{= 5 * level} ft.', save: 'Will' });
-  check('and reads back as one entry',
-    maneuverDetails(disc(), 'Demoralizing Roar'),
+  check('the player wrote just those three',
+    maneuverOwn(disc(), 'Demoralizing Roar'),
     {
       type: '', action: 'Standard', range: '{= 5 * level} ft.', target: '',
       duration: '', save: 'Will', dc: '', text: '',
     });
-  check('something is written now', maneuverIsWritten(maneuverDetails(disc(), 'Demoralizing Roar')), true);
+  // ...and reading it back lays the catalogue's type underneath them.
+  check('the card reads them over the catalogue',
+    maneuverDetails(disc(), 'Demoralizing Roar'),
+    {
+      type: 'Boost', action: 'Standard', range: '{= 5 * level} ft.', target: '',
+      duration: '', save: 'Will', dc: '', text: '',
+    });
+  check('something is written now', maneuverIsWritten(maneuverOwn(disc(), 'Demoralizing Roar')), true);
   check('the cells round-trip',
     maneuverDetails(new Character(c.toJSON()).data.maneuvers.disciplines[0], 'Demoralizing Roar').range,
     '{= 5 * level} ft.');
@@ -3075,6 +3084,82 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
   }
   check('an entry with nothing left is dropped',
     'Demoralizing Roar' in disc().notes, false);
+}
+
+console.log('maneuvers from a pack -- the catalogue fills the cells, the sheet writes over them');
+{
+  /*
+   * A discipline somebody wrote in the Extensions manager, carrying the cells
+   * the bundled Path of War catalogue is not allowed to (its rules text is a
+   * publisher's). What a player writes on their own sheet sits over the top,
+   * cell by cell, and is the only thing ever saved with the character -- so a
+   * corrected pack reaches every sheet, including the ones already in play.
+   */
+  setManeuverCatalogue({
+    disciplines: [{
+      name: 'Iron Tortoise',
+      entries: [
+        {
+          level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+          action: 'Standard', range: 'Melee attack', save: 'Fortitude',
+          text: 'Slams for {= level}d6.',
+        },
+        { level: 1, kind: 'stance', name: 'Wall of Iron', type: 'Stance' },
+      ],
+    }],
+  });
+  const c = new Character(blankDocument({ name: 'Turtle', level: 6 }));
+  c.listAdd('maneuvers.disciplines', { name: 'Iron Tortoise', known: ['Shield Slam'] });
+  const disc = () => c.data.maneuvers.disciplines[0];
+  const entry = (n) => disc().entries.find((e) => e.name === n);
+
+  check('the pack fills the card', maneuverDetails(disc(), 'Shield Slam'), {
+    type: 'Strike', action: 'Standard', range: 'Melee attack', target: '',
+    duration: '', save: 'Fortitude', dc: '', text: 'Slams for {= level}d6.',
+  });
+  check('and the row it was built from carries them too',
+    entry('Shield Slam').action, 'Standard');
+  check('but the player has written nothing',
+    maneuverIsWritten(maneuverOwn(disc(), 'Shield Slam')), false);
+  check('a pack formula resolves against the character',
+    c.renderProse(maneuverDetails(disc(), 'Shield Slam').text)
+      .map((s) => (s.kind === 'text' ? s.text : s.value)).join(''),
+    'Slams for 6d6.');
+
+  // A ruling at the table: one cell, and only that cell, becomes the player's.
+  c.setManeuverField('maneuvers.disciplines.0', 'Shield Slam', 'action', 'Swift');
+  check('only the cell written is stored', disc().notes['Shield Slam'], { action: 'Swift' });
+  check('the card shows it over the pack',
+    maneuverDetails(disc(), 'Shield Slam').action, 'Swift');
+  check('the cells beside it still come from the pack',
+    maneuverDetails(disc(), 'Shield Slam').range, 'Melee attack');
+  check('and the character carries no copy of them',
+    JSON.stringify(new Character(c.toJSON()).data.maneuvers.disciplines[0].notes),
+    '{"Shield Slam":{"action":"Swift"}}');
+
+  // Clearing it hands the cell back rather than leaving a hole.
+  c.setManeuverField('maneuvers.disciplines.0', 'Shield Slam', 'action', '');
+  check('clearing it falls back to the pack',
+    maneuverDetails(disc(), 'Shield Slam').action, 'Standard');
+  check('and the entry is gone entirely', 'Shield Slam' in disc().notes, false);
+
+  // A pack that corrects itself reaches a sheet already in play.
+  setManeuverCatalogue({
+    disciplines: [{
+      name: 'Iron Tortoise',
+      entries: [{
+        level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+        action: 'Swift', range: 'Melee attack', save: 'Fortitude',
+        text: 'Slams for {= level}d8.',
+      }],
+    }],
+  });
+  c.recompute();
+  check('a corrected pack corrects the sheet',
+    maneuverDetails(disc(), 'Shield Slam').text, 'Slams for {= level}d8.');
+
+  // Put the real catalogue back for whatever runs after this.
+  setManeuverCatalogue(catalogue);
 
   // A prepared spell's note is prose data too, and survives the round trip.
   c.listAdd('vancian.prepared', {
