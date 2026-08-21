@@ -13,6 +13,7 @@
 import { esc } from '../html.js';
 import { PIP_LIMIT, round, pct } from '../format.js';
 import { forwardedBadge } from '../badges.js';
+import { prose, renderedProse } from '../prose.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
@@ -139,7 +140,7 @@ function trackerRow(model, ctx, t) {
         return badge ? `<div class="tmeta">${esc(edge)} ${badge}</div>` : '';
       }).join('')}
         ${t.note ? `<div class="tnote">${hasTokens(t.note)
-    ? renderedProse(t.note, model.trackerScope(t))
+    ? renderedProse(model, t.note, model.trackerScope(t))
     : esc(t.note)}</div>` : ''}
         ${t.error ? `<div class="terr">${esc(t.error)}</div>` : ''}
         ${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}
@@ -422,7 +423,7 @@ function trackerNoteField(model, t, value) {
   const facts = Object.keys(model.trackerScope(t).self);
   return `<label class="fld tall tnote-edit">
       <span>Note — shown under the tracker, formulas resolve as it fills</span>
-      ${prose(`data-tedit="note"`, value, 2, '', model.trackerScope(t))}
+      ${prose(model, `data-tedit="note"`, value, 2, '', model.trackerScope(t))}
       <span class="hint">
         <code>self</code> is this tracker: ${facts.map((k) => `<code>self.${k}</code>`).join(' ')}.
         Elsewhere on the character the same numbers are
