@@ -1,6 +1,6 @@
 # Using the sheet: Overview, wealth, hit points, stats, skills
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, and the tab bar._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. How the sheet is edited and what its core tabs compute — the Overview and its panels, the d20 buttons that copy a roll for Roll20, the wallet, hit points, the Stats tab (point buy, enhancement cap, save and AC bonuses, progression picks, attunement), classes and traits, granted feats, skills, character colour, the Ctrl+K search palette, and the tab bar._
 
 ---
 
@@ -149,6 +149,73 @@ kept per browser rather than in the document, and it applies to every character 
 > If the clipboard is refused — a page served over plain `http://`, or an embed without
 > permission — the card says so and hands you the text selected instead, which is the
 > same thing one <kbd>Ctrl</kbd>+<kbd>C</kbd> later.
+
+---
+
+## Finding things: the search palette
+
+<kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens one box over the
+sheet that searches the whole character. Type three letters, press <kbd>↵</kbd>, and you
+are standing on the thing you were looking for. **/** opens it too when you are not
+typing into a field, and the **🔍 Search** button in the header is there for the first
+time, before the shortcut is muscle memory.
+
+It exists because the tab bar stops scaling somewhere around the twentieth tab. Knowing
+a feat is *somewhere* on Feats & Mythic is not knowing where it is, and "what is my
+Disguise modifier" should not cost a tab switch and a scan down sixty rows.
+
+**Often you never leave the box.** Every row carries the number beside it, so the
+question is usually answered by the list itself:
+
+```
+Disguise            SKILL     Skills · Cha · 12 ranks · class skill      +27   ↵ Jump
+Bardic Performance  TRACKER   Trackers · Daily                          3/14   ↵ Jump
+Guitar Axe          WEAPON    Equipment · Melee · S · Instrument       +17 · 1d12  Roll ↵
+```
+
+**What it searches.** Everything the sheet models, each row saying which tab it came
+from: the vitals (hit points, AC, CMD, initiative, BAB, the three saves, the six
+abilities, speeds, carrying capacity, DR/SR/resistances) · skills · weapons, armour and
+every worn or carried item · feats, traits, race traits, granted feats and mythic
+abilities · classes and archetypes · spheres, talents and traditions · veils and their
+chakras · maneuvers and disciplines · spells, powers, cards and techniques · trackers,
+resources, buffs and the conditions that are on · every progression cell and class
+feature · templates · notes, background and approvals · the companions with their
+attacks, feats, evolutions and tricks · the cells the converter kept under *From the
+source tab* · the tabs themselves · and the header's own buttons as commands.
+
+| Key | What it does |
+|---|---|
+| <kbd>↑</kbd> <kbd>↓</kbd> | Move down the list (<kbd>PgUp</kbd>/<kbd>PgDn</kbd>, <kbd>Home</kbd>/<kbd>End</kbd> as well) |
+| <kbd>↵</kbd> | Jump to it — or run it, on a command row |
+| <kbd>Ctrl</kbd>+<kbd>↵</kbd> | Copy that row's roll for Roll20, the same as pressing its d20 |
+| <kbd>Esc</kbd> | Close, leaving the sheet exactly where it was |
+| `>` | Commands only — *`>rest`*, *`>export`* |
+| `#` | Tabs only — *`#gear`* finds Equipment, whatever you have renamed it to |
+
+**What a jump does.** It switches to the tab, opens the collapsed group the row hides
+inside if it is in one, scrolls it to the middle of the screen, lights it up for a
+couple of seconds, and puts the caret in the field itself — so the next keystroke edits
+the thing you went looking for. If the row lives on a tab this view's bar does not carry
+— most of the sheet is off the bar in the session view — that tab joins the bar as a
+**dashed guest** for as long as you are on it, and leaves when you go elsewhere. Your
+saved tab order is not touched.
+
+**How it matches.** A whole word beats a prefix beats a word inside the title beats an
+abbreviation, and the shortest title that matches wins the tie: `heal` finds the Heal
+skill before *Healing Hand of the Faithful*. Abbreviations work — `blndf` finds
+Blind-Fight — but only from three letters up, only where the letters start a word, and
+only where they stay close together, because a fuzzy search that answers `ac` with four
+hundred rows has answered nothing. Two words both have to match, anywhere on the row:
+`iron crown` finds the veil.
+
+Opened with an empty box it offers the vitals, the tabs and the commands, with whatever
+you picked last on top. That last list is per session rather than saved: one browser
+holds many characters, and a palette opening on somebody else's last five choices would
+be worse than one opening on this character's own numbers.
+
+Searching writes nothing to the character. Opening a collapsed group to land in it is
+the one exception, and that is the same edit the group's own **▸** makes.
 
 ---
 

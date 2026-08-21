@@ -2584,3 +2584,148 @@ textarea.rolltext {
   border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 3px;
 }
 .rolltoast p.hint { margin: 5px 0 0; }
+
+/* ---------- the search palette (Ctrl+K) ---------- */
+/* A <dialog> rather than a floating box, and showModal() rather than a class:
+   the top layer is above every stacking context on the page, the backdrop and
+   the focus trap come with it, and Esc closes it without a key handler. That
+   matters here more than usual -- :host declares container-type, which makes
+   the sheet a containing block for anything fixed inside it, so a hand-rolled
+   overlay would be pinned to the sheet's top edge rather than to the screen. */
+dialog.cmdk {
+  position: fixed; inset: 0; margin: 7vh auto auto; padding: 0; border: 0;
+  width: min(46rem, 94vw); max-height: min(72vh, 44rem);
+  background: transparent; color: var(--cs-text); font-family: var(--cs-font);
+  overflow: visible;
+}
+dialog.cmdk[open] { display: flex; }
+dialog.cmdk::backdrop { background: rgba(6, 8, 13, 0.55); backdrop-filter: blur(2px); }
+dialog.cmdk[open] { animation: cmdk-in 130ms ease-out; }
+dialog.cmdk[open]::backdrop { animation: cmdk-fade 130ms ease-out; }
+@keyframes cmdk-in { from { opacity: 0; transform: translateY(-8px) scale(0.99); } }
+@keyframes cmdk-fade { from { opacity: 0; } }
+
+.cmdk-box {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--cs-panel); border: 1px solid var(--cs-accent);
+  border-radius: var(--cs-radius); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.cmdk-head { display: flex; align-items: center; gap: 9px; padding: 9px 11px; }
+.cmdk-head + .cmdk-list { border-top: 1px solid var(--cs-line); }
+.cmdk-glass {
+  width: 15px; height: 15px; flex: none; fill: none; stroke: var(--cs-accent);
+  stroke-width: 2; stroke-linecap: round;
+}
+input.cmdk-input {
+  flex: 1; font-size: 1rem; padding: 4px 0; background: transparent;
+  border: 0; border-radius: 0;
+}
+input.cmdk-input:focus { outline: none; }
+button.cmdk-esc { flex: none; padding: 2px 7px; font-size: 0.7rem; color: var(--cs-muted); }
+
+.cmdk-list { flex: 1; min-height: 0; overflow-y: auto; padding: 5px; scrollbar-width: thin; }
+
+.cmdk-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; scroll-margin: 6px;
+}
+.cmdk-row[aria-selected="true"] {
+  background: var(--cs-accent-soft);
+  box-shadow: inset 2px 0 0 var(--cs-accent), inset 0 0 0 1px var(--cs-accent);
+}
+.cmdk-body { flex: 1; min-width: 0; }
+.cmdk-line { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.cmdk-title {
+  font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.cmdk-title mark { background: transparent; color: var(--cs-accent); font-weight: 750; }
+.cmdk-sub {
+  display: block; font-size: 0.75rem; color: var(--cs-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* One hue per kind, mixed towards the theme's own text so the badge stays
+   readable on both. The hues are the sheet's existing ones -- an ability
+   colour, the formula gold, the edit blue -- rather than a new palette. */
+.cmdk-kind {
+  --k: var(--cs-muted);
+  flex: none; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.07em;
+  font-weight: 700; padding: 1px 5px; border-radius: 4px; line-height: 1.5;
+  color: color-mix(in srgb, var(--k) 70%, var(--cs-text));
+  background: color-mix(in srgb, var(--k) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--k) 34%, transparent);
+}
+.cmdk-kind[data-kind="stat"], .cmdk-kind[data-kind="skill"] { --k: var(--cs-edit); }
+.cmdk-kind[data-kind="weapon"], .cmdk-kind[data-kind="maneuver"] { --k: var(--ab-str); }
+.cmdk-kind[data-kind="tracker"], .cmdk-kind[data-kind="buff"] { --k: var(--cs-good); }
+.cmdk-kind[data-kind="condition"] { --k: var(--cs-bad); }
+.cmdk-kind[data-kind="feat"], .cmdk-kind[data-kind="feature"],
+.cmdk-kind[data-kind="class"], .cmdk-kind[data-kind="progression"] { --k: var(--cs-accent); }
+.cmdk-kind[data-kind="veil"], .cmdk-kind[data-kind="talent"],
+.cmdk-kind[data-kind="sphere"], .cmdk-kind[data-kind="spell"],
+.cmdk-kind[data-kind="power"], .cmdk-kind[data-kind="card"] { --k: var(--ab-cha); }
+.cmdk-kind[data-kind="gear"], .cmdk-kind[data-kind="dish"],
+.cmdk-kind[data-kind="technique"], .cmdk-kind[data-kind="companion"] { --k: var(--ab-con); }
+.cmdk-kind[data-kind="command"], .cmdk-kind[data-kind="tab"] { --k: var(--ab-dex); }
+
+.cmdk-value {
+  flex: none; font-size: 0.85rem; font-weight: 650; font-variant-numeric: tabular-nums;
+  color: var(--cs-text); max-width: 12rem; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmdk-go { flex: none; display: flex; align-items: center; gap: 6px; }
+button.cmdk-roll {
+  padding: 1px 8px; font-size: 0.7rem;
+  border-color: color-mix(in srgb, var(--cs-accent) 55%, transparent);
+  color: var(--cs-accent);
+}
+.cmdk-enter { font-size: 0.7rem; color: var(--cs-muted); opacity: 0; }
+.cmdk-row[aria-selected="true"] .cmdk-enter { opacity: 1; }
+.cmdk-row[aria-selected="true"] .cmdk-enter::before { content: "\21B5"; margin-right: 4px; }
+
+.cmdk-empty { margin: 18px 10px; color: var(--cs-muted); font-size: 0.85rem; }
+.cmdk-empty strong { color: var(--cs-text); }
+.cmdk-tip { display: block; margin-top: 5px; font-size: 0.78rem; }
+
+.cmdk-foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 11px; border-top: 1px solid var(--cs-line);
+  background: var(--cs-panel-2); font-size: 0.72rem; color: var(--cs-muted);
+}
+.cmdk-hints { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.cmdk-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cmdk-foot kbd, .searchbtn kbd, .cmdk-tip kbd {
+  font-family: var(--cs-mono); font-size: 0.68rem; background: var(--cs-panel);
+  border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 4px; color: var(--cs-text);
+}
+/* The Ctrl+↵ hint only means anything on a row that can be rolled. */
+.cmdk-rollhint { display: none; align-items: center; gap: 4px; }
+dialog.cmdk.has-roll .cmdk-rollhint { display: inline-flex; }
+
+/* The header's way in, for anyone who has not learned the shortcut yet. */
+button.searchbtn { display: inline-flex; align-items: center; gap: 6px; }
+button.searchbtn .cmdk-glass { width: 13px; height: 13px; stroke: currentColor; }
+button.searchbtn kbd { font-size: 0.62rem; color: var(--cs-muted); }
+
+/* A tab search took you to that this view's bar does not carry: a guest, and
+   marked as one, so nobody wonders why it is there or why it left. */
+nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
+
+/* Where the jump landed. Long enough to find with the eye, short enough that
+   it is gone before it becomes part of the furniture. */
+.cmdk-found { animation: cmdk-found 2s ease-out; }
+@keyframes cmdk-found {
+  0%, 45% { background: var(--cs-accent-soft); box-shadow: inset 3px 0 0 var(--cs-accent); }
+  100% { background: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+
+@container (max-width: 620px) {
+  .cmdk-value { max-width: 6rem; }
+  .cmdk-foot .cmdk-hints { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.cmdk[open], dialog.cmdk[open]::backdrop, .cmdk-found { animation: none; }
+  .cmdk-found { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
+}
