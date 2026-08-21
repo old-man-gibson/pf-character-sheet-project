@@ -121,7 +121,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/panels.test.mjs
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the
