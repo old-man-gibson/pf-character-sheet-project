@@ -392,10 +392,26 @@ What the frame guarantees, whatever the kind:
 | `# Title` | what the document is about |
 | `> quote` | its description — no cell of its own, so it is offered as a note |
 | `##` / `###` | sections and groups; an entry knows the trail above it |
-| `#### Name` | one entry — any heading at depth 4 or deeper |
+| `#### Name` | one entry — the heading level worked out below |
 | `* **Key:** value` | its fields, matched case- and space-insensitively |
 | `**Summary:** *…*` | an optional précis, kept apart from the prose |
+| `##### Sub` | a heading *below* the entry level: part of that entry, not another one |
 | `---` | ends an entry |
+
+The kinds it knows so far:
+
+| kind | identified by | becomes |
+|---|---|---|
+| maneuver | `Discipline` + `Initiation Action` | an entry in the pack's discipline catalogue |
+| veil | `Shapeable Slot(s)` | a `veil` block, shaped into that chakra slot |
+| sphere | the *document* — a `Sphere Talents` section | a whole sphere in the pack's `spheres` table |
+
+**A heading deeper than the entry level belongs to the entry above it.** An akashic veil
+writes each of its chakra binds as `##### Chakra Bind: [Belt]` under the `###` that names
+the veil, and there may be five of them. Taken as entries of their own they turned 2,149
+veils into 5,785 things — every veil stripped of its binds, beside a run of nameless
+fragments carrying no fields at all. The sub-heading stays in the text, being what says
+which bind the paragraph under it belongs to.
 
 **The entry level is worked out per document, not fixed.** One source writes
 `## section / ### group / #### entry`; another has no group level at all and puts every
@@ -413,6 +429,46 @@ the rule away with them.
 Two more things a scraped page carries that a prose cell cannot use: a **MediaWiki table**
 (`{| … |}`) becomes tab-separated rows, which is how the sheet shows a table everywhere
 else, and a **MediaWiki external link** (`[https://… label]`) is unwrapped to its label.
+
+The wiki's own markup goes the same way. Formatting tags (`<br />`, `<sup>`, `<nowiki>`,
+`<poem>`…) are named one by one and stripped, keeping what they wrapped — named rather
+than matched as `<…>` so a rule reading `AC <10` survives. A `==Heading==` is unwrapped to
+its words, and dropped when it has nothing under it: `==Bind Level==` over a lone
+`<references group="Bind Level"/>` is a footnote section whose footnotes the scrape did
+not take, and there are 183 of those across the akashic veils.
+
+### A directory of them at once
+
+The panel reads one document, which is right when a player has copied a page. A scraper
+that has just walked a wiki hands over a directory, and pasting sixteen files of up to a
+megabyte each is not that. `tools/scrape-pack.mjs` runs **the same reader** over a
+directory and writes the packs, so what happens in the browser is one **Import a pack…**
+each:
+
+```bash
+node tools/scrape-pack.mjs <scrape-dir> --match '*_veils.md' --out private/extensions/veils
+```
+
+`--one "Name"` puts everything in a single pack instead, deduplicated by name — a veil
+shapeable in five chakras is on five of the slot pages with the same text each time, and
+every copy is identical, so dropping the others loses no slot. `--sort bind` orders a pack
+by the chakra each veil binds to **first**, `--bind-order "Hands,Feet,…"` gives that its
+sequence, and without one it is alphabetical: no chakra ladder is assumed, because the
+veils' own slot lists contradict each other as an ordering (Shoulders precedes Body 34
+times and follows it 13).
+
+Write the packs somewhere git-ignored: packs are content, and content is a publisher's.
+Size is worth a look but rarely a problem — 1,496 veils in one 4.2 MB pack imports in a
+few seconds and opens for editing in 298 ms, and this app's Chromium held 49.8 MB in the
+origin before localStorage threw. Per-page packs are still the friendlier default, since a
+player switches on the chakras they use.
+
+**There is no bind level in a scrape.** On the wiki a bind is the template call
+`{{Chakra Bind|Belt}}`, whose only argument is the slot — checked across all 2,149 — and
+the level is what the template works out from the veil's class list and prints as a
+footnote. A scrape captures the call, not its expansion, which is why `==Bind Level==`
+arrives standing over an empty `<references group="Bind Level"/>`. A level has to come
+from the (class, slot) table instead; it was never in the per-veil source to lose.
 A title's own stamp is trimmed too — `# Open Hand Sphere (Wikidot)` names the sphere
 **Open Hand**, which is what the pickers and the side lookup want.
 

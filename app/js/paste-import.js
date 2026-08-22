@@ -1271,11 +1271,47 @@ function wikiTable(lines) {
  * Single-asterisk emphasis stays, because `clean()` leaves it on every other
  * paste and `*destructive blast*` is how these books name a defined term.
  */
-const tidyProse = (s) => String(s ?? '')
+/**
+ * The formatting tags a wiki scrape carries through -- HTML the page used for
+ * looks, and MediaWiki's own. Only the tag goes; what it wrapped is rules
+ * text. Named one by one rather than matched as `<…>` so that a rule reading
+ * `AC <10` or `<Ability> checks` is safe from it.
+ */
+const WIKI_TAGS = /<\/?(?:references|sup|sub|span|nowiki|poem|u|b|i|em|strong|small|div|p)\b[^>]*>/gi;
+
+/** `==Heading==`, which a scrape leaves where the page had a section. */
+const WIKI_HEAD = /^\s*={2,}\s*(.+?)\s*={2,}\s*$/;
+
+/**
+ * Wiki headings unwrapped, and the empty ones dropped.
+ *
+ * `==Bind Level==` over a lone `<references group="Bind Level"/>` is a
+ * footnote section whose footnotes the scrape did not take -- 183 of them
+ * across the akashic veils, every one empty once the tag is gone. A heading
+ * standing over nothing is not a heading, so it goes the same way, while
+ * `==Notes==`, which does have its lines, stays on as a plain one.
+ */
+function unwikiHeadings(text) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(WIKI_HEAD);
+    if (!m) { out.push(lines[i]); continue; }
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    if (j >= lines.length || WIKI_HEAD.test(lines[j])) { i = j - 1; continue; }
+    out.push(m[1]);
+  }
+  return out.join('\n');
+}
+
+const tidyProse = (s) => unwikiHeadings(String(s ?? '')
   .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')
   .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
   .replace(/\[(?:https?|ftp):\/\/\S+\s+([^\]\n]+)\]/g, '$1')
-  .replace(/\*\*([^*\n]+)\*\*/g, '$1');
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(WIKI_TAGS, '')
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1'));
 
 /** Every wiki table in a stretch of text, turned into tab-separated rows. */
 export function unwikiTables(text) {
@@ -1350,8 +1386,24 @@ export function parseStructured(text) {
 
     const h = line.match(MD_HEAD);
     if (h) {
-      close();
       const d = h[1].length;
+      /*
+       * A heading *deeper* than the entry level, while an entry is open, is a
+       * part of that entry rather than another one. An akashic veil writes
+       * each of its chakra binds as `##### Chakra Bind: [Belt]` under the
+       * `###` that names the veil, and taking those as entries of their own
+       * turned 2,149 veils into 5,785 things -- every veil stripped of its
+       * binds, beside a run of nameless fragments carrying no fields. The
+       * heading is kept as a line of the text, being what says which bind the
+       * paragraph under it belongs to.
+       */
+      if (entry && d > depth) {
+        entry.inHead = false;
+        if (entry.body.length && entry.body[entry.body.length - 1] !== '') entry.body.push('');
+        entry.body.push(h[2].trim());
+        return;
+      }
+      close();
       heads.length = Math.max(0, d - 1);
       heads[d - 1] = h[2].trim();
       if (d === 1) { doc.title = h[2].trim(); return; }
@@ -1459,6 +1511,33 @@ function structuredManeuver(e) {
       text,
     },
   };
+}
+
+/**
+ * A veil out of a structured entry.
+ *
+ * `Shapeable Slot(s)` both identifies it and answers the only question the
+ * sheet asks of a veil: `applyBlock` reads that list and shapes the veil in
+ * the first of those chakra slots with room in it. The binds need no reading
+ * -- they are already in the text, each under the heading naming its chakra.
+ *
+ * Class access and the weapon an enhanced veil shapes into are rules rather
+ * than properties the board holds, so they go to the foot of the text the way
+ * `readVeil` puts a saving throw there, instead of being dropped.
+ */
+function structuredVeil(e) {
+  const tail = [
+    ['Class access', pick(e.fields, 'class access', 'classes')],
+    ['Enhanced weapon', pick(e.fields, 'enhanced weapon')],
+  ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+  return normalizeBlock({
+    kind: 'veil',
+    name: e.name,
+    slot: pick(e.fields, 'shapeable slot(s)', 'shapeable slots', 'shapeable slot', 'chakra slot(s)', 'chakra slot', 'slot'),
+    descriptor: pick(e.fields, 'descriptors', 'descriptor'),
+    text: [e.summary, e.text, ...tail].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  });
 }
 
 /**
@@ -1598,6 +1677,17 @@ const STRUCTURED_KINDS = [
     drops: ['source', 'prerequisite', 'prerequisites'],
     read: structuredManeuver,
     into: 'maneuvers',
+  },
+  {
+    // One field is enough here and two would be worse: every veil carries a
+    // shapeable slot and nothing else does, while Class Access and
+    // Descriptors are on most of them but not all, and requiring either
+    // would quietly drop the rest.
+    kind: 'veil',
+    wants: ['shapeable slot(s)'],
+    drops: [],
+    read: structuredVeil,
+    into: 'blocks',
   },
 ];
 

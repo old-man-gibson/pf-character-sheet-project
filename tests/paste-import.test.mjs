@@ -1321,6 +1321,85 @@ after`), 'before\nTable: Variant Dice\nNormal\tAlternative\n2d4\t1d10\n2d6\t1d14
     unwikiTables('{|\n|-\n!A!!B\n|-\n|1||2\n|}'), 'A\tB\n1\t2');
 }
 
+console.log('a scraper document of akashic veils -- sub-headings belong to their entry');
+{
+  /*
+   * The shape a page of veils comes in: one section, an entry per veil, and
+   * each veil's chakra binds as headings *under* it. Those sub-headings are
+   * the point of the fixture -- taken as entries of their own they turned
+   * 2,149 veils into 5,785 things, every veil stripped of its binds beside a
+   * run of nameless fragments carrying no fields.
+   */
+  const VEILS = `# Belt Veils
+
+> All Akashic Veils shapeable in the Belt Chakra Slot.
+
+---
+
+## Akashic Veils (2 Unique Veils)
+
+### Tidewrack Mantle
+
+* **Shapeable Slot(s):** Hands, Feet, Belt
+* **Class Access:** Tidecaller, Warden
+* **Descriptors:** Water, Enhanced
+* **Source:** Invented Akasha p. 3 (No Press)
+
+> *Cold water sheets off your shoulders and never quite runs dry.*
+
+Shaping this veil wraps you in a running film of water.
+
+**Essence:** For each point of essence invested, the film's reach grows by 5 feet.
+
+##### Chakra Bind: [Hands]
+ Binding this veil to your Hands chakra lets the water strike where you do.
+
+##### Chakra Bind: [Feet]
+ Binding this veil to your Feet chakra lets you stand on the water you shed.
+
+==Bind Level==
+<references group="Bind Level"/>
+
+---
+
+### Lantern Eye
+
+* **Shapeable Slot(s):** Belt
+* **Class Access:** Warden
+
+While using this veil, you see one range band further.<br />It stacks with itself.
+
+##### Chakra Bind: [Belt]
+ When this veil is bound, you see in the dark as well as in the light.
+
+==Notes==
+* This veil was added to the Warden list in a later printing.
+
+---`;
+
+  ok('it is a scraper document', looksStructured(VEILS));
+  const doc = parseStructured(VEILS);
+  check('the entry level is the veils, not their binds', entryDepth(VEILS.split('\n')), 3);
+  check('one entry per veil', doc.entries.map((e) => e.name), ['Tidewrack Mantle', 'Lantern Eye']);
+
+  const r = parsePaste(VEILS);
+  check('each is read as a veil block', r.blocks.map((b) => b.kind), ['veil', 'veil']);
+  check('no leftover but the page title and its line', r.leftovers.length, 1);
+  const [mantle, eye] = r.blocks;
+  check('every slot it shapes in is kept, in order', mantle.slot, 'Hands, Feet, Belt');
+  check('descriptors come across', mantle.descriptor, 'Water, Enhanced');
+  check('and the source', mantle.source, 'Invented Akasha p. 3 (No Press)');
+  ok('both binds stay with the veil, under the heading that names each',
+    /Chakra Bind: \[Hands\][\s\S]*Chakra Bind: \[Feet\]/.test(mantle.text));
+  ok('so does the essence line', /Essence: For each point/.test(mantle.text));
+  ok('class access has nowhere of its own, so it goes to the foot of the text',
+    /Class access: Tidecaller, Warden$/.test(mantle.text));
+  // The scrape's own footnote group: a heading over a tag, and nothing else.
+  ok('an empty wiki heading and its references tag are dropped', !/Bind Level|references/.test(mantle.text));
+  ok('but a wiki heading with lines under it stays, unwrapped', /\nNotes\n/.test(eye.text));
+  ok('and a <br> leaves the break it stood for', /range band further\.\nIt stacks with itself\./.test(eye.text));
+}
+
 console.log('a markdown copy of a page is not a scraper document');
 {
   // A "copy as markdown" browser extension produces headings and bold too;

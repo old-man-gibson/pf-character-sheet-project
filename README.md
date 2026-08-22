@@ -88,6 +88,8 @@ tools/convert.mjs       the same converter as a Node CLI, no dependencies
 tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
 tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
 tools/extension_pack.py what the *_ref tools use to write a table as a pack
+tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
+                        reader the Paste text… panel uses
 app/index.html          local host page (character picker)
 app/embed-example.html  embedding demo
 app/js/xlsx.js          dependency-free .xlsx reader (ZIP + OOXML)
