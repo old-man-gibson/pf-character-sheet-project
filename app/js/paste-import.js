@@ -24,6 +24,7 @@
  */
 
 import { normalizeBlock, featureKey } from './extensions.js';
+import { sphereSide } from './rules.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -1228,6 +1229,66 @@ const MD_HEAD = /^(#{1,6})\s+(.+?)\s*#*$/;
 const MD_RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 /** Emphasis around a value, which the scraper leaves on its summaries. */
 const unemph = (s) => String(s ?? '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
+/**
+ * A label the scraper half-converted: `    * Special:**`, `    * Note:**`.
+ * The bold opened on the line above and it lost the opening stars, so the
+ * line reads as a stray bullet. Straightened rather than dropped -- it is a
+ * real part of the rule underneath it.
+ */
+const MD_BROKEN_LABEL = /^\s*\*\s+([A-Z][\w' -]{1,24}):\*\*\s*(.*)$/;
+
+/**
+ * A MediaWiki table, which some pages carry through the scraper whole.
+ *
+ * `{| … |- … !head … |cell … |}` is unreadable in a prose cell, and the sheet
+ * shows tab-separated rows everywhere else it shows a table, so that is what
+ * it becomes. Nothing is thrown away: the caption leads, the header row is a
+ * row, and cells that shared a line (`!A!!B`) are split out.
+ */
+function wikiTable(lines) {
+  const rows = [];
+  let caption = '';
+  let row = null;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (/^\{\|/.test(l)) continue;
+    if (/^\|\}/.test(l)) break;
+    if (/^\|\+/.test(l)) { caption = unemph(l.slice(2)); continue; }
+    if (/^\|-/.test(l)) { if (row?.length) rows.push(row); row = []; continue; }
+    if (/^[!|]/.test(l)) {
+      row ??= [];
+      row.push(...l.slice(1).split(l[0] === '!' ? '!!' : '||').map((c) => c.trim()));
+    }
+  }
+  if (row?.length) rows.push(row);
+  return [caption, ...rows.map((r) => r.join('\t'))].filter(Boolean).join('\n');
+}
+
+/**
+ * The markup left in a scraper's prose, once the structure has been read off
+ * it: markdown links, a MediaWiki external link (`[https://… label]`), bold.
+ *
+ * Single-asterisk emphasis stays, because `clean()` leaves it on every other
+ * paste and `*destructive blast*` is how these books name a defined term.
+ */
+const tidyProse = (s) => String(s ?? '')
+  .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')
+  .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
+  .replace(/\[(?:https?|ftp):\/\/\S+\s+([^\]\n]+)\]/g, '$1')
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1');
+
+/** Every wiki table in a stretch of text, turned into tab-separated rows. */
+export function unwikiTables(text) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*\{\|/.test(lines[i])) { out.push(lines[i]); continue; }
+    const start = i;
+    while (i < lines.length && !/^\s*\|\}/.test(lines[i])) i++;
+    out.push(wikiTable(lines.slice(start, i + 1)));
+  }
+  return out.join('\n');
+}
 
 /**
  * Is this a scraper document at all?
@@ -1288,7 +1349,9 @@ export function parseStructured(text) {
     }
 
     if (line.startsWith('>')) {
-      const t = line.replace(/^>\s?/, '');
+      // "> > text" -- the scraper nests a quote inside the description, and
+      // one level stripped leaves a stray marker in the prose.
+      const t = line.replace(/^(?:>\s?)+/, '');
       if (entry) entry.body.push(t);
       else { if (!doc.intro.length) doc.introAt = [i, i]; doc.intro.push(t); doc.introAt[1] = i; }
       return;
@@ -1305,13 +1368,16 @@ export function parseStructured(text) {
     if (s) { entry.summary = unemph(s[1]); return; }
 
     if (!line.trim()) { if (entry) entry.body.push(''); return; }
-    if (entry) entry.body.push(line.trim());
-    else doc.strays.push({ text: line.trim(), at: i });
+    const b = line.match(MD_BROKEN_LABEL);
+    const text = b ? `${b[1]}: ${b[2]}`.trim() : line.trim();
+    if (entry) entry.body.push(text);
+    else doc.strays.push({ text, at: i });
   });
   close();
 
+  doc.intro = tidyProse(unwikiTables(doc.intro.join('\n'))).split('\n');
   for (const e of doc.entries) {
-    e.text = e.body.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    e.text = tidyProse(unwikiTables(e.body.join('\n'))).replace(/\n{3,}/g, '\n\n').trim();
     delete e.body;
   }
   return doc;
@@ -1362,6 +1428,66 @@ function structuredManeuver(e) {
 }
 
 /**
+ * A whole sphere, where the *document* is the thing and its entries are the
+ * talents inside it -- the other way round from a discipline, whose document
+ * is only a wrapper and whose entries are each their own maneuver.
+ *
+ * The sphere's own description keeps the base ability written into it (the
+ * scraper leaves `*Destructive Blast:* …` in the blockquote rather than
+ * heading it), because inventing a heading the document does not have is a
+ * worse lie than a long description. Which side of the line it is on is not
+ * in the document at all, so it is looked up by name and left blank when the
+ * engine has never heard of it.
+ */
+function structuredSphere(doc) {
+  const talents = doc.entries.map((e) => {
+    const { name, tags, sources } = splitTalentName(e.name);
+    // `Tags: Blast Type, Acid` -- the groups a talent belongs to, which is
+    // what a caster filters on when looking for one.
+    for (const t of pick(e.fields, 'tags', 'tag').split(',')) {
+      const v = t.trim();
+      if (v && !tags.some((x) => lower(x) === lower(v))) tags.push(v);
+    }
+    const source = pick(e.fields, 'source', 'sources');
+    if (source && !sources.includes(source)) sources.push(source);
+    return {
+      name,
+      group: e.section[e.section.length - 1] || '',
+      tags,
+      sources,
+      prerequisites: pick(e.fields, 'prerequisite', 'prerequisites'),
+      text: e.text,
+    };
+  });
+  return {
+    name: doc.title,
+    kind: sphereSide(doc.title, ''),
+    description: doc.intro.join('\n').trim(),
+    abilities: [],
+    talents,
+  };
+}
+
+/**
+ * Kinds where the document as a whole is the thing, not each entry.
+ *
+ * Asked before the per-entry kinds, and a match consumes every entry. What
+ * says which is the scraper's own section heading -- the one place a document
+ * states what it is about -- rather than anything guessed from the contents.
+ */
+const STRUCTURED_DOCS = [
+  {
+    kind: 'sphere',
+    when: (doc) => !!doc.title
+      && doc.entries.length
+      && doc.entries.some((e) => /\bsphere talents\b/i.test(e.section[0] || '')),
+    drops: [],
+    read: structuredSphere,
+    into: 'spheres',
+  },
+];
+
+/**
  * What each kind of entry looks like, and what to make of it.
  *
  * `wants` are the fields that identify it -- all of them must be there. Order
@@ -1379,6 +1505,18 @@ const STRUCTURED_KINDS = [
   },
 ];
 
+/** What was read off a sphere document, in one line. */
+function sphereLine(s) {
+  const groups = [...new Set(s.talents.map((t) => t.group).filter(Boolean))];
+  const tagged = s.talents.filter((t) => t.tags.length).length;
+  const pre = s.talents.filter((t) => t.prerequisites).length;
+  return `Sphere ${s.name}${s.kind ? ` (${s.kind})` : ' (neither list knows it)'}: `
+    + `${s.talents.length} talent${s.talents.length === 1 ? '' : 's'}`
+    + `${groups.length ? ` in ${groups.length} group(s)` : ''}`
+    + `${tagged ? `, ${tagged} tagged` : ''}${pre ? `, ${pre} with prerequisites` : ''}.`
+    + (s.description ? ' Its description and base ability are kept with it.' : '');
+}
+
 /**
  * Read a scraper document. Same shape back as `parsePaste`, because it is one
  * of the two things `parsePaste` can be.
@@ -1391,6 +1529,16 @@ export function readStructured(text) {
   const dropped = new Set();
   const unknown = [];
   const counts = new Map();
+
+  // A document that is itself one thing -- a sphere and its talents -- is
+  // read whole, and its entries are not offered again as things of their own.
+  const asDoc = STRUCTURED_DOCS.find((k) => k.when(doc));
+  if (asDoc) {
+    out[asDoc.into].push(asDoc.read(doc));
+    counts.set(asDoc.kind, 1);
+    out.report.push(sphereLine(out.spheres[0]));
+    return out;
+  }
 
   for (const e of doc.entries) {
     const kind = STRUCTURED_KINDS.find((k) => k.wants.every((w) => e.fields.has(w)));
@@ -1448,6 +1596,12 @@ export function readStructured(text) {
  */
 const RULES_TAGS = /^(?:counter|stance|utility|package|blitz|tandem|totem|form)$/i;
 const TAG_SUFFIX = /\s*(?:\(([^()]+)\)|\[([^\][]+)\])\s*$/;
+/**
+ * A suffix that is neither: the wiki disambiguates a page whose name is also
+ * something else's by appending "(talent)", and that says nothing about the
+ * talent at all.
+ */
+const NOT_A_TAG = /^talents?$/i;
 
 /**
  * Strip a talent's trailing tags off its name, keeping both kinds.
@@ -1465,7 +1619,8 @@ export function splitTalentName(raw) {
     const text = (paren ?? brack ?? '').trim();
     // A parenthesised tag is always a rule; a bracketed one is a rule only if
     // it is one of the few written that way, and a source otherwise.
-    if (paren !== undefined || RULES_TAGS.test(text)) tags.unshift(text);
+    if (NOT_A_TAG.test(text)) { /* a page-title disambiguator, not a tag */ }
+    else if (paren !== undefined || RULES_TAGS.test(text)) tags.unshift(text);
     else sources.unshift(text);
     name = name.slice(0, m.index).trim();
   }

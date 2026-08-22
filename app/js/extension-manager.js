@@ -111,6 +111,7 @@ const CSS = `
    shows on the sheet. Three levels, so each one is kept as flat as it can be. */
 .extmgr .disc > .head input[type=text] { flex: 1; font-weight: 600; }
 .extmgr .disc > .head .meta, .extmgr .block > .head .meta { font-size: 0.74rem; opacity: 0.65; white-space: nowrap; }
+.extmgr .block[data-sphere] > .head .title { flex: 1; }
 .extmgr .ents { margin-top: 8px; }
 .extmgr .lvl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 8px 0 2px; }
 .extmgr .ent { border-top: 1px solid var(--line, #333); padding: 4px 0; }
@@ -332,18 +333,12 @@ Hit Die: d12.
       <h3>Read into spheres</h3>
       <p class="hint">A whole sphere, read off its page's table of contents. Like a
         discipline it joins the pack's shared tables rather than becoming a block.</p>
-      ${result.spheres.map((sp, i) => {
-    const groups = [...new Set(sp.talents.map((t) => t.group))];
-    const tags = [...new Set(sp.talents.flatMap((t) => [...t.tags, ...t.sources]))];
-    return `<div class="found ${skeep[i] ? '' : 'off'}">
+      ${result.spheres.map((sp, i) => `<div class="found ${skeep[i] ? '' : 'off'}">
         <label class="sw"><input type="checkbox" data-skeep="${i}" ${skeep[i] ? 'checked' : ''}></label>
         <span class="kind">${esc(sp.kind || 'sphere')}</span>
         <span class="what"><strong>${esc(sp.name || '(unnamed)')}</strong>
-          <span class="d">${esc([`${sp.abilities.length} base abilities`,
-    `${sp.talents.length} talents`, groups.join(', ')].filter(Boolean).join(' · '))}${
-  tags.length ? esc(` — tags: ${tags.join(', ')}`) : ''}</span></span>
-      </div>`;
-  }).join('')}` : ''}
+          <span class="d">${esc(sphereLine(sp))}</span></span>
+      </div>`).join('')}` : ''}
 
       ${result.maneuvers.length ? `
       <h3>Read into disciplines</h3>
@@ -653,6 +648,25 @@ Hit Die: d12.
    * sphere back out, with the tags its talents carry summarised because that
    * is the part anything downstream will want to filter on.
    */
+  /**
+   * A sphere in one line: what it holds, then the **rules** tags its talents
+   * carry. Sources are counted rather than listed -- a scraper's are full
+   * book citations, and thirty of them buried the tags a reader came for.
+   */
+  function sphereLine(sp) {
+    const talents = sp.talents || [];
+    const groups = [...new Set(talents.map((t) => t.group).filter(Boolean))];
+    const tags = [...new Set(talents.flatMap((t) => t.tags || []))];
+    const sourced = talents.filter((t) => (t.sources || []).length).length;
+    return [
+      (sp.abilities || []).length ? `${sp.abilities.length} base abilities` : '',
+      `${talents.length} talent${talents.length === 1 ? '' : 's'}`,
+      groups.length ? groups.join(', ') : '',
+      sourced ? `${sourced} sourced` : '',
+      tags.length ? `tags: ${tags.join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
   function spheresHtml() {
     const list = draft.provides.spheres?.spheres || [];
     if (!list.length) {
@@ -663,20 +677,14 @@ Hit Die: d12.
     }
     return `<h3>Spheres</h3>
       <p class="hint">Read off a wiki page and kept whole. Re-paste a page to replace one.</p>
-      ${list.map((sp, i) => {
-    const groups = [...new Set((sp.talents || []).map((t) => t.group).filter(Boolean))];
-    const tags = [...new Set((sp.talents || []).flatMap((t) => [...(t.tags || []), ...(t.sources || [])]))];
-    return `<div class="block" data-sphere="${i}">
+      ${list.map((sp, i) => `<div class="block" data-sphere="${i}">
         <div class="head">
           <span class="kind">${esc(sp.kind || 'sphere')}</span>
           <span class="title">${esc(sp.name || '(unnamed)')}</span>
-          <span class="meta">${esc(`${(sp.abilities || []).length} base · ${(sp.talents || []).length} talents`)}</span>
           <button class="danger" data-sremove="${i}" title="Remove this sphere">×</button>
         </div>
-        <div class="land">${esc(groups.join(' · ') || 'no groups')}${
-  tags.length ? esc(` — tags: ${tags.join(', ')}`) : ''}</div>
-      </div>`;
-  }).join('')}`;
+        <div class="land">${esc(sphereLine(sp))}</div>
+      </div>`).join('')}`;
   }
 
   function blockHtml(b, i) {

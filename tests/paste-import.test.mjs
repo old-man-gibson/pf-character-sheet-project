@@ -3,7 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
-  splitTalentName, looksStructured, parseStructured,
+  splitTalentName, looksStructured, parseStructured, unwikiTables,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -1096,6 +1096,143 @@ Dwarves can see in the dark up to 60 feet.
   check('an unknown kind reaches the review instead of vanishing', f.maneuvers.length, 0);
   ok('with its fields intact to read', /Type: Racial/.test(f.leftovers.map((l) => l.text).join('\n')));
   ok('and the report says so', /nothing here matched a kind this reader knows/.test(f.report[0]));
+}
+
+console.log('a scraper document whose subject is the whole thing -- a sphere');
+{
+  /*
+   * The other way round from a discipline. There, the document is a wrapper
+   * and each entry is its own maneuver; here the *document* is the sphere and
+   * the entries are the talents inside it. Which of the two a document is
+   * comes from its section heading, the one place it says what it is about.
+   */
+  const SPHERE = `# Destruction
+
+> > *You can use destructive power.*
+> *Destructive Blast:* As a standard action, you may deliver a burst of blunt magical force.
+> {|class="wikitable" cellpadding="5" border="1"
+> |- align=center
+> !Level
+> !Damage
+> |-
+> |1st
+> |1d6
+> |-
+> |3rd
+> |2d6
+> |}
+
+---
+
+## Sphere Talents (91 Talents)
+
+### Basic Talents (74)
+
+#### Acid Blast (talent)
+
+* **Tags:** Blast Type, Acid
+* **Source:** Ultimate Spheres of Power p. 277
+
+Your *destructive blast* deals acid damage.
+
+---
+
+#### Admixture
+
+* **Source:** Ultimate Spheres of Power p. 273
+
+You may apply two (blast type) talents instead of 1.
+
+    * Special:** You do not increase the casting time when using two blast types from the same group.
+
+---
+
+### Advanced Talents (17)
+
+#### Extreme Range (talent) (Advanced)
+
+* **Tags:** Advanced
+* **Prerequisite:** Destruction sphere (Extended Range x2), caster level 5th.
+* **Source:** Ultimate Spheres of Power p. 396
+
+Your *destructive blast* has a range of 1,000 feet + 100 feet per caster level.
+
+---`;
+
+  const r = parsePaste(SPHERE);
+  check('one sphere, no loose entries', [r.spheres.length, r.maneuvers.length, r.leftovers.length], [1, 0, 0]);
+  const s = r.spheres[0];
+  // Which side of the line it is on is not in the document at all, so it is
+  // looked up by name rather than guessed.
+  check('named, and its side looked up', [s.name, s.kind], ['Destruction', 'magic']);
+  check('talents keep the group they were listed under',
+    s.talents.map((t) => `${t.group.replace(/ \(\d+\)$/, '')}: ${t.name}`),
+    ['Basic Talents: Acid Blast', 'Basic Talents: Admixture', 'Advanced Talents: Extreme Range']);
+  // "(talent)" is how the wiki disambiguates a page title from something
+  // else's; it says nothing about the talent and is not a tag.
+  check('the page-title disambiguator is dropped', s.talents[0].name, 'Acid Blast');
+  check('a Tags field becomes the tags', s.talents[0].tags, ['Blast Type', 'Acid']);
+  check('and a Source the sources', s.talents[0].sources, ['Ultimate Spheres of Power p. 277']);
+  check('an (Advanced) suffix is kept as a tag', s.talents[2].tags, ['Advanced']);
+  check('prerequisites come off their own line',
+    s.talents[2].prerequisites, 'Destruction sphere (Extended Range x2), caster level 5th.');
+
+  // The scraper leaves the base ability written into the description rather
+  // than heading it, so it stays there: inventing a heading the document does
+  // not have would be the worse lie.
+  ok('the description leads with the sphere\'s own line', s.description.startsWith('*You can use destructive power.*'));
+  ok('and keeps the base ability', /Destructive Blast:\*? As a standard action/.test(s.description));
+  // A nested blockquote used to leave a stray marker in the prose.
+  ok('no quote markers survive', !/^>/m.test(s.description));
+  // A MediaWiki table is unreadable in a prose cell; the sheet shows tables
+  // as tab-separated rows everywhere else.
+  ok('a wiki table becomes rows', /Level\tDamage\n1st\t1d6\n3rd\t2d6/.test(s.description));
+
+  // "    * Special:**" is a label the scraper half-converted, not a bullet.
+  ok('a half-converted label is straightened',
+    /\nSpecial: You do not increase/.test(s.talents[1].text));
+
+  ok('the report counts what was read',
+    /Sphere Destruction \(magic\): 3 talents in 2 group\(s\)/.test(r.report[0]));
+
+  // Nothing about the maneuver document changed: its entries still carry
+  // their own kind, and a document is only read whole when it says it is one.
+  const notASphere = parsePaste(`# Iron Tortoise
+
+## Maneuvers & Stances (34 Abilities)
+
+#### Angering Smash
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+
+Prose.
+
+---`);
+  check('a discipline document is still read entry by entry',
+    [notASphere.spheres.length, notASphere.maneuvers.length], [0, 1]);
+}
+
+console.log('wiki tables out of a scraper document');
+{
+  check('caption, header and rows, tab-separated', unwikiTables(`before
+{|class="wikitable"
+|- align=center
+|+Table: Variant Dice
+!Normal
+!Alternative
+|-
+|2d4
+|1d10
+|-
+|2d6
+|1d14
+|}
+after`), 'before\nTable: Variant Dice\nNormal\tAlternative\n2d4\t1d10\n2d6\t1d14\nafter');
+  check('text with no table is untouched', unwikiTables('just prose'), 'just prose');
+  check('cells sharing a line are split out',
+    unwikiTables('{|\n|-\n!A!!B\n|-\n|1||2\n|}'), 'A\tB\n1\t2');
 }
 
 console.log('a markdown copy of a page is not a scraper document');
