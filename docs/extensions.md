@@ -1,6 +1,6 @@
 # Extensions: content packs and the paste importer
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a scraper's structured markdown or a copied rules page into blocks, with its review stage._
 
 The engine knows rules — how a save is built, what a level rule means, how a tracker's
 formula is evaluated. It does not know the names of anyone's classes, disciplines,
@@ -11,12 +11,17 @@ in it, and a table's content travels separately.
 
 A pack carries two kinds of thing:
 
-- **Shared tables** the whole app reads — a discipline catalogue (`maneuvers`), casting
-  tables (`vancian`), manifesting curves (`psionics`), deck manipulations
-  (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
+- **Shared tables** the whole app reads — a discipline catalogue (`maneuvers`), a sphere
+  catalogue (`spheres`), casting tables (`vancian`), manifesting curves (`psionics`), deck
+  manipulations (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
   pack's tables are merged at load and registered with the model; a later pack's entry
   replaces an earlier one of the same name, so a player can correct a bundled table by
-  shipping a fixed copy in their own pack.
+  shipping a fixed copy in their own pack. **A discipline is the exception** — two packs
+  naming the same one join maneuver by maneuver, and only an entry of the same name is
+  replaced, because a discipline is a list of thirty rather than one fact and a pack
+  carrying a single corrected maneuver must not delete the twenty-nine it had no opinion
+  about. Tables are **not** copied into a character: the sheet reads them where they
+  stand, so a corrected pack corrects every sheet already in play.
 - **Blocks** a player attaches to one character: a `class` (hit die, BAB, saves, ranks,
   class skills, features by level), a `race` (size, speed, ability modifiers, traits,
   languages), a single race `trait`, a `feature` (joins a named group on the Template
@@ -72,13 +77,117 @@ pack on or off (bundled ones too — the choice is remembered), **Export** one a
 `.json` to share, **Import** a file, paste JSON, or drop a pack anywhere on the page —
 the page tells a pack from a character by its `format` line, and the sheet's own Import
 button hands a pack up the same way. **+ New extension** opens the editor: the header
-fields, then blocks as one small form each (features and traits are typed one per line
-— `1: Fast movement, Rage`, `Darkvision: text`), or the whole document as JSON. **Copy
+fields, then the discipline catalogue (below) and blocks as one small form each (features
+and traits are typed one per line — `1: Fast movement, Rage`, `Darkvision: text`), or the
+whole document as JSON. The other four tables are big, regular and usually built by a
+tool, so they stay JSON-only. **Copy
 to mine** clones a bundled pack into an editable local one; **From this character…**
 lifts the open sheet's classes, race, feature groups and trackers into a new pack, which
 is how something built by hand gets shared. A pack imported with the same id as one
 already here replaces it (that is how a friend's rev 2 lands); a local pack cannot take
 a bundled pack's id.
+
+### Disciplines
+
+The one shared table with a form of its own, because it is the one a player writes by
+hand rather than generating with a tool. Under **Disciplines** in the editor: name the
+discipline, add maneuvers and stances under it, and for each of them fill in as much of
+its card as you want to — type, action, range, target, duration, saving throw, DC and a
+description, the same eight cells the sheet's Maneuvers tab shows. A saved pack puts the
+discipline in the sheet's *Train a discipline…* dropdown beside the bundled thirty, and
+everything under it can be readied.
+
+Every cell reads `{…}` formulas when the sheet draws it, so a pack can write
+`Close ({= 25 + 5 * floor(level / 2)} ft.)` once and have it come out right on every
+character who trains the discipline. What the pack cannot do is *define* a name or
+forward a bonus: only the character's own prose is collected for that, so a `{…}` in a
+pack cell shows a value and nothing more. It also never reaches the Formula Audit, which
+lists what this character wrote — a pack's formula is fixed in the pack.
+
+**What a player writes on their sheet sits over the pack, cell by cell.** A ruling made
+at the table goes in the cell and wins; the cells beside it still come from the pack;
+emptying it hands that cell straight back. Only the cells actually written are saved
+with the character, which is what lets a corrected pack correct a sheet already in play.
+In the editor's cells the greyed text tells you which is which: a plain ghost value
+(*Melee attack*) is what the cell will say if left alone, and one marked *e.g.* is only
+a suggestion.
+
+The bundled Path of War catalogue fills in nothing but the type. That is not a
+limitation of the format — it is that its 1,033 maneuver names are a publisher's, and
+their rules text is not ours to ship. A pack of your own homebrew has nothing to hold
+back.
+
+### Spheres
+
+A whole sphere — its description, its base abilities and every talent in it — is a shared
+table too, under `provides.spheres.spheres`. There is no form for one: a sphere is forty
+talents deep and arrives whole off a wiki page, so **Paste text…** is how one gets in, and
+the editor's **Spheres** list is for seeing what a pack holds and taking a sphere back out.
+Unlike a discipline, a later pack naming the same sphere **replaces** it: one page is the
+whole sphere, so a corrected copy is a copy of all of it.
+
+```json
+{ "name": "Boxing", "kind": "combat",
+  "description": "Boxers specialize in fighting with their fists…",
+  "abilities": [{ "name": "Counter Punch", "text": "…" }],
+  "talents": [
+    { "name": "Clinch", "group": "Counter Talents",
+      "tags": ["counter"], "sources": [], "prerequisites": "", "text": "…" },
+    { "name": "Elongated Step", "group": "Boxing Talents",
+      "tags": ["stance"], "sources": ["3PP"], "prerequisites": "", "text": "…" }
+  ] }
+```
+
+**Base abilities are lifted out of the description.** A scraper writes them into the
+sphere's blockquote as an emphasised label — `*Destructive Blast:* As a standard action…` —
+and everything under one belongs to it until the next. They land in `abilities`, and the
+description keeps only what the sphere itself is. That split matters because the sheet asks
+two different questions: what the sphere *is*, and what taking it *grants*.
+
+Taking the sphere is a **base pick**, not a talent in it, so a row that records one reads as
+the sphere and what it opened — **Destruction Sphere (Destructive Blast)**, *Fencing Sphere
+(Fatal Thrust)* — with the abilities' full text in the note beside it, where the rest of the
+rules live. `isBasePick` already reads that shape as a base pick (it strips parentheses
+before looking for the word), so it counts for the sphere tallies the moment it is written.
+A pick that already carries a parenthesis of its own is left exactly as typed.
+
+**The two kinds of tag are kept apart, because they answer different questions.** A `(…)`
+tag is a **rule** the talent carries — `(counter)` is a talent a counter punch can apply,
+`(stance)` one you take a stance in — and lands in `tags`. A `[…]` tag is nearly always
+**provenance** — `[3PP]`, `[Apoc]`, `[Youxia HB]`, `[EO3]` — and lands in `sources`, which
+is what a table filters on when it rules content in or out. Nearly always: a few rules tags
+are written in brackets too (`[utility]`), so those are named in the reader rather than
+guessed at. A talent's own `Source:` line joins `sources` as well, since it says which book
+where the tag only says which shelf.
+
+`sphereEntry(name)`, `sphereTalents(name)`, `talentsTagged(tag)` and `talentTagCounts()`
+read the registered catalogue; `talentsTagged` searches both lists, since which of the two
+a wiki wrote a label in is its business rather than a caller's.
+
+**What the sheet does with it.** Two things, both light. Every sphere picker on the
+Spheres &amp; Magic tab offers what the packs carry as well as the names `rules.js` knows —
+appended after the built-in ones, on the matching side, and never doubling a name the
+engine already has. And a talent cell whose text matches the catalogue grows a small **✦**
+carrying the whole entry on hover: its sphere and group, its tags, its prerequisites and
+its rules text, muted rather than gold when it came from a named third-party source.
+`sphereTalent(sphere, talent)` is the match — case, spacing and any tag the player typed
+are ignored, and with **no** sphere on the row the whole catalogue is searched so the sheet
+can tell you which sphere a talent came from instead of being told.
+
+**Typing a recognised talent fills in what the catalogue can answer for free** — the sphere
+it belongs to, and its rules text as the row's note. Only ever into cells that are *empty*:
+a note is where the table's own ruling goes, and having that overwritten by a book would be
+worse than never filling anything. Clearing a filled cell and leaving the talent alone
+leaves it cleared; retyping the talent is how you ask for it back. Tables without a notes
+column (a customized weapon, a martial tradition) fill only the sphere, and never grow one.
+
+The cell stays a prose field: a talent is still whatever you write, `{…}` formulas and all,
+and the catalogue is a second opinion rather than a gate. A talent no pack covers is simply
+unmarked and fills nothing, which is what every talent on every sheet did before this.
+
+> `rules.js` still hard-codes the sphere **names** — skill-rank and unarmed logic key off
+> them, so the catalogue widens the pickers without yet replacing that list. Lifting it out
+> is the remaining step.
 
 A class's own feature text lands **under the class**, on the Progression tab beneath its
 ladder — *What they do*, one entry per distinct feature however many levels grant it, an
@@ -221,16 +330,173 @@ set of active packs registered with the model, `extension-manager.js` the dialog
 page mounts the dialog with `mountExtensionManager(dialogElement, { say, currentCharacter })`.
 Covered by `tests/extensions.test.mjs`.
 
-## Paste text — reading a rules page into blocks
+## Paste text — a scraper's document
 
-The editor's **Paste text…** takes a class, a race or a veil copied straight off a rules
-page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot wiki —
-the whole page, several pages one after another) and reads it into blocks. It is a two-stage
+**Paste text…** takes two quite different things, and tells them apart before it reads
+either. One is a page somebody copied out of a browser, below. The other is a document a
+**tool** wrote — and a tool does not have the problem the page readers spend all their
+care on. A page is built for human eyes, where a heading is a short line and a talent's
+name is a short line and telling them apart is most of the job; a scraper already knows
+what it found and can say so in the file.
+
+So structured markdown is read on its own terms, and read **first** — `clean()` flattens
+the markdown that the page readers cannot use and this one is made of.
+
+```markdown
+# Iron Tortoise                      what the document is about
+
+> The discipline known as Iron Tortoise rose up from…       its description
+
+---
+
+## Maneuvers & Stances (34 Abilities)                       a section
+### Level 1 Maneuvers                                       a group inside it
+
+#### Angering Smash                                         one entry
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+* **Range:** Melee attack
+* **Target / Area:** One creature
+* **Duration:** One round
+* **Source:** Path of War p. 69
+
+**Summary:** *Melee attack that causes -4 to hit any target but you.*
+
+By making a quick shield bash, the disciple taunts and aggravates his foes…
+```
+
+**The rule that makes it extensible: what an entry *is* comes from the fields it carries**,
+not from where it sits, what the document is called, or what the headings above it say. A
+thing with a `Discipline` and an `Initiation Action` is a maneuver wherever it turns up. So
+a scraper can learn to fetch classes, archetypes, veils or races and emit them in the same
+frame, and teaching the reader a new kind is one row in `STRUCTURED_KINDS`:
+
+```js
+{ kind: 'maneuver',
+  wants: ['discipline', 'initiation action'],   // all of these must be present
+  drops: ['source', 'prerequisite'],            // no cell — reported, not lost
+  read: structuredManeuver,                     // fields -> the thing
+  into: 'maneuvers' }                           // which list it joins
+```
+
+Until that row exists the entry is **not dropped**: it comes back to the review stage as a
+leftover, fields and all, to be tagged as a note or left out. The scraper is free to run
+ahead of the reader.
+
+What the frame guarantees, whatever the kind:
+
+| | |
+|---|---|
+| `# Title` | what the document is about |
+| `> quote` | its description — no cell of its own, so it is offered as a note |
+| `##` / `###` | sections and groups; an entry knows the trail above it |
+| `#### Name` | one entry — the heading level worked out below |
+| `* **Key:** value` | its fields, matched case- and space-insensitively |
+| `**Summary:** *…*` | an optional précis, kept apart from the prose |
+| `##### Sub` | a heading *below* the entry level: part of that entry, not another one |
+| `---` | ends an entry |
+
+The kinds it knows so far:
+
+| kind | identified by | becomes |
+|---|---|---|
+| maneuver | `Discipline` + `Initiation Action` | an entry in the pack's discipline catalogue |
+| veil | `Shapeable Slot(s)` | a `veil` block, shaped into that chakra slot |
+| sphere | the *document* — a `Sphere Talents` section | a whole sphere in the pack's `spheres` table |
+
+**A heading deeper than the entry level belongs to the entry above it.** An akashic veil
+writes each of its chakra binds as `##### Chakra Bind: [Belt]` under the `###` that names
+the veil, and there may be five of them. Taken as entries of their own they turned 2,149
+veils into 5,785 things — every veil stripped of its binds, beside a run of nameless
+fragments carrying no fields at all. The sub-heading stays in the text, being what says
+which bind the paragraph under it belongs to.
+
+**The entry level is worked out per document, not fixed.** One source writes
+`## section / ### group / #### entry`; another has no group level at all and puts every
+entry directly under the page's one section. Both are right, and what tells them apart is
+that an entry carries *fields* while a section carries only more headings — so the entry
+level is the deepest one whose headings are followed by a field list. A document whose
+entries have no group heading says which group a talent is in with a `Section:` field
+instead, and that is used in its place.
+
+**A field is only a field at the top of an entry.** Past the first line of prose, a
+`* **Lesser Charm:** …` line is one of the effects the talent is made of rather than a
+property of it — the Mind and Nature spheres are full of them, and eating those would take
+the rule away with them.
+
+Two more things a scraped page carries that a prose cell cannot use: a **MediaWiki table**
+(`{| … |}`) becomes tab-separated rows, which is how the sheet shows a table everywhere
+else, and a **MediaWiki external link** (`[https://… label]`) is unwrapped to its label.
+
+The wiki's own markup goes the same way. Formatting tags (`<br />`, `<sup>`, `<nowiki>`,
+`<poem>`…) are named one by one and stripped, keeping what they wrapped — named rather
+than matched as `<…>` so a rule reading `AC <10` survives. A `==Heading==` is unwrapped to
+its words, and dropped when it has nothing under it: `==Bind Level==` over a lone
+`<references group="Bind Level"/>` is a footnote section whose footnotes the scrape did
+not take, and there are 183 of those across the akashic veils.
+
+### A directory of them at once
+
+The panel reads one document, which is right when a player has copied a page. A scraper
+that has just walked a wiki hands over a directory, and pasting sixteen files of up to a
+megabyte each is not that. `tools/scrape-pack.mjs` runs **the same reader** over a
+directory and writes the packs, so what happens in the browser is one **Import a pack…**
+each:
+
+```bash
+node tools/scrape-pack.mjs <scrape-dir> --match '*_veils.md' --out private/extensions/veils
+```
+
+`--one "Name"` puts everything in a single pack instead, deduplicated by name — a veil
+shapeable in five chakras is on five of the slot pages with the same text each time, and
+every copy is identical, so dropping the others loses no slot. `--sort bind` orders a pack
+by the chakra each veil binds to **first**, `--bind-order "Hands,Feet,…"` gives that its
+sequence, and without one it is alphabetical: no chakra ladder is assumed, because the
+veils' own slot lists contradict each other as an ordering (Shoulders precedes Body 34
+times and follows it 13).
+
+Write the packs somewhere git-ignored: packs are content, and content is a publisher's.
+Size is worth a look but rarely a problem — 1,496 veils in one 4.2 MB pack imports in a
+few seconds and opens for editing in 298 ms, and this app's Chromium held 49.8 MB in the
+origin before localStorage threw. Per-page packs are still the friendlier default, since a
+player switches on the chakras they use.
+
+**There is no bind level in a scrape.** On the wiki a bind is the template call
+`{{Chakra Bind|Belt}}`, whose only argument is the slot — checked across all 2,149 — and
+the level is what the template works out from the veil's class list and prints as a
+footnote. A scrape captures the call, not its expansion, which is why `==Bind Level==`
+arrives standing over an empty `<references group="Bind Level"/>`. A level has to come
+from the (class, slot) table instead; it was never in the per-veil source to lose.
+A title's own stamp is trimmed too — `# Open Hand Sphere (Wikidot)` names the sphere
+**Open Hand**, which is what the pickers and the side lookup want.
+
+For a maneuver: `Level: 1 (Maneuver [Strike])` gives the level, whether it is a maneuver or
+a stance, and its type, all three the way a discipline's table prints them; `Initiation
+Action` is normalised (*1 standard action* → **Standard**); `Target / Area`, `Target`,
+`Targets`, `Area` and `Effect` all reach the target cell. The summary and the prose both
+matter and there is one description cell, so the summary sits over the prose with a blank
+line between. `Source` and `Prerequisite` have no cell on a maneuver's card, so they are
+left out and the report names them.
+
+Detection is deliberately narrow: a "copy as markdown" browser extension also produces
+headings and bold, and those pages must keep going to the readers that know their shape.
+What only a tool writes is the **field list** — three or more `* **Key:** value` lines. That
+is the whole test.
+
+## Paste text — reading a copied rules page
+
+The other half of the same box. **Paste text…** also takes a class, a race, a veil, a sphere
+or a maneuver copied straight off a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
+wiki — the whole page, several pages one after another) and reads it into blocks. It is a two-stage
 affair, and the second stage is the point:
 
 1. **Read it.** `app/js/paste-import.js` finds what the paste holds by a handful of anchor
    lines every page uses — *Hit Die* for a class, *Standard Racial Traits* / *Ability Score
-   Modifiers* for a race, *Chakra Slots* for a veil — reaches back for each thing's preamble
+   Modifiers* for a race, *Chakra Slots* for a veil, *Initiation Action* for a maneuver, the
+   first *X Talents* heading on a page whose breadcrumb says Spheres of Power or Might for a
+   sphere — reaches back for each thing's preamble
    and forward to the next thing, with two blank lines in a row (what a paste of several
    pages has between them) as a hard boundary. A wiki page's chrome — the sign-in and
    search lines over the title, the tab strip, the errata *Notice*, the breadcrumb, and the
@@ -282,22 +548,54 @@ affair, and the second stage is the point:
    sentence instead: the first short line is its name, a *Description* section its flavour,
    `Name (Ex)` title lines (colons allowed) and untyped headings over a paragraph its
    features; the class is left blank for the form (or resolves to the sheet's only class).
+   A **martial ability page** is the one thing that does not become a block. Its box copies as
+   a label on one line and its value on the next, bar *Range / Target / Duration*, which copy
+   as a small tab-separated table; from that come the discipline it belongs under, its level,
+   whether it is a maneuver or a stance and of what type (*Maneuver (Boost)*), the action it
+   is initiated with (*1 swift action* → **Swift**), range, target, duration, saving throw
+   (*Fort* → **Fortitude**, but *Will negates* kept whole — the qualifier is the useful half)
+   and the rules text. Its *Descriptors*, *Prerequisites* and *Sources* lines have no cell on a
+   maneuver's card, so they are left out and the report says so rather than wedging them into
+   the description. What comes back is a **catalogue entry**, not a block, because a
+   discipline is a [shared table](#disciplines): it is filed in the pack's discipline list,
+   where every character who trains that discipline reads it.
+   A **sphere page** is read from its **table of contents**, which is the whole trick: the
+   contents name, in order and spelt exactly as they appear below, every heading the article
+   has — the base abilities, the tables, each *X Talents* group and every talent under it —
+   so the body needs no guessing at all about which short line is a talent's name and which is
+   the first line of a paragraph, the question that makes every other reader here as careful
+   as it is. Each talent keeps its group, its `(rules)` and `[source]` tags
+   ([above](#spheres)), a leading *Prerequisites:* or *Source:* line lifted out of its text,
+   and the rest as its text; what sits above the first group is the sphere's description and
+   its base abilities. It is [a shared table](#spheres) too, so it is filed rather than
+   blocked. (A class page has *X Talents* headings of its own — a table's *Combat Talents*
+   column — which is why the breadcrumb has to vouch for a sphere page first.)
 2. **Review.** The panel shows what was read — one line per block, each with a tick to
    drop it — and then **everything the reader did not use**, as stretches of the original
    text with a tag menu on each: *feature of* the class it sat under, *race trait of* the
    race, a trait block, a feature block (in a named group), a note, or leave it out. The
    reader suggests a tag (a `Label: text` line near a class is offered as its feature; page
-   chrome as skippable) and the player decides. **Add N blocks** folds the decisions in:
-   tagged text joins the class or race it was tagged onto, the rest become blocks, and the
-   editor's block forms are where anything gets corrected before Save.
+   chrome as skippable) and the player decides. Maneuvers get a section of their own, each
+   with the discipline it will be filed under as an editable field — a page that never named
+   one is marked, and a maneuver with no discipline is left out and said to be. Spheres get a
+   section of their own too, each showing its groups and the tags its talents carry. **Add …
+   to the pack** folds the decisions in: tagged text joins the class or race it was tagged
+   onto, the rest become blocks, maneuvers join their discipline (making it if the pack has
+   none, replacing an entry of the same name so a re-read lands rather than doubling),
+   spheres replace any of the same name, and the editor's forms are where anything gets
+   corrected before Save.
 
 Nothing is guessed at silently: every line either lands somewhere the report names or comes
 back in the review as text to tag — bar the page tail above, which the report accounts for.
 `tests/paste-import.test.mjs` runs the reader over the three table shapes, both
 feature-prose shapes, the segmentation, the whole Barbarian / Dwarf / Warlord / veil paste,
-a two-page wikidot copy and an option page.
+a two-page wikidot copy, an option page, a martial ability page, a sphere page, and a
+scraper document (its frame, its maneuvers, and an entry of a kind the reader does not
+know yet).
 
 > The engine still carries some publisher names of its own — the Spheres of Power sphere
 > lists in `rules.js` (which drive skill-rank and unarmed logic), the Primordia techniques,
-> the mythic path names — and those are the next thing to lift into packs.
+> the mythic path names — and those are the next thing to lift into packs. The `spheres`
+> table above is the first half of that: what a sphere *contains* now travels in a pack,
+> even though what the spheres are *called* does not yet.
 

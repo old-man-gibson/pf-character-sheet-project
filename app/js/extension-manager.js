@@ -28,9 +28,24 @@ import {
   describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter,
 } from './extensions.js';
 import { parsePaste, splitChunk } from './paste-import.js';
+import { MANEUVER_FIELDS } from './rules.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const lower = (s) => String(s ?? '').trim().toLowerCase();
+
+/**
+ * How many unplaced stretches the review panel will draw.
+ *
+ * Each one is a tag menu, a name box and a slab of the original text, and a
+ * document the reader does not recognise at all turns *every* line into one:
+ * a page of akashic veils came back with 1,005, which is over a megabyte of
+ * dialog and a browser that stops responding. Past this many the answer is
+ * never to tag them one by one -- it is that the document is a kind nothing
+ * knows yet -- so the rest are left out and the panel says so.
+ */
+const LEFTOVER_LIMIT = 40;
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
@@ -83,6 +98,8 @@ const CSS = `
 .extmgr .abil label { display: flex; flex-direction: column; font-size: 0.7rem; text-transform: uppercase; }
 .extmgr .abil input { width: 3.6rem; }
 .extmgr .err { color: #e0635f; margin: 8px 0; }
+/* An input the apply step cannot use yet -- a maneuver with no discipline named. */
+.extmgr input.needs { border-color: #e0635f; }
 .extmgr .ok { color: #6bbf7b; margin: 8px 0; }
 .extmgr code { background: var(--bg, #111); padding: 1px 4px; border-radius: 3px; }
 .extmgr .paste { margin-top: 10px; }
@@ -93,6 +110,13 @@ const CSS = `
 .extmgr .found .kind { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border: 1px solid var(--line, #444); border-radius: 10px; opacity: 0.8; white-space: nowrap; }
 .extmgr .found .what { flex: 1; min-width: 0; }
 .extmgr .found .what .d { opacity: 0.65; font-size: 0.76rem; }
+/* One line per section of a scraped sphere page: what to do with it, its name,
+   and how many entries it holds. */
+.extmgr .secs { display: flex; flex-direction: column; gap: 2px; margin: 5px 0 2px; }
+.extmgr .secs label { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; }
+.extmgr .secs select { width: 8.5rem; flex: none; padding: 1px 4px; font-size: 0.76rem; }
+.extmgr .secs label > span { flex: 1; min-width: 0; }
+.extmgr .secs i { font-style: normal; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .extmgr .found.off .what { opacity: 0.45; text-decoration: line-through; }
 .extmgr .left { border: 1px dashed var(--line, #444); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 .extmgr .left .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -101,6 +125,21 @@ const CSS = `
 .extmgr .left .top input[type=text] { width: 12rem; }
 .extmgr .left pre { margin: 6px 0 0; white-space: pre-wrap; font: inherit; font-size: 0.78rem; opacity: 0.85; max-height: 7.5em; overflow: auto; }
 .extmgr .left.skip pre { opacity: 0.4; }
+/* The discipline editor. A discipline is a block-shaped card; its maneuvers
+   are rows inside it, each of which opens into the cells a maneuver's card
+   shows on the sheet. Three levels, so each one is kept as flat as it can be. */
+.extmgr .disc > .head input[type=text] { flex: 1; font-weight: 600; }
+.extmgr .disc > .head .meta, .extmgr .block > .head .meta { font-size: 0.74rem; opacity: 0.65; white-space: nowrap; }
+.extmgr .block[data-sphere] > .head .title { flex: 1; }
+.extmgr .ents { margin-top: 8px; }
+.extmgr .lvl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.6; margin: 8px 0 2px; }
+.extmgr .ent { border-top: 1px solid var(--line, #333); padding: 4px 0; }
+.extmgr .ent > .top { display: flex; gap: 6px; align-items: center; }
+.extmgr .ent > .top input[type=number] { width: 3.4rem; }
+.extmgr .ent > .top select { width: 6.5rem; }
+.extmgr .ent > .top input.nm { flex: 1; min-width: 0; }
+.extmgr .ent > .top button { padding: 1px 8px; }
+.extmgr .ent .cells { margin: 6px 0 8px 10px; padding-left: 10px; border-left: 2px solid var(--accent, #d4a24a); }
 `;
 
 export function mountExtensionManager(dialog, { say = () => {}, currentCharacter = () => null } = {}) {
@@ -114,6 +153,8 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let showPaste = false;
   let confirmRemove = null;
   const openBlocks = new Set();
+  const openDisciplines = new Set();   // discipline index
+  const openEntries = new Set();       // "<discipline>|<entry>", whose cells are showing
   /**
    * The paste importer's two stages inside the editor: `text` (a box to
    * paste into) and `review` (what was read, and the rest to tag). Null when
@@ -193,8 +234,13 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
   function editorHtml() {
     const d = draft;
-    const tables = Object.keys(d.provides);
     const s = summarize(d);
+    // Disciplines and spheres have sections of their own below; the rest of
+    // the tables are big, regular and usually built by a tool, so they stay
+    // JSON.
+    const OWN_SECTION = new Set(['maneuvers', 'spheres']);
+    const otherTables = Object.keys(d.provides).filter((k) => !OWN_SECTION.has(k));
+    const otherCounts = Object.fromEntries(otherTables.map((k) => [k, s.tables[k]]));
     return `
       <h2>${draftIsNew ? 'New extension' : `Edit — ${esc(d.name)}`}</h2>
       <p class="hint">A pack has a header (who wrote it, where it came from), any shared
@@ -220,10 +266,13 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
           <label class="wide">Description <textarea class="prose" rows="2" data-h="description">${esc(d.description)}</textarea></label>
         </div>
 
-        <h3>Shared tables</h3>
-        <p class="hint">${tables.length
-    ? `This pack provides ${esc(describeSummary({ tables: s.tables, blocks: {} }))}. Tables are edited in the JSON view.`
-    : `None. A pack can carry ${TABLE_KINDS.map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
+        ${disciplinesHtml()}
+        ${spheresHtml()}
+
+        <h3>Other shared tables</h3>
+        <p class="hint">${otherTables.length
+    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}, edited in the JSON view.`
+    : `A pack can also carry ${TABLE_KINDS.filter((k) => !OWN_SECTION.has(k)).map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
 
         <h3>Blocks</h3>
         <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
@@ -244,11 +293,14 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function pasteHtml() {
     if (paste.stage === 'text') {
       return `
-        <p class="hint">Copy a class, a race or a veil off a rules page — the whole page is fine,
-          several pages one after another too — and paste it here. The reader picks out the
-          progression table, hit die, saves, class skills and feature text of a class; the ability
-          modifiers, size, speed, languages and traits of a race; a veil's essence and bind text.
-          Then it shows you what it read, and asks you to tag whatever it could not place.</p>
+        <p class="hint">Paste a document your own tool wrote — structured markdown, an
+          <code>#</code> title over <code>* **Key:** value</code> entries — or a class, a race,
+          a veil, a sphere or a maneuver copied straight off a rules page (the whole page is
+          fine, several pages one after another too). The reader picks
+          out the progression table, hit die, saves, class skills and feature text of a class; the
+          ability modifiers, size, speed, languages and traits of a race; a veil's essence and bind
+          text; a martial ability's discipline, level, action, range, target, duration and rules
+          text. Then it shows you what it read, and asks you to tag whatever it could not place.</p>
         <textarea rows="16" data-paste-text placeholder="Barbarian
 Source PRPG Core Rulebook pg. 31
 …
@@ -259,7 +311,7 @@ Hit Die: d12.
           <button data-action="paste-cancel">Back to the form</button>
         </div>`;
     }
-    const { result, keep, tags } = paste;
+    const { result, keep, mkeep, mdisc, skeep, ssec, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
     const archs = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'archetype' && !b.single && keep[i]);
@@ -296,11 +348,53 @@ Hit Die: d12.
         <span class="what"><strong>${esc(b.name || '(unnamed)')}</strong> <span class="d">${esc(detail(b))}</span></span>
       </div>`).join('') || '<p class="hint">Nothing.</p>'}
 
+      ${result.spheres.length ? `
+      <h3>Read into spheres</h3>
+      <p class="hint">A whole sphere, read off its page's table of contents. Like a
+        discipline it joins the pack's shared tables rather than becoming a block.</p>
+      ${result.spheres.map((sp, i) => `<div class="found ${skeep[i] ? '' : 'off'}">
+        <label class="sw"><input type="checkbox" data-skeep="${i}" ${skeep[i] ? 'checked' : ''}></label>
+        <span class="kind">${esc(sp.kind || 'sphere')}</span>
+        <span class="what"><strong>${esc(sp.name || '(unnamed)')}</strong>
+          <span class="d">${esc(sphereLine(sp, ssec[i]))}</span>
+          <div class="secs">${sphereSections(sp).map((x) => `<label>
+            <select data-ssec="${i}" data-sec="${esc(x.name)}">${SECTION_CHOICES.map(([v, label]) =>
+    `<option value="${v}" ${ssec[i].get(x.name) === v ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+            <span>${esc(x.name)}</span><i>${x.count}</i></label>`).join('')}</div></span>
+      </div>`).join('')}` : ''}
+
+      ${result.maneuvers.length ? `
+      <h3>Read into disciplines</h3>
+      <p class="hint">A maneuver joins the pack's discipline catalogue rather than
+        becoming a block — a discipline is a shared table, so every character who trains
+        it sees this. Say which discipline each one belongs under; one that is not in
+        the pack yet is made.</p>
+      ${result.maneuvers.map((m, i) => {
+    const e = m.entry;
+    const cells = ['type', 'action', 'range', 'target', 'duration', 'save']
+      .map((k) => e[k]).filter(Boolean);
+    return `<div class="found ${mkeep[i] ? '' : 'off'}">
+        <label class="sw"><input type="checkbox" data-mkeep="${i}" ${mkeep[i] ? 'checked' : ''}></label>
+        <span class="kind">${e.kind === 'stance' ? 'Stance' : 'Maneuver'}</span>
+        <span class="what"><strong>${esc(e.name || '(unnamed)')}</strong>
+          <span class="d">${esc([e.level ? `level ${e.level}` : '', ...cells].filter(Boolean).join(' · '))}${
+  e.text ? esc(` — ${e.text.slice(0, 90)}${e.text.length > 90 ? '…' : ''}`) : ' — no description'}</span></span>
+        <input type="text" data-mdisc="${i}" value="${esc(mdisc[i])}"
+          placeholder="Discipline" title="The discipline it is filed under"
+          style="width:11rem"${mdisc[i] ? '' : ' class="needs"'}>
+      </div>`;
+  }).join('')}` : ''}
+
       <h3>Not placed — tag it, or leave it</h3>
       <p class="hint">${result.leftovers.length
     ? 'Stretches of the paste nothing claimed. Say what each is — a feature of the class above it, a race trait, a note — or leave it out. Page chrome and tables of ages and heights are the usual leftovers.'
     : 'Everything in the paste was placed.'}</p>
-      ${result.leftovers.map((l, i) => {
+      ${result.leftovers.length > LEFTOVER_LIMIT ? `<p class="err">Only the first
+        ${LEFTOVER_LIMIT} of ${result.leftovers.length} are shown; the rest are left out.
+        This many means the reader did not recognise <em>what kind of document this is</em>
+        rather than missing a few lines — read the report above, and see
+        <code>STRUCTURED_KINDS</code> in <code>paste-import.js</code> for what it knows.</p>` : ''}
+      ${result.leftovers.slice(0, LEFTOVER_LIMIT).map((l, i) => {
     const tag = tags[i];
     const split = splitChunk(l.text);
     return `<div class="left ${tag.choice === 'skip' ? 'skip' : ''}" data-left="${i}">
@@ -315,7 +409,15 @@ Hit Die: d12.
   }).join('')}
 
       <div class="actions">
-        <button class="primary" data-action="paste-apply">Add ${keep.filter(Boolean).length + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length} block(s) to the pack</button>
+        <button class="primary" data-action="paste-apply">${(() => {
+    const blocks = keep.filter(Boolean).length
+      + tags.filter((t) => t.choice !== 'skip' && !/^(class|race|arch):/.test(t.choice)).length;
+    const mans = mkeep.filter((on, i) => on && String(mdisc[i] || '').trim()).length;
+    const sphs = skeep.filter(Boolean).length;
+    const parts = [blocks ? `${blocks} block(s)` : '', sphs ? `${sphs} sphere(s)` : '',
+      mans ? `${mans} maneuver(s)` : ''].filter(Boolean);
+    return `Add ${parts.join(' and ') || 'nothing'} to the pack`;
+  })()}</button>
         <button data-action="paste-back">Back to the text</button>
         <button data-action="paste-cancel">Cancel</button>
       </div>`;
@@ -332,7 +434,9 @@ Hit Die: d12.
       const hit = l.near && l.near.kind === kind ? list.find(([b]) => b.name === l.near.name) : null;
       return (hit || list[list.length - 1])[1];
     };
-    const tags = result.leftovers.map((l) => {
+    const tags = result.leftovers.map((l, at) => {
+      // Past what the panel will show, nothing was reviewed, so nothing lands.
+      if (at >= LEFTOVER_LIMIT) return { choice: 'skip', name: null, group: null };
       let choice = l.suggest;
       if (choice === 'feature') {
         const ai = l.near?.kind === 'archetype' ? nearest(l, 'archetype', archs) : null;
@@ -348,12 +452,80 @@ Hit Die: d12.
       }
       return { choice, name: null, group: null };
     });
-    paste = { stage: 'review', text: paste.text, result, keep: result.blocks.map(() => true), tags };
+    paste = {
+      stage: 'review',
+      text: paste.text,
+      result,
+      keep: result.blocks.map(() => true),
+      // Maneuvers are filed in the pack's discipline table rather than added
+      // as blocks, so they carry their own ticks and the discipline each one
+      // lands under -- which the page names, but not always.
+      mkeep: result.maneuvers.map(() => true),
+      mdisc: result.maneuvers.map((m) => m.discipline || ''),
+      skeep: result.spheres.map(() => true),
+      ssec: result.spheres.map(defaultSections),
+      tags,
+    };
     error = null;
     render();
   }
 
   /** Fold the review's decisions into the draft and go back to the form. */
+  /**
+   * File the maneuvers that were ticked into the pack's discipline table.
+   *
+   * A discipline the pack does not carry yet is made; an entry whose name is
+   * already there is replaced, which is how a page re-read after a correction
+   * lands rather than doubling. Returns how many went in.
+   */
+  function applyManeuvers() {
+    const { result, mkeep, mdisc } = paste;
+    let n = 0;
+    result.maneuvers.forEach((m, i) => {
+      const discName = String(mdisc[i] || '').trim();
+      if (!mkeep[i] || !discName || !m.entry.name) return;
+      const list = disciplines();
+      let disc = list.find((d) => lower(d.name) === lower(discName));
+      if (!disc) { disc = { name: discName, entries: [] }; list.push(disc); }
+      if (!Array.isArray(disc.entries)) disc.entries = [];
+      // Only the cells that were read; a blank one is the player's to fill in
+      // on their sheet, and storing it empty would say the pack had answered.
+      const entry = Object.fromEntries(
+        Object.entries(m.entry).filter(([, v]) => v !== '' && v !== null && v !== undefined),
+      );
+      const at = disc.entries.findIndex((e) => lower(e.name) === lower(entry.name));
+      if (at === -1) disc.entries.push(entry); else disc.entries[at] = entry;
+      n++;
+    });
+    return n;
+  }
+
+  /** File the spheres that were ticked; one of the same name is replaced. */
+  function applySpheres() {
+    const { result, skeep, ssec } = paste;
+    let n = 0;
+    result.spheres.forEach((sp, i) => {
+      if (!skeep[i] || !sp.name) return;
+      const say = ssec[i];
+      // A section marked "base" becomes a base ability rather than a talent:
+      // an entry is a name and its text either way, which is what both are.
+      const kept = {
+        ...sp,
+        talents: sp.talents.filter((t) => say.get(t.group) === 'talents'),
+        abilities: [
+          ...sp.abilities,
+          ...sp.talents.filter((t) => say.get(t.group) === 'base')
+            .map((t) => ({ name: t.name, text: t.text })),
+        ],
+      };
+      const list = spheres();
+      const at = list.findIndex((x) => lower(x.name) === lower(kept.name));
+      if (at === -1) list.push(kept); else list[at] = kept;
+      n++;
+    });
+    return n;
+  }
+
   function pasteApply() {
     const { result, keep, tags } = paste;
     const taken = result.blocks.map((b) => structuredClone(b));
@@ -381,12 +553,227 @@ Hit Die: d12.
     const fresh = [...taken.filter((b, i) => keep[i]).map((b) => normalizeBlock(b)), ...extra].filter(Boolean);
     const first = draft.blocks.length;
     draft.blocks.push(...fresh);
+    const filed = applyManeuvers() + applySpheres();
     notice = null;
-    error = fresh.length ? null : 'Nothing was added — every block was unticked and every leftover left out.';
+    error = fresh.length || filed ? null
+      : 'Nothing was added — every block was unticked and every leftover left out.';
+    // A maneuver with no discipline named has nowhere to go, and saying so is
+    // better than dropping it quietly.
+    const homeless = paste.result.maneuvers
+      .filter((m, i) => paste.mkeep[i] && !String(paste.mdisc[i] || '').trim());
+    if (homeless.length) {
+      error = `${homeless.map((m) => m.entry.name).join(', ')} had no discipline named, so ${homeless.length === 1 ? 'it was' : 'they were'} left out. Paste again and fill the discipline in.`;
+    }
     paste = null;
     openBlocks.clear();
+    openDisciplines.clear();
+    openEntries.clear();
     render();
     if (fresh.length) dialog.querySelector(`.block[data-block="${first}"]`)?.scrollIntoView({ block: 'start' });
+    else if (filed) dialog.querySelector('.disc')?.scrollIntoView({ block: 'start' });
+  }
+
+  /* ---------------- disciplines ---------------- */
+
+  /**
+   * The discipline catalogue, as a form rather than as JSON.
+   *
+   * A discipline grants everything in it, so a player who writes one here is
+   * writing what every character who trains it will see: the maneuvers and
+   * stances by level, and for each of them the cells its card shows on the
+   * sheet. Those cells are optional -- the bundled Path of War catalogue fills
+   * in only the type, because the rest is a publisher's rules text -- but a
+   * pack of your own homebrew has nothing to hold back.
+   */
+  function disciplinesHtml() {
+    const list = draft.provides.maneuvers?.disciplines || [];
+    return `
+      <h3>Disciplines</h3>
+      <p class="hint">Each one arrives on the sheet's Maneuvers tab under
+        <em>Train a discipline…</em>, and everything under it can be readied.
+        Cells left blank here are the player's to fill in on their own sheet;
+        cells you fill in show for everyone, and a player who writes over one
+        is writing over it for their character only.</p>
+      ${list.map((x, i) => disciplineHtml(x, i)).join('')
+        || '<p class="hint">None yet.</p>'}
+      <div class="actions" style="margin-top:6px">
+        <button data-action="add-discipline">+ Add discipline</button>
+      </div>`;
+  }
+
+  function disciplineHtml(disc, i) {
+    const open = openDisciplines.has(i);
+    const entries = disc.entries || [];
+    const stances = entries.filter((e) => e.kind === 'stance').length;
+    const count = [
+      `${entries.length - stances} maneuver${entries.length - stances === 1 ? '' : 's'}`,
+      stances ? `${stances} stance${stances === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' · ');
+
+    return `<div class="block disc" data-disc="${i}">
+      <div class="head">
+        <input type="text" data-d="${i}" data-k="name" value="${esc(disc.name || '')}"
+          placeholder="Discipline name" maxlength="80" aria-label="Discipline name">
+        <span class="meta">${esc(count)}</span>
+        <button data-dopen="${i}" aria-expanded="${open}">${open ? 'Done' : 'Edit'}</button>
+        <button class="danger" data-dremove="${i}" title="Remove this discipline">×</button>
+      </div>
+      ${open ? `<div class="body">${entriesHtml(entries, i)}</div>` : ''}
+    </div>`;
+  }
+
+  /** Its maneuvers, grouped by level the way the sheet groups them. */
+  function entriesHtml(entries, di) {
+    const rows = entries.map((e, ei) => [e, ei]);
+    const levels = [...new Set(entries.map((e) => Number(e.level) || 0))].sort((a, b) => a - b);
+    return `<div class="ents">
+      ${rows.length ? levels.map((lvl) => `
+        <div class="lvl">${lvl ? `Level ${lvl}` : 'Other'}</div>
+        ${rows.filter(([e]) => (Number(e.level) || 0) === lvl)
+    .map(([e, ei]) => entryHtml(e, di, ei)).join('')}`).join('')
+    : '<p class="hint">Nothing in it yet.</p>'}
+      <div class="actions" style="margin-top:8px">
+        <button data-add-entry="${di}" data-kind="maneuver">+ Add maneuver</button>
+        <button data-add-entry="${di}" data-kind="stance">+ Add stance</button>
+      </div>
+    </div>`;
+  }
+
+  function entryHtml(e, di, ei) {
+    const key = `${di}|${ei}`;
+    const open = openEntries.has(key);
+    const filled = MANEUVER_FIELDS.filter((f) => String(e[f.key] ?? '').trim() !== '').length;
+    return `<div class="ent" data-ent="${esc(key)}">
+      <div class="top">
+        <input type="number" data-e="${esc(key)}" data-k="level" value="${esc(e.level ?? 0)}"
+          min="0" max="9" step="1" aria-label="Level" title="Level it is granted at">
+        <select data-e="${esc(key)}" data-k="kind" aria-label="Maneuver or stance">
+          <option value="maneuver" ${e.kind === 'stance' ? '' : 'selected'}>Maneuver</option>
+          <option value="stance" ${e.kind === 'stance' ? 'selected' : ''}>Stance</option>
+        </select>
+        <input type="text" class="nm" data-e="${esc(key)}" data-k="name" value="${esc(e.name || '')}"
+          placeholder="Name" maxlength="120" aria-label="Name">
+        <button data-eopen="${esc(key)}" aria-expanded="${open}"
+          title="${filled ? `${filled} of ${MANEUVER_FIELDS.length} cells filled in` : 'No cells filled in'}">${open ? 'Done' : `Cells${filled ? ` ${filled}` : ''}`}</button>
+        <button class="danger" data-eremove="${esc(key)}" title="Remove">×</button>
+      </div>
+      ${open ? `<div class="cells"><div class="fields">${MANEUVER_FIELDS.map((f) => {
+    if (f.options) {
+      return `<label>${esc(f.label)}
+          <select data-e="${esc(key)}" data-k="${f.key}">
+            <option value="">—</option>
+            ${f.options.map((o) => `<option value="${esc(o)}" ${e[f.key] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+          </select></label>`;
+    }
+    if (f.lines) {
+      return `<label class="wide">${esc(f.label)}
+          <textarea class="prose" rows="${f.lines}" data-e="${esc(key)}" data-k="${f.key}"
+            placeholder="What it does. {…} formulas work on the sheet.">${esc(e[f.key] || '')}</textarea></label>`;
+    }
+    return `<label>${esc(f.label)}
+        <input type="text" data-e="${esc(key)}" data-k="${f.key}" value="${esc(e[f.key] || '')}"
+          placeholder="${esc(f.hint || '')}"></label>`;
+  }).join('')}</div>
+        <div class="land">Every cell reads <code>{…}</code> formulas on the sheet, so
+          <code>Close ({= 25 + 5 * floor(level / 2)} ft.)</code> keeps up with the level.</div>
+      </div>` : ''}
+    </div>`;
+  }
+
+  /* ---------------- spheres ---------------- */
+
+  /**
+   * The spheres a pack carries, as a list rather than a form.
+   *
+   * A sphere is forty talents deep and arrives whole off a wiki page, so
+   * there is nothing here worth typing by hand -- **Paste text…** is how one
+   * gets in. What the list is for is seeing what a pack holds and taking a
+   * sphere back out, with the tags its talents carry summarised because that
+   * is the part anything downstream will want to filter on.
+   */
+  /**
+   * What each section of a scraped sphere page is, and what to do with it.
+   *
+   * A wiki puts more than a sphere on a sphere's page -- Enhancement's has
+   * its 48 talents, then 47 feats, an archetype, and a page of special
+   * abilities -- and a scraper reading it faithfully brings back all of it
+   * under whatever section heading it last saw. Nothing in the text reliably
+   * says which is which: filtering on a name ending in "Talents" would keep
+   * the 59 of Enhancement's bled section and reject all 47 of Open Hand's,
+   * which are legitimately under "Sweep".
+   *
+   * So the player says, once per section, in the place this importer already
+   * asks them things. Three answers, because there are three kinds of thing
+   * on those pages: the sphere's talents, the base abilities taking the
+   * sphere grants, and everything that is neither.
+   */
+  const SECTION_CHOICES = [
+    ['talents', 'Talents'],
+    ['base', 'Base abilities'],
+    ['skip', 'Leave out'],
+  ];
+
+  /** Each section of a parsed sphere, in page order, with how many it holds. */
+  function sphereSections(sp) {
+    const out = new Map();
+    for (const t of sp.talents || []) out.set(t.group, (out.get(t.group) || 0) + 1);
+    return [...out].map(([name, count]) => ({ name, count }));
+  }
+
+  /**
+   * What each section starts as. A name ending in "Talents" is talents; a page
+   * whose sections say nothing either way (Open Hand's are all "Sweep") is
+   * taken at its word and kept, since rejecting everything is never the answer.
+   */
+  function defaultSections(sp) {
+    const found = sphereSections(sp);
+    const named = found.filter((x) => /talents?$/i.test(x.name));
+    return new Map(found.map((x) => [x.name,
+      named.length ? (named.includes(x) ? 'talents' : 'skip') : 'talents']));
+  }
+
+  /**
+   * A sphere in one line: what it holds, then the **rules** tags its talents
+   * carry. Sources are counted rather than listed -- a scraper's are full
+   * book citations, and thirty of them buried the tags a reader came for.
+   */
+  function sphereLine(sp, sections = null) {
+    const talents = sections
+      ? (sp.talents || []).filter((t) => sections.get(t.group) === 'talents')
+      : (sp.talents || []);
+    const base = sections
+      ? (sp.talents || []).filter((t) => sections.get(t.group) === 'base').length
+      : (sp.abilities || []).length;
+    const groups = [...new Set(talents.map((t) => t.group).filter(Boolean))];
+    const tags = [...new Set(talents.flatMap((t) => t.tags || []))];
+    const sourced = talents.filter((t) => (t.sources || []).length).length;
+    return [
+      base ? `${base} base abilit${base === 1 ? 'y' : 'ies'}` : '',
+      `${talents.length} talent${talents.length === 1 ? '' : 's'}`,
+      groups.length ? groups.join(', ') : '',
+      sourced ? `${sourced} sourced` : '',
+      tags.length ? `tags: ${tags.join(', ')}` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  function spheresHtml() {
+    const list = draft.provides.spheres?.spheres || [];
+    if (!list.length) {
+      return `<h3>Spheres</h3>
+        <p class="hint">None. <strong>Paste text…</strong> reads a whole sphere off its page
+          on the Spheres of Power or Spheres of Might wiki — its base abilities, every talent
+          by group, and the <code>(counter)</code> / <code>[3PP]</code> tags each one carries.</p>`;
+    }
+    return `<h3>Spheres</h3>
+      <p class="hint">Read off a wiki page and kept whole. Re-paste a page to replace one.</p>
+      ${list.map((sp, i) => `<div class="block" data-sphere="${i}">
+        <div class="head">
+          <span class="kind">${esc(sp.kind || 'sphere')}</span>
+          <span class="title">${esc(sp.name || '(unnamed)')}</span>
+          <button class="danger" data-sremove="${i}" title="Remove this sphere">×</button>
+        </div>
+        <div class="land">${esc(sphereLine(sp))}</div>
+      </div>`).join('')}`;
   }
 
   function blockHtml(b, i) {
@@ -606,6 +993,13 @@ Hit Die: d12.
     q('[data-action="paste-cancel"]')?.addEventListener('click', () => { paste = null; error = null; render(); });
     q('[data-action="paste-apply"]')?.addEventListener('click', pasteApply);
     qa('[data-keep]').forEach((el) => el.addEventListener('change', () => { paste.keep[Number(el.dataset.keep)] = el.checked; render(); }));
+    qa('[data-mkeep]').forEach((el) => el.addEventListener('change', () => { paste.mkeep[Number(el.dataset.mkeep)] = el.checked; render(); }));
+    qa('[data-skeep]').forEach((el) => el.addEventListener('change', () => { paste.skeep[Number(el.dataset.skeep)] = el.checked; render(); }));
+    qa('[data-ssec]').forEach((el) => el.addEventListener('change', () => {
+      paste.ssec[Number(el.dataset.ssec)].set(el.dataset.sec, el.value);
+      render();
+    }));
+    qa('[data-mdisc]').forEach((el) => el.addEventListener('input', () => { paste.mdisc[Number(el.dataset.mdisc)] = el.value; }));
     qa('[data-tag]').forEach((el) => el.addEventListener('change', () => { paste.tags[Number(el.dataset.tag)].choice = el.value; render(); }));
     qa('[data-tagname]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.tagname)].name = el.value; }));
     qa('[data-taggroup]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.taggroup)].group = el.value; }));
@@ -646,6 +1040,70 @@ Hit Die: d12.
       openBlocks.clear();
       render();
     }));
+    /* ---- disciplines ---- */
+    qa('[data-d]').forEach((el) => el.addEventListener('input', () => {
+      const disc = disciplines()[Number(el.dataset.d)];
+      if (disc) disc[el.dataset.k] = el.value;
+    }));
+    qa('[data-e]').forEach((el) => el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      const [di, ei] = el.dataset.e.split('|').map(Number);
+      const entry = disciplines()[di]?.entries?.[ei];
+      if (!entry) return;
+      entry[el.dataset.k] = el.dataset.k === 'level' ? Number(el.value) || 0 : el.value;
+      // Moving a maneuver to another level regroups the list, and the cell
+      // count on its own button changes as cells are filled in.
+      if (el.dataset.k === 'level') render();
+    }));
+    qa('[data-dopen]').forEach((el) => el.addEventListener('click', () => {
+      const i = Number(el.dataset.dopen);
+      if (openDisciplines.has(i)) openDisciplines.delete(i); else openDisciplines.add(i);
+      render();
+    }));
+    qa('[data-dremove]').forEach((el) => el.addEventListener('click', () => {
+      disciplines().splice(Number(el.dataset.dremove), 1);
+      openDisciplines.clear();
+      openEntries.clear();
+      render();
+    }));
+    qa('[data-eopen]').forEach((el) => el.addEventListener('click', () => {
+      const key = el.dataset.eopen;
+      if (openEntries.has(key)) openEntries.delete(key); else openEntries.add(key);
+      render();
+    }));
+    qa('[data-eremove]').forEach((el) => el.addEventListener('click', () => {
+      const [di, ei] = el.dataset.eremove.split('|').map(Number);
+      disciplines()[di]?.entries?.splice(ei, 1);
+      openEntries.clear();
+      render();
+    }));
+    qa('[data-sremove]').forEach((el) => el.addEventListener('click', () => {
+      spheres().splice(Number(el.dataset.sremove), 1);
+      render();
+    }));
+    q('[data-action="add-discipline"]')?.addEventListener('click', () => {
+      const list = disciplines();
+      list.push({ name: '', entries: [] });
+      openDisciplines.clear();
+      openDisciplines.add(list.length - 1);
+      render();
+      dialog.querySelector(`.disc[data-disc="${list.length - 1}"] input`)?.focus();
+    });
+    qa('[data-add-entry]').forEach((el) => el.addEventListener('click', () => {
+      const di = Number(el.dataset.addEntry);
+      const disc = disciplines()[di];
+      if (!disc) return;
+      // A new one lands at the level of the last one written, which is the
+      // level somebody filling in a discipline is usually still on.
+      const last = disc.entries[disc.entries.length - 1];
+      disc.entries.push({
+        level: Number(last?.level) || 1, kind: el.dataset.kind, name: '',
+        ...(el.dataset.kind === 'stance' ? { type: 'Stance' } : {}),
+      });
+      openEntries.clear();
+      render();
+      dialog.querySelector(`.ent[data-ent="${di}|${disc.entries.length - 1}"] input.nm`)?.focus();
+    }));
+
     q('[data-action="add-block"]')?.addEventListener('click', () => {
       const kind = q('[data-newkind]').value;
       draft.blocks.push(normalizeBlock({ kind, name: '' }));
@@ -656,6 +1114,31 @@ Hit Die: d12.
     });
     q('[data-action="save"]')?.addEventListener('click', save);
     q('[data-action="cancel"]')?.addEventListener('click', () => { view = 'list'; draft = null; error = null; render(); });
+  }
+
+  /**
+   * The draft's discipline list, made if it is not there yet.
+   *
+   * A pack carries `provides.maneuvers` only once it has a discipline in it,
+   * so an empty table is never written into a pack that has no use for one.
+   */
+  function disciplines() {
+    if (!draft.provides.maneuvers || typeof draft.provides.maneuvers !== 'object') {
+      draft.provides.maneuvers = { disciplines: [] };
+    }
+    if (!Array.isArray(draft.provides.maneuvers.disciplines)) {
+      draft.provides.maneuvers.disciplines = [];
+    }
+    return draft.provides.maneuvers.disciplines;
+  }
+
+  /** The draft's sphere list, made if it is not there yet. */
+  function spheres() {
+    if (!draft.provides.spheres || typeof draft.provides.spheres !== 'object') {
+      draft.provides.spheres = { spheres: [] };
+    }
+    if (!Array.isArray(draft.provides.spheres.spheres)) draft.provides.spheres.spheres = [];
+    return draft.provides.spheres.spheres;
   }
 
   /**
@@ -709,6 +1192,10 @@ Hit Die: d12.
       try {
         const doc = JSON.parse(jsonText);
         draft = normalizeExtension(doc);
+        // Every fold is keyed by index, and the JSON may have moved them.
+        openBlocks.clear();
+        openDisciplines.clear();
+        openEntries.clear();
         asJson = false; error = null;
       } catch (err) {
         error = `The JSON does not parse — ${err.message}. Fix it, or Cancel to drop the edit.`;
@@ -722,6 +1209,8 @@ Hit Die: d12.
     draftIsNew = isNew;
     asJson = false; jsonText = ''; error = null; notice = null; paste = null;
     openBlocks.clear();
+    openDisciplines.clear();
+    openEntries.clear();
     view = 'edit';
     render();
     dialog.querySelector('[data-h="name"]')?.focus();
@@ -749,6 +1238,7 @@ Hit Die: d12.
       error = null; view = 'list'; draft = null;
       render();
     } catch (err) {
+      notice = null;
       error = err.name === 'QuotaExceededError'
         ? 'This browser is out of space — remove a pack or a character and try again.'
         : `Could not save — ${err.message}`;
@@ -773,6 +1263,9 @@ Hit Die: d12.
       error = null; showPaste = false;
       say('ok', notice);
     } catch (err) {
+      // The last success stays on screen beside a failure otherwise, which is
+      // how "Imported All akashic veils" came to sit above "out of space".
+      notice = null;
       error = err.name === 'QuotaExceededError'
         ? 'This browser is out of space — remove a pack or a character and try again.'
         : `Could not store ${label} — ${err.message}`;

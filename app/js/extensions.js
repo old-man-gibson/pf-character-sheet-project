@@ -31,7 +31,7 @@ export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
 /** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = ['maneuvers', 'vancian', 'psionics', 'cardcasting', 'cooking'];
+export const TABLE_KINDS = ['maneuvers', 'spheres', 'vancian', 'psionics', 'cardcasting', 'cooking'];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -588,6 +588,7 @@ function tableCount(kind, table) {
   const t = obj(table);
   switch (kind) {
     case 'maneuvers': return arr(t.disciplines).length;
+    case 'spheres': return arr(t.spheres).length;
     case 'vancian': return arr(t.classes).length;
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
@@ -600,7 +601,8 @@ function tableCount(kind, table) {
 export function describeSummary(s) {
   const parts = [];
   const words = {
-    maneuvers: ['discipline', 'disciplines'], vancian: ['casting table', 'casting tables'],
+    maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
+    vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
   };
@@ -662,25 +664,48 @@ export function extensionStore(storage = globalThis.localStorage) {
      * Store a pack: new, or replacing the one with the same id (which is how
      * an updated pack a friend sends over lands -- same id, higher revision).
      * Returns the index row. Throws on a full browser, like a character import.
+     *
+     * **All of it or none of it.** A pack is two writes -- the document under
+     * its own key, then the index row that makes it findable -- and a full
+     * browser can fail the second after passing the first. That left the
+     * document behind with nothing pointing at it: `list()` could not see it,
+     * so the dialog could not offer to remove it, while it went on holding
+     * exactly the space the "out of space" message was asking to be freed.
+     * Worse on a replace, where the pack being updated had already been
+     * overwritten and was simply gone. So the previous state goes back.
      */
     save(doc, { origin = 'import', enabled = null } = {}) {
       const ext = normalizeExtension(doc);
       if (!ext.id) throw new Error('An extension needs a name.');
       ext.updatedAt = new Date().toISOString().slice(0, 19);
       if (!ext.createdAt) ext.createdAt = ext.updatedAt;
-      storage.setItem(extensionKey(ext.id), JSON.stringify(ext));
-      const index = readIndex();
-      const prior = index.extensions.find((e) => e.id === ext.id);
-      const row = {
-        ...summarize(ext),
-        origin: prior?.origin || origin,
-        enabled: enabled ?? prior?.enabled ?? true,
-      };
-      index.extensions = prior
-        ? index.extensions.map((e) => (e.id === ext.id ? row : e))
-        : [...index.extensions, row];
-      writeIndex(index);
-      return { ...row, local: true, replaced: !!prior };
+      const key = extensionKey(ext.id);
+      const before = storage.getItem(key);
+      let row;
+      let replaced = false;
+      try {
+        storage.setItem(key, JSON.stringify(ext));
+        const index = readIndex();
+        const prior = index.extensions.find((e) => e.id === ext.id);
+        replaced = !!prior;
+        row = {
+          ...summarize(ext),
+          origin: prior?.origin || origin,
+          enabled: enabled ?? prior?.enabled ?? true,
+        };
+        index.extensions = prior
+          ? index.extensions.map((e) => (e.id === ext.id ? row : e))
+          : [...index.extensions, row];
+        writeIndex(index);
+      } catch (err) {
+        // Put back what was there. The restore cannot itself run out of
+        // room: the value it writes was in this very key a moment ago, and
+        // the larger one that displaced it has just been taken out again.
+        storage.removeItem(key);
+        if (before !== null) storage.setItem(key, before);
+        throw err;
+      }
+      return { ...row, local: true, replaced };
     },
 
     remove(id) {
@@ -745,14 +770,23 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch }
 
 /**
  * Fold every enabled pack's tables into the one document each registrar
- * expects. Later packs win: a discipline, class or manipulation with the same
- * name (case-insensitively) as an earlier one replaces it, so a player can
- * fix a bundled table by shipping a corrected copy in their own pack without
- * being able to edit the bundled one.
+ * expects. Later packs win: a class or manipulation with the same name
+ * (case-insensitively) as an earlier one replaces it, so a player can fix a
+ * bundled table by shipping a corrected copy in their own pack without being
+ * able to edit the bundled one.
+ *
+ * A **discipline is the exception**: two packs naming the same one add up,
+ * maneuver by maneuver, and only an entry of the same name is replaced. A
+ * discipline is not one fact but a list of thirty, and the ordinary rule
+ * makes a pack carrying a single corrected maneuver delete the twenty-nine it
+ * had no opinion about -- which is what a player does the first time they
+ * paste one maneuver off a wiki page. The cost is that a later pack cannot
+ * *remove* an entry, which nothing has ever wanted to do.
  */
 export function mergeTables(extensions) {
   const out = {
     maneuvers: { disciplines: [] },
+    spheres: { spheres: [] },
     vancian: { spellLevels: null, classes: [] },
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
@@ -764,9 +798,26 @@ export function mergeTables(extensions) {
     const i = list.findIndex((x) => lower(x?.[key]) === k);
     if (i === -1) list.push(item); else list[i] = item;
   };
+  /** A discipline joins one already there rather than replacing it. */
+  const upsertDiscipline = (list, disc) => {
+    const k = lower(disc?.name);
+    if (!k) return;
+    const at = list.findIndex((x) => lower(x?.name) === k);
+    if (at === -1) { list.push({ ...disc, entries: [...arr(disc.entries)] }); return; }
+    const entries = [...arr(list[at].entries)];
+    for (const e of arr(disc.entries)) {
+      const j = entries.findIndex((x) => lower(x?.name) === lower(e?.name));
+      if (j === -1) entries.push(e); else entries[j] = e;
+    }
+    list[at] = { ...list[at], ...disc, entries };
+  };
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
-    for (const d of arr(p.maneuvers?.disciplines)) upsert(out.maneuvers.disciplines, d);
+    for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
+    // A sphere replaces a sphere of the same name outright: unlike a
+    // discipline it arrives whole -- one page is the whole sphere -- so a
+    // later pack carrying it means a corrected copy of all of it.
+    for (const x of arr(p.spheres?.spheres)) upsert(out.spheres.spheres, x);
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
@@ -786,12 +837,13 @@ export function mergeTables(extensions) {
 
 /**
  * Register the merged tables with the model. `registrars` is the model's
- * five setters, passed in rather than imported so this module has no
+ * table setters, passed in rather than imported so this module has no
  * dependency on model.js and the tests can hand it spies.
  */
 export function registerTables(merged, registrars) {
   const r = obj(registrars);
   r.setManeuverCatalogue?.(merged.maneuvers);
+  r.setSphereCatalogue?.(merged.spheres);
   r.setVancianTables?.(merged.vancian);
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);

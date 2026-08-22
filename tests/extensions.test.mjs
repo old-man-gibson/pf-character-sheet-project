@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
-  extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
+  extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
@@ -15,7 +15,9 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+  setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
 } from '../app/js/model.js';
+import { isBasePick } from '../app/js/rules.js';
 import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
@@ -202,6 +204,68 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   check('a nameless pack is refused', threw, true);
 }
 
+console.log('store -- a save that runs out of room leaves nothing behind');
+{
+  /*
+   * A pack is two writes, and a full browser can fail the second after
+   * passing the first. What that used to leave was a document with no index
+   * row: invisible to `list()`, so the dialog could not offer to remove it,
+   * holding exactly the space the "out of space" message asked to be freed.
+   */
+  const withCeiling = (limit) => {
+    const m = new Map();
+    const used = () => [...m].reduce((n, [k, v]) => n + k.length + v.length, 0);
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      removeItem: (k) => m.delete(k),
+      keys: () => [...m.keys()],
+      setItem(k, v) {
+        const had = m.has(k) ? m.get(k).length : 0;
+        if (used() - had + v.length > limit) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        m.set(k, v);
+      },
+    };
+  };
+  const pack = (id, n) => ({
+    format: EXTENSION_FORMAT,
+    id,
+    name: id,
+    blocks: Array.from({ length: n }, (_, i) => ({ kind: 'note', name: `n${i}`, text: 'x'.repeat(200) })),
+  });
+  // Room for the document but not for the index row that follows it.
+  const body = JSON.stringify(normalizeExtension(pack('big', 20)));
+  const storage = withCeiling(extensionKey('big').length + body.length + 20);
+  const store = extensionStore(storage);
+  let threw = null;
+  try { store.save(pack('big', 20)); } catch (e) { threw = e.name; }
+  check('the save reports the browser is full', threw, 'QuotaExceededError');
+  check('and no orphaned document is left holding the space',
+    storage.keys().filter((k) => k.startsWith('character-sheet:ext:')), []);
+  check('so nothing is listed either', store.list(), []);
+
+  /*
+   * And on a *replace*, where the pack being updated was overwritten before
+   * the failure: losing the old one to a save that did not happen is worse
+   * than the orphan.
+   */
+  const roomy = withCeiling(1e6);
+  const s2 = extensionStore(roomy);
+  s2.save(pack('keep', 1));
+  const kept = roomy.getItem(extensionKey('keep'));
+  // Only the index write fails, which is the shape a real ceiling takes: the
+  // document went in, and the row that would have found it did not fit.
+  const write = roomy.setItem;
+  roomy.setItem = (k, v) => {
+    if (k === EXTENSIONS_KEY) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+    return write(k, v);
+  };
+  let alsoThrew = false;
+  try { s2.save(pack('keep', 40)); } catch { alsoThrew = true; }
+  check('a failed replace throws', alsoThrew, true);
+  check('and the pack it would have replaced is still there, unchanged',
+    roomy.getItem(extensionKey('keep')), kept);
+}
+
 console.log('active set -- bundled first, disabled dropped, local packs after');
 {
   const storage = fakeStorage();
@@ -232,8 +296,11 @@ console.log('merge -- later packs win by name, tables concatenate');
     cooking: { entrees: [{ name: 'rice', effect: 'b' }] },
   } });
   const m = mergeTables([a, b]);
-  check('discipline replaced by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 1], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
-  check('later entries win', m.maneuvers.disciplines[0].entries[0].name, 'Y');
+  // A discipline is the one table that adds up rather than replacing: two
+  // packs naming it join maneuver by maneuver, and the later pack's header
+  // still wins (its casing is the one kept).
+  check('same discipline joined by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 2], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
+  check('both packs\' maneuvers are there', m.maneuvers.disciplines[0].entries.map((e) => e.name), ['X', 'Y']);
   check('vancian classes concatenate, spellLevels kept', [m.vancian.classes.map((c) => c.name), m.vancian.spellLevels], [['Cleric', 'Wizard'], ['0', '1st']]);
   check('psionic curve replaced by total', m.psionics.curves, [{ total: 52, points: [1] }]);
   check('cardcasting from the one pack', m.cardcasting.manipulations.length, 1);
@@ -242,6 +309,51 @@ console.log('merge -- later packs win by name, tables concatenate');
   const calls = [];
   registerTables(m, { setManeuverCatalogue: (d) => calls.push(['m', d.disciplines.length]), setCookingTables: (d) => calls.push(['c', d.entrees.length]) });
   check('registrars called with the merged docs, missing ones skipped', calls, [['m', 3], ['c', 1]]);
+
+  /*
+   * The case the joining rule exists for. A player pastes one maneuver off a
+   * wiki page; it is filed under Golden Lion, which the bundled catalogue
+   * already carries thirty-odd of. Under a replace-by-name rule the other
+   * thirty would vanish the moment the pack was switched on.
+   */
+  const pow = normalizeExtension({
+    id: 'pow',
+    name: 'Path of War',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [
+            { level: 1, kind: 'maneuver', name: 'Demoralizing Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Lion\'s Pounce', type: 'Strike' },
+          ],
+        }],
+      },
+    },
+  });
+  const pasted = normalizeExtension({
+    id: 'mine',
+    name: 'Mine',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost',
+            action: 'Swift', text: 'Roars.',
+          }],
+        }],
+      },
+    },
+  });
+  const both = mergeTables([pow, pasted]).maneuvers.disciplines[0];
+  check('one pasted maneuver does not delete the discipline around it',
+    both.entries.map((e) => e.name), ['Demoralizing Roar', 'Encouraging Roar', 'Lion\'s Pounce']);
+  check('and the one it names is the corrected copy',
+    both.entries[1].text, 'Roars.');
+  check('the ones it did not name are untouched',
+    both.entries[0].text, undefined);
 }
 
 console.log('bundled -- the shipped packs load through the index and merge cleanly');
@@ -264,8 +376,228 @@ console.log('bundled -- the shipped packs load through the index and merge clean
   check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length], [30, 34, 5, 33]);
   setManeuverCatalogue(m.maneuvers);
   ok('the catalogue answers by discipline name', disciplineEntries('Broken Blade').length > 0);
+  // The bundled catalogue is names and types only: the rules text of 1,033
+  // publisher maneuvers is not ours to ship, and this is the check that says
+  // so if somebody ever pastes it in.
+  const bundled = disciplineEntries('Broken Blade');
+  ok('every bundled entry has a type', bundled.every((e) => e.type !== ''));
+  check('and no bundled entry carries rules text',
+    bundled.filter((e) => ['action', 'range', 'target', 'duration', 'save', 'dc', 'text']
+      .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('spheres -- a whole sphere as a shared table, tags and all');
+{
+  const sphere = {
+    name: 'Boxing',
+    kind: 'combat',
+    description: 'Boxers specialize in fighting with their fists.',
+    abilities: [{ name: 'Counter Punch', text: 'You may ready an action.' }],
+    talents: [
+      { name: 'Clinch', group: 'Counter Talents', tags: ['counter'], sources: [], prerequisites: '', text: 'Grapple.' },
+      { name: 'Elongated Step', group: 'Boxing Talents', tags: ['stance'], sources: ['3PP'], prerequisites: '', text: 'Reach.' },
+    ],
+  };
+  const pack = normalizeExtension({ id: 'som', name: 'SoM', provides: { spheres: { spheres: [sphere] } } });
+  const merged = mergeTables([pack]);
+  check('the sphere survives the merge', merged.spheres.spheres.map((s) => s.name), ['Boxing']);
+  check('a pack of spheres counts as spheres',
+    describeSummary({ tables: { spheres: 2 }, blocks: {} }), '2 spheres');
+
+  const calls = [];
+  registerTables(merged, { setSphereCatalogue: (d) => calls.push(d.spheres.length) });
+  check('and reaches its registrar', calls, [1]);
+
+  setSphereCatalogue(merged.spheres);
+  check('read back by name, however it was capitalised',
+    sphereEntry('boxing').talents.length, 2);
+  check('unknown sphere is null', sphereEntry('Nowhere'), null);
+  // The tags are what a table filters on -- both kinds are searched, since
+  // which of the two a wiki wrote a label in is its business, not ours.
+  check('found by a rules tag', talentsTagged('counter').map((t) => t.name), ['Clinch']);
+  check('and by a source tag', talentsTagged('3PP').map((t) => t.name), ['Elongated Step']);
+  check('case does not count', talentsTagged('3pp').length, 1);
+  check('a talent knows its sphere', talentsTagged('counter')[0].sphere, 'Boxing');
+
+  /*
+   * A sphere replaces a sphere of the same name outright -- unlike a
+   * discipline, which joins. One page is the whole sphere, so a later pack
+   * carrying it means a corrected copy of all of it, not an addition to it.
+   */
+  const fixed = normalizeExtension({
+    id: 'fix',
+    name: 'Fix',
+    provides: { spheres: { spheres: [{ ...sphere, talents: [sphere.talents[0]] }] } },
+  });
+  check('a later pack replaces the sphere whole',
+    mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
+
+  /*
+   * Matching a talent somebody typed on their sheet against the catalogue.
+   * The sheet has always taken a talent as free text and still does -- this
+   * is a second opinion, so a miss is silence rather than an error.
+   */
+  setSphereCatalogue(merged.spheres);
+  check('an exact name matches', sphereTalent('Boxing', 'Clinch').group, 'Counter Talents');
+  check('case and spacing do not count', !!sphereTalent('boxing', '  clinch '), true);
+  // A player writes what their book calls it, tags and all.
+  check('a tag the player typed is ignored', !!sphereTalent('Boxing', 'Clinch (counter)'), true);
+  check('a talent the sphere lacks is a miss', sphereTalent('Boxing', 'Nonesuch'), null);
+  check('a sphere no pack carries is a miss', sphereTalent('Alteration', 'Clinch'), null);
+  check('and nothing typed is a miss', sphereTalent('Boxing', '   '), null);
+  // With no sphere named the whole catalogue is searched, so the sheet can
+  // tell the player which sphere it came from rather than being told.
+  check('an unnamed sphere is found when only one has it',
+    sphereTalent('', 'Elongated Step').sphere, 'Boxing');
+
+  /*
+   * The sphere pickers offer what the packs carry as well as what rules.js
+   * knows, so a homebrew sphere turns up where a player looks for it.
+   */
+  check('a pack sphere joins the picker',
+    sphereNames(['Alteration', 'Death'], 'magic'), ['Alteration', 'Death']);
+  check('one of the other side stays out',
+    sphereNames(['Alteration'], 'magic'), ['Alteration']);
+  check('and joins its own side, after the built-in names',
+    sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
+  check('a name the engine already knows is not doubled',
+    sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+
+  /*
+   * Typing a talent fills in what the catalogue can answer for free -- the
+   * sphere it belongs to, and its rules text as the row's note. Only ever
+   * into cells that are empty: a note is where the table's own ruling goes,
+   * and having that overwritten by a book would be worse than never filling.
+   */
+  const c = new Character(blankDocument({ name: 'Boxer', level: 4 }));
+  const L = 'training.combat.bonusTalents';
+  c.data.training.combat.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+    { talent: '', sphere: 'Alchemy', source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+  ];
+  const row = (i) => c.data.training.combat.bonusTalents[i];
+  const cols = { sphere: 'sphere', notes: 'notes' };
+
+  c.setTalentEntry(L, 0, 'Clinch', cols);
+  check('an empty row takes the sphere and the text',
+    [row(0).sphere, row(0).notes], ['Boxing', 'Grapple.']);
+  c.setTalentEntry(L, 1, 'Clinch', cols);
+  check('a note already written is left alone',
+    [row(1).sphere, row(1).notes], ['Boxing', 'my own ruling']);
+  // A sphere already chosen is the row's own answer, and it is also what the
+  // match is made against -- so a talent that sphere does not have is a miss.
+  c.setTalentEntry(L, 2, 'Clinch', cols);
+  check('a sphere already chosen decides, and misses',
+    [row(2).sphere, row(2).notes], ['Alchemy', '']);
+  c.setTalentEntry(L, 3, 'Nothing Known', cols);
+  check('no match fills nothing', [row(3).sphere, row(3).notes], [null, '']);
+
+  // A table with no notes column must not grow one.
+  c.data.training.combat.tradition = { entries: [{ talent: '', sphere: null }] };
+  c.setTalentEntry('training.combat.tradition.entries', 0, 'Clinch', { sphere: 'sphere' });
+  check('a row without notes keeps its shape',
+    c.data.training.combat.tradition.entries[0], { talent: 'Clinch', sphere: 'Boxing' });
+
+  // Emptying a filled cell and leaving the talent alone leaves it empty --
+  // the fill happens on entry, not on every recompute.
+  row(0).notes = '';
+  c.recompute();
+  check('a cleared note stays cleared', row(0).notes, '');
+
+  /*
+   * Taking the sphere itself is not taking a talent in it: what it grants is
+   * the sphere's base abilities. The row reads as the sphere and what it
+   * opened, which is the name a player scanning their own list wants, and the
+   * abilities' full text -- far too long for a name -- goes in the note.
+   */
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Destruction',
+      kind: 'magic',
+      description: '*You can use destructive power.*',
+      abilities: [{ name: 'Destructive Blast', text: 'You deliver a burst of blunt magical force.' }],
+      talents: [{ name: 'Acid Blast', group: 'Basic', tags: [], sources: [], prerequisites: '', text: 'Acid.' }],
+    }],
+  });
+  check('a base pick reads as the sphere and what it opened',
+    sphereBasePick('Destruction').label, 'Destruction Sphere (Destructive Blast)');
+  check('a sphere with no base abilities has no pick', sphereBasePick('Nowhere'), null);
+
+  const d = new Character(blankDocument({ name: 'Caster', level: 4 }));
+  const M = 'training.magic.bonusTalents';
+  d.data.training.magic.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+  ];
+  const mrow = (i) => d.data.training.magic.bonusTalents[i];
+  d.setTalentEntry(M, 0, 'Destruction Sphere', cols);
+  check('typing the sphere fills all three',
+    [mrow(0).talent, mrow(0).sphere, mrow(0).notes],
+    ['Destruction Sphere (Destructive Blast)', 'Destruction',
+      'Destructive Blast: You deliver a burst of blunt magical force.']);
+  // `isBasePick` strips parentheses before looking for the word, so the label
+  // it writes still counts as a base pick for the sphere tallies.
+  check('and the label it wrote is still a base pick', isBasePick(mrow(0).talent), true);
+  // Somebody who wrote their own parenthesis said something, and it is not
+  // ours to replace.
+  d.setTalentEntry(M, 1, 'Destruction Sphere (from a feat)', cols);
+  check('a pick with its own parenthesis is left alone',
+    mrow(1).talent, 'Destruction Sphere (from a feat)');
+  check('though the blanks beside it are still filled',
+    [mrow(1).sphere, !!mrow(1).notes], ['Destruction', true]);
+  d.setTalentEntry(M, 2, 'Destruction Sphere', cols);
+  check('and a note already written is never overwritten', mrow(2).notes, 'my own ruling');
+}
+
+console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');
+{
+  /*
+   * A discipline written in the Extensions editor: names, and the cells the
+   * sheet's maneuver card shows. Nothing between the file and the catalogue
+   * may quietly drop them -- which is exactly what happened before, where
+   * setManeuverCatalogue narrowed every entry to four keys.
+   */
+  const pack = normalizeExtension({
+    id: 'homebrew', name: 'Homebrew',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Iron Tortoise',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+            action: 'Standard', range: 'Melee attack', target: 'One creature',
+            duration: 'Instantaneous', save: 'Fortitude', dc: '{= 10 + 1 + str.mod}',
+            text: 'Slams for {= level}d6.',
+          }],
+        }],
+      },
+    },
+  });
+  const cells = ['type', 'action', 'range', 'target', 'duration', 'save', 'dc', 'text'];
+  check('normalizeExtension keeps them',
+    cells.every((k) => k in pack.provides.maneuvers.disciplines[0].entries[0]), true);
+  const merged = mergeTables([pack]);
+  check('mergeTables keeps them',
+    cells.every((k) => k in merged.maneuvers.disciplines[0].entries[0]), true);
+  registerTables(merged, { setManeuverCatalogue });
+  const entry = disciplineEntries('Iron Tortoise')[0];
+  check('and the catalogue registers them', cells.map((k) => entry[k]), [
+    'Strike', 'Standard', 'Melee attack', 'One creature',
+    'Instantaneous', 'Fortitude', '{= 10 + 1 + str.mod}', 'Slams for {= level}d6.',
+  ]);
+  // A cell the pack left out is a blank string, never undefined -- every
+  // reader treats these as strings and one hole would show as "undefined".
+  registerTables(mergeTables([normalizeExtension({
+    id: 'bare', name: 'Bare',
+    provides: { maneuvers: { disciplines: [{ name: 'Bare', entries: [{ name: 'Thing' }] }] } },
+  })]), { setManeuverCatalogue });
+  check('a cell the pack left out is blank, not missing',
+    cells.map((k) => disciplineEntries('Bare')[0][k]), cells.map(() => ''));
 }
 
 console.log('apply -- blocks land on a blank character through the model');

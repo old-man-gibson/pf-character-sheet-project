@@ -27,19 +27,68 @@ const TEMPLATE_TYPE_HINTS = {
 const NEW_TEMPLATE_TABLE = () => ({
   caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
 });
-import { TEMPLATE_TYPES, classForwardKey } from '../../model.js';
+import {
+  TEMPLATE_TYPES, basePickSphere, classForwardKey, sphereBasePick, sphereNames, sphereTalent,
+} from '../../model.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BLENDED_SPHERES,
   BRAWLERS_VEST_TALENTS, CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENTED_KNUCKLE_TALENTS, TALENT_RATES, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, UNARMED_SPHERES, fmt, mergeLayout, sphereSide,
-  trackSpheres,
+  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, UNARMED_SPHERES, fmt, isBasePick, mergeLayout,
+  sphereSide, trackSpheres,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, itemCheck, itemNum, itemSelect, itemText, line, lineHtml,
   rowRemove, rowTools,
 } from '../rows.js';
+
+/**
+ * A talent cell: the box it is typed in, and -- when a pack's sphere
+ * catalogue knows what was typed -- a mark carrying what it does.
+ *
+ * The box stays a prose field. A talent is still whatever a player writes,
+ * `{…}` formulas and all, and the catalogue is a second opinion rather than a
+ * gate: a talent nobody has a pack for is simply unmarked, which is the state
+ * every talent on every sheet was in before this. `extra` goes on the wrapper
+ * so a caller can keep the cell's own classes.
+ */
+function talentCell(model, binding, value, sphere, fill = null) {
+  // `fill` names the row's own sphere and notes columns, which differ per
+  // table -- a customized weapon and a martial tradition have no notes. The
+  // element reads it to fill in what the catalogue can answer for free; left
+  // off, the cell is an ordinary one that only ever writes the talent.
+  const bind = fill ? `${binding} data-talent-fill="${esc(JSON.stringify(fill))}"` : binding;
+  const field = prose(model, bind, value, 1, 'grow');
+  // A base pick is the sphere itself; what it carries is the sphere's base
+  // abilities, which is what somebody hovering the row wants to read.
+  const base = isBasePick(value) ? sphereBasePick(basePickSphere(value, sphere)) : null;
+  if (base) {
+    return `<span class="tcell">${field}<i class="tmark"
+        title="${esc(`${base.label}\n\n${base.text}`)}"
+        aria-label="${esc(`${base.sphere} sphere — from the sphere catalogue`)}">✦</i></span>`;
+  }
+  const hit = sphereTalent(sphere, value);
+  if (!hit) return field;
+  // A pack written by hand may leave a tag on the name it also lists in
+  // `tags` ("Deathful Form (form)" tagged `form`), and saying it twice reads
+  // badly. Only an actual repeated suffix counts: an Acid Blast tagged `Acid`
+  // is a blast-type group that happens to share a word with its name, and
+  // dropping that would lose the tag a caster filters on.
+  const suffix = hit.name.trim().match(/[([]([^)\]]+)[)\]]$/)?.[1]?.trim().toLowerCase();
+  const tags = [...hit.tags, ...hit.sources]
+    .filter((x) => String(x).trim().toLowerCase() !== suffix);
+  // The hover is the whole entry, because a talent's text is the reason to
+  // look it up at all and there is nowhere in a four-column table to put it.
+  const title = [
+    `${hit.name}${tags.length ? ` (${tags.join(', ')})` : ''}`,
+    [hit.sphere, hit.group].filter(Boolean).join(' — '),
+    hit.prerequisites ? `Prerequisites: ${hit.prerequisites}` : '',
+    hit.text ? `\n${hit.text}` : '',
+  ].filter(Boolean).join('\n');
+  return `<span class="tcell">${field}<i class="tmark${hit.sources.length ? ' third' : ''}"
+      title="${esc(title)}" aria-label="${esc(`${hit.name} — from the sphere catalogue`)}">✦</i></span>`;
+}
 
   /**
    * Each side reads top to bottom as one story: the classes and what they
@@ -97,7 +146,7 @@ export function classNames(model) {
 function trainingSide(model, sideKey, side) {
     const isMagic = sideKey === 'magic';
     const title = isMagic ? 'Magic training' : 'Combat training';
-    const spheres = isMagic ? MAGIC_SPHERES : COMBAT_SPHERES;
+    const spheres = sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat');
     const types = isMagic ? CASTING_TYPES : PRACTITIONER_TYPES;
     const tplOptions = Object.keys(TALENT_RATES);
     const list = `training.${sideKey}.classes`;
@@ -149,8 +198,9 @@ function trainingSide(model, sideKey, side) {
               : `Level ${lv.level} grants no talent`;
             return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${prose(model, 
-    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, 1, 'grow')}</td>
+              <td class="${state}">${talentCell(model,
+    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}
@@ -215,7 +265,8 @@ function customizationPanel(model, blocks) {
     // customized weapon teaches its wielder to fight with it -- and widened by
     // the archetype that says so, which is why it is a field here and not a
     // rule in the engine.
-    const spheres = trackSpheres(block.spec);
+    const spheres = sphereNames(trackSpheres(block.spec),
+      block.spec?.spheres === 'both' ? null : block.spec?.spheres || 'combat');
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
@@ -283,7 +334,8 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
           <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
       ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
       : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
-            ${prose(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, 1, 'grow')}</td>
+            ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere,
+    on ? { sphere: 'sphere' } : null)}</td>
           <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
       ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
         + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
@@ -364,8 +416,9 @@ function blendedPanel(model, pairs) {
         : `Level ${lv.level} grants no talent`;
       return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${prose(model, 
-        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, 1, 'grow')}</td>
+              <td class="${state}">${talentCell(model,
+        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+        on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}${side ? ` side-${side}` : ''}">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, BLENDED_SPHERES)
         : '<select disabled><option></option></select>'}
@@ -410,8 +463,9 @@ function combatTraditionPanel(model, t) {
         <colgroup><col class="talent"><col class="sphere"><col class="tool"></colgroup>
         <thead><tr><th>Grants</th><th>Sphere</th><th></th></tr></thead>
         <tbody>${(t.tradition?.entries || []).map((e, i) => `<tr>
-          <td>${prose(model, `data-item="${list}|${i}|talent"`, e.talent, 1, 'grow')}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, COMBAT_SPHERES)}</td>
+          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere' })}</td>
+          <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(COMBAT_SPHERES, 'combat'))}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>
@@ -438,8 +492,9 @@ function bonusTalentPanel(model, sideKey, side) {
         <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
         <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr>
-          <td>${prose(model, `data-item="${list}|${i}|talent"`, e.talent, 1, 'grow')}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, isMagic ? MAGIC_SPHERES : COMBAT_SPHERES)}</td>
+          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere', notes: 'notes' })}</td>
+          <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
           <td>${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
           <td>${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
           ${rowTools(list, i)}

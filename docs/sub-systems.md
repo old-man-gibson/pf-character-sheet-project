@@ -23,7 +23,21 @@ a level that grants a talent gets a green, writable name field and a sphere drop
 unlocks even levels only. **Class levels (override)** covers sparse Planners that
 list a class once instead of per-level. Each row also takes a **note** beside the
 talent — both it and the talent read `{…}` formulas and grow to fit what is written,
-so a talent whose effect scales can carry the number with it. The running talent
+so a talent whose effect scales can carry the number with it.
+
+A talent an [extension pack's sphere catalogue](extensions.md#spheres) recognises grows a
+small **✦** in the corner of its box; hovering it gives the whole entry — sphere and group,
+tags, prerequisites, rules text — and the mark reads muted rather than gold when the talent
+came from a named third-party source. Every sphere dropdown offers what the packs carry as
+well, after the built-in names.
+
+Typing one also **fills in the blanks beside it**: its sphere, and its rules text as the
+row's note. Typing the *sphere itself* — a base pick — fills the row as the sphere and what
+it opened (**Destruction Sphere (Destructive Blast)**), with the base abilities' full text
+as the note. Only cells that are empty, so a ruling you wrote yourself is never overwritten —
+and clearing one leaves it clear until you retype the talent. Nothing else about typing
+changes: a talent is still whatever you write, and one no pack covers is simply unmarked and
+fills nothing. The running talent
 count is the level cell's tooltip rather than a column of its own.
 
 **Bonus talents** — the ones a feat, an item or a template handed over rather than a
@@ -408,19 +422,31 @@ maneuver and is the only thing that does — it used to be the whole row, so rea
 maneuver meant hitting the ✎ dead on or readying it by accident. **Clicking the name**
 opens what you wrote about it. The **✎** opens the same card with its cells showing.
 
-The card is the stat entry the catalogue cannot ship. It has seven cells — **type,
-action, range, target, duration, saving throw and DC** — and a **description**, and
-every one of them takes `{…}` formulas, so a range written
-`Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of going
-stale. Reading it, only the cells you filled in are there at all: a maneuver with a
-range and nothing else is a card with a range and nothing else, never a column of
-em-dashes. Type is the one cell that arrives answered, from the catalogue, and the
-picker says so rather than looking blank.
+The card has seven cells — **type, action, range, target, duration, saving throw and
+DC** — and a **description**, and every one of them takes `{…}` formulas, so a range
+written `Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of
+going stale. Reading it, only the cells that were filled in are there at all: a maneuver
+with a range and nothing else is a card with a range and nothing else, never a column of
+em-dashes.
+
+A cell can be filled from either end. **A pack may carry it** — see
+[Extensions](extensions.md#disciplines), where a discipline you write has the same eight
+cells — and **what you type on your own sheet sits over that, cell by cell**. So a table
+ruling wins, the cells beside it still come from the pack, and emptying yours hands that
+cell straight back. In the editor the greyed text says which is which: a plain ghost
+value is what the cell will say if left alone, and one marked *e.g.* is only a
+suggestion.
+
+The bundled Path of War catalogue fills in nothing but the type — its 1,033 names are a
+publisher's and their rules text is not ours to ship — so on those disciplines every
+other cell starts out yours to write.
 
 What you write is stored on the discipline under the maneuver's name, because the
-rows themselves belong to the shared catalogue and have nowhere to hang. A
-description on its own is still saved as the plain string it always was, so a
-character who never opens the other cells is byte-for-byte the character it was.
+rows themselves belong to the shared catalogue and have nowhere to hang. Only the cells
+you actually wrote are saved, which is what lets a corrected pack correct a sheet
+already in play. A description on its own is still saved as the plain string it always
+was, so a character who never opens the other cells is byte-for-byte the character it
+was.
 The dashboard's **Readied maneuvers** card shows the header cells as one line and
 the description under it.
 

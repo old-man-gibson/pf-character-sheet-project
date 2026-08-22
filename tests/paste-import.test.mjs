@@ -3,6 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
+  splitTalentName, looksStructured, parseStructured, unwikiTables, entryDepth,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -959,6 +960,729 @@ console.log('a plain homebrew archetype document -- no info box, title features 
   check('"At level 20"', f('Axiomatic').level, 20);
   ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
   ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
+}
+
+console.log('a scraper document -- structured markdown, read before anything is cleaned');
+{
+  /*
+   * What a scraper writes, rather than what a browser copies. The shape is
+   * meant to hold for whatever it learns to fetch next, so this checks the
+   * frame as much as the maneuvers: an H1 subject, a blockquote description,
+   * sections and groups by heading depth, and entries whose *fields* say what
+   * they are.
+   */
+  const DOC = `# Iron Tortoise
+
+> The discipline known as Iron Tortoise rose up from the need to protect one's self and allies.
+> Maneuvers from Iron Tortoise require use of a shield in one hand.
+
+---
+
+## Maneuvers & Stances (34 Abilities)
+
+### Level 1 Maneuvers
+
+#### Angering Smash
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+* **Range:** Melee attack
+* **Target / Area:** One creature
+* **Duration:** One round
+* **Source:** Path of War p. 69
+
+**Summary:** *Melee attack that causes -4 to hit any target but you.*
+
+By making a quick shield bash, the disciple taunts his foes into striking at him solely.
+
+---
+
+#### Snapping Turtle Stance
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Stance)
+* **Initiation Action:** 1 swift action
+* **Range:** Personal
+* **Target / Area:** You
+* **Duration:** Stance
+* **Source:** Path of War p. 70
+
+**Summary:** *Shield bashes inflict an additional 1d6 points of damage.*
+
+The disciple holds his shield to deliver punishing shield bashes.
+
+This bonus damage increases by +1d6 every 8 initiator levels beyond 1st.
+
+---
+
+### Level 3 Maneuvers
+
+#### Burnished Shell
+
+* **Discipline:** Iron Tortoise
+* **Level:** 3 (Maneuver [Counter])
+* **Initiation Action:** 1 immediate action
+* **Range:** Personal
+* **Target / Area:** You
+* **Prerequisite:** 1 Iron Tortoise Maneuver
+* **Source:** Path of War p. 71-72
+
+**Summary:** *Deny the effects of a spell targeted on you.*
+
+By angling one's shield correctly he may deflect the power of the spell.
+
+---`;
+
+  ok('it is recognised as a scraper document', looksStructured(DOC));
+  const doc = parseStructured(DOC);
+  check('the H1 is the subject', doc.title, 'Iron Tortoise');
+  check('the blockquote is its description', doc.intro.length, 2);
+  check('nothing is stray', doc.strays, []);
+  check('entries come off the deepest headings',
+    doc.entries.map((e) => e.name), ['Angering Smash', 'Snapping Turtle Stance', 'Burnished Shell']);
+  check('and each knows the trail above it',
+    doc.entries[2].section, ['Maneuvers & Stances (34 Abilities)', 'Level 3 Maneuvers']);
+  check('fields are keyed by their label, lowercased',
+    [...doc.entries[0].fields.keys()],
+    ['discipline', 'level', 'initiation action', 'range', 'target / area', 'duration', 'source']);
+  check('a summary is kept apart from the prose',
+    doc.entries[0].summary, 'Melee attack that causes -4 to hit any target but you.');
+  ok('and the prose is the rest', /^By making a quick shield bash/.test(doc.entries[0].text));
+  ok('a body keeps its paragraphs', /\n\n/.test(doc.entries[1].text));
+
+  const r = parsePaste(DOC);
+  check('no blocks -- these are catalogue entries', r.blocks.length, 0);
+  check('every entry filed under its discipline',
+    [...new Set(r.maneuvers.map((m) => m.discipline))], ['Iron Tortoise']);
+  // "1 (Maneuver [Strike])" carries three things at once, the way a
+  // discipline's own table prints it.
+  check('level, kind and type off the one line',
+    r.maneuvers.map((m) => [m.entry.level, m.entry.kind, m.entry.type]),
+    [[1, 'maneuver', 'Strike'], [1, 'stance', 'Stance'], [3, 'maneuver', 'Counter']]);
+  check('the action normalised', r.maneuvers.map((m) => m.entry.action),
+    ['Standard', 'Swift', 'Immediate']);
+  check('target read from "Target / Area"', r.maneuvers[0].entry.target, 'One creature');
+  check('a duration nobody wrote stays empty', r.maneuvers[2].entry.duration, '');
+  // Both halves are worth keeping and there is one cell, so they stack.
+  ok('the summary sits over the prose',
+    r.maneuvers[0].entry.text.startsWith('Melee attack that causes -4 to hit any target but you.\n\nBy making'));
+  // Source and Prerequisite have no cell on a card; saying so beats losing them.
+  ok('the report says what was dropped',
+    /source and prerequisite lines have no cell/.test(r.report[0]));
+  ok('and what was read', /Iron Tortoise: 3 maneuvers/.test(r.report[0]));
+  // The document's own description has nowhere to go, so it comes back to be
+  // tagged rather than being thrown away.
+  check('the description is offered as a note',
+    r.leftovers.map((l) => l.suggest), ['note']);
+  ok('under its subject', /^Iron Tortoise\nThe discipline known/.test(r.leftovers[0].text));
+
+  // An entry whose fields match no kind is a leftover, not a silent loss --
+  // which is what keeps the scraper free to grow ahead of this reader.
+  const FUTURE = `# Dwarf
+
+## Traits
+
+#### Darkvision
+
+* **Type:** Racial
+* **Range:** 60 ft.
+* **Source:** Core p. 21
+
+Dwarves can see in the dark up to 60 feet.
+
+---`;
+  const f = parsePaste(FUTURE);
+  check('an unknown kind reaches the review instead of vanishing', f.maneuvers.length, 0);
+  ok('with its fields intact to read', /Type: Racial/.test(f.leftovers.map((l) => l.text).join('\n')));
+  ok('and the report says so', /nothing here matched a kind this reader knows/.test(f.report[0]));
+}
+
+console.log('a scraper document whose subject is the whole thing -- a sphere');
+{
+  /*
+   * The other way round from a discipline. There, the document is a wrapper
+   * and each entry is its own maneuver; here the *document* is the sphere and
+   * the entries are the talents inside it. Which of the two a document is
+   * comes from its section heading, the one place it says what it is about.
+   */
+  const SPHERE = `# Destruction
+
+> > *You can use destructive power.*
+> *Destructive Blast:* As a standard action, you may deliver a burst of blunt magical force.
+> {|class="wikitable" cellpadding="5" border="1"
+> |- align=center
+> !Level
+> !Damage
+> |-
+> |1st
+> |1d6
+> |-
+> |3rd
+> |2d6
+> |}
+
+---
+
+## Sphere Talents (91 Talents)
+
+### Basic Talents (74)
+
+#### Acid Blast (talent)
+
+* **Tags:** Blast Type, Acid
+* **Source:** Ultimate Spheres of Power p. 277
+
+Your *destructive blast* deals acid damage.
+
+---
+
+#### Admixture
+
+* **Source:** Ultimate Spheres of Power p. 273
+
+You may apply two (blast type) talents instead of 1.
+
+    * Special:** You do not increase the casting time when using two blast types from the same group.
+
+---
+
+### Advanced Talents (17)
+
+#### Extreme Range (talent) (Advanced)
+
+* **Tags:** Advanced
+* **Prerequisite:** Destruction sphere (Extended Range x2), caster level 5th.
+* **Source:** Ultimate Spheres of Power p. 396
+
+Your *destructive blast* has a range of 1,000 feet + 100 feet per caster level.
+
+---`;
+
+  const r = parsePaste(SPHERE);
+  check('one sphere, no loose entries', [r.spheres.length, r.maneuvers.length, r.leftovers.length], [1, 0, 0]);
+  const s = r.spheres[0];
+  // Which side of the line it is on is not in the document at all, so it is
+  // looked up by name rather than guessed.
+  check('named, and its side looked up', [s.name, s.kind], ['Destruction', 'magic']);
+  check('talents keep the group they were listed under',
+    s.talents.map((t) => `${t.group.replace(/ \(\d+\)$/, '')}: ${t.name}`),
+    ['Basic Talents: Acid Blast', 'Basic Talents: Admixture', 'Advanced Talents: Extreme Range']);
+  // "(talent)" is how the wiki disambiguates a page title from something
+  // else's; it says nothing about the talent and is not a tag.
+  check('the page-title disambiguator is dropped', s.talents[0].name, 'Acid Blast');
+  check('a Tags field becomes the tags', s.talents[0].tags, ['Blast Type', 'Acid']);
+  check('and a Source the sources', s.talents[0].sources, ['Ultimate Spheres of Power p. 277']);
+  check('an (Advanced) suffix is kept as a tag', s.talents[2].tags, ['Advanced']);
+  check('prerequisites come off their own line',
+    s.talents[2].prerequisites, 'Destruction sphere (Extended Range x2), caster level 5th.');
+
+  /*
+   * The scraper writes the base ability into the description as an
+   * emphasised label rather than heading it, so it is lifted out: what the
+   * sphere *is* and what taking it *grants* are different questions, and the
+   * sheet asks the second one when a player takes the base sphere.
+   */
+  check('the description is the sphere\'s own line only',
+    s.description, '*You can use destructive power.*');
+  check('the base ability is lifted out under its name',
+    s.abilities.map((a) => a.name), ['Destructive Blast']);
+  ok('with its text', /^As a standard action/.test(s.abilities[0].text));
+  // A nested blockquote used to leave a stray marker in the prose.
+  ok('no quote markers survive', !/^>/m.test(s.description));
+  // A MediaWiki table is unreadable in a prose cell; the sheet shows tables
+  // as tab-separated rows everywhere else. It belongs to the ability it sits
+  // under, and travels with it.
+  ok('a wiki table becomes rows', /Level\tDamage\n1st\t1d6\n3rd\t2d6/.test(s.abilities[0].text));
+
+  // "    * Special:**" is a label the scraper half-converted, not a bullet.
+  ok('a half-converted label is straightened',
+    /\nSpecial: You do not increase/.test(s.talents[1].text));
+
+  ok('the report counts what was read',
+    /Sphere Destruction \(magic\): 3 talents in 2 group\(s\)/.test(r.report[0]));
+
+  // Nothing about the maneuver document changed: its entries still carry
+  // their own kind, and a document is only read whole when it says it is one.
+  const notASphere = parsePaste(`# Iron Tortoise
+
+## Maneuvers & Stances (34 Abilities)
+
+#### Angering Smash
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+
+Prose.
+
+---`);
+  check('a discipline document is still read entry by entry',
+    [notASphere.spheres.length, notASphere.maneuvers.length], [0, 1]);
+}
+
+console.log('a second scraper shape -- entries a level shallower, grouped by a field');
+{
+  /*
+   * The same tool, a different source page, and both are right: this one has
+   * no group level at all -- every entry sits directly under the document's
+   * one section -- and says which group a talent is in with a field instead.
+   * So the entry level is worked out per document rather than fixed.
+   */
+  const WIKIDOT = `# Mind Sphere (Wikidot)
+
+> You gain the ability to alter the minds of others.
+
+---
+
+## Sphere Talents & Abilities (133 Entries)
+
+### Suggestion
+
+* **Section:** Charm
+
+You may plant thoughts into a target's mind.
+
+**Lesser Charm:** You may plant a suggestion in a target's mind.
+
+**Greater Charm:** This works as the lesser charm, but may be up to a basic request.
+
+---
+
+### Charming Strike [strike]
+
+* **Section:** Charm Talents
+* **Tags:** strike
+
+You may deliver a charm through a melee attack.
+
+---
+
+### Mental Backdoor [Apoc]
+
+* **Section:** Advanced Mind Talents
+* **Tags:** Apoc
+* **Prerequisite:** Mind sphere.
+* **Source:** Spheres Apocrypha
+
+You leave a way back into a mind you have charmed.
+
+---`;
+
+  check('the entry level is worked out, not assumed', entryDepth(WIKIDOT.split('\n')), 3);
+  const doc = parseStructured(WIKIDOT);
+  check('so the entries are the talents',
+    doc.entries.map((e) => e.name), ['Suggestion', 'Charming Strike [strike]', 'Mental Backdoor [Apoc]']);
+
+  const s = parsePaste(WIKIDOT).spheres[0];
+  // "Mind Sphere (Wikidot)" is where it came from and what kind of page it
+  // was; neither belongs in the name a player picks from a dropdown.
+  check('the title loses the scraper\'s stamp', [s.name, s.kind], ['Mind', 'magic']);
+  // With no group heading, the Section field is the real grouping -- the
+  // page's own section heading is the same for every entry and says nothing.
+  check('groups come from the Section field',
+    s.talents.map((t) => t.group), ['Charm', 'Charm Talents', 'Advanced Mind Talents']);
+  check('name tags still come off the heading',
+    [s.talents[1].name, s.talents[1].tags], ['Charming Strike', ['strike']]);
+  check('and the fields are read',
+    [s.talents[2].prerequisites, s.talents[2].sources], ['Mind sphere.', ['Apoc', 'Spheres Apocrypha']]);
+
+  /*
+   * The half of a talent that looks like a field but is not. Mind and Nature
+   * are full of `**Lesser Charm:** …` sub-effects, and eating those as
+   * properties of the talent would take the rule away with them. A field is
+   * only a field at the top of an entry, before any prose.
+   */
+  ok('a bold label inside the prose stays in the prose',
+    /Lesser Charm:\*\* You may plant a suggestion/.test(s.talents[0].text)
+    || /Lesser Charm: You may plant a suggestion/.test(s.talents[0].text));
+  check('and is not mistaken for a property',
+    [...doc.entries[0].fields.keys()], ['section']);
+}
+
+console.log('wiki tables out of a scraper document');
+{
+  check('caption, header and rows, tab-separated', unwikiTables(`before
+{|class="wikitable"
+|- align=center
+|+Table: Variant Dice
+!Normal
+!Alternative
+|-
+|2d4
+|1d10
+|-
+|2d6
+|1d14
+|}
+after`), 'before\nTable: Variant Dice\nNormal\tAlternative\n2d4\t1d10\n2d6\t1d14\nafter');
+  check('text with no table is untouched', unwikiTables('just prose'), 'just prose');
+  check('cells sharing a line are split out',
+    unwikiTables('{|\n|-\n!A!!B\n|-\n|1||2\n|}'), 'A\tB\n1\t2');
+}
+
+console.log('a scraper document of akashic veils -- sub-headings belong to their entry');
+{
+  /*
+   * The shape a page of veils comes in: one section, an entry per veil, and
+   * each veil's chakra binds as headings *under* it. Those sub-headings are
+   * the point of the fixture -- taken as entries of their own they turned
+   * 2,149 veils into 5,785 things, every veil stripped of its binds beside a
+   * run of nameless fragments carrying no fields.
+   */
+  const VEILS = `# Belt Veils
+
+> All Akashic Veils shapeable in the Belt Chakra Slot.
+
+---
+
+## Akashic Veils (2 Unique Veils)
+
+### Tidewrack Mantle
+
+* **Shapeable Slot(s):** Hands, Feet, Belt
+* **Class Access:** Tidecaller, Warden
+* **Descriptors:** Water, Enhanced
+* **Source:** Invented Akasha p. 3 (No Press)
+
+> *Cold water sheets off your shoulders and never quite runs dry.*
+
+Shaping this veil wraps you in a running film of water.
+
+**Essence:** For each point of essence invested, the film's reach grows by 5 feet.
+
+##### Chakra Bind: [Hands]
+ Binding this veil to your Hands chakra lets the water strike where you do.
+
+##### Chakra Bind: [Feet]
+ Binding this veil to your Feet chakra lets you stand on the water you shed.
+
+==Bind Level==
+<references group="Bind Level"/>
+
+---
+
+### Lantern Eye
+
+* **Shapeable Slot(s):** Belt
+* **Class Access:** Warden
+
+While using this veil, you see one range band further.<br />It stacks with itself.
+
+##### Chakra Bind: [Belt]
+ When this veil is bound, you see in the dark as well as in the light.
+
+==Notes==
+* This veil was added to the Warden list in a later printing.
+
+---`;
+
+  ok('it is a scraper document', looksStructured(VEILS));
+  const doc = parseStructured(VEILS);
+  check('the entry level is the veils, not their binds', entryDepth(VEILS.split('\n')), 3);
+  check('one entry per veil', doc.entries.map((e) => e.name), ['Tidewrack Mantle', 'Lantern Eye']);
+
+  const r = parsePaste(VEILS);
+  check('each is read as a veil block', r.blocks.map((b) => b.kind), ['veil', 'veil']);
+  check('no leftover but the page title and its line', r.leftovers.length, 1);
+  const [mantle, eye] = r.blocks;
+  check('every slot it shapes in is kept, in order', mantle.slot, 'Hands, Feet, Belt');
+  check('descriptors come across', mantle.descriptor, 'Water, Enhanced');
+  check('and the source', mantle.source, 'Invented Akasha p. 3 (No Press)');
+  ok('both binds stay with the veil, under the heading that names each',
+    /Chakra Bind: \[Hands\][\s\S]*Chakra Bind: \[Feet\]/.test(mantle.text));
+  ok('so does the essence line', /Essence: For each point/.test(mantle.text));
+  ok('class access has nowhere of its own, so it goes to the foot of the text',
+    /Class access: Tidecaller, Warden$/.test(mantle.text));
+  // The scrape's own footnote group: a heading over a tag, and nothing else.
+  ok('an empty wiki heading and its references tag are dropped', !/Bind Level|references/.test(mantle.text));
+  ok('but a wiki heading with lines under it stays, unwrapped', /\nNotes\n/.test(eye.text));
+  ok('and a <br> leaves the break it stood for', /range band further\.\nIt stacks with itself\./.test(eye.text));
+}
+
+console.log('a markdown copy of a page is not a scraper document');
+{
+  // A "copy as markdown" browser extension produces headings and bold too;
+  // those pages still go to the readers that know their shape.
+  ok('headings and bold alone are not enough', !looksStructured(`## Barbarian
+
+**Hit Die:** d12.
+
+Some flavour text about rage.`));
+  ok('but a field list is', looksStructured(`# Thing
+
+* **One:** a
+* **Two:** b
+* **Three:** c`));
+}
+
+console.log('a sphere page -- the table of contents is the parse');
+{
+  /*
+   * A Spheres of Might page, cut down but keeping every shape that matters:
+   * the side menu (which lists other spheres, and must not be mistaken for
+   * content), the breadcrumb that says which wiki this is, the table of
+   * contents that names every heading, a base ability, a table, and talents
+   * across three groups carrying both kinds of tag.
+   *
+   * The page runs its contents straight into the article with no blank line
+   * between, which used to cost the sphere's own description.
+   */
+  const BOXING = `site-name
+.wikidot.com
+Share on twitter Facebook Delicious Digg Reddit RedditExplore »
+
+Spheres of Power Wiki
+A Quick Reference Site
+Home
+Combat Spheres
+
+Boxing
+Brute
+Wrestling
+
+Page tags
+
+home
+Boxing
+Spheres of Power Wiki Home Page » Spheres Of Might » Boxing
+Fold
+Table of Contents
+Counter Punch
+Table: Practitioner Unarmed Damage
+Boxing Talents
+Corkscrew Set Up
+Elongated Step (stance) [3PP]
+Read the Rhythm [utility]
+Counter Talents
+Clinch (counter)
+Disarming Jab (counter) [Apoc]
+Legendary Talents
+Chasing Assault
+Wiggling Kitten, Lunging Lion (stance) [Catgirl HB]
+Boxers specialize in fighting with their fists, using their punches and upper bodies to batter their way across the battlefield.
+All practitioners of the Boxing sphere gain the following ability:
+
+Counter Punch
+You may ready an action to make an attack with a light melee weapon.
+
+You can apply a single talent with the (counter) tag to a counter punch.
+
+Table: Practitioner Unarmed Damage
+Level\tDamage (Medium Practitioner)
+1-3 talents\t1d4
+4-7 talents\t1d6
+Boxing Talents
+Corkscrew Set Up
+As a part of readying an action to perform a counter punch, you can make an attack roll.
+
+Elongated Step (stance) [3PP]
+At the start of your turn, you can spend a swift action to use this talent.
+
+Read the Rhythm [utility]
+As a move action, you can select one creature within 40 ft. of yourself.
+
+Counter Talents
+Clinch (counter)
+Whenever you successfully attack with your counter punch, you may attempt to grapple.
+
+Disarming Jab (counter) [Apoc]
+Source: Spheres Apocrypha: Pugilists
+
+Whenever you successfully attack with your counter punch, you can make a disarm attempt.
+
+Legendary Talents
+Chasing Assault
+Prerequisites: Boxing sphere, counter punch ability, Launching Uppercut.
+
+Whenever you launch a hostile creature into the air, you may make an Acrobatics check.
+
+Wiggling Kitten, Lunging Lion (stance) [Catgirl HB]
+Prerequisites: Acrobatics 3 ranks, Athletics sphere ((leap) package), Boxing sphere (Gazelle Punch).
+
+While in this stance, you may attempt an Acrobatics check to jump.
+
+Spheres of Might by Drop Dead Studios
+Classes
+Armiger\tBlacksmith\tCommander
+Help  | Terms of Service  | Privacy Powered by Wikidot.com
+This website uses cookies. See the Legal & OGL page for important information.`;
+
+  const r = parsePaste(BOXING);
+  check('no blocks -- a sphere is a shared table', r.blocks.length, 0);
+  const s = r.spheres[0];
+  check('the sphere, and which side of the line it is on', [s.name, s.kind], ['Boxing', 'combat']);
+  // The description used to be eaten by the contents, which ran to the next
+  // blank line and there is not one.
+  ok('its own description survives the contents above it', /^Boxers specialize/.test(s.description));
+  ok('and the line under it', /gain the following ability:$/.test(s.description));
+  check('base abilities, tables among them',
+    s.abilities.map((a) => a.name), ['Counter Punch', 'Table: Practitioner Unarmed Damage']);
+  ok('a base ability keeps its paragraphs', /\n\n/.test(s.abilities[0].text));
+  ok('a table keeps its rows', /1-3 talents\t1d4/.test(s.abilities[1].text));
+
+  check('every talent, in page order, by group',
+    s.talents.map((t) => `${t.group}: ${t.name}`), [
+      'Boxing Talents: Corkscrew Set Up',
+      'Boxing Talents: Elongated Step',
+      'Boxing Talents: Read the Rhythm',
+      'Counter Talents: Clinch',
+      'Counter Talents: Disarming Jab',
+      'Legendary Talents: Chasing Assault',
+      'Legendary Talents: Wiggling Kitten, Lunging Lion',
+    ]);
+
+  /*
+   * The tags, which are the point of reading a sphere at all. A (…) tag is a
+   * rule the talent carries; a […] tag is nearly always which book it came
+   * from -- but [utility] is a rule written in brackets, so the few of those
+   * are named rather than guessed at.
+   */
+  const t = (n) => s.talents.find((x) => x.name === n);
+  check('a parenthesised tag is a rule', [t('Clinch').tags, t('Clinch').sources], [['counter'], []]);
+  check('a bracketed one is a source', [t('Elongated Step').tags, t('Elongated Step').sources], [['stance'], ['3PP']]);
+  check('unless it is one of the rules written that way',
+    [t('Read the Rhythm').tags, t('Read the Rhythm').sources], [['utility'], []]);
+  check('both kinds at once, and the name left clean',
+    [t('Wiggling Kitten, Lunging Lion').tags, t('Wiggling Kitten, Lunging Lion').sources],
+    [['stance'], ['Catgirl HB']]);
+  // A Source: line says the same as an [Apoc] tag but says which book, so it
+  // joins rather than replaces.
+  check('a Source line joins the sources', t('Disarming Jab').sources, ['Apoc', 'Spheres Apocrypha: Pugilists']);
+  ok('and leaves the text', /^Whenever you successfully/.test(t('Disarming Jab').text));
+
+  check('prerequisites come off the top of the text',
+    t('Chasing Assault').prerequisites, 'Boxing sphere, counter punch ability, Launching Uppercut.');
+  ok('and the text starts after them', /^Whenever you launch/.test(t('Chasing Assault').text));
+  // The nested parens inside a prerequisite are not a tag: only a name's
+  // trailing ones are read that way.
+  ok('a prerequisite keeps its own brackets',
+    /Athletics sphere \(\(leap\) package\)/.test(t('Wiggling Kitten, Lunging Lion').prerequisites));
+
+  ok('the report counts what was read', /Sphere Boxing \(combat\): 2 base abilities, 7 talents in 3 group/.test(r.report[0]));
+  // The side menu lists two dozen other spheres; none of them is content.
+  check('nothing but the wikidot banner is left over',
+    r.leftovers.map((l) => l.text), ['site-name']);
+}
+
+console.log('splitTalentName -- tags off a name, both kinds');
+check('rules tag', splitTalentName('Clinch (counter)'), { name: 'Clinch', tags: ['counter'], sources: [] });
+check('source tag', splitTalentName('Hair Trigger [Apoc]'), { name: 'Hair Trigger', tags: [], sources: ['Apoc'] });
+check('both, in page order', splitTalentName('Floating Butterfly (stance) [Youxia HB]'), { name: 'Floating Butterfly', tags: ['stance'], sources: ['Youxia HB'] });
+check('no tags at all', splitTalentName('Gazelle Punch'), { name: 'Gazelle Punch', tags: [], sources: [] });
+check('a comma in the name is not a tag', splitTalentName('Wiggling Kitten, Lunging Lion'), { name: 'Wiggling Kitten, Lunging Lion', tags: [], sources: [] });
+
+console.log('a class page is not a sphere page -- the heading shape overlaps');
+{
+  // "…\tSpecial\tCombat Talents" is a class table's header row, not a group
+  // heading, and a class page has no Spheres breadcrumb to vouch for one.
+  const r = parsePaste(`Blacksmith
+Spheres of Power Wiki Home Page » Classes » Blacksmith
+Hit Die: d10.
+Class Level\tBase Attack Bonus\tFort Save\tSpecial\tCombat Talents
+1st\t+1\t+2\tCombat training\t1`);
+  check('no sphere read off a class page', r.spheres.length, 0);
+  check('the class still is', r.blocks.map((b) => `${b.kind}:${b.name}`), ['class:Blacksmith']);
+}
+
+console.log('a martial ability page -- the wiki box into a catalogue entry, not a block');
+{
+  /*
+   * A whole-page copy off the Metzofitz wiki. The information box copies as a
+   * label on one line and its value on the next, except Range / Target /
+   * Duration, which copy as a small tab-separated table. A maneuver is the one
+   * thing the reader does not turn into a block: a discipline is a shared
+   * table, so it comes back as the entry and the discipline it belongs under.
+   */
+  const ROAR = `Anonymous
+Library of Metzofitz
+Search
+Search Library of Metzofitz
+Encouraging Roar
+NamespacesPageDiscussionPage actionsReadView sourceHistoryPurge
+Martial Ability
+Encouraging Roar
+Information
+Discipline
+Golden Lion
+Category
+Maneuver (Boost)
+Descriptors
+None
+Level
+1
+Prerequisites
+None
+Initiation Action
+1 swift action
+Range\tTarget\tDuration
+30-ft.\tAllies\tOne round
+Sources
+Path of War, pg. 63
+The disciple lets out shouts of encouragement to bolster his allies in battle.
+
+
+Navigation
+Main page
+Recent changes`;
+
+  const r = parsePaste(ROAR);
+  check('no blocks -- a maneuver is not one', r.blocks.length, 0);
+  check('one maneuver, filed under its discipline',
+    r.maneuvers.map((m) => m.discipline), ['Golden Lion']);
+  check('every cell the box named', r.maneuvers[0].entry, {
+    level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost',
+    action: 'Swift', range: '30-ft.', target: 'Allies', duration: 'One round',
+    save: '', dc: '',
+    text: 'The disciple lets out shouts of encouragement to bolster his allies in battle.',
+  });
+  check('nothing left over', r.leftovers.length, 0);
+  // The three box lines a card has nowhere to put are said to be left out
+  // rather than wedged into the description.
+  ok('the report says what was dropped', /Sources line has no cell/.test(r.report[0]));
+  ok('and what was read', /Maneuver Encouraging Roar \(Golden Lion, level 1\)/.test(r.report[0]));
+
+  // A stance, with a saving throw, and the abbreviations the wiki uses.
+  const STANCE = `Martial Ability
+Iron Shell
+Information
+Discipline
+Iron Tortoise
+Category
+Stance
+Level
+3
+Initiation Action
+1 swift action
+Range\tTarget\tDuration
+Personal\tYou\tStance
+Saving Throw
+Fort
+You raise your shield.`;
+  const s = parsePaste(STANCE).maneuvers[0];
+  check('a stance is read as one', [s.entry.kind, s.entry.type, s.entry.level], ['stance', 'Stance', 3]);
+  check('and its save is spelt out', s.entry.save, 'Fortitude');
+  check('personal range and target', [s.entry.range, s.entry.target], ['Personal', 'You']);
+
+  // A save the list has never heard of is kept as written rather than guessed
+  // at -- "Will negates" is not "Will", and the qualifier is the useful half.
+  const QUALIFIED = `Martial Ability
+Crushing Blow
+Information
+Discipline
+Primal Fury
+Category
+Maneuver (Strike)
+Level
+2
+Initiation Action
+1 standard action
+Saving Throw
+Will negates
+You strike hard.`;
+  const q = parsePaste(QUALIFIED).maneuvers[0];
+  check('a qualified save is kept whole', q.entry.save, 'Will negates');
+  check('and the action normalised', q.entry.action, 'Standard');
 }
 
 console.log('splitChunk -- a leftover as name and text for tagging');
