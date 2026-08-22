@@ -1511,10 +1511,20 @@ export function splitBaseAbilities(description) {
  * "Open Hand Sphere (Wikidot)" -- and neither belongs in the name a player
  * picks from a dropdown.
  */
-const sphereTitle = (title) => String(title ?? '')
-  .replace(/\s*\([^)]*\)\s*$/, '')
-  .replace(/\s+spheres?$/i, '')
-  .trim();
+const sphereTitle = (title) => {
+  let t = String(title ?? '').trim();
+  // Stripped in a loop rather than once: "Technomancy [LG] Sphere (Wikidot)"
+  // wears three of them, and which order they come in is the page's business.
+  for (let n = 0; n < 6; n++) {
+    const next = t
+      .replace(/\s*[([][^)\]]*[)\]]\s*$/, '')
+      .replace(/\s+spheres?$/i, '')
+      .trim();
+    if (next === t) break;
+    t = next;
+  }
+  return t;
+};
 
 function structuredSphere(doc) {
   const talents = doc.entries.map((e) => {

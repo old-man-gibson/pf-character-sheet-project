@@ -39,6 +39,36 @@ import { closestName, normalizeName, slug } from './util.js';
 
 let SPHERE_CATALOGUE = { spheres: [] };
 
+/**
+ * One entry per talent, however many times the page listed it.
+ *
+ * A wiki organises a sphere more than one way at once: Destruction's
+ * Admixture is in the main talent list *and* under "Creating New Blasts", and
+ * a scraper reading the page faithfully brings back both. They are the same
+ * talent -- 63 of Destruction's 244 entries are a second copy -- and leaving
+ * them doubled would double-count every tag and let a lookup answer with
+ * whichever copy came first.
+ *
+ * The first listing wins the group, because a page puts the main list before
+ * its topical sections; the longest text wins, because the copies differ only
+ * in trimming; tags and sources are pooled, since each listing may know a
+ * label the other did not.
+ */
+function dedupeTalents(talents) {
+  const byName = new Map();
+  for (const t of talents) {
+    const key = t.name.trim().toLowerCase();
+    if (!key) continue;
+    const had = byName.get(key);
+    if (!had) { byName.set(key, t); continue; }
+    for (const x of t.tags) if (!had.tags.some((y) => y.toLowerCase() === x.toLowerCase())) had.tags.push(x);
+    for (const x of t.sources) if (!had.sources.includes(x)) had.sources.push(x);
+    if (t.text.length > had.text.length) had.text = t.text;
+    if (!had.prerequisites) had.prerequisites = t.prerequisites;
+  }
+  return [...byName.values()];
+}
+
 /** Register the shared catalogue. Call before constructing a Character. */
 export function setSphereCatalogue(doc) {
   const list = Array.isArray(doc?.spheres) ? doc.spheres : [];
@@ -52,14 +82,14 @@ export function setSphereCatalogue(doc) {
       abilities: (s.abilities || []).map((a) => ({
         name: String(a.name || ''), text: String(a.text || ''),
       })),
-      talents: (s.talents || []).map((t) => ({
+      talents: dedupeTalents((s.talents || []).map((t) => ({
         name: String(t.name || ''),
         group: String(t.group || ''),
         tags: (t.tags || []).map(String),
         sources: (t.sources || []).map(String),
         prerequisites: String(t.prerequisites || ''),
         text: String(t.text || ''),
-      })),
+      }))),
     })),
   };
 }
