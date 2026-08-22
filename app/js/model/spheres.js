@@ -97,6 +97,58 @@ export function talentsTagged(tag) {
     .some((x) => String(x).trim().toLowerCase() === key));
 }
 
+/**
+ * A talent's name as it is matched: case, spacing and any trailing tag off.
+ *
+ * A player writes what the book calls it, which is not always what the wiki's
+ * heading called it -- "Reaping (greater)", "reaping", "Reaping  ". The tags
+ * go because the catalogue already keeps them in a field of their own.
+ */
+const talentKey = (s) => String(s ?? '')
+  .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
+  .trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * What the catalogue knows about a talent somebody typed on their sheet.
+ *
+ * The row's own sphere is asked first. With no sphere on the row the whole
+ * catalogue is searched, and an answer comes back only if exactly one sphere
+ * has a talent by that name -- naming the sphere is then something the sheet
+ * can tell the player rather than something it has to be told.
+ */
+export function sphereTalent(sphere, talent) {
+  const key = talentKey(talent);
+  if (!key) return null;
+  const named = sphereEntry(sphere);
+  if (named) {
+    const hit = named.talents.find((t) => talentKey(t.name) === key);
+    return hit ? { ...hit, sphere: named.name } : null;
+  }
+  if (String(sphere ?? '').trim()) return null;      // a sphere it does not carry
+  const all = sphereTalents().filter((t) => talentKey(t.name) === key);
+  return all.length === 1 ? all[0] : null;
+}
+
+/**
+ * The spheres a picker offers: the names the engine knows, then any a pack
+ * carries that it does not. `side` is 'combat', 'magic', or null for both; a
+ * pack sphere whose page never said which side it was on is offered either
+ * way, since a name in the wrong list is easier to ignore than one missing
+ * from the right one.
+ */
+export function sphereNames(base, side = null) {
+  const have = new Set((base || []).map((s) => String(s).trim().toLowerCase()));
+  const extra = SPHERE_CATALOGUE.spheres
+    .filter((s) => s.name && !have.has(s.name.trim().toLowerCase()))
+    .filter((s) => !side || !s.kind || s.kind === side)
+    .map((s) => s.name)
+    .sort((a, b) => a.localeCompare(b));
+  // Appended rather than merged in: the built-in lists put their third-party
+  // spheres at the end too, so "not one of the core ones" keeps reading as a
+  // position in the list.
+  return extra.length ? [...(base || []), ...extra] : (base || []);
+}
+
 /** Every tag and source in the catalogue, with how many talents carry each. */
 export function talentTagCounts() {
   const out = new Map();

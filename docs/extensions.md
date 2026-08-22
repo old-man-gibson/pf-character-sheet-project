@@ -151,10 +151,23 @@ where the tag only says which shelf.
 read the registered catalogue; `talentsTagged` searches both lists, since which of the two
 a wiki wrote a label in is its business rather than a caller's.
 
-> The sheet does not yet *use* this. A talent is still typed in free-hand on the Spheres
-> &amp; Magic tab, and `rules.js` still hard-codes the sphere **names** (skill-rank and
-> unarmed logic key off them). This catalogue is the other half — their contents — and
-> joining the two up is the next step.
+**What the sheet does with it.** Two things, both light. Every sphere picker on the
+Spheres &amp; Magic tab offers what the packs carry as well as the names `rules.js` knows —
+appended after the built-in ones, on the matching side, and never doubling a name the
+engine already has. And a talent cell whose text matches the catalogue grows a small **✦**
+carrying the whole entry on hover: its sphere and group, its tags, its prerequisites and
+its rules text, muted rather than gold when it came from a named third-party source.
+`sphereTalent(sphere, talent)` is the match — case, spacing and any tag the player typed
+are ignored, and with **no** sphere on the row the whole catalogue is searched so the sheet
+can tell you which sphere a talent came from instead of being told.
+
+The cell stays a prose field: a talent is still whatever you write, `{…}` formulas and all,
+and the catalogue is a second opinion rather than a gate. A talent no pack covers is simply
+unmarked, which is what every talent on every sheet was before this.
+
+> `rules.js` still hard-codes the sphere **names** — skill-rank and unarmed logic key off
+> them, so the catalogue widens the pickers without yet replacing that list. Lifting it out
+> is the remaining step.
 
 A class's own feature text lands **under the class**, on the Progression tab beneath its
 ladder — *What they do*, one entry per distinct feature however many levels grant it, an

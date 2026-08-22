@@ -15,7 +15,7 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
-  setSphereCatalogue, sphereEntry, talentsTagged,
+  setSphereCatalogue, sphereEntry, sphereNames, sphereTalent, talentsTagged,
 } from '../app/js/model.js';
 import { blankDocument } from '../app/js/convert.js';
 
@@ -370,6 +370,37 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   });
   check('a later pack replaces the sphere whole',
     mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
+
+  /*
+   * Matching a talent somebody typed on their sheet against the catalogue.
+   * The sheet has always taken a talent as free text and still does -- this
+   * is a second opinion, so a miss is silence rather than an error.
+   */
+  setSphereCatalogue(merged.spheres);
+  check('an exact name matches', sphereTalent('Boxing', 'Clinch').group, 'Counter Talents');
+  check('case and spacing do not count', !!sphereTalent('boxing', '  clinch '), true);
+  // A player writes what their book calls it, tags and all.
+  check('a tag the player typed is ignored', !!sphereTalent('Boxing', 'Clinch (counter)'), true);
+  check('a talent the sphere lacks is a miss', sphereTalent('Boxing', 'Nonesuch'), null);
+  check('a sphere no pack carries is a miss', sphereTalent('Alteration', 'Clinch'), null);
+  check('and nothing typed is a miss', sphereTalent('Boxing', '   '), null);
+  // With no sphere named the whole catalogue is searched, so the sheet can
+  // tell the player which sphere it came from rather than being told.
+  check('an unnamed sphere is found when only one has it',
+    sphereTalent('', 'Elongated Step').sphere, 'Boxing');
+
+  /*
+   * The sphere pickers offer what the packs carry as well as what rules.js
+   * knows, so a homebrew sphere turns up where a player looks for it.
+   */
+  check('a pack sphere joins the picker',
+    sphereNames(['Alteration', 'Death'], 'magic'), ['Alteration', 'Death']);
+  check('one of the other side stays out',
+    sphereNames(['Alteration'], 'magic'), ['Alteration']);
+  check('and joins its own side, after the built-in names',
+    sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
+  check('a name the engine already knows is not doubled',
+    sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');
