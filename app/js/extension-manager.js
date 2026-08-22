@@ -110,6 +110,13 @@ const CSS = `
 .extmgr .found .kind { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border: 1px solid var(--line, #444); border-radius: 10px; opacity: 0.8; white-space: nowrap; }
 .extmgr .found .what { flex: 1; min-width: 0; }
 .extmgr .found .what .d { opacity: 0.65; font-size: 0.76rem; }
+/* One line per section of a scraped sphere page: what to do with it, its name,
+   and how many entries it holds. */
+.extmgr .secs { display: flex; flex-direction: column; gap: 2px; margin: 5px 0 2px; }
+.extmgr .secs label { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; }
+.extmgr .secs select { width: 8.5rem; flex: none; padding: 1px 4px; font-size: 0.76rem; }
+.extmgr .secs label > span { flex: 1; min-width: 0; }
+.extmgr .secs i { font-style: normal; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .extmgr .found.off .what { opacity: 0.45; text-decoration: line-through; }
 .extmgr .left { border: 1px dashed var(--line, #444); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
 .extmgr .left .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -304,7 +311,7 @@ Hit Die: d12.
           <button data-action="paste-cancel">Back to the form</button>
         </div>`;
     }
-    const { result, keep, mkeep, mdisc, skeep, tags } = paste;
+    const { result, keep, mkeep, mdisc, skeep, ssec, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
     const archs = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'archetype' && !b.single && keep[i]);
@@ -349,7 +356,11 @@ Hit Die: d12.
         <label class="sw"><input type="checkbox" data-skeep="${i}" ${skeep[i] ? 'checked' : ''}></label>
         <span class="kind">${esc(sp.kind || 'sphere')}</span>
         <span class="what"><strong>${esc(sp.name || '(unnamed)')}</strong>
-          <span class="d">${esc(sphereLine(sp))}</span></span>
+          <span class="d">${esc(sphereLine(sp, ssec[i]))}</span>
+          <div class="secs">${sphereSections(sp).map((x) => `<label>
+            <select data-ssec="${i}" data-sec="${esc(x.name)}">${SECTION_CHOICES.map(([v, label]) =>
+    `<option value="${v}" ${ssec[i].get(x.name) === v ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+            <span>${esc(x.name)}</span><i>${x.count}</i></label>`).join('')}</div></span>
       </div>`).join('')}` : ''}
 
       ${result.maneuvers.length ? `
@@ -452,6 +463,7 @@ Hit Die: d12.
       mkeep: result.maneuvers.map(() => true),
       mdisc: result.maneuvers.map((m) => m.discipline || ''),
       skeep: result.spheres.map(() => true),
+      ssec: result.spheres.map(defaultSections),
       tags,
     };
     error = null;
@@ -490,13 +502,25 @@ Hit Die: d12.
 
   /** File the spheres that were ticked; one of the same name is replaced. */
   function applySpheres() {
-    const { result, skeep } = paste;
+    const { result, skeep, ssec } = paste;
     let n = 0;
     result.spheres.forEach((sp, i) => {
       if (!skeep[i] || !sp.name) return;
+      const say = ssec[i];
+      // A section marked "base" becomes a base ability rather than a talent:
+      // an entry is a name and its text either way, which is what both are.
+      const kept = {
+        ...sp,
+        talents: sp.talents.filter((t) => say.get(t.group) === 'talents'),
+        abilities: [
+          ...sp.abilities,
+          ...sp.talents.filter((t) => say.get(t.group) === 'base')
+            .map((t) => ({ name: t.name, text: t.text })),
+        ],
+      };
       const list = spheres();
-      const at = list.findIndex((x) => lower(x.name) === lower(sp.name));
-      if (at === -1) list.push(sp); else list[at] = sp;
+      const at = list.findIndex((x) => lower(x.name) === lower(kept.name));
+      if (at === -1) list.push(kept); else list[at] = kept;
       n++;
     });
     return n;
@@ -668,17 +692,63 @@ Hit Die: d12.
    * is the part anything downstream will want to filter on.
    */
   /**
+   * What each section of a scraped sphere page is, and what to do with it.
+   *
+   * A wiki puts more than a sphere on a sphere's page -- Enhancement's has
+   * its 48 talents, then 47 feats, an archetype, and a page of special
+   * abilities -- and a scraper reading it faithfully brings back all of it
+   * under whatever section heading it last saw. Nothing in the text reliably
+   * says which is which: filtering on a name ending in "Talents" would keep
+   * the 59 of Enhancement's bled section and reject all 47 of Open Hand's,
+   * which are legitimately under "Sweep".
+   *
+   * So the player says, once per section, in the place this importer already
+   * asks them things. Three answers, because there are three kinds of thing
+   * on those pages: the sphere's talents, the base abilities taking the
+   * sphere grants, and everything that is neither.
+   */
+  const SECTION_CHOICES = [
+    ['talents', 'Talents'],
+    ['base', 'Base abilities'],
+    ['skip', 'Leave out'],
+  ];
+
+  /** Each section of a parsed sphere, in page order, with how many it holds. */
+  function sphereSections(sp) {
+    const out = new Map();
+    for (const t of sp.talents || []) out.set(t.group, (out.get(t.group) || 0) + 1);
+    return [...out].map(([name, count]) => ({ name, count }));
+  }
+
+  /**
+   * What each section starts as. A name ending in "Talents" is talents; a page
+   * whose sections say nothing either way (Open Hand's are all "Sweep") is
+   * taken at its word and kept, since rejecting everything is never the answer.
+   */
+  function defaultSections(sp) {
+    const found = sphereSections(sp);
+    const named = found.filter((x) => /talents?$/i.test(x.name));
+    return new Map(found.map((x) => [x.name,
+      named.length ? (named.includes(x) ? 'talents' : 'skip') : 'talents']));
+  }
+
+  /**
    * A sphere in one line: what it holds, then the **rules** tags its talents
    * carry. Sources are counted rather than listed -- a scraper's are full
    * book citations, and thirty of them buried the tags a reader came for.
    */
-  function sphereLine(sp) {
-    const talents = sp.talents || [];
+  function sphereLine(sp, sections = null) {
+    const talents = sections
+      ? (sp.talents || []).filter((t) => sections.get(t.group) === 'talents')
+      : (sp.talents || []);
+    const base = sections
+      ? (sp.talents || []).filter((t) => sections.get(t.group) === 'base').length
+      : (sp.abilities || []).length;
     const groups = [...new Set(talents.map((t) => t.group).filter(Boolean))];
     const tags = [...new Set(talents.flatMap((t) => t.tags || []))];
     const sourced = talents.filter((t) => (t.sources || []).length).length;
     return [
-      (sp.abilities || []).length ? `${sp.abilities.length} base abilities` : '',
+      base ? `${base} base abilit${base === 1 ? 'y' : 'ies'}` : '',
       `${talents.length} talent${talents.length === 1 ? '' : 's'}`,
       groups.length ? groups.join(', ') : '',
       sourced ? `${sourced} sourced` : '',
@@ -925,6 +995,10 @@ Hit Die: d12.
     qa('[data-keep]').forEach((el) => el.addEventListener('change', () => { paste.keep[Number(el.dataset.keep)] = el.checked; render(); }));
     qa('[data-mkeep]').forEach((el) => el.addEventListener('change', () => { paste.mkeep[Number(el.dataset.mkeep)] = el.checked; render(); }));
     qa('[data-skeep]').forEach((el) => el.addEventListener('change', () => { paste.skeep[Number(el.dataset.skeep)] = el.checked; render(); }));
+    qa('[data-ssec]').forEach((el) => el.addEventListener('change', () => {
+      paste.ssec[Number(el.dataset.ssec)].set(el.dataset.sec, el.value);
+      render();
+    }));
     qa('[data-mdisc]').forEach((el) => el.addEventListener('input', () => { paste.mdisc[Number(el.dataset.mdisc)] = el.value; }));
     qa('[data-tag]').forEach((el) => el.addEventListener('change', () => { paste.tags[Number(el.dataset.tag)].choice = el.value; render(); }));
     qa('[data-tagname]').forEach((el) => el.addEventListener('input', () => { paste.tags[Number(el.dataset.tagname)].name = el.value; }));
