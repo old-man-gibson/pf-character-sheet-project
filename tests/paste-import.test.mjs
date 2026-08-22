@@ -3,7 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
-  splitTalentName,
+  splitTalentName, looksStructured, parseStructured,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -960,6 +960,158 @@ console.log('a plain homebrew archetype document -- no info box, title features 
   check('"At level 20"', f('Axiomatic').level, 20);
   ok('sub-entries under Topological Theory', /Opening Theorem: Whenever/.test(f('Topological Theory').text) && /Proven Lemma:/.test(f('Topological Theory').text));
   ok('the report says the class is not named, and counts the menu', /Archetype Isougiri for a class the text does not name/.test(r.report[0]) && /Topological Iaijutsu Techniques: 2 options/.test(r.report[0]));
+}
+
+console.log('a scraper document -- structured markdown, read before anything is cleaned');
+{
+  /*
+   * What a scraper writes, rather than what a browser copies. The shape is
+   * meant to hold for whatever it learns to fetch next, so this checks the
+   * frame as much as the maneuvers: an H1 subject, a blockquote description,
+   * sections and groups by heading depth, and entries whose *fields* say what
+   * they are.
+   */
+  const DOC = `# Iron Tortoise
+
+> The discipline known as Iron Tortoise rose up from the need to protect one's self and allies.
+> Maneuvers from Iron Tortoise require use of a shield in one hand.
+
+---
+
+## Maneuvers & Stances (34 Abilities)
+
+### Level 1 Maneuvers
+
+#### Angering Smash
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+* **Range:** Melee attack
+* **Target / Area:** One creature
+* **Duration:** One round
+* **Source:** Path of War p. 69
+
+**Summary:** *Melee attack that causes -4 to hit any target but you.*
+
+By making a quick shield bash, the disciple taunts his foes into striking at him solely.
+
+---
+
+#### Snapping Turtle Stance
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Stance)
+* **Initiation Action:** 1 swift action
+* **Range:** Personal
+* **Target / Area:** You
+* **Duration:** Stance
+* **Source:** Path of War p. 70
+
+**Summary:** *Shield bashes inflict an additional 1d6 points of damage.*
+
+The disciple holds his shield to deliver punishing shield bashes.
+
+This bonus damage increases by +1d6 every 8 initiator levels beyond 1st.
+
+---
+
+### Level 3 Maneuvers
+
+#### Burnished Shell
+
+* **Discipline:** Iron Tortoise
+* **Level:** 3 (Maneuver [Counter])
+* **Initiation Action:** 1 immediate action
+* **Range:** Personal
+* **Target / Area:** You
+* **Prerequisite:** 1 Iron Tortoise Maneuver
+* **Source:** Path of War p. 71-72
+
+**Summary:** *Deny the effects of a spell targeted on you.*
+
+By angling one's shield correctly he may deflect the power of the spell.
+
+---`;
+
+  ok('it is recognised as a scraper document', looksStructured(DOC));
+  const doc = parseStructured(DOC);
+  check('the H1 is the subject', doc.title, 'Iron Tortoise');
+  check('the blockquote is its description', doc.intro.length, 2);
+  check('nothing is stray', doc.strays, []);
+  check('entries come off the deepest headings',
+    doc.entries.map((e) => e.name), ['Angering Smash', 'Snapping Turtle Stance', 'Burnished Shell']);
+  check('and each knows the trail above it',
+    doc.entries[2].section, ['Maneuvers & Stances (34 Abilities)', 'Level 3 Maneuvers']);
+  check('fields are keyed by their label, lowercased',
+    [...doc.entries[0].fields.keys()],
+    ['discipline', 'level', 'initiation action', 'range', 'target / area', 'duration', 'source']);
+  check('a summary is kept apart from the prose',
+    doc.entries[0].summary, 'Melee attack that causes -4 to hit any target but you.');
+  ok('and the prose is the rest', /^By making a quick shield bash/.test(doc.entries[0].text));
+  ok('a body keeps its paragraphs', /\n\n/.test(doc.entries[1].text));
+
+  const r = parsePaste(DOC);
+  check('no blocks -- these are catalogue entries', r.blocks.length, 0);
+  check('every entry filed under its discipline',
+    [...new Set(r.maneuvers.map((m) => m.discipline))], ['Iron Tortoise']);
+  // "1 (Maneuver [Strike])" carries three things at once, the way a
+  // discipline's own table prints it.
+  check('level, kind and type off the one line',
+    r.maneuvers.map((m) => [m.entry.level, m.entry.kind, m.entry.type]),
+    [[1, 'maneuver', 'Strike'], [1, 'stance', 'Stance'], [3, 'maneuver', 'Counter']]);
+  check('the action normalised', r.maneuvers.map((m) => m.entry.action),
+    ['Standard', 'Swift', 'Immediate']);
+  check('target read from "Target / Area"', r.maneuvers[0].entry.target, 'One creature');
+  check('a duration nobody wrote stays empty', r.maneuvers[2].entry.duration, '');
+  // Both halves are worth keeping and there is one cell, so they stack.
+  ok('the summary sits over the prose',
+    r.maneuvers[0].entry.text.startsWith('Melee attack that causes -4 to hit any target but you.\n\nBy making'));
+  // Source and Prerequisite have no cell on a card; saying so beats losing them.
+  ok('the report says what was dropped',
+    /source and prerequisite lines have no cell/.test(r.report[0]));
+  ok('and what was read', /Iron Tortoise: 3 maneuvers/.test(r.report[0]));
+  // The document's own description has nowhere to go, so it comes back to be
+  // tagged rather than being thrown away.
+  check('the description is offered as a note',
+    r.leftovers.map((l) => l.suggest), ['note']);
+  ok('under its subject', /^Iron Tortoise\nThe discipline known/.test(r.leftovers[0].text));
+
+  // An entry whose fields match no kind is a leftover, not a silent loss --
+  // which is what keeps the scraper free to grow ahead of this reader.
+  const FUTURE = `# Dwarf
+
+## Traits
+
+#### Darkvision
+
+* **Type:** Racial
+* **Range:** 60 ft.
+* **Source:** Core p. 21
+
+Dwarves can see in the dark up to 60 feet.
+
+---`;
+  const f = parsePaste(FUTURE);
+  check('an unknown kind reaches the review instead of vanishing', f.maneuvers.length, 0);
+  ok('with its fields intact to read', /Type: Racial/.test(f.leftovers.map((l) => l.text).join('\n')));
+  ok('and the report says so', /nothing here matched a kind this reader knows/.test(f.report[0]));
+}
+
+console.log('a markdown copy of a page is not a scraper document');
+{
+  // A "copy as markdown" browser extension produces headings and bold too;
+  // those pages still go to the readers that know their shape.
+  ok('headings and bold alone are not enough', !looksStructured(`## Barbarian
+
+**Hit Die:** d12.
+
+Some flavour text about rage.`));
+  ok('but a field list is', looksStructured(`# Thing
+
+* **One:** a
+* **Two:** b
+* **Three:** c`));
 }
 
 console.log('a sphere page -- the table of contents is the parse');

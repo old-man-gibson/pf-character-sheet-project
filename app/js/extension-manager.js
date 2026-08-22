@@ -273,8 +273,10 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   function pasteHtml() {
     if (paste.stage === 'text') {
       return `
-        <p class="hint">Copy a class, a race, a veil or a maneuver off a rules page — the whole
-          page is fine, several pages one after another too — and paste it here. The reader picks
+        <p class="hint">Paste a document your own tool wrote — structured markdown, an
+          <code>#</code> title over <code>* **Key:** value</code> entries — or a class, a race,
+          a veil, a sphere or a maneuver copied straight off a rules page (the whole page is
+          fine, several pages one after another too). The reader picks
           out the progression table, hit die, saves, class skills and feature text of a class; the
           ability modifiers, size, speed, languages and traits of a race; a veil's essence and bind
           text; a martial ability's discipline, level, action, range, target, duration and rules

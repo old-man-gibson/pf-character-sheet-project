@@ -178,6 +178,10 @@ const ABILITY_WORDS = { strength: 'str', dexterity: 'dex', constitution: 'con', 
  *              and a guess at what it might be: 'feature' | 'trait' | 'note' | 'skip'
  */
 export function parsePaste(text) {
+  // A scraper's own document is read before anything is cleaned: `clean()`
+  // strips the markdown that the page readers cannot use and this one is
+  // made of.
+  if (looksStructured(text)) return readStructured(text);
   const lines = clean(text).split(/\r?\n/);
   const used = new Array(lines.length).fill(false);
   // A wiki's chrome is marked first and stays transparent from here on: the
@@ -1184,6 +1188,247 @@ export function readVeil(lines, pre = new Set()) {
     name, blocks: [block], used,
     report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
   };
+}
+
+/* ---------------- a scraper's structured markdown ---------------- */
+
+/**
+ * A document a tool wrote, rather than a page somebody copied.
+ *
+ * Everything else in this file reads pages built for human eyes, where a
+ * heading is a short line and a talent's name is a short line and telling the
+ * two apart is most of the work. A scraper does not have that problem: it
+ * knows what it found and can say so. So this shape is read on its own terms,
+ * and read *first* -- `clean()` flattens the markdown that the page readers
+ * cannot use and this one is made of.
+ *
+ *     # Iron Tortoise            what the document is about
+ *     > prose                    its description, as a blockquote
+ *     ## Maneuvers & Stances     a section
+ *     ### Level 1 Maneuvers      a group inside it
+ *     #### Angering Smash        one entry
+ *     * **Level:** 1 (Maneuver [Strike])
+ *     * **Range:** Melee attack        its fields, one per line
+ *     **Summary:** *one line*    an optional précis
+ *     prose…                     and its text
+ *
+ * What an entry *is* comes from the fields it carries rather than from where
+ * it sits or what the document is called: a thing with a Discipline and an
+ * Initiation Action is a maneuver wherever it turns up. That is what lets the
+ * scraper grow without this reader being told -- a new kind is a new row in
+ * STRUCTURED_KINDS -- and anything unrecognised comes back as a leftover to
+ * be tagged rather than being dropped.
+ */
+
+/** `* **Key:** value`, the field lines under an entry. */
+const MD_FIELD = /^\s*[*-]\s+\*\*\s*([^:*]+?)\s*:?\s*\*\*:?\s*(.*)$/;
+/** `**Summary:** *text*` -- the one-line précis over the prose. */
+const MD_SUMMARY = /^\s*\*\*\s*Summary\s*:?\s*\*\*:?\s*(.*)$/i;
+const MD_HEAD = /^(#{1,6})\s+(.+?)\s*#*$/;
+const MD_RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+/** Emphasis around a value, which the scraper leaves on its summaries. */
+const unemph = (s) => String(s ?? '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Is this a scraper document at all?
+ *
+ * A markdown *copy* of a rules page (a "copy as markdown" browser extension)
+ * also has headings and bold, and `clean()` already flattens those for the
+ * page readers. What only a scraper writes is the field list: several lines of
+ * `* **Key:** value` in a row. Three is past coincidence.
+ */
+export function looksStructured(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  if (!lines.some((l) => MD_HEAD.test(l))) return false;
+  return lines.filter((l) => MD_FIELD.test(l)).length >= 3;
+}
+
+/**
+ * The document as headings, entries and fields -- no interpretation yet. Kept
+ * apart from the reading so the shape can be tested on its own, and so a new
+ * kind of entry needs nothing here.
+ */
+export function parseStructured(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const doc = {
+    title: '', intro: [], introAt: [0, 0], entries: [], strays: [],
+  };
+  let entry = null;
+  const heads = [];                       // the heading stack, by depth
+  const close = () => { if (entry) doc.entries.push(entry); entry = null; };
+
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/\s+$/, '');
+    if (MD_RULE.test(line)) { close(); return; }
+
+    const h = line.match(MD_HEAD);
+    if (h) {
+      const depth = h[1].length;
+      close();
+      heads.length = Math.max(0, depth - 1);
+      heads[depth - 1] = h[2].trim();
+      if (depth === 1) { doc.title = h[2].trim(); return; }
+      // A heading deeper than the document's sections opens an entry; the
+      // ones above it are the trail saying which group it is in.
+      if (depth >= 4) {
+        entry = {
+          name: h[2].trim(),
+          fields: new Map(),
+          // The label as the scraper spelt it, kept beside the key it is
+          // matched on: a leftover is read by a person in the review panel,
+          // and "target / area" is not how anybody wrote it.
+          labels: new Map(),
+          summary: '',
+          body: [],
+          at: i,
+          section: heads.slice(1, depth - 1).filter(Boolean),
+        };
+      }
+      return;
+    }
+
+    if (line.startsWith('>')) {
+      const t = line.replace(/^>\s?/, '');
+      if (entry) entry.body.push(t);
+      else { if (!doc.intro.length) doc.introAt = [i, i]; doc.intro.push(t); doc.introAt[1] = i; }
+      return;
+    }
+
+    const f = entry && line.match(MD_FIELD);
+    if (f) {
+      const label = f[1].trim();
+      entry.fields.set(label.toLowerCase(), unemph(f[2]));
+      entry.labels.set(label.toLowerCase(), label);
+      return;
+    }
+    const s = entry && line.match(MD_SUMMARY);
+    if (s) { entry.summary = unemph(s[1]); return; }
+
+    if (!line.trim()) { if (entry) entry.body.push(''); return; }
+    if (entry) entry.body.push(line.trim());
+    else doc.strays.push({ text: line.trim(), at: i });
+  });
+  close();
+
+  for (const e of doc.entries) {
+    e.text = e.body.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    delete e.body;
+  }
+  return doc;
+}
+
+/** A field by any of the names a scraper might have given it. */
+const pick = (fields, ...names) => {
+  for (const n of names) {
+    const v = fields.get(n);
+    if (v) return v;
+  }
+  return '';
+};
+
+/**
+ * A maneuver or stance out of a structured entry.
+ *
+ * `Level: 1 (Maneuver [Strike])` carries three things at once -- which level,
+ * whether it is a maneuver or a stance, and its type -- because that is how a
+ * discipline's table prints it.
+ */
+function structuredManeuver(e) {
+  const raw = pick(e.fields, 'level');
+  const paren = raw.match(/\(([^)]*)\)/)?.[1] || '';
+  const bracket = paren.match(/\[([^\]]*)\]/)?.[1] || '';
+  const kind = /stance/i.test(paren) ? 'stance' : 'maneuver';
+  const action = pick(e.fields, 'initiation action', 'action');
+  const save = pick(e.fields, 'saving throw', 'save');
+  // The summary is the précis a table actually reads out; the prose under it
+  // is the rule. Both are worth having and there is one cell, so they stack.
+  const text = [e.summary, e.text].filter(Boolean).join('\n\n');
+  return {
+    discipline: pick(e.fields, 'discipline'),
+    entry: {
+      level: Number(raw.match(/\d+/)?.[0]) || 0,
+      kind,
+      name: e.name,
+      type: bracket.trim() || (kind === 'stance' ? 'Stance' : titleCase(paren.trim())),
+      action: ACTION_WORDS.find(([re]) => re.test(action))?.[1] || action,
+      range: pick(e.fields, 'range'),
+      target: pick(e.fields, 'target / area', 'target', 'targets', 'area', 'effect'),
+      duration: pick(e.fields, 'duration'),
+      save: SAVE_ALIASES[lower(save)] ?? save,
+      dc: pick(e.fields, 'dc', 'save dc'),
+      text,
+    },
+  };
+}
+
+/**
+ * What each kind of entry looks like, and what to make of it.
+ *
+ * `wants` are the fields that identify it -- all of them must be there. Order
+ * matters only in that the first match wins, so a narrower kind goes above a
+ * wider one. `drops` are fields the sheet has nowhere to put, named so the
+ * report can say they were left out instead of them vanishing.
+ */
+const STRUCTURED_KINDS = [
+  {
+    kind: 'maneuver',
+    wants: ['discipline', 'initiation action'],
+    drops: ['source', 'prerequisite', 'prerequisites'],
+    read: structuredManeuver,
+    into: 'maneuvers',
+  },
+];
+
+/**
+ * Read a scraper document. Same shape back as `parsePaste`, because it is one
+ * of the two things `parsePaste` can be.
+ */
+export function readStructured(text) {
+  const doc = parseStructured(text);
+  const out = {
+    blocks: [], maneuvers: [], spheres: [], report: [], leftovers: [],
+  };
+  const dropped = new Set();
+  const unknown = [];
+  const counts = new Map();
+
+  for (const e of doc.entries) {
+    const kind = STRUCTURED_KINDS.find((k) => k.wants.every((w) => e.fields.has(w)));
+    if (!kind) { unknown.push(e); continue; }
+    for (const d of kind.drops || []) if (e.fields.get(d)) dropped.add(d);
+    out[kind.into].push(kind.read(e));
+    counts.set(kind.kind, (counts.get(kind.kind) || 0) + 1);
+  }
+
+  // The document's own title and description have nowhere to go -- a
+  // discipline is a name and its maneuvers -- so the description comes back
+  // to be tagged, the way anything else nothing claimed does.
+  const intro = doc.intro.join('\n').trim();
+  if (intro) {
+    out.leftovers.push({
+      text: doc.title ? `${doc.title}\n${intro}` : intro,
+      lines: doc.introAt,
+      near: doc.title ? { kind: 'document', name: doc.title } : null,
+      suggest: 'note',
+    });
+  }
+  for (const e of [...unknown, ...doc.strays]) {
+    const text = e.fields
+      ? [e.name, ...[...e.fields].map(([k, v]) => `${e.labels.get(k) || k}: ${v}`), e.text]
+        .filter(Boolean).join('\n')
+      : e.text;
+    out.leftovers.push({
+      text, lines: [e.at, e.at], near: doc.title ? { kind: 'document', name: doc.title } : null, suggest: suggestFor({ text }),
+    });
+  }
+
+  const said = [...counts].map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`).join(', ');
+  out.report.push(said
+    ? `${doc.title || 'A document'}: ${said}.`
+      + (dropped.size ? ` Their ${[...dropped].join(' and ')} line${dropped.size === 1 ? ' has' : 's have'} no cell and ${dropped.size === 1 ? 'was' : 'were'} left out.` : '')
+      + (intro ? ' Its description is below, to keep as a note or leave out.' : '')
+    : `${doc.title || 'A document'}: nothing here matched a kind this reader knows. Tag it below, or keep it as a note.`);
+  return out;
 }
 
 /* ---------------- spheres ---------------- */

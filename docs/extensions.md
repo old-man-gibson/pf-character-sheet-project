@@ -1,6 +1,6 @@
 # Extensions: content packs and the paste importer
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a scraper's structured markdown or a copied rules page into blocks, with its review stage._
 
 The engine knows rules — how a save is built, what a level rule means, how a tracker's
 formula is evaluated. It does not know the names of anyone's classes, disciplines,
@@ -317,10 +317,90 @@ set of active packs registered with the model, `extension-manager.js` the dialog
 page mounts the dialog with `mountExtensionManager(dialogElement, { say, currentCharacter })`.
 Covered by `tests/extensions.test.mjs`.
 
-## Paste text — reading a rules page into blocks
+## Paste text — a scraper's document
 
-The editor's **Paste text…** takes a class, a race, a veil, a sphere or a maneuver copied
-straight off a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
+**Paste text…** takes two quite different things, and tells them apart before it reads
+either. One is a page somebody copied out of a browser, below. The other is a document a
+**tool** wrote — and a tool does not have the problem the page readers spend all their
+care on. A page is built for human eyes, where a heading is a short line and a talent's
+name is a short line and telling them apart is most of the job; a scraper already knows
+what it found and can say so in the file.
+
+So structured markdown is read on its own terms, and read **first** — `clean()` flattens
+the markdown that the page readers cannot use and this one is made of.
+
+```markdown
+# Iron Tortoise                      what the document is about
+
+> The discipline known as Iron Tortoise rose up from…       its description
+
+---
+
+## Maneuvers & Stances (34 Abilities)                       a section
+### Level 1 Maneuvers                                       a group inside it
+
+#### Angering Smash                                         one entry
+
+* **Discipline:** Iron Tortoise
+* **Level:** 1 (Maneuver [Strike])
+* **Initiation Action:** 1 standard action
+* **Range:** Melee attack
+* **Target / Area:** One creature
+* **Duration:** One round
+* **Source:** Path of War p. 69
+
+**Summary:** *Melee attack that causes -4 to hit any target but you.*
+
+By making a quick shield bash, the disciple taunts and aggravates his foes…
+```
+
+**The rule that makes it extensible: what an entry *is* comes from the fields it carries**,
+not from where it sits, what the document is called, or what the headings above it say. A
+thing with a `Discipline` and an `Initiation Action` is a maneuver wherever it turns up. So
+a scraper can learn to fetch classes, archetypes, veils or races and emit them in the same
+frame, and teaching the reader a new kind is one row in `STRUCTURED_KINDS`:
+
+```js
+{ kind: 'maneuver',
+  wants: ['discipline', 'initiation action'],   // all of these must be present
+  drops: ['source', 'prerequisite'],            // no cell — reported, not lost
+  read: structuredManeuver,                     // fields -> the thing
+  into: 'maneuvers' }                           // which list it joins
+```
+
+Until that row exists the entry is **not dropped**: it comes back to the review stage as a
+leftover, fields and all, to be tagged as a note or left out. The scraper is free to run
+ahead of the reader.
+
+What the frame guarantees, whatever the kind:
+
+| | |
+|---|---|
+| `# Title` | what the document is about |
+| `> quote` | its description — no cell of its own, so it is offered as a note |
+| `##` / `###` | sections and groups; an entry knows the trail above it |
+| `#### Name` | one entry — any heading at depth 4 or deeper |
+| `* **Key:** value` | its fields, matched case- and space-insensitively |
+| `**Summary:** *…*` | an optional précis, kept apart from the prose |
+| `---` | ends an entry |
+
+For a maneuver: `Level: 1 (Maneuver [Strike])` gives the level, whether it is a maneuver or
+a stance, and its type, all three the way a discipline's table prints them; `Initiation
+Action` is normalised (*1 standard action* → **Standard**); `Target / Area`, `Target`,
+`Targets`, `Area` and `Effect` all reach the target cell. The summary and the prose both
+matter and there is one description cell, so the summary sits over the prose with a blank
+line between. `Source` and `Prerequisite` have no cell on a maneuver's card, so they are
+left out and the report names them.
+
+Detection is deliberately narrow: a "copy as markdown" browser extension also produces
+headings and bold, and those pages must keep going to the readers that know their shape.
+What only a tool writes is the **field list** — three or more `* **Key:** value` lines. That
+is the whole test.
+
+## Paste text — reading a copied rules page
+
+The other half of the same box. **Paste text…** also takes a class, a race, a veil, a sphere
+or a maneuver copied straight off a rules page (Archives of Nethys, d20pfsrd, the Metzofitz wiki, the Spheres of Power wikidot
 wiki — the whole page, several pages one after another) and reads it into blocks. It is a two-stage
 affair, and the second stage is the point:
 
@@ -421,7 +501,9 @@ Nothing is guessed at silently: every line either lands somewhere the report nam
 back in the review as text to tag — bar the page tail above, which the report accounts for.
 `tests/paste-import.test.mjs` runs the reader over the three table shapes, both
 feature-prose shapes, the segmentation, the whole Barbarian / Dwarf / Warlord / veil paste,
-a two-page wikidot copy, an option page, a martial ability page and a sphere page.
+a two-page wikidot copy, an option page, a martial ability page, a sphere page, and a
+scraper document (its frame, its maneuvers, and an entry of a kind the reader does not
+know yet).
 
 > The engine still carries some publisher names of its own — the Spheres of Power sphere
 > lists in `rules.js` (which drive skill-rank and unarmed logic), the Primordia techniques,
