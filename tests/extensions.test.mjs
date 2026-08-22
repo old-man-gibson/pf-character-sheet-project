@@ -15,8 +15,9 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
-  setSphereCatalogue, sphereEntry, sphereNames, sphereTalent, talentsTagged,
+  setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
 } from '../app/js/model.js';
+import { isBasePick } from '../app/js/rules.js';
 import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
@@ -444,6 +445,51 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   row(0).notes = '';
   c.recompute();
   check('a cleared note stays cleared', row(0).notes, '');
+
+  /*
+   * Taking the sphere itself is not taking a talent in it: what it grants is
+   * the sphere's base abilities. The row reads as the sphere and what it
+   * opened, which is the name a player scanning their own list wants, and the
+   * abilities' full text -- far too long for a name -- goes in the note.
+   */
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Destruction',
+      kind: 'magic',
+      description: '*You can use destructive power.*',
+      abilities: [{ name: 'Destructive Blast', text: 'You deliver a burst of blunt magical force.' }],
+      talents: [{ name: 'Acid Blast', group: 'Basic', tags: [], sources: [], prerequisites: '', text: 'Acid.' }],
+    }],
+  });
+  check('a base pick reads as the sphere and what it opened',
+    sphereBasePick('Destruction').label, 'Destruction Sphere (Destructive Blast)');
+  check('a sphere with no base abilities has no pick', sphereBasePick('Nowhere'), null);
+
+  const d = new Character(blankDocument({ name: 'Caster', level: 4 }));
+  const M = 'training.magic.bonusTalents';
+  d.data.training.magic.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+  ];
+  const mrow = (i) => d.data.training.magic.bonusTalents[i];
+  d.setTalentEntry(M, 0, 'Destruction Sphere', cols);
+  check('typing the sphere fills all three',
+    [mrow(0).talent, mrow(0).sphere, mrow(0).notes],
+    ['Destruction Sphere (Destructive Blast)', 'Destruction',
+      'Destructive Blast: You deliver a burst of blunt magical force.']);
+  // `isBasePick` strips parentheses before looking for the word, so the label
+  // it writes still counts as a base pick for the sphere tallies.
+  check('and the label it wrote is still a base pick', isBasePick(mrow(0).talent), true);
+  // Somebody who wrote their own parenthesis said something, and it is not
+  // ours to replace.
+  d.setTalentEntry(M, 1, 'Destruction Sphere (from a feat)', cols);
+  check('a pick with its own parenthesis is left alone',
+    mrow(1).talent, 'Destruction Sphere (from a feat)');
+  check('though the blanks beside it are still filled',
+    [mrow(1).sphere, !!mrow(1).notes], ['Destruction', true]);
+  d.setTalentEntry(M, 2, 'Destruction Sphere', cols);
+  check('and a note already written is never overwritten', mrow(2).notes, 'my own ruling');
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');

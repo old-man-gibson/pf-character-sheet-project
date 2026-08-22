@@ -150,6 +150,44 @@ export function sphereNames(base, side = null) {
 }
 
 /**
+ * What taking a sphere itself gets you, for the row that records it.
+ *
+ * A base pick is not a talent -- it is the sphere, and what it grants is the
+ * sphere's base abilities. The row reads as the sphere and what it opened
+ * (`Destruction Sphere (Destructive Blast)`), which is the name a player
+ * scanning their own list wants; the abilities' full text is far too long for
+ * a name, so it goes in the note beside it where the rest of the rules live.
+ *
+ * `isBasePick` already reads that shape as a base pick -- it strips
+ * parentheses before looking for the word -- so the label counts as one for
+ * the sphere tallies the moment it is written.
+ */
+export function sphereBasePick(sphere) {
+  const s = sphereEntry(sphere);
+  if (!s || !s.abilities.length) return null;
+  return {
+    sphere: s.name,
+    label: `${s.name} Sphere (${s.abilities.map((a) => a.name).join(', ')})`,
+    // Each ability under its own name: with one it reads as a heading, and
+    // with several it is the only thing telling them apart.
+    text: s.abilities.map((a) => `${a.name}: ${a.text}`).join('\n\n'),
+  };
+}
+
+/**
+ * The sphere a base pick names, from the row's own text or its sphere cell.
+ * "Destruction Sphere" and "Destruction Sphere (…)" both mean Destruction.
+ */
+export const basePickSphere = (talent, sphere) => {
+  const named = String(talent ?? '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\bspheres?\b/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sphereEntry(named) ? named : sphere;
+};
+
+/**
  * Write a talent, and fill in what the catalogue can answer for free.
  *
  * A row has three parts and typing the first often settles the other two: the
@@ -173,7 +211,33 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
 
   row.talent = String(value ?? '');
   const filled = [];
-  const hit = sphereTalent(sphereField ? row[sphereField] : null, row.talent);
+
+  /*
+   * A base sphere pick is the sphere itself, not a talent in it. What it
+   * grants is the sphere's base abilities, so the row reads as the sphere and
+   * what it opened -- "Destruction Sphere (Destructive Blast)" -- and the
+   * abilities' full text goes in the note.
+   *
+   * The label is only written over a pick that has no parenthesis of its own:
+   * somebody who wrote "Destruction Sphere (from the feat)" said something,
+   * and it is not ours to replace.
+   */
+  const base = isBasePick(row.talent)
+    ? sphereBasePick(basePickSphere(row.talent, sphereField ? row[sphereField] : null))
+    : null;
+  if (base) {
+    if (!/\(/.test(row.talent)) { row.talent = base.label; filled.push('talent'); }
+    if (sphereField && !String(row[sphereField] ?? '').trim()) {
+      row[sphereField] = base.sphere;
+      filled.push('sphere');
+    }
+    if (notesField && !String(row[notesField] ?? '').trim()) {
+      row[notesField] = base.text;
+      filled.push('notes');
+    }
+  }
+
+  const hit = base ? null : sphereTalent(sphereField ? row[sphereField] : null, row.talent);
   if (hit) {
     if (sphereField && !String(row[sphereField] ?? '').trim()) {
       row[sphereField] = hit.sphere;

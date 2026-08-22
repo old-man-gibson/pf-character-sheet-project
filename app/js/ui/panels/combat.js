@@ -28,14 +28,14 @@ const NEW_TEMPLATE_TABLE = () => ({
   caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
 });
 import {
-  TEMPLATE_TYPES, classForwardKey, sphereNames, sphereTalent,
+  TEMPLATE_TYPES, basePickSphere, classForwardKey, sphereBasePick, sphereNames, sphereTalent,
 } from '../../model.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BLENDED_SPHERES,
   BRAWLERS_VEST_TALENTS, CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENTED_KNUCKLE_TALENTS, TALENT_RATES, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, UNARMED_SPHERES, fmt, mergeLayout, sphereSide,
-  trackSpheres,
+  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, UNARMED_SPHERES, fmt, isBasePick, mergeLayout,
+  sphereSide, trackSpheres,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
@@ -60,13 +60,24 @@ function talentCell(model, binding, value, sphere, fill = null) {
   // off, the cell is an ordinary one that only ever writes the talent.
   const bind = fill ? `${binding} data-talent-fill="${esc(JSON.stringify(fill))}"` : binding;
   const field = prose(model, bind, value, 1, 'grow');
+  // A base pick is the sphere itself; what it carries is the sphere's base
+  // abilities, which is what somebody hovering the row wants to read.
+  const base = isBasePick(value) ? sphereBasePick(basePickSphere(value, sphere)) : null;
+  if (base) {
+    return `<span class="tcell">${field}<i class="tmark"
+        title="${esc(`${base.label}\n\n${base.text}`)}"
+        aria-label="${esc(`${base.sphere} sphere — from the sphere catalogue`)}">✦</i></span>`;
+  }
   const hit = sphereTalent(sphere, value);
   if (!hit) return field;
-  // A pack written by hand may leave a tag in the name it also lists in
-  // `tags`; the paste reader never does, but saying "(form)" twice is a silly
-  // way to find that out.
+  // A pack written by hand may leave a tag on the name it also lists in
+  // `tags` ("Deathful Form (form)" tagged `form`), and saying it twice reads
+  // badly. Only an actual repeated suffix counts: an Acid Blast tagged `Acid`
+  // is a blast-type group that happens to share a word with its name, and
+  // dropping that would lose the tag a caster filters on.
+  const suffix = hit.name.trim().match(/[([]([^)\]]+)[)\]]$/)?.[1]?.trim().toLowerCase();
   const tags = [...hit.tags, ...hit.sources]
-    .filter((x) => !hit.name.toLowerCase().includes(String(x).toLowerCase()));
+    .filter((x) => String(x).trim().toLowerCase() !== suffix);
   // The hover is the whole entry, because a talent's text is the reason to
   // look it up at all and there is nowhere in a four-column table to put it.
   const title = [

@@ -3,7 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
-  splitTalentName, looksStructured, parseStructured, unwikiTables,
+  splitTalentName, looksStructured, parseStructured, unwikiTables, entryDepth,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -1177,16 +1177,23 @@ Your *destructive blast* has a range of 1,000 feet + 100 feet per caster level.
   check('prerequisites come off their own line',
     s.talents[2].prerequisites, 'Destruction sphere (Extended Range x2), caster level 5th.');
 
-  // The scraper leaves the base ability written into the description rather
-  // than heading it, so it stays there: inventing a heading the document does
-  // not have would be the worse lie.
-  ok('the description leads with the sphere\'s own line', s.description.startsWith('*You can use destructive power.*'));
-  ok('and keeps the base ability', /Destructive Blast:\*? As a standard action/.test(s.description));
+  /*
+   * The scraper writes the base ability into the description as an
+   * emphasised label rather than heading it, so it is lifted out: what the
+   * sphere *is* and what taking it *grants* are different questions, and the
+   * sheet asks the second one when a player takes the base sphere.
+   */
+  check('the description is the sphere\'s own line only',
+    s.description, '*You can use destructive power.*');
+  check('the base ability is lifted out under its name',
+    s.abilities.map((a) => a.name), ['Destructive Blast']);
+  ok('with its text', /^As a standard action/.test(s.abilities[0].text));
   // A nested blockquote used to leave a stray marker in the prose.
   ok('no quote markers survive', !/^>/m.test(s.description));
   // A MediaWiki table is unreadable in a prose cell; the sheet shows tables
-  // as tab-separated rows everywhere else.
-  ok('a wiki table becomes rows', /Level\tDamage\n1st\t1d6\n3rd\t2d6/.test(s.description));
+  // as tab-separated rows everywhere else. It belongs to the ability it sits
+  // under, and travels with it.
+  ok('a wiki table becomes rows', /Level\tDamage\n1st\t1d6\n3rd\t2d6/.test(s.abilities[0].text));
 
   // "    * Special:**" is a label the scraper half-converted, not a bullet.
   ok('a half-converted label is straightened',
@@ -1212,6 +1219,85 @@ Prose.
 ---`);
   check('a discipline document is still read entry by entry',
     [notASphere.spheres.length, notASphere.maneuvers.length], [0, 1]);
+}
+
+console.log('a second scraper shape -- entries a level shallower, grouped by a field');
+{
+  /*
+   * The same tool, a different source page, and both are right: this one has
+   * no group level at all -- every entry sits directly under the document's
+   * one section -- and says which group a talent is in with a field instead.
+   * So the entry level is worked out per document rather than fixed.
+   */
+  const WIKIDOT = `# Mind Sphere (Wikidot)
+
+> You gain the ability to alter the minds of others.
+
+---
+
+## Sphere Talents & Abilities (133 Entries)
+
+### Suggestion
+
+* **Section:** Charm
+
+You may plant thoughts into a target's mind.
+
+**Lesser Charm:** You may plant a suggestion in a target's mind.
+
+**Greater Charm:** This works as the lesser charm, but may be up to a basic request.
+
+---
+
+### Charming Strike [strike]
+
+* **Section:** Charm Talents
+* **Tags:** strike
+
+You may deliver a charm through a melee attack.
+
+---
+
+### Mental Backdoor [Apoc]
+
+* **Section:** Advanced Mind Talents
+* **Tags:** Apoc
+* **Prerequisite:** Mind sphere.
+* **Source:** Spheres Apocrypha
+
+You leave a way back into a mind you have charmed.
+
+---`;
+
+  check('the entry level is worked out, not assumed', entryDepth(WIKIDOT.split('\n')), 3);
+  const doc = parseStructured(WIKIDOT);
+  check('so the entries are the talents',
+    doc.entries.map((e) => e.name), ['Suggestion', 'Charming Strike [strike]', 'Mental Backdoor [Apoc]']);
+
+  const s = parsePaste(WIKIDOT).spheres[0];
+  // "Mind Sphere (Wikidot)" is where it came from and what kind of page it
+  // was; neither belongs in the name a player picks from a dropdown.
+  check('the title loses the scraper\'s stamp', [s.name, s.kind], ['Mind', 'magic']);
+  // With no group heading, the Section field is the real grouping -- the
+  // page's own section heading is the same for every entry and says nothing.
+  check('groups come from the Section field',
+    s.talents.map((t) => t.group), ['Charm', 'Charm Talents', 'Advanced Mind Talents']);
+  check('name tags still come off the heading',
+    [s.talents[1].name, s.talents[1].tags], ['Charming Strike', ['strike']]);
+  check('and the fields are read',
+    [s.talents[2].prerequisites, s.talents[2].sources], ['Mind sphere.', ['Apoc', 'Spheres Apocrypha']]);
+
+  /*
+   * The half of a talent that looks like a field but is not. Mind and Nature
+   * are full of `**Lesser Charm:** …` sub-effects, and eating those as
+   * properties of the talent would take the rule away with them. A field is
+   * only a field at the top of an entry, before any prose.
+   */
+  ok('a bold label inside the prose stays in the prose',
+    /Lesser Charm:\*\* You may plant a suggestion/.test(s.talents[0].text)
+    || /Lesser Charm: You may plant a suggestion/.test(s.talents[0].text));
+  check('and is not mistaken for a property',
+    [...doc.entries[0].fields.keys()], ['section']);
 }
 
 console.log('wiki tables out of a scraper document');

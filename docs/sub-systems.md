@@ -32,7 +32,9 @@ came from a named third-party source. Every sphere dropdown offers what the pack
 well, after the built-in names.
 
 Typing one also **fills in the blanks beside it**: its sphere, and its rules text as the
-row's note. Only cells that are empty, so a ruling you wrote yourself is never overwritten —
+row's note. Typing the *sphere itself* — a base pick — fills the row as the sphere and what
+it opened (**Destruction Sphere (Destructive Blast)**), with the base abilities' full text
+as the note. Only cells that are empty, so a ruling you wrote yourself is never overwritten —
 and clearing one leaves it clear until you retype the talent. Nothing else about typing
 changes: a talent is still whatever you write, and one no pack covers is simply unmarked and
 fills nothing. The running talent

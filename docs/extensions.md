@@ -138,6 +138,19 @@ whole sphere, so a corrected copy is a copy of all of it.
   ] }
 ```
 
+**Base abilities are lifted out of the description.** A scraper writes them into the
+sphere's blockquote as an emphasised label — `*Destructive Blast:* As a standard action…` —
+and everything under one belongs to it until the next. They land in `abilities`, and the
+description keeps only what the sphere itself is. That split matters because the sheet asks
+two different questions: what the sphere *is*, and what taking it *grants*.
+
+Taking the sphere is a **base pick**, not a talent in it, so a row that records one reads as
+the sphere and what it opened — **Destruction Sphere (Destructive Blast)**, *Fencing Sphere
+(Fatal Thrust)* — with the abilities' full text in the note beside it, where the rest of the
+rules live. `isBasePick` already reads that shape as a base pick (it strips parentheses
+before looking for the word), so it counts for the sphere tallies the moment it is written.
+A pick that already carries a parenthesis of its own is left exactly as typed.
+
 **The two kinds of tag are kept apart, because they answer different questions.** A `(…)`
 tag is a **rule** the talent carries — `(counter)` is a talent a counter punch can apply,
 `(stance)` one you take a stance in — and lands in `tags`. A `[…]` tag is nearly always
@@ -383,6 +396,25 @@ What the frame guarantees, whatever the kind:
 | `* **Key:** value` | its fields, matched case- and space-insensitively |
 | `**Summary:** *…*` | an optional précis, kept apart from the prose |
 | `---` | ends an entry |
+
+**The entry level is worked out per document, not fixed.** One source writes
+`## section / ### group / #### entry`; another has no group level at all and puts every
+entry directly under the page's one section. Both are right, and what tells them apart is
+that an entry carries *fields* while a section carries only more headings — so the entry
+level is the deepest one whose headings are followed by a field list. A document whose
+entries have no group heading says which group a talent is in with a `Section:` field
+instead, and that is used in its place.
+
+**A field is only a field at the top of an entry.** Past the first line of prose, a
+`* **Lesser Charm:** …` line is one of the effects the talent is made of rather than a
+property of it — the Mind and Nature spheres are full of them, and eating those would take
+the rule away with them.
+
+Two more things a scraped page carries that a prose cell cannot use: a **MediaWiki table**
+(`{| … |}`) becomes tab-separated rows, which is how the sheet shows a table everywhere
+else, and a **MediaWiki external link** (`[https://… label]`) is unwrapped to its label.
+A title's own stamp is trimmed too — `# Open Hand Sphere (Wikidot)` names the sphere
+**Open Hand**, which is what the pickers and the side lookup want.
 
 For a maneuver: `Level: 1 (Maneuver [Strike])` gives the level, whether it is a maneuver or
 a stance, and its type, all three the way a discipline's table prints them; `Initiation

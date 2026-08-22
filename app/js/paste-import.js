@@ -1305,6 +1305,31 @@ export function looksStructured(text) {
 }
 
 /**
+ * Which heading level the entries are at.
+ *
+ * Not a constant, because scrapers differ and both are right: one writes
+ * `## section / ### group / #### entry`, another `## section / ### entry`
+ * with no group level. What tells them apart is that an entry carries
+ * *fields* and a section carries only more headings -- so the entry level is
+ * the deepest one whose headings are followed by a field list, and failing
+ * that (a document whose entries carry no fields at all) simply the deepest
+ * heading there is.
+ */
+export function entryDepth(lines) {
+  const withFields = new Set();
+  const seen = new Set();
+  let at = 0;
+  for (const raw of lines) {
+    const h = raw.match(MD_HEAD);
+    if (h) { at = h[1].length; seen.add(at); continue; }
+    if (at && MD_FIELD.test(raw)) withFields.add(at);
+    else if (raw.trim()) at = 0;          // prose: later fields are its own
+  }
+  const pool = withFields.size ? withFields : seen;
+  return pool.size ? Math.max(...pool) : 4;
+}
+
+/**
  * The document as headings, entries and fields -- no interpretation yet. Kept
  * apart from the reading so the shape can be tested on its own, and so a new
  * kind of entry needs nothing here.
@@ -1314,6 +1339,7 @@ export function parseStructured(text) {
   const doc = {
     title: '', intro: [], introAt: [0, 0], entries: [], strays: [],
   };
+  const depth = entryDepth(lines);
   let entry = null;
   const heads = [];                       // the heading stack, by depth
   const close = () => { if (entry) doc.entries.push(entry); entry = null; };
@@ -1324,14 +1350,14 @@ export function parseStructured(text) {
 
     const h = line.match(MD_HEAD);
     if (h) {
-      const depth = h[1].length;
       close();
-      heads.length = Math.max(0, depth - 1);
-      heads[depth - 1] = h[2].trim();
-      if (depth === 1) { doc.title = h[2].trim(); return; }
-      // A heading deeper than the document's sections opens an entry; the
-      // ones above it are the trail saying which group it is in.
-      if (depth >= 4) {
+      const d = h[1].length;
+      heads.length = Math.max(0, d - 1);
+      heads[d - 1] = h[2].trim();
+      if (d === 1) { doc.title = h[2].trim(); return; }
+      // A heading at the entry level or below opens an entry; the ones above
+      // it are the trail saying which group it is in.
+      if (d >= depth) {
         entry = {
           name: h[2].trim(),
           fields: new Map(),
@@ -1339,10 +1365,11 @@ export function parseStructured(text) {
           // matched on: a leftover is read by a person in the review panel,
           // and "target / area" is not how anybody wrote it.
           labels: new Map(),
+          inHead: true,
           summary: '',
           body: [],
           at: i,
-          section: heads.slice(1, depth - 1).filter(Boolean),
+          section: heads.slice(1, d - 1).filter(Boolean),
         };
       }
       return;
@@ -1357,13 +1384,20 @@ export function parseStructured(text) {
       return;
     }
 
-    const f = entry && line.match(MD_FIELD);
+    /*
+     * Fields are the list at the *top* of an entry, before any prose. Past
+     * that, a `* **Twitches:** …` line is one of the effects the talent is
+     * made of, not a property of it -- the Mind and Nature spheres are full
+     * of them, and eating those would take the rule with them.
+     */
+    const f = entry && entry.inHead && line.match(MD_FIELD);
     if (f) {
       const label = f[1].trim();
       entry.fields.set(label.toLowerCase(), unemph(f[2]));
       entry.labels.set(label.toLowerCase(), label);
       return;
     }
+    if (entry && line.trim()) entry.inHead = false;
     const s = entry && line.match(MD_SUMMARY);
     if (s) { entry.summary = unemph(s[1]); return; }
 
@@ -1428,17 +1462,60 @@ function structuredManeuver(e) {
 }
 
 /**
+ * A base ability inside a sphere's description: `*Destructive Blast:* As a
+ * standard action…`, `*Fatal Thrust*: …`. The scraper leaves these in the
+ * blockquote rather than heading them, so the emphasised label is the only
+ * thing marking one — which is enough, because the colon is required and a
+ * sphere's opening line (`*You can use destructive power.*`) has none.
+ */
+const BASE_ABILITY = /^\*([A-Z][^*\n:]{1,40})(?::\*|\*:)\s*(.*)$/;
+
+/**
+ * The description split into what it says about the sphere and the base
+ * abilities written into it.
+ *
+ * Everything under a label belongs to it until the next one, because that is
+ * how the prose runs: the paragraphs after `*Destructive Blast:*` are all
+ * about the destructive blast.
+ */
+export function splitBaseAbilities(description) {
+  const lead = [];
+  const abilities = [];
+  for (const line of String(description ?? '').split('\n')) {
+    const m = line.match(BASE_ABILITY);
+    if (m) { abilities.push({ name: m[1].trim(), text: m[2].trim() ? [m[2].trim()] : [] }); continue; }
+    if (abilities.length) abilities[abilities.length - 1].text.push(line);
+    else lead.push(line);
+  }
+  return {
+    description: lead.join('\n').trim(),
+    abilities: abilities.map((a) => ({
+      name: a.name,
+      text: a.text.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    })),
+  };
+}
+
+/**
  * A whole sphere, where the *document* is the thing and its entries are the
  * talents inside it -- the other way round from a discipline, whose document
  * is only a wrapper and whose entries are each their own maneuver.
  *
- * The sphere's own description keeps the base ability written into it (the
- * scraper leaves `*Destructive Blast:* …` in the blockquote rather than
- * heading it), because inventing a heading the document does not have is a
- * worse lie than a long description. Which side of the line it is on is not
- * in the document at all, so it is looked up by name and left blank when the
- * engine has never heard of it.
+ * Which side of the line it is on is not in the document at all, so it is
+ * looked up by name and left blank when the engine has never heard of it.
  */
+/**
+ * The sphere's own name out of the document's title.
+ *
+ * A scraper stamps where a page came from and what kind of page it was --
+ * "Open Hand Sphere (Wikidot)" -- and neither belongs in the name a player
+ * picks from a dropdown.
+ */
+const sphereTitle = (title) => String(title ?? '')
+  .replace(/\s*\([^)]*\)\s*$/, '')
+  .replace(/\s+spheres?$/i, '')
+  .trim();
+
 function structuredSphere(doc) {
   const talents = doc.entries.map((e) => {
     const { name, tags, sources } = splitTalentName(e.name);
@@ -1450,21 +1527,30 @@ function structuredSphere(doc) {
     }
     const source = pick(e.fields, 'source', 'sources');
     if (source && !sources.includes(source)) sources.push(source);
+    /*
+     * Which group it is in. A document with a group heading over its entries
+     * says so in the trail; one without (every entry directly under the page's
+     * single section) says so in a `Section:` field instead -- "Charm
+     * Talents", "Geomancing Talents" -- which is the real grouping either way.
+     * The page's own section heading is the last resort, being the same for
+     * every entry and so telling a reader nothing.
+     */
+    const group = e.section.length > 1
+      ? e.section[e.section.length - 1]
+      : pick(e.fields, 'section') || e.section[0] || '';
     return {
       name,
-      group: e.section[e.section.length - 1] || '',
+      group,
       tags,
       sources,
       prerequisites: pick(e.fields, 'prerequisite', 'prerequisites'),
       text: e.text,
     };
   });
+  const { description, abilities } = splitBaseAbilities(doc.intro.join('\n'));
+  const name = sphereTitle(doc.title);
   return {
-    name: doc.title,
-    kind: sphereSide(doc.title, ''),
-    description: doc.intro.join('\n').trim(),
-    abilities: [],
-    talents,
+    name, kind: sphereSide(name, ''), description, abilities, talents,
   };
 }
 
@@ -1514,7 +1600,7 @@ function sphereLine(s) {
     + `${s.talents.length} talent${s.talents.length === 1 ? '' : 's'}`
     + `${groups.length ? ` in ${groups.length} group(s)` : ''}`
     + `${tagged ? `, ${tagged} tagged` : ''}${pre ? `, ${pre} with prerequisites` : ''}.`
-    + (s.description ? ' Its description and base ability are kept with it.' : '');
+    + (s.abilities.length ? ` Base: ${s.abilities.map((a) => a.name).join(', ')}.` : '');
 }
 
 /**
