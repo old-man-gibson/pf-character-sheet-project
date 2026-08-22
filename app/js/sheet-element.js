@@ -3067,8 +3067,25 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    /*
+     * A sphere talent, which writes more than the cell it was typed in: a
+     * name the pack catalogue knows settles the row's sphere, and its rules
+     * text is what the player was about to go and look up. Both are filled
+     * only when blank -- see setTalentEntry. The cell is skipped by the
+     * generic writer below, so this is the one write and the one render.
+     */
+    root.querySelectorAll('[data-talent-fill]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [list, index] = input.dataset.item.split('|');
+        const fill = JSON.parse(input.dataset.talentFill);
+        this.#model.setTalentEntry(list, Number(index), input.value, fill);
+        this.#rerender(input);
+      });
+    });
+
     // Generic list-item field -> model path.
     root.querySelectorAll('[data-item]').forEach((input) => {
+      if (input.dataset.talentFill) return;
       input.addEventListener('change', () => {
         const [list, index, field] = input.dataset.item.split('|');
         this.#model.setItem(list, Number(index), field, readControl(input));

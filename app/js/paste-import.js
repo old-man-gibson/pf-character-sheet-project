@@ -108,6 +108,8 @@ const WIKIDOT_CHROME = /^(?:Wikidot\.com|\.wikidot\.com|Share on.*|Explore ?»|P
 const WIKIDOT_FOOTER = /^(?:Powered by Wikidot\.com|This website uses cookies\b.*|Unless otherwise stated, the content of this page.*|Click here to (?:edit|toggle).*|Append content without editing.*|Watch headings for an "edit" link.*|Something does not work as expected\?.*|General Wikidot\.com documentation.*|Other interesting sites.*|View\/set parent page.*|Notify administrators.*|Check out how this page.*)$/i;
 /** "Spheres of Power Wiki Home Page » Spheres Of Might » Blacksmith" */
 const BREADCRUMB = /\S\s»\s\S/;
+/** ...and the part of it that says the page is a sphere rather than a class. */
+const SPHERE_CRUMB = /»\s*Spheres?\s+Of\s+(?:Might|Power)\s*»/i;
 /** A footer's navigation: short cells, tab-separated or not, and no sentences. */
 const NAVISH = (l) => !l || (!/[.!?]$/.test(l) && (l.includes('\t') ? true : words(l) <= 8));
 
@@ -136,7 +138,13 @@ function markWikidotChrome(lines, used) {
   }
 
   // The table of contents, whether it copies as a list or as one long line.
-  t.forEach((l, i) => { if (isToc(l)) { for (let k = i; k < t.length && t[k]; k++) used[k] = true; } });
+  // It ends at a blank line or at the first sentence: a sphere page runs its
+  // contents straight into the article with no blank between, and the run
+  // used to swallow the first two lines of the sphere's own description.
+  t.forEach((l, i) => {
+    if (!isToc(l)) return;
+    for (let k = i; k < t.length && t[k] && !(k > i && /[.!?]$/.test(t[k])); k++) used[k] = true;
+  });
 
   // The tail: the footer, the columns of links above it, and everything down
   // to where the next page starts. The climb allows a line or two that is
@@ -180,6 +188,7 @@ export function parsePaste(text) {
   const segments = findSegments(lines, used, pages);
   const blocks = [];
   const maneuvers = [];
+  const spheres = [];
   const report = [];
   const nearOf = new Array(lines.length).fill(null);
 
@@ -189,7 +198,7 @@ export function parsePaste(text) {
     for (let i = seg.start; i < seg.end; i++) if (used[i]) pre.add(i - seg.start);
     const reader = {
       class: readClass, race: readRace, veil: readVeil, archetype: readArchetype,
-      maneuver: readManeuver,
+      maneuver: readManeuver, sphere: readSphere,
     }[seg.kind];
     const out = reader(slice, pre);
     for (const i of out.used) used[seg.start + i] = true;
@@ -198,6 +207,7 @@ export function parsePaste(text) {
     // A maneuver is a catalogue entry, not a block: it goes to the pack's
     // discipline table rather than onto a character. See readManeuver.
     maneuvers.push(...(out.maneuvers || []));
+    spheres.push(...(out.spheres || []));
     report.push(...out.report);
   }
 
@@ -218,9 +228,9 @@ export function parsePaste(text) {
   for (const l of leftovers) { delete l.gap; l.suggest = suggestFor(l); }
 
   if (!segments.length && leftovers.length) {
-    report.push('Nothing here looked like a class, a race, a veil or a maneuver. Tag the text below, or keep it as a note.');
+    report.push('Nothing here looked like a class, a race, a veil, a sphere or a maneuver. Tag the text below, or keep it as a note.');
   }
-  return { blocks: blocks.filter(Boolean), maneuvers, report, leftovers };
+  return { blocks: blocks.filter(Boolean), maneuvers, spheres, report, leftovers };
 }
 
 /**
@@ -267,6 +277,19 @@ function suggestFor(l) {
 export function findSegments(lines, pre = [], pageStarts = []) {
   const anchors = [];
   const nextText = (i) => { let j = i + 1; while (j < lines.length && (!lines[j].trim() || pre[j])) j++; return (lines[j] || '').trim(); };
+  /*
+   * Which pages are a Spheres wiki page, by their breadcrumb. A sphere is
+   * anchored on a heading shape ("Boxing Talents") that a class page can wear
+   * too, so the page has to vouch for it first.
+   */
+  const sphereCrumbs = [];
+  lines.forEach((l, i) => { if (SPHERE_CRUMB.test(l)) sphereCrumbs.push(i); });
+  const onSpherePage = (i) => {
+    if (!sphereCrumbs.length) return false;
+    const page = pageStarts.filter((p) => p <= i).pop() ?? 0;
+    const next = pageStarts.find((p) => p > page) ?? lines.length;
+    return sphereCrumbs.some((c) => c >= page && c < next);
+  };
   lines.forEach((line, i) => {
     if (pre[i]) return;
     const t = line.trim();
@@ -276,7 +299,14 @@ export function findSegments(lines, pre = [], pageStarts = []) {
     } else if (/^Standard Racial Traits$/i.test(t) || /^Ability Score Modifiers?:/i.test(t)) {
       if (!anchors.some((a) => a.kind === 'race' && i - a.at < 40)) anchors.push({ kind: 'race', at: i });
     } else if (/^Chakra Slots?:?$/i.test(t)) anchors.push({ kind: 'veil', at: i });
-    else if (/^Initiation Action:?$/i.test(t) || /^Initiation Action:\s*\S/i.test(t)) {
+    else if (GROUP_HEADING.test(t) && onSpherePage(i)) {
+      // A sphere page: its first "<X> Talents" heading. The rest of them
+      // ("Counter Talents", "Legendary Talents") are that same sphere's, so
+      // only the first per page anchors. A class page has headings of that
+      // shape too, which is why this asks the breadcrumb first.
+      const page = pageStarts.filter((q) => q <= i).pop() ?? 0;
+      if (!anchors.some((a) => a.kind === 'sphere' && a.at >= page)) anchors.push({ kind: 'sphere', at: i });
+    } else if (/^Initiation Action:?$/i.test(t) || /^Initiation Action:\s*\S/i.test(t)) {
       // A martial ability page. Its box is the only one with an initiation
       // action, and one page holds one maneuver, so this needs no guard
       // against a second anchor the way a class's hit die does.
@@ -1153,6 +1183,170 @@ export function readVeil(lines, pre = new Set()) {
   return {
     name, blocks: [block], used,
     report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
+  };
+}
+
+/* ---------------- spheres ---------------- */
+
+/**
+ * The tags a talent's name carries, and what each of them means.
+ *
+ * Two styles on the Spheres wikis, and they say different things. A `(…)` tag
+ * is a **rules** tag -- `(counter)` is a talent a counter punch may apply,
+ * `(stance)` one you take a stance in -- and belongs with the talent for good.
+ * A `[…]` tag is nearly always **provenance**: `[3PP]`, `[Apoc]`, `[Youxia
+ * HB]`, `[EO3]` say which book or homebrew it came from, which is what a table
+ * filters on when it rules something in or out.
+ *
+ * Nearly always: a handful of rules tags are written in brackets too, so those
+ * are named rather than guessed at. Everything else in brackets is a source.
+ */
+const RULES_TAGS = /^(?:counter|stance|utility|package|blitz|tandem|totem|form)$/i;
+const TAG_SUFFIX = /\s*(?:\(([^()]+)\)|\[([^\][]+)\])\s*$/;
+
+/**
+ * Strip a talent's trailing tags off its name, keeping both kinds.
+ * "Elongated Step (stance) [3PP]" -> Elongated Step, tags [stance], sources [3PP].
+ */
+export function splitTalentName(raw) {
+  let name = String(raw || '').trim();
+  const tags = [];
+  const sources = [];
+  for (;;) {
+    const m = name.match(TAG_SUFFIX);
+    if (!m) break;
+    const paren = m[1];
+    const brack = m[2];
+    const text = (paren ?? brack ?? '').trim();
+    // A parenthesised tag is always a rule; a bracketed one is a rule only if
+    // it is one of the few written that way, and a source otherwise.
+    if (paren !== undefined || RULES_TAGS.test(text)) tags.unshift(text);
+    else sources.unshift(text);
+    name = name.slice(0, m.index).trim();
+  }
+  return { name, tags, sources };
+}
+
+/**
+ * "Boxing Talents", "Counter Talents", "Legendary Talents" -- a group heading.
+ * Tab-free and short on purpose: a class page's table header row ends
+ * "...	Special	Combat Talents", and a heading is a line of its own.
+ */
+const GROUP_HEADING = /^([^	]{1,40}?)\s+Talents$/i;
+/** Which side of the line a sphere sits on, from its breadcrumb. */
+const SPHERE_KIND = (crumb) => (/spheres?\s+of\s+might/i.test(crumb) ? 'combat'
+  : /spheres?\s+of\s+power/i.test(crumb) ? 'magic' : '');
+
+/**
+ * A whole sphere off the Spheres of Power / Spheres of Might wiki.
+ *
+ * The page's **table of contents is the parse**. It lists, in order and
+ * exactly as they are spelt below, every heading the article has: the base
+ * abilities, the tables, each `X Talents` group, and every talent under it.
+ * Reading it first means the body needs no guessing at all about which short
+ * line is a talent's name and which is the first line of a paragraph -- the
+ * question that makes every other reader in this file as careful as it is.
+ * The contents are chrome (`markWikidotChrome` marks them), so they are read
+ * off the raw lines rather than the content ones.
+ *
+ * Like a maneuver and unlike everything else here, a sphere is not a block: it
+ * is a shared table, so it comes back to be filed in the pack's sphere list.
+ */
+export function readSphere(lines, pre = new Set()) {
+  const used = new Set(pre);
+  const t = lines.map((l) => l.trim());
+  lines.forEach((_, i) => used.add(i));
+
+  const crumbAt = t.findIndex((l) => BREADCRUMB.test(l));
+  const crumb = crumbAt >= 0 ? t[crumbAt] : '';
+  // The title is the line above the breadcrumb, which the chrome pass keeps;
+  // failing that, whatever the first `X Talents` heading is named for.
+  let name = '';
+  for (let k = crumbAt - 1; k >= 0 && !name; k--) if (t[k]) name = t[k];
+  const firstGroup = t.findIndex((l, i) => !pre.has(i) && GROUP_HEADING.test(l));
+  if (!name && firstGroup >= 0) name = t[firstGroup].match(GROUP_HEADING)[1];
+
+  // The contents: from its own heading to the first sentence or blank.
+  const tocAt = t.findIndex((l) => /^(?:Fold|Unfold|FoldUnfold)?\s*Table of Contents\b/i.test(l));
+  const toc = [];
+  if (tocAt >= 0) {
+    for (let k = tocAt + 1; k < t.length && t[k] && !/[.!?]$/.test(t[k]); k++) toc.push(t[k]);
+  }
+
+  // Every heading the article will have, and which group each talent is in.
+  const groupOf = new Map();
+  const headings = [];
+  let group = '';
+  for (const entry of toc) {
+    const g = entry.match(GROUP_HEADING);
+    if (g) { group = entry; headings.push(entry); continue; }
+    headings.push(entry);
+    if (group) groupOf.set(entry, group);
+  }
+
+  // The article: everything below the contents, cut at each heading it named.
+  const start = tocAt >= 0 ? tocAt + toc.length + 1 : Math.max(0, firstGroup);
+  const wanted = new Set(headings);
+  const lead = [];
+  const sections = [];
+  for (let k = start; k < t.length; k++) {
+    const l = t[k];
+    if (!l) { if (sections.length) sections[sections.length - 1].body.push(''); continue; }
+    // The footer's own navigation repeats sphere names; stop at it.
+    if (WIKIDOT_FOOTER.test(l) || pre.has(k)) continue;
+    if (wanted.has(l)) { sections.push({ head: l, body: [] }); continue; }
+    if (sections.length) sections[sections.length - 1].body.push(l);
+    else lead.push(l);
+  }
+
+  const textOf = (s) => s.body.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const abilities = [];
+  const talents = [];
+  for (const s of sections) {
+    if (GROUP_HEADING.test(s.head)) continue;              // the heading itself carries nothing
+    const body = textOf(s);
+    if (!groupOf.has(s.head)) { abilities.push({ name: s.head, text: body }); continue; }
+    const { name: tname, tags, sources } = splitTalentName(s.head);
+    // Two lines a talent opens with that are about the talent rather than part
+    // of it: where it was published, and what it asks of you first.
+    // "Source: Spheres Apocrypha: Pugilists" says the same as its [Apoc] tag
+    // but says which book, so it joins the sources rather than replacing them.
+    let rest = body;
+    const sm = rest.match(/^Sources?:\s*(.+?)(?:\n|$)/i);
+    if (sm) { sources.push(sm[1].trim()); rest = rest.slice(sm[0].length).trim(); }
+    const pm = rest.match(/^Prerequisites?:\s*(.+?)(?:\n|$)/i);
+    if (pm) rest = rest.slice(pm[0].length).trim();
+    talents.push({
+      name: tname,
+      group: groupOf.get(s.head),
+      tags,
+      sources,
+      prerequisites: pm ? pm[1].trim() : '',
+      text: rest,
+    });
+  }
+
+  const description = lead.join('\n').trim();
+  const kind = SPHERE_KIND(crumb);
+  const tagged = talents.filter((x) => x.tags.length).length;
+  const sourced = talents.filter((x) => x.sources.length).length;
+  return {
+    name,
+    blocks: [],
+    spheres: name ? [{
+      name,
+      kind,
+      description,
+      abilities,
+      talents,
+    }] : [],
+    used,
+    report: [name
+      ? `Sphere ${name}${kind ? ` (${kind})` : ''}: ${abilities.length} base abilit${abilities.length === 1 ? 'y' : 'ies'}, `
+        + `${talents.length} talent${talents.length === 1 ? '' : 's'} in `
+        + `${new Set(talents.map((x) => x.group)).size} group(s)`
+        + `${tagged ? `, ${tagged} tagged` : ''}${sourced ? `, ${sourced} from a named source` : ''}.`
+      : 'A sphere page with no name — nothing read.'],
   };
 }
 

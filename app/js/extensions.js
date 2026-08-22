@@ -31,7 +31,7 @@ export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
 /** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = ['maneuvers', 'vancian', 'psionics', 'cardcasting', 'cooking'];
+export const TABLE_KINDS = ['maneuvers', 'spheres', 'vancian', 'psionics', 'cardcasting', 'cooking'];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -588,6 +588,7 @@ function tableCount(kind, table) {
   const t = obj(table);
   switch (kind) {
     case 'maneuvers': return arr(t.disciplines).length;
+    case 'spheres': return arr(t.spheres).length;
     case 'vancian': return arr(t.classes).length;
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
@@ -600,7 +601,8 @@ function tableCount(kind, table) {
 export function describeSummary(s) {
   const parts = [];
   const words = {
-    maneuvers: ['discipline', 'disciplines'], vancian: ['casting table', 'casting tables'],
+    maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
+    vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
   };
@@ -761,6 +763,7 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch }
 export function mergeTables(extensions) {
   const out = {
     maneuvers: { disciplines: [] },
+    spheres: { spheres: [] },
     vancian: { spellLevels: null, classes: [] },
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
@@ -788,6 +791,10 @@ export function mergeTables(extensions) {
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
     for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
+    // A sphere replaces a sphere of the same name outright: unlike a
+    // discipline it arrives whole -- one page is the whole sphere -- so a
+    // later pack carrying it means a corrected copy of all of it.
+    for (const x of arr(p.spheres?.spheres)) upsert(out.spheres.spheres, x);
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
@@ -807,12 +814,13 @@ export function mergeTables(extensions) {
 
 /**
  * Register the merged tables with the model. `registrars` is the model's
- * five setters, passed in rather than imported so this module has no
+ * table setters, passed in rather than imported so this module has no
  * dependency on model.js and the tests can hand it spies.
  */
 export function registerTables(merged, registrars) {
   const r = obj(registrars);
   r.setManeuverCatalogue?.(merged.maneuvers);
+  r.setSphereCatalogue?.(merged.spheres);
   r.setVancianTables?.(merged.vancian);
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);

@@ -21,6 +21,189 @@ import { primordiaTalents } from './subsystems/primordia.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { closestName, normalizeName, slug } from './util.js';
 
+/* ------------------------------------------------------------------ *
+ * The sphere catalogue.
+ *
+ * What a sphere *is* -- its base abilities and every talent in it -- is
+ * content, so it arrives in an extension pack like the discipline catalogue
+ * and is read where it stands rather than copied onto a character. The sheet
+ * has always let a talent be typed in free-hand and still does; this is what
+ * lets it eventually offer the list instead, and what makes a talent's tags
+ * (`(counter)`, `(stance)`) and its source (`[3PP]`, `[Apoc]`) available to
+ * anything that wants to search or filter by them.
+ *
+ * Note that `rules.js` still hard-codes the *names* of the spheres, because
+ * skill-rank and unarmed logic key off them. This catalogue is the other
+ * half -- their contents -- and the two are not yet joined up.
+ * ------------------------------------------------------------------ */
+
+let SPHERE_CATALOGUE = { spheres: [] };
+
+/** Register the shared catalogue. Call before constructing a Character. */
+export function setSphereCatalogue(doc) {
+  const list = Array.isArray(doc?.spheres) ? doc.spheres : [];
+  SPHERE_CATALOGUE = {
+    spheres: list.map((s) => ({
+      name: String(s.name || ''),
+      // 'combat' or 'magic', the two sides the sheet already counts
+      // separately; '' when a page never said.
+      kind: s.kind === 'combat' || s.kind === 'magic' ? s.kind : '',
+      description: String(s.description || ''),
+      abilities: (s.abilities || []).map((a) => ({
+        name: String(a.name || ''), text: String(a.text || ''),
+      })),
+      talents: (s.talents || []).map((t) => ({
+        name: String(t.name || ''),
+        group: String(t.group || ''),
+        tags: (t.tags || []).map(String),
+        sources: (t.sources || []).map(String),
+        prerequisites: String(t.prerequisites || ''),
+        text: String(t.text || ''),
+      })),
+    })),
+  };
+}
+
+export function sphereCatalogue() {
+  return SPHERE_CATALOGUE;
+}
+
+/** One sphere by name, however it was capitalised. */
+export function sphereEntry(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  return SPHERE_CATALOGUE.spheres.find((s) => s.name.trim().toLowerCase() === key) || null;
+}
+
+/** Every talent a sphere holds, or all of them when no sphere is named. */
+export function sphereTalents(name = null) {
+  if (name === null) {
+    return SPHERE_CATALOGUE.spheres.flatMap((s) => s.talents.map((t) => ({ ...t, sphere: s.name })));
+  }
+  const s = sphereEntry(name);
+  return s ? s.talents.map((t) => ({ ...t, sphere: s.name })) : [];
+}
+
+/**
+ * Talents carrying a tag or a source, case-insensitively -- every `(counter)`
+ * across every sphere, or everything a table wants to rule out because it
+ * came from `[3PP]`. Both lists are searched, since which of the two a wiki
+ * wrote a label in is its business rather than the reader's.
+ */
+export function talentsTagged(tag) {
+  const key = String(tag || '').trim().toLowerCase();
+  if (!key) return [];
+  return sphereTalents().filter((t) => [...t.tags, ...t.sources]
+    .some((x) => String(x).trim().toLowerCase() === key));
+}
+
+/**
+ * A talent's name as it is matched: case, spacing and any trailing tag off.
+ *
+ * A player writes what the book calls it, which is not always what the wiki's
+ * heading called it -- "Reaping (greater)", "reaping", "Reaping  ". The tags
+ * go because the catalogue already keeps them in a field of their own.
+ */
+const talentKey = (s) => String(s ?? '')
+  .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
+  .trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * What the catalogue knows about a talent somebody typed on their sheet.
+ *
+ * The row's own sphere is asked first. With no sphere on the row the whole
+ * catalogue is searched, and an answer comes back only if exactly one sphere
+ * has a talent by that name -- naming the sphere is then something the sheet
+ * can tell the player rather than something it has to be told.
+ */
+export function sphereTalent(sphere, talent) {
+  const key = talentKey(talent);
+  if (!key) return null;
+  const named = sphereEntry(sphere);
+  if (named) {
+    const hit = named.talents.find((t) => talentKey(t.name) === key);
+    return hit ? { ...hit, sphere: named.name } : null;
+  }
+  if (String(sphere ?? '').trim()) return null;      // a sphere it does not carry
+  const all = sphereTalents().filter((t) => talentKey(t.name) === key);
+  return all.length === 1 ? all[0] : null;
+}
+
+/**
+ * The spheres a picker offers: the names the engine knows, then any a pack
+ * carries that it does not. `side` is 'combat', 'magic', or null for both; a
+ * pack sphere whose page never said which side it was on is offered either
+ * way, since a name in the wrong list is easier to ignore than one missing
+ * from the right one.
+ */
+export function sphereNames(base, side = null) {
+  const have = new Set((base || []).map((s) => String(s).trim().toLowerCase()));
+  const extra = SPHERE_CATALOGUE.spheres
+    .filter((s) => s.name && !have.has(s.name.trim().toLowerCase()))
+    .filter((s) => !side || !s.kind || s.kind === side)
+    .map((s) => s.name)
+    .sort((a, b) => a.localeCompare(b));
+  // Appended rather than merged in: the built-in lists put their third-party
+  // spheres at the end too, so "not one of the core ones" keeps reading as a
+  // position in the list.
+  return extra.length ? [...(base || []), ...extra] : (base || []);
+}
+
+/**
+ * Write a talent, and fill in what the catalogue can answer for free.
+ *
+ * A row has three parts and typing the first often settles the other two: the
+ * sphere a talent belongs to is a fact, and its effect is what the player was
+ * about to go and look up. So when a name matches, an **empty** sphere and an
+ * **empty** notes cell are filled from the catalogue.
+ *
+ * Only empty ones, ever. What a player wrote is theirs -- a note is where the
+ * table's own ruling goes, and having that overwritten by a book would be
+ * worse than never filling anything. Emptying a cell and leaving the talent
+ * alone leaves it empty; retyping the talent fills it again, which is the
+ * only way to ask for it back.
+ *
+ * `fields` names the row's own columns, because they differ: a customized
+ * weapon and a martial tradition have a sphere and no notes.
+ */
+export function setTalentEntry(model, path, index, value, fields = {}) {
+  const { sphere: sphereField = 'sphere', notes: notesField = null } = fields;
+  const row = model.list(path)?.[index];
+  if (!row || typeof row !== 'object') return model;
+
+  row.talent = String(value ?? '');
+  const filled = [];
+  const hit = sphereTalent(sphereField ? row[sphereField] : null, row.talent);
+  if (hit) {
+    if (sphereField && !String(row[sphereField] ?? '').trim()) {
+      row[sphereField] = hit.sphere;
+      filled.push('sphere');
+    }
+    if (notesField && !String(row[notesField] ?? '').trim() && hit.text) {
+      row[notesField] = hit.text;
+      filled.push('notes');
+    }
+  }
+  model.recompute();
+  emit(model, {
+    type: 'set-item', path, index, field: 'talent', value: row.talent, filled,
+  });
+  return model;
+}
+
+/** Every tag and source in the catalogue, with how many talents carry each. */
+export function talentTagCounts() {
+  const out = new Map();
+  for (const t of sphereTalents()) {
+    for (const x of [...t.tags, ...t.sources]) {
+      const k = String(x).trim();
+      if (k) out.set(k, (out.get(k) || 0) + 1);
+    }
+  }
+  return [...out.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, count]) => ({ tag, count }));
+}
+
 /** A talent row nobody has written anything into. */
 const isBlankTalentRow = (row) => !String(row?.talent ?? '').trim()
   && !String(row?.sphere ?? '').trim() && !String(row?.notes ?? '').trim();

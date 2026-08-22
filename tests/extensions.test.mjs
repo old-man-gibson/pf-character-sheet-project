@@ -15,6 +15,7 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+  setSphereCatalogue, sphereEntry, sphereNames, sphereTalent, talentsTagged,
 } from '../app/js/model.js';
 import { blankDocument } from '../app/js/convert.js';
 
@@ -322,6 +323,127 @@ console.log('bundled -- the shipped packs load through the index and merge clean
       .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('spheres -- a whole sphere as a shared table, tags and all');
+{
+  const sphere = {
+    name: 'Boxing',
+    kind: 'combat',
+    description: 'Boxers specialize in fighting with their fists.',
+    abilities: [{ name: 'Counter Punch', text: 'You may ready an action.' }],
+    talents: [
+      { name: 'Clinch', group: 'Counter Talents', tags: ['counter'], sources: [], prerequisites: '', text: 'Grapple.' },
+      { name: 'Elongated Step', group: 'Boxing Talents', tags: ['stance'], sources: ['3PP'], prerequisites: '', text: 'Reach.' },
+    ],
+  };
+  const pack = normalizeExtension({ id: 'som', name: 'SoM', provides: { spheres: { spheres: [sphere] } } });
+  const merged = mergeTables([pack]);
+  check('the sphere survives the merge', merged.spheres.spheres.map((s) => s.name), ['Boxing']);
+  check('a pack of spheres counts as spheres',
+    describeSummary({ tables: { spheres: 2 }, blocks: {} }), '2 spheres');
+
+  const calls = [];
+  registerTables(merged, { setSphereCatalogue: (d) => calls.push(d.spheres.length) });
+  check('and reaches its registrar', calls, [1]);
+
+  setSphereCatalogue(merged.spheres);
+  check('read back by name, however it was capitalised',
+    sphereEntry('boxing').talents.length, 2);
+  check('unknown sphere is null', sphereEntry('Nowhere'), null);
+  // The tags are what a table filters on -- both kinds are searched, since
+  // which of the two a wiki wrote a label in is its business, not ours.
+  check('found by a rules tag', talentsTagged('counter').map((t) => t.name), ['Clinch']);
+  check('and by a source tag', talentsTagged('3PP').map((t) => t.name), ['Elongated Step']);
+  check('case does not count', talentsTagged('3pp').length, 1);
+  check('a talent knows its sphere', talentsTagged('counter')[0].sphere, 'Boxing');
+
+  /*
+   * A sphere replaces a sphere of the same name outright -- unlike a
+   * discipline, which joins. One page is the whole sphere, so a later pack
+   * carrying it means a corrected copy of all of it, not an addition to it.
+   */
+  const fixed = normalizeExtension({
+    id: 'fix',
+    name: 'Fix',
+    provides: { spheres: { spheres: [{ ...sphere, talents: [sphere.talents[0]] }] } },
+  });
+  check('a later pack replaces the sphere whole',
+    mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
+
+  /*
+   * Matching a talent somebody typed on their sheet against the catalogue.
+   * The sheet has always taken a talent as free text and still does -- this
+   * is a second opinion, so a miss is silence rather than an error.
+   */
+  setSphereCatalogue(merged.spheres);
+  check('an exact name matches', sphereTalent('Boxing', 'Clinch').group, 'Counter Talents');
+  check('case and spacing do not count', !!sphereTalent('boxing', '  clinch '), true);
+  // A player writes what their book calls it, tags and all.
+  check('a tag the player typed is ignored', !!sphereTalent('Boxing', 'Clinch (counter)'), true);
+  check('a talent the sphere lacks is a miss', sphereTalent('Boxing', 'Nonesuch'), null);
+  check('a sphere no pack carries is a miss', sphereTalent('Alteration', 'Clinch'), null);
+  check('and nothing typed is a miss', sphereTalent('Boxing', '   '), null);
+  // With no sphere named the whole catalogue is searched, so the sheet can
+  // tell the player which sphere it came from rather than being told.
+  check('an unnamed sphere is found when only one has it',
+    sphereTalent('', 'Elongated Step').sphere, 'Boxing');
+
+  /*
+   * The sphere pickers offer what the packs carry as well as what rules.js
+   * knows, so a homebrew sphere turns up where a player looks for it.
+   */
+  check('a pack sphere joins the picker',
+    sphereNames(['Alteration', 'Death'], 'magic'), ['Alteration', 'Death']);
+  check('one of the other side stays out',
+    sphereNames(['Alteration'], 'magic'), ['Alteration']);
+  check('and joins its own side, after the built-in names',
+    sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
+  check('a name the engine already knows is not doubled',
+    sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+
+  /*
+   * Typing a talent fills in what the catalogue can answer for free -- the
+   * sphere it belongs to, and its rules text as the row's note. Only ever
+   * into cells that are empty: a note is where the table's own ruling goes,
+   * and having that overwritten by a book would be worse than never filling.
+   */
+  const c = new Character(blankDocument({ name: 'Boxer', level: 4 }));
+  const L = 'training.combat.bonusTalents';
+  c.data.training.combat.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+    { talent: '', sphere: 'Alchemy', source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+  ];
+  const row = (i) => c.data.training.combat.bonusTalents[i];
+  const cols = { sphere: 'sphere', notes: 'notes' };
+
+  c.setTalentEntry(L, 0, 'Clinch', cols);
+  check('an empty row takes the sphere and the text',
+    [row(0).sphere, row(0).notes], ['Boxing', 'Grapple.']);
+  c.setTalentEntry(L, 1, 'Clinch', cols);
+  check('a note already written is left alone',
+    [row(1).sphere, row(1).notes], ['Boxing', 'my own ruling']);
+  // A sphere already chosen is the row's own answer, and it is also what the
+  // match is made against -- so a talent that sphere does not have is a miss.
+  c.setTalentEntry(L, 2, 'Clinch', cols);
+  check('a sphere already chosen decides, and misses',
+    [row(2).sphere, row(2).notes], ['Alchemy', '']);
+  c.setTalentEntry(L, 3, 'Nothing Known', cols);
+  check('no match fills nothing', [row(3).sphere, row(3).notes], [null, '']);
+
+  // A table with no notes column must not grow one.
+  c.data.training.combat.tradition = { entries: [{ talent: '', sphere: null }] };
+  c.setTalentEntry('training.combat.tradition.entries', 0, 'Clinch', { sphere: 'sphere' });
+  check('a row without notes keeps its shape',
+    c.data.training.combat.tradition.entries[0], { talent: 'Clinch', sphere: 'Boxing' });
+
+  // Emptying a filled cell and leaving the talent alone leaves it empty --
+  // the fill happens on entry, not on every recompute.
+  row(0).notes = '';
+  c.recompute();
+  check('a cleared note stays cleared', row(0).notes, '');
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');

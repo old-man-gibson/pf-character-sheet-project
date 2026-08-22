@@ -996,6 +996,22 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
    takes whatever the others leave, which is most of it. */
 table.talents { table-layout: fixed; }
 table.talents td { padding: 2px 4px; vertical-align: top; }
+/* A talent a pack's sphere catalogue recognises. The mark sits in the box's
+   own top-right rather than taking a column, because most talents on most
+   sheets will not have a pack behind them and an empty column of nothing is
+   worse than no column. Hovering it gives the whole entry -- there is nowhere
+   in a four-column table to put a paragraph of rules text. */
+.tcell { position: relative; display: block; }
+.tcell .tmark {
+  position: absolute; top: 0; right: 3px; font-style: normal; font-size: 0.6rem;
+  line-height: 1.6; color: var(--cs-accent); opacity: 0.55; cursor: help;
+  pointer-events: auto;
+}
+.tcell:hover .tmark, .tcell .tmark:hover { opacity: 1; }
+/* One that came from a named third-party source reads a shade quieter, so a
+   table that cares can pick them out without opening anything. */
+.tcell .tmark.third { color: var(--cs-muted); }
+.tcell .tmark.third:hover { color: var(--cs-accent); }
 table.talents th { vertical-align: bottom; }
 table.talents input, table.talents select, table.talents textarea { min-width: 0; }
 table.talents col.lvl { width: 2.9rem; }
