@@ -35,6 +35,18 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 
 const lower = (s) => String(s ?? '').trim().toLowerCase();
 
+/**
+ * How many unplaced stretches the review panel will draw.
+ *
+ * Each one is a tag menu, a name box and a slab of the original text, and a
+ * document the reader does not recognise at all turns *every* line into one:
+ * a page of akashic veils came back with 1,005, which is over a megabyte of
+ * dialog and a browser that stops responding. Past this many the answer is
+ * never to tag them one by one -- it is that the document is a kind nothing
+ * knows yet -- so the rest are left out and the panel says so.
+ */
+const LEFTOVER_LIMIT = 40;
+
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
 /** A source is a link only when it is one; a book-and-page reads as text. */
@@ -366,7 +378,12 @@ Hit Die: d12.
       <p class="hint">${result.leftovers.length
     ? 'Stretches of the paste nothing claimed. Say what each is — a feature of the class above it, a race trait, a note — or leave it out. Page chrome and tables of ages and heights are the usual leftovers.'
     : 'Everything in the paste was placed.'}</p>
-      ${result.leftovers.map((l, i) => {
+      ${result.leftovers.length > LEFTOVER_LIMIT ? `<p class="err">Only the first
+        ${LEFTOVER_LIMIT} of ${result.leftovers.length} are shown; the rest are left out.
+        This many means the reader did not recognise <em>what kind of document this is</em>
+        rather than missing a few lines — read the report above, and see
+        <code>STRUCTURED_KINDS</code> in <code>paste-import.js</code> for what it knows.</p>` : ''}
+      ${result.leftovers.slice(0, LEFTOVER_LIMIT).map((l, i) => {
     const tag = tags[i];
     const split = splitChunk(l.text);
     return `<div class="left ${tag.choice === 'skip' ? 'skip' : ''}" data-left="${i}">
@@ -406,7 +423,9 @@ Hit Die: d12.
       const hit = l.near && l.near.kind === kind ? list.find(([b]) => b.name === l.near.name) : null;
       return (hit || list[list.length - 1])[1];
     };
-    const tags = result.leftovers.map((l) => {
+    const tags = result.leftovers.map((l, at) => {
+      // Past what the panel will show, nothing was reviewed, so nothing lands.
+      if (at >= LEFTOVER_LIMIT) return { choice: 'skip', name: null, group: null };
       let choice = l.suggest;
       if (choice === 'feature') {
         const ai = l.near?.kind === 'archetype' ? nearest(l, 'archetype', archs) : null;
