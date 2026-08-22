@@ -1238,6 +1238,7 @@ Hit Die: d12.
       error = null; view = 'list'; draft = null;
       render();
     } catch (err) {
+      notice = null;
       error = err.name === 'QuotaExceededError'
         ? 'This browser is out of space — remove a pack or a character and try again.'
         : `Could not save — ${err.message}`;
@@ -1262,6 +1263,9 @@ Hit Die: d12.
       error = null; showPaste = false;
       say('ok', notice);
     } catch (err) {
+      // The last success stays on screen beside a failure otherwise, which is
+      // how "Imported All akashic veils" came to sit above "out of space".
+      notice = null;
       error = err.name === 'QuotaExceededError'
         ? 'This browser is out of space — remove a pack or a character and try again.'
         : `Could not store ${label} — ${err.message}`;

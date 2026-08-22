@@ -664,25 +664,48 @@ export function extensionStore(storage = globalThis.localStorage) {
      * Store a pack: new, or replacing the one with the same id (which is how
      * an updated pack a friend sends over lands -- same id, higher revision).
      * Returns the index row. Throws on a full browser, like a character import.
+     *
+     * **All of it or none of it.** A pack is two writes -- the document under
+     * its own key, then the index row that makes it findable -- and a full
+     * browser can fail the second after passing the first. That left the
+     * document behind with nothing pointing at it: `list()` could not see it,
+     * so the dialog could not offer to remove it, while it went on holding
+     * exactly the space the "out of space" message was asking to be freed.
+     * Worse on a replace, where the pack being updated had already been
+     * overwritten and was simply gone. So the previous state goes back.
      */
     save(doc, { origin = 'import', enabled = null } = {}) {
       const ext = normalizeExtension(doc);
       if (!ext.id) throw new Error('An extension needs a name.');
       ext.updatedAt = new Date().toISOString().slice(0, 19);
       if (!ext.createdAt) ext.createdAt = ext.updatedAt;
-      storage.setItem(extensionKey(ext.id), JSON.stringify(ext));
-      const index = readIndex();
-      const prior = index.extensions.find((e) => e.id === ext.id);
-      const row = {
-        ...summarize(ext),
-        origin: prior?.origin || origin,
-        enabled: enabled ?? prior?.enabled ?? true,
-      };
-      index.extensions = prior
-        ? index.extensions.map((e) => (e.id === ext.id ? row : e))
-        : [...index.extensions, row];
-      writeIndex(index);
-      return { ...row, local: true, replaced: !!prior };
+      const key = extensionKey(ext.id);
+      const before = storage.getItem(key);
+      let row;
+      let replaced = false;
+      try {
+        storage.setItem(key, JSON.stringify(ext));
+        const index = readIndex();
+        const prior = index.extensions.find((e) => e.id === ext.id);
+        replaced = !!prior;
+        row = {
+          ...summarize(ext),
+          origin: prior?.origin || origin,
+          enabled: enabled ?? prior?.enabled ?? true,
+        };
+        index.extensions = prior
+          ? index.extensions.map((e) => (e.id === ext.id ? row : e))
+          : [...index.extensions, row];
+        writeIndex(index);
+      } catch (err) {
+        // Put back what was there. The restore cannot itself run out of
+        // room: the value it writes was in this very key a moment ago, and
+        // the larger one that displaced it has just been taken out again.
+        storage.removeItem(key);
+        if (before !== null) storage.setItem(key, before);
+        throw err;
+      }
+      return { ...row, local: true, replaced };
     },
 
     remove(id) {

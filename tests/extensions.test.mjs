@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
-  extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
+  extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
@@ -202,6 +202,68 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   let threw = false;
   try { store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
   check('a nameless pack is refused', threw, true);
+}
+
+console.log('store -- a save that runs out of room leaves nothing behind');
+{
+  /*
+   * A pack is two writes, and a full browser can fail the second after
+   * passing the first. What that used to leave was a document with no index
+   * row: invisible to `list()`, so the dialog could not offer to remove it,
+   * holding exactly the space the "out of space" message asked to be freed.
+   */
+  const withCeiling = (limit) => {
+    const m = new Map();
+    const used = () => [...m].reduce((n, [k, v]) => n + k.length + v.length, 0);
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      removeItem: (k) => m.delete(k),
+      keys: () => [...m.keys()],
+      setItem(k, v) {
+        const had = m.has(k) ? m.get(k).length : 0;
+        if (used() - had + v.length > limit) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        m.set(k, v);
+      },
+    };
+  };
+  const pack = (id, n) => ({
+    format: EXTENSION_FORMAT,
+    id,
+    name: id,
+    blocks: Array.from({ length: n }, (_, i) => ({ kind: 'note', name: `n${i}`, text: 'x'.repeat(200) })),
+  });
+  // Room for the document but not for the index row that follows it.
+  const body = JSON.stringify(normalizeExtension(pack('big', 20)));
+  const storage = withCeiling(extensionKey('big').length + body.length + 20);
+  const store = extensionStore(storage);
+  let threw = null;
+  try { store.save(pack('big', 20)); } catch (e) { threw = e.name; }
+  check('the save reports the browser is full', threw, 'QuotaExceededError');
+  check('and no orphaned document is left holding the space',
+    storage.keys().filter((k) => k.startsWith('character-sheet:ext:')), []);
+  check('so nothing is listed either', store.list(), []);
+
+  /*
+   * And on a *replace*, where the pack being updated was overwritten before
+   * the failure: losing the old one to a save that did not happen is worse
+   * than the orphan.
+   */
+  const roomy = withCeiling(1e6);
+  const s2 = extensionStore(roomy);
+  s2.save(pack('keep', 1));
+  const kept = roomy.getItem(extensionKey('keep'));
+  // Only the index write fails, which is the shape a real ceiling takes: the
+  // document went in, and the row that would have found it did not fit.
+  const write = roomy.setItem;
+  roomy.setItem = (k, v) => {
+    if (k === EXTENSIONS_KEY) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+    return write(k, v);
+  };
+  let alsoThrew = false;
+  try { s2.save(pack('keep', 40)); } catch { alsoThrew = true; }
+  check('a failed replace throws', alsoThrew, true);
+  check('and the pack it would have replaced is still there, unchanged',
+    roomy.getItem(extensionKey('keep')), kept);
 }
 
 console.log('active set -- bundled first, disabled dropped, local packs after');
