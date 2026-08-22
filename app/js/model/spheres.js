@@ -149,6 +149,48 @@ export function sphereNames(base, side = null) {
   return extra.length ? [...(base || []), ...extra] : (base || []);
 }
 
+/**
+ * Write a talent, and fill in what the catalogue can answer for free.
+ *
+ * A row has three parts and typing the first often settles the other two: the
+ * sphere a talent belongs to is a fact, and its effect is what the player was
+ * about to go and look up. So when a name matches, an **empty** sphere and an
+ * **empty** notes cell are filled from the catalogue.
+ *
+ * Only empty ones, ever. What a player wrote is theirs -- a note is where the
+ * table's own ruling goes, and having that overwritten by a book would be
+ * worse than never filling anything. Emptying a cell and leaving the talent
+ * alone leaves it empty; retyping the talent fills it again, which is the
+ * only way to ask for it back.
+ *
+ * `fields` names the row's own columns, because they differ: a customized
+ * weapon and a martial tradition have a sphere and no notes.
+ */
+export function setTalentEntry(model, path, index, value, fields = {}) {
+  const { sphere: sphereField = 'sphere', notes: notesField = null } = fields;
+  const row = model.list(path)?.[index];
+  if (!row || typeof row !== 'object') return model;
+
+  row.talent = String(value ?? '');
+  const filled = [];
+  const hit = sphereTalent(sphereField ? row[sphereField] : null, row.talent);
+  if (hit) {
+    if (sphereField && !String(row[sphereField] ?? '').trim()) {
+      row[sphereField] = hit.sphere;
+      filled.push('sphere');
+    }
+    if (notesField && !String(row[notesField] ?? '').trim() && hit.text) {
+      row[notesField] = hit.text;
+      filled.push('notes');
+    }
+  }
+  model.recompute();
+  emit(model, {
+    type: 'set-item', path, index, field: 'talent', value: row.talent, filled,
+  });
+  return model;
+}
+
 /** Every tag and source in the catalogue, with how many talents carry each. */
 export function talentTagCounts() {
   const out = new Map();

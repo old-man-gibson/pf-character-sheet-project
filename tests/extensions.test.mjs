@@ -401,6 +401,49 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
   check('a name the engine already knows is not doubled',
     sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+
+  /*
+   * Typing a talent fills in what the catalogue can answer for free -- the
+   * sphere it belongs to, and its rules text as the row's note. Only ever
+   * into cells that are empty: a note is where the table's own ruling goes,
+   * and having that overwritten by a book would be worse than never filling.
+   */
+  const c = new Character(blankDocument({ name: 'Boxer', level: 4 }));
+  const L = 'training.combat.bonusTalents';
+  c.data.training.combat.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+    { talent: '', sphere: 'Alchemy', source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+  ];
+  const row = (i) => c.data.training.combat.bonusTalents[i];
+  const cols = { sphere: 'sphere', notes: 'notes' };
+
+  c.setTalentEntry(L, 0, 'Clinch', cols);
+  check('an empty row takes the sphere and the text',
+    [row(0).sphere, row(0).notes], ['Boxing', 'Grapple.']);
+  c.setTalentEntry(L, 1, 'Clinch', cols);
+  check('a note already written is left alone',
+    [row(1).sphere, row(1).notes], ['Boxing', 'my own ruling']);
+  // A sphere already chosen is the row's own answer, and it is also what the
+  // match is made against -- so a talent that sphere does not have is a miss.
+  c.setTalentEntry(L, 2, 'Clinch', cols);
+  check('a sphere already chosen decides, and misses',
+    [row(2).sphere, row(2).notes], ['Alchemy', '']);
+  c.setTalentEntry(L, 3, 'Nothing Known', cols);
+  check('no match fills nothing', [row(3).sphere, row(3).notes], [null, '']);
+
+  // A table with no notes column must not grow one.
+  c.data.training.combat.tradition = { entries: [{ talent: '', sphere: null }] };
+  c.setTalentEntry('training.combat.tradition.entries', 0, 'Clinch', { sphere: 'sphere' });
+  check('a row without notes keeps its shape',
+    c.data.training.combat.tradition.entries[0], { talent: 'Clinch', sphere: 'Boxing' });
+
+  // Emptying a filled cell and leaving the talent alone leaves it empty --
+  // the fill happens on entry, not on every recompute.
+  row(0).notes = '';
+  c.recompute();
+  check('a cleared note stays cleared', row(0).notes, '');
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');

@@ -53,8 +53,13 @@ import {
  * every talent on every sheet was in before this. `extra` goes on the wrapper
  * so a caller can keep the cell's own classes.
  */
-function talentCell(model, binding, value, sphere) {
-  const field = prose(model, binding, value, 1, 'grow');
+function talentCell(model, binding, value, sphere, fill = null) {
+  // `fill` names the row's own sphere and notes columns, which differ per
+  // table -- a customized weapon and a martial tradition have no notes. The
+  // element reads it to fill in what the catalogue can answer for free; left
+  // off, the cell is an ordinary one that only ever writes the talent.
+  const bind = fill ? `${binding} data-talent-fill="${esc(JSON.stringify(fill))}"` : binding;
+  const field = prose(model, bind, value, 1, 'grow');
   const hit = sphereTalent(sphere, value);
   if (!hit) return field;
   // A pack written by hand may leave a tag in the name it also lists in
@@ -183,7 +188,8 @@ function trainingSide(model, sideKey, side) {
             return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
               <td class="${state}">${talentCell(model,
-    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere)}</td>
+    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}
@@ -317,7 +323,8 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
           <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
       ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
       : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
-            ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere)}</td>
+            ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere,
+    on ? { sphere: 'sphere' } : null)}</td>
           <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
       ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
         + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
@@ -399,7 +406,8 @@ function blendedPanel(model, pairs) {
       return `<tr class="${lv.future ? 'future' : ''}">
               <td class="num" title="${esc(count)}">${lv.level}</td>
               <td class="${state}">${talentCell(model,
-        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere)}</td>
+        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+        on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}${side ? ` side-${side}` : ''}">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, BLENDED_SPHERES)
         : '<select disabled><option></option></select>'}
@@ -444,7 +452,8 @@ function combatTraditionPanel(model, t) {
         <colgroup><col class="talent"><col class="sphere"><col class="tool"></colgroup>
         <thead><tr><th>Grants</th><th>Sphere</th><th></th></tr></thead>
         <tbody>${(t.tradition?.entries || []).map((e, i) => `<tr>
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere)}</td>
+          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere' })}</td>
           <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(COMBAT_SPHERES, 'combat'))}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}</tbody>
@@ -472,7 +481,8 @@ function bonusTalentPanel(model, sideKey, side) {
         <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
         <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr>
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere)}</td>
+          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere', notes: 'notes' })}</td>
           <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
           <td>${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
           <td>${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>

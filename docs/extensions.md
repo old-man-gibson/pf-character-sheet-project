@@ -161,9 +161,16 @@ its rules text, muted rather than gold when it came from a named third-party sou
 are ignored, and with **no** sphere on the row the whole catalogue is searched so the sheet
 can tell you which sphere a talent came from instead of being told.
 
+**Typing a recognised talent fills in what the catalogue can answer for free** — the sphere
+it belongs to, and its rules text as the row's note. Only ever into cells that are *empty*:
+a note is where the table's own ruling goes, and having that overwritten by a book would be
+worse than never filling anything. Clearing a filled cell and leaving the talent alone
+leaves it cleared; retyping the talent is how you ask for it back. Tables without a notes
+column (a customized weapon, a martial tradition) fill only the sphere, and never grow one.
+
 The cell stays a prose field: a talent is still whatever you write, `{…}` formulas and all,
 and the catalogue is a second opinion rather than a gate. A talent no pack covers is simply
-unmarked, which is what every talent on every sheet was before this.
+unmarked and fills nothing, which is what every talent on every sheet did before this.
 
 > `rules.js` still hard-codes the sphere **names** — skill-rank and unarmed logic key off
 > them, so the catalogue widens the pickers without yet replacing that list. Lifting it out

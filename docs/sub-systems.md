@@ -29,8 +29,13 @@ A talent an [extension pack's sphere catalogue](extensions.md#spheres) recognise
 small **✦** in the corner of its box; hovering it gives the whole entry — sphere and group,
 tags, prerequisites, rules text — and the mark reads muted rather than gold when the talent
 came from a named third-party source. Every sphere dropdown offers what the packs carry as
-well, after the built-in names. Nothing about typing changes: a talent is still whatever
-you write, and one no pack covers is simply unmarked. The running talent
+well, after the built-in names.
+
+Typing one also **fills in the blanks beside it**: its sphere, and its rules text as the
+row's note. Only cells that are empty, so a ruling you wrote yourself is never overwritten —
+and clearing one leaves it clear until you retype the talent. Nothing else about typing
+changes: a talent is still whatever you write, and one no pack covers is simply unmarked and
+fills nothing. The running talent
 count is the level cell's tooltip rather than a column of its own.
 
 **Bonus talents** — the ones a feat, an item or a template handed over rather than a
