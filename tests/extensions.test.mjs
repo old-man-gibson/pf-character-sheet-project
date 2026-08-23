@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
-  blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
   isPackKey, packsWorthMoving,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
@@ -18,8 +18,11 @@ import {
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
   setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
+  setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
+  veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
 import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
+import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
 import { blankDocument } from '../app/js/convert.js';
 
@@ -1392,6 +1395,200 @@ console.log('copying a bundled pack -- what it costs, said before the Save');
   ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
   ok('names the size the copy would take', line.includes(packSize(big)));
   ok('and that editing is not what spends it', line.includes('only Save spends anything'));
+}
+
+console.log('veils -- a catalogue read where it stands, not copied onto the sheet');
+{
+  const pack = (id, veils) => normalizeExtension({ id, name: id, provides: { veils: { veils } } });
+  const wire = {
+    name: 'Aether Wire',
+    slot: 'Hands, Wrists',
+    descriptor: 'Enhanced, Force',
+    classes: ['Daevic', 'Vizier'],
+    text: 'A thin wire, {= 1 + essence.self} feet of it.',
+    source: 'A compilation',
+  };
+  const mass = { name: 'Acidic Mass', slot: 'Belt', classes: ['Eclipse'], text: 'Calcified skin.' };
+  const loose = { name: 'Nobody Placed This', slot: 'Hands', text: 'On no list at all.' };
+
+  setVeilCatalogue(mergeTables([pack('a', [wire, mass, loose])]).veils);
+  check('the catalogue holds what the pack carried', veilCatalogue().veils.length, 3);
+  check('a veil is found however it was capitalised', veilEntry('AETHER wire').descriptor, 'Enhanced, Force');
+  check('unknown reads null', veilEntry('Nothing'), null);
+  check('its chakras are split as well as kept', [veilEntry('Aether Wire').slot, veilEntry('Aether Wire').slots],
+    ['Hands, Wrists', ['Hands', 'Wrists']]);
+  check('every class any veil names', veilClasses(), ['Daevic', 'Eclipse', 'Vizier']);
+  check('every chakra any veil names', veilSlots(), ['Belt', 'Hands', 'Wrists']);
+
+  /*
+   * What a slot offers. Narrowing on a class the catalogue does not know
+   * about for a given veil has to *widen* the answer rather than empty it:
+   * the class lists are a second import, and a catalogue holding only half of
+   * them must not hide the half it cannot vouch for.
+   */
+  check('a chakra narrows it', veilsAvailable({ slot: 'Belt' }).map((v) => v.name), ['Acidic Mass']);
+  check('a class narrows it further', veilsAvailable({ slot: 'Hands', classes: ['Daevic'] }).map((v) => v.name),
+    ['Aether Wire', 'Nobody Placed This']);
+  check('a class that is on no list gets only the unplaced ones',
+    veilsAvailable({ slot: 'Hands', classes: ['Guru'] }).map((v) => v.name), ['Nobody Placed This']);
+  check('two classes see both lists', veilsAvailable({ classes: ['Eclipse', 'Vizier'] }).map((v) => v.name),
+    ['Acidic Mass', 'Aether Wire', 'Nobody Placed This']);
+  check('naming no class at all is every veil', veilsAvailable({}).length, 3);
+
+  /*
+   * The sheet keeps the name and the essence. What the veil says is read from
+   * the pack every time -- so a corrected pack corrects every sheet, and a
+   * character sent to a friend carries names rather than somebody's book.
+   */
+  const shaped = { name: 'Aether Wire', essence: 2, desc: '' };
+  const read = veilDetails(shaped);
+  check('what it says comes from the pack', read.desc, 'A thin wire, {= 1 + essence.self} feet of it.');
+  check('and so does everything the sheet never stored',
+    [read.slot, read.descriptor, read.classes, read.source],
+    ['Hands, Wrists', 'Enhanced, Force', ['Daevic', 'Vizier'], 'A compilation']);
+  check('the sheet knows the pack has it', [read.known, read.mine], [true, false]);
+  check('what the player owns is nothing yet', veilOwn(shaped), { desc: '' });
+  check('and nothing is written', veilIsWritten(shaped), false);
+
+  const written = { name: 'Aether Wire', essence: 2, desc: 'GM ruled: outdoors only.' };
+  check('their own text wins', veilDetails(written).desc, 'GM ruled: outdoors only.');
+  check('and says it is theirs', veilDetails(written).mine, true);
+  check('while the pack still supplies the rest', veilDetails(written).descriptor, 'Enhanced, Force');
+  check('emptying it hands the veil back', veilDetails({ ...written, desc: '' }).desc, wire.text);
+
+  const invented = { name: 'A Veil I Made Up', essence: 1, desc: 'Does a thing.' };
+  check('a veil no pack carries is all the player’s', veilDetails(invented).desc, 'Does a thing.');
+  check('and says so, so a card can drop the pen', veilDetails(invented).known, false);
+
+  /*
+   * The size of the win, stated as a number: what a shaped veil costs the
+   * character document now against the rules text it used to bank.
+   */
+  ok('a shaped veil is smaller than the text it reads',
+    JSON.stringify(shaped).length * 4 < JSON.stringify({ ...shaped, desc: wire.text }).length * 4 + 200);
+}
+
+console.log('veils -- one veil, assembled from two kinds of page');
+{
+  /*
+   * A veil's own page carries its rules text, its chakras and its descriptors
+   * and says nothing about who may shape it. The page listing a *class's*
+   * veils says exactly that and little else. Replace-by-name would mean
+   * whichever pack loaded second erased what the other knew, and which half
+   * survived would depend on the order the packs happened to be switched on.
+   */
+  const fromVeilPage = normalizeExtension({
+    id: 'veil-pages',
+    name: 'Veil pages',
+    provides: { veils: { veils: [{ name: 'Aether Wire', slot: 'Hands, Wrists', descriptor: 'Force', text: 'A thin wire.', source: 'A compilation' }] } },
+  });
+  const fromDaevicList = normalizeExtension({
+    id: 'daevic-list',
+    name: 'Daevic list',
+    provides: { veils: { veils: [{ name: 'Aether Wire', classes: ['Daevic'], effect: 'Wire that grapples.' }] } },
+  });
+  const fromViziersList = normalizeExtension({
+    id: 'vizier-list',
+    name: 'Vizier list',
+    provides: { veils: { veils: [{ name: 'aether wire', classes: ['Vizier'] }] } },
+  });
+
+  const merged = mergeTables([fromVeilPage, fromDaevicList, fromViziersList]).veils;
+  check('one veil, not three', merged.veils.length, 1);
+  const v = merged.veils[0];
+  check('the veil page’s text survives the class lists', v.text, 'A thin wire.');
+  check('and its chakras and descriptors with it', [v.slot, v.descriptor], ['Hands, Wrists', 'Force']);
+  check('every class that listed it is on it', v.classes, ['Daevic', 'Vizier']);
+  check('a summary a list page carried is kept beside the full text', v.effect, 'Wire that grapples.');
+
+  // And the other order, since which pack loads first is not something a
+  // player chooses on purpose.
+  const other = mergeTables([fromViziersList, fromDaevicList, fromVeilPage]).veils;
+  check('the same answer whichever way round the packs load',
+    [other.veils.length, other.veils[0].text, other.veils[0].classes.sort()],
+    [1, 'A thin wire.', ['Daevic', 'Vizier']]);
+
+  /*
+   * The duplicate question the per-chakra packs raised dissolves here: a veil
+   * shapeable in five chakras is on five of the wiki's slot pages with the
+   * same text each time, and as a table those five are one entry.
+   */
+  const perSlot = ['hands', 'wrists', 'shoulders'].map((slot) => normalizeExtension({
+    id: `${slot}-veils`,
+    name: `${slot} veils`,
+    provides: { veils: { veils: [{ name: 'Aether Wire', slot: 'Hands, Shoulders, Wrists', text: 'A thin wire.' }] } },
+  }));
+  check('three slot packs, one veil', mergeTables(perSlot).veils.veils.length, 1);
+
+  setVeilCatalogue(merged);
+  check('the catalogue reads the assembled veil', veilEntry('Aether Wire').classes, ['Daevic', 'Vizier']);
+  check('and a Daevic is offered it', veilsAvailable({ slot: 'Wrists', classes: ['Daevic'] }).map((x) => x.name), ['Aether Wire']);
+  check('while a Guru is not', veilsAvailable({ slot: 'Wrists', classes: ['Guru'] }), []);
+}
+
+console.log('veils -- a pack summarises them as a table, not as blocks');
+{
+  const doc = normalizeExtension({
+    id: 'veils',
+    name: 'Veils',
+    provides: { veils: { veils: [{ name: 'One', slot: 'Belt' }, { name: 'Two', slot: 'Belt' }] } },
+  });
+  const s = summarize(doc);
+  check('counted as a table', s.tables.veils, 2);
+  check('and none of it is blocks', s.blockCount, 0);
+  check('described in words', describeSummary(s), '2 veils');
+  check('and one of them reads singular', describeSummary({ tables: { veils: 1 }, blocks: {} }), '1 veil');
+}
+
+console.log('veils -- a pack of blocks converted into the table it should have been');
+{
+  /*
+   * Veils arrived as blocks before this, and `structuredVeil` had nowhere on
+   * a block to put "Classes Available", so it appended the line to the foot
+   * of the text rather than dropping it. A table has a field for it, and the
+   * conversion is where it comes back out of the prose.
+   */
+  const lift = liftClassAccess('The veil does a thing.\n\nAnd another.\n\nClass access: Daevic, Vizier, Daevic\n');
+  check('the class line comes out', lift.classes, ['Daevic', 'Vizier']);
+  check('and the rules text is what is left', lift.text, 'The veil does a thing.\n\nAnd another.');
+  check('a text with no class line is untouched', liftClassAccess('Just rules.').text, 'Just rules.');
+  check('and claims no classes', liftClassAccess('Just rules.').classes, []);
+
+  const veilBlock = (name, slot, text, extra = {}) => ({ kind: 'veil', name, slot, text, ...extra });
+  const { ext, moved, entries, classed } = convertPack({
+    format: EXTENSION_FORMAT,
+    id: 'scraped',
+    name: 'Scraped veils',
+    revision: 3,
+    blocks: [
+      veilBlock('Aether Wire', 'Hands, Wrists', 'A short stub.\n\nClass access: Daevic', { descriptor: 'Force' }),
+      // The same veil off a second slot page: same name, fuller text, and a
+      // class the first page did not name.
+      veilBlock('Aether Wire', 'Hands, Wrists', 'A thin wire, at rather more length than the other page gave it.\n\nClass access: Vizier', { source: 'A compilation' }),
+      veilBlock('Unplaced', 'Belt', 'Nobody said whose list this is on.'),
+      { kind: 'note', name: 'Keep me', text: 'Not a veil.' },
+    ],
+  });
+
+  check('every veil block moved', [moved, entries, classed], [3, 2, 1]);
+  check('and nothing else did', ext.blocks.map((b) => b.kind), ['note']);
+  check('the table is what carries them now', ext.provides.veils.veils.map((v) => v.name), ['Aether Wire', 'Unplaced']);
+
+  const wire = ext.provides.veils.veils[0];
+  check('two pages of one veil become one', wire.classes, ['Daevic', 'Vizier']);
+  check('the fuller page’s text is the one kept',
+    wire.text, 'A thin wire, at rather more length than the other page gave it.');
+  check('and neither page’s fields are lost', [wire.descriptor, wire.source, wire.slot],
+    ['Force', 'A compilation', 'Hands, Wrists']);
+  check('a veil on nobody’s list keeps an empty class list', ext.provides.veils.veils[1].classes, []);
+  check('the pack says it is a new revision', ext.revision, 4);
+
+  // And what comes out is a pack the app will take.
+  check('the converted pack still vets clean', inspectExtension(ext).ok, true);
+  check('summarised as a table', describeSummary(summarize(ext)), '2 veils · 1 note');
+
+  const untouched = convertPack({ format: EXTENSION_FORMAT, id: 'x', name: 'X', blocks: [{ kind: 'note', name: 'n' }] });
+  check('a pack with no veils is left alone', [untouched.moved, untouched.ext.revision], [0, 1]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -47,6 +47,7 @@ import {
   deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
   maneuverOwn,
   psionicCurveTotals, psionicTables,
+  veilsAvailable, veilDetails, veilOwn, slug,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
 import { round } from '../format.js';
@@ -199,10 +200,11 @@ export function akashicPanel(model, ctx) {
     if (!a) return '<div class="grid"><p class="empty">No akashic data.</p></div>';
 
     return `<div class="grid">
+      ${veilDatalists(a)}
       ${essencePanel(ctx, model, a)}
       ${akashicClassesPanel(a)}
-      ${akashicSlotsPanel(model, a)}
-      ${akashicKheshigPanel(model, a)}
+      ${akashicSlotsPanel(model, ctx, a)}
+      ${akashicKheshigPanel(model, ctx, a)}
       ${akashicReceptaclesPanel(model, a)}
       ${systemExtrasPanel(a, 'akashic', 'Akashic')}
     </div>`;
@@ -356,7 +358,7 @@ function akashicClassesPanel(a) {
    * behind a toggle by default: what a player wants to see is the four or five
    * veils they actually shaped.
    */
-function akashicSlotsPanel(model, a) {
+function akashicSlotsPanel(model, ctx, a) {
     const list = 'akashic.slots';
     const slots = a.slots || [];
     const shaped = slots.filter((s) => (s.veils || []).length).length;
@@ -382,7 +384,7 @@ function akashicSlotsPanel(model, a) {
         is the base DC plus the essence invested in it. A description may carry
         <code>{name = expr}</code> formulas, the same as anywhere else.</p>
       ${shown.length
-    ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, list, s, i)).join('')}</div>`
+    ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, ctx, a, list, s, i)).join('')}</div>`
     : '<p class="empty">No veils shaped.</p>'}
     </section>`;
   }
@@ -423,8 +425,9 @@ function veilGridStyle(model) {
   }
 
 
-function veilSlotCard(model, list, s, i) {
+function veilSlotCard(model, ctx, a, list, s, i) {
     const base = `${list}.${i}`;
+    const options = veilOptions(a, s.slot);   // its id; the list itself is emitted once for the tab
     const veils = s.veils || [];
     const max = s.twinveil ? 2 : 1;
     const key = `veil:${s.slot || i}`;
@@ -443,7 +446,7 @@ function veilSlotCard(model, list, s, i) {
           ${check(`${base}.twinveil`, s.twinveil, 'Twinveil')}
           ${check(`${base}.bound`, s.bound, 'Bound')}
         </div>
-        ${veils.map((v, vi) => veilCard(model, `${base}.veils`, v, vi)).join('')}
+        ${veils.map((v, vi) => veilCard(model, ctx, `${base}.veils`, v, vi, options)).join('')}
         ${veils.length < max
     ? `<div style="margin-top:4px">${addButton(`${base}.veils`, 'Shape a veil', { name: '', desc: '', essence: 0 })}</div>`
     : ''}
@@ -451,17 +454,103 @@ function veilSlotCard(model, list, s, i) {
     </div>`;
   }
 
-  /** One shaped veil: its name, what it does, and what it costs. */
-function veilCard(model, list, v, vi) {
-    return `<div class="veil">
+/**
+ * The veilweaving classes this character actually has, for narrowing what a
+ * slot offers. Empty where the sheet never named one, which has to read as
+ * "every list" rather than "no veils".
+ */
+function veilweavingClasses(a) {
+  return (a?.classes || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+}
+
+/**
+ * What a slot offers, as a `<datalist>` its cards point at.
+ *
+ * One per chakra rather than one per card: the list is the same for every
+ * veil shaped in that slot, and the Hands chakra alone runs to a few hundred
+ * entries. Nothing is emitted where no pack provides a catalogue, and the
+ * name field is then the free-text box it has always been -- a player who
+ * types a veil nobody has published is not doing anything wrong.
+ */
+function veilOptions(a, slot) {
+  const veils = veilsAvailable({ slot, classes: veilweavingClasses(a) });
+  if (!veils.length) return { id: '', html: '' };
+  const id = `veils-${slug(slot || 'any')}`;
+  return {
+    id,
+    html: `<datalist id="${esc(id)}">${veils.map((v) => `<option value="${esc(v.name)}"${
+      v.slot || v.descriptor ? ` label="${esc([v.slot, v.descriptor].filter(Boolean).join(' · '))}"` : ''
+    }></option>`).join('')}</datalist>`,
+  };
+}
+
+/**
+ * Every slot's catalogue, emitted once for the tab.
+ *
+ * A `<datalist>` is addressed by id, so one per chakra has to appear once in
+ * the document however many cards point at it -- two Kheshig receptacles both
+ * set to Hands share the Hands list rather than each printing their own.
+ */
+function veilDatalists(a) {
+  const slots = [...(a?.slots || []).map((s) => s.slot), ...(a?.kheshig || []).map((r) => r.slot)];
+  const seen = new Set();
+  const out = [];
+  for (const slot of slots) {
+    const { id, html } = veilOptions(a, slot);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(html);
+  }
+  return out.join('');
+}
+
+/** The name of a shaped veil: free text, with the slot's catalogue behind it. */
+function veilNameField(list, vi, v, options) {
+  const text = String(v.name ?? '');
+  return `<input type="text" value="${esc(text)}" data-item="${list}|${vi}|name"
+      data-kind="text" placeholder="Veil name"${options.id ? ` list="${esc(options.id)}"` : ''}${
+  text.trim() ? ` title="${esc(text)}"` : ''}>`;
+}
+
+/**
+ * One shaped veil: its name, what it does, and what it costs.
+ *
+ * What it says has two faces, for the reason a maneuver's card does. The
+ * catalogue's text is read where it stands and never copied onto the sheet --
+ * so a pack that corrects a veil corrects it everywhere it is shaped, and a
+ * character sent to a friend carries the veil's *name* rather than four
+ * kilobytes of somebody else's book. The pen turns the card over to what the
+ * player wrote themselves, which is all that is ever saved; emptying that
+ * hands the veil back to the pack.
+ *
+ * A veil the catalogue has never heard of -- typed in by hand, or one whose
+ * pack is switched off -- has only the player's own text, so that face is the
+ * only one there is and the pen would have nothing to turn over to.
+ */
+function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
+    const key = `${list}|${vi}`;
+    const d = veilDetails(v);
+    const own = veilOwn(v);
+    const writing = ctx?.veilEdit === key || !d.known;
+    const meta = [d.slot, d.descriptor, d.classes.join(', '), d.source].filter(Boolean);
+    return `<div class="veil${d.known ? ' is-known' : ''}">
       <div class="veil-top">
-        ${itemText(list, vi, 'name', v.name, 'Veil name')}
+        ${veilNameField(list, vi, v, options)}
         <label class="minifield" title="essence invested">Ess
           ${itemNum(list, vi, 'essence', v.essence)}</label>
         <span class="veil-dc" title="base DC + essence">DC ${v.dc ?? 0}</span>
+        ${d.known ? `<button class="mnote-btn${d.mine ? ' has-note' : ''}" data-vedit="${esc(key)}"
+          aria-expanded="${writing}"
+          title="${d.mine ? 'What you wrote about it — click to edit' : 'Write your own version; leave it empty and the pack’s text stands'}"
+          aria-label="Edit ${esc(v.name || 'this veil')}">✎</button>` : ''}
         ${rowRemoveButton(list, vi, 'Unshape this veil')}
       </div>
-      ${itemArea(model, list, vi, 'desc', v.desc, 2, model.veilScope(v))}
+      ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
+      ${writing
+    ? itemArea(model, list, vi, 'desc', own.desc, 2, model.veilScope(v))
+    : `<div class="veil-text">${renderedProse(model, d.desc, model.veilScope(v))}</div>`}
+      ${d.known && d.bindEffect && !writing
+    ? `<div class="veil-bind"><b>Bind:</b> ${esc(d.bindEffect)}</div>` : ''}
     </div>`;
   }
 
@@ -472,7 +561,7 @@ export function rowRemoveButton(list, i, title) {
   }
 
 
-function akashicKheshigPanel(model, a) {
+function akashicKheshigPanel(model, ctx, a) {
     const list = 'akashic.kheshig';
     if (!(a.kheshig || []).length) return '';
     return `<section class="panel span2">
@@ -488,7 +577,7 @@ function akashicKheshigPanel(model, a) {
           <div class="veilslot-body">
             <div class="veilflags">${check(`${list}.${i}.bound`, r.bound, 'Bound')}</div>
             ${(r.veils || []).length
-    ? (r.veils || []).map((v, vi) => veilCard(model, `${list}.${i}.veils`, v, vi)).join('')
+    ? (r.veils || []).map((v, vi) => veilCard(model, ctx, `${list}.${i}.veils`, v, vi, veilOptions(a, r.slot))).join('')
     : `<div style="margin-top:4px">${addButton(`${list}.${i}.veils`, 'Shape a veil', { name: '', desc: '', essence: 0 })}</div>`}
           </div>
         </div>`).join('')}

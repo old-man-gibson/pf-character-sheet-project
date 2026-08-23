@@ -334,6 +334,36 @@ sit beside it as tiles. The gauge takes a style like any tracker — see *The bu
 meters take the same style* — so it can be pips instead, and over-investing turns it
 red rather than merely reading a negative number.
 
+### Shaping a veil, and where its text lives
+
+A veil's name is picked from a **catalogue an extension pack carries**, and only the
+name and the essence are kept on the sheet. What the veil *does* is read from the pack
+every time the card is drawn, which is the point: a pack that corrects a veil corrects
+it on every character already playing one, and a character sent to a friend carries the
+names of its veils rather than a few kilobytes of somebody else's book each. A shaped
+veil costs the character document about **forty bytes**; it used to cost two and a half
+thousand.
+
+Each slot's name field offers **the veils that shape in that chakra and are on one of
+this character's veilweaving class lists** — for a 10th-level Daevic the Hands slot
+offers 235 rather than the 369 veils that shape in Hands, or the 1,496 that exist. It
+is still a text field: a veil nobody has published is typed in as it always was, and
+one the catalogue does not recognise simply has no pack half to read.
+
+The card has two faces, the way a maneuver's does. It **reads** by default — the pack's
+text, with `{…}` formulas resolving against the essence invested — and the **pen** turns
+it over to a box holding what *you* wrote, which is all that is ever saved. The box
+starts empty even where the pack has plenty to say, because filling it in for you would
+bank a copy of the catalogue on the sheet and quietly undo the whole arrangement.
+Emptying it again hands the veil back to the pack. Under the name sits what the pack
+knows and the sheet never stored: the chakras it shapes in, its descriptors, whose lists
+it is on, and where it was published.
+
+Packs scraped before this carried veils as *blocks*, which were copied onto the
+character when applied. `node tools/veils-to-table.mjs <pack.json|dir>` rewrites one —
+and recovers the class list while it is there, since the reader had nowhere on a block
+to put "Classes Available" and appended it to the foot of the text instead.
+
 ### Spell points into essence
 
 A veilweaver with the **Veilweaving sphere** condenses **2 spell points into 1

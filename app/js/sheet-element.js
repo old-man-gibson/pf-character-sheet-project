@@ -389,6 +389,12 @@ export class CharacterSheetElement extends HTMLElement {
   #openManeuver = null;
   /** Whether the open maneuver is showing its cells rather than reading them. */
   #maneuverEdit = false;
+
+  /**
+   * Which shaped veil is showing what the player wrote rather than what its
+   * pack says. Not saved with the character: it is a way of reading the tab.
+   */
+  #veilEdit = null;
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -1677,6 +1683,7 @@ export class CharacterSheetElement extends HTMLElement {
       deckView: this.#deckView,
       openManeuver: this.#openManeuver,
       maneuverEdit: this.#maneuverEdit,
+      veilEdit: this.#veilEdit,
       peek: this.#peek,
     };
   }
@@ -3664,6 +3671,16 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
         showManeuver(b.dataset.medit, true);
+      });
+    });
+    // The pen on a veil card turns it over to what the player wrote. Pressing
+    // it again turns it back, which is how you read the pack's text after
+    // writing your own -- your text is still there, under the pen.
+    root.querySelectorAll('[data-vedit]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        this.#veilEdit = this.#veilEdit === b.dataset.vedit ? null : b.dataset.vedit;
+        this.#render();
       });
     });
     root.querySelectorAll('[data-mclose]').forEach((b) => {
