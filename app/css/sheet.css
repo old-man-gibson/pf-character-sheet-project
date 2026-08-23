@@ -38,6 +38,18 @@
   --fx-number: #8fcf9d;
   --fx-string: #c9a3e0;
   --fx-op: var(--cs-muted);
+  /* Brackets by how deep they are, cycling. Deliberately outside the palette
+     above: gold means "a name", blue means "a function", and a bracket is
+     neither -- it is structure, so it gets hues nothing else on the sheet
+     uses and can never be read as a value. Two of those, and then plain text
+     for the third: a fourth hue would have to borrow one, and a formula
+     nested that deep wants breaking up rather than another colour. */
+  --fx-nest-0: #7fb7c9;
+  --fx-nest-1: #d99ac0;
+  --fx-nest-2: var(--cs-text);
+  /* The pair the caret is standing beside, drawn behind the glyphs. */
+  --fx-match: rgba(110, 168, 254, 0.34);
+  --fx-match-bad: rgba(224, 99, 95, 0.30);
   /* The six abilities, in the fills the workbook gives them (sheet2!B15:B20).
      An ability wears its hue wherever the sheet names one, and so does every
      dropdown that picks an ability -- in the hue of the one it picked. */
@@ -88,6 +100,11 @@
   --cs-edit: #2563c9;
   --fx-number: #1f7a43;
   --fx-string: #6b3fa0;
+  --fx-nest-0: #226b82;
+  --fx-nest-1: #99306f;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(37, 99, 201, 0.24);
+  --fx-match-bad: rgba(190, 60, 56, 0.22);
   --ab-wash: 38%;
   --ab-edge: 72%;
   --ab-ink: 66%;
@@ -2230,14 +2247,26 @@ table.feats tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent
 table.feats tr.featempty td { cursor: default; }
 
 /* ---------- the mythic ladder ----------
-   Nine columns across one table. Everything but the two Effect columns is a
-   known quantity -- a tier, a level, a path, two names, a grant, an ability --
-   so they are held to their content and the effects share what is left. */
+   Two tables, not one. Nine columns across a single table left both Effect
+   columns -- the only prose on the tier row -- squeezed into a third of the
+   width between seven known quantities, so the path abilities and the feats
+   the tiers alternate with are each a ladder of their own, ruled apart. Within
+   each, everything but Effect is held to its content and Effect takes the
+   rest. */
+.mythladder { margin-top: 14px; }
+.mythladder + .mythladder { padding-top: 12px; border-top: 1px solid var(--cs-line); }
+/* Folded, a sub-group is its subhead alone: the heading's own bottom margin
+   would leave the gap where the table was, so it goes. */
+.foldsub.collapsed > h4.subhead { margin-bottom: 0; }
+h4.subhead [data-collapse] { margin-left: auto; padding: 1px 8px; }
 table.mythic { table-layout: fixed; }
 table.mythic col.tier { width: 3.2rem; }
 table.mythic col.lvl { width: 3.2rem; }
 table.mythic col.mpath { width: 8rem; }
-table.mythic col.mname { width: 8.5rem; }
+/* The two name columns took the split as room to grow: at 8.5rem a real
+   pick ("MECT: Beastmastery", "Mythic Sphere Specialization") was cut off in
+   the middle while the Effect beside it ran to 400px of empty. */
+table.mythic col.mname { width: 12rem; }
 table.mythic col.grants { width: 6.5rem; }
 table.mythic col.mstat { width: 6.5rem; }
 table.mythic td { vertical-align: top; }
@@ -2492,7 +2521,41 @@ ul.tablelog li:first-child { color: var(--cs-text); }
 .fx-number { color: var(--fx-number); font-variant-numeric: tabular-nums; }
 .fx-string { color: var(--fx-string); }
 .fx-op { color: var(--fx-op); }
+/* A bracket takes the colour of the depth it opens, and its partner takes the
+   same one, so a nest is read by matching colours rather than by counting. A
+   comma keeps the colour of the call it separates, which is the one thing a
+   comma is ever about. */
 .fx-bracket { color: var(--cs-text); opacity: 0.75; }
+.fx-bracket.fx-d0 { color: var(--fx-nest-0); opacity: 1; }
+.fx-bracket.fx-d1 { color: var(--fx-nest-1); opacity: 1; }
+.fx-bracket.fx-d2 { color: var(--fx-nest-2); opacity: 1; }
+
+/* ---------- the bracket under the caret ----------
+   A native field cannot colour part of its own text, so the pair is drawn on a
+   mirror behind it: the same text, in the same metrics, invisible but for the
+   two marks. The field goes transparent for as long as the mirror is up and
+   the mirror carries its background, so what the reader sees is one field with
+   two characters lit -- see ui/brackets.js. */
+.bx-mirror {
+  position: absolute; z-index: 0; margin: 0;
+  overflow: hidden; box-sizing: border-box;
+  border-style: solid; border-color: transparent;
+  color: transparent; pointer-events: none; user-select: none;
+  overflow-wrap: break-word;
+}
+.bx-mirror .bx-hit {
+  color: transparent; background: var(--fx-match);
+  border-radius: 2px; box-shadow: 0 0 0 1px var(--fx-match);
+}
+/* No other end to find: the same mark in the error colour says so without
+   moving anything, which matters when it is said mid-keystroke. */
+.bx-mirror .bx-miss { background: var(--fx-match-bad); box-shadow: 0 0 0 1px var(--fx-match-bad); }
+.bx-mirror .bx-d0 { background: var(--fx-match); }
+/* The field paints over the mirror -- both positioned, and it comes second --
+   so it has to let the marks through. */
+.prose textarea.bx-lit, .xf input.bx-lit, input.bx-lit, textarea.bx-lit {
+  position: relative; z-index: 1; background: transparent;
+}
 .fx-bad, .fx-unknown {
   color: var(--cs-bad); text-decoration: underline wavy var(--cs-bad);
   text-underline-offset: 3px; cursor: help;

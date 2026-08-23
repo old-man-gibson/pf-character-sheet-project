@@ -149,10 +149,15 @@ function classFeatureGroups(model, ctx) {
       const charLevel = Number(model.data.identity.level) || 0;
       const due = Object.values(model.classFeatureDue(name)).reduce((t, n) => t + n, 0);
 
+      // Cells waiting on a class level the character has not got back yet.
+      const parked = Object.keys(model.classFeatureParked(name)).map(Number).sort((a, b) => a - b);
+      const arming = ctx.confirmGroup === name;
       return collapsible(model, `progfeat-${name}`, `<section class="panel featpanel">
         <h3>${esc(name)} features
           <span class="badge">${orphaned ? 'not in progression' : `levels ${rows.length ? `${rows[0].level}–${rows[rows.length - 1].level}` : '—'}`}</span>
           ${due ? `<span class="badge due" title="Levels you have reached that grant something you have not filled in">${due} to pick</span>` : ''}
+          ${parked.length ? `<span class="badge" title="Written for ${esc(name)} level${parked.length === 1 ? '' : 's'} ${parked.join(', ')}, which this character no longer has. Kept, and back the moment the class is that long again.">${parked.length} parked</span>` : ''}
+          ${orphaned ? groupDelete(name, g, arming) : ''}
         </h3>
         <div class="tablewrap"><table class="gridtab featgrid" style="width:${total}px">
           <colgroup>
@@ -175,6 +180,31 @@ function classFeatureGroups(model, ctx) {
         ${classFeatureNotes(model, name)}
       </section>`);
     }).join('') + menuListMarkup(ctx, ctx);
+  }
+
+  /**
+   * Deleting a group the progression no longer names, in two clicks.
+   *
+   * Both states live in the heading, because a group is usually met folded --
+   * a ghost class is exactly the one nobody has open -- and a confirmation in
+   * the body would be a click on a × that visibly did nothing. The second
+   * click says what is going: a group is a column of the player's own writing
+   * per level, and History is the only way back.
+   */
+function groupDelete(name, g, arming) {
+    if (!arming) {
+      return `<button class="danger" data-action="remove-cf-group" data-class="${esc(name)}"
+        style="margin-left:auto" title="Delete this group and everything in it">×</button>`;
+    }
+    const cols = g.columns.length;
+    // A ghost with no columns left is the one that has been stuck the longest,
+    // so it gets a sentence of its own rather than "delete 0 columns".
+    const what = cols ? `${cols} column${cols === 1 ? '' : 's'} and everything in ${cols === 1 ? 'it' : 'them'}` : 'this empty group';
+    return `<span class="pair" style="margin-left:auto">
+      <span class="hint warn">Delete ${what}?</span>
+      <button class="danger" data-action="remove-cf-group-confirm" data-class="${esc(name)}">Delete</button>
+      <button data-action="remove-cf-group-cancel">Keep</button>
+    </span>`;
   }
 
   /**

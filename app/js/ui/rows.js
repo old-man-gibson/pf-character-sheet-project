@@ -194,11 +194,35 @@ export function editLine(label, path, value) {
  */
 export function collapsible(model, key, panelHtml) {
   const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
-  const btn = `<button data-collapse="${key}" title="${collapsed ? 'Expand' : 'Minimize'}" aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
+  const btn = foldButton(model, key);
   if (!collapsed) return panelHtml.replace('</h3>', ` ${btn}</h3>`);
   // Collapsed: keep only the header line of the panel.
   const m = panelHtml.match(/<h3[\s\S]*?<\/h3>/);
   const header = m ? m[0].replace('</h3>', ` ${btn}</h3>`) : btn;
   const cls = panelHtml.match(/class="panel([^"]*)"/)?.[1] ?? '';
   return `<section class="panel${cls} collapsed">${header}</section>`;
+}
+
+/** The ▾/▸ that folds whatever `key` names; the click lands on the element. */
+export function foldButton(model, key) {
+  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+  return `<button data-collapse="${key}" title="${collapsed ? 'Expand' : 'Minimize'}"
+    aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
+}
+
+/**
+ * One block inside a panel, folded down to its subhead.
+ *
+ * The same state and the same button as `collapsible`, a heading level down: a
+ * panel's <h3> folds the whole panel, and this folds one group within it --
+ * which is what a panel holding two tables of its own wants. Collapsed it
+ * keeps the subhead exactly where it was, so nothing moves but the body.
+ */
+export function collapsibleSub(model, key, title, bodyHtml, className = '') {
+  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+  const classes = `${className}${className ? ' ' : ''}foldsub${collapsed ? ' collapsed' : ''}`;
+  return `<div class="${classes}">
+    <h4 class="subhead">${title} ${foldButton(model, key)}</h4>
+    ${collapsed ? '' : bodyHtml}
+  </div>`;
 }

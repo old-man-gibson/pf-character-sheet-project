@@ -506,7 +506,7 @@ function feats(model, add) {
 /** Spheres of Power and of Might: the talents, the traditions, the numbers. */
 function spheres(model, add) {
   const t = model.data.training || {};
-  for (const [side, tab, label] of [['combat', 'combat', 'Combat sphere'], ['magic', 'combat', 'Magic sphere']]) {
+  for (const [side, tab, label] of [['combat', 'martial', 'Combat sphere'], ['magic', 'magic', 'Magic sphere']]) {
     const s = t[side];
     if (!s) continue;
     for (const row of s.sphereRows || []) {
@@ -557,7 +557,7 @@ function spheres(model, add) {
     for (const set of block.sets || []) {
       if (text(set.weapon)) {
         add({
-          kind: 'weapon', title: text(set.weapon), tab: 'combat', expand: 'customized-weapons',
+          kind: 'weapon', title: text(set.weapon), tab: 'martial', expand: 'customized-weapons',
           sub: bits('Customized weapon', text(block.className), set.spare ? 'spare' : ''),
           keys: 'customization customized weapon',
         });
@@ -565,7 +565,7 @@ function spheres(model, add) {
       for (const row of set.talents || []) {
         if (!text(row.talent)) continue;
         add({
-          kind: 'talent', title: text(row.talent), tab: 'combat', expand: 'customized-weapons',
+          kind: 'talent', title: text(row.talent), tab: 'martial', expand: 'customized-weapons',
           sub: bits(text(row.sphere), text(set.weapon), text(block.className)),
           keys: 'customization talent',
         });
@@ -987,7 +987,7 @@ function worksheets(model, add, ctx) {
       kind: 'tab', title: t.label, tab: t.id, start: true,
       sub: bits(t.kind === 'system' ? 'Worksheet' : 'Tab', t.inUse === false ? 'empty' : ''),
       // The id as well as the label: several tabs are known by a word that is
-      // not on them -- Equipment is `gear`, Spheres & Magic is `combat`.
+      // not on them -- Equipment is `gear`, Martial Spheres is `martial`.
       keys: `tab go to open ${t.id}`,
     });
   }

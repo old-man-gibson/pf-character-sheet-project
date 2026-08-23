@@ -107,7 +107,7 @@ kept per browser rather than in the document, and it applies to every character 
 | *Overview* → **Attack** | Melee and Ranged copy the whole iterative sequence, one row per attack; CMB copies the maneuver alone. The mode table below them does the same for all six slots, **alternates included**. |
 | *Skills* | The skill's **Total** — ranks, ability, the class-skill bonus, armour check penalty and Misc, already summed. |
 | *Equipment* → **Weapons** | The attack (iteratives included), the damage, the confirmation roll and the critical damage. |
-| *Spheres & Magic* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
+| *Magic Spheres* → **Casting numbers** | The global **concentration** check, with the caster level behind it. |
 | *Vancian* → each casting class | That class's own concentration. |
 | *Familiar*, *Animal Companion*, *Eidolon* | Initiative, the three saves, an ability check off the Mod column, every skill, and every natural attack. |
 
@@ -388,7 +388,7 @@ is not working.
 The manager lists what is off the bar **alphabetically**, in three groups:
 
 - **Hidden tabs** — the rest of the built-in tabs (Extras & Notes), the modelled
-  sub-systems (Spheres & Magic, Crafting, Akashic, Maneuvers, Vancian, Psionics,
+  sub-systems (Martial Spheres, Magic Spheres, Crafting, Akashic, Maneuvers, Vancian, Psionics,
   Template, and the three companions), and the workbook's own worksheets. A
   sub-system that already holds the character's data is badged *in use*, so a
   character with veils sees which waiting tab has them; one a class names without
@@ -403,7 +403,7 @@ Every remaining worksheet of the workbook — the character-specific tabs like a
 Technique List or an Auto-Cooking sheet — is its own tab, fully editable: **rename**
 inline (in the manager or from the tab's own header), **delete** with a confirm, grow
 it with rows and columns. Cells accept inline `{name = expr}` formulas, so a custom
-tab can define character-wide values too. The big Spheres & Magic panels can be
+tab can define character-wide values too. The big sphere-training panels can be
 minimized; all of this persists per character.
 
 > The `#ERROR!` cells in the exports sat in Animal Companion (16 per workbook) and

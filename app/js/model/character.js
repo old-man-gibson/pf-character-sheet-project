@@ -52,11 +52,13 @@ import { emit, subscribe } from './events.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
-  classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNotes, classFeatureRows,
+  classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNotes, classFeatureParked,
+  classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
   removeClassFeatureColumn, removeClassFeatureColumnOptions, removeClassFeatureNote,
-  removeClassFeatureRuleGroup, removeProgressionTrack, renameClassFeatureColumn,
+  removeClassFeatureGroup, removeClassFeatureRuleGroup, removeProgressionTrack,
+  renameClassFeatureColumn,
   setClassFeature, setClassFeatureColumnOptions, setClassFeatureColumnRule, setClassFeatureNote,
   setClassFeatureRuleGroup, setColumnWidth, setProgressionClass,
 } from './progression.js';
@@ -411,6 +413,10 @@ export class Character {
   setClassFeatureColumnRule(...a) { return setClassFeatureColumnRule(this, ...a); }
   classFeatureRows(...a) { return classFeatureRows(this, ...a); }
   classFeatureDue(...a) { return classFeatureDue(this, ...a); }
+
+  classFeatureParked(...a) { return classFeatureParked(this, ...a); }
+
+  removeClassFeatureGroup(...a) { return removeClassFeatureGroup(this, ...a); }
   setColumnWidth(...a) { return setColumnWidth(this, ...a); }
   removeClassFeatureColumn(...a) { return removeClassFeatureColumn(this, ...a); }
   #applyGestalt(...a) { return applyGestalt(this, ...a); }

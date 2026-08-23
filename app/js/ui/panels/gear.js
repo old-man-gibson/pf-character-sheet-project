@@ -96,7 +96,7 @@ export function weaponsPanel(model, e) {
               title: w.useUnarmedDice ? 'Overridden by the unarmed calculator'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
-            <label class="chk" title="Use the unarmed practitioner dice from Spheres & Magic">
+            <label class="chk" title="Use the unarmed practitioner dice from Martial Spheres">
               ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}

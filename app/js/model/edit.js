@@ -270,7 +270,8 @@ export function systemTabsInUse(model) {
   const trainingSide = (side) => !!side
     && ((side.classes || []).some((x) => x?.name) || !!side.tradition?.name);
   const out = {
-    combat: trainingSide(d.training?.combat) || trainingSide(d.training?.magic),
+    martial: trainingSide(d.training?.combat),
+    magic: trainingSide(d.training?.magic),
     crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
       || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
     akashic: !!(d.akashic?.slots || []).length,

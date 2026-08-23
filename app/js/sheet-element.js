@@ -59,6 +59,7 @@ import {
 } from './ui/html.js';
 import * as fields from './ui/fields.js';
 import * as rows from './ui/rows.js';
+import { showBrackets, hideBrackets } from './ui/brackets.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -166,7 +167,8 @@ const TABS = [
   ['overview', 'Overview'],
   ['stats', 'Stats'],
   ['skills', 'Skills'],
-  ['combat', 'Spheres & Magic'],
+  ['martial', 'Martial Spheres'],
+  ['magic', 'Magic Spheres'],
   ['features', 'Feats & Mythic'],
   ['primordia', 'Primordia'],
   ['gear', 'Equipment'],
@@ -384,6 +386,8 @@ export class CharacterSheetElement extends HTMLElement {
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
   #armedGearCol = null;
   #confirmDelete = null;
+  /** The class whose feature group is one click from being deleted, or null. */
+  #confirmGroup = null;
   /** Which Classes row has its sub-system picker open (index, or null). */
   #openClassSystems = null;
   /** Whether the dashboard's grouped condition picker is unfolded. */
@@ -510,6 +514,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   connectedCallback() {
     if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+    this.#bindBracketMatching();
     this.#renderShell();
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
@@ -1037,6 +1042,32 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.#palette) this.shadowRoot.append(this.#palette);
   }
 
+  /**
+   * Light the bracket under the caret, and the one that answers it.
+   *
+   * Bound to the shadow root once and never again: it is delegated, and the
+   * root outlives every render, so this is the one listener on the sheet that
+   * must not be re-bound by #bind(). The mirror it draws lives inside the
+   * field's own wrapper and is dropped with the rest of the markup on the next
+   * render -- the focus that follows a render draws it again.
+   *
+   * Nothing here touches the model or the value. If any of it throws on a
+   * browser that does something unusual with selections, the field still works
+   * and the sheet still saves.
+   */
+  #bindBracketMatching() {
+    const root = this.shadowRoot;
+    const draw = (el) => { try { showBrackets(el); } catch { /* a hint, not a feature */ } };
+    root.addEventListener('focusin', (e) => draw(e.target));
+    root.addEventListener('focusout', (e) => hideBrackets(e.target));
+    // Typing, arrow keys, clicking into the middle of a formula, and dragging
+    // the field's own scroll are each a way of standing somewhere else.
+    for (const kind of ['input', 'keyup', 'pointerup']) {
+      root.addEventListener(kind, (e) => draw(e.target));
+    }
+    root.addEventListener('scroll', (e) => draw(e.target), true);
+  }
+
   #header() {
     const c = this.#model.data;
     const i = c.identity;
@@ -1331,7 +1362,8 @@ export class CharacterSheetElement extends HTMLElement {
     switch (this.#tab) {
       case 'stats': return this.#statsPanel();
       case 'skills': return this.#skillsPanel();
-      case 'combat': return this.#combatPanel();
+      case 'martial': return this.#martialPanel();
+      case 'magic': return this.#magicPanel();
       case 'template': return this.#templatePanel();
       case 'systabs': return this.#systemManagerPanel();
       case 'features': return this.#featuresPanel();
@@ -1407,15 +1439,17 @@ export class CharacterSheetElement extends HTMLElement {
     return renderSkillsPanel(this.#model, { showAllSkills: this.#showAllSkills });
   }
 
-  /* ---------------- combat & magic ---------------- */
+  /* ---------------- the two sphere tabs ---------------- */
 
   /** Folding a panel down to its heading; the builder is in ui/rows.js. */
   #collapsible(key, panelHtml) { return rows.collapsible(this.#model, key, panelHtml); }
 
-  /** Spheres & Magic and Templates live in ui/panels/combat.js. */
+  /** The two sphere tabs and Templates live in ui/panels/combat.js. */
   #combatCtx() { return { showCells: this.#showCells }; }
 
-  #combatPanel() { return combat.renderCombatPanel(this.#model, this.#combatCtx()); }
+  #martialPanel() { return combat.renderMartialPanel(this.#model); }
+
+  #magicPanel() { return combat.renderMagicPanel(this.#model); }
 
   #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#combatCtx()); }
 
@@ -1590,60 +1624,84 @@ export class CharacterSheetElement extends HTMLElement {
           into the maximum on the Hit points panel (Champion/Guardian 5, Marshal/Trickster 4,
           Archmage/Hierophant 3).
         </p>
-        <div class="tablewrap" style="margin-top:8px"><table class="mythic">
-          <!-- Nine columns, and only two of them prose. The path, the two names
-               and the grant are all a few words, so they are held narrow and the
-               two Effect columns get what is left — folded down to one line
-               each until one is clicked open. -->
-          <colgroup>
-            <col class="tier"><col class="lvl"><col class="mpath"><col class="mname">
-            <col class="meffect"><col class="grants"><col class="mname"><col class="meffect">
-            <col class="mstat">
-          </colgroup>
-          <thead><tr>
-            <th class="num">Tier</th>
-            <th class="num" title="The character level this tier is reached at">Level</th>
-            <th>Path</th>
-            <th>Ability</th>
-            <th title="What the path ability does. Formulas work here.">Effect</th>
-            <!-- Grants sits beside the feat's own name and effect: the slot,
-                 then what was taken for it, then what that does. -->
-            <th title="What the tier hands over — a feat on odd tiers, a path power on even ones">Grants</th>
-            <th>Name</th>
-            <th title="What the granted feat does. Formulas work here.">Effect</th>
-            <th title="+2 to one ability, at every even tier">Stat</th>
-          </tr></thead>
-          <tbody>${MYTHIC_TIERS.map((t) => {
-            const a = (m.abilities || [])[t - 1] || {};
-            const i = t - 1;
-            const even = t % 2 === 0;
-            return `<tr class="${t > tier ? 'future' : ''}">
-              <td class="num">${t}</td>
-              <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
-              <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
-              <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
-              <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-              <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
-              <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
-              ${even
-                ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
-                : '<td class="noslot"></td>'}
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>
-        <p class="hint">
-          Ten tiers, one row each: a mythic feat on the odd ones, a path power and a
-          <strong>+2 ability increase</strong> on the even ones — which is why only those
-          rows offer a Stat. <strong>Grants</strong> is what the tier hands over,
-          <strong>Name</strong> is what you took for it, and each <strong>Effect</strong>
-          says what that thing does — folded to one line to keep the table readable, so
-          click one to open it and click away to shut it again. Formulas work in both:
-          write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
-          somewhere. The same increases are on the <strong>Stats</strong> tab, either
-          place edits the one set. Rows above tier ${tier} are greyed: planned, not
-          counted yet — and a bonus written in one does not apply until it is reached.
-        </p>
+        ${rows.collapsibleSub(this.#model, 'mythic-abilities', 'Mythic path abilities', `
+          <div class="tablewrap"><table class="mythic">
+            <!-- Six columns and one of them prose. The tier, the level it is
+                 reached at, the path and the ability's name are all a few words,
+                 so they are held narrow and Effect takes what is left. -->
+            <colgroup>
+              <col class="tier"><col class="lvl"><col class="mpath"><col class="mname">
+              <col class="meffect"><col class="mstat">
+            </colgroup>
+            <thead><tr>
+              <th class="num">Tier</th>
+              <th class="num" title="The character level this tier is reached at">Level</th>
+              <th>Path</th>
+              <th>Ability</th>
+              <th title="What the path ability does. Formulas work here.">Effect</th>
+              <th title="+2 to one ability, at every even tier">Stat</th>
+            </tr></thead>
+            <tbody>${MYTHIC_TIERS.map((t) => {
+              const a = (m.abilities || [])[t - 1] || {};
+              const i = t - 1;
+              return `<tr class="${t > tier ? 'future' : ''}">
+                <td class="num">${t}</td>
+                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+                <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+                <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
+                ${t % 2 === 0
+                  ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
+                  : '<td class="noslot"></td>'}
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>
+          <p class="hint">
+            Ten tiers, one row each, beside the character level it is reached at. A
+            <strong>+2 ability increase</strong> comes at every even tier, which is why
+            only those rows offer a Stat; the same increases are on the
+            <strong>Stats</strong> tab, and either place edits the one set. Rows above
+            tier ${tier} are greyed: planned, not counted yet.
+          </p>`, 'mythladder')}
+
+        ${rows.collapsibleSub(this.#model, 'mythic-feats', 'Mythic Feats', `
+          <div class="tablewrap"><table class="mythic">
+            <!-- The slot, then what was taken for it, then what that does. Off
+                 the ladder above so both halves have room: nine columns across
+                 one table left the two Effects sharing a third of the width. -->
+            <colgroup>
+              <col class="tier"><col class="lvl"><col class="grants"><col class="mname">
+              <col class="meffect">
+            </colgroup>
+            <thead><tr>
+              <th class="num">Tier</th>
+              <th class="num" title="The character level this tier is reached at">Level</th>
+              <th title="What the tier hands over — a feat on odd tiers, an RP power on even ones">Grants</th>
+              <th>Name</th>
+              <th title="What the granted feat does. Formulas work here.">Effect</th>
+            </tr></thead>
+            <tbody>${MYTHIC_TIERS.map((t) => {
+              const a = (m.abilities || [])[t - 1] || {};
+              const i = t - 1;
+              return `<tr class="${t > tier ? 'future' : ''}">
+                <td class="num">${t}</td>
+                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
+                <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
+                <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>
+          <p class="hint">
+            A mythic feat on the odd tiers, an RP power on the even ones:
+            <strong>Grants</strong> is what the tier hands over, <strong>Name</strong> is
+            what you took for it, and <strong>Effect</strong> says what that thing does —
+            folded to one line to keep the table readable, so click one to open it and
+            click away to shut it again. Formulas work here and in the path abilities
+            above: write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
+            somewhere. A bonus written above tier ${tier} does not apply until it is
+            reached.
+          </p>`, 'mythladder')}
       </section>`)}
 
       ${this.#collapsible('mythic-tradition', this.#mythicTraditionPanel(m))}
@@ -1783,7 +1841,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- progression, lore & leftover tabs ---------------- */
 
   /** All three live in ui/panels/lore.js. */
-  #loreCtx() { return { menuLists: this.#menuLists }; }
+  #loreCtx() { return { menuLists: this.#menuLists, confirmGroup: this.#confirmGroup }; }
 
   #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#loreCtx()); }
 
@@ -2240,7 +2298,7 @@ export class CharacterSheetElement extends HTMLElement {
       <h3>Hidden tabs</h3>
       <p class="hint">
         Everything else the sheet can show, alphabetically: the rest of the built-in
-        tabs, the modelled sub-systems (Spheres &amp; Magic, Crafting, Akashic, Maneuvers,
+        tabs, the modelled sub-systems (Martial and Magic Spheres, Crafting, Akashic, Maneuvers,
         Vancian, Psionics, the companions…), and the workbook's own worksheets.
         <em>In use</em> marks a sub-system that already holds this character's data;
         <em>marked</em> means a class on the Overview names the system but its tab is
@@ -5173,6 +5231,21 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'remove-cf-column':
         this.#model.removeClassFeatureColumn(button?.dataset.class, Number(button?.dataset.col));
+        this.#render();
+        break;
+      // Deleting a whole feature group takes a second click: it is a column of
+      // the player's own writing per level, and there is no undo but History.
+      case 'remove-cf-group':
+        this.#confirmGroup = button?.dataset.class ?? null;
+        this.#render();
+        break;
+      case 'remove-cf-group-confirm':
+        this.#model.removeClassFeatureGroup(button?.dataset.class);
+        this.#confirmGroup = null;
+        this.#render();
+        break;
+      case 'remove-cf-group-cancel':
+        this.#confirmGroup = null;
         this.#render();
         break;
       case 'add-rule-group':

@@ -41,15 +41,30 @@ const PUNCTUATION = ['<=', '>=', '==', '!=', '&&', '||', '<', '>', '=',
 
 const BRACKETS = new Set(['(', ')', ',']);
 
+/** Depths past this one start the bracket colours again; see --fx-nest-*. */
+export const NEST_COLOURS = 3;
+
 /**
  * Split source into display tokens: {kind, text, start}.
  * kind is one of: space number string name fn op bracket bad
+ *
+ * A bracket token also carries `depth`: how many pairs enclose it, counting
+ * from nothing. A closer takes the depth of the opener it answers, so a pair
+ * is one number and can be given one colour; a comma takes the depth of the
+ * call it separates, since that is the only thing a comma is ever about. An
+ * unbalanced closer -- normal, halfway through typing -- counts as 0.
  */
 export function lex(source) {
   const src = String(source ?? '');
   const out = [];
   let i = 0;
+  let depth = 0;
   const push = (kind, text, start) => out.push({ kind, text, start });
+  const pushBracket = (text, start) => {
+    if (text === '(') { out.push({ kind: 'bracket', text, start, depth }); depth += 1; return; }
+    if (text === ')') { depth = Math.max(0, depth - 1); }
+    out.push({ kind: 'bracket', text, start, depth: text === ',' ? Math.max(0, depth - 1) : depth });
+  };
 
   while (i < src.length) {
     const ch = src[i];
@@ -94,7 +109,8 @@ export function lex(source) {
 
     const punct = PUNCTUATION.find((p) => src.startsWith(p, i));
     if (punct) {
-      push(BRACKETS.has(punct) ? 'bracket' : 'op', punct, i);
+      if (BRACKETS.has(punct)) pushBracket(punct, i);
+      else push('op', punct, i);
       i += punct.length;
       continue;
     }
@@ -115,7 +131,12 @@ export function lex(source) {
 export function highlight(source) {
   return lex(source).map((t) => (t.kind === 'space'
     ? esc(t.text)
-    : `<span class="fx-${t.kind}">${esc(t.text)}</span>`)).join('');
+    : `<span class="fx-${t.kind}${nestClass(t)}">${esc(t.text)}</span>`)).join('');
+}
+
+/** The colour a bracket takes for its depth, as a class; nothing for the rest. */
+function nestClass(t) {
+  return t.kind === 'bracket' ? ` fx-d${(t.depth || 0) % NEST_COLOURS}` : '';
 }
 
 /* ------------------------------------------------------------------ *
@@ -162,7 +183,7 @@ function markup(source, isUnknownName) {
     const unknown = (t.kind === 'name' && isUnknownName(t.text))
       || (t.kind === 'fn' && !FUNCTIONS[t.text.toLowerCase()]);
     const title = unknown ? ` title="${esc(whyUnknown(t.kind, t.text))}"` : '';
-    return `<span class="fx-${t.kind}${unknown ? ' fx-unknown' : ''}"${title}>${esc(t.text)}</span>`;
+    return `<span class="fx-${t.kind}${nestClass(t)}${unknown ? ' fx-unknown' : ''}"${title}>${esc(t.text)}</span>`;
   }).join('');
 }
 

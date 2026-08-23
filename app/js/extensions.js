@@ -1115,7 +1115,7 @@ export function applyBlock(model, rawBlock) {
         + `${block.features.length ? `, ${block.features.length} feature(s) on the Progression tab` : ''}`
         + `${withText.length ? `, ${withText.length} with their text under the class` : ''}`
         + `${ticked ? `, ${ticked} class skill(s) ticked` : ''}`
-        + `${block.tracks ? ', and its customized weapons on Spheres & Magic' : ''}.`;
+        + `${block.tracks ? ', and its customized weapons on Martial Spheres' : ''}.`;
     }
     case 'race': {
       model.set('identity.race', block.name);

@@ -233,9 +233,9 @@ export function resolveAbility(entry = {}) {
  * the tabs and the session view puts them on its bar.
  */
 export const GAME_SYSTEMS = [
-  { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['combat'] },
-  { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['combat'] },
-  { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['combat'] },
+  { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['magic'] },
+  { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['martial'] },
+  { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['martial', 'magic'] },
   { id: 'vancian', label: 'Vancian magic', tabs: ['vancian'] },
   { id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'] },
   { id: 'psionics', label: 'Psionics', tabs: ['psionics'] },

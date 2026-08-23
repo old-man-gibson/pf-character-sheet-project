@@ -32,7 +32,8 @@ const ok = (label, actual) => check(label, !!actual, true);
 /** The tab list the element passes in, as far as these tests care. */
 const TABS = [
   ['overview', 'Overview'], ['stats', 'Stats'], ['skills', 'Skills'],
-  ['combat', 'Spheres & Magic'], ['features', 'Feats & Mythic'], ['gear', 'Equipment'],
+  ['martial', 'Martial Spheres'], ['magic', 'Magic Spheres'],
+  ['features', 'Feats & Mythic'], ['gear', 'Equipment'],
   ['akashic', 'Akashic'], ['maneuvers', 'Maneuvers'], ['vancian', 'Vancian'],
   ['psionics', 'Psionics'], ['trackers', 'Trackers'], ['progression', 'Progression'],
   ['lore', 'Lore'], ['extras', 'Extras & Notes'],

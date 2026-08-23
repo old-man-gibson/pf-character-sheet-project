@@ -1,11 +1,14 @@
 /**
  * ui/panels/combat.js -- Spheres of Power and Might, and the templates.
  *
- * The Spheres & Magic tab: what each class trains in, the talents it takes per
- * level, the traditions and their drawbacks, the sphere-specific skill ranks,
- * and the unarmed damage that falls out of a practitioner's progression. The
- * Templates tab is here too -- a race or template's features and their tables,
- * which is the same shape of data even though it is not combat.
+ * The Martial Spheres and Magic Spheres tabs: what each class trains in, the
+ * talents it takes per level, the traditions and their drawbacks, the
+ * sphere-specific skill ranks, and the unarmed damage that falls out of a
+ * practitioner's progression. One module for both because they are one
+ * subsystem drawn twice -- the same builders, a side key apart -- and because
+ * a class that trains both ways heads either tab. The Templates tab is here
+ * too -- a race or template's features and their tables, which is the same
+ * shape of data even though it is not combat.
  *
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
@@ -98,13 +101,18 @@ function talentCell(model, binding, value, sphere, fill = null) {
    * strip rather than in the page grid. In the page grid a side with three
    * panels left the fourth column of the shared four empty, and a side with
    * four squeezed all of them into a quarter each.
+   *
+   * The two sides were one tab and are now two, because they are two
+   * subsystems and most characters play only one of them: a caster should not
+   * have to scroll past an empty set of martial tables to reach her spheres.
+   * What they still share is the blended classes, which belong to neither and
+   * so head both.
    */
-export function renderCombatPanel(model, ctx) {
+export function renderMartialPanel(model) {
     const t = model.data.training || {};
     const wrap = (key, html) => collapsible(model, key, html);
-    const blended = model.blendedClasses();
     return `<div class="grid">
-      ${blended.length ? wrap('blended-training', blendedPanel(model, blended)) : ''}
+      ${blendedSection(model, wrap)}
       ${t.combat ? `
         ${wrap('combat-training', trainingSide(model, 'combat', t.combat))}
         ${(t.combat.customizations || []).length
@@ -116,6 +124,14 @@ export function renderCombatPanel(model, ctx) {
           ${wrap('sphere-skills', sphereSkillPanel(model))}
           ${wrap('combat-spheres', sphereBonusPanel('combat', t.combat))}
         </div>` : ''}
+    </div>`;
+  }
+
+export function renderMagicPanel(model) {
+    const t = model.data.training || {};
+    const wrap = (key, html) => collapsible(model, key, html);
+    return `<div class="grid">
+      ${blendedSection(model, wrap)}
       ${t.magic ? `
         ${wrap('magic-training', trainingSide(model, 'magic', t.magic))}
         ${wrap('magic-bonus', bonusTalentPanel(model, 'magic', t.magic))}
@@ -125,6 +141,19 @@ export function renderCombatPanel(model, ctx) {
           ${wrap('magic-spheres', sphereBonusPanel('magic', t.magic))}
         </div>` : ''}
     </div>`;
+  }
+
+  /**
+   * The blended classes, at the head of both sphere tabs.
+   *
+   * One group, drawn twice: the same fold key, so it opens and shuts on both
+   * at once, and the same `data-item` paths, so a talent typed in on the
+   * martial tab is the one the magic tab is showing. Neither tab holds a copy
+   * -- both are looking at the same rows of the same class.
+   */
+function blendedSection(model, wrap) {
+    const blended = model.blendedClasses();
+    return blended.length ? wrap('blended-training', blendedPanel(model, blended)) : '';
   }
 
   /**
@@ -434,7 +463,9 @@ function blendedPanel(model, pairs) {
         One pool of talents, spent either way: the sphere on each row decides whether the
         talent counts toward Sphere BAB / DC or Sphere CL / DC. Each side keeps its own
         type and ability score above, because a blended class rarely advances at the same
-        rate as both.
+        rate as both. This group heads <strong>Martial Spheres</strong> and
+        <strong>Magic Spheres</strong> alike, and is the same on either: what you type
+        on one tab is what the other is showing.
       </p>
     </section>`;
   }

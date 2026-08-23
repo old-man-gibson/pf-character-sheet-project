@@ -47,7 +47,7 @@ export const SCHEMA_VERSION = 9;
 
 /**
  * The tabs a fresh sheet puts on its tab bar, in order. Everything else --
- * Spheres & Magic, Crafting, the modelled sub-systems, the workbook's
+ * the two sphere tabs, Crafting, the modelled sub-systems, the workbook's
  * own extra worksheets -- is reachable from the ⚙ manager, where the player
  * shows, hides and rearranges. Keys are the tab ids in sheet-element.js; a
  * workbook worksheet is `sys:<its name>`.
@@ -941,6 +941,16 @@ export function normalise(model) {
   // waits in the ⚙ manager. Started from the standard eight; the player
   // rearranges, hides and shows from there.
   if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = [...DEFAULT_TAB_ORDER];
+  // Spheres & Magic became two tabs -- Martial Spheres and Magic Spheres --
+  // so a bar saved with the old one carries both in its place, in that order
+  // and where the old tab stood. Cheaper than a schema bump: the document is
+  // the same shape, and a bar naming a tab that no longer exists would just
+  // lose the player their spheres.
+  for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+    const order = d.uiPrefs[listKey];
+    if (!Array.isArray(order) || !order.includes('combat')) continue;
+    d.uiPrefs[listKey] = [...new Set(order.flatMap((k) => (k === 'combat' ? ['martial', 'magic'] : [k])))];
+  }
   // Two views of the same sheet: the build view (everything) and the session
   // view (what actually comes up at the table). Each keeps its own tab bar;
   // the session bar is seeded from what the character uses the first time

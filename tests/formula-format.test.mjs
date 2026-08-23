@@ -4,7 +4,9 @@ import {
   lex, highlight, highlightAgainst, highlightFlagging, contextualNote,
   pretty, workings, workingLine, formatNumber,
   FUNCTION_HELP, OPERATOR_HELP, VALUE_GUIDE, PLACES_GUIDE, TOKEN_FORMS, CONTEXTUAL_VALUES,
+  NEST_COLOURS,
 } from '../app/js/formula-format.js';
+import { scanBrackets, pairAtCaret, mirrorHtml } from '../app/js/ui/brackets.js';
 
 let pass = 0;
 let fail = 0;
@@ -180,6 +182,56 @@ check('every function entry has a group', FUNCTION_HELP.every((f) => f.group && 
 check('places guide is populated', PLACES_GUIDE.length >= 4, true);
 check('four token forms', TOKEN_FORMS.map((t) => t.form),
   ['{= expr}', '{name = expr}', '{name}', '{dest += expr}']);
+
+/* ---- brackets: the depth a bracket is drawn at, and its other end ---- */
+
+// A pair shares one depth, so a nest is read by matching colours rather than
+// by counting inwards; a comma takes the depth of the call it separates.
+const depths = (src) => lex(src).filter((t) => t.kind === 'bracket').map((t) => `${t.text}${t.depth}`);
+check('a flat call is all depth 0', depths('if(a, b, c)'), ['(0', ',0', ',0', ')0']);
+check('a nested one steps in and back out',
+  depths('floor(min(level, 20) / 2)'), ['(0', '(1', ',1', ')1', ')0']);
+check('two calls side by side each start again',
+  depths('max(a) + max(b)'), ['(0', ')0', '(0', ')0']);
+check('an unbalanced closer does not go negative', depths('floor(x))'), ['(0', ')0', ')0']);
+check('and the colour cycles rather than running out',
+  lex('((((x))))').filter((t) => t.text === '(').map((t) => t.depth % NEST_COLOURS), [0, 1, 2, 0]);
+check('the class says the depth',
+  highlight('min(a, 1)').includes('class="fx-bracket fx-d0"'), true);
+check('and the nested one differs',
+  /fx-bracket fx-d1">\(/.test(highlight('floor(min(a, 1))')), true);
+
+// The caret's own pair. Everything here is what ui/brackets.js draws.
+const pairs = (src) => scanBrackets(src).map((m) => `${m.ch}@${m.at}${m.partner < 0 ? '!' : ''}`);
+check('each bracket knows where its partner is',
+  scanBrackets('a(b(c))').map((m) => m.partner), [3, 2, 1, 0]);
+check('a bracket inside a string is a character, not a nest',
+  pairs('if(name = "a)b", 1, 0)'), ['(@2', ')@21']);
+check('a stray closer has no partner', pairs('floor(x))'), ['(@5', ')@7', ')@8!']);
+check('a brace closed by a bracket matches neither', pairs('{a)'), ['{@0!', ')@2!']);
+check('prose braces nest with the formula inside them',
+  scanBrackets('{= floor((a+b)/2)}').map((m) => m.depth), [0, 1, 2, 2, 1, 0]);
+
+check('the character before the caret wins',
+  pairAtCaret('min(a)', 6), { at: 5, partner: 3, depth: 0, matched: true });
+check('and the one after it answers when there is nothing before',
+  pairAtCaret('min(a)', 3), { at: 3, partner: 5, depth: 0, matched: true });
+check('a caret in the middle of a word matches nothing', pairAtCaret('min(a)', 2), null);
+check('an unmatched bracket is still found, and says it is unmatched',
+  pairAtCaret('min(a', 4), { at: 3, partner: -1, depth: 0, matched: false });
+
+// The mirror is the text with the pair wrapped and nothing else touched, so
+// that every mark sits under the character it belongs to.
+const mirror = mirrorHtml('min(a)', pairAtCaret('min(a)', 4));
+check('the mirror keeps the whole text', mirror.replace(/<[^>]+>/g, ''), 'min(a)');
+check('and marks both ends at the depth they are',
+  (mirror.match(/<mark class="bx-hit bx-d0">/g) || []).length, 2);
+check('an unmatched bracket is marked as such',
+  mirrorHtml('min(a', pairAtCaret('min(a', 4)).includes('bx-miss'), true);
+check('with no pair there is nothing to mark',
+  mirrorHtml('min(a)', null), 'min(a)');
+check('and the text is escaped on the way out',
+  mirrorHtml('a<b(c)', pairAtCaret('a<b(c)', 4)).startsWith('a&lt;b'), true);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
