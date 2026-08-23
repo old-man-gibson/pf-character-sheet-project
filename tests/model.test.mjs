@@ -26,7 +26,7 @@ import {
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
-  gearColumnCount, gearColumnInUse,
+  gearColumnCount, gearColumnInUse, importAnimalCompanion,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -260,6 +260,7 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
       row(42, { B: 'Eyes', H: 'Cracked pale green ioun stone', J: 4000 }),
     ],
   };
+  const gridRows = JSON.parse(JSON.stringify(raw.extraTabs['Animal Companion'].rows));
   const c = new Character(raw);
   const b = c.data.animalCompanion;
   check('the grid retires once it has been read',
@@ -323,6 +324,18 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   typed.animalCompanion = { ...defaultCompanion('animalCompanion'), name: 'Someone else' };
   check('and one already typed in is left alone',
     new Character(typed).data.animalCompanion.name, 'Someone else');
+
+  // The grid reaches the importer with no row numbers on it: `normalise`
+  // drops them when it builds `sheetTabs`, and a document saved by an older
+  // build never carried them at all. So the tab has to read the same either
+  // way, and nothing may depend on a blank worksheet row still being there.
+  const withRows = importAnimalCompanion({ rows: gridRows });
+  const withoutRows = importAnimalCompanion({ rows: gridRows.map((r) => ({ cells: r.cells })) });
+  check('row numbers on the grid change nothing -- they are gone before it is read',
+    withoutRows, withRows);
+  check('and it is the whole companion either way',
+    [withoutRows.name, withoutRows.tricks.length, withoutRows.attacks.length, withoutRows.feats.length],
+    ['Rustle', 3, 2, 3]);
 }
 
 /* ------------------------------------------------------------------ *

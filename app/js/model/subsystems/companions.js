@@ -10,7 +10,6 @@ import {
 } from '../../companions.js';
 import { ABILITIES } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { positionedRows } from '../templates.js';
 import { classLevelCount } from '../progression.js';
 
 // A companion: the level, HD, hit points, attack, saves, AC and every skill
@@ -40,14 +39,21 @@ const abilityKey = (label) => {
  * creature, where the level comes from, the base scores and the increases
  * chosen, the typed bonuses, the tricks, feats, skill ranks, attacks, items.
  *
- * Labels are found rather than addressed, but the rows are put back at their
- * sheet positions first, because half the tab writes its values *under* a
- * heading rather than beside it and a dropped blank row would shift them.
+ * Labels are found rather than addressed. Half the tab writes its values
+ * *under* a heading rather than beside it, so the reads below go a row down
+ * as often as a column across -- and "a row down" here means the next row
+ * that holds anything, not the next row of the worksheet. By the time this
+ * runs the grid has lost its row numbers (`normalise` drops them when it
+ * builds `sheetTabs`, and a document saved by an older build never had them
+ * to give), so a blank worksheet row is already gone. That suits the tab:
+ * every label sits directly above its own value in a fixed block, and the
+ * lists below read through a blank row a player left in the middle of one
+ * rather than stopping at it.
  */
 export function importAnimalCompanion(tab) {
   const b = defaultCompanion('animalCompanion');
   if (!tab) return b;
-  const g = sheetReader({ rows: positionedRows(tab) });
+  const g = sheetReader(tab);
   const { rows, at, text, num, find } = g;
   const t = (ri, ci) => text(at(ri, ci));
   const ticked = (v) => v === true || /^(true|yes|y|x)$/i.test(String(v ?? '').trim());
