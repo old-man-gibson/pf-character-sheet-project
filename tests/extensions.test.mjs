@@ -1552,6 +1552,24 @@ console.log('veils -- a pack of blocks converted into the table it should have b
   check('the class line comes out', lift.classes, ['Daevic', 'Vizier']);
   check('and the rules text is what is left', lift.text, 'The veil does a thing.\n\nAnd another.');
   check('a text with no class line is untouched', liftClassAccess('Just rules.').text, 'Just rules.');
+  /*
+   * The `Class access:` line sat in a paragraph of its own, between the rules
+   * text and the `Enhanced weapon:` line that follows it on 229 of the veils.
+   * Lifting it out left the blank line above it against the blank line below,
+   * and a converter that leaves a hole where it took something out is a
+   * converter whose diff nobody can read.
+   */
+  const middle = liftClassAccess('The rules text.\n\nClass access: Daevic\n\nEnhanced weapon: dagger');
+  check('the gap closes behind the lifted line', middle.text, 'The rules text.\n\nEnhanced weapon: dagger');
+  check('and the class still comes out', middle.classes, ['Daevic']);
+  check('a line at the end takes its blank with it',
+    liftClassAccess('The rules text.\n\nClass access: Daevic').text, 'The rules text.');
+  check('paragraphs the text meant to have are left alone',
+    liftClassAccess('One.\n\nTwo.\n\nThree.\n\nClass access: Guru').text, 'One.\n\nTwo.\n\nThree.');
+  // Nothing lifted, nothing reflowed -- a text with no class line comes back
+  // byte-identical however oddly it is spaced.
+  const odd = 'One.\n\n\n\nTwo.';
+  ok('no class line means no reflow', liftClassAccess(odd).text === odd);
   check('and claims no classes', liftClassAccess('Just rules.').classes, []);
 
   const veilBlock = (name, slot, text, extra = {}) => ({ kind: 'veil', name, slot, text, ...extra });

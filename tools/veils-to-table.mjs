@@ -70,10 +70,13 @@ export function liftClassAccess(text) {
     }
     kept.push(line);
   }
-  // The paragraph it sat in leaves a blank line behind it; trim the tail
-  // rather than every blank, since the text's own paragraphs are load-bearing.
+  // The line sat in a paragraph of its own, so taking it out leaves the blank
+  // line above it against the blank line below. Close that one gap and trim
+  // the tail -- and collapse nothing else, because the text's own paragraphs
+  // are load-bearing and a converter that reflows them buries its real change.
   while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
-  return { text: kept.join('\n'), classes };
+  const body = kept.join('\n');
+  return { text: classes.length ? body.replace(/\n{3,}/g, '\n\n') : body, classes };
 }
 
 /** One veil block as a table entry. */
