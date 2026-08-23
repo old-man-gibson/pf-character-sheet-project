@@ -402,21 +402,53 @@ const BLOCKED_KEYS = new Set([
 ]);
 
 /**
+ * Whether a resolved branch is also a value: one carrying its own `total`.
+ *
+ * This is how a total can be broken into parts without the name that used to
+ * mean the total coming to mean an object instead. `saves.will` is the save,
+ * `saves.will.luck` is the part of it luck is worth, and neither had to be
+ * renamed to make room for the other.
+ */
+export const carriesTotal = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+  && Object.prototype.hasOwnProperty.call(v, 'total')
+  && typeof v.total === 'number';
+
+/** One key of a path. `fold` is what makes the second pass ignore case. */
+function step(acc, key, fold) {
+  if (acc == null || typeof acc !== 'object') return undefined;
+  if (BLOCKED_KEYS.has(key.toLowerCase())) return undefined;
+  let k = key;
+  if (!Object.prototype.hasOwnProperty.call(acc, k)) {
+    if (!fold) return undefined;
+    const want = key.toLowerCase();
+    k = Object.keys(acc).find((n) => n.toLowerCase() === want);
+    if (k === undefined) return undefined;
+  }
+  const v = acc[k];
+  return typeof v === 'function' ? undefined : v;
+}
+
+/**
  * Resolve "str.mod" against a plain object.
  *
  * Only own, enumerable data properties are followed: inherited members are
  * invisible, so `constructor`, `__proto__` and `toString` resolve to undefined
  * (which the evaluator reports as an unknown value) rather than handing back a
  * live host object.
+ *
+ * A branch carrying a `total` resolves to that total, so a name may be both a
+ * number and a family of numbers -- see carriesTotal(). Only the end of the
+ * path is unwrapped: walking *through* such a branch still reaches its parts.
  */
 export function resolvePath(obj, path) {
-  return String(path).split('.').reduce((acc, key) => {
-    if (acc == null || typeof acc !== 'object') return undefined;
-    if (BLOCKED_KEYS.has(key)) return undefined;
-    if (!Object.prototype.hasOwnProperty.call(acc, key)) return undefined;
-    const value = acc[key];
-    return typeof value === 'function' ? undefined : value;
-  }, obj);
+  const keys = String(path).split('.');
+  // Exact first, and on a miss the same walk ignoring case. Two passes rather
+  // than one lenient one, so a scope holding both `AC` and `ac` gives each of
+  // them to whoever spelled it that way, and so the common path -- a name
+  // written the way the sheet publishes it -- costs exactly what it did.
+  let value = keys.reduce((acc, key) => step(acc, key, false), obj);
+  if (value === undefined) value = keys.reduce((acc, key) => step(acc, key, true), obj);
+  return carriesTotal(value) ? value.total : value;
 }
 
 /** Collect every variable and function a formula references. */
@@ -455,11 +487,33 @@ export function analyse(source) {
   }
 }
 
+/**
+ * A set of names that answers the way resolvePath() does: ignoring case.
+ *
+ * Whether a name is known and whether it resolves have to be the same
+ * question, or the sheet flags `Level` in red and then quietly works it out
+ * anyway -- which teaches a player that the red marks mean nothing. It is a
+ * Set so that every place already holding one keeps working; all that changes
+ * is that `has` is as forgiving as the lookup it stands in for.
+ *
+ * The folded index is built on the first miss and only then: a formula whose
+ * names are all spelled as the sheet publishes them never pays for it.
+ */
+export class NameIndex extends Set {
+  #folded = null;
+
+  has(name) {
+    if (super.has(name)) return true;
+    this.#folded ??= new Set([...this].map((n) => String(n).toLowerCase()));
+    return this.#folded.has(String(name).toLowerCase());
+  }
+}
+
 /** Validate a formula against a set of known variable names. */
 export function validate(source, knownNames) {
   const info = analyse(source);
   if (!info.ok) return info;
-  const known = knownNames instanceof Set ? knownNames : new Set(knownNames || []);
+  const known = knownNames instanceof NameIndex ? knownNames : new NameIndex(knownNames || []);
   const unknown = info.variables.filter((v) => !known.has(v));
   if (unknown.length) {
     return { ...info, ok: false, error: `Unknown value(s): ${unknown.join(', ')}` };

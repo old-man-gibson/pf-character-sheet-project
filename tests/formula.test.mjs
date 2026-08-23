@@ -1,5 +1,5 @@
 /** Tests for the sandboxed formula engine. Run: node tests/formula.test.mjs */
-import { evaluateFormula, analyse, validate, FormulaError } from '../app/js/formula.js';
+import { evaluateFormula, analyse, validate, resolvePath, NameIndex, FormulaError } from '../app/js/formula.js';
 
 let pass = 0;
 let fail = 0;
@@ -102,6 +102,57 @@ throws('empty', () => ev(''), /empty/);
 throws('bad arity', () => ev('clamp(1)'), /argument/);
 throws('trailing junk', () => ev('1 + 2 3'), /Unexpected/);
 throws('too long', () => ev('1+'.repeat(300) + '1'), /too long|complex/);
+
+console.log('a branch carrying a total reads as that total');
+{
+  const totalled = {
+    saves: { will: { total: 13, base: 6, luck: 2, resistance: 5 } },
+    ac: { total: 21, shield: 1 },
+    str: { score: 9, mod: -1 },
+    parts: { luck: 2 },
+    fake: { total: 'lots' },
+  };
+  const t = (src) => evaluateFormula(src, totalled);
+  check('the branch is the total', t('saves.will'), 13);
+  check('and so is the total itself', t('saves.will.total'), 13);
+  check('the parts are still reachable through it', t('saves.will.luck'), 2);
+  check('it is a number, not an object', t('saves.will + 2'), 15);
+  check('one level up is untouched', t('ac'), 21);
+  check('a branch with no total stays a branch', typeof resolvePath(totalled, 'str'), 'object');
+  check('so does one whose total is not a number', typeof resolvePath(totalled, 'fake'), 'object');
+  check('a branch with no total keeps its parts', t('parts.luck'), 2);
+  check('the rule reaches only the end of the path', resolvePath(totalled, 'saves.will.base'), 6);
+}
+
+console.log('names resolve whatever case they are typed in');
+{
+  const mixed = {
+    level: 15,
+    ac: { flatFooted: 13, total: 21 },
+    animalCompanion: { hd: 4 },
+    // Two names that differ only by case: each must go on meaning itself.
+    Fort: 7,
+    fort: 99,
+  };
+  const t = (src) => evaluateFormula(src, mixed);
+  check('lower for lower', t('level'), 15);
+  check('capitalised', t('Level'), 15);
+  check('shouted', t('LEVEL'), 15);
+  check('mid-path', t('ac.FLATFOOTED'), 13);
+  check('whole path', t('ANIMALCOMPANION.HD'), 4);
+  check('exact still wins over folded', t('Fort'), 7);
+  check('and the other way round', t('fort'), 99);
+  throws('a name that is not there is still not there', () => t('leval'), /Unknown value/);
+  throws('case does not open the prototype', () => t('ac.__PROTO__'), /Unknown value/);
+  throws('nor the constructor', () => t('ac.Constructor'), /Unknown value/);
+
+  const known = new NameIndex(['level', 'ac.flatFooted', 'StrMod']);
+  check('the name index agrees with the lookup', known.has('LEVEL'), true);
+  check('and on a dotted name', known.has('ac.flatfooted'), true);
+  check('and still says no to a typo', known.has('leval'), false);
+  check('validate() accepts what resolves', validate('Level + AC.FlatFooted', ['level', 'ac.flatFooted']).ok, true);
+  check('and rejects what does not', validate('Levle', ['level']).ok, false);
+}
 
 console.log('sandbox: host objects are unreachable');
 throws('constructor escape', () => ev('constructor'), /Unknown value/);

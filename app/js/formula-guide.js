@@ -23,6 +23,7 @@
  */
 
 import { resolvePath } from './formula.js';
+import { isSheetAlias } from './rules.js';
 import {
   highlight, highlightAgainst, highlightFlagging, workings, formatNumber, contextualNote,
   FUNCTION_HELP, OPERATOR_HELP, VALUE_GUIDE, PLACES_GUIDE, TOKEN_FORMS, CONTEXTUAL_VALUES,
@@ -59,6 +60,7 @@ export const VALUE_SECTIONS = [
   { key: 'skill', label: 'Skills', blurb: 'Each skill total, by its slugged name.' },
   { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck.' },
   { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion or eidolon, when the character has one.' },
+  { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
@@ -119,6 +121,10 @@ export function targetGroups(list, query = '') {
 /** Which family a dotted name belongs to. */
 export function classify(name, inlineNames = {}) {
   if (Object.prototype.hasOwnProperty.call(inlineNames, name)) return 'mine';
+  // Before anything else, and by shape rather than by list: the workbook's
+  // names are PascalCase and undotted, this sheet's are neither, and the
+  // per-character ones (VeilEssenceHands) are generated and so unlistable.
+  if (isSheetAlias(name)) return 'sheet';
   const head = String(name).split('.')[0];
   if (head === 'tracker') return 'tracker';
   if (head === 'skill') return 'skill';
@@ -601,6 +607,12 @@ function rulesHtml() {
       'Define a name twice and the first one wins, both are flagged, and Needs attention shows you both so you can delete the one you did not mean. First rather than last, so that pasting in a new page cannot quietly change what an existing name is worth.'],
     ['Definitions must not wait on each other.',
       'If a reads b and b reads a, neither can be worked out; the loop is reported once, naming every member, rather than as several unrelated faults.'],
+    ['A total is also a family.',
+      'Where a number has parts, the parts hang off its own name and the name goes on meaning the number: saves.will is the save, saves.will.luck is what luck is worth in it, and ac.total and ac are the same thing. So a formula written before a total grew parts never has to be revisited.'],
+    ['Capitals do not matter.',
+      'Level, level and LEVEL are the same value, and so are skill.senseMotive and skill.sense_motive’s spelling in either case. Names are shown in the list the way the sheet publishes them, but nothing is ever refused for the case it was typed in.'],
+    ['Spreadsheet names still work.',
+      'The workbook this sheet was imported from had its own names — StrMod, Fort, MythicTier, VeilEssenceHands — and they are published alongside. A formula you already had working can be pasted in as it stands. They are listed under Spreadsheet names, with the value each one is another name for.'],
     ['A tracker’s id is not its name.',
       'The id is slugged from the name the tracker was created with and never changes afterwards, so renaming a tracker cannot break a formula pointing at it. Each tracker’s ✎ editor spells out its own id.'],
     ['A few names only exist in one kind of field.',
