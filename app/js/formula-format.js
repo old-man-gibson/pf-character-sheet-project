@@ -19,7 +19,7 @@
  */
 
 import {
-  parse, evaluateFormula, collectReferences, resolvePath, FUNCTIONS,
+  parse, evaluateFormula, collectReferences, resolvePath, NameIndex, FUNCTIONS,
 } from './formula.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -173,7 +173,10 @@ function markup(source, isUnknownName) {
  * box -- where the character's own names are the whole of what is legal.
  */
 export function highlightAgainst(source, knownNames) {
-  const known = knownNames instanceof Set ? knownNames : new Set(knownNames || []);
+  // A plain Set is rewrapped rather than used as it stands: what is being
+  // asked is "can this character supply this name", and a NameIndex is the
+  // only Set that answers it the way the lookup will (see resolvePath).
+  const known = knownNames instanceof NameIndex ? knownNames : new NameIndex(knownNames || []);
   return markup(source, (name) => !known.has(name));
 }
 
@@ -494,6 +497,10 @@ export const VALUE_GUIDE = [
   { prefix: 'str.score, str.mod, str.temp, str.tempMod', what: 'Each ability four ways: the score, its modifier, the temporary score and its modifier. dex, con, int, wis and cha are the same.', eg: '10 + con.mod' },
   { prefix: 'hp.total, hp.current, ac.total, ac.touch, ac.flatFooted, ac.cmd', what: 'What the sheet worked out for hit points, armour class and CMD.', eg: 'floor(hp.total / 4)' },
   { prefix: 'saves.fortitude, saves.reflex, saves.will', what: 'The three saving throws, as the sheet totals them.', eg: 'saves.will + 2' },
+  { prefix: 'ac.armor, ac.shield, ac.ability', what: 'What the armour class is wearing: the armour’s own bonus, every active shield’s together, and the ability bonus after the armour has capped it.', eg: 'ac.shield * 2' },
+  { prefix: 'ac.shield1, ac.shield2 …', what: 'Where you keep several of a thing, each one takes the family name and a number from one — one per shield row, in the order the Equipment tab lists them. A row you are not holding reads 0, so the numbers always add up to ac.shield.', eg: 'ac.shield1' },
+  { prefix: 'ac.dodge, ac.natural, ac.deflection, ac.insight …', what: 'Every typed column of the Stats tab’s AC row, under the name on the column. One for each: dodge, natural, enhancement, deflection, circumstance, insight, luck, morale, sacred, profane, untyped, size, template and the ABP pair.', eg: 'if(ac.dodge > 0, 2, 0)' },
+  { prefix: 'saves.will.base, saves.will.ability, saves.will.luck …', what: 'The same for each save: its base save, its ability modifier, and every typed column by name — resistance, morale, trait, racial and the rest. The save’s own name still reads the total, so saves.will and saves.will.total are one number.', eg: 'saves.fortitude.resistance' },
   { prefix: 'attack.melee, attack.ranged, attack.cmb', what: 'The attack numbers.', eg: 'attack.cmb + 4' },
   { prefix: 'skill.<name>', what: 'Any skill total, by its name in lower case with underscores for spaces.', eg: 'skill.perception + 5' },
   { prefix: 'speed.<type>', what: 'Each movement rate by its type in lower case — speed.land, speed.fly, speed.climb — as the Speed panel totals it, before conditions. A speed may read the speeds listed above it and not the ones below.', eg: 'floor(speed.land / 2)' },
@@ -501,6 +508,7 @@ export const VALUE_GUIDE = [
   { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Every tracker publishes its numbers under the id shown on its own row. That id never changes when the tracker is renamed, so a formula pointing at one cannot be broken by renaming it.', eg: 'tracker.burn.max - 2' },
   { prefix: 'familiar.*  animalCompanion.*  eidolon.*', what: 'A companion’s own numbers, on a character that has one.', eg: 'eidolon.hd + 2' },
   { prefix: 'anything you named yourself', what: 'Every {name = …} you have written in prose, anywhere on the character. They sit in the same list as the built-in values and are read the same way — they are the point of the whole system.', eg: 'qi.max' },
+  { prefix: 'StrMod, Fort, MythicTier, VeilEssenceHands …', what: 'The workbook’s own named ranges, so a formula pasted out of a spreadsheet keeps working. Each is another name for a value above — StrMod is str.tempMod, the working modifier, which is the one the workbook meant. Only names that were checked against the source sheets are here; the rest were configuration cells and have no number to point at.', eg: 'floor(StrMod / 2)' },
 ];
 
 /** Where formulas may be written — the other half of "how do I use this". */

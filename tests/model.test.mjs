@@ -37,12 +37,14 @@ import {
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
+  AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
+import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 
 let pass = 0;
 let fail = 0;
@@ -103,6 +105,96 @@ for (const id of IDS) {
     .filter((s, i) => s.bonus !== raw.skills[i].bonus)
     .map((s) => s.name);
   check(`${id} all ${raw.skills.length} skills match`, mismatched, []);
+}
+
+console.log('every typed column publishes itself under its own name');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const s = c.scope();
+  const names = c.scopeNames();
+
+  // The names are generated from the bonus tables rather than listed here, so
+  // this asks the thing that would actually break: that adding a column to
+  // AC_BONUS_TYPES adds a name, and that the name reads the resolved cell.
+  const wrongAc = AC_BONUS_TYPES
+    .filter(([key]) => s.ac[key] !== (Number(c.data.defenses.acBonusesResolved?.[key]) || 0));
+  check(`${id} all ${AC_BONUS_TYPES.length} AC columns read their cell`, wrongAc.map(([k]) => k), []);
+  const wrongSaves = [];
+  for (const save of ['fortitude', 'reflex', 'will']) {
+    const resolved = c.data.saves[save].bonusesResolved;
+    for (const [key] of SAVE_BONUS_TYPES) {
+      if (s.saves[save][key] !== (Number(resolved?.[key]) || 0)) wrongSaves.push(`${save}.${key}`);
+    }
+  }
+  check(`${id} all ${SAVE_BONUS_TYPES.length * 3} save columns read their cell`, wrongSaves, []);
+
+  // A total that grew parts is still a name, and still the same number.
+  const missingNames = ['saves.will', 'saves.will.luck', 'saves.fortitude.base', 'ac', 'ac.total',
+    'ac.armor', 'ac.shield', 'ac.ability', 'ac.dodge'].filter((n) => !names.includes(n));
+  check(`${id} the new names are all published`, missingNames, []);
+  check(`${id} saves.will still reads the total`, evaluateFormula('saves.will', s), c.data.saves.will.total);
+  check(`${id} ac still reads the total`, evaluateFormula('ac', s), c.data.defenses.ac);
+
+  // Armour and shield, split the way the equipment rows are: only what is
+  // ticked active counts, and the two together are what AC was already using.
+  const worn = armorParts(c.data);
+  const armorAc = c.data.equipment?.armor?.active ? (Number(c.data.equipment.armor.acBonus) || 0) : 0;
+  const shieldAc = (c.data.equipment?.shields || [])
+    .filter((sh) => sh.active).reduce((t, sh) => t + (Number(sh.acBonus) || 0), 0);
+  check(`${id} ac.armor is the armour worn`, s.ac.armor, armorAc);
+  check(`${id} ac.shield is the shields carried`, s.ac.shield, shieldAc);
+  check(`${id} the two still come to the AC bonus`, worn.armor + worn.shield, worn.ac);
+
+  // One name per shield row, numbered from one the way the rows are
+  // labelled, and adding up to the total. A row nobody is holding reads 0
+  // rather than the bonus it would give if they were.
+  const rows = c.data.equipment?.shields || [];
+  const numbered = rows.map((_, i) => s.ac[`shield${i + 1}`]);
+  check(`${id} every shield row has a name`, numbered.filter((v) => v === undefined).length, 0);
+  check(`${id} no name for a row that is not there`, s.ac[`shield${rows.length + 1}`], undefined);
+  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), s.ac.shield);
+  check(`${id} a row that is not held contributes nothing`,
+    rows.map((sh, i) => (sh.active ? (Number(sh.acBonus) || 0) : 0)), numbered);
+  check(`${id} ACBonusShield<n> names the same row`,
+    rows.map((_, i) => resolvePath(s, `ACBonusShield${i + 1}`)), numbered);
+  check(`${id} ac.ability is capped by the armour`, s.ac.ability,
+    Math.min(worn.maxDex, statMod(c.data, c.data.defenses.acStat1, c.data.defenses.acStat2)));
+}
+
+console.log('the workbook’s own names still read, and read the same number');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const s = c.scope();
+  const names = new Set(c.scopeNames());
+
+  // An alias is worth having only if it is the same number as the thing it
+  // stands for. Where the path does not exist on this character the alias
+  // must not exist either -- a name reading 0 because it points at nothing is
+  // exactly the silent wrongness this is meant to avoid.
+  const wrong = [];
+  for (const [alias, path] of Object.entries(SHEET_ALIASES)) {
+    const target = resolvePath(s, path);
+    const via = resolvePath(s, alias);
+    if (target === undefined) { if (via !== undefined) wrong.push(`${alias} (points at nothing)`); continue; }
+    if (via !== target) wrong.push(`${alias}: ${via} vs ${path} = ${target}`);
+    if (!names.has(alias)) wrong.push(`${alias} (not published)`);
+  }
+  check(`${id} all ${Object.keys(SHEET_ALIASES).length} sheet aliases agree`, wrong, []);
+
+  // Case is not part of a name, here or in the list that judges one.
+  const known = new NameIndex(c.scopeNames());
+  const shouted = ['LEVEL', 'Ac.Total', 'SAVES.WILL', 'strmod', 'FORT'];
+  check(`${id} case-blind lookup`, shouted.map((n) => resolvePath(s, n)),
+    ['level', 'ac.total', 'saves.will', 'StrMod', 'Fort'].map((n) => resolvePath(s, n)));
+  check(`${id} case-blind validation`, shouted.filter((n) => !known.has(n)), []);
+
+  // An alias means the same name when a bonus is sent to it, not only when
+  // one is read from it.
+  const targets = c.forwardTargets();
+  check(`${id} {Fort += …} lands where {saves.fortitude += …} does`,
+    targets.expand('Fort'), targets.expand('saves.fortitude'));
+  check(`${id} and case does not change a destination`,
+    targets.expand('SAVES.WILL'), targets.expand('saves.will'));
 }
 
 /* ------------------------------------------------------------------ *

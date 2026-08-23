@@ -10,7 +10,7 @@
  */
 
 import { DERIVED, FORWARD_BY_DERIVED, diceString, skillLabel } from '../rules.js';
-import { analyse, evaluateFormula, resolvePath } from '../formula.js';
+import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens } from '../inline.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
 import { emit } from './events.js';
@@ -80,7 +80,11 @@ export function describeSource(path) {
         : b === 'featEffect' ? `the tier ${nth(a)} feat’s effect`
           : `mythic ability ${nth(a)}`;
     case 'mythicTradition': return 'mythic tradition';
+    case 'mythicTraditionNote': return 'a mythic tradition note';
+    case 'feat': return `a feat’s note, group ${nth(a)}`;
+    case 'grantedFeat': return 'a granted feat’s note';
     case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
+    case 'primordiaNote': return `Primordia notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'gear':
@@ -176,7 +180,7 @@ export function diffFromSource(model) {
  */
 export function audit(model) {
   const scope = model.scope();
-  const known = new Set(model.scopeNames());
+  const known = new NameIndex(model.scopeNames());
 
   // Skill ranks entered as formulas are player-authored too.
   const skillFormulas = (model.data.skills || [])
@@ -509,7 +513,7 @@ export function audit(model) {
  * the symptom and the fix are identical.
  */
 export function orphans(model, auditRows = null) {
-  const known = new Set(model.scopeNames());
+  const known = new NameIndex(model.scopeNames());
   // A name that *is* defined but did not resolve -- one caught in a cycle,
   // one whose formula does not parse -- is not an orphan. It has a
   // definition and that definition has its own problem; saying "nothing

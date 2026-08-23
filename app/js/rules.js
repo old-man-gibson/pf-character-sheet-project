@@ -2040,15 +2040,33 @@ export function diceAverage(dice, flat = 0) {
   return Math.round(avg * 10) / 10;
 }
 
-/** Active armor + shields, reduced to the numbers the sheet needs. */
+/**
+ * Active armor + shields, reduced to the numbers the sheet needs.
+ *
+ * `ac` is the two together, which is all the AC formulas ever wanted. They are
+ * also kept apart, because half the rules written about them are about one and
+ * not the other -- "your shield bonus to AC", "while wearing no armour" -- and
+ * a formula that can only read the sum has to be told the split by hand.
+ *
+ * `shields` is one number per shield *row*, in the order the rows are kept:
+ * what that row is worth while it is being held, and nothing while it is not.
+ * So the rows always add up to `shield`, and a row nobody has raised reads
+ * zero rather than a bonus the character is not getting.
+ */
 export function armorParts(c) {
-  const pieces = [];
-  const armor = c.equipment?.armor;
-  if (armor?.active) pieces.push(armor);
-  for (const s of c.equipment?.shields || []) if (s.active) pieces.push(s);
+  const armor = c.equipment?.armor?.active ? c.equipment.armor : null;
+  const rows = c.equipment?.shields || [];
+  const shieldAcs = rows.map((s) => (s?.active ? (Number(s.acBonus) || 0) : 0));
+  const shields = rows.filter((s) => s?.active);
+  const pieces = armor ? [armor, ...shields] : shields;
   const maxDexes = pieces.map((p) => p.maxDex).filter((v) => v !== null && v !== undefined && v !== '');
+  const armorAc = Number(armor?.acBonus) || 0;
+  const shieldAc = shieldAcs.reduce((t, n) => t + n, 0);
   return {
-    ac: pieces.reduce((t, p) => t + (Number(p.acBonus) || 0), 0),
+    ac: armorAc + shieldAc,
+    armor: armorAc,
+    shield: shieldAc,
+    shields: shieldAcs,
     maxDex: maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity,
     acp: pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0),
   };
@@ -2620,6 +2638,83 @@ export const FORWARD_FAMILIES = {
 export const FORWARD_BY_DERIVED = Object.fromEntries(
   FORWARD_STATS.filter(([, , key]) => key).map(([name, , key]) => [key, name]),
 );
+
+/* -------------------------------------------------------------- *
+ * The workbook's own vocabulary
+ *
+ * The template declares some 470 defined names -- StrMod, Fort, MythicTier --
+ * and every formula anyone has ever written in one of these characters is
+ * written in them. A player porting a rule they already had working should be
+ * able to paste it in, so the names they typed for years go on meaning what
+ * they meant, and each one is published beside this sheet's own name for the
+ * same number.
+ *
+ * Most of the 470 name a configuration cell (which stat a save uses, which
+ * class sits in slot 3) and have no equivalent here; those are deliberately
+ * absent rather than guessed at. What is below was checked against the five
+ * source workbooks -- each alias holds the same number as the path it points
+ * at, in every one of them, ACBonusShield excepted and for a reason set out
+ * where it stands -- because an alias that is subtly the wrong number is
+ * worse than no alias at all: it works, and it lies.
+ *
+ * Check the same way before adding one. Guessing gets it wrong more often
+ * than not: ACStatsTotal is the subtotal of the AC bonus columns and not the
+ * AC, MeleeBonus is the misc attack bonus and not the attack, and a named
+ * range can be displaced by a row inserted above it.
+ *
+ * That check is also why `StrMod` is `str.tempMod` and not `str.mod`. The
+ * workbook's modifier is the working one, buffs and damage included, which is
+ * the number the rest of its sheet is built from; `str.mod` here is the score
+ * before any of that. The obvious mapping is the wrong one.
+ *
+ * Every alias is PascalCase and has no dot in it, which is what tells one
+ * apart from a name of this sheet's own -- see `isSheetAlias`.
+ */
+
+/** Aliases every character has, whatever is on it. */
+export const SHEET_ALIASES = {
+  // Abilities. The workbook only ever declared StrScore, but a player typing
+  // DexScore by analogy has guessed the convention right and should be met.
+  ...Object.fromEntries(ABILITIES.flatMap((a) => {
+    const Ab = a[0].toUpperCase() + a.slice(1);
+    return [[`${Ab}Mod`, `${a}.tempMod`], [`${Ab}Score`, `${a}.score`]];
+  })),
+  TempStrength: 'str.temp',
+
+  CharacterHP: 'hp.total',
+  MythicTier: 'mythic.tier',
+
+  Fort: 'saves.fortitude',
+  Ref: 'saves.reflex',
+  Will: 'saves.will',
+  ABPFort: 'saves.fortitude.abpResistance',
+  ABPRef: 'saves.reflex.abpResistance',
+  ABPWill: 'saves.will.abpResistance',
+
+  ABPDef: 'ac.abpDeflection',
+  ABPNat: 'ac.abpNatural',
+  ACBonusArmor: 'ac.armor',
+  // The template's one shield row. A sheet carrying more than one numbers
+  // them -- ACBonusShield1, ACBonusShield2, aliased per character beside the
+  // veil slots -- and the inserted rows push the unnumbered name down onto
+  // the blank one at the bottom, where it reads 0 however many shields are
+  // strapped on. So this is the one alias that means what the name says
+  // rather than what the cell holds: on the four workbooks with a single
+  // shield row the two are the same number, and on the fifth the cell is an
+  // artefact of row insertion that no formula would be written against.
+  ACBonusShield: 'ac.shield',
+
+  MSBTotal: 'caster.msb',
+  MSDTotal: 'caster.msd',
+  EssenceCapTotal1: 'essence.cap',
+};
+
+/**
+ * `Level` and `BAB` are not here, and neither is any other name that differs
+ * from this sheet's only by its capitals: reading is case-insensitive, so
+ * `Level` already finds `level` and an entry for it would say nothing.
+ */
+export const isSheetAlias = (name) => /^[A-Z][A-Za-z0-9]*$/.test(String(name));
 
 /* -------------------------------------------------------------- */
 
