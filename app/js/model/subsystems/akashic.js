@@ -341,6 +341,155 @@ export function essenceScope(model) {
   return out;
 }
 
+/* ------------------------------------------------------------------ *
+ * The shared veil catalogue.
+ *
+ * What veils exist is an extension pack; which of them a character has
+ * shaped, and how much essence is in each, is on the sheet. The two are
+ * matched by name, exactly as a discipline's maneuvers are.
+ *
+ * A veil is a **table** rather than a block for the reason a maneuver is: the
+ * rules text belongs to whoever wrote it and stays in the pack, so a pack
+ * that fixes a typo fixes it on every sheet already in play, and a character
+ * sent to a friend carries the names of its veils rather than four kilobytes
+ * of somebody else's book each. What the sheet keeps is the name, the
+ * essence, and anything the player wrote themselves.
+ *
+ * A veil is assembled from more than one page, which is why `mergeTables`
+ * merges a veil field by field instead of replacing it. The veil's own page
+ * has its rules text, its chakra slots and its descriptors; the page listing
+ * a *class's* veils is what says the veil is on that class's list at all.
+ * Neither knows what the other does, and a catalogue wants both.
+ * ------------------------------------------------------------------ */
+
+let VEIL_CATALOGUE = { veils: [] };
+
+/** "Hands, Wrists" and "Head/Headband" both name two chakras. */
+export function splitSlots(raw) {
+  return String(raw ?? '').split(/\s*[,/]\s*/).map((s) => s.trim()).filter(Boolean);
+}
+
+const uniqueBy = (list, key = (s) => s.toLowerCase()) => {
+  const seen = new Map();
+  for (const x of list) if (x && !seen.has(key(x))) seen.set(key(x), x);
+  return [...seen.values()];
+};
+
+/**
+ * Register the shared catalogue. Call before constructing a Character.
+ *
+ * `slot` is the chakra list as the page wrote it -- "Hands, Wrists" for a
+ * veil shapeable in either -- and is kept verbatim as well as split, because
+ * the string is what a card shows and the parts are what a picker filters on.
+ */
+export function setVeilCatalogue(doc) {
+  const list = Array.isArray(doc?.veils) ? doc.veils : [];
+  VEIL_CATALOGUE = {
+    veils: list.map((v) => {
+      const slot = String(v.slot ?? v.chakra ?? '').trim();
+      return {
+        name: String(v.name || '').trim(),
+        slot,
+        slots: splitSlots(slot),
+        descriptor: String(v.descriptor || '').trim(),
+        classes: uniqueBy((Array.isArray(v.classes) ? v.classes : splitSlots(v.classes)).map((c) => String(c).trim()).filter(Boolean)),
+        text: String(v.text || ''),
+        effect: String(v.effect || '').trim(),
+        bindEffect: String(v.bindEffect || '').trim(),
+        source: String(v.source || '').trim(),
+      };
+    }).filter((v) => v.name),
+  };
+}
+
+export function veilCatalogue() {
+  return VEIL_CATALOGUE;
+}
+
+/** One veil by name, however it was capitalised, or null. */
+export function veilEntry(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return null;
+  return VEIL_CATALOGUE.veils.find((v) => v.name.toLowerCase() === key) || null;
+}
+
+/** Every veilweaving class any veil names, in the order a picker lists them. */
+export function veilClasses() {
+  return uniqueBy(VEIL_CATALOGUE.veils.flatMap((v) => v.classes)).sort((a, b) => a.localeCompare(b));
+}
+
+/** Every chakra any veil names. */
+export function veilSlots() {
+  return uniqueBy(VEIL_CATALOGUE.veils.flatMap((v) => v.slots)).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The veils a picker should offer, narrowed by chakra and by whose list they
+ * are on, in name order.
+ *
+ * `slot` left null is every chakra -- a Kheshig receptacle and a slot the
+ * sheet invented have no chakra to filter on. `classes` left empty is every
+ * list, because a catalogue whose class lists have never been imported knows
+ * no class for any veil and would otherwise offer nothing at all. That is the
+ * important case to get right: narrowing on absent data must widen, not
+ * empty, the answer.
+ */
+export function veilsAvailable({ slot = null, classes = [] } = {}) {
+  const chakra = String(slot ?? '').trim().toLowerCase();
+  const want = (Array.isArray(classes) ? classes : [classes])
+    .map((c) => String(c ?? '').trim().toLowerCase()).filter(Boolean);
+  const anyClassKnown = want.length > 0 && VEIL_CATALOGUE.veils.some((v) => v.classes.length);
+  return VEIL_CATALOGUE.veils
+    .filter((v) => (!chakra || v.slots.some((s) => s.toLowerCase() === chakra)))
+    // A veil no page has placed on a list stays on offer: the class lists are
+    // a second import, and a catalogue with only half of them must not hide
+    // the half it cannot vouch for.
+    .filter((v) => !anyClassKnown || !v.classes.length || v.classes.some((c) => want.includes(c.toLowerCase())))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * What the player wrote themselves, and nothing else.
+ *
+ * This is what gets saved and what an edit starts from -- kept apart from
+ * `veilDetails` so that opening a veil can never copy the catalogue's text
+ * into the character. A pack that fixes a typo has to be able to fix it on
+ * every sheet, which it cannot do if the sheets took a copy.
+ */
+export function veilOwn(veil) {
+  return { desc: String(veil?.desc ?? '') };
+}
+
+/** Is there anything of the player's own on this veil? */
+export function veilIsWritten(veil) {
+  return veilOwn(veil).desc.trim() !== '';
+}
+
+/**
+ * A shaped veil as a reader wants it: the player's own description where they
+ * wrote one, the catalogue's underneath, and the chakra, descriptors, class
+ * list and source the catalogue knows and the sheet never stored.
+ *
+ * `known` says whether the catalogue has it at all, so a card can tell a veil
+ * whose pack is switched off from one the player named themselves.
+ */
+export function veilDetails(veil) {
+  const own = veilOwn(veil);
+  const shared = veilEntry(veil?.name);
+  const mine = own.desc.trim() !== '';
+  return {
+    name: String(veil?.name ?? ''),
+    desc: mine ? own.desc : String(shared?.text || shared?.effect || ''),
+    mine,
+    known: !!shared,
+    slot: shared?.slot || '',
+    descriptor: shared?.descriptor || '',
+    classes: shared?.classes || [],
+    bindEffect: shared?.bindEffect || '',
+    source: shared?.source || '',
+  };
+}
+
 /** The local scope a veil's own text resolves in. */
 export function veilScope(model, veil) {
   return { essence: { self: Number(veil?.essence) || 0 } };

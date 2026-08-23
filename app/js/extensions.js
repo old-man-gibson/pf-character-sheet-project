@@ -36,7 +36,7 @@ export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
 /** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = ['maneuvers', 'spheres', 'vancian', 'psionics', 'cardcasting', 'cooking'];
+export const TABLE_KINDS = ['maneuvers', 'spheres', 'veils', 'vancian', 'psionics', 'cardcasting', 'cooking'];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -594,6 +594,7 @@ function tableCount(kind, table) {
   switch (kind) {
     case 'maneuvers': return arr(t.disciplines).length;
     case 'spheres': return arr(t.spheres).length;
+    case 'veils': return arr(t.veils).length;
     case 'vancian': return arr(t.classes).length;
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
@@ -607,6 +608,7 @@ export function describeSummary(s) {
   const parts = [];
   const words = {
     maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
+    veils: ['veil', 'veils'],
     vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
@@ -887,6 +889,7 @@ export function mergeTables(extensions) {
   const out = {
     maneuvers: { disciplines: [] },
     spheres: { spheres: [] },
+    veils: { veils: [] },
     vancian: { spellLevels: null, classes: [] },
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
@@ -898,6 +901,45 @@ export function mergeTables(extensions) {
     const i = list.findIndex((x) => lower(x?.[key]) === k);
     if (i === -1) list.push(item); else list[i] = item;
   };
+  /**
+   * A veil joins one already there, field by field, rather than replacing it.
+   *
+   * It is the one table assembled from two different kinds of page. The
+   * veil's own page carries its rules text, its chakra slots and its
+   * descriptors and says nothing about who may shape it; the page listing a
+   * *class's* veils says exactly that and carries a one-line summary at most.
+   * Replace-by-name would mean whichever pack was switched on second erased
+   * what the other knew, and which half survived would depend on the order
+   * the packs happened to load in.
+   *
+   * So a field a later pack leaves empty leaves the earlier answer standing,
+   * a field it fills wins, and `classes` is the union -- five classes listing
+   * the same veil is five packs each contributing one name to it.
+   */
+  const upsertVeil = (list, veil) => {
+    const k = lower(veil?.name);
+    if (!k) return;
+    const at = list.findIndex((x) => lower(x?.name) === k);
+    if (at === -1) { list.push(veil); return; }
+    const had = list[at];
+    const merged = { ...had };
+    for (const [key, value] of Object.entries(veil)) {
+      if (key === 'classes') continue;
+      // The name is the key the whole thing meets on, so a merge never
+      // changes it. A list page that wrote it in lower case would otherwise
+      // rename the veil for everyone, and the first spelling is the one a
+      // sheet that shaped it already has written down.
+      if (key === 'name') continue;
+      if (value === null || value === undefined || value === '') continue;
+      merged[key] = value;
+    }
+    const classes = [...arr(had.classes).map(str), ...arr(veil.classes).map(str)].filter(Boolean);
+    const seen = new Map();
+    for (const c of classes) if (!seen.has(lower(c))) seen.set(lower(c), c);
+    if (seen.size) merged.classes = [...seen.values()];
+    list[at] = merged;
+  };
+
   /** A discipline joins one already there rather than replacing it. */
   const upsertDiscipline = (list, disc) => {
     const k = lower(disc?.name);
@@ -918,6 +960,12 @@ export function mergeTables(extensions) {
     // discipline it arrives whole -- one page is the whole sphere -- so a
     // later pack carrying it means a corrected copy of all of it.
     for (const x of arr(p.spheres?.spheres)) upsert(out.spheres.spheres, x);
+    // A veil is one fact under its own name, so the ordinary later-wins rule
+    // applies -- and it is what dissolves the duplicate question, since a veil
+    // shapeable in five chakras is on five of the wiki's slot pages with the
+    // same text each time. Sixteen per-chakra packs together come to the 1,496
+    // veils that exist rather than the 2,149 entries they are written as.
+    for (const x of arr(p.veils?.veils)) upsertVeil(out.veils.veils, x);
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
@@ -944,6 +992,7 @@ export function registerTables(merged, registrars) {
   const r = obj(registrars);
   r.setManeuverCatalogue?.(merged.maneuvers);
   r.setSphereCatalogue?.(merged.spheres);
+  r.setVeilCatalogue?.(merged.veils);
   r.setVancianTables?.(merged.vancian);
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);

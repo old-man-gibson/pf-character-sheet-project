@@ -16,7 +16,7 @@
  */
 
 import {
-  setManeuverCatalogue, setSphereCatalogue, setVancianTables, setPsionicTables,
+  setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue, setVancianTables, setPsionicTables,
   setCardcastingTables, setCookingTables, setOptionCatalogues,
 } from './model.js';
 import {
@@ -26,7 +26,7 @@ import {
 import { packMedium } from './pack-storage.js';
 
 const REGISTRARS = {
-  setManeuverCatalogue, setSphereCatalogue, setVancianTables, setPsionicTables,
+  setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue, setVancianTables, setPsionicTables,
   setCardcastingTables, setCookingTables,
 };
 

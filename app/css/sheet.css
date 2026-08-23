@@ -746,6 +746,22 @@ button.mname {
    prose, and stays draggable so a long veil can be opened up. */
 .veil .prose textarea { resize: vertical; min-height: 34px; font-size: 0.76rem; }
 .veil .prose-view { font-size: 0.76rem; min-height: 34px; }
+/* What the pack knows and the sheet never stored: the chakras it shapes in,
+   its descriptors, whose veil lists it is on, and where it was published.
+   Small and quiet -- it is what you check, not what you read. */
+.veil-meta {
+  font-size: 0.68rem; opacity: 0.6; line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+/* A veil the catalogue carries reads rather than edits: its text belongs to
+   the pack, and the pen beside it turns the card over to what you wrote. */
+.veil-text {
+  font-size: 0.76rem; line-height: 1.4; white-space: pre-wrap;
+  max-height: 11em; overflow: auto;
+}
+.veil-bind { font-size: 0.7rem; opacity: 0.8; }
+.veil-bind b { font-weight: 650; opacity: 0.75; }
+.veil.is-known .veil-top > input[type="text"] { border-color: color-mix(in srgb, var(--cs-accent) 35%, var(--cs-line)); }
 
 /* ---------- ability colour coding ---------- */
 /*

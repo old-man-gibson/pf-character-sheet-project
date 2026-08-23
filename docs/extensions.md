@@ -249,8 +249,9 @@ tags (`GAME_SYSTEMS` ids in `rules.js` — `"spheres-of-power"`, `"path-of-war"`
 `"psionics"`, …) land on the row's **Systems** toggles and merge with whatever the player
 already marked, lighting the matching tabs up in the manager and on the session view's
 bar. A race
-sets the race, size and racial ability modifiers, and fills the race-trait rows. A veil is
-shaped in its chakra slot on the Akashic board (essence 0), the first listed slot with room.
+sets the race, size and racial ability modifiers, and fills the race-trait rows. A veil block — one written by hand, rather than the catalogue a pack's veils table
+carries — is shaped in its chakra slot on the Akashic board (essence 0), the first listed
+slot with room.
 
 **Alternate racial traits swap, and remember.** A `trait` block carries `replaces` — read
 off its own text ("This racial trait replaces defensive training and hatred", "in place of
@@ -353,6 +354,36 @@ set of active packs registered with the model, `extension-manager.js` the dialog
 page mounts the dialog with `mountExtensionManager(dialogElement, { say, currentCharacter })`.
 Covered by `tests/extensions.test.mjs`.
 
+### Veils
+
+A veil is a shared table too, under `provides.veils.veils`: one entry per veil, carrying
+its `name`, the chakra `slot`s it shapes in ("Hands, Wrists"), its `descriptor`s, the
+`classes` whose veil lists it is on, its rules `text`, and its `source`. The Akashic tab
+reads it where it stands — the character keeps the name and the essence and nothing else,
+so a corrected pack reaches every sheet already playing that veil and an exported
+character carries names rather than a publisher's prose. See
+[Sub-systems](sub-systems.md) for the card.
+
+**A veil is the one table assembled from two kinds of page**, and merges field by field
+because of it. The veil's own page has the rules text, the chakras and the descriptors
+and says nothing about who may shape it; a *class's* veil list says exactly that and
+carries a one-line summary at most. So a field a later pack leaves empty leaves the
+earlier answer standing, a field it fills wins, and `classes` is the **union** — five
+classes listing the same veil is five packs each adding one name to it. The name itself
+is never rewritten by a merge: it is the key the halves meet on, and it is what a sheet
+that shaped the veil has written down.
+
+That merge is also what dissolves the duplicate problem the per-chakra packs had. A veil
+shapeable in five chakras is on five of the wiki's slot pages with the same text each
+time; as blocks that was five entries in the picker, and as a table it is one. Sixteen
+per-chakra packs switched on together come to the 1,496 veils that exist rather than the
+2,149 rows they are written as.
+
+Packs scraped before veils were a table carry them as blocks instead.
+`node tools/veils-to-table.mjs <pack.json|dir>` converts one in place — collapsing the
+duplicates, and lifting the `Class access:` line the old reader had appended to the foot
+of each veil's text into the `classes` field where it belongs.
+
 ## Paste text — a scraper's document
 
 **Paste text…** takes two quite different things, and tells them apart before it reads
@@ -426,7 +457,7 @@ The kinds it knows so far:
 | kind | identified by | becomes |
 |---|---|---|
 | maneuver | `Discipline` + `Initiation Action` | an entry in the pack's discipline catalogue |
-| veil | `Shapeable Slot(s)` | a `veil` block, shaped into that chakra slot |
+| veil | `Shapeable Slot(s)` | an entry in the pack's veils table, with `Class Access` as its class list |
 | sphere | the *document* — a `Sphere Talents` section | a whole sphere in the pack's `spheres` table |
 
 **A heading deeper than the entry level belongs to the entry above it.** An akashic veil
@@ -490,6 +521,32 @@ discipline pack after it. There is no number to design against — there is a fo
 does not ask you for one. Per-page packs stay useful for a player who wants a single
 chakra rather than all of them; keep them beside the combined catalogue under a name
 starting with `_` and the indexer passes over them until they are wanted.
+
+**What a cut page leaves behind.** A scrape that stops mid-construct leaves marks, and
+`tidyScrapeResidue` takes out the three that turned up across the akashic veils:
+
+- **a template close with nothing that opened it.** A `{{…}}` call written across two
+  lines has its head on one and its tail on the next, and a scrape that took the second
+  without the first leaves a line reading `(Akasha Retold)}}` standing over the article
+  it was heading — 75 of the 1,496 veils began on one. That is the argument list of a
+  call whose name is gone, so the line goes. **Only where the text holds no `{{` at
+  all**: a template taken whole is content, and `{{Chakra Bind|Belt}}` is the call that
+  says which chakra a paragraph belongs to.
+- **a raw wiki link** — `[[Target|what it reads as]]` shows its second half, `[[Target]]`
+  is its own text. The markdown spellings were already handled; this is the one that
+  arrives unconverted.
+- **non-breaking spaces**, which are spaces everywhere the sheet shows them and only make
+  a word un-findable.
+
+**Text with nothing wrong with it comes back byte-identical**, which is the property that
+makes the pass safe to run over a pack full of somebody's paragraphs: it cannot quietly
+reflow fifteen hundred of them on its way to fixing a hundred. It is idempotent, so a
+second run is a no-op.
+
+`node tools/tidy-pack-text.mjs <pack.json|dir>` runs it over a pack built before the
+reader did — every text a pack holds, not only its veils — and reports what changed
+before it changes anything under `--dry`. It calls the same function the reader calls, so
+a re-scrape and a tidied-up pack come out agreeing rather than nearly agreeing.
 
 **There is no bind level in a scrape.** On the wiki a bind is the template call
 `{{Chakra Bind|Belt}}`, whose only argument is the slot — checked across all 2,149 — and

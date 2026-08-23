@@ -1305,13 +1305,57 @@ function unwikiHeadings(text) {
   return out.join('\n');
 }
 
-const tidyProse = (s) => unwikiHeadings(String(s ?? '')
+/**
+ * What a scrape leaves behind when it cuts a page mid-construct.
+ *
+ * Three things, none of them content:
+ *
+ *  - **a template close with nothing that opened it.** A `{{…}}` call written
+ *    across two lines has its head on one and its tail on the next, and a
+ *    scrape that took the second without the first leaves a line reading
+ *    `(Akasha Retold)}}` standing over the article it was heading. What is
+ *    left is not a fragment of the rules — it is the argument list of a call
+ *    whose name is gone — so the line goes. Only ever where the text holds no
+ *    `{{` at all: a template the scrape *did* take whole is content, and
+ *    `{{Chakra Bind|Belt}}` is exactly the kind that carries meaning.
+ *  - **a raw wiki link.** `[[Target|what it reads as]]` shows its second
+ *    half, `[[Target]]` is its own text. The markdown forms are handled
+ *    below; this is the one that arrives unconverted.
+ *  - **non-breaking spaces**, which are spaces everywhere the sheet shows
+ *    them and only make a word un-findable.
+ *
+ * Kept apart from the rest of `tidyProse`, and exported, because it is the
+ * one part that a pack built before this can have run over it after the fact.
+ * `tools/tidy-pack-text.mjs` calls exactly this, so a re-scrape and a
+ * tidied-up pack come out agreeing rather than nearly agreeing.
+ */
+export function tidyScrapeResidue(text) {
+  // Written as an escape on purpose: a literal non-breaking space here is
+  // invisible, and one editor normalising it would turn this line into a
+  // no-op that still looks right.
+  let s = String(text ?? '').replace(/\u00a0/g, ' ');
+  s = s.replace(/\[\[(?:[^\][|]*\|)?(.*?)\]\]/gs, '$1');
+  if (!s.includes('{{')) {
+    s = s.split('\n').map((line) => {
+      const at = line.lastIndexOf('}}');
+      return at === -1 ? line : line.slice(at + 2);
+    }).join('\n');
+  }
+  // A text with nothing wrong with it comes back byte-identical. Only where
+  // something was actually taken out is the hole it left tidied up -- the
+  // dropped line leaves a blank one at the top, and that is the only reason
+  // to be reflowing anybody's paragraphs.
+  if (s === text) return text;
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const tidyProse = (s) => tidyScrapeResidue(unwikiHeadings(String(s ?? '')
   .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')
   .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
   .replace(/\[(?:https?|ftp):\/\/\S+\s+([^\]\n]+)\]/g, '$1')
   .replace(/<br\s*\/?>/gi, '\n')
   .replace(WIKI_TAGS, '')
-  .replace(/\*\*([^*\n]+)\*\*/g, '$1'));
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1')));
 
 /** Every wiki table in a stretch of text, turned into tab-separated rows. */
 export function unwikiTables(text) {

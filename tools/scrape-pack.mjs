@@ -31,6 +31,7 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
 import { parsePaste } from '../app/js/paste-import.js';
+import { convertPack } from './veils-to-table.mjs';
 
 /* ---------------- arguments ---------------- */
 
@@ -155,10 +156,29 @@ const pack = (id, name, blocks, provides, sources) => ({
 mkdirSync(out, { recursive: true });
 const wrote = [];
 const write = (doc) => {
-  const path = join(out, `${doc.id}.json`);
-  const json = JSON.stringify(doc, null, 1);
+  /*
+   * Veils leave as a table, not as blocks.
+   *
+   * `parsePaste` still reads a veil page into a `veil` block, because that is
+   * what the paste panel's review stage is built around -- one page, a handful
+   * of things found, each with a tick beside it. A pack, though, is a
+   * catalogue: its veils are read where they stand and never copied onto a
+   * character, and the same name off five slot pages is one veil rather than
+   * five. So the conversion happens on the way out, which also lifts the
+   * `Class access:` line out of each veil's prose and into the field the
+   * Akashic tab narrows a slot's picker by.
+   */
+  const converted = convertPack(doc);
+  const final = converted.moved ? { ...converted.ext, revision: doc.revision } : doc;
+  const path = join(out, `${final.id}.json`);
+  const json = JSON.stringify(final, null, 1);
   if (!dry) writeFileSync(path, json, 'utf8');
-  wrote.push({ path, blocks: doc.blocks.length, bytes: json.length });
+  wrote.push({
+    path,
+    blocks: final.blocks.length,
+    veils: converted.moved ? converted.entries : 0,
+    bytes: json.length,
+  });
 };
 
 const provisions = (results) => {
@@ -212,7 +232,10 @@ if (one) {
 
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 console.log(`\n${dry ? 'Would write' : 'Wrote'} ${wrote.length} pack(s) to ${out}:`);
-for (const w of wrote.sort((a, b) => b.bytes - a.bytes)) console.log(`  ${kb(w.bytes).padStart(8)}  ${String(w.blocks).padStart(5)} blocks  ${basename(w.path)}`);
+for (const w of wrote.sort((a, b) => b.bytes - a.bytes)) {
+  const what = w.veils ? `${String(w.veils).padStart(5)} veils ` : `${String(w.blocks).padStart(5)} blocks`;
+  console.log(`  ${kb(w.bytes).padStart(8)}  ${what}  ${basename(w.path)}`);
+}
 const total = wrote.reduce((n, w) => n + w.bytes, 0);
 console.log(`  ${kb(total).padStart(8)}  total`);
 /*
