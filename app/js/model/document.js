@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion,
+  COMPANION_KINDS, COMPANION_TABS, companionInUse, defaultCompanion, normalizeCompanion,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -24,7 +24,7 @@ import { AKASHIC_DERIVED, importAkashic, splitVeilName } from './subsystems/akas
 import {
   CARDCASTING_DERIVED, deckFeatNames, importCardcasting,
 } from './subsystems/cardcasting.js';
-import { COMPANION_DERIVED } from './subsystems/companions.js';
+import { COMPANION_DERIVED, importAnimalCompanion } from './subsystems/companions.js';
 import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
 import { MANEUVER_DERIVED, importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
@@ -616,18 +616,28 @@ export function normalise(model) {
   /*
    * The three companion sheets -- Familiar, Animal Companion, Eidolon -- were
    * template worksheets on every workbook, each a grid of formulas against
-   * `dataSheet` that the export left as `#ERROR!`. They become structured
-   * blocks that start empty and are worked out from the tables in
-   * `companions.js`. None of the five characters ever filled one in, so
-   * there is nothing to read off the grid; if a workbook's copy does carry a
-   * name, the grid is kept beside the block rather than dropped.
+   * `dataSheet` that the export left frozen at whatever they last worked out.
+   * They become structured blocks worked out afresh from the tables in
+   * `companions.js`.
+   *
+   * The Animal Companion tab is read into its block and then retired like any
+   * other imported worksheet. The other two are not read yet, so an unfilled
+   * copy is dropped and a filled one -- a tab that carries a name -- is kept
+   * beside the empty block rather than losing what somebody typed on it.
+   *
+   * It is read again when a document saved before it was read still carries
+   * the grid beside a block nobody has touched: that pair is exactly what the
+   * older import left behind, and reading it is what recovers the companion.
    */
   for (const kind of COMPANION_KINDS) {
     const index = d.sheetTabs.findIndex((t) => t.name === COMPANION_TABS[kind]);
+    const tab = index < 0 ? null : d.sheetTabs[index];
+    const stranded = tab && d[kind] && !companionInUse(kind, d[kind]);
+    if (kind === 'animalCompanion' && (!d[kind] || stranded)) d[kind] = importAnimalCompanion(tab);
     d[kind] = normalizeCompanion(kind, d[kind] || defaultCompanion(kind));
     if (index < 0) continue;
-    const g = sheetReader(d.sheetTabs[index]);
-    const named = g.text(g.take('Name')) !== '';
+    const g = sheetReader(tab);
+    const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
     if (!named) d.sheetTabs.splice(index, 1);
   }
 

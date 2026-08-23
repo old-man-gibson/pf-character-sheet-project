@@ -26,7 +26,7 @@ import {
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
-  gearColumnCount, gearColumnInUse,
+  gearColumnCount, gearColumnInUse, importAnimalCompanion,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -43,6 +43,7 @@ import {
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { defaultCompanion } from '../app/js/companions.js';
 import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
@@ -196,6 +197,145 @@ for (const id of IDS) {
     targets.expand('Fort'), targets.expand('saves.fortitude'));
   check(`${id} and case does not change a destination`,
     targets.expand('SAVES.WILL'), targets.expand('saves.will'));
+}
+
+console.log('companions -- a filled Animal Companion tab is read, not left as a grid');
+{
+  // The workbook's Animal Companion tab with a companion on it. The layout is
+  // the template's, addresses and all, and the numbers the sheet worked out
+  // for itself are left where they were -- the level and HD, the BAB, the
+  // saves, the AC line, the skill totals -- because none of them may be read
+  // back. Only what a player types is.
+  //
+  // Cells go in by their column letter so the fixture reads like a worksheet.
+  const row = (r, cells) => ({
+    r,
+    cells: Object.entries(cells).reduce((out, [col, v]) => {
+      const i = col.charCodeAt(0) - 65;
+      while (out.length < i) out.push(null);
+      out[i] = v;
+      return out;
+    }, []),
+  });
+  const raw = blankDocument({ id: 'pete', name: 'Pete’s Owner', level: 13 });
+  raw.extraTabs['Animal Companion'] = {
+    hidden: false,
+    rows: [
+      row(1, { B: 'Name', C: 'Rustle', H: 'Spheres', I: false }),
+      row(3, {
+        B: 'Animal Companion', D: 'Master Class', E: 'Beastmaster', H: 'Saves', J: 'Ability',
+        L: 'Familiar Skills', N: 'Skill Bonus', O: 'Class Skill', P: 'Ranks', Q: 'Race', R: 'Ability', T: 'Misc',
+      }),
+      row(4, { B: 'Class Level', C: 13, D: 'Master Lvl Penalty', E: 1, H: 'Fort', I: 9, J: 'Con', L: 'Acrobatics', N: 17, O: 3, P: 9, Q: 2, R: 'Dex' }),
+      row(5, { B: 'HP', C: 76, D: 'Effective Level', E: 12, H: 'Ref', I: 9, J: 'Dex', L: 'Climb', N: 6, O: 3, R: 'Str' }),
+      row(6, { B: 'Bonus HP', C: 4, D: 'Size', E: 'Large', H: 'Will', I: 3, J: 'Wis', L: 'Escape Artist', N: 3, O: 0, R: 'Dex' }),
+      row(7, { B: 'HD', C: 9, D: 'Ability Score', E: 'Con', F: 9, H: 'Good Fort', I: 'Good Ref', J: 'Good Will', L: 'Fly', N: 3, O: 3, R: 'Dex' }),
+      row(8, { B: 'Type', C: 'Dire wolf', D: 'Body Type', E: 'Quadruped (claws)', H: true, I: true, J: false, L: 'Intimidate', N: 1, O: 0, R: 'Cha' }),
+      row(9, { B: 'Archetype', C: 'Charger', L: 'Perception', N: 6, O: 3, P: 3, R: 'Wis', T: 1 }),
+      row(10, { B: 'BAB', C: 6, D: 'Ability', E: 'Str', H: 'Initiative', I: 'Bonus', J: 'Total', L: 'Stealth', N: 3, O: 3, R: 'Dex' }),
+      row(11, { B: 'Attack Bonus', C: 4, D: 'Total Attack', E: 10, H: 'Dex', I: 2, J: 7, L: 'Survival', N: 1, O: 0, R: 'Wis' }),
+      row(12, { B: 'Special Qualities', C: 'Scent, low-light vision', L: 'Swim', N: 6, O: 3, R: 'Str' }),
+      row(13, { B: 'Trip on a bite', H: 'AC', J: 'Ability', M: 'Skill Ranks', N: 8, O: 'Total Ranks', P: 12 }),
+      row(14, { H: 'AC', I: 17, J: 'Dex' }),
+      row(15, { B: 'Scores', C: 'Base', D: 'Lvl up Bonuses', E: 'Total', F: 'Modifier', H: 'Touch', I: 13, J: 'Dex', L: 'Attacks', N: 'CMB', O: 10 }),
+      row(16, { B: 'Str', C: 17, D: 3, E: 20, F: 5, H: 'Flat-Footed', I: 15, J: 'Dex', L: 'Type', M: 'Bite', N: 'Damage Type', P: 'Primary?', Q: 'Yes' }),
+      row(17, { B: 'Dex', C: 15, D: 3, E: 18, F: 4, H: 'Bonus AC (All)', I: 'Bonus AC (Touch)', J: 'Natural & other FF', L: 'Qualities', M: 'Trip' }),
+      row(18, { B: 'Con', C: 15, D: 0, E: 15, F: 2, H: 1, I: 2, J: 3, L: 'To-Hit Bonus', M: 10, N: 'Damage', O: '1d8', P: 'Crit', Q: '20/', R: 'x2' }),
+      row(19, { B: 'Int', C: 2, D: 0, E: 2, F: -4, H: 'CMD', I: 'Other Bonus', J: 'Total CMD' }),
+      row(20, { B: 'Wis', C: 12, D: 0, E: 12, F: 1, H: 'CMD', I: 1, J: 24, L: 'Type', M: 'Claw', N: 'Damage Type', P: 'Primary?', Q: 'No' }),
+      row(21, { B: 'Cha', C: 6, D: 0, E: 6, F: -2, H: 'FF CMD', J: 19, L: 'Qualities' }),
+      row(22, { L: 'To-Hit Bonus', M: 10, N: 'Damage', O: '1d4', P: 'Crit', Q: '19-20/', R: 'x2' }),
+      row(23, { B: 'Ability Score Increase', E: 'Speed', H: 'Tricks', I: 'Bonus Tricks', J: 4 }),
+      row(24, { B: 4, C: 'Str', E: 'Base', F: 50, H: 'Attack' }),
+      row(25, { B: 9, C: 'Con', E: 'Fly', H: 'Come' }),
+      row(26, { B: 14, C: 'Str', E: 'Burrow', H: 'Heel' }),
+      row(27, { B: 20, C: 'Con', E: 'Swim', F: 20 }),
+      row(29, { B: 'Class Level', C: 'Feat' }),
+      row(30, { B: 1, C: 'Weapon Focus (bite)' }),
+      row(31, { B: 2, C: 'Multiattack' }),
+      row(32, { B: 5, C: 'Toughness' }),
+      row(39, { B: 'Items', D: 'Can Grasp', E: 'No', F: 'Cost' }),
+      row(40, { B: 'Belt (saddle)', C: 'Belt of giant strength', F: 4000 }),
+      row(41, { B: 'Chest', H: 'Slotless Items', J: 'Cost' }),
+      row(42, { B: 'Eyes', H: 'Cracked pale green ioun stone', J: 4000 }),
+    ],
+  };
+  const gridRows = JSON.parse(JSON.stringify(raw.extraTabs['Animal Companion'].rows));
+  const c = new Character(raw);
+  const b = c.data.animalCompanion;
+  check('the grid retires once it has been read',
+    (c.data.sheetTabs || []).some((t) => t.name === 'Animal Companion'), false);
+  check('name, creature, archetype, body type',
+    [b.name, b.creature, b.archetype, b.bodyType], ['Rustle', 'Dire wolf', 'Charger', 'Quadruped (claws)']);
+  check('where the level comes from', [b.levelSource, b.masterClass, b.masterLevelPenalty], ['class', 'Beastmaster', 1]);
+  check('size, the hit-point ability, the attack ability', [b.size, b.hpAbility, b.attackAbility], ['Large', 'Con', 'Str']);
+  check('bonus hit points', b.hp.bonus, 4);
+  check('the base scores, not the totals beside them',
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((a) => b.scores[a].base), [17, 15, 15, 2, 12, 6]);
+  check('the increases chosen', b.abilityIncreases.map((x) => `${x.level}:${x.ability}`),
+    ['4:Str', '9:Con', '14:Str', '20:Con']);
+  check('the good saves ticked', b.goodSaves, { fort: true, ref: true, will: false });
+  check('the typed AC, CMD and initiative bonuses',
+    [b.ac.all, b.ac.touch, b.ac.ff, b.cmdOther, b.initBonus], [1, 2, 3, 1, 2]);
+  check('the speeds', [b.speed.base, b.speed.fly, b.speed.swim], ['50', '', '20']);
+  check('special qualities, both merged lines', b.specialQualities, 'Scent, low-light vision\nTrip on a bite');
+  check('the tricks', b.tricks.map((t) => t.name), ['Attack', 'Come', 'Heel']);
+  check('the feats, with the level each was taken at', b.feats.map((f) => `${f.name} @ ${f.notes}`),
+    ['Weapon Focus (bite) @ Level 1', 'Multiattack @ Level 2', 'Toughness @ Level 5']);
+  check('the attacks, three rows each', b.attacks.map((a) => [a.type, a.damage, a.crit, a.primary, a.qualities]),
+    [['Bite', '1d8', '20/×2', true, 'Trip'], ['Claw', '1d4', '19-20/×2', false, '']]);
+  check('the skills: ranks, the class tick and the racial and misc columns, never the total',
+    b.skills.map((s) => `${s.name} ${s.ranks}${s.classSkill ? 'c' : '-'}${s.misc}`),
+    ['Acrobatics 9c2', 'Climb 0c0', 'Escape Artist 0-0', 'Fly 0c0', 'Intimidate 0-0',
+      'Perception 3c1', 'Stealth 0c0', 'Survival 0-0', 'Swim 0c0']);
+  check('the item in its slot, and the slotless one', [b.items['Belt (saddle)'], b.slotless],
+    [{ name: 'Belt of giant strength', cost: 4000 }, [{ name: 'Cracked pale green ioun stone', cost: 4000 }]]);
+
+  // The sheet's own cells said 9 HD, BAB +6, 4 bonus tricks and 8 ranks --
+  // it looked the level-keyed table up by hit dice. Read again by level, at
+  // 13 less the master-level penalty, the table says otherwise.
+  c.set('animalCompanion.levelOverride', 13);
+  const k = c.data.animalCompanion.calc;
+  check('and every number is worked out again rather than read off the grid',
+    [k.level, k.hd, k.bab, k.tableNatural, k.bonusTricks, k.ranksAllowed], [12, 10, 7, 8, 5, 10]);
+  check('a natural attack still knows its damage type and role',
+    c.data.animalCompanion.attacks.map((a) => `${a.damageType} ${a.toHit}`),
+    [`B, P, and S ${k.totalAttack}`, `B and S ${k.totalAttack - 2}`]);
+
+  // Ticking Spheres takes the level from the skill named beside the box.
+  const spheres = JSON.parse(JSON.stringify(raw));
+  delete spheres.animalCompanion;
+  spheres.extraTabs['Animal Companion'].rows[0].cells[8] = true;
+  spheres.extraTabs['Animal Companion'].rows[0].cells[9] = 'Ride';
+  check('the Spheres box switches where the level is counted',
+    new Character(spheres).data.animalCompanion.levelSource, 'ride');
+
+  // What a document saved by the older import looks like: the grid kept as a
+  // worksheet beside a block nothing was ever read into. Loading it now reads
+  // the one into the other -- but a companion somebody has since typed is
+  // never overwritten by the grid it came from.
+  const stranded = JSON.parse(JSON.stringify(raw));
+  stranded.animalCompanion = defaultCompanion('animalCompanion');
+  stranded.sheetTabs = [{ name: 'Animal Companion', hidden: false, rows: stranded.extraTabs['Animal Companion'].rows }];
+  const rescued = new Character(stranded);
+  check('a companion stranded on the grid by an older import is recovered',
+    [rescued.data.animalCompanion.name, (rescued.data.sheetTabs || []).length], ['Rustle', 0]);
+  const typed = JSON.parse(JSON.stringify(stranded));
+  typed.animalCompanion = { ...defaultCompanion('animalCompanion'), name: 'Someone else' };
+  check('and one already typed in is left alone',
+    new Character(typed).data.animalCompanion.name, 'Someone else');
+
+  // The grid reaches the importer with no row numbers on it: `normalise`
+  // drops them when it builds `sheetTabs`, and a document saved by an older
+  // build never carried them at all. So the tab has to read the same either
+  // way, and nothing may depend on a blank worksheet row still being there.
+  const withRows = importAnimalCompanion({ rows: gridRows });
+  const withoutRows = importAnimalCompanion({ rows: gridRows.map((r) => ({ cells: r.cells })) });
+  check('row numbers on the grid change nothing -- they are gone before it is read',
+    withoutRows, withRows);
+  check('and it is the whole companion either way',
+    [withoutRows.name, withoutRows.tricks.length, withoutRows.attacks.length, withoutRows.feats.length],
+    ['Rustle', 3, 2, 3]);
 }
 
 /* ------------------------------------------------------------------ *
