@@ -206,13 +206,15 @@ the reader are two halves of one format, so the honest test of either is the oth
 
 ### Saving, and going back
 
-Three things are kept per character, each in the store that suits it.
+Three things are kept per character, each in the store that suits it — and the
+extension packs a player has imported sit beside them, in a database of their own.
 
 | | Where | Written |
 |---|---|---|
 | The working sheet | `localStorage` | on every edit |
 | The saved version | IndexedDB | when you press **Save** |
 | Snapshots and checkpoints | IndexedDB, gzipped | every 20 changes, or on request |
+| Imported extension packs | IndexedDB, in a database of their own | on import, edit or removal |
 
 **The sheet opens on the saved version.** That is what makes Save mean something: an
 evening of experiments does not quietly become the character. Nothing is lost to that,
@@ -243,6 +245,10 @@ saved version and the history have the opposite shape, written on a button press
 every twenty edits but many documents deep, and there `localStorage`'s ~5 MB is the wrong
 budget. A document is ~250 KB of JSON and ~20 KB gzipped, so five snapshots and a saved
 version cost ~120 KB per character against a quota measured in hundreds of megabytes.
+Imported packs moved for the same reason and more sharply: a 4.2 MB catalogue that one
+Brave profile would not take in localStorage at all goes into the database with a quota in
+the gigabytes behind it. See [Extensions](extensions.md) for where a pack a *deployment*
+carries lives instead, which is nowhere — those are fetched every load and never stored.
 
 If IndexedDB is unavailable — private browsing, a blocked frame, a zero quota — there is
 no saved version and no history, and the sheet behaves as it did before any of this

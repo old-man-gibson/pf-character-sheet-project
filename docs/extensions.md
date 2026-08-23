@@ -81,9 +81,17 @@ with `_`, which is how a pack stays in the folder without being offered. An id i
 folders resolves to the private copy, which is how you correct a bundled pack you cannot
 edit.
 
-*Local* packs are the ones that cost storage: they live in the visitor's browser only
-(`character-sheet:extensions` index, `character-sheet:ext:<id>` documents), alongside
-imported characters.
+*Local* packs are the ones that cost storage: they live in the visitor's browser only,
+under the same two keys they always had — a `character-sheet:extensions` index and a
+`character-sheet:ext:<id>` document per pack — but in **IndexedDB** now rather than
+localStorage, in a `character-sheet-extensions` database beside the one holding saved
+characters. The move is what makes a large pack importable at all: localStorage's budget
+is whatever a given browser feels like (49.8 MB in this app's Chromium, less than 4.2 MB
+in one Brave profile), where IndexedDB's is a fraction of free disk — the same browser
+that refused a pack in localStorage reports a quota in the gigabytes for the database.
+Packs already in localStorage move across on the first load that finds a working
+database, and the room they were holding comes back. A browser with no database — private
+browsing, a blocked frame — carries on in localStorage exactly as before.
 
 **The Extensions dialog** (the button in the host page's header) lists both: switch any
 pack on or off (bundled ones too — the choice is remembered), **Export** one as a
@@ -95,7 +103,7 @@ and traits are typed one per line — `1: Fast movement, Rage`, `Darkvision: tex
 whole document as JSON. The other four tables are big, regular and usually built by a
 tool, so they stay JSON-only. **Copy
 to mine** clones a bundled pack into an editable local one, and says what that will cost
-when the pack is a big one -- editing the copy is free, saving it is what spends the
+when the pack is a big one — editing the copy is free, saving it is what spends the
 storage the original was not using; **From this character…**
 lifts the open sheet's classes, race, feature groups and trackers into a new pack, which
 is how something built by hand gets shared. A pack imported with the same id as one

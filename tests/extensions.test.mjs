@@ -7,6 +7,7 @@ import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  isPackKey, packsWorthMoving,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
@@ -18,6 +19,7 @@ import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
   setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
 } from '../app/js/model.js';
+import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
 import { isBasePick } from '../app/js/rules.js';
 import { blankDocument } from '../app/js/convert.js';
 
@@ -184,25 +186,80 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
 {
   const storage = fakeStorage();
   const store = extensionStore(storage);
+  await store.open();
   check('empty to start', store.list(), []);
-  const row = store.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
+  const row = await store.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
   check('saved row', [row.id, row.name, row.enabled, row.replaced, row.local], ['pack-a', 'Pack A', true, false, true]);
   check('listed', store.list().map((e) => e.id), ['pack-a']);
   check('read back normalised', store.read('pack-a').blocks.length, 1);
   check('missing reads null', store.read('nope'), null);
-  const again = store.save({ format: EXTENSION_FORMAT, id: 'pack-a', name: 'Pack A2', revision: 2 });
+  const again = await store.save({ format: EXTENSION_FORMAT, id: 'pack-a', name: 'Pack A2', revision: 2 });
   check('same id replaces', [again.replaced, again.revision, store.list().length, store.list()[0].name], [true, 2, 1, 'Pack A2']);
-  store.setEnabled('pack-a', false);
+  await store.setEnabled('pack-a', false);
   check('disabled', store.list()[0].enabled, false);
-  store.setEnabled('bundled-x', false, { bundled: true });
+  await store.setEnabled('bundled-x', false, { bundled: true });
   check('bundled disable remembered', [...store.disabledBundled()], ['bundled-x']);
-  store.setEnabled('bundled-x', true, { bundled: true });
+  await store.setEnabled('bundled-x', true, { bundled: true });
   check('bundled re-enabled', [...store.disabledBundled()], []);
-  store.remove('pack-a');
+  await store.remove('pack-a');
   check('removed from index and storage', [store.list(), storage.keys().filter((k) => k.includes(':ext:'))], [[], []]);
   let threw = false;
-  try { store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
+  try { await store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
   check('a nameless pack is refused', threw, true);
+
+  // A second store over the same bytes reads what the first one wrote: the
+  // cache is a copy of the medium, not the only place the packs exist.
+  await store.save({ format: EXTENSION_FORMAT, name: 'Pack B' });
+  const reopened = extensionStore(storage);
+  await reopened.open();
+  check('another store reads the same medium', reopened.list().map((e) => e.id), ['pack-b']);
+  check('and says where it read from', reopened.medium, 'localStorage');
+}
+
+console.log('store -- reads are answered from memory, so a render never waits');
+{
+  /*
+   * The sheet asks what is switched on for every render, and a render cannot
+   * await anything. So the store reads its medium once and answers from a
+   * cache -- and the cache follows a write only after the write has gone
+   * through, never before.
+   */
+  const storage = fakeStorage();
+  const store = extensionStore(storage);
+  await store.open();
+  await store.save({ format: EXTENSION_FORMAT, name: 'Cached' });
+  let reads = 0;
+  const counting = { ...storage, getItem: (k) => { reads++; return storage.getItem(k); } };
+  const quiet = extensionStore(counting);
+  await quiet.open();
+  const before = reads;
+  quiet.list(); quiet.read('cached'); quiet.disabledBundled();
+  check('reading the store touches the medium not at all', reads - before, 0);
+}
+
+console.log('store -- a write that arrives before the store has read its medium');
+{
+  /*
+   * The dialog can be handed a pack before `load()` has resolved -- a file
+   * dropped on the page during startup does exactly that. A write reads the
+   * index to add its row to it, and reading an index that has not been read
+   * in yet would build the new one out of nothing and write away every pack
+   * already stored. So writers wait; only readers may answer "nothing yet".
+   */
+  const storage = fakeStorage();
+  const first = extensionStore(storage);
+  await first.open();
+  await first.save({ format: EXTENSION_FORMAT, name: 'Already here' });
+
+  const cold = extensionStore(storage);
+  check('a cold store reads as empty', cold.list(), []);
+  await cold.save({ format: EXTENSION_FORMAT, name: 'Dropped on the page' });
+  check('and a save into it keeps what was already there',
+    cold.list().map((e) => e.id).sort(), ['already-here', 'dropped-on-the-page']);
+
+  const after = extensionStore(storage);
+  await after.open();
+  check('which is what the medium holds', after.list().map((e) => e.id).sort(), ['already-here', 'dropped-on-the-page']);
 }
 
 console.log('store -- a save that runs out of room leaves nothing behind');
@@ -237,8 +294,9 @@ console.log('store -- a save that runs out of room leaves nothing behind');
   const body = JSON.stringify(normalizeExtension(pack('big', 20)));
   const storage = withCeiling(extensionKey('big').length + body.length + 20);
   const store = extensionStore(storage);
+  await store.open();
   let threw = null;
-  try { store.save(pack('big', 20)); } catch (e) { threw = e.name; }
+  try { await store.save(pack('big', 20)); } catch (e) { threw = e.name; }
   check('the save reports the browser is full', threw, 'QuotaExceededError');
   check('and no orphaned document is left holding the space',
     storage.keys().filter((k) => k.startsWith('character-sheet:ext:')), []);
@@ -251,7 +309,8 @@ console.log('store -- a save that runs out of room leaves nothing behind');
    */
   const roomy = withCeiling(1e6);
   const s2 = extensionStore(roomy);
-  s2.save(pack('keep', 1));
+  await s2.open();
+  await s2.save(pack('keep', 1));
   const kept = roomy.getItem(extensionKey('keep'));
   // Only the index write fails, which is the shape a real ceiling takes: the
   // document went in, and the row that would have found it did not fit.
@@ -261,10 +320,175 @@ console.log('store -- a save that runs out of room leaves nothing behind');
     return write(k, v);
   };
   let alsoThrew = false;
-  try { s2.save(pack('keep', 40)); } catch { alsoThrew = true; }
+  try { await s2.save(pack('keep', 40)); } catch { alsoThrew = true; }
   check('a failed replace throws', alsoThrew, true);
-  check('and the pack it would have replaced is still there, unchanged',
-    roomy.getItem(extensionKey('keep')), kept);
+  check('and the pack it was replacing is still there', roomy.getItem(extensionKey('keep')), kept);
+  check('unchanged in the index too', s2.list().map((e) => e.blockCount), [1]);
+  check('and in memory, which followed the medium rather than leading it',
+    s2.read('keep').blocks.length, 1);
+}
+
+/**
+ * The smallest IndexedDB that answers what `pack-storage.js` asks of one:
+ * open with an upgrade, a transaction per call, `getAll`, `put`, `delete`.
+ *
+ * Writes are staged and applied on complete, which is not fake politeness --
+ * it is the property being tested. A transaction that aborts must leave the
+ * store exactly as it found it, and a fake that wrote through would pass a
+ * test the real thing would fail.
+ */
+function fakeIndexedDb({ limit = Infinity } = {}) {
+  const rows = new Map();
+  const later = (fn) => queueMicrotask(fn);
+  const weight = (m) => [...m.values()].reduce((n, r) => n + r.key.length + r.value.length, 0);
+
+  const db = {
+    objectStoreNames: { contains: (n) => n === PACK_STORE },
+    createObjectStore: () => ({}),
+    close: () => {},
+    transaction() {
+      const staged = new Map(rows);
+      const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
+      let failed = null;
+      tx.objectStore = () => ({
+        getAll() {
+          const req = { result: null, onsuccess: null, onerror: null };
+          later(() => { req.result = [...staged.values()]; req.onsuccess?.(); });
+          return req;
+        },
+        put(record) { staged.set(record.key, record); },
+        delete(key) { staged.delete(key); },
+      });
+      later(() => {
+        if (weight(staged) > limit) {
+          failed = new Error('quota');
+          failed.name = 'QuotaExceededError';
+        }
+        if (failed) { tx.error = failed; tx.onabort?.(); return; }
+        rows.clear();
+        for (const [k, v] of staged) rows.set(k, v);
+        tx.oncomplete?.();
+      });
+      return tx;
+    },
+  };
+
+  return {
+    rows,
+    open() {
+      const req = { result: db, onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
+      later(() => { req.onupgradeneeded?.(); req.onsuccess?.(); });
+      return req;
+    },
+  };
+}
+
+console.log('pack storage -- two mediums, the same two questions');
+{
+  for (const [where, make] of [
+    ['localStorage', () => storageMedium(fakeStorage(), { holds: isPackKey })],
+    ['IndexedDB', () => indexedDbMedium({ factory: fakeIndexedDb() })],
+  ]) {
+    const medium = make();
+    check(`${where}: empty to start`, [...await medium.all()], []);
+    await medium.commit([['character-sheet:ext:a', '{"a":1}'], [EXTENSIONS_KEY, '{"extensions":[]}']]);
+    const all = await medium.all();
+    check(`${where}: both keys land`, [...all.keys()].sort(), ['character-sheet:ext:a', EXTENSIONS_KEY]);
+    check(`${where}: values come back whole`, all.get('character-sheet:ext:a'), '{"a":1}');
+    await medium.commit([['character-sheet:ext:a', null]]);
+    check(`${where}: null deletes`, [...(await medium.all()).keys()], [EXTENSIONS_KEY]);
+  }
+
+  // Only the localStorage medium is asked about other people's keys: the
+  // database holds nothing but packs, so there is nothing there to filter.
+  const shared = fakeStorage();
+  shared.setItem('character-sheet:vesna', 'a character');
+  shared.setItem('character-sheet:ext:a', '{"a":1}');
+  const scoped = storageMedium(shared, { holds: isPackKey });
+  check('an origin shared with characters yields only packs',
+    [...(await scoped.all()).keys()], ['character-sheet:ext:a']);
+}
+
+console.log('pack storage -- a database transaction is all of the writes or none');
+{
+  /*
+   * The same guarantee the localStorage medium buys with a rollback,
+   * IndexedDB gives for nothing: the two writes are one transaction, and a
+   * failure aborts both. This is the check that the code is actually asking
+   * for that rather than putting each key in a transaction of its own.
+   */
+  const factory = fakeIndexedDb({ limit: 60 });
+  const medium = indexedDbMedium({ factory });
+  await medium.commit([['character-sheet:ext:small', '{}']]);
+  let threw = null;
+  try {
+    await medium.commit([
+      ['character-sheet:ext:big', `{"x":"${'y'.repeat(200)}"}`],
+      [EXTENSIONS_KEY, '{"extensions":[{"id":"big"}]}'],
+    ]);
+  } catch (e) { threw = e.name; }
+  check('the write reports the browser is full', threw, 'QuotaExceededError');
+  check('and neither key of it was kept', [...(await medium.all()).keys()], ['character-sheet:ext:small']);
+}
+
+console.log('pack storage -- packs move out of localStorage once, and orphans stay put');
+{
+  /*
+   * A player who has been using this app has packs in localStorage already.
+   * They move on the first load with a working database, which is also the
+   * load that gives them back the room those packs were holding.
+   */
+  const storage = fakeStorage();
+  storage.setItem(EXTENSIONS_KEY, JSON.stringify({ extensions: [{ id: 'a' }, { id: 'b' }], disabledBundled: ['x'] }));
+  storage.setItem(extensionKey('a'), '{"id":"a"}');
+  storage.setItem(extensionKey('b'), '{"id":"b"}');
+  storage.setItem(extensionKey('ghost'), '{"id":"ghost"}');
+  storage.setItem('character-sheet:vesna', 'a character');
+
+  const factory = fakeIndexedDb();
+  const { medium, moved } = await packMedium({ storage, factory, holds: isPackKey, keep: packsWorthMoving });
+  check('it chose the database', medium.name, 'IndexedDB');
+  check('the index and the packs it lists moved',
+    moved.sort(), [EXTENSIONS_KEY, extensionKey('a'), extensionKey('b')].sort());
+  check('and are readable there', [...(await medium.all()).keys()].sort(),
+    [EXTENSIONS_KEY, extensionKey('a'), extensionKey('b')].sort());
+  check('localStorage got the room back', storage.keys().sort(),
+    [extensionKey('ghost'), 'character-sheet:vesna'].sort());
+
+  /*
+   * The ghost is a document with no index row -- what a browser filling up
+   * between the two writes of a save used to leave behind. Nothing can reach
+   * it, so moving it would carry dead weight into the new home; it stays
+   * where `tools/storage-report.js` looks for it.
+   */
+  check('the orphan stayed behind', storage.getItem(extensionKey('ghost')), '{"id":"ghost"}');
+
+  const second = await packMedium({ storage, factory, holds: isPackKey, keep: packsWorthMoving });
+  check('a second load moves nothing', second.moved, []);
+  check('and the store still reads what moved', [...(await second.medium.all())].length, 3);
+
+  const store = extensionStore(second.medium);
+  await store.open();
+  check('the packs are listed after the move', store.list().map((e) => e.id), ['a', 'b']);
+  check('and so is a bundled pack that was switched off', [...store.disabledBundled()], ['x']);
+}
+
+console.log('pack storage -- no database is not an error, only a smaller budget');
+{
+  const storage = fakeStorage();
+  storage.setItem(EXTENSIONS_KEY, JSON.stringify({ extensions: [{ id: 'a' }] }));
+  storage.setItem(extensionKey('a'), '{"id":"a"}');
+
+  const none = await packMedium({ storage, factory: null, holds: isPackKey, keep: packsWorthMoving });
+  check('it falls back to localStorage', none.medium.name, 'localStorage');
+  check('moving nothing', none.moved, []);
+  check('and the packs are still readable where they are', [...(await none.medium.all())].length, 2);
+
+  // A database that will not open reads the same as no database at all.
+  const refuses = { open: () => { const req = { onerror: null, onsuccess: null, error: new Error('blocked') }; queueMicrotask(() => req.onerror?.()); return req; } };
+  const blocked = await packMedium({ storage, factory: refuses, holds: isPackKey, keep: packsWorthMoving });
+  check('a database that refuses to open reads the same', blocked.medium.name, 'localStorage');
+  check('and takes nothing with it', storage.keys().length, 2);
 }
 
 console.log('active set -- bundled first, disabled dropped, local packs after');
@@ -272,9 +496,10 @@ console.log('active set -- bundled first, disabled dropped, local packs after');
   const storage = fakeStorage();
   const store = extensionStore(storage);
   const bundled = [normalizeExtension({ id: 'b1', name: 'B1', blocks: [{ kind: 'note', name: 'from b1' }] }), normalizeExtension({ id: 'b2', name: 'B2' })];
-  store.save({ format: EXTENSION_FORMAT, id: 'l1', name: 'L1', blocks: [{ kind: 'note', name: 'from l1' }] });
-  store.save({ format: EXTENSION_FORMAT, id: 'l2', name: 'L2' }, { enabled: false });
-  store.setEnabled('b2', false, { bundled: true });
+  await store.open();
+  await store.save({ format: EXTENSION_FORMAT, id: 'l1', name: 'L1', blocks: [{ kind: 'note', name: 'from l1' }] });
+  await store.save({ format: EXTENSION_FORMAT, id: 'l2', name: 'L2' }, { enabled: false });
+  await store.setEnabled('b2', false, { bundled: true });
   const active = activeExtensions(bundled, store);
   check('order and filtering', active.map((e) => [e.id, e.bundled]), [['b1', true], ['l1', false]]);
   check('blocks tagged with their pack', activeBlocks(active).map((b) => [b.extId, b.extName, b.index, b.name]), [['b1', 'B1', 0, 'from b1'], ['l1', 'L1', 0, 'from l1']]);

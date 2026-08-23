@@ -958,10 +958,21 @@ Hit Die: d12.
     const qa = (sel) => [...dialog.querySelectorAll(sel)];
 
     if (view === 'list') {
-      qa('[data-toggle]').forEach((el) => el.addEventListener('change', () => {
-        runtime.store?.setEnabled(el.dataset.toggle, el.checked, { bundled: el.dataset.bundled === 'true' });
+      qa('[data-toggle]').forEach((el) => el.addEventListener('change', async () => {
+        /*
+         * The store is what says which packs are on, so the switch follows it
+         * rather than the other way round: on a write that does not go
+         * through, `render()` draws the checkbox back where the store still
+         * has it, and the line below says why it moved back.
+         */
+        try {
+          await runtime.store?.setEnabled(el.dataset.toggle, el.checked, { bundled: el.dataset.bundled === 'true' });
+          notice = null; error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not switch that pack — ${err.message}`;
+        }
         runtime.refresh();
-        notice = null; error = null;
         render();
       }));
       qa('[data-edit]').forEach((el) => el.addEventListener('click', () => startEdit(runtime.store.read(el.dataset.edit), false)));
@@ -985,12 +996,18 @@ Hit Die: d12.
       }));
       qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; render(); }));
       q('[data-remove-cancel]')?.addEventListener('click', () => { confirmRemove = null; render(); });
-      qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', () => {
-        const row = runtime.store.list().find((e) => e.id === el.dataset.removeConfirm);
-        runtime.store.remove(el.dataset.removeConfirm);
+      qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', async () => {
+        const id = el.dataset.removeConfirm;
+        const row = runtime.store.list().find((e) => e.id === id);
+        try {
+          await runtime.store.remove(id);
+          notice = `Removed ${row?.name || 'the pack'} from this browser.`; error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not remove ${row?.name || 'the pack'} — ${err.message}`;
+        }
         runtime.refresh();
         confirmRemove = null;
-        notice = `Removed ${row?.name || 'the pack'} from this browser.`; error = null;
         render();
       }));
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
@@ -1257,7 +1274,7 @@ Hit Die: d12.
     dialog.querySelector('[data-h="name"]')?.focus();
   }
 
-  function save() {
+  async function save() {
     if (asJson) {
       try { draft = normalizeExtension(JSON.parse(jsonText)); } catch (err) { error = `The JSON does not parse — ${err.message}.`; render(); return; }
     }
@@ -1273,7 +1290,7 @@ Hit Die: d12.
       render(); return;
     }
     try {
-      const row = runtime.store.save(draft, { origin: 'local' });
+      const row = await runtime.store.save(draft, { origin: 'local' });
       runtime.refresh();
       notice = `${row.replaced ? 'Updated' : 'Saved'} ${row.name} (${describeSummary(row)}).`;
       error = null; view = 'list'; draft = null;
@@ -1289,7 +1306,7 @@ Hit Die: d12.
 
   /* ---------------- bringing a pack in ---------------- */
 
-  function importDoc(doc, label = 'the pack') {
+  async function importDoc(doc, label = 'the pack') {
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
     if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
@@ -1297,7 +1314,7 @@ Hit Die: d12.
       render(); return { ok: false, error };
     }
     try {
-      const row = runtime.store.save(doc, { origin: 'import' });
+      const row = await runtime.store.save(doc, { origin: 'import' });
       runtime.refresh();
       notice = `${row.replaced ? 'Updated' : 'Imported'} ${row.name} rev ${row.revision} (${describeSummary(row)}).`
         + (verdict.warnings?.length ? ` Note — ${verdict.warnings.join('; ')}.` : '');

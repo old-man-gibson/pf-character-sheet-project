@@ -18,14 +18,19 @@
  *    Attaching copies the block into the character, so an exported character is
  *    still self-contained and needs no pack to open.
  *
- * Bundled packs come from `data/extensions/index.json` (a deployment lists what
- * it ships there, exactly as `data/characters/index.json` lists characters --
- * and the published engine ships neither). Local packs live in this browser
- * only, in localStorage, alongside the imported characters.
+ * Bundled packs come from an `index.json` in `data/extensions/` (what the
+ * repository ships, exactly as `data/characters/index.json` lists characters --
+ * and the published engine ships neither) or in `private/extensions/`, the
+ * folder git ignores. Either way they are fetched into memory and never
+ * stored. Local packs -- the ones a player imports -- are stored, in this
+ * browser only: IndexedDB where there is one and localStorage where there is
+ * not (see `pack-storage.js`), alongside the imported characters.
  *
  * Nothing in here touches the DOM: the manager UI and the sheet element both
  * call this module, and the tests call it with a fake storage.
  */
+
+import { storageMedium } from './pack-storage.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -627,35 +632,120 @@ export function blankExtension({ name = 'My extension', author = '', id = null }
 
 /* ---------------- the local store ---------------- */
 
+/** The keys the store owns: the index, and one document per local pack. */
+export const isPackKey = (key) => key === EXTENSIONS_KEY || str(key).startsWith(extensionKey(''));
+
 /**
- * The store is a thin layer over a Storage-like object (`getItem` /
- * `setItem` / `removeItem`), which is localStorage in the page and a Map in
- * the tests. One index lists the local packs and remembers which bundled ones
- * are switched off; each pack's document is its own key so the index stays
- * small enough to read on every load.
+ * Which of the pack keys found in localStorage are worth moving into the
+ * database: the index, and the documents the index actually lists.
+ *
+ * What that leaves behind is a document with no index row -- the fingerprint
+ * of the bug fixed in 758f36c, from a browser that filled up between the two
+ * writes a save used to be. Nothing can reach it, so moving it would carry a
+ * dead weight into the new home; `tools/storage-report.js` finds those where
+ * they lie and prints the line that clears them.
  */
-export function extensionStore(storage = globalThis.localStorage) {
-  if (!storage) throw new Error('extensionStore needs a Storage-like object');
+export function packsWorthMoving(found) {
+  const out = new Map();
+  const raw = found.get(EXTENSIONS_KEY);
+  if (typeof raw !== 'string') return out;
+  let rows;
+  try { rows = arr(JSON.parse(raw).extensions).filter((e) => e && e.id); } catch { return out; }
+  out.set(EXTENSIONS_KEY, raw);
+  for (const { id } of rows) {
+    const doc = found.get(extensionKey(id));
+    if (typeof doc === 'string') out.set(extensionKey(id), doc);
+  }
+  return out;
+}
+
+/**
+ * The local store: one index listing the packs a player has imported and
+ * remembering which bundled ones they have switched off, plus each pack's
+ * document under a key of its own so the index stays small enough to read on
+ * every load.
+ *
+ * **Reads are synchronous and writes are not**, and the split is the whole
+ * design. The sheet asks what is switched on for every render, and a render
+ * cannot wait for a database -- so everything is read into memory once by
+ * `open()` and answered from there afterwards. A write goes to the medium
+ * first and into memory only once it has gone through, so a store that says
+ * a pack is there is a store where the pack is really stored.
+ *
+ * The argument is where the bytes live (see `pack-storage.js`), in any of
+ * three shapes: a medium, a Storage-like object to wrap in one -- which is
+ * what the tests hand it -- or a function returning either, awaited at
+ * `open()` for the case where choosing takes a database to be opened first.
+ */
+export function extensionStore(medium = globalThis.localStorage) {
+  const cache = new Map();
+  let opened = null;
+  let backing = null;
+  let moved = [];
+
+  const asMedium = (m) => (m && typeof m.commit === 'function'
+    ? m
+    : storageMedium(m, { holds: isPackKey }));
+
+  const open = () => {
+    if (!opened) {
+      opened = (async () => {
+        const chosen = typeof medium === 'function' ? await medium() : medium;
+        if (chosen && chosen.medium) { backing = asMedium(chosen.medium); moved = arr(chosen.moved); }
+        else backing = asMedium(chosen);
+        const found = await backing.all();
+        cache.clear();
+        for (const [key, value] of found) cache.set(key, value);
+        return true;
+      })().catch(() => false);
+    }
+    return opened;
+  };
 
   const readIndex = () => {
     try {
-      const raw = JSON.parse(storage.getItem(EXTENSIONS_KEY) || '{}');
+      const raw = JSON.parse(cache.get(EXTENSIONS_KEY) || '{}');
       return {
         extensions: arr(raw.extensions).filter((e) => e && e.id),
         disabledBundled: arr(raw.disabledBundled).map(str),
       };
     } catch { return { extensions: [], disabledBundled: [] }; }
   };
-  const writeIndex = (index) => storage.setItem(EXTENSIONS_KEY, JSON.stringify(index));
+
+  /**
+   * Store first, remember second. `commit` is all-or-nothing, so a failure
+   * here leaves both the medium and the cache on the previous state rather
+   * than on two different ones.
+   *
+   * Every writer above waits on `open()` before it reads the index, which is
+   * not belt and braces: a save arriving before the store had read its medium
+   * would build the new index out of an empty one and write away every pack
+   * already there. Reads may answer "nothing yet"; writes may not act on it.
+   */
+  const write = async (writes) => {
+    if (!backing) await open();
+    if (!backing) throw new Error('There is nowhere to store a pack in this browser.');
+    await backing.commit(writes);
+    for (const [key, value] of writes) {
+      if (value === null) cache.delete(key); else cache.set(key, value);
+    }
+  };
 
   return {
+    /** Read everything in. Resolves false where there is nowhere to read from. */
+    open,
+
+    /** Which medium the packs ended up in, and what moved there, once open. */
+    get medium() { return backing?.name || null; },
+    get moved() { return [...moved]; },
+
     /** Every local pack's index row, in the order they were added. */
     list() { return readIndex().extensions.map((e) => ({ ...e, local: true })); },
 
     /** One local pack's full document, or null. */
     read(id) {
       try {
-        const raw = storage.getItem(extensionKey(id));
+        const raw = cache.get(extensionKey(id));
         return raw ? normalizeExtension(JSON.parse(raw)) : null;
       } catch { return null; }
     },
@@ -663,60 +753,42 @@ export function extensionStore(storage = globalThis.localStorage) {
     /**
      * Store a pack: new, or replacing the one with the same id (which is how
      * an updated pack a friend sends over lands -- same id, higher revision).
-     * Returns the index row. Throws on a full browser, like a character import.
-     *
-     * **All of it or none of it.** A pack is two writes -- the document under
-     * its own key, then the index row that makes it findable -- and a full
-     * browser can fail the second after passing the first. That left the
-     * document behind with nothing pointing at it: `list()` could not see it,
-     * so the dialog could not offer to remove it, while it went on holding
-     * exactly the space the "out of space" message was asking to be freed.
-     * Worse on a replace, where the pack being updated had already been
-     * overwritten and was simply gone. So the previous state goes back.
+     * Resolves to the index row. Rejects on a full browser, like a character
+     * import, and leaves nothing of the attempt behind when it does.
      */
-    save(doc, { origin = 'import', enabled = null } = {}) {
+    async save(doc, { origin = 'import', enabled = null } = {}) {
+      await open();
       const ext = normalizeExtension(doc);
       if (!ext.id) throw new Error('An extension needs a name.');
       ext.updatedAt = new Date().toISOString().slice(0, 19);
       if (!ext.createdAt) ext.createdAt = ext.updatedAt;
-      const key = extensionKey(ext.id);
-      const before = storage.getItem(key);
-      let row;
-      let replaced = false;
-      try {
-        storage.setItem(key, JSON.stringify(ext));
-        const index = readIndex();
-        const prior = index.extensions.find((e) => e.id === ext.id);
-        replaced = !!prior;
-        row = {
-          ...summarize(ext),
-          origin: prior?.origin || origin,
-          enabled: enabled ?? prior?.enabled ?? true,
-        };
-        index.extensions = prior
-          ? index.extensions.map((e) => (e.id === ext.id ? row : e))
-          : [...index.extensions, row];
-        writeIndex(index);
-      } catch (err) {
-        // Put back what was there. The restore cannot itself run out of
-        // room: the value it writes was in this very key a moment ago, and
-        // the larger one that displaced it has just been taken out again.
-        storage.removeItem(key);
-        if (before !== null) storage.setItem(key, before);
-        throw err;
-      }
-      return { ...row, local: true, replaced };
+      const index = readIndex();
+      const prior = index.extensions.find((e) => e.id === ext.id);
+      const row = {
+        ...summarize(ext),
+        origin: prior?.origin || origin,
+        enabled: enabled ?? prior?.enabled ?? true,
+      };
+      index.extensions = prior
+        ? index.extensions.map((e) => (e.id === ext.id ? row : e))
+        : [...index.extensions, row];
+      await write([
+        [extensionKey(ext.id), JSON.stringify(ext)],
+        [EXTENSIONS_KEY, JSON.stringify(index)],
+      ]);
+      return { ...row, local: true, replaced: !!prior };
     },
 
-    remove(id) {
+    async remove(id) {
+      await open();
       const index = readIndex();
       index.extensions = index.extensions.filter((e) => e.id !== id);
-      writeIndex(index);
-      storage.removeItem(extensionKey(id));
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
     },
 
     /** Switch a pack on or off; bundled ones are remembered by id. */
-    setEnabled(id, on, { bundled = false } = {}) {
+    async setEnabled(id, on, { bundled = false } = {}) {
+      await open();
       const index = readIndex();
       if (bundled) {
         const set = new Set(index.disabledBundled);
@@ -725,7 +797,7 @@ export function extensionStore(storage = globalThis.localStorage) {
       } else {
         index.extensions = index.extensions.map((e) => (e.id === id ? { ...e, enabled: !!on } : e));
       }
-      writeIndex(index);
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
     },
 
     disabledBundled() { return new Set(readIndex().disabledBundled); },
