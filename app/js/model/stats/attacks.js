@@ -14,6 +14,7 @@ import {
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { weaponProficient } from '../document.js';
+import { emit } from '../events.js';
 import { forwarded } from '../scope.js';
 import { sphereTally } from '../spheres.js';
 import { slug } from '../util.js';
@@ -375,6 +376,78 @@ export function recomputeEquipment(model) {
   c.carry.carried = computed + (Number(c.carry.carriedOffset) || 0);
   e.totalValue = sum(e.gear, 'cost') + sum(e.other, 'cost')
     + (Number(e.armor?.cost) || 0) + sum(e.shields, 'cost') + sum(e.weapons, 'price');
+}
+
+/* ------------------------------------------------------------------ *
+ * Gear columns.
+ *
+ * The workbook's Equipment sheet gave every item three typed bonuses and
+ * four freeform columns, and that is what the import carries. Three was
+ * never a rule -- it is how wide the spreadsheet happened to be -- so the
+ * count is the table's to set: a ring with four properties needs a fourth
+ * pair, and a character who never writes in the Other columns should not
+ * scroll past four empty ones.
+ *
+ * How many there are is not stored anywhere. It is the longest row in the
+ * list, which makes the data its own answer: no count to keep in step with
+ * the rows, nothing to migrate, and a document saved by an older build
+ * reports exactly the columns it has.
+ * ------------------------------------------------------------------ */
+
+/** An empty cell of each kind, so adding a column adds the right shape. */
+const GEAR_COLUMN_BLANK = { bonuses: () => ({ value: null, type: null }), others: () => null };
+
+/** The floor: a table with no columns at all has nothing to fill in. */
+const GEAR_COLUMN_MIN = { bonuses: 1, others: 1 };
+
+/**
+ * How many columns of `kind` the list shows -- the longest row in it, never
+ * fewer than one. An empty list still offers the workbook's own three and
+ * four, because that is the shape the next item added will have.
+ */
+export function gearColumnCount(rows, kind) {
+  const lengths = (rows || []).map((g) => (Array.isArray(g?.[kind]) ? g[kind].length : 0));
+  if (!lengths.length) return kind === 'bonuses' ? 3 : 4;
+  return Math.max(GEAR_COLUMN_MIN[kind], ...lengths);
+}
+
+/** Does any row have something written in the last column of `kind`? */
+export function gearColumnInUse(rows, kind) {
+  const at = gearColumnCount(rows, kind) - 1;
+  return (rows || []).some((g) => {
+    const cell = g?.[kind]?.[at];
+    if (cell === null || cell === undefined || cell === '') return false;
+    // A bonus is two boxes; either one written on is the column being used.
+    if (kind === 'bonuses') return cell.value != null && cell.value !== '' ? true : !!cell.type;
+    return true;
+  });
+}
+
+/**
+ * Add or drop a column across every row of a gear list at once.
+ *
+ * Every row keeps the same shape, because they are columns of one table and
+ * a row that was short would read as a row with a blank in it. `delta` is +1
+ * or -1; dropping the last column is refused when it would leave the list
+ * with none.
+ */
+export function setGearColumns(model, list, kind, delta) {
+  const rows = model.list(list);
+  if (!rows || !GEAR_COLUMN_BLANK[kind]) return model;
+  const now = gearColumnCount(rows, kind);
+  const want = Math.max(GEAR_COLUMN_MIN[kind], now + (delta > 0 ? 1 : -1));
+  if (want === now) return model;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    if (!Array.isArray(row[kind])) row[kind] = [];
+    while (row[kind].length < want) row[kind].push(GEAR_COLUMN_BLANK[kind]());
+    row[kind].length = want;
+  }
+  model.recompute();
+  emit(model, {
+    type: 'set', path: `${list}:columns:${kind}`, value: want,
+  });
+  return model;
 }
 
 export function recomputeUnarmed(model) {

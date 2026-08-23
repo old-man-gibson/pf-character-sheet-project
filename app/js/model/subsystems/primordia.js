@@ -103,6 +103,15 @@ export function recomputePrimordia(model) {
     });
     const text = String(p.picks[lvl] ?? '');
     const pick = grants.find((g) => g.pick)?.pick || null;
+    /*
+     * What the rules already named at this level.
+     *
+     * A level that hands over Detect Spellcaster has said which talent it is,
+     * so the name column can say so too rather than leaving the player to
+     * copy it across from the sentence beside it. Levels that only offer a
+     * choice name nothing, and their column stays a question.
+     */
+    const auto = grants.map((g) => g.name).filter(Boolean).join(' + ');
     const filled = text.trim() !== '';
     const due = !!pick && reached && !filled;
 
@@ -121,6 +130,11 @@ export function recomputePrimordia(model) {
       grants,
       pick,
       text,
+      auto,
+      // The name that stands in the column when nothing has been typed over
+      // it: what the player wrote, or failing that what the rules named.
+      name: text.trim() || auto,
+      note: String(p.rowNotes?.[lvl] ?? ''),
       reached,
       filled,
       due,

@@ -7,7 +7,10 @@
  * points and skill ranks per level that the derived stats then read.
  */
 
-import { gestaltSaveBase, levelRuleGrants, parseGroupText, parseLevelRule } from '../rules.js';
+import {
+  MYTHIC_PATH_HP, gestaltSaveBase, hitPointBase, levelRuleGrants, parseGroupText, parseLevelRule,
+  statMod,
+} from '../rules.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { orphans } from './reconcile.js';
 import { forwarded } from './scope.js';
@@ -777,12 +780,39 @@ export function applyGestalt(model) {
     return Number.isFinite(over) ? over : (Number(cls.bab) || 0);
   };
   let rate = 0;
+  // The hit die taken at each level, alongside the progression -- the two
+  // walk the same levels and ask the same question of them, and the Planner's
+  // own sheet kept them as neighbouring columns for that reason.
+  const hdPerLevel = [];
+  /*
+   * How often each class is the one setting the pace.
+   *
+   * Best-of-the-classes-present is a rule with a quiet failure mode: on a
+   * character who already has a full-BAB class, dropping another class to
+   * half changes the sheet by nothing at all, and a table that says so only
+   * by not moving looks broken. Counted here, where presence is already in
+   * hand, so the table can say which rows are being beaten and by how much.
+   */
+  const beaten = new Map(classes.map((x) => [x, { hd: 0, bab: 0, levels: 0 }]));
   for (let l = 1; l <= level; l++) {
     const present = classes.filter((x) => presence.get(x)[l - 1]);
-    if (present.length) rate += Math.max(...present.map(rateOf));
+    const bestBab = present.length ? Math.max(...present.map(rateOf)) : 0;
+    const bestHd = present.length ? Math.max(...present.map((x) => Number(x.hd) || 0)) : 0;
+    if (present.length) rate += bestBab;
+    hdPerLevel.push(bestHd);
+    for (const x of present) {
+      const tally = beaten.get(x);
+      tally.levels += 1;
+      if (rateOf(x) < bestBab) tally.bab += 1;
+      if ((Number(x.hd) || 0) < bestHd) tally.hd += 1;
+    }
   }
+  for (const cls of classes) cls.gestaltBeaten = beaten.get(cls);
   summary.babPerLevel = rate;
   summary.bab = Math.floor(rate);
+  // The total rather than the array: the per-level figures are already on the
+  // Planner rows, and the sum is the only one the hit-points readout asks for.
+  summary.hdTotal = hdPerLevel.reduce((n, hd) => n + hd, 0);
   c.gestalt = summary;
 
   /*
@@ -804,6 +834,8 @@ export function applyGestalt(model) {
     c.attack.bab = c.attack.babOverride == null ? summary.bab : Number(c.attack.babOverride) || 0;
   }
 
+  applyHitPoints(model, summary, hdPerLevel);
+
   // Per-level read-only numbers for the Progression tab, from the class
   // tracks actually chosen on each row.
   const byName = new Map(classes.map((x) => [x.name, x]));
@@ -819,6 +851,72 @@ export function applyGestalt(model) {
       will: inc('goodWill'),
     };
   }
+}
+
+/**
+ * The bonus hit points a mythic tier is worth on this character.
+ *
+ * Typed in when the player has typed one, and otherwise the path's own figure
+ * -- a sheet that says "Champion" has already said "five a tier", and asking
+ * for the number again is asking it to repeat itself. Zero for a path the
+ * table has no row for, which leaves the field to say what it is.
+ */
+export function mythicHpPerTier(c) {
+  const typed = c.mythic?.bonusHpPerTier;
+  if (typed !== null && typed !== undefined && typed !== '') return Number(typed) || 0;
+  return MYTHIC_PATH_HP[String(c.mythic?.path || c.identity?.mythicPath || '').trim()] || 0;
+}
+
+/**
+ * Hit points, worked out from the class table the way the saves and the base
+ * attack bonus are.
+ *
+ * The parts live in `rules.hitPointBase`; what happens here is the same
+ * arrangement the BAB field already uses, and for the same reason. `hp.base`
+ * is what the classes come to and `hp.totalOverride` is a number the player
+ * pinned over it, with the total following whichever is in force.
+ *
+ * The first pass is where a sheet that cannot explain its own hit points
+ * keeps them: an imported total that the class table does not reproduce --
+ * rolled dice rather than maximums, a bonus the workbook applied through some
+ * formula that did not survive the export -- is pinned as an override then
+ * and there, so importing never costs a character hit points. Where the two
+ * agree, and they do on every workbook this was written against, the field
+ * stays automatic and the total follows the classes from then on.
+ */
+export function applyHitPoints(model, summary, hdPerLevel = []) {
+  const c = model.data;
+  if (!c.hp) return;
+  const level = Number(c.identity?.level) || 0;
+
+  const abilityMod = statMod(c, c.hp.ability, c.hp.ability2);
+  const perTier = mythicHpPerTier(c);
+  const base = hitPointBase({
+    perLevel: hdPerLevel,
+    level,
+    abilityMod,
+    fcb: c.hp.fcb,
+    toughness: c.hp.toughness,
+    misc: c.hp.misc,
+    mythicTier: c.identity?.mythicTier,
+    mythicHpPerTier: perTier,
+  });
+
+  if (c.hp.totalOverride === undefined) {
+    const imported = Number(c.hp.total);
+    c.hp.totalOverride = Number.isFinite(imported) && imported !== base ? imported : null;
+  }
+  c.hp.base = base;
+  c.hp.total = c.hp.totalOverride == null ? base : Number(c.hp.totalOverride) || 0;
+
+  /*
+   * The two figures the readout needs that are nowhere else: what the ability
+   * slot came to, and what a tier turned out to be worth once the path had
+   * been consulted. Everything else in the sum is already a field on `hp`,
+   * and a summary that copied them would be a second place for them to be
+   * wrong -- the hit dice above are the whole of what this block adds.
+   */
+  summary.hp = { abilityMod, mythicHpPerTier: perTier, base };
 }
 
 /**

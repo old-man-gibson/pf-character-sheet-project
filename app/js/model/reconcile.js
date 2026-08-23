@@ -80,11 +80,17 @@ export function describeSource(path) {
         : b === 'featEffect' ? `the tier ${nth(a)} feat’s effect`
           : `mythic ability ${nth(a)}`;
     case 'mythicTradition': return 'mythic tradition';
+    case 'mythicTraditionNote': return 'a mythic tradition note';
+    case 'feat': return `a feat’s note, group ${nth(a)}`;
+    case 'grantedFeat': return 'a granted feat’s note';
     case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
+    case 'primordiaNote': return `Primordia notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'gear':
     case 'other': return `gear ${nth(a)}`;
+    case 'gearNote':
+    case 'otherNote': return `gear ${nth(a)}, description`;
     case 'talent':
     case 'bonusTalent': return `a ${a} talent`;
     case 'tradition': return `${a} tradition`;

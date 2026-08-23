@@ -13,7 +13,7 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, val } from '../html.js';
+import { esc } from '../html.js';
 import { field } from '../fields.js';
 import { collapsible } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
@@ -52,6 +52,38 @@ const DASH_CARD_LABELS = new Map(DASH_CARDS);
 
 /** The base attack progressions a class can run, as the rules name them. */
 const BAB_RATES = [[1, 'full'], [0.75, '&frac34;'], [0.5, '&frac12;'], [0, 'none']];
+
+/** The hit dice a class can have, as the workbook's own HD Size column listed them. */
+const HIT_DICE = [4, 6, 8, 10, 12];
+
+/**
+ * One of the class table's two progression dropdowns.
+ *
+ * HD and BAB are the same control asking two questions, so they are built by
+ * the same function: a fixed list of what the rules allow, plus whatever the
+ * row already holds if a pack or an import put something else there -- which
+ * is how a d20 hit die or a 2/3 progression survives being looked at.
+ */
+function progressionSelect(i, field, value, choices, label, format = String, beaten = null) {
+  const now = Number(value) || 0;
+  const known = choices.some(([v]) => v === now);
+  const opts = known ? choices : [...choices, [now, format(now)]];
+  // Marked when another class present at the same levels is doing better,
+  // because that is when changing this dropdown moves nothing on the sheet.
+  const lost = beaten?.count || 0;
+  const all = lost > 0 && lost === beaten.levels;
+  const where = beaten?.levels === 1 ? 'its only level'
+    : all ? `all ${lost} of its levels`
+      : `${lost} of its ${beaten?.levels} levels`;
+  const why = lost
+    ? `Another class has a better ${beaten.noun} at ${where}, so this one${
+      all ? ' does nothing to the character as it stands' : ' only counts at the rest'}.`
+    : '';
+  return `<select data-item="classes|${i}|${field}" data-kind="number" aria-label="${esc(label)}"
+      class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}>
+      ${opts.map(([v, text]) => `<option value="${v}"${v === now ? ' selected' : ''}>${text}</option>`).join('')}
+    </select>`;
+}
 import { weaponsPanel, wealthPanel } from './gear.js';
 import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
@@ -1536,19 +1568,15 @@ function classesPanel(model, ctx) {
             value="${over ?? ''}" placeholder="${auto}" title="${esc(why)}"
             data-item="classes|${i}|levelsOverride" data-kind="number-or-null"
             aria-label="Levels of ${esc(x.name || 'this class')}"></td>
-          <td class="num">d${val(x.hd)}</td>
-          <td>${(() => {
-    // The progression, not a bonus: what the class adds to BAB per level.
-    // Kept as the fraction the rules state it in, because that is what the
-    // gestalt sum adds up and floors.
-    const rate = Number(x.bab) || 0;
-    const known = BAB_RATES.some(([v]) => v === rate);
-    const opts = known ? BAB_RATES : [...BAB_RATES, [rate, String(rate)]];
-    return `<select data-item="classes|${i}|bab" data-kind="number"
-      aria-label="BAB progression for ${esc(x.name || 'this class')}">
-      ${opts.map(([v, label]) => `<option value="${v}"${v === rate ? ' selected' : ''}>${label}</option>`).join('')}
-    </select>`;
-  })()}</td>
+          <td class="num">${progressionSelect(i, 'hd', x.hd,
+    HIT_DICE.map((d) => [d, `d${d}`]), `Hit die for ${x.name || 'this class'}`, (d) => `d${d}`,
+    { count: x.gestaltBeaten?.hd, levels: x.gestaltBeaten?.levels, noun: 'hit die' })}</td>
+          ${/* The progression, not a bonus: what the class adds to BAB per level.
+              Kept as the fraction the rules state it in, because that is what
+              the gestalt sum adds up and floors. */ ''}
+          <td>${progressionSelect(i, 'bab', x.bab, BAB_RATES,
+    `BAB progression for ${x.name || 'this class'}`, String,
+    { count: x.gestaltBeaten?.bab, levels: x.gestaltBeaten?.levels, noun: 'progression' })}</td>
           <td class="mid">${itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
           <td class="mid">${itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
           <td class="mid">${itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
@@ -1570,8 +1598,15 @@ function classesPanel(model, ctx) {
         <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
           <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;
             Ref ${sv('reflex').base ?? 0} &middot; Will ${sv('will').base ?? 0}</span></div>
+        <div class="statline"><span class="label">Base attack bonus${gestalt ? ' (gestalt)' : ''}</span>
+          <span class="value" title="${esc(`${g.babPerLevel ?? 0} per-level progression, summed and floored once${
+    c.attack?.babOverride == null ? '' : `. Pinned at ${c.attack.babOverride} on the Attack panel`}`)}"
+            >+${g.bab ?? 0}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${c.attack.babOverride}</span>`}</span></div>
         <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
           <span class="value">d${g.hpPerLevel || 0}</span></div>
+        <div class="statline"><span class="label">Hit points from these classes</span>
+          <span class="value" title="${esc(`${g.hdTotal ?? 0} from the hit dice over ${level} level${level === 1 ? '' : 's'}, before Con, favoured class, Toughness and the mythic tiers`)}"
+            >${g.hdTotal ?? 0} &rarr; ${g.hp?.base ?? 0} total</span></div>
         <div class="statline"><span class="label">Skill ranks / level${gestalt ? ' (best)' : ''}</span>
           <span class="value">${g.ranksPerLevel || 0}</span></div>
       </div>
@@ -1579,7 +1614,9 @@ function classesPanel(model, ctx) {
         ${gestalt ? `Gestalt: each level takes the best progression among the classes present that
         level (from the Planner). Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`
     : `Good saves give +2 once plus &frac12;/level; poor give &#8531;/level.`}
-        These bases drive the Saves panel automatically.
+        These bases drive the Saves, Attack and Hit points panels automatically${gestalt
+    ? ` — which is why a hit die or a progression that another class is already beating
+        changes nothing when you move it. Those dropdowns say so when you hover them.` : ''}.
       </p>
     </section>`;
   }
@@ -1597,6 +1634,73 @@ function classesPanel(model, ctx) {
 
 
 
+/**
+ * Where the maximum came from, and the fields that decide it.
+ *
+ * The workbook worked hit points out on Character Info and this sheet only
+ * kept the answer, so the four inputs it kept alongside -- the ability, the
+ * favoured-class points, Toughness, the miscellany -- were imported and then
+ * never shown. They are the difference between a total that moves with the
+ * classes and one that does not, so they are fields, and the sum is spelled
+ * out above them in the order the parts are added.
+ *
+ * The maximum itself is a read-out with an override behind it, the same
+ * arrangement as the base attack bonus and a class's Levels: type a number to
+ * pin it, clear the box to hand it back to the class table.
+ */
+function hpBuild(model) {
+  const c = model.data;
+  const g = c.gestalt?.hp || {};
+  const level = Number(c.identity?.level) || 0;
+  const base = Number(c.hp.base) || 0;
+  const over = c.hp.totalOverride == null ? null : Number(c.hp.totalOverride);
+  const abilityMod = Number(g.abilityMod) || 0;
+  const shut = !!c.uiPrefs?.collapsed?.['hp:build'];
+
+  // Only the parts that are doing something, so a plain character reads as
+  // "dice plus Con" rather than as a form with four zeroes in it. A part that
+  // takes hit points away is parenthesised rather than signed, because the
+  // pluses between the terms are already doing that job.
+  const term = (n) => (n < 0 ? `(${String(n).replace('-', '−')})` : String(n));
+  const parts = [
+    [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}`],
+    abilityMod ? [term(abilityMod * level), `${c.hp.ability || 'ability'}${
+      c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} ${fmt(abilityMod)} × ${level}`] : null,
+    Number(c.hp.fcb) ? [term(Number(c.hp.fcb)), 'favoured class'] : null,
+    Number(c.hp.toughness) ? [term(Number(c.hp.toughness) * level),
+      `Toughness ${fmt(Number(c.hp.toughness))} × ${level}`] : null,
+    model.mythicHp ? [term(model.mythicHp),
+      `${c.mythic?.path || 'mythic'} tier ${c.identity?.mythicTier || 0}`] : null,
+    Number(c.hp.misc) ? [term(Number(c.hp.misc)), 'misc'] : null,
+  ].filter(Boolean);
+
+  const why = over == null
+    ? 'From the Classes table: the best hit die on each level, plus the parts below. Type a number to override it.'
+    : `Pinned at ${over}. The class table comes to ${base}; clear the box to go back to that.`;
+
+  return `<div class="fieldgrid two">
+        ${field('Base maximum', `<input type="number" class="autonum${over == null ? ' auto' : ''}"
+          value="${over ?? ''}" placeholder="${base}" data-set="hp.totalOverride"
+          data-kind="number-or-null" style="width:4.6rem" title="${esc(why)}"
+          aria-label="Base maximum hit points">`)}
+        ${field('HP ability', abilitySelect('hp.ability', c.hp.ability))}
+      </div>
+      <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
+        = <strong>${base}</strong>${over == null ? '' : `, overridden to <strong>${over}</strong>`}
+        <button class="disclose" data-collapse="hp:build" aria-expanded="${!shut}"
+          title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
+      ${shut ? '' : `<div class="fieldgrid two">
+        ${field('2nd HP ability', abilitySelect('hp.ability2', c.hp.ability2))}
+        ${field('Favoured class HP', num('hp.fcb', c.hp.fcb))}
+        ${field('Toughness / level', num('hp.toughness', c.hp.toughness))}
+        ${field('Misc', num('hp.misc', c.hp.misc))}
+        ${field('Mythic bonus', `<span class="value" title="${esc(`${
+    c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
+    (c.identity?.mythicTier || 0) === 1 ? '' : 's'} — set the per-tier figure on the Features tab`)}"
+          >${fmt(model.mythicHp)}</span>`)}
+      </div>`}`;
+}
+
 function hitPointsPanel(ctx, model) {
     const hp = model.hpState;
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
@@ -1611,13 +1715,10 @@ function hitPointsPanel(ctx, model) {
       ${meterStyleEditor(model, ctx, 'hp')}
       <div class="hprow">
         ${num('hp.current', hp.current)}<span class="hpsep">/</span>
-        <span class="value" title="Base maximum + mythic bonus + anything forwarded here">${hp.max}</span>
+        <span class="value" title="The maximum the class table comes to, plus anything forwarded here">${hp.max}</span>
         ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, spent first">+${hp.temp}</span>` : ''}
       </div>
-      <div class="fieldgrid two">
-        ${field('Base maximum', num('hp.total', model.data.hp.total))}
-        ${field('Mythic bonus', `<span class="value">+${model.mythicHp}</span>`)}
-      </div>
+      ${hpBuild(model)}
       ${model.forwardedInto('hp.total')
         ? `<div class="fieldgrid two">${field('Forwarded',
           `<span class="value">${forwardedBadge(model, 'hp.total')}</span>`)}</div>` : ''}

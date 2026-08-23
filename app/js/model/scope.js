@@ -516,9 +516,36 @@ export function proseSources(model) {
     push(`mythic:${i}:featChoice`, a.featChoice, null, ahead);
     push(`mythic:${i}:featEffect`, a.featEffect, null, ahead);
   });
+  /*
+   * Every feat's note, in the groups and among the granted ones alike.
+   *
+   * The note column is prose, so a feat that hands over a pool or a DC can
+   * define it where the feat itself is written down -- which is the whole
+   * point of putting it beside the feat rather than in a tracker somewhere
+   * else. The granted feats have carried this column all along and were never
+   * walked; they are now, under the same name.
+   */
+  (d.featGroups || []).forEach((group, gi) => {
+    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note));
+  });
+  for (const key of ['drawback', 'specialty']) {
+    push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
+  }
+  (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note));
   for (const [lvl, text] of Object.entries(d.primordia?.picks || {})) push(`primordia:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.primordia?.rowNotes || {})) {
+    push(`primordiaNote:${lvl}`, text);
+  }
   push('primordia:notes', d.primordia?.notes);
-  for (const [k, v] of Object.entries(d.mythic?.tradition || {})) push(`mythicTradition:${k}`, v);
+  // `notes` is the sibling map of one note per slot, not an eighth slot, so it
+  // is walked rather than pushed as though it were a name.
+  for (const [k, v] of Object.entries(d.mythic?.tradition || {})) {
+    if (k === 'notes') continue;
+    push(`mythicTradition:${k}`, v);
+  }
+  for (const [k, v] of Object.entries(d.mythic?.tradition?.notes || {})) {
+    push(`mythicTraditionNote:${k}`, v);
+  }
   (d.crafting?.projects || []).forEach((p, i) => {
     push(`crafting:${i}:resources`, p.resources);
     push(`crafting:${i}:notes`, p.notes);
@@ -548,8 +575,16 @@ export function proseSources(model) {
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
-  (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
-  (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
+  // An item's Other columns and the description on its card: a ring that
+  // grants a pool can size it where the ring is written down.
+  (d.equipment?.gear || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o));
+    push(`gearNote:${i}`, g.note);
+  });
+  (d.equipment?.other || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o));
+    push(`otherNote:${i}`, g.note);
+  });
   // Everything a player writes on a training side reads {…}: the talent
   // itself, the note beside it, the talents a tradition or a feat handed
   // over, and the drawbacks -- a locus priced in mana or a pool sized off

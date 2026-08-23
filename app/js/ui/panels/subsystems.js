@@ -1084,8 +1084,9 @@ export function primordiaPanel(model) {
           One technique, taken at 1st level or whenever its prerequisite is first met, granting
           at 1st, 3rd, 5th, then ${PRIMORDIA_REPEAT_FROM}th and every two levels after.
           <strong>Grants</strong> is what the rules hand over; the column beside it is what you
-          took for it. A technique feat can be swapped under the Associated Feat rules if you
-          are later given a feat for a sphere or talent you already have.
+          took for it, already filled in on the levels the rules name themselves; the last is
+          yours, and takes formulas. A technique feat can be swapped under the Associated Feat
+          rules if you are later given a feat for a sphere or talent you already have.
         </p>
       </section>
 
@@ -1099,14 +1100,28 @@ export function primordiaPanel(model) {
     </div>`;
   }
 
-  /** The ten granting levels, what each hands over, and what was taken for it. */
+  /**
+   * The ten granting levels, what each hands over, what was taken for it, and
+   * a note beside that.
+   *
+   * The name and the note were one box until the levels the rules already
+   * name -- Detect Spellcaster, Fast Divinations -- had nowhere to put their
+   * own name and nothing to type but a note. They are two columns now: the
+   * name column carries what the rules named where they named it, and the
+   * note takes formulas the way every other note on the sheet does.
+   */
 function primordiaLadder(model, k) {
+    // Whatever this technique calls the thing it hands over -- a talent, a
+    // spell, a power, a feat. The repeating grant is the one that says it
+    // seven times, so it is the one that names the column.
+    const noun = k.repeat?.pick?.label || 'Taken';
     return `<section class="panel span2">
       <div class="tablewrap"><table class="build primordia">
         <thead><tr>
           <th class="num">Lvl</th>
-          <th>Grants</th>
-          <th>Choice / notes</th>
+          <th class="grants">Grants</th>
+          <th class="pickname" title="What you took — filled in already where the rules name it">${esc(noun)}</th>
+          <th class="picknote">Notes</th>
         </tr></thead>
         <tbody>${(k.rows || []).map((row) => {
     const pick = row.pick;
@@ -1124,6 +1139,7 @@ function primordiaLadder(model, k) {
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
           <td class="choice${state}">${primordiaPick(model, row)}</td>
+          <td class="picknote">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
@@ -1133,24 +1149,35 @@ function primordiaLadder(model, k) {
       </p>` : ''}
       <p class="hint">
         A level you have reached with a choice still to make is outlined and counted above;
-        one you have not reached yet is dotted — the plan, not a chore. Levels whose grant is
-        fixed still take a note, which is where the sheet's own ladder was written.
+        one you have not reached yet is dotted — the plan, not a chore. Levels whose grant the
+        rules name carry that name already; type over one to say otherwise. Every row's note
+        resolves <code>{name = expr}</code> like any other prose field on the sheet.
       </p>
     </section>`;
   }
 
-  /** The pick cell: a dropdown where the rules offer two, otherwise free text. */
+  /**
+   * The name cell: a dropdown where the rules offer two, otherwise free text.
+   *
+   * A level whose grant the rules already name shows that name as the
+   * placeholder rather than as typed-in text, so it reads as filled without
+   * pretending the player chose it -- the same bargain the automatic Levels
+   * and BAB boxes on the Overview make. Typing over it wins, which is what an
+   * archetype that swaps the grant needs.
+   */
 function primordiaPick(model, row) {
     const path = `primordia.picks.${row.level}`;
     const options = row.pick?.options;
     if (options) return select(path, row.text, options);
-    const placeholder = row.pick?.placeholder || 'Notes';
+    const placeholder = row.pick?.placeholder || row.auto || '—';
+    const auto = !row.text.trim() && row.auto;
     // A pick carrying an inline formula shows what it comes to, the same way a
     // progression feature cell does.
     return hasTokens(row.text)
       ? prose(model, `data-set="${path}"`, row.text, 1, 'grow')
-      : `<input type="text" value="${esc(row.text)}" data-set="${path}" data-kind="text"
-          placeholder="${esc(placeholder)}">`;
+      : `<input type="text" class="autotext${auto ? ' auto' : ''}" value="${esc(row.text)}"
+          data-set="${path}" data-kind="text" placeholder="${esc(placeholder)}"${auto
+  ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`;
   }
 
   /** With no technique taken, the five on offer and what each asks for. */

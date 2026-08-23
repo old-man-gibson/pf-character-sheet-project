@@ -1118,15 +1118,25 @@ td.needsbase .prose-view, td.needsbase textarea {
 .panel > h3 [data-collapse] { margin-left: auto; padding: 1px 8px; }
 tr.lockedslot { opacity: 0.45; }
 tr.lockedslot input, tr.lockedslot select { pointer-events: auto; }
+/* The mythic tradition: the slot is a label and the choice is a boon's name,
+   both of them a few words. What it does is the sentence, so the note takes
+   what is left rather than splitting the row evenly with a name. */
+table.tradition { table-layout: fixed; }
+table.tradition th.slot { width: 11rem; }
+table.tradition th.choice { width: 26%; }
 td.bought { white-space: nowrap; }
 td.bought .xf input { font-size: 0.78rem; }
 
 /* ---------- primordia technique ladder ---------- */
-/* Ten rows, and the middle column is a paragraph of rules rather than a value,
-   so it takes the width and wraps; the level and the pick stay tight. */
+/* Ten rows. The grants column is a sentence of rules rather than a value, so
+   it wraps and is set smaller -- but it is the same sentence seven times over
+   on the repeating levels, and it is being read once. The note is the column
+   that keeps growing, so it takes whatever is left. */
 table.primordia { table-layout: fixed; }
 table.primordia th:first-child, table.primordia td:first-child { width: 3rem; }
-table.primordia td.grants { width: 55%; font-size: 0.8rem; line-height: 1.4; }
+table.primordia th.grants, table.primordia td.grants { width: 30%; }
+table.primordia td.grants { font-size: 0.8rem; line-height: 1.4; }
+table.primordia th.pickname { width: 22%; }
 table.primordia td.grants .grant { display: block; }
 table.primordia td.grants .grant + .grant { margin-top: 3px; }
 table.primordia td.grants .grant a { color: var(--cs-accent); text-decoration: none; }
@@ -1137,6 +1147,12 @@ table.primordia label.chk.alt {
   margin-top: 3px; font-size: 0.72rem; color: var(--cs-muted); align-items: flex-start;
 }
 table.primordia td.choice input[type="text"], table.primordia td.choice select { width: 100%; }
+/* A name the rules already gave: the box is empty and the placeholder is the
+   value, so it is drawn as the value it is -- the same arrangement the
+   automatic Levels and BAB boxes on the Overview use, in text rather than
+   numbers. Typing puts the field back to ordinary. */
+input.autotext.auto::placeholder { color: var(--cs-text); opacity: 0.85; font-style: normal; }
+input.autotext.auto { border-style: dashed; border-color: var(--cs-line); }
 /* Reached with nothing written against it: the same dashed outline and edge bar
    an owed feature slot uses, so one kind of thing looks like one kind of thing. */
 table.primordia td.choice.due input, table.primordia td.choice.due select {
@@ -1191,6 +1207,46 @@ tr.untrained .sname { font-weight: 500; }
 /* A granted feat's source is the fixed half of the row, so it reads as a label
    rather than another field. */
 .fsource { font-weight: 620; color: var(--cs-accent); white-space: nowrap; }
+
+/* ---------- gear tables and their cards ----------
+   A gear row is fourteen narrow boxes because it has to fit a page, which is
+   the wrong shape for describing what an item *is*. So the row stays the
+   index and the caret in its first cell opens the entry underneath it: a
+   full-width row of the same table, which pushes the items below it down and
+   leaves the item where it was in the list while it is being read. */
+table.gear th.slot, table.gear td.slot { white-space: nowrap; }
+/* The caret is the row's handle, so it is a size worth aiming at rather than
+   the hairline a fold-away caret elsewhere can afford to be. */
+table.gear td.slot .disclose { padding: 0 6px 0 0; font-size: 0.9rem; color: var(--cs-accent); }
+table.gear tr.gearrow.open td.slot .disclose { color: var(--cs-accent); }
+table.gear tr.gearrow.open > td { background: var(--cs-accent-soft); }
+table.gear tr.gearcardrow > td { padding: 0; }
+.gearcard {
+  border-left: 3px solid var(--cs-accent);
+  padding: 10px 13px 12px; background: var(--cs-panel-2);
+}
+.gearcardhead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+.gearcardhead h4 { margin: 0; font-size: 0.95rem; }
+.gearcardhead .disclose { margin-left: auto; }
+.gearcard h5 {
+  margin: 12px 0 5px; font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--cs-accent); font-weight: 650;
+}
+.gearcard .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.gearcard .gearbonuses .pair { gap: 5px; }
+.gearcard .gearbonuses select { flex: 1; min-width: 0; }
+.gearcard textarea { width: 100%; }
+/* The ± that widens or narrows a family of columns, tucked into the last
+   header cell of that family so the control stands where the column would.
+   Small and quiet: it is furniture, not one of the row's own fields. */
+/* Kept on the header's own line: a stepper that wrapped would make one header
+   cell taller than the rest of the row for no reason anyone could see. */
+table.gear th.colhead { white-space: nowrap; }
+.colstep { display: inline-flex; gap: 2px; margin-left: 5px; vertical-align: middle; }
+.colstep button {
+  padding: 0 4px; min-width: 0; font-size: 0.72rem; line-height: 1.4;
+}
+.colstep button.armed { padding: 0 5px; }
 
 /* ---------- weapons ---------- */
 .weapon {
@@ -1924,6 +1980,12 @@ table.classes col.tools { width: 6.2rem; }
 table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
 table.classes td input[type="text"] { width: 100%; min-width: 0; }
 table.classes td.num input[type="number"] { width: 100%; text-align: right; }
+/* A hit die or a progression another class is beating at every level this one
+   runs. It is still the class's own, and still editable -- it is simply doing
+   nothing to the character, which is worth saying before the player changes it
+   and watches the sheet not move. The title says which and how often. */
+table.classes td select.beaten { opacity: 0.55; font-style: italic; }
+table.classes td select.beaten:focus, table.classes td select.beaten:hover { opacity: 1; }
 /* A field whose value is computed and whose box is the override: the number
    showing is the placeholder, so it is drawn as the value it is. */
 input.autonum.auto::placeholder { color: var(--cs-accent); opacity: 1; font-weight: 620; }
@@ -2118,11 +2180,12 @@ table.racetraits td:first-child input { min-width: 8rem; }
 td.empty { color: var(--cs-muted); font-style: italic; text-align: center; padding: 10px; }
 
 /* ---------- feat groups ----------
-   Two columns rather than a row of panels. The left one is a single panel of
-   sections -- the granted feats, then every group after the first -- and the
-   right one is the first group standing on its own, because the level-up list
-   is the one a character actually fills and it needs the height. The band is
-   .pairrow.even, which already stacks the two under about 900px.
+   Panels stacked down the page, each the full width. The first group stands on
+   its own -- it is the level-up list, the one a character actually fills -- and
+   the granted feats and every group after the first share the panel below it.
+
+   They were two columns while a feat was a name and a source. Three columns of
+   writing do not fit in half a page, so the row became a stack.
 
    A section after the first is ruled off at the top: three tables down one
    panel with nothing between them read as one long table. */
@@ -2148,6 +2211,17 @@ h4.subhead button.danger { margin-left: auto; padding: 1px 6px; font-size: 0.7re
 /* The grip column is as narrow as the handle in it; the row's own tools lost
    their arrows to the drag, so one cross is all that is left on the right. */
 table.feats th.grip, table.feats td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
+/* A feat's name and where it came from are both a few words; what it does is
+   the paragraph. So those two are held to their measure and the note takes
+   whatever is left, which is the only column that can use it. A fixed layout
+   shares the remainder equally between the columns with no width, so the grip
+   and the cross are given one too -- or the cross ends up as wide as the
+   feat, and the note gets nothing. */
+table.feats { table-layout: fixed; }
+table.feats th.fname { width: 24%; }
+table.feats th.src { width: 20%; }
+table.feats th:last-child, table.feats td.tools { width: 2.6rem; }
+table.feats td input[type="text"] { width: 100%; min-width: 0; }
 table.feats tr.dragging { opacity: 0.4; }
 /* Border-collapse eats a shadow on the row itself, so the line that says where
    the drop lands is drawn inside the cells. */

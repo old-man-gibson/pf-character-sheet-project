@@ -495,7 +495,11 @@ export function techniqueTalents(model) {
     for (const g of primordiaGrantsAt(t, lvl)) {
       if (!grantCount(g, 'talent')) continue;
       const pick = String(picks[lvl] ?? '').trim();
-      if (g.name) names.push(g.name);
+      // A grant the player chooses is a choice even where the rules name the
+      // sphere it comes from, so `name` only settles a grant with no pick on
+      // it. Athletics at 1st is the case: the rules say which sphere and the
+      // player says which package, and it is the package the skill rows match.
+      if (g.name && !g.pick) names.push(g.name);
       else if (pick) names.push(pick);
       else if (g.pick?.options?.length) choices.push(g.pick.options);
     }
