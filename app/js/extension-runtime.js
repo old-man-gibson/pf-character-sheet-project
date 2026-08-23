@@ -21,8 +21,9 @@ import {
 } from './model.js';
 import {
   extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
-  optionCataloguesFrom,
+  optionCataloguesFrom, isPackKey, packsWorthMoving,
 } from './extensions.js';
+import { packMedium } from './pack-storage.js';
 
 const REGISTRARS = {
   setManeuverCatalogue, setSphereCatalogue, setVancianTables, setPsionicTables,
@@ -34,24 +35,35 @@ class ExtensionRuntime extends EventTarget {
   #loading = null;
   #store = null;
 
-  /** The local store, or null where there is no localStorage (a Node import). */
+  /**
+   * The local store. It exists from the first ask, but it is empty until
+   * `load()` has opened it -- choosing where packs live means opening a
+   * database, and that is a promise. Empty reads the same as no packs, which
+   * is exactly what the bundled ones do while they are still being fetched.
+   */
   get store() {
     if (this.#store === null) {
-      try { this.#store = globalThis.localStorage ? extensionStore(globalThis.localStorage) : false; } catch { this.#store = false; }
+      try {
+        this.#store = (globalThis.localStorage || globalThis.indexedDB)
+          ? extensionStore(() => packMedium({ holds: isPackKey, keep: packsWorthMoving }))
+          : false;
+      } catch { this.#store = false; }
     }
     return this.#store || null;
   }
 
   /**
-   * Fetch the bundled packs and register the merged tables. Idempotent: the
-   * first caller's promise is kept, so the sheet and the manager can both ask
-   * and the files are read once. `base` is where `data/` is resolved from.
+   * Fetch the bundled packs, open the local store, and register the merged
+   * tables. Idempotent: the first caller's promise is kept, so the sheet and
+   * the manager can both ask and the files are read once. `base` is where
+   * `data/` is resolved from.
    */
   load(base) {
     if (!this.#loading) {
-      this.#loading = loadBundledExtensions(base)
-        .catch(() => [])
-        .then((docs) => { this.bundled = docs; this.refresh({ silent: true }); return this.active(); });
+      this.#loading = Promise.all([
+        loadBundledExtensions(base).catch(() => []),
+        this.store ? this.store.open().catch(() => false) : Promise.resolve(false),
+      ]).then(([docs]) => { this.bundled = docs; this.refresh({ silent: true }); return this.active(); });
     }
     return this.#loading;
   }

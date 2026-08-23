@@ -49,6 +49,39 @@ const LEFTOVER_LIMIT = 40;
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
+/**
+ * How much room a pack asks for, said the way a person reads a download.
+ * Under a megabyte it is kilobytes, above it megabytes; the number is the
+ * JSON's own length, which is what the browser counts.
+ */
+export const packSize = (doc) => {
+  const n = JSON.stringify(doc ?? null).length;
+  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+};
+
+/**
+ * The line shown when a pack the deployment carries is copied for editing.
+ *
+ * The two live in different places and only one of them costs anything: a
+ * bundled pack is fetched into memory every load, a pack of your own is
+ * written into this browser and stays there. Copying moves a catalogue from
+ * the free side to the paid one, and how much room a browser has for the
+ * paid side is not a number anyone can promise -- it varies by browser far
+ * more than the old "5 MB" rule of thumb suggests. So a big copy is worth a
+ * word before the editing starts, not after a Save that fails.
+ *
+ * Small packs say nothing: a 20 KB class is not news.
+ */
+export const COPY_WARN_BYTES = 262144;
+
+export function copyCost(doc) {
+  const bytes = JSON.stringify(doc ?? null).length;
+  if (bytes < COPY_WARN_BYTES) return null;
+  return `Where it sits now this pack costs no storage at all — a deployment's packs are fetched, not kept. `
+    + `Saving your copy writes ${packSize(doc)} into this browser instead, which not every browser has room for. `
+    + `Editing it is free; only Save spends anything.`;
+}
+
 /** A source is a link only when it is one; a book-and-page reads as text. */
 const sourceLink = (source) => {
   const s = String(source || '').trim();
@@ -246,6 +279,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       <p class="hint">A pack has a header (who wrote it, where it came from), any shared
         tables it provides, and blocks a player adds to a character. Save keeps it in this
         browser; Export on the list sends it out.</p>
+      ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
       <div class="actions" style="margin:0 0 10px">
         <button data-action="mode-form" aria-pressed="${!asJson && !paste}" ${asJson || paste ? '' : 'class="primary"'}>Form</button>
@@ -924,10 +958,21 @@ Hit Die: d12.
     const qa = (sel) => [...dialog.querySelectorAll(sel)];
 
     if (view === 'list') {
-      qa('[data-toggle]').forEach((el) => el.addEventListener('change', () => {
-        runtime.store?.setEnabled(el.dataset.toggle, el.checked, { bundled: el.dataset.bundled === 'true' });
+      qa('[data-toggle]').forEach((el) => el.addEventListener('change', async () => {
+        /*
+         * The store is what says which packs are on, so the switch follows it
+         * rather than the other way round: on a write that does not go
+         * through, `render()` draws the checkbox back where the store still
+         * has it, and the line below says why it moved back.
+         */
+        try {
+          await runtime.store?.setEnabled(el.dataset.toggle, el.checked, { bundled: el.dataset.bundled === 'true' });
+          notice = null; error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not switch that pack — ${err.message}`;
+        }
         runtime.refresh();
-        notice = null; error = null;
         render();
       }));
       qa('[data-edit]').forEach((el) => el.addEventListener('click', () => startEdit(runtime.store.read(el.dataset.edit), false)));
@@ -935,7 +980,14 @@ Hit Die: d12.
         const src = runtime.bundled.find((e) => e.id === el.dataset.copy);
         if (!src) return;
         const copy = normalizeExtension({ ...structuredClone(src), id: `${src.id}-mine`, name: `${src.name} (mine)`, revision: 1, createdAt: '', updatedAt: '' });
-        startEdit(copy, true);
+        /*
+         * A pack the deployment carries is fetched and held in memory; a copy
+         * of it is written into this browser. For a catalogue of any size that
+         * is the whole difference between costing nothing and not fitting, and
+         * the place to say so is here rather than at a Save that fails after
+         * the editing is done.
+         */
+        startEdit(copy, true, copyCost(copy));
       }));
       qa('[data-export]').forEach((el) => el.addEventListener('click', () => {
         const id = el.dataset.export;
@@ -944,12 +996,18 @@ Hit Die: d12.
       }));
       qa('[data-remove]').forEach((el) => el.addEventListener('click', () => { confirmRemove = el.dataset.remove; render(); }));
       q('[data-remove-cancel]')?.addEventListener('click', () => { confirmRemove = null; render(); });
-      qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', () => {
-        const row = runtime.store.list().find((e) => e.id === el.dataset.removeConfirm);
-        runtime.store.remove(el.dataset.removeConfirm);
+      qa('[data-remove-confirm]').forEach((el) => el.addEventListener('click', async () => {
+        const id = el.dataset.removeConfirm;
+        const row = runtime.store.list().find((e) => e.id === id);
+        try {
+          await runtime.store.remove(id);
+          notice = `Removed ${row?.name || 'the pack'} from this browser.`; error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not remove ${row?.name || 'the pack'} — ${err.message}`;
+        }
         runtime.refresh();
         confirmRemove = null;
-        notice = `Removed ${row?.name || 'the pack'} from this browser.`; error = null;
         render();
       }));
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
@@ -1204,10 +1262,10 @@ Hit Die: d12.
     render();
   }
 
-  function startEdit(doc, isNew) {
+  function startEdit(doc, isNew, note = null) {
     draft = normalizeExtension(doc);
     draftIsNew = isNew;
-    asJson = false; jsonText = ''; error = null; notice = null; paste = null;
+    asJson = false; jsonText = ''; error = null; notice = note; paste = null;
     openBlocks.clear();
     openDisciplines.clear();
     openEntries.clear();
@@ -1216,7 +1274,7 @@ Hit Die: d12.
     dialog.querySelector('[data-h="name"]')?.focus();
   }
 
-  function save() {
+  async function save() {
     if (asJson) {
       try { draft = normalizeExtension(JSON.parse(jsonText)); } catch (err) { error = `The JSON does not parse — ${err.message}.`; render(); return; }
     }
@@ -1232,7 +1290,7 @@ Hit Die: d12.
       render(); return;
     }
     try {
-      const row = runtime.store.save(draft, { origin: 'local' });
+      const row = await runtime.store.save(draft, { origin: 'local' });
       runtime.refresh();
       notice = `${row.replaced ? 'Updated' : 'Saved'} ${row.name} (${describeSummary(row)}).`;
       error = null; view = 'list'; draft = null;
@@ -1248,7 +1306,7 @@ Hit Die: d12.
 
   /* ---------------- bringing a pack in ---------------- */
 
-  function importDoc(doc, label = 'the pack') {
+  async function importDoc(doc, label = 'the pack') {
     const verdict = inspectExtension(doc);
     if (!verdict.ok) { error = `${label}: ${verdict.error}`; notice = null; render(); return verdict; }
     if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
@@ -1256,7 +1314,7 @@ Hit Die: d12.
       render(); return { ok: false, error };
     }
     try {
-      const row = runtime.store.save(doc, { origin: 'import' });
+      const row = await runtime.store.save(doc, { origin: 'import' });
       runtime.refresh();
       notice = `${row.replaced ? 'Updated' : 'Imported'} ${row.name} rev ${row.revision} (${describeSummary(row)}).`
         + (verdict.warnings?.length ? ` Note — ${verdict.warnings.join('; ')}.` : '');
