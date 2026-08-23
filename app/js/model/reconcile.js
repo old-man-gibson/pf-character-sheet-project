@@ -10,7 +10,7 @@
  */
 
 import { DERIVED, FORWARD_BY_DERIVED, diceString, skillLabel } from '../rules.js';
-import { analyse, evaluateFormula, resolvePath } from '../formula.js';
+import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens } from '../inline.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
 import { emit } from './events.js';
@@ -80,11 +80,17 @@ export function describeSource(path) {
         : b === 'featEffect' ? `the tier ${nth(a)} feat’s effect`
           : `mythic ability ${nth(a)}`;
     case 'mythicTradition': return 'mythic tradition';
+    case 'mythicTraditionNote': return 'a mythic tradition note';
+    case 'feat': return `a feat’s note, group ${nth(a)}`;
+    case 'grantedFeat': return 'a granted feat’s note';
     case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
+    case 'primordiaNote': return `Primordia notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'gear':
     case 'other': return `gear ${nth(a)}`;
+    case 'gearNote':
+    case 'otherNote': return `gear ${nth(a)}, description`;
     case 'talent':
     case 'bonusTalent': return `a ${a} talent`;
     case 'tradition': return `${a} tradition`;
@@ -98,6 +104,10 @@ export function describeSource(path) {
     case 'familiar': return 'the familiar';
     case 'animalCompanion': return 'the animal companion';
     case 'eidolon': return 'the eidolon';
+    // A maneuver's own entry. The name is last in both because it may hold a
+    // colon ("Lesson I: Balance"), so it is rejoined rather than indexed.
+    case 'maneuverNote': return `${parts.slice(2).join(':')}, its description`;
+    case 'maneuver': return `${parts.slice(3).join(':')}, its ${b}`;
     case 'tab': return `the ${a} tab`;
     case 'tracker': return `the ${a} tracker’s note`;
     default:
@@ -172,7 +182,7 @@ export function diffFromSource(model) {
  */
 export function audit(model) {
   const scope = model.scope();
-  const known = new Set(model.scopeNames());
+  const known = new NameIndex(model.scopeNames());
 
   // Skill ranks entered as formulas are player-authored too.
   const skillFormulas = (model.data.skills || [])
@@ -505,7 +515,7 @@ export function audit(model) {
  * the symptom and the fix are identical.
  */
 export function orphans(model, auditRows = null) {
-  const known = new Set(model.scopeNames());
+  const known = new NameIndex(model.scopeNames());
   // A name that *is* defined but did not resolve -- one caught in a cycle,
   // one whose formula does not parse -- is not an orphan. It has a
   // definition and that definition has its own problem; saying "nothing

@@ -24,6 +24,7 @@
  */
 
 import { normalizeBlock, featureKey } from './extensions.js';
+import { sphereSide } from './rules.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -108,6 +109,8 @@ const WIKIDOT_CHROME = /^(?:Wikidot\.com|\.wikidot\.com|Share on.*|Explore ?»|P
 const WIKIDOT_FOOTER = /^(?:Powered by Wikidot\.com|This website uses cookies\b.*|Unless otherwise stated, the content of this page.*|Click here to (?:edit|toggle).*|Append content without editing.*|Watch headings for an "edit" link.*|Something does not work as expected\?.*|General Wikidot\.com documentation.*|Other interesting sites.*|View\/set parent page.*|Notify administrators.*|Check out how this page.*)$/i;
 /** "Spheres of Power Wiki Home Page » Spheres Of Might » Blacksmith" */
 const BREADCRUMB = /\S\s»\s\S/;
+/** ...and the part of it that says the page is a sphere rather than a class. */
+const SPHERE_CRUMB = /»\s*Spheres?\s+Of\s+(?:Might|Power)\s*»/i;
 /** A footer's navigation: short cells, tab-separated or not, and no sentences. */
 const NAVISH = (l) => !l || (!/[.!?]$/.test(l) && (l.includes('\t') ? true : words(l) <= 8));
 
@@ -136,7 +139,13 @@ function markWikidotChrome(lines, used) {
   }
 
   // The table of contents, whether it copies as a list or as one long line.
-  t.forEach((l, i) => { if (isToc(l)) { for (let k = i; k < t.length && t[k]; k++) used[k] = true; } });
+  // It ends at a blank line or at the first sentence: a sphere page runs its
+  // contents straight into the article with no blank between, and the run
+  // used to swallow the first two lines of the sphere's own description.
+  t.forEach((l, i) => {
+    if (!isToc(l)) return;
+    for (let k = i; k < t.length && t[k] && !(k > i && /[.!?]$/.test(t[k])); k++) used[k] = true;
+  });
 
   // The tail: the footer, the columns of links above it, and everything down
   // to where the next page starts. The climb allows a line or two that is
@@ -170,6 +179,10 @@ const ABILITY_WORDS = { strength: 'str', dexterity: 'dex', constitution: 'con', 
  *              and a guess at what it might be: 'feature' | 'trait' | 'note' | 'skip'
  */
 export function parsePaste(text) {
+  // A scraper's own document is read before anything is cleaned: `clean()`
+  // strips the markdown that the page readers cannot use and this one is
+  // made of.
+  if (looksStructured(text)) return readStructured(text);
   const lines = clean(text).split(/\r?\n/);
   const used = new Array(lines.length).fill(false);
   // A wiki's chrome is marked first and stays transparent from here on: the
@@ -179,6 +192,8 @@ export function parsePaste(text) {
   const pages = markWikidotChrome(lines, used);
   const segments = findSegments(lines, used, pages);
   const blocks = [];
+  const maneuvers = [];
+  const spheres = [];
   const report = [];
   const nearOf = new Array(lines.length).fill(null);
 
@@ -186,11 +201,18 @@ export function parsePaste(text) {
     const slice = lines.slice(seg.start, seg.end);
     const pre = new Set();
     for (let i = seg.start; i < seg.end; i++) if (used[i]) pre.add(i - seg.start);
-    const reader = { class: readClass, race: readRace, veil: readVeil, archetype: readArchetype }[seg.kind];
+    const reader = {
+      class: readClass, race: readRace, veil: readVeil, archetype: readArchetype,
+      maneuver: readManeuver, sphere: readSphere,
+    }[seg.kind];
     const out = reader(slice, pre);
     for (const i of out.used) used[seg.start + i] = true;
     for (let i = seg.start; i < seg.end; i++) nearOf[i] = { kind: seg.kind, name: out.name };
     blocks.push(...out.blocks);
+    // A maneuver is a catalogue entry, not a block: it goes to the pack's
+    // discipline table rather than onto a character. See readManeuver.
+    maneuvers.push(...(out.maneuvers || []));
+    spheres.push(...(out.spheres || []));
     report.push(...out.report);
   }
 
@@ -211,9 +233,9 @@ export function parsePaste(text) {
   for (const l of leftovers) { delete l.gap; l.suggest = suggestFor(l); }
 
   if (!segments.length && leftovers.length) {
-    report.push('Nothing here looked like a class, a race or a veil. Tag the text below, or keep it as a note.');
+    report.push('Nothing here looked like a class, a race, a veil, a sphere or a maneuver. Tag the text below, or keep it as a note.');
   }
-  return { blocks: blocks.filter(Boolean), report, leftovers };
+  return { blocks: blocks.filter(Boolean), maneuvers, spheres, report, leftovers };
 }
 
 /**
@@ -260,6 +282,19 @@ function suggestFor(l) {
 export function findSegments(lines, pre = [], pageStarts = []) {
   const anchors = [];
   const nextText = (i) => { let j = i + 1; while (j < lines.length && (!lines[j].trim() || pre[j])) j++; return (lines[j] || '').trim(); };
+  /*
+   * Which pages are a Spheres wiki page, by their breadcrumb. A sphere is
+   * anchored on a heading shape ("Boxing Talents") that a class page can wear
+   * too, so the page has to vouch for it first.
+   */
+  const sphereCrumbs = [];
+  lines.forEach((l, i) => { if (SPHERE_CRUMB.test(l)) sphereCrumbs.push(i); });
+  const onSpherePage = (i) => {
+    if (!sphereCrumbs.length) return false;
+    const page = pageStarts.filter((p) => p <= i).pop() ?? 0;
+    const next = pageStarts.find((p) => p > page) ?? lines.length;
+    return sphereCrumbs.some((c) => c >= page && c < next);
+  };
   lines.forEach((line, i) => {
     if (pre[i]) return;
     const t = line.trim();
@@ -269,6 +304,19 @@ export function findSegments(lines, pre = [], pageStarts = []) {
     } else if (/^Standard Racial Traits$/i.test(t) || /^Ability Score Modifiers?:/i.test(t)) {
       if (!anchors.some((a) => a.kind === 'race' && i - a.at < 40)) anchors.push({ kind: 'race', at: i });
     } else if (/^Chakra Slots?:?$/i.test(t)) anchors.push({ kind: 'veil', at: i });
+    else if (GROUP_HEADING.test(t) && onSpherePage(i)) {
+      // A sphere page: its first "<X> Talents" heading. The rest of them
+      // ("Counter Talents", "Legendary Talents") are that same sphere's, so
+      // only the first per page anchors. A class page has headings of that
+      // shape too, which is why this asks the breadcrumb first.
+      const page = pageStarts.filter((q) => q <= i).pop() ?? 0;
+      if (!anchors.some((a) => a.kind === 'sphere' && a.at >= page)) anchors.push({ kind: 'sphere', at: i });
+    } else if (/^Initiation Action:?$/i.test(t) || /^Initiation Action:\s*\S/i.test(t)) {
+      // A martial ability page. Its box is the only one with an initiation
+      // action, and one page holds one maneuver, so this needs no guard
+      // against a second anchor the way a class's hit die does.
+      anchors.push({ kind: 'maneuver', at: i });
+    }
     else if (/^Classes Available$/i.test(t)) {
       // An archetype page: its info box names the class it is for. An option
       // page's box says which option too, and need not mark the class with
@@ -1140,6 +1188,914 @@ export function readVeil(lines, pre = new Set()) {
   return {
     name, blocks: [block], used,
     report: [`Veil ${name}${chakras.length ? ` (${chakras.join(' or ')})` : ' (no chakra slot found)'}: description${features.length ? ` + ${features.map((f) => f.name.replace(/ —.*/, '')).join(', ')}` : ''}${source ? `; source ${source}` : ''}.`],
+  };
+}
+
+/* ---------------- a scraper's structured markdown ---------------- */
+
+/**
+ * A document a tool wrote, rather than a page somebody copied.
+ *
+ * Everything else in this file reads pages built for human eyes, where a
+ * heading is a short line and a talent's name is a short line and telling the
+ * two apart is most of the work. A scraper does not have that problem: it
+ * knows what it found and can say so. So this shape is read on its own terms,
+ * and read *first* -- `clean()` flattens the markdown that the page readers
+ * cannot use and this one is made of.
+ *
+ *     # Iron Tortoise            what the document is about
+ *     > prose                    its description, as a blockquote
+ *     ## Maneuvers & Stances     a section
+ *     ### Level 1 Maneuvers      a group inside it
+ *     #### Angering Smash        one entry
+ *     * **Level:** 1 (Maneuver [Strike])
+ *     * **Range:** Melee attack        its fields, one per line
+ *     **Summary:** *one line*    an optional précis
+ *     prose…                     and its text
+ *
+ * What an entry *is* comes from the fields it carries rather than from where
+ * it sits or what the document is called: a thing with a Discipline and an
+ * Initiation Action is a maneuver wherever it turns up. That is what lets the
+ * scraper grow without this reader being told -- a new kind is a new row in
+ * STRUCTURED_KINDS -- and anything unrecognised comes back as a leftover to
+ * be tagged rather than being dropped.
+ */
+
+/** `* **Key:** value`, the field lines under an entry. */
+const MD_FIELD = /^\s*[*-]\s+\*\*\s*([^:*]+?)\s*:?\s*\*\*:?\s*(.*)$/;
+/** `**Summary:** *text*` -- the one-line précis over the prose. */
+const MD_SUMMARY = /^\s*\*\*\s*Summary\s*:?\s*\*\*:?\s*(.*)$/i;
+const MD_HEAD = /^(#{1,6})\s+(.+?)\s*#*$/;
+const MD_RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+/** Emphasis around a value, which the scraper leaves on its summaries. */
+const unemph = (s) => String(s ?? '').replace(/\*+/g, '').replace(/\s+/g, ' ').trim();
+/**
+ * A label the scraper half-converted: `    * Special:**`, `    * Note:**`.
+ * The bold opened on the line above and it lost the opening stars, so the
+ * line reads as a stray bullet. Straightened rather than dropped -- it is a
+ * real part of the rule underneath it.
+ */
+const MD_BROKEN_LABEL = /^\s*\*\s+([A-Z][\w' -]{1,24}):\*\*\s*(.*)$/;
+
+/**
+ * A MediaWiki table, which some pages carry through the scraper whole.
+ *
+ * `{| … |- … !head … |cell … |}` is unreadable in a prose cell, and the sheet
+ * shows tab-separated rows everywhere else it shows a table, so that is what
+ * it becomes. Nothing is thrown away: the caption leads, the header row is a
+ * row, and cells that shared a line (`!A!!B`) are split out.
+ */
+function wikiTable(lines) {
+  const rows = [];
+  let caption = '';
+  let row = null;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (/^\{\|/.test(l)) continue;
+    if (/^\|\}/.test(l)) break;
+    if (/^\|\+/.test(l)) { caption = unemph(l.slice(2)); continue; }
+    if (/^\|-/.test(l)) { if (row?.length) rows.push(row); row = []; continue; }
+    if (/^[!|]/.test(l)) {
+      row ??= [];
+      row.push(...l.slice(1).split(l[0] === '!' ? '!!' : '||').map((c) => c.trim()));
+    }
+  }
+  if (row?.length) rows.push(row);
+  return [caption, ...rows.map((r) => r.join('\t'))].filter(Boolean).join('\n');
+}
+
+/**
+ * The markup left in a scraper's prose, once the structure has been read off
+ * it: markdown links, a MediaWiki external link (`[https://… label]`), bold.
+ *
+ * Single-asterisk emphasis stays, because `clean()` leaves it on every other
+ * paste and `*destructive blast*` is how these books name a defined term.
+ */
+/**
+ * The formatting tags a wiki scrape carries through -- HTML the page used for
+ * looks, and MediaWiki's own. Only the tag goes; what it wrapped is rules
+ * text. Named one by one rather than matched as `<…>` so that a rule reading
+ * `AC <10` or `<Ability> checks` is safe from it.
+ */
+const WIKI_TAGS = /<\/?(?:references|sup|sub|span|nowiki|poem|u|b|i|em|strong|small|div|p)\b[^>]*>/gi;
+
+/** `==Heading==`, which a scrape leaves where the page had a section. */
+const WIKI_HEAD = /^\s*={2,}\s*(.+?)\s*={2,}\s*$/;
+
+/**
+ * Wiki headings unwrapped, and the empty ones dropped.
+ *
+ * `==Bind Level==` over a lone `<references group="Bind Level"/>` is a
+ * footnote section whose footnotes the scrape did not take -- 183 of them
+ * across the akashic veils, every one empty once the tag is gone. A heading
+ * standing over nothing is not a heading, so it goes the same way, while
+ * `==Notes==`, which does have its lines, stays on as a plain one.
+ */
+function unwikiHeadings(text) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(WIKI_HEAD);
+    if (!m) { out.push(lines[i]); continue; }
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    if (j >= lines.length || WIKI_HEAD.test(lines[j])) { i = j - 1; continue; }
+    out.push(m[1]);
+  }
+  return out.join('\n');
+}
+
+/**
+ * What a scrape leaves behind when it cuts a page mid-construct.
+ *
+ * Three things, none of them content:
+ *
+ *  - **a template close with nothing that opened it.** A `{{…}}` call written
+ *    across two lines has its head on one and its tail on the next, and a
+ *    scrape that took the second without the first leaves a line reading
+ *    `(Akasha Retold)}}` standing over the article it was heading. What is
+ *    left is not a fragment of the rules — it is the argument list of a call
+ *    whose name is gone — so the line goes. Only ever where the text holds no
+ *    `{{` at all: a template the scrape *did* take whole is content, and
+ *    `{{Chakra Bind|Belt}}` is exactly the kind that carries meaning.
+ *  - **a raw wiki link.** `[[Target|what it reads as]]` shows its second
+ *    half, `[[Target]]` is its own text. The markdown forms are handled
+ *    below; this is the one that arrives unconverted.
+ *  - **non-breaking spaces**, which are spaces everywhere the sheet shows
+ *    them and only make a word un-findable.
+ *
+ * Kept apart from the rest of `tidyProse`, and exported, because it is the
+ * one part that a pack built before this can have run over it after the fact.
+ * `tools/tidy-pack-text.mjs` calls exactly this, so a re-scrape and a
+ * tidied-up pack come out agreeing rather than nearly agreeing.
+ */
+export function tidyScrapeResidue(text) {
+  // Written as an escape on purpose: a literal non-breaking space here is
+  // invisible, and one editor normalising it would turn this line into a
+  // no-op that still looks right.
+  let s = String(text ?? '').replace(/\u00a0/g, ' ');
+  s = s.replace(/\[\[(?:[^\][|]*\|)?(.*?)\]\]/gs, '$1');
+  if (!s.includes('{{')) {
+    s = s.split('\n').map((line) => {
+      const at = line.lastIndexOf('}}');
+      return at === -1 ? line : line.slice(at + 2);
+    }).join('\n');
+  }
+  // A text with nothing wrong with it comes back byte-identical. Only where
+  // something was actually taken out is the hole it left tidied up -- the
+  // dropped line leaves a blank one at the top, and that is the only reason
+  // to be reflowing anybody's paragraphs.
+  if (s === text) return text;
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const tidyProse = (s) => tidyScrapeResidue(unwikiHeadings(String(s ?? '')
+  .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')
+  .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')
+  .replace(/\[(?:https?|ftp):\/\/\S+\s+([^\]\n]+)\]/g, '$1')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(WIKI_TAGS, '')
+  .replace(/\*\*([^*\n]+)\*\*/g, '$1')));
+
+/** Every wiki table in a stretch of text, turned into tab-separated rows. */
+export function unwikiTables(text) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*\{\|/.test(lines[i])) { out.push(lines[i]); continue; }
+    const start = i;
+    while (i < lines.length && !/^\s*\|\}/.test(lines[i])) i++;
+    out.push(wikiTable(lines.slice(start, i + 1)));
+  }
+  return out.join('\n');
+}
+
+/**
+ * Is this a scraper document at all?
+ *
+ * A markdown *copy* of a rules page (a "copy as markdown" browser extension)
+ * also has headings and bold, and `clean()` already flattens those for the
+ * page readers. What only a scraper writes is the field list: several lines of
+ * `* **Key:** value` in a row. Three is past coincidence.
+ */
+export function looksStructured(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  if (!lines.some((l) => MD_HEAD.test(l))) return false;
+  return lines.filter((l) => MD_FIELD.test(l)).length >= 3;
+}
+
+/**
+ * Which heading level the entries are at.
+ *
+ * Not a constant, because scrapers differ and both are right: one writes
+ * `## section / ### group / #### entry`, another `## section / ### entry`
+ * with no group level. What tells them apart is that an entry carries
+ * *fields* and a section carries only more headings -- so the entry level is
+ * the deepest one whose headings are followed by a field list, and failing
+ * that (a document whose entries carry no fields at all) simply the deepest
+ * heading there is.
+ */
+export function entryDepth(lines) {
+  const withFields = new Set();
+  const seen = new Set();
+  let at = 0;
+  for (const raw of lines) {
+    const h = raw.match(MD_HEAD);
+    if (h) { at = h[1].length; seen.add(at); continue; }
+    if (at && MD_FIELD.test(raw)) withFields.add(at);
+    else if (raw.trim()) at = 0;          // prose: later fields are its own
+  }
+  const pool = withFields.size ? withFields : seen;
+  return pool.size ? Math.max(...pool) : 4;
+}
+
+/**
+ * The document as headings, entries and fields -- no interpretation yet. Kept
+ * apart from the reading so the shape can be tested on its own, and so a new
+ * kind of entry needs nothing here.
+ */
+export function parseStructured(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const doc = {
+    title: '', intro: [], introAt: [0, 0], entries: [], strays: [],
+  };
+  const depth = entryDepth(lines);
+  let entry = null;
+  const heads = [];                       // the heading stack, by depth
+  const close = () => { if (entry) doc.entries.push(entry); entry = null; };
+
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/\s+$/, '');
+    if (MD_RULE.test(line)) { close(); return; }
+
+    const h = line.match(MD_HEAD);
+    if (h) {
+      const d = h[1].length;
+      /*
+       * A heading *deeper* than the entry level, while an entry is open, is a
+       * part of that entry rather than another one. An akashic veil writes
+       * each of its chakra binds as `##### Chakra Bind: [Belt]` under the
+       * `###` that names the veil, and taking those as entries of their own
+       * turned 2,149 veils into 5,785 things -- every veil stripped of its
+       * binds, beside a run of nameless fragments carrying no fields. The
+       * heading is kept as a line of the text, being what says which bind the
+       * paragraph under it belongs to.
+       */
+      if (entry && d > depth) {
+        entry.inHead = false;
+        if (entry.body.length && entry.body[entry.body.length - 1] !== '') entry.body.push('');
+        entry.body.push(h[2].trim());
+        return;
+      }
+      close();
+      heads.length = Math.max(0, d - 1);
+      heads[d - 1] = h[2].trim();
+      if (d === 1) { doc.title = h[2].trim(); return; }
+      // A heading at the entry level or below opens an entry; the ones above
+      // it are the trail saying which group it is in.
+      if (d >= depth) {
+        entry = {
+          name: h[2].trim(),
+          fields: new Map(),
+          // The label as the scraper spelt it, kept beside the key it is
+          // matched on: a leftover is read by a person in the review panel,
+          // and "target / area" is not how anybody wrote it.
+          labels: new Map(),
+          inHead: true,
+          summary: '',
+          body: [],
+          at: i,
+          section: heads.slice(1, d - 1).filter(Boolean),
+        };
+      }
+      return;
+    }
+
+    if (line.startsWith('>')) {
+      // "> > text" -- the scraper nests a quote inside the description, and
+      // one level stripped leaves a stray marker in the prose.
+      const t = line.replace(/^(?:>\s?)+/, '');
+      if (entry) entry.body.push(t);
+      else { if (!doc.intro.length) doc.introAt = [i, i]; doc.intro.push(t); doc.introAt[1] = i; }
+      return;
+    }
+
+    /*
+     * Fields are the list at the *top* of an entry, before any prose. Past
+     * that, a `* **Twitches:** …` line is one of the effects the talent is
+     * made of, not a property of it -- the Mind and Nature spheres are full
+     * of them, and eating those would take the rule with them.
+     */
+    const f = entry && entry.inHead && line.match(MD_FIELD);
+    if (f) {
+      const label = f[1].trim();
+      entry.fields.set(label.toLowerCase(), unemph(f[2]));
+      entry.labels.set(label.toLowerCase(), label);
+      return;
+    }
+    if (entry && line.trim()) entry.inHead = false;
+    const s = entry && line.match(MD_SUMMARY);
+    if (s) { entry.summary = unemph(s[1]); return; }
+
+    if (!line.trim()) { if (entry) entry.body.push(''); return; }
+    const b = line.match(MD_BROKEN_LABEL);
+    const text = b ? `${b[1]}: ${b[2]}`.trim() : line.trim();
+    if (entry) entry.body.push(text);
+    else doc.strays.push({ text, at: i });
+  });
+  close();
+
+  doc.intro = tidyProse(unwikiTables(doc.intro.join('\n'))).split('\n');
+  for (const e of doc.entries) {
+    e.text = tidyProse(unwikiTables(e.body.join('\n'))).replace(/\n{3,}/g, '\n\n').trim();
+    delete e.body;
+  }
+  return doc;
+}
+
+/** A field by any of the names a scraper might have given it. */
+const pick = (fields, ...names) => {
+  for (const n of names) {
+    const v = fields.get(n);
+    if (v) return v;
+  }
+  return '';
+};
+
+/**
+ * A maneuver or stance out of a structured entry.
+ *
+ * `Level: 1 (Maneuver [Strike])` carries three things at once -- which level,
+ * whether it is a maneuver or a stance, and its type -- because that is how a
+ * discipline's table prints it.
+ */
+function structuredManeuver(e) {
+  const raw = pick(e.fields, 'level');
+  const paren = raw.match(/\(([^)]*)\)/)?.[1] || '';
+  const bracket = paren.match(/\[([^\]]*)\]/)?.[1] || '';
+  const kind = /stance/i.test(paren) ? 'stance' : 'maneuver';
+  const action = pick(e.fields, 'initiation action', 'action');
+  const save = pick(e.fields, 'saving throw', 'save');
+  // The summary is the précis a table actually reads out; the prose under it
+  // is the rule. Both are worth having and there is one cell, so they stack.
+  const text = [e.summary, e.text].filter(Boolean).join('\n\n');
+  return {
+    discipline: pick(e.fields, 'discipline'),
+    entry: {
+      level: Number(raw.match(/\d+/)?.[0]) || 0,
+      kind,
+      name: e.name,
+      type: bracket.trim() || (kind === 'stance' ? 'Stance' : titleCase(paren.trim())),
+      action: ACTION_WORDS.find(([re]) => re.test(action))?.[1] || action,
+      range: pick(e.fields, 'range'),
+      target: pick(e.fields, 'target / area', 'target', 'targets', 'area', 'effect'),
+      duration: pick(e.fields, 'duration'),
+      save: SAVE_ALIASES[lower(save)] ?? save,
+      dc: pick(e.fields, 'dc', 'save dc'),
+      text,
+    },
+  };
+}
+
+/**
+ * A veil out of a structured entry.
+ *
+ * `Shapeable Slot(s)` both identifies it and answers the only question the
+ * sheet asks of a veil: `applyBlock` reads that list and shapes the veil in
+ * the first of those chakra slots with room in it. The binds need no reading
+ * -- they are already in the text, each under the heading naming its chakra.
+ *
+ * Class access and the weapon an enhanced veil shapes into are rules rather
+ * than properties the board holds, so they go to the foot of the text the way
+ * `readVeil` puts a saving throw there, instead of being dropped.
+ */
+function structuredVeil(e) {
+  const tail = [
+    ['Class access', pick(e.fields, 'class access', 'classes')],
+    ['Enhanced weapon', pick(e.fields, 'enhanced weapon')],
+  ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+  return normalizeBlock({
+    kind: 'veil',
+    name: e.name,
+    slot: pick(e.fields, 'shapeable slot(s)', 'shapeable slots', 'shapeable slot', 'chakra slot(s)', 'chakra slot', 'slot'),
+    descriptor: pick(e.fields, 'descriptors', 'descriptor'),
+    text: [e.summary, e.text, ...tail].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  });
+}
+
+/**
+ * A base ability inside a sphere's description: `*Destructive Blast:* As a
+ * standard action…`, `*Fatal Thrust*: …`. The scraper leaves these in the
+ * blockquote rather than heading them, so the emphasised label is the only
+ * thing marking one — which is enough, because the colon is required and a
+ * sphere's opening line (`*You can use destructive power.*`) has none.
+ */
+const BASE_ABILITY = /^\*([A-Z][^*\n:]{1,40})(?::\*|\*:)\s*(.*)$/;
+
+/**
+ * The description split into what it says about the sphere and the base
+ * abilities written into it.
+ *
+ * Everything under a label belongs to it until the next one, because that is
+ * how the prose runs: the paragraphs after `*Destructive Blast:*` are all
+ * about the destructive blast.
+ */
+export function splitBaseAbilities(description) {
+  const lead = [];
+  const abilities = [];
+  for (const line of String(description ?? '').split('\n')) {
+    const m = line.match(BASE_ABILITY);
+    if (m) { abilities.push({ name: m[1].trim(), text: m[2].trim() ? [m[2].trim()] : [] }); continue; }
+    if (abilities.length) abilities[abilities.length - 1].text.push(line);
+    else lead.push(line);
+  }
+  return {
+    description: lead.join('\n').trim(),
+    abilities: abilities.map((a) => ({
+      name: a.name,
+      text: a.text.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    })),
+  };
+}
+
+/**
+ * A whole sphere, where the *document* is the thing and its entries are the
+ * talents inside it -- the other way round from a discipline, whose document
+ * is only a wrapper and whose entries are each their own maneuver.
+ *
+ * Which side of the line it is on is not in the document at all, so it is
+ * looked up by name and left blank when the engine has never heard of it.
+ */
+/**
+ * The sphere's own name out of the document's title.
+ *
+ * A scraper stamps where a page came from and what kind of page it was --
+ * "Open Hand Sphere (Wikidot)" -- and neither belongs in the name a player
+ * picks from a dropdown.
+ */
+const sphereTitle = (title) => {
+  let t = String(title ?? '').trim();
+  // Stripped in a loop rather than once: "Technomancy [LG] Sphere (Wikidot)"
+  // wears three of them, and which order they come in is the page's business.
+  for (let n = 0; n < 6; n++) {
+    const next = t
+      .replace(/\s*[([][^)\]]*[)\]]\s*$/, '')
+      .replace(/\s+spheres?$/i, '')
+      .trim();
+    if (next === t) break;
+    t = next;
+  }
+  return t;
+};
+
+function structuredSphere(doc) {
+  const talents = doc.entries.map((e) => {
+    const { name, tags, sources } = splitTalentName(e.name);
+    // `Tags: Blast Type, Acid` -- the groups a talent belongs to, which is
+    // what a caster filters on when looking for one.
+    for (const t of pick(e.fields, 'tags', 'tag').split(',')) {
+      const v = t.trim();
+      if (v && !tags.some((x) => lower(x) === lower(v))) tags.push(v);
+    }
+    const source = pick(e.fields, 'source', 'sources');
+    if (source && !sources.includes(source)) sources.push(source);
+    /*
+     * Which group it is in. A document with a group heading over its entries
+     * says so in the trail; one without (every entry directly under the page's
+     * single section) says so in a `Section:` field instead -- "Charm
+     * Talents", "Geomancing Talents" -- which is the real grouping either way.
+     * The page's own section heading is the last resort, being the same for
+     * every entry and so telling a reader nothing.
+     */
+    const group = e.section.length > 1
+      ? e.section[e.section.length - 1]
+      : pick(e.fields, 'section') || e.section[0] || '';
+    return {
+      name,
+      group,
+      tags,
+      sources,
+      prerequisites: pick(e.fields, 'prerequisite', 'prerequisites'),
+      text: e.text,
+    };
+  });
+  const { description, abilities } = splitBaseAbilities(doc.intro.join('\n'));
+  const name = sphereTitle(doc.title);
+  return {
+    name, kind: sphereSide(name, ''), description, abilities, talents,
+  };
+}
+
+/**
+ * Kinds where the document as a whole is the thing, not each entry.
+ *
+ * Asked before the per-entry kinds, and a match consumes every entry. What
+ * says which is the scraper's own section heading -- the one place a document
+ * states what it is about -- rather than anything guessed from the contents.
+ */
+const STRUCTURED_DOCS = [
+  {
+    kind: 'sphere',
+    when: (doc) => !!doc.title
+      && doc.entries.length
+      && doc.entries.some((e) => /\bsphere talents\b/i.test(e.section[0] || '')),
+    drops: [],
+    read: structuredSphere,
+    into: 'spheres',
+  },
+];
+
+/**
+ * What each kind of entry looks like, and what to make of it.
+ *
+ * `wants` are the fields that identify it -- all of them must be there. Order
+ * matters only in that the first match wins, so a narrower kind goes above a
+ * wider one. `drops` are fields the sheet has nowhere to put, named so the
+ * report can say they were left out instead of them vanishing.
+ */
+const STRUCTURED_KINDS = [
+  {
+    kind: 'maneuver',
+    wants: ['discipline', 'initiation action'],
+    drops: ['source', 'prerequisite', 'prerequisites'],
+    read: structuredManeuver,
+    into: 'maneuvers',
+  },
+  {
+    // One field is enough here and two would be worse: every veil carries a
+    // shapeable slot and nothing else does, while Class Access and
+    // Descriptors are on most of them but not all, and requiring either
+    // would quietly drop the rest.
+    kind: 'veil',
+    wants: ['shapeable slot(s)'],
+    drops: [],
+    read: structuredVeil,
+    into: 'blocks',
+  },
+];
+
+/** What was read off a sphere document, in one line. */
+function sphereLine(s) {
+  const groups = [...new Set(s.talents.map((t) => t.group).filter(Boolean))];
+  const tagged = s.talents.filter((t) => t.tags.length).length;
+  const pre = s.talents.filter((t) => t.prerequisites).length;
+  return `Sphere ${s.name}${s.kind ? ` (${s.kind})` : ' (neither list knows it)'}: `
+    + `${s.talents.length} talent${s.talents.length === 1 ? '' : 's'}`
+    + `${groups.length ? ` in ${groups.length} group(s)` : ''}`
+    + `${tagged ? `, ${tagged} tagged` : ''}${pre ? `, ${pre} with prerequisites` : ''}.`
+    + (s.abilities.length ? ` Base: ${s.abilities.map((a) => a.name).join(', ')}.` : '');
+}
+
+/**
+ * Read a scraper document. Same shape back as `parsePaste`, because it is one
+ * of the two things `parsePaste` can be.
+ */
+export function readStructured(text) {
+  const doc = parseStructured(text);
+  const out = {
+    blocks: [], maneuvers: [], spheres: [], report: [], leftovers: [],
+  };
+  const dropped = new Set();
+  const unknown = [];
+  const counts = new Map();
+
+  // A document that is itself one thing -- a sphere and its talents -- is
+  // read whole, and its entries are not offered again as things of their own.
+  const asDoc = STRUCTURED_DOCS.find((k) => k.when(doc));
+  if (asDoc) {
+    out[asDoc.into].push(asDoc.read(doc));
+    counts.set(asDoc.kind, 1);
+    out.report.push(sphereLine(out.spheres[0]));
+    return out;
+  }
+
+  for (const e of doc.entries) {
+    const kind = STRUCTURED_KINDS.find((k) => k.wants.every((w) => e.fields.has(w)));
+    if (!kind) { unknown.push(e); continue; }
+    for (const d of kind.drops || []) if (e.fields.get(d)) dropped.add(d);
+    out[kind.into].push(kind.read(e));
+    counts.set(kind.kind, (counts.get(kind.kind) || 0) + 1);
+  }
+
+  // The document's own title and description have nowhere to go -- a
+  // discipline is a name and its maneuvers -- so the description comes back
+  // to be tagged, the way anything else nothing claimed does.
+  const intro = doc.intro.join('\n').trim();
+  if (intro) {
+    out.leftovers.push({
+      text: doc.title ? `${doc.title}\n${intro}` : intro,
+      lines: doc.introAt,
+      near: doc.title ? { kind: 'document', name: doc.title } : null,
+      suggest: 'note',
+    });
+  }
+  for (const e of [...unknown, ...doc.strays]) {
+    const text = e.fields
+      ? [e.name, ...[...e.fields].map(([k, v]) => `${e.labels.get(k) || k}: ${v}`), e.text]
+        .filter(Boolean).join('\n')
+      : e.text;
+    out.leftovers.push({
+      text, lines: [e.at, e.at], near: doc.title ? { kind: 'document', name: doc.title } : null, suggest: suggestFor({ text }),
+    });
+  }
+
+  const said = [...counts].map(([k, n]) => `${n} ${k}${n === 1 ? '' : 's'}`).join(', ');
+  out.report.push(said
+    ? `${doc.title || 'A document'}: ${said}.`
+      + (dropped.size ? ` Their ${[...dropped].join(' and ')} line${dropped.size === 1 ? ' has' : 's have'} no cell and ${dropped.size === 1 ? 'was' : 'were'} left out.` : '')
+      + (intro ? ' Its description is below, to keep as a note or leave out.' : '')
+    : `${doc.title || 'A document'}: nothing here matched a kind this reader knows. Tag it below, or keep it as a note.`);
+  return out;
+}
+
+/* ---------------- spheres ---------------- */
+
+/**
+ * The tags a talent's name carries, and what each of them means.
+ *
+ * Two styles on the Spheres wikis, and they say different things. A `(…)` tag
+ * is a **rules** tag -- `(counter)` is a talent a counter punch may apply,
+ * `(stance)` one you take a stance in -- and belongs with the talent for good.
+ * A `[…]` tag is nearly always **provenance**: `[3PP]`, `[Apoc]`, `[Youxia
+ * HB]`, `[EO3]` say which book or homebrew it came from, which is what a table
+ * filters on when it rules something in or out.
+ *
+ * Nearly always: a handful of rules tags are written in brackets too, so those
+ * are named rather than guessed at. Everything else in brackets is a source.
+ */
+const RULES_TAGS = /^(?:counter|stance|utility|package|blitz|tandem|totem|form)$/i;
+const TAG_SUFFIX = /\s*(?:\(([^()]+)\)|\[([^\][]+)\])\s*$/;
+/**
+ * A suffix that is neither: the wiki disambiguates a page whose name is also
+ * something else's by appending "(talent)", and that says nothing about the
+ * talent at all.
+ */
+const NOT_A_TAG = /^talents?$/i;
+
+/**
+ * Strip a talent's trailing tags off its name, keeping both kinds.
+ * "Elongated Step (stance) [3PP]" -> Elongated Step, tags [stance], sources [3PP].
+ */
+export function splitTalentName(raw) {
+  let name = String(raw || '').trim();
+  const tags = [];
+  const sources = [];
+  for (;;) {
+    const m = name.match(TAG_SUFFIX);
+    if (!m) break;
+    const paren = m[1];
+    const brack = m[2];
+    const text = (paren ?? brack ?? '').trim();
+    // A parenthesised tag is always a rule; a bracketed one is a rule only if
+    // it is one of the few written that way, and a source otherwise.
+    if (NOT_A_TAG.test(text)) { /* a page-title disambiguator, not a tag */ }
+    else if (paren !== undefined || RULES_TAGS.test(text)) tags.unshift(text);
+    else sources.unshift(text);
+    name = name.slice(0, m.index).trim();
+  }
+  return { name, tags, sources };
+}
+
+/**
+ * "Boxing Talents", "Counter Talents", "Legendary Talents" -- a group heading.
+ * Tab-free and short on purpose: a class page's table header row ends
+ * "...	Special	Combat Talents", and a heading is a line of its own.
+ */
+const GROUP_HEADING = /^([^	]{1,40}?)\s+Talents$/i;
+/** Which side of the line a sphere sits on, from its breadcrumb. */
+const SPHERE_KIND = (crumb) => (/spheres?\s+of\s+might/i.test(crumb) ? 'combat'
+  : /spheres?\s+of\s+power/i.test(crumb) ? 'magic' : '');
+
+/**
+ * A whole sphere off the Spheres of Power / Spheres of Might wiki.
+ *
+ * The page's **table of contents is the parse**. It lists, in order and
+ * exactly as they are spelt below, every heading the article has: the base
+ * abilities, the tables, each `X Talents` group, and every talent under it.
+ * Reading it first means the body needs no guessing at all about which short
+ * line is a talent's name and which is the first line of a paragraph -- the
+ * question that makes every other reader in this file as careful as it is.
+ * The contents are chrome (`markWikidotChrome` marks them), so they are read
+ * off the raw lines rather than the content ones.
+ *
+ * Like a maneuver and unlike everything else here, a sphere is not a block: it
+ * is a shared table, so it comes back to be filed in the pack's sphere list.
+ */
+export function readSphere(lines, pre = new Set()) {
+  const used = new Set(pre);
+  const t = lines.map((l) => l.trim());
+  lines.forEach((_, i) => used.add(i));
+
+  const crumbAt = t.findIndex((l) => BREADCRUMB.test(l));
+  const crumb = crumbAt >= 0 ? t[crumbAt] : '';
+  // The title is the line above the breadcrumb, which the chrome pass keeps;
+  // failing that, whatever the first `X Talents` heading is named for.
+  let name = '';
+  for (let k = crumbAt - 1; k >= 0 && !name; k--) if (t[k]) name = t[k];
+  const firstGroup = t.findIndex((l, i) => !pre.has(i) && GROUP_HEADING.test(l));
+  if (!name && firstGroup >= 0) name = t[firstGroup].match(GROUP_HEADING)[1];
+
+  // The contents: from its own heading to the first sentence or blank.
+  const tocAt = t.findIndex((l) => /^(?:Fold|Unfold|FoldUnfold)?\s*Table of Contents\b/i.test(l));
+  const toc = [];
+  if (tocAt >= 0) {
+    for (let k = tocAt + 1; k < t.length && t[k] && !/[.!?]$/.test(t[k]); k++) toc.push(t[k]);
+  }
+
+  // Every heading the article will have, and which group each talent is in.
+  const groupOf = new Map();
+  const headings = [];
+  let group = '';
+  for (const entry of toc) {
+    const g = entry.match(GROUP_HEADING);
+    if (g) { group = entry; headings.push(entry); continue; }
+    headings.push(entry);
+    if (group) groupOf.set(entry, group);
+  }
+
+  // The article: everything below the contents, cut at each heading it named.
+  const start = tocAt >= 0 ? tocAt + toc.length + 1 : Math.max(0, firstGroup);
+  const wanted = new Set(headings);
+  const lead = [];
+  const sections = [];
+  for (let k = start; k < t.length; k++) {
+    const l = t[k];
+    if (!l) { if (sections.length) sections[sections.length - 1].body.push(''); continue; }
+    // The footer's own navigation repeats sphere names; stop at it.
+    if (WIKIDOT_FOOTER.test(l) || pre.has(k)) continue;
+    if (wanted.has(l)) { sections.push({ head: l, body: [] }); continue; }
+    if (sections.length) sections[sections.length - 1].body.push(l);
+    else lead.push(l);
+  }
+
+  const textOf = (s) => s.body.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const abilities = [];
+  const talents = [];
+  for (const s of sections) {
+    if (GROUP_HEADING.test(s.head)) continue;              // the heading itself carries nothing
+    const body = textOf(s);
+    if (!groupOf.has(s.head)) { abilities.push({ name: s.head, text: body }); continue; }
+    const { name: tname, tags, sources } = splitTalentName(s.head);
+    // Two lines a talent opens with that are about the talent rather than part
+    // of it: where it was published, and what it asks of you first.
+    // "Source: Spheres Apocrypha: Pugilists" says the same as its [Apoc] tag
+    // but says which book, so it joins the sources rather than replacing them.
+    let rest = body;
+    const sm = rest.match(/^Sources?:\s*(.+?)(?:\n|$)/i);
+    if (sm) { sources.push(sm[1].trim()); rest = rest.slice(sm[0].length).trim(); }
+    const pm = rest.match(/^Prerequisites?:\s*(.+?)(?:\n|$)/i);
+    if (pm) rest = rest.slice(pm[0].length).trim();
+    talents.push({
+      name: tname,
+      group: groupOf.get(s.head),
+      tags,
+      sources,
+      prerequisites: pm ? pm[1].trim() : '',
+      text: rest,
+    });
+  }
+
+  const description = lead.join('\n').trim();
+  const kind = SPHERE_KIND(crumb);
+  const tagged = talents.filter((x) => x.tags.length).length;
+  const sourced = talents.filter((x) => x.sources.length).length;
+  return {
+    name,
+    blocks: [],
+    spheres: name ? [{
+      name,
+      kind,
+      description,
+      abilities,
+      talents,
+    }] : [],
+    used,
+    report: [name
+      ? `Sphere ${name}${kind ? ` (${kind})` : ''}: ${abilities.length} base abilit${abilities.length === 1 ? 'y' : 'ies'}, `
+        + `${talents.length} talent${talents.length === 1 ? '' : 's'} in `
+        + `${new Set(talents.map((x) => x.group)).size} group(s)`
+        + `${tagged ? `, ${tagged} tagged` : ''}${sourced ? `, ${sourced} from a named source` : ''}.`
+      : 'A sphere page with no name — nothing read.'],
+  };
+}
+
+/* ---------------- martial abilities ---------------- */
+
+/**
+ * The labels a martial ability's information box uses. `Information` is the
+ * box's own heading, which the wiki chrome pass usually eats already.
+ */
+const MARTIAL_INFO = /^(?:Information|Discipline|Category|Descriptors?|Levels?|Prerequisites?|Initiation Action|Ranges?|Targets?|Area|Effect|Durations?|Saving Throws?|Save|Sources?)$/i;
+
+/** "1 swift action", "1 full-round action" -- the action a maneuver is initiated with. */
+const ACTION_WORDS = [
+  [/full[\s-]?round/i, 'Full-round'], [/standard/i, 'Standard'], [/\bmove\b/i, 'Move'],
+  [/swift/i, 'Swift'], [/immediate/i, 'Immediate'], [/\bfree\b/i, 'Free'],
+];
+const SAVE_ALIASES = {
+  none: 'None', fort: 'Fortitude', fortitude: 'Fortitude',
+  ref: 'Reflex', reflex: 'Reflex', will: 'Will',
+};
+
+/**
+ * A maneuver or stance off a martial ability page.
+ *
+ * Alone among the readers here this does not make a block. A discipline is a
+ * shared *table*, read where it stands rather than copied into a character
+ * (see docs/extensions.md), so what comes back is the catalogue entry and the
+ * name of the discipline it belongs under, and the editor files it there.
+ *
+ * The page is an information box that copies as a label on one line and its
+ * value on the next, except for Range / Target / Duration, which copy as a
+ * small tab-separated table. Then the rules text, which is everything after
+ * the last label the box knows.
+ *
+ * Three of the box's lines have no cell on a maneuver's card -- its
+ * descriptors, its prerequisites and where it was published -- so they are
+ * left out and said to be left out, rather than being wedged into the
+ * description where nothing can find them again.
+ */
+export function readManeuver(lines, pre = new Set()) {
+  const used = new Set(pre);
+  const all = [];
+  lines.forEach((raw, i) => { used.add(i); if (!pre.has(i) && raw.trim()) all.push(raw.trim()); });
+
+  // The page opens "Martial Ability" over the ability's name; failing that,
+  // the name is whatever sits directly above the first label of the box.
+  let at = all.findIndex((l) => /^Martial Abilit(?:y|ies)$/i.test(l));
+  let name = at >= 0 ? (all[at + 1] || '') : '';
+  if (name) at += 2;
+  else {
+    const first = all.findIndex((l) => MARTIAL_INFO.test(l));
+    name = first > 0 ? all[first - 1] : '';
+    at = Math.max(0, first);
+  }
+
+  const info = {};
+  let i = at;
+  for (; i < all.length; i++) {
+    const l = all[i];
+    if (l === name) continue;
+    // "Range<tab>Target<tab>Duration" over its values.
+    if (l.includes('\t')) {
+      const heads = l.split('\t').map((s) => s.trim()).filter(Boolean);
+      if (heads.length && heads.every((h) => MARTIAL_INFO.test(h))) {
+        const vals = (all[i + 1] || '').split('\t').map((s) => s.trim());
+        heads.forEach((h, k) => { info[lower(h)] = vals[k] || ''; });
+        i++;
+        continue;
+      }
+      break;
+    }
+    if (!MARTIAL_INFO.test(l)) break;      // the rules text starts here
+    const next = all[i + 1] || '';
+    if (MARTIAL_INFO.test(next) || next.includes('\t')) { info[lower(l)] = ''; continue; }
+    info[lower(l)] = next;
+    i++;
+  }
+
+  const text = all.slice(i).join('\n');
+  const category = info.category || '';
+  const kind = /stance/i.test(category) ? 'stance' : 'maneuver';
+  const type = category.match(/\(([^)]+)\)/)?.[1]?.trim()
+    || (kind === 'stance' ? 'Stance' : titleCase(category));
+  const rawAction = info['initiation action'] || '';
+  const rawSave = info['saving throw'] || info['saving throws'] || info.save || '';
+  const entry = {
+    level: Number(String(info.level ?? info.levels ?? '').match(/\d+/)?.[0]) || 0,
+    kind,
+    name,
+    type,
+    action: ACTION_WORDS.find(([re]) => re.test(rawAction))?.[1] || rawAction,
+    range: info.range || info.ranges || '',
+    target: info.target || info.targets || info.area || info.effect || '',
+    duration: info.duration || info.durations || '',
+    save: SAVE_ALIASES[lower(rawSave)] ?? rawSave,
+    dc: '',
+    text,
+  };
+
+  // What the box said that a card has nowhere to put.
+  const dropped = [['Descriptors', info.descriptors || info.descriptor],
+    ['Prerequisites', info.prerequisites || info.prerequisite],
+    ['Sources', info.sources || info.source]]
+    .filter(([, v]) => v && !/^none$/i.test(v.trim()))
+    .map(([k]) => k);
+  const discipline = info.discipline || '';
+  const filled = ['type', 'action', 'range', 'target', 'duration', 'save']
+    .filter((k) => entry[k]).length;
+
+  return {
+    name,
+    blocks: [],
+    maneuvers: name ? [{ discipline, entry }] : [],
+    used,
+    report: [name
+      ? `${kind === 'stance' ? 'Stance' : 'Maneuver'} ${name}${discipline ? ` (${discipline}` : ' (no discipline named'}${entry.level ? `, level ${entry.level}` : ''}): `
+        + `${filled} cell${filled === 1 ? '' : 's'}${text ? ' and its description' : ', no description'}.`
+        + (dropped.length ? ` Its ${dropped.join(' and ')} line${dropped.length === 1 ? ' has' : 's have'} no cell on a card and ${dropped.length === 1 ? 'was' : 'were'} left out.` : '')
+      : 'A martial ability box with no name — nothing read.'],
   };
 }
 

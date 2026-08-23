@@ -42,7 +42,7 @@ export function renderProgressionPanel(model, ctx) {
     };
 
     return `<div class="grid">
-      <section class="panel span2">
+      ${collapsible(model, 'prog-levels', `<section class="panel span2">
         <h3>Level progression
           <button data-action="add-track" title="Tristalt and beyond">+ Class track</button>
         </h3>
@@ -98,7 +98,7 @@ export function renderProgressionPanel(model, ctx) {
           you haven't filled in is outlined and counted on the group header; one you haven't
           reached yet is only faintly marked.
         </p>
-      </section>
+      </section>`)}
     </div>
     <div class="featgroups">
       ${classFeatureGroups(model, ctx, model, ctx)}

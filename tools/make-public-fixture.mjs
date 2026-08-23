@@ -123,9 +123,19 @@ function playerValues(c) {
     'identity.deity': 'None',
     'identity.specialty': 'Scholar',
     'identity.color': '#6ea8fe',
-    // Hit points as the player rolled and recorded them.
-    'hp.total': 78,
+    /*
+     * Hit points as the player rolled and recorded them -- which is why they
+     * are pinned rather than left to the class table. Twelve levels of d6
+     * taken at maximum would be 120 with her Constitution, and she rolled 78;
+     * a character who cannot reach her own total from her hit dice is the
+     * case worth having in the fixture, because it is the one every imported
+     * sheet is in until its player decides otherwise.
+     */
+    'hp.totalOverride': 78,
     'hp.current': 78,
+    // The ability the total counts, which the class table needs in order to
+    // work out what the alternative would have been.
+    'hp.ability': 'Con',
   })) c.set(path, value);
 
   // Two classes, one per gestalt side: a d6 caster and a d6 manifester, both on

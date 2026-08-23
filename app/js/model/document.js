@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, defaultCompanion, normalizeCompanion,
+  COMPANION_KINDS, COMPANION_TABS, companionInUse, defaultCompanion, normalizeCompanion,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -24,7 +24,7 @@ import { AKASHIC_DERIVED, importAkashic, splitVeilName } from './subsystems/akas
 import {
   CARDCASTING_DERIVED, deckFeatNames, importCardcasting,
 } from './subsystems/cardcasting.js';
-import { COMPANION_DERIVED } from './subsystems/companions.js';
+import { COMPANION_DERIVED, importAnimalCompanion } from './subsystems/companions.js';
 import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
 import { MANEUVER_DERIVED, importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
@@ -517,6 +517,14 @@ export function normalise(model) {
     }));
   }
   delete d.feats;
+  // Every feat takes a note, the way the granted feats beside them always
+  // have. A group saved before the column existed has none, and a row with no
+  // field for it would drop what a drag put there.
+  for (const group of d.featGroups) {
+    for (const e of group.entries || []) {
+      if (e && typeof e === 'object' && e.note === undefined) e.note = '';
+    }
+  }
 
   // Background sections are keyed by prose labels ("Friends/Family",
   // "Ez'atian Certifications") which are not usable as path segments either.
@@ -608,18 +616,28 @@ export function normalise(model) {
   /*
    * The three companion sheets -- Familiar, Animal Companion, Eidolon -- were
    * template worksheets on every workbook, each a grid of formulas against
-   * `dataSheet` that the export left as `#ERROR!`. They become structured
-   * blocks that start empty and are worked out from the tables in
-   * `companions.js`. None of the five characters ever filled one in, so
-   * there is nothing to read off the grid; if a workbook's copy does carry a
-   * name, the grid is kept beside the block rather than dropped.
+   * `dataSheet` that the export left frozen at whatever they last worked out.
+   * They become structured blocks worked out afresh from the tables in
+   * `companions.js`.
+   *
+   * The Animal Companion tab is read into its block and then retired like any
+   * other imported worksheet. The other two are not read yet, so an unfilled
+   * copy is dropped and a filled one -- a tab that carries a name -- is kept
+   * beside the empty block rather than losing what somebody typed on it.
+   *
+   * It is read again when a document saved before it was read still carries
+   * the grid beside a block nobody has touched: that pair is exactly what the
+   * older import left behind, and reading it is what recovers the companion.
    */
   for (const kind of COMPANION_KINDS) {
     const index = d.sheetTabs.findIndex((t) => t.name === COMPANION_TABS[kind]);
+    const tab = index < 0 ? null : d.sheetTabs[index];
+    const stranded = tab && d[kind] && !companionInUse(kind, d[kind]);
+    if (kind === 'animalCompanion' && (!d[kind] || stranded)) d[kind] = importAnimalCompanion(tab);
     d[kind] = normalizeCompanion(kind, d[kind] || defaultCompanion(kind));
     if (index < 0) continue;
-    const g = sheetReader(d.sheetTabs[index]);
-    const named = g.text(g.take('Name')) !== '';
+    const g = sheetReader(tab);
+    const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
     if (!named) d.sheetTabs.splice(index, 1);
   }
 
@@ -961,6 +979,23 @@ export function normalise(model) {
   for (const k of ['melee', 'ranged', 'cmb']) {
     if (d.uiPrefs.collapsed[`atk:${k}`] === undefined) d.uiPrefs.collapsed[`atk:${k}`] = true;
   }
+  // And the hit-point parts: the sum above them says what they come to, and
+  // the ability is the only one most characters ever touch.
+  if (d.uiPrefs.collapsed['hp:build'] === undefined) d.uiPrefs.collapsed['hp:build'] = true;
+
+  /*
+   * Hit points. `total` used to be the whole of it -- a number the workbook
+   * worked out and this sheet kept -- and is now what `applyHitPoints`
+   * arrives at from the class table, with `totalOverride` holding a figure
+   * pinned over it. The parts the workbook summed were always imported;
+   * `misc` is the last of them and older saves have no field for it.
+   */
+  if (!d.hp || typeof d.hp !== 'object') d.hp = {};
+  for (const k of ['fcb', 'toughness', 'misc']) {
+    if (d.hp[k] === undefined || d.hp[k] === null) d.hp[k] = 0;
+  }
+  if (d.hp.ability === undefined) d.hp.ability = null;
+  if (d.hp.ability2 === undefined) d.hp.ability2 = null;
   if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
   // How the built-in meters are painted. Empty on a sheet nobody has
   // restyled, and only the meters that differ from the default are in it.
@@ -975,10 +1010,29 @@ export function normalise(model) {
     const imported = Number(d.identity?.mythicTier) || 0;
     d.mythic.tierOverride = imported !== computed ? imported : null;
   }
-  if (d.mythic.bonusHpPerTier === undefined) d.mythic.bonusHpPerTier = 0;
+  /*
+   * Bonus HP per tier is an override over the path's own figure now that hit
+   * points are worked out rather than stored, so "not set" has to be sayable
+   * and null is how this file says it.
+   *
+   * The zero is migrated rather than honoured. It was this line's own default
+   * back when the field was added on top of an imported total that already
+   * counted the tiers -- so zero was the only figure that did not double the
+   * bonus, and every sheet saved since carries it without anyone having
+   * chosen it. A player who means zero can still say so on a path the table
+   * has no row for, which is what the field is for.
+   */
+  if (d.mythic.bonusHpPerTier === undefined || d.mythic.bonusHpPerTier === 0) {
+    d.mythic.bonusHpPerTier = null;
+  }
   if (!d.mythic.tradition) d.mythic.tradition = {};
   for (const k of ['drawback1', 'drawback2', 'drawback3', 'quality', 'boon1', 'boon2', 'boon3']) {
     if (d.mythic.tradition[k] === undefined) d.mythic.tradition[k] = null;
+  }
+  // Each slot's note, beside its name. Under `notes` rather than alongside the
+  // slots so that the seven keys above stay the whole of what a slot is.
+  if (!d.mythic.tradition.notes || typeof d.mythic.tradition.notes !== 'object') {
+    d.mythic.tradition.notes = {};
   }
   /*
    * The mythic ladder is ten tiers, one row each: a feat on the odd ones, a
@@ -1096,6 +1150,19 @@ export function normalise(model) {
   }
   if (!d.primordia.picks || typeof d.primordia.picks !== 'object') d.primordia.picks = {};
   if (!d.primordia.alt || typeof d.primordia.alt !== 'object') d.primordia.alt = {};
+  /*
+   * The ladder's own notes, one per granting level, beside the name.
+   *
+   * Empty on a sheet that predates the column, and deliberately so: the pick
+   * box was the only writing surface a row had, and what the workbooks put in
+   * it -- "Endurance, Armor Adept" at Bryva's 1st, "Armor Trick" at her 3rd --
+   * is a name, not a note. Moving that text across on load would take the
+   * technique's own talents out of the column that counts them, which is
+   * where `trainingSkillRanks` goes looking for them.
+   */
+  if (!d.primordia.rowNotes || typeof d.primordia.rowNotes !== 'object') {
+    d.primordia.rowNotes = {};
+  }
 
   delete d.planner;
   if (!d.progression) {
@@ -1150,6 +1217,18 @@ export function normalise(model) {
   const e = d.equipment;
   if (!Array.isArray(e.gear)) e.gear = [];
   if (!Array.isArray(e.other)) e.other = [];
+  /*
+   * Every item takes a description. The row is fourteen narrow boxes because
+   * it has to fit a page; what the item actually is goes here, and it reads
+   * {…} the way the rest of the sheet's prose does.
+   *
+   * How many bonus and Other columns a list has is deliberately not recorded:
+   * it is the longest row in it (see gearColumnCount), so the rows are their
+   * own answer and there is nothing here to keep in step with them.
+   */
+  for (const g of [...e.gear, ...e.other]) {
+    if (g && typeof g === 'object' && g.note === undefined) g.note = '';
+  }
   if (!Array.isArray(e.shields)) e.shields = e.shield ? [e.shield] : [];
   delete e.shield;
   if (!e.armor) e.armor = { kind: 'Armor', name: null, acBonus: 0, maxDex: null, acp: 0, others: [], weight: 0, cost: 0 };

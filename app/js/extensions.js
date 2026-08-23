@@ -18,20 +18,25 @@
  *    Attaching copies the block into the character, so an exported character is
  *    still self-contained and needs no pack to open.
  *
- * Bundled packs come from `data/extensions/index.json` (a deployment lists what
- * it ships there, exactly as `data/characters/index.json` lists characters --
- * and the published engine ships neither). Local packs live in this browser
- * only, in localStorage, alongside the imported characters.
+ * Bundled packs come from an `index.json` in `data/extensions/` (what the
+ * repository ships, exactly as `data/characters/index.json` lists characters --
+ * and the published engine ships neither) or in `private/extensions/`, the
+ * folder git ignores. Either way they are fetched into memory and never
+ * stored. Local packs -- the ones a player imports -- are stored, in this
+ * browser only: IndexedDB where there is one and localStorage where there is
+ * not (see `pack-storage.js`), alongside the imported characters.
  *
  * Nothing in here touches the DOM: the manager UI and the sheet element both
  * call this module, and the tests call it with a fake storage.
  */
 
+import { storageMedium } from './pack-storage.js';
+
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
 /** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = ['maneuvers', 'vancian', 'psionics', 'cardcasting', 'cooking'];
+export const TABLE_KINDS = ['maneuvers', 'spheres', 'veils', 'vancian', 'psionics', 'cardcasting', 'cooking'];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -588,6 +593,8 @@ function tableCount(kind, table) {
   const t = obj(table);
   switch (kind) {
     case 'maneuvers': return arr(t.disciplines).length;
+    case 'spheres': return arr(t.spheres).length;
+    case 'veils': return arr(t.veils).length;
     case 'vancian': return arr(t.classes).length;
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
@@ -600,7 +607,9 @@ function tableCount(kind, table) {
 export function describeSummary(s) {
   const parts = [];
   const words = {
-    maneuvers: ['discipline', 'disciplines'], vancian: ['casting table', 'casting tables'],
+    maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
+    veils: ['veil', 'veils'],
+    vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
   };
@@ -625,35 +634,120 @@ export function blankExtension({ name = 'My extension', author = '', id = null }
 
 /* ---------------- the local store ---------------- */
 
+/** The keys the store owns: the index, and one document per local pack. */
+export const isPackKey = (key) => key === EXTENSIONS_KEY || str(key).startsWith(extensionKey(''));
+
 /**
- * The store is a thin layer over a Storage-like object (`getItem` /
- * `setItem` / `removeItem`), which is localStorage in the page and a Map in
- * the tests. One index lists the local packs and remembers which bundled ones
- * are switched off; each pack's document is its own key so the index stays
- * small enough to read on every load.
+ * Which of the pack keys found in localStorage are worth moving into the
+ * database: the index, and the documents the index actually lists.
+ *
+ * What that leaves behind is a document with no index row -- the fingerprint
+ * of the bug fixed in 758f36c, from a browser that filled up between the two
+ * writes a save used to be. Nothing can reach it, so moving it would carry a
+ * dead weight into the new home; `tools/storage-report.js` finds those where
+ * they lie and prints the line that clears them.
  */
-export function extensionStore(storage = globalThis.localStorage) {
-  if (!storage) throw new Error('extensionStore needs a Storage-like object');
+export function packsWorthMoving(found) {
+  const out = new Map();
+  const raw = found.get(EXTENSIONS_KEY);
+  if (typeof raw !== 'string') return out;
+  let rows;
+  try { rows = arr(JSON.parse(raw).extensions).filter((e) => e && e.id); } catch { return out; }
+  out.set(EXTENSIONS_KEY, raw);
+  for (const { id } of rows) {
+    const doc = found.get(extensionKey(id));
+    if (typeof doc === 'string') out.set(extensionKey(id), doc);
+  }
+  return out;
+}
+
+/**
+ * The local store: one index listing the packs a player has imported and
+ * remembering which bundled ones they have switched off, plus each pack's
+ * document under a key of its own so the index stays small enough to read on
+ * every load.
+ *
+ * **Reads are synchronous and writes are not**, and the split is the whole
+ * design. The sheet asks what is switched on for every render, and a render
+ * cannot wait for a database -- so everything is read into memory once by
+ * `open()` and answered from there afterwards. A write goes to the medium
+ * first and into memory only once it has gone through, so a store that says
+ * a pack is there is a store where the pack is really stored.
+ *
+ * The argument is where the bytes live (see `pack-storage.js`), in any of
+ * three shapes: a medium, a Storage-like object to wrap in one -- which is
+ * what the tests hand it -- or a function returning either, awaited at
+ * `open()` for the case where choosing takes a database to be opened first.
+ */
+export function extensionStore(medium = globalThis.localStorage) {
+  const cache = new Map();
+  let opened = null;
+  let backing = null;
+  let moved = [];
+
+  const asMedium = (m) => (m && typeof m.commit === 'function'
+    ? m
+    : storageMedium(m, { holds: isPackKey }));
+
+  const open = () => {
+    if (!opened) {
+      opened = (async () => {
+        const chosen = typeof medium === 'function' ? await medium() : medium;
+        if (chosen && chosen.medium) { backing = asMedium(chosen.medium); moved = arr(chosen.moved); }
+        else backing = asMedium(chosen);
+        const found = await backing.all();
+        cache.clear();
+        for (const [key, value] of found) cache.set(key, value);
+        return true;
+      })().catch(() => false);
+    }
+    return opened;
+  };
 
   const readIndex = () => {
     try {
-      const raw = JSON.parse(storage.getItem(EXTENSIONS_KEY) || '{}');
+      const raw = JSON.parse(cache.get(EXTENSIONS_KEY) || '{}');
       return {
         extensions: arr(raw.extensions).filter((e) => e && e.id),
         disabledBundled: arr(raw.disabledBundled).map(str),
       };
     } catch { return { extensions: [], disabledBundled: [] }; }
   };
-  const writeIndex = (index) => storage.setItem(EXTENSIONS_KEY, JSON.stringify(index));
+
+  /**
+   * Store first, remember second. `commit` is all-or-nothing, so a failure
+   * here leaves both the medium and the cache on the previous state rather
+   * than on two different ones.
+   *
+   * Every writer above waits on `open()` before it reads the index, which is
+   * not belt and braces: a save arriving before the store had read its medium
+   * would build the new index out of an empty one and write away every pack
+   * already there. Reads may answer "nothing yet"; writes may not act on it.
+   */
+  const write = async (writes) => {
+    if (!backing) await open();
+    if (!backing) throw new Error('There is nowhere to store a pack in this browser.');
+    await backing.commit(writes);
+    for (const [key, value] of writes) {
+      if (value === null) cache.delete(key); else cache.set(key, value);
+    }
+  };
 
   return {
+    /** Read everything in. Resolves false where there is nowhere to read from. */
+    open,
+
+    /** Which medium the packs ended up in, and what moved there, once open. */
+    get medium() { return backing?.name || null; },
+    get moved() { return [...moved]; },
+
     /** Every local pack's index row, in the order they were added. */
     list() { return readIndex().extensions.map((e) => ({ ...e, local: true })); },
 
     /** One local pack's full document, or null. */
     read(id) {
       try {
-        const raw = storage.getItem(extensionKey(id));
+        const raw = cache.get(extensionKey(id));
         return raw ? normalizeExtension(JSON.parse(raw)) : null;
       } catch { return null; }
     },
@@ -661,14 +755,15 @@ export function extensionStore(storage = globalThis.localStorage) {
     /**
      * Store a pack: new, or replacing the one with the same id (which is how
      * an updated pack a friend sends over lands -- same id, higher revision).
-     * Returns the index row. Throws on a full browser, like a character import.
+     * Resolves to the index row. Rejects on a full browser, like a character
+     * import, and leaves nothing of the attempt behind when it does.
      */
-    save(doc, { origin = 'import', enabled = null } = {}) {
+    async save(doc, { origin = 'import', enabled = null } = {}) {
+      await open();
       const ext = normalizeExtension(doc);
       if (!ext.id) throw new Error('An extension needs a name.');
       ext.updatedAt = new Date().toISOString().slice(0, 19);
       if (!ext.createdAt) ext.createdAt = ext.updatedAt;
-      storage.setItem(extensionKey(ext.id), JSON.stringify(ext));
       const index = readIndex();
       const prior = index.extensions.find((e) => e.id === ext.id);
       const row = {
@@ -679,19 +774,23 @@ export function extensionStore(storage = globalThis.localStorage) {
       index.extensions = prior
         ? index.extensions.map((e) => (e.id === ext.id ? row : e))
         : [...index.extensions, row];
-      writeIndex(index);
+      await write([
+        [extensionKey(ext.id), JSON.stringify(ext)],
+        [EXTENSIONS_KEY, JSON.stringify(index)],
+      ]);
       return { ...row, local: true, replaced: !!prior };
     },
 
-    remove(id) {
+    async remove(id) {
+      await open();
       const index = readIndex();
       index.extensions = index.extensions.filter((e) => e.id !== id);
-      writeIndex(index);
-      storage.removeItem(extensionKey(id));
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
     },
 
     /** Switch a pack on or off; bundled ones are remembered by id. */
-    setEnabled(id, on, { bundled = false } = {}) {
+    async setEnabled(id, on, { bundled = false } = {}) {
+      await open();
       const index = readIndex();
       if (bundled) {
         const set = new Set(index.disabledBundled);
@@ -700,7 +799,7 @@ export function extensionStore(storage = globalThis.localStorage) {
       } else {
         index.extensions = index.extensions.map((e) => (e.id === id ? { ...e, enabled: !!on } : e));
       }
-      writeIndex(index);
+      await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
     },
 
     disabledBundled() { return new Set(readIndex().disabledBundled); },
@@ -710,49 +809,87 @@ export function extensionStore(storage = globalThis.localStorage) {
 /* ---------------- bundled packs ---------------- */
 
 /**
- * The packs a deployment ships: `data/extensions/index.json` lists them and
- * each is a plain extension document beside it. Missing index, missing file
- * and bad JSON all read as "none" -- the engine runs content-free.
+ * Where a deployment keeps the packs it carries, in the order they load.
  *
- * `base` is the URL `data/extensions/` resolves against; the sheet element
- * passes its own module URL, a host page can pass `document.baseURI`.
+ * `data/extensions/` is the repository's own, and ships empty of anybody
+ * else's content on purpose. `private/extensions/` is the folder git ignores
+ * -- the same bargain as `private/` characters: yours to hold, not the
+ * repository's to publish.
+ *
+ * Both are *fetched and kept in memory*, never written to storage, so a pack
+ * sitting in either costs nothing at all against the browser's storage
+ * budget. That is the point of the second one: a catalogue too big to import
+ * -- 4 MB of akashic veils will not go into localStorage in every browser --
+ * loads from here without asking for a byte of it.
  */
-export async function loadBundledExtensions(base, { fetcher = globalThis.fetch } = {}) {
+export const PACK_FOLDERS = ['data/extensions/', 'private/extensions/'];
+
+/**
+ * The packs a deployment ships: each folder's `index.json` lists them, and
+ * each pack is a plain extension document beside it. Missing index, missing
+ * file and bad JSON all read as "none" -- the engine runs content-free, and a
+ * checkout with no `private/` folder is the ordinary case, not an error.
+ *
+ * A later folder wins a tie: a pack in `private/extensions/` carrying an id
+ * the repository also ships replaces it, keeping the shipped one's place in
+ * the list. That is how you correct a bundled pack you cannot edit.
+ *
+ * `base` is the URL those folders resolve against; the sheet element passes
+ * its own module URL, a host page can pass `document.baseURI`.
+ */
+export async function loadBundledExtensions(base, { fetcher = globalThis.fetch, folders = PACK_FOLDERS } = {}) {
   if (!fetcher) return [];
   const url = (path) => new URL(path, base);
-  let index;
-  try {
-    const res = await fetcher(url('data/extensions/index.json'));
-    index = res.ok ? await res.json() : null;
-  } catch { index = null; }
-  const rows = arr(index?.extensions).filter((e) => e && (e.file || e.id));
-  const docs = await Promise.all(rows.map(async (row) => {
+
+  const readFolder = async (folder) => {
+    let index;
     try {
-      const res = await fetcher(url(`data/extensions/${row.file || `${row.id}.json`}`));
-      if (!res.ok) return null;
-      const doc = await res.json();
-      const verdict = inspectExtension(doc);
-      if (!verdict.ok) return null;
-      const ext = normalizeExtension(doc);
-      if (row.id) ext.id = slugId(row.id) || ext.id;
-      return ext;
-    } catch { return null; }
-  }));
-  return docs.filter(Boolean);
+      const res = await fetcher(url(`${folder}index.json`));
+      index = res.ok ? await res.json() : null;
+    } catch { index = null; }
+    const rows = arr(index?.extensions).filter((e) => e && (e.file || e.id));
+    return Promise.all(rows.map(async (row) => {
+      try {
+        const res = await fetcher(url(`${folder}${row.file || `${row.id}.json`}`));
+        if (!res.ok) return null;
+        const doc = await res.json();
+        const verdict = inspectExtension(doc);
+        if (!verdict.ok) return null;
+        const ext = normalizeExtension(doc);
+        if (row.id) ext.id = slugId(row.id) || ext.id;
+        return ext;
+      } catch { return null; }
+    }));
+  };
+
+  const found = (await Promise.all(arr(folders).map(readFolder))).flat().filter(Boolean);
+  const byId = new Map();
+  for (const ext of found) byId.set(ext.id, ext);
+  return [...byId.values()];
 }
 
 /* ---------------- merging the tables ---------------- */
 
 /**
  * Fold every enabled pack's tables into the one document each registrar
- * expects. Later packs win: a discipline, class or manipulation with the same
- * name (case-insensitively) as an earlier one replaces it, so a player can
- * fix a bundled table by shipping a corrected copy in their own pack without
- * being able to edit the bundled one.
+ * expects. Later packs win: a class or manipulation with the same name
+ * (case-insensitively) as an earlier one replaces it, so a player can fix a
+ * bundled table by shipping a corrected copy in their own pack without being
+ * able to edit the bundled one.
+ *
+ * A **discipline is the exception**: two packs naming the same one add up,
+ * maneuver by maneuver, and only an entry of the same name is replaced. A
+ * discipline is not one fact but a list of thirty, and the ordinary rule
+ * makes a pack carrying a single corrected maneuver delete the twenty-nine it
+ * had no opinion about -- which is what a player does the first time they
+ * paste one maneuver off a wiki page. The cost is that a later pack cannot
+ * *remove* an entry, which nothing has ever wanted to do.
  */
 export function mergeTables(extensions) {
   const out = {
     maneuvers: { disciplines: [] },
+    spheres: { spheres: [] },
+    veils: { veils: [] },
     vancian: { spellLevels: null, classes: [] },
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
@@ -764,9 +901,71 @@ export function mergeTables(extensions) {
     const i = list.findIndex((x) => lower(x?.[key]) === k);
     if (i === -1) list.push(item); else list[i] = item;
   };
+  /**
+   * A veil joins one already there, field by field, rather than replacing it.
+   *
+   * It is the one table assembled from two different kinds of page. The
+   * veil's own page carries its rules text, its chakra slots and its
+   * descriptors and says nothing about who may shape it; the page listing a
+   * *class's* veils says exactly that and carries a one-line summary at most.
+   * Replace-by-name would mean whichever pack was switched on second erased
+   * what the other knew, and which half survived would depend on the order
+   * the packs happened to load in.
+   *
+   * So a field a later pack leaves empty leaves the earlier answer standing,
+   * a field it fills wins, and `classes` is the union -- five classes listing
+   * the same veil is five packs each contributing one name to it.
+   */
+  const upsertVeil = (list, veil) => {
+    const k = lower(veil?.name);
+    if (!k) return;
+    const at = list.findIndex((x) => lower(x?.name) === k);
+    if (at === -1) { list.push(veil); return; }
+    const had = list[at];
+    const merged = { ...had };
+    for (const [key, value] of Object.entries(veil)) {
+      if (key === 'classes') continue;
+      // The name is the key the whole thing meets on, so a merge never
+      // changes it. A list page that wrote it in lower case would otherwise
+      // rename the veil for everyone, and the first spelling is the one a
+      // sheet that shaped it already has written down.
+      if (key === 'name') continue;
+      if (value === null || value === undefined || value === '') continue;
+      merged[key] = value;
+    }
+    const classes = [...arr(had.classes).map(str), ...arr(veil.classes).map(str)].filter(Boolean);
+    const seen = new Map();
+    for (const c of classes) if (!seen.has(lower(c))) seen.set(lower(c), c);
+    if (seen.size) merged.classes = [...seen.values()];
+    list[at] = merged;
+  };
+
+  /** A discipline joins one already there rather than replacing it. */
+  const upsertDiscipline = (list, disc) => {
+    const k = lower(disc?.name);
+    if (!k) return;
+    const at = list.findIndex((x) => lower(x?.name) === k);
+    if (at === -1) { list.push({ ...disc, entries: [...arr(disc.entries)] }); return; }
+    const entries = [...arr(list[at].entries)];
+    for (const e of arr(disc.entries)) {
+      const j = entries.findIndex((x) => lower(x?.name) === lower(e?.name));
+      if (j === -1) entries.push(e); else entries[j] = e;
+    }
+    list[at] = { ...list[at], ...disc, entries };
+  };
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
-    for (const d of arr(p.maneuvers?.disciplines)) upsert(out.maneuvers.disciplines, d);
+    for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
+    // A sphere replaces a sphere of the same name outright: unlike a
+    // discipline it arrives whole -- one page is the whole sphere -- so a
+    // later pack carrying it means a corrected copy of all of it.
+    for (const x of arr(p.spheres?.spheres)) upsert(out.spheres.spheres, x);
+    // A veil is one fact under its own name, so the ordinary later-wins rule
+    // applies -- and it is what dissolves the duplicate question, since a veil
+    // shapeable in five chakras is on five of the wiki's slot pages with the
+    // same text each time. Sixteen per-chakra packs together come to the 1,496
+    // veils that exist rather than the 2,149 entries they are written as.
+    for (const x of arr(p.veils?.veils)) upsertVeil(out.veils.veils, x);
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
@@ -786,12 +985,14 @@ export function mergeTables(extensions) {
 
 /**
  * Register the merged tables with the model. `registrars` is the model's
- * five setters, passed in rather than imported so this module has no
+ * table setters, passed in rather than imported so this module has no
  * dependency on model.js and the tests can hand it spies.
  */
 export function registerTables(merged, registrars) {
   const r = obj(registrars);
   r.setManeuverCatalogue?.(merged.maneuvers);
+  r.setSphereCatalogue?.(merged.spheres);
+  r.setVeilCatalogue?.(merged.veils);
   r.setVancianTables?.(merged.vancian);
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);

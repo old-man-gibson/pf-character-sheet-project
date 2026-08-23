@@ -15,7 +15,7 @@
  * output identical, which is the whole point of moving them.
  */
 
-import { weaponHandle } from '../../model.js';
+import { gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
 import { roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
@@ -41,8 +41,8 @@ export function renderGearPanel(model, ctx) {
     return `<div class="grid">
       ${weaponsPanel(model, e)}
       ${armorPanel(e)}
-      ${gearSlotsPanel(ctx, e)}
-      ${otherItemsPanel(e)}
+      ${gearSlotsPanel(model, ctx, e)}
+      ${otherItemsPanel(model, ctx, e)}
       ${loadPanel(model, e)}
     </div>`;
   }
@@ -219,63 +219,181 @@ function armorPanel(e) {
     </section>`;
   }
 
-function gearRow(list, i, g, tools) {
+/**
+ * One item, as a row.
+ *
+ * The bonus and Other columns are as many as the table has, not the three and
+ * four the workbook happened to be wide -- see gearColumnCount. The caret in
+ * the first cell opens the row's detail card underneath it.
+ */
+function gearRow(model, ctx, list, i, g, cols, tools) {
     const bonus = (bi) => `
       <td class="num"><input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
         data-item="${list}|${i}|bonuses.${bi}.value" data-kind="number-or-null" style="width:3rem"></td>
       <td>${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</td>`;
-    return `<tr>
-      <td>${esc(g.slot)}</td>
+    const key = `${list}|${i}`;
+    const open = ctx.openGear === key;
+    const label = String(g.name || '').trim() || g.slot || 'this item';
+    return `<tr class="gearrow${open ? ' open' : ''}">
+      <td class="slot"><button class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
+        title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
+        aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
+        >${esc(g.slot ?? '')}</td>
       <td>${itemText(list, i, 'name', g.name)}</td>
-      ${bonus(0)}${bonus(1)}${bonus(2)}
-      <td>${itemText(list, i, 'others.0', g.others?.[0])}</td>
-      <td>${itemText(list, i, 'others.1', g.others?.[1])}</td>
-      <td>${itemText(list, i, 'others.2', g.others?.[2])}</td>
-      <td>${itemText(list, i, 'others.3', g.others?.[3])}</td>
+      ${Array.from({ length: cols.bonuses }, (_, bi) => bonus(bi)).join('')}
+      ${Array.from({ length: cols.others }, (_, oi) => `<td>${itemText(list, i, `others.${oi}`, g.others?.[oi])}</td>`).join('')}
       <td class="num">${itemNum(list, i, 'weight', g.weight)}</td>
       <td class="num">${itemNum(list, i, 'cost', g.cost)}</td>
       ${tools || '<td></td>'}
-    </tr>`;
+    </tr>
+    ${open ? gearCard(model, list, i, g, cols) : ''}`;
   }
 
-const GEAR_HEAD = `<thead><tr>
-    <th>Slot</th><th>Item</th>
-    <th class="num">B1</th><th>Type</th><th class="num">B2</th><th>Type</th>
-    <th class="num">B3</th><th>Type</th>
-    <th>Other 1</th><th>Other 2</th><th>Other 3</th><th>Other 4</th>
-    <th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>`;
+/**
+ * The header, and the buttons that widen or narrow the table.
+ *
+ * A pair of buttons per family, in the last header cell of that family, so
+ * the control that adds a column stands where the column would appear. The
+ * minus is armed when the column it would drop has something written in it --
+ * losing a bonus off the end of every row at once is worth a second click.
+ */
+function gearHead(list, cols, inUse, armed) {
+    const step = (kind, label) => `<span class="colstep">
+      <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="-1"
+        class="${armed === `${list}|${kind}` ? 'danger armed' : inUse[kind] ? 'danger' : ''}"
+        title="${esc(armed === `${list}|${kind}`
+    ? `Click again to drop the last ${label} column and what is written in it`
+    : inUse[kind]
+      ? `Remove the last ${label} column — something is written in it, so this asks twice`
+      : `Remove the last ${label} column`)}"
+        aria-label="Remove a ${label} column">${armed === `${list}|${kind}` ? 'sure?' : '−'}</button>
+      <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="1"
+        title="Add another ${label} column to every row" aria-label="Add a ${label} column">+</button>
+    </span>`;
+    // The cell carrying a stepper says so, rather than being found by what is
+    // inside it: `th:has(…)` does not survive the stylesheet this page adopts.
+    const bonusHeads = Array.from({ length: cols.bonuses }, (_, bi) => {
+      const last = bi === cols.bonuses - 1;
+      return `
+      <th class="num">B${bi + 1}</th><th${last ? ' class="colhead"' : ''}>Type${last ? step('bonuses', 'bonus') : ''}</th>`;
+    }).join('');
+    const otherHeads = Array.from({ length: cols.others }, (_, oi) => {
+      const last = oi === cols.others - 1;
+      return `
+      <th${last ? ' class="colhead"' : ''}>Other ${oi + 1}${last ? step('others', 'Other') : ''}</th>`;
+    }).join('');
+    return `<thead><tr>
+      <th class="slot">Slot</th><th>Item</th>
+      ${bonusHeads}${otherHeads}
+      <th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>`;
+  }
 
-function gearSlotsPanel(ctx, e) {
+/** How wide this list's table is, and whether its last columns are in use. */
+function gearCols(rows) {
+    return {
+      bonuses: gearColumnCount(rows, 'bonuses'),
+      others: gearColumnCount(rows, 'others'),
+    };
+  }
+
+/**
+ * One item opened out: the whole of it, with room to write.
+ *
+ * A gear table is a row of narrow boxes because it has to fit fourteen slots
+ * on a page, and that is the wrong shape for the thing a player actually
+ * wants to record -- what the item *is*, what it does, where it came from.
+ * So the row stays the index and this is the entry: the same fields at a
+ * legible size, every bonus and Other column labelled rather than numbered,
+ * and a description that takes formulas like the rest of the sheet's prose.
+ *
+ * It is a row of the same table, pushing the items below it down, so the
+ * item stays where it was in the list while it is open.
+ */
+function gearCard(model, list, i, g, cols) {
+    const span = 4 + cols.bonuses * 2 + cols.others;
+    const label = String(g.name || '').trim() || g.slot || 'this item';
+    return `<tr class="gearcardrow"><td colspan="${span}">
+      <div class="gearcard">
+        <div class="gearcardhead">
+          <h4>${esc(label)}</h4>
+          <button class="disclose" data-gearopen="" title="Close ${esc(label)}"
+            aria-label="Close ${esc(label)}">▾</button>
+        </div>
+        <div class="fieldgrid">
+          ${field('Slot', itemText(list, i, 'slot', g.slot, 'Head, Ring 1…'))}
+          ${field('Item', itemText(list, i, 'name', g.name, 'What it is'))}
+          ${field('Weight', itemNum(list, i, 'weight', g.weight))}
+          ${field('Cost', itemNum(list, i, 'cost', g.cost))}
+        </div>
+        <h5>Bonuses</h5>
+        <div class="fieldgrid gearbonuses">
+          ${Array.from({ length: cols.bonuses }, (_, bi) => field(`Bonus ${bi + 1}`, `<span class="pair">
+            <input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
+              data-item="${list}|${i}|bonuses.${bi}.value" data-kind="number-or-null" style="width:3.4rem"
+              aria-label="Bonus ${bi + 1} value">
+            ${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</span>`)).join('')}
+        </div>
+        <h5>Other properties</h5>
+        <div class="fieldgrid">
+          ${Array.from({ length: cols.others }, (_, oi) => field(`Other ${oi + 1}`,
+    itemText(list, i, `others.${oi}`, g.others?.[oi]))).join('')}
+        </div>
+        <h5>Description</h5>
+        ${itemArea(model, list, i, 'note', g.note, 4)}
+        <p class="hint">The description resolves <code>{name = expr}</code> like any other prose
+          on the sheet, so an item that grants a pool can define it here — and the Other
+          columns read formulas too.</p>
+      </div>
+    </td></tr>`;
+  }
+
+function gearSlotsPanel(model, ctx, e) {
     const showAll = ctx.showAllGear;
     const filled = (g) => g.name || g.bonuses?.some((b) => b.value != null && b.value !== '')
-      || g.others?.some(Boolean);
+      || g.others?.some(Boolean) || String(g.note || '').trim();
+    const cols = gearCols(e.gear);
+    // A slot with the card open stays on the list whatever the filter says --
+    // hiding the row somebody is reading would be the filter answering a
+    // question nobody asked.
     const rows = (e.gear || []).map((g, i) => ({ g, i }))
-      .filter(({ g }) => showAll || filled(g));
+      .filter(({ g, i }) => showAll || filled(g) || ctx.openGear === `equipment.gear|${i}`);
     return `<section class="panel span2">
       <h3>Slotted gear
         <span class="badge">${rows.length} of ${(e.gear || []).length}</span>
         <button data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
       </h3>
-      <div class="tablewrap"><table>
-        ${GEAR_HEAD}
-        <tbody>${rows.map(({ g, i }) => gearRow('equipment.gear', i, g)).join('')
-    || '<tr><td colspan="15"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>'}</tbody>
+      <div class="tablewrap"><table class="gear">
+        ${gearHead('equipment.gear', cols, {
+    bonuses: gearColumnInUse(e.gear, 'bonuses'), others: gearColumnInUse(e.gear, 'others'),
+  }, ctx.armedGearCol)}
+        <tbody>${rows.map(({ g, i }) => gearRow(model, ctx, 'equipment.gear', i, g, cols)).join('')
+    || `<tr><td colspan="${4 + cols.bonuses * 2 + cols.others}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
       </table></div>
-      <p class="hint">Three typed bonuses per item (value + bonus type) plus four freeform ones, like the sheet.</p>
+      <p class="hint">Typed bonuses (value + bonus type) and freeform properties, as many
+        columns of each as you need — the ± on the last of each family adds or drops one
+        across every row. Click an item's ▸ to open it out with room to describe it.</p>
     </section>`;
   }
 
-function otherItemsPanel(e) {
+function otherItemsPanel(model, ctx, e) {
+    const cols = gearCols(e.other);
     return `<section class="panel span2">
-      <h3>Other items</h3>
-      <div class="tablewrap"><table>
-        ${GEAR_HEAD}
-        <tbody>${(e.other || []).map((g, i) => gearRow('equipment.other', i, g,
+      <h3>Other items <span class="badge">${(e.other || []).length}</span></h3>
+      <div class="tablewrap"><table class="gear">
+        ${gearHead('equipment.other', cols, {
+    bonuses: gearColumnInUse(e.other, 'bonuses'), others: gearColumnInUse(e.other, 'others'),
+  }, ctx.armedGearCol)}
+        <tbody>${(e.other || []).map((g, i) => gearRow(model, ctx, 'equipment.other', i, g, cols,
     `<td class="tools"><button class="danger" data-remove="equipment.other|${i}" aria-label="Remove">×</button></td>`)).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${addButton('equipment.other', 'Add item', {
-        slot: 'Other', name: '', bonuses: [{ value: null, type: null }, { value: null, type: null }, { value: null, type: null }],
-        others: [null, null, null, null], weight: 0, cost: 0,
+        slot: 'Other',
+        name: '',
+        bonuses: Array.from({ length: cols.bonuses }, () => ({ value: null, type: null })),
+        others: Array.from({ length: cols.others }, () => null),
+        weight: 0,
+        cost: 0,
+        note: '',
       })}</div>
     </section>`;
   }

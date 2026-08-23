@@ -27,7 +27,21 @@ a level that grants a talent gets a green, writable name field and a sphere drop
 unlocks even levels only. **Class levels (override)** covers sparse Planners that
 list a class once instead of per-level. Each row also takes a **note** beside the
 talent — both it and the talent read `{…}` formulas and grow to fit what is written,
-so a talent whose effect scales can carry the number with it. The running talent
+so a talent whose effect scales can carry the number with it.
+
+A talent an [extension pack's sphere catalogue](extensions.md#spheres) recognises grows a
+small **✦** in the corner of its box; hovering it gives the whole entry — sphere and group,
+tags, prerequisites, rules text — and the mark reads muted rather than gold when the talent
+came from a named third-party source. Every sphere dropdown offers what the packs carry as
+well, after the built-in names.
+
+Typing one also **fills in the blanks beside it**: its sphere, and its rules text as the
+row's note. Typing the *sphere itself* — a base pick — fills the row as the sphere and what
+it opened (**Destruction Sphere (Destructive Blast)**), with the base abilities' full text
+as the note. Only cells that are empty, so a ruling you wrote yourself is never overwritten —
+and clearing one leaves it clear until you retype the talent. Nothing else about typing
+changes: a talent is still whatever you write, and one no pack covers is simply unmarked and
+fills nothing. The running talent
 count is the level cell's tooltip rather than a column of its own.
 
 **Bonus talents** — the ones a feat, an item or a template handed over rather than a
@@ -326,6 +340,36 @@ sit beside it as tiles. The gauge takes a style like any tracker — see *The bu
 meters take the same style* — so it can be pips instead, and over-investing turns it
 red rather than merely reading a negative number.
 
+### Shaping a veil, and where its text lives
+
+A veil's name is picked from a **catalogue an extension pack carries**, and only the
+name and the essence are kept on the sheet. What the veil *does* is read from the pack
+every time the card is drawn, which is the point: a pack that corrects a veil corrects
+it on every character already playing one, and a character sent to a friend carries the
+names of its veils rather than a few kilobytes of somebody else's book each. A shaped
+veil costs the character document about **forty bytes**; it used to cost two and a half
+thousand.
+
+Each slot's name field offers **the veils that shape in that chakra and are on one of
+this character's veilweaving class lists** — for a 10th-level Daevic the Hands slot
+offers 235 rather than the 369 veils that shape in Hands, or the 1,496 that exist. It
+is still a text field: a veil nobody has published is typed in as it always was, and
+one the catalogue does not recognise simply has no pack half to read.
+
+The card has two faces, the way a maneuver's does. It **reads** by default — the pack's
+text, with `{…}` formulas resolving against the essence invested — and the **pen** turns
+it over to a box holding what *you* wrote, which is all that is ever saved. The box
+starts empty even where the pack has plenty to say, because filling it in for you would
+bank a copy of the catalogue on the sheet and quietly undo the whole arrangement.
+Emptying it again hands the veil back to the pack. Under the name sits what the pack
+knows and the sheet never stored: the chakras it shapes in, its descriptors, whose lists
+it is on, and where it was published.
+
+Packs scraped before this carried veils as *blocks*, which were copied onto the
+character when applied. `node tools/veils-to-table.mjs <pack.json|dir>` rewrites one —
+and recovers the class list while it is there, since the reader had nowhere on a block
+to put "Classes Available" and appended it to the foot of the text instead.
+
 ### Spell points into essence
 
 A veilweaver with the **Veilweaving sphere** condenses **2 spell points into 1
@@ -409,10 +453,43 @@ still reads 10/11 maneuvers and 4/4 stances with his six per-discipline counts
 homebrew maneuver, a discipline the reference tab never had — is kept on the
 character so nothing from a sheet is lost.
 
-**Right-click a maneuver** to open its page on the campaign wiki
-(<https://metzo.miraheze.org>) in a new tab — left-click still readies it, so the
+Every row is three targets, and each does one thing. The **tick box** readies the
+maneuver and is the only thing that does — it used to be the whole row, so reading a
+maneuver meant hitting the ✎ dead on or readying it by accident. **Clicking the name**
+opens what you wrote about it. The **✎** opens the same card with its cells showing.
+
+The card has seven cells — **type, action, range, target, duration, saving throw and
+DC** — and a **description**, and every one of them takes `{…}` formulas, so a range
+written `Close ({= 25 + 5 * floor(level / 2)} ft.)` keeps up with the level instead of
+going stale. Reading it, only the cells that were filled in are there at all: a maneuver
+with a range and nothing else is a card with a range and nothing else, never a column of
+em-dashes.
+
+A cell can be filled from either end. **A pack may carry it** — see
+[Extensions](extensions.md#disciplines), where a discipline you write has the same eight
+cells — and **what you type on your own sheet sits over that, cell by cell**. So a table
+ruling wins, the cells beside it still come from the pack, and emptying yours hands that
+cell straight back. In the editor the greyed text says which is which: a plain ghost
+value is what the cell will say if left alone, and one marked *e.g.* is only a
+suggestion.
+
+The bundled Path of War catalogue fills in nothing but the type — its 1,033 names are a
+publisher's and their rules text is not ours to ship — so on those disciplines every
+other cell starts out yours to write.
+
+What you write is stored on the discipline under the maneuver's name, because the
+rows themselves belong to the shared catalogue and have nowhere to hang. Only the cells
+you actually wrote are saved, which is what lets a corrected pack correct a sheet
+already in play. A description on its own is still saved as the plain string it always
+was, so a character who never opens the other cells is byte-for-byte the character it
+was.
+The dashboard's **Readied maneuvers** card shows the header cells as one line and
+the description under it.
+
+**Right-click a maneuver's name** to open its page on the campaign wiki
+(<https://metzo.miraheze.org>) in a new tab — left-click opens the card, so the
 other button does the looking-up. Hovering a row underlines the name to show there
-is a page behind it.
+is something behind it.
 
 The title is built from the maneuver's own name, with one wrinkle: the catalogue was
 typed in Google Sheets, whose autocorrect turned **93 of the 1,033 names** curly, so

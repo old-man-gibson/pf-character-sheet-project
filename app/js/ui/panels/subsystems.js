@@ -44,15 +44,18 @@ const TYPE_ABBREV = {
 };
 import {
   CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
-  deckManipulationCatalogue, maneuverCatalogue, psionicCurveTotals, psionicTables,
+  deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
+  maneuverOwn,
+  psionicCurveTotals, psionicTables,
+  veilsAvailable, veilDetails, veilOwn, slug,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
 import { round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, PREP_STYLES,
-  PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS, SPELL_LEVELS,
-  SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle, skillLabel,
-  wikiUrl,
+  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, MANEUVER_FIELDS,
+  PREP_STYLES, PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS,
+  SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
+  skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
@@ -197,10 +200,11 @@ export function akashicPanel(model, ctx) {
     if (!a) return '<div class="grid"><p class="empty">No akashic data.</p></div>';
 
     return `<div class="grid">
+      ${veilDatalists(a)}
       ${essencePanel(ctx, model, a)}
       ${akashicClassesPanel(a)}
-      ${akashicSlotsPanel(model, a)}
-      ${akashicKheshigPanel(model, a)}
+      ${akashicSlotsPanel(model, ctx, a)}
+      ${akashicKheshigPanel(model, ctx, a)}
       ${akashicReceptaclesPanel(model, a)}
       ${systemExtrasPanel(a, 'akashic', 'Akashic')}
     </div>`;
@@ -354,7 +358,7 @@ function akashicClassesPanel(a) {
    * behind a toggle by default: what a player wants to see is the four or five
    * veils they actually shaped.
    */
-function akashicSlotsPanel(model, a) {
+function akashicSlotsPanel(model, ctx, a) {
     const list = 'akashic.slots';
     const slots = a.slots || [];
     const shaped = slots.filter((s) => (s.veils || []).length).length;
@@ -380,7 +384,7 @@ function akashicSlotsPanel(model, a) {
         is the base DC plus the essence invested in it. A description may carry
         <code>{name = expr}</code> formulas, the same as anywhere else.</p>
       ${shown.length
-    ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, list, s, i)).join('')}</div>`
+    ? `<div class="veils"${veilGridStyle(model)}>${shown.map(({ s, i }) => veilSlotCard(model, ctx, a, list, s, i)).join('')}</div>`
     : '<p class="empty">No veils shaped.</p>'}
     </section>`;
   }
@@ -421,8 +425,9 @@ function veilGridStyle(model) {
   }
 
 
-function veilSlotCard(model, list, s, i) {
+function veilSlotCard(model, ctx, a, list, s, i) {
     const base = `${list}.${i}`;
+    const options = veilOptions(a, s.slot);   // its id; the list itself is emitted once for the tab
     const veils = s.veils || [];
     const max = s.twinveil ? 2 : 1;
     const key = `veil:${s.slot || i}`;
@@ -441,7 +446,7 @@ function veilSlotCard(model, list, s, i) {
           ${check(`${base}.twinveil`, s.twinveil, 'Twinveil')}
           ${check(`${base}.bound`, s.bound, 'Bound')}
         </div>
-        ${veils.map((v, vi) => veilCard(model, `${base}.veils`, v, vi)).join('')}
+        ${veils.map((v, vi) => veilCard(model, ctx, `${base}.veils`, v, vi, options)).join('')}
         ${veils.length < max
     ? `<div style="margin-top:4px">${addButton(`${base}.veils`, 'Shape a veil', { name: '', desc: '', essence: 0 })}</div>`
     : ''}
@@ -449,17 +454,103 @@ function veilSlotCard(model, list, s, i) {
     </div>`;
   }
 
-  /** One shaped veil: its name, what it does, and what it costs. */
-function veilCard(model, list, v, vi) {
-    return `<div class="veil">
+/**
+ * The veilweaving classes this character actually has, for narrowing what a
+ * slot offers. Empty where the sheet never named one, which has to read as
+ * "every list" rather than "no veils".
+ */
+function veilweavingClasses(a) {
+  return (a?.classes || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+}
+
+/**
+ * What a slot offers, as a `<datalist>` its cards point at.
+ *
+ * One per chakra rather than one per card: the list is the same for every
+ * veil shaped in that slot, and the Hands chakra alone runs to a few hundred
+ * entries. Nothing is emitted where no pack provides a catalogue, and the
+ * name field is then the free-text box it has always been -- a player who
+ * types a veil nobody has published is not doing anything wrong.
+ */
+function veilOptions(a, slot) {
+  const veils = veilsAvailable({ slot, classes: veilweavingClasses(a) });
+  if (!veils.length) return { id: '', html: '' };
+  const id = `veils-${slug(slot || 'any')}`;
+  return {
+    id,
+    html: `<datalist id="${esc(id)}">${veils.map((v) => `<option value="${esc(v.name)}"${
+      v.slot || v.descriptor ? ` label="${esc([v.slot, v.descriptor].filter(Boolean).join(' · '))}"` : ''
+    }></option>`).join('')}</datalist>`,
+  };
+}
+
+/**
+ * Every slot's catalogue, emitted once for the tab.
+ *
+ * A `<datalist>` is addressed by id, so one per chakra has to appear once in
+ * the document however many cards point at it -- two Kheshig receptacles both
+ * set to Hands share the Hands list rather than each printing their own.
+ */
+function veilDatalists(a) {
+  const slots = [...(a?.slots || []).map((s) => s.slot), ...(a?.kheshig || []).map((r) => r.slot)];
+  const seen = new Set();
+  const out = [];
+  for (const slot of slots) {
+    const { id, html } = veilOptions(a, slot);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(html);
+  }
+  return out.join('');
+}
+
+/** The name of a shaped veil: free text, with the slot's catalogue behind it. */
+function veilNameField(list, vi, v, options) {
+  const text = String(v.name ?? '');
+  return `<input type="text" value="${esc(text)}" data-item="${list}|${vi}|name"
+      data-kind="text" placeholder="Veil name"${options.id ? ` list="${esc(options.id)}"` : ''}${
+  text.trim() ? ` title="${esc(text)}"` : ''}>`;
+}
+
+/**
+ * One shaped veil: its name, what it does, and what it costs.
+ *
+ * What it says has two faces, for the reason a maneuver's card does. The
+ * catalogue's text is read where it stands and never copied onto the sheet --
+ * so a pack that corrects a veil corrects it everywhere it is shaped, and a
+ * character sent to a friend carries the veil's *name* rather than four
+ * kilobytes of somebody else's book. The pen turns the card over to what the
+ * player wrote themselves, which is all that is ever saved; emptying that
+ * hands the veil back to the pack.
+ *
+ * A veil the catalogue has never heard of -- typed in by hand, or one whose
+ * pack is switched off -- has only the player's own text, so that face is the
+ * only one there is and the pen would have nothing to turn over to.
+ */
+function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
+    const key = `${list}|${vi}`;
+    const d = veilDetails(v);
+    const own = veilOwn(v);
+    const writing = ctx?.veilEdit === key || !d.known;
+    const meta = [d.slot, d.descriptor, d.classes.join(', '), d.source].filter(Boolean);
+    return `<div class="veil${d.known ? ' is-known' : ''}">
       <div class="veil-top">
-        ${itemText(list, vi, 'name', v.name, 'Veil name')}
+        ${veilNameField(list, vi, v, options)}
         <label class="minifield" title="essence invested">Ess
           ${itemNum(list, vi, 'essence', v.essence)}</label>
         <span class="veil-dc" title="base DC + essence">DC ${v.dc ?? 0}</span>
+        ${d.known ? `<button class="mnote-btn${d.mine ? ' has-note' : ''}" data-vedit="${esc(key)}"
+          aria-expanded="${writing}"
+          title="${d.mine ? 'What you wrote about it — click to edit' : 'Write your own version; leave it empty and the pack’s text stands'}"
+          aria-label="Edit ${esc(v.name || 'this veil')}">✎</button>` : ''}
         ${rowRemoveButton(list, vi, 'Unshape this veil')}
       </div>
-      ${itemArea(model, list, vi, 'desc', v.desc, 2, model.veilScope(v))}
+      ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
+      ${writing
+    ? itemArea(model, list, vi, 'desc', own.desc, 2, model.veilScope(v))
+    : `<div class="veil-text">${renderedProse(model, d.desc, model.veilScope(v))}</div>`}
+      ${d.known && d.bindEffect && !writing
+    ? `<div class="veil-bind"><b>Bind:</b> ${esc(d.bindEffect)}</div>` : ''}
     </div>`;
   }
 
@@ -470,7 +561,7 @@ export function rowRemoveButton(list, i, title) {
   }
 
 
-function akashicKheshigPanel(model, a) {
+function akashicKheshigPanel(model, ctx, a) {
     const list = 'akashic.kheshig';
     if (!(a.kheshig || []).length) return '';
     return `<section class="panel span2">
@@ -486,7 +577,7 @@ function akashicKheshigPanel(model, a) {
           <div class="veilslot-body">
             <div class="veilflags">${check(`${list}.${i}.bound`, r.bound, 'Bound')}</div>
             ${(r.veils || []).length
-    ? (r.veils || []).map((v, vi) => veilCard(model, `${list}.${i}.veils`, v, vi)).join('')
+    ? (r.veils || []).map((v, vi) => veilCard(model, ctx, `${list}.${i}.veils`, v, vi, veilOptions(a, r.slot))).join('')
     : `<div style="margin-top:4px">${addButton(`${list}.${i}.veils`, 'Shape a veil', { name: '', desc: '', essence: 0 })}</div>`}
           </div>
         </div>`).join('')}
@@ -564,9 +655,12 @@ export function maneuversPanel(model, ctx) {
           ${available.length ? '' : '<span class="hint">Every discipline in the catalogue is trained.</span>'}
         </div>
         <p class="hint" style="margin-top:6px">
-          Tick a maneuver to ready it. <strong>Right-click</strong> one to open its
-          page on the <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>
-          in a new tab.
+          <strong>Tick</strong> a maneuver to ready it — the box alone, so nothing else
+          on the row can toggle it. <strong>Click its name</strong> to read what you wrote
+          down about it, and the ✎ to write it: type, action, range, target, duration,
+          saving throw and description, every one of them taking <code>{…}</code> formulas.
+          <strong>Right-click</strong> a name for its page on the
+          <a href="${esc(WIKI_BASE)}" target="_blank" rel="noopener noreferrer">wiki</a>.
         </p>
       </section>
 
@@ -607,27 +701,138 @@ function disciplineColumn(model, ctx, d, i) {
           <div class="dlevel">${lvl ? `Level ${lvl}` : 'Other'}</div>
           ${entries.map((e, ei) => [e, ei]).filter(([e]) => e.level === lvl).map(([e, ei]) => {
     const wiki = wikiUrl(e.name);
-    const note = (d.notes || {})[e.name] || '';
-    const noteKey = `${list}|${e.name}`;
-    const noteOpen = ctx.openManeuverNote === noteKey;
+    const key = `${list}|${e.name}`;
+    const open = ctx.openManeuver === key;
+    // Two readings of the same maneuver: what it says (the player's cells over
+    // the catalogue's) and what the player wrote (which is what the pen means,
+    // and all that is ever saved).
+    const entry = maneuverDetails(d, e.name, e);
+    const own = maneuverOwn(d, e.name);
+    const written = maneuverIsWritten(own);
     return `
-            <label class="mrow${e.known ? ' is-known' : ''}"
-              title="${esc(e.name)}${e.type ? ` — ${esc(e.type)}` : ''}${wiki ? '\n\nRight-click to open the wiki' : ''}"
-              ${wiki ? `data-wiki="${esc(wiki)}"` : ''}>
-              <input type="checkbox" ${e.known ? 'checked' : ''}
-                data-ready="${list}|${esc(e.name)}" data-kind="bool">
-              <span class="mname">${esc(e.name)}</span>
-              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(e.type))}</span>
-              ${e.known ? `<button class="mnote-btn${note ? ' has-note' : ''}" data-mnote-toggle="${esc(noteKey)}"
-                title="${note ? 'Its overview note — click to edit' : 'Give it a note for the overview card — {…} formulas work'}"
-                aria-label="Overview note for ${esc(e.name)}" aria-expanded="${noteOpen}">✎</button>` : ''}
-            </label>
-            ${noteOpen ? `<div class="mnote-edit">${prose(model, `data-mnote="${esc(noteKey)}"`, note, 2, 'grow')}</div>` : ''}`;
+            <div class="mrow${e.known ? ' is-known' : ''}${open ? ' is-open' : ''}">
+              <label class="mtick" title="${esc(e.known ? `Stop readying ${e.name}` : `Ready ${e.name}`)}">
+                <input type="checkbox" ${e.known ? 'checked' : ''}
+                  data-ready="${list}|${esc(e.name)}" data-kind="bool"
+                  aria-label="Ready ${esc(e.name)}"></label>
+              <button type="button" class="mname" data-mopen="${esc(key)}"
+                ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
+                title="${esc(e.name)}${entry.type ? ` — ${esc(entry.type)}` : ''}
+
+Click to ${open ? 'close' : 'open'} it${wiki ? ', right-click for the wiki' : ''}">${esc(e.name)}</button>
+              <span class="mtype ${e.kind === 'stance' ? 'is-stance' : ''}">${esc(shortType(entry.type))}</span>
+              <button class="mnote-btn${written ? ' has-note' : ''}" data-medit="${esc(key)}"
+                title="${written ? 'What you wrote down about it — click to edit' : 'Write down what it does — {…} formulas work'}"
+                aria-label="Edit ${esc(e.name)}" aria-expanded="${open && !!ctx.maneuverEdit}">✎</button>
+            </div>
+            ${open ? maneuverCard(model, ctx, list, e, entry, own, key, wiki) : ''}`;
   }).join('')}
         `).join('')}
       </div>`}
     </div>`;
   }
+
+/* ------------------------------------------------------------------ *
+ * One maneuver, opened.
+ *
+ * Two faces of the same card -- read it, or fill it in -- because at the
+ * table you are reading it and only ever writing it once.
+ *
+ * What it says can come from two places. A pack may carry the cells (the
+ * bundled Path of War catalogue carries only the type: the rest is a
+ * publisher's rules text and is not ours to ship, but a player's own pack is
+ * their own content). Anything the player writes on their sheet sits over the
+ * top of that, cell by cell -- so a table ruling scribbled mid-session wins,
+ * and emptying the cell again hands it back to the pack.
+ * ------------------------------------------------------------------ */
+
+function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
+  const editing = !!ctx.maneuverEdit;
+  const sub = [e.level ? `Level ${e.level}` : '', e.kind === 'stance' ? 'Stance' : 'Maneuver']
+    .filter(Boolean).join(' · ');
+
+  return `<div class="mdetail${editing ? ' is-editing' : ''}">
+      <div class="mdetail-head">
+        <span class="mdetail-name" title="${esc(e.name)}">${esc(e.name)}</span>
+        <span class="mdetail-sub">${esc(sub)}</span>
+        ${wiki ? `<a class="mdetail-wiki" href="${esc(wiki)}" target="_blank" rel="noopener noreferrer"
+          title="Its page on the wiki">wiki ↗</a>` : ''}
+        <button class="tiny" ${editing ? `data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
+          aria-pressed="${editing}"
+          title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
+        <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
+      </div>
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, entry)}
+    </div>`;
+}
+
+/**
+ * What it says, with the blanks left out.
+ *
+ * A stat entry prints the lines it has; the ones nobody filled in are not
+ * "Target: —", they are simply not part of the maneuver, and a card of seven
+ * em-dashes is a form rather than a rules entry.
+ */
+function maneuverRead(model, entry) {
+  const shown = MANEUVER_FIELDS
+    .map((f) => [f, entry[f.key]])
+    .filter(([, v]) => String(v).trim() !== '');
+  const value = (v) => (hasTokens(v) ? renderedProse(model, v) : esc(v));
+  const cells = shown.filter(([f]) => f.key !== 'text');
+  const body = shown.find(([f]) => f.key === 'text');
+  return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
+      <dt>${esc(f.label)}</dt><dd>${value(v)}</dd>`).join('')}</dl>` : ''}
+    ${body ? `<div class="mdetail-text">${value(body[1])}</div>` : ''}
+    ${maneuverIsWritten(entry) ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
+}
+
+/**
+ * The same entry with every cell open.
+ *
+ * Three of them are picked from a list because the rules only allow those
+ * answers; the rest are prose, so a range that scales -- `Close ({= 25 + 5 *
+ * floor(level / 2)} ft.)` -- keeps up with the level instead of going stale
+ * the way a typed number does.
+ *
+ * A cell holds the player's own answer and nothing else, so that clearing one
+ * really does clear it. What the catalogue says sits behind as the greyed
+ * placeholder -- which is also what the cell falls back to the moment it is
+ * emptied, so the ghost text is a promise rather than a hint.
+ */
+function maneuverCells(model, list, e, own) {
+  const key = `${list}|${e.name}`;
+  const bind = (f) => `data-mfield="${esc(key)}" data-mf="${f.key}" aria-label="${esc(f.label)}"`;
+  const cell = (f) => {
+    // What the catalogue's own row says for this cell, whether or not the
+    // player has written over it -- because that is what emptying it gives
+    // back, which makes the ghost text a promise rather than a hint.
+    //
+    // A cell the catalogue says nothing about falls back to an example
+    // instead, and the two must not read alike: "Melee attack" is what the
+    // cell *will* say if left alone, "e.g. One creature" is only a suggestion.
+    const under = String(e?.[f.key] ?? '');
+    const ghost = under || (f.hint ? `e.g. ${f.hint}` : '');
+    const control = f.options
+      ? maneuverSelect(bind(f), own[f.key], f.options,
+        under ? `${under} — from the catalogue` : '—')
+      : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
+        own[f.key], f.lines || 1, 'grow');
+    return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
+  };
+  const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];
+  return `<div class="medit">${lines.map((n) => `<div class="mline">${
+    MANEUVER_FIELDS.filter((f) => f.line === n).map(cell).join('')}</div>`).join('')}</div>`;
+}
+
+/** A picker that keeps an answer its list has never heard of, marked with a *. */
+function maneuverSelect(bindingAttr, value, options, blank) {
+  const pairs = options.map((o) => [o, o]);
+  if (value && !pairs.some(([v]) => v === value)) pairs.push([value, `${value} *`]);
+  const opts = [['', blank], ...pairs]
+    .map(([v, label]) => `<option value="${esc(v)}"${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
+    .join('');
+  return `<select ${bindingAttr} data-kind="text">${opts}</select>`;
+}
 
   /* ---------------- vancian casting ---------------- */
 
@@ -879,8 +1084,9 @@ export function primordiaPanel(model) {
           One technique, taken at 1st level or whenever its prerequisite is first met, granting
           at 1st, 3rd, 5th, then ${PRIMORDIA_REPEAT_FROM}th and every two levels after.
           <strong>Grants</strong> is what the rules hand over; the column beside it is what you
-          took for it. A technique feat can be swapped under the Associated Feat rules if you
-          are later given a feat for a sphere or talent you already have.
+          took for it, already filled in on the levels the rules name themselves; the last is
+          yours, and takes formulas. A technique feat can be swapped under the Associated Feat
+          rules if you are later given a feat for a sphere or talent you already have.
         </p>
       </section>
 
@@ -894,14 +1100,28 @@ export function primordiaPanel(model) {
     </div>`;
   }
 
-  /** The ten granting levels, what each hands over, and what was taken for it. */
+  /**
+   * The ten granting levels, what each hands over, what was taken for it, and
+   * a note beside that.
+   *
+   * The name and the note were one box until the levels the rules already
+   * name -- Detect Spellcaster, Fast Divinations -- had nowhere to put their
+   * own name and nothing to type but a note. They are two columns now: the
+   * name column carries what the rules named where they named it, and the
+   * note takes formulas the way every other note on the sheet does.
+   */
 function primordiaLadder(model, k) {
+    // Whatever this technique calls the thing it hands over -- a talent, a
+    // spell, a power, a feat. The repeating grant is the one that says it
+    // seven times, so it is the one that names the column.
+    const noun = k.repeat?.pick?.label || 'Taken';
     return `<section class="panel span2">
       <div class="tablewrap"><table class="build primordia">
         <thead><tr>
           <th class="num">Lvl</th>
-          <th>Grants</th>
-          <th>Choice / notes</th>
+          <th class="grants">Grants</th>
+          <th class="pickname" title="What you took — filled in already where the rules name it">${esc(noun)}</th>
+          <th class="picknote">Notes</th>
         </tr></thead>
         <tbody>${(k.rows || []).map((row) => {
     const pick = row.pick;
@@ -919,6 +1139,7 @@ function primordiaLadder(model, k) {
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
           <td class="choice${state}">${primordiaPick(model, row)}</td>
+          <td class="picknote">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
@@ -928,24 +1149,35 @@ function primordiaLadder(model, k) {
       </p>` : ''}
       <p class="hint">
         A level you have reached with a choice still to make is outlined and counted above;
-        one you have not reached yet is dotted — the plan, not a chore. Levels whose grant is
-        fixed still take a note, which is where the sheet's own ladder was written.
+        one you have not reached yet is dotted — the plan, not a chore. Levels whose grant the
+        rules name carry that name already; type over one to say otherwise. Every row's note
+        resolves <code>{name = expr}</code> like any other prose field on the sheet.
       </p>
     </section>`;
   }
 
-  /** The pick cell: a dropdown where the rules offer two, otherwise free text. */
+  /**
+   * The name cell: a dropdown where the rules offer two, otherwise free text.
+   *
+   * A level whose grant the rules already name shows that name as the
+   * placeholder rather than as typed-in text, so it reads as filled without
+   * pretending the player chose it -- the same bargain the automatic Levels
+   * and BAB boxes on the Overview make. Typing over it wins, which is what an
+   * archetype that swaps the grant needs.
+   */
 function primordiaPick(model, row) {
     const path = `primordia.picks.${row.level}`;
     const options = row.pick?.options;
     if (options) return select(path, row.text, options);
-    const placeholder = row.pick?.placeholder || 'Notes';
+    const placeholder = row.pick?.placeholder || row.auto || '—';
+    const auto = !row.text.trim() && row.auto;
     // A pick carrying an inline formula shows what it comes to, the same way a
     // progression feature cell does.
     return hasTokens(row.text)
       ? prose(model, `data-set="${path}"`, row.text, 1, 'grow')
-      : `<input type="text" value="${esc(row.text)}" data-set="${path}" data-kind="text"
-          placeholder="${esc(placeholder)}">`;
+      : `<input type="text" class="autotext${auto ? ' auto' : ''}" value="${esc(row.text)}"
+          data-set="${path}" data-kind="text" placeholder="${esc(placeholder)}"${auto
+  ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`;
   }
 
   /** With no technique taken, the five on offer and what each asks for. */

@@ -5,17 +5,25 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
-  extensionStore, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
-  blocksFromCharacter, describeSummary, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
+  blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  isPackKey, packsWorthMoving,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
+  copyCost, packSize,
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
+  setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
+  setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
+  veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
+import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
+import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
+import { isBasePick } from '../app/js/rules.js';
 import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
@@ -181,25 +189,309 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
 {
   const storage = fakeStorage();
   const store = extensionStore(storage);
+  await store.open();
   check('empty to start', store.list(), []);
-  const row = store.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
+  const row = await store.save({ format: EXTENSION_FORMAT, name: 'Pack A', blocks: [{ kind: 'note', name: 'n' }] });
   check('saved row', [row.id, row.name, row.enabled, row.replaced, row.local], ['pack-a', 'Pack A', true, false, true]);
   check('listed', store.list().map((e) => e.id), ['pack-a']);
   check('read back normalised', store.read('pack-a').blocks.length, 1);
   check('missing reads null', store.read('nope'), null);
-  const again = store.save({ format: EXTENSION_FORMAT, id: 'pack-a', name: 'Pack A2', revision: 2 });
+  const again = await store.save({ format: EXTENSION_FORMAT, id: 'pack-a', name: 'Pack A2', revision: 2 });
   check('same id replaces', [again.replaced, again.revision, store.list().length, store.list()[0].name], [true, 2, 1, 'Pack A2']);
-  store.setEnabled('pack-a', false);
+  await store.setEnabled('pack-a', false);
   check('disabled', store.list()[0].enabled, false);
-  store.setEnabled('bundled-x', false, { bundled: true });
+  await store.setEnabled('bundled-x', false, { bundled: true });
   check('bundled disable remembered', [...store.disabledBundled()], ['bundled-x']);
-  store.setEnabled('bundled-x', true, { bundled: true });
+  await store.setEnabled('bundled-x', true, { bundled: true });
   check('bundled re-enabled', [...store.disabledBundled()], []);
-  store.remove('pack-a');
+  await store.remove('pack-a');
   check('removed from index and storage', [store.list(), storage.keys().filter((k) => k.includes(':ext:'))], [[], []]);
   let threw = false;
-  try { store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
+  try { await store.save({ format: EXTENSION_FORMAT, name: '' }); } catch { threw = true; }
   check('a nameless pack is refused', threw, true);
+
+  // A second store over the same bytes reads what the first one wrote: the
+  // cache is a copy of the medium, not the only place the packs exist.
+  await store.save({ format: EXTENSION_FORMAT, name: 'Pack B' });
+  const reopened = extensionStore(storage);
+  await reopened.open();
+  check('another store reads the same medium', reopened.list().map((e) => e.id), ['pack-b']);
+  check('and says where it read from', reopened.medium, 'localStorage');
+}
+
+console.log('store -- reads are answered from memory, so a render never waits');
+{
+  /*
+   * The sheet asks what is switched on for every render, and a render cannot
+   * await anything. So the store reads its medium once and answers from a
+   * cache -- and the cache follows a write only after the write has gone
+   * through, never before.
+   */
+  const storage = fakeStorage();
+  const store = extensionStore(storage);
+  await store.open();
+  await store.save({ format: EXTENSION_FORMAT, name: 'Cached' });
+  let reads = 0;
+  const counting = { ...storage, getItem: (k) => { reads++; return storage.getItem(k); } };
+  const quiet = extensionStore(counting);
+  await quiet.open();
+  const before = reads;
+  quiet.list(); quiet.read('cached'); quiet.disabledBundled();
+  check('reading the store touches the medium not at all', reads - before, 0);
+}
+
+console.log('store -- a write that arrives before the store has read its medium');
+{
+  /*
+   * The dialog can be handed a pack before `load()` has resolved -- a file
+   * dropped on the page during startup does exactly that. A write reads the
+   * index to add its row to it, and reading an index that has not been read
+   * in yet would build the new one out of nothing and write away every pack
+   * already stored. So writers wait; only readers may answer "nothing yet".
+   */
+  const storage = fakeStorage();
+  const first = extensionStore(storage);
+  await first.open();
+  await first.save({ format: EXTENSION_FORMAT, name: 'Already here' });
+
+  const cold = extensionStore(storage);
+  check('a cold store reads as empty', cold.list(), []);
+  await cold.save({ format: EXTENSION_FORMAT, name: 'Dropped on the page' });
+  check('and a save into it keeps what was already there',
+    cold.list().map((e) => e.id).sort(), ['already-here', 'dropped-on-the-page']);
+
+  const after = extensionStore(storage);
+  await after.open();
+  check('which is what the medium holds', after.list().map((e) => e.id).sort(), ['already-here', 'dropped-on-the-page']);
+}
+
+console.log('store -- a save that runs out of room leaves nothing behind');
+{
+  /*
+   * A pack is two writes, and a full browser can fail the second after
+   * passing the first. What that used to leave was a document with no index
+   * row: invisible to `list()`, so the dialog could not offer to remove it,
+   * holding exactly the space the "out of space" message asked to be freed.
+   */
+  const withCeiling = (limit) => {
+    const m = new Map();
+    const used = () => [...m].reduce((n, [k, v]) => n + k.length + v.length, 0);
+    return {
+      getItem: (k) => (m.has(k) ? m.get(k) : null),
+      removeItem: (k) => m.delete(k),
+      keys: () => [...m.keys()],
+      setItem(k, v) {
+        const had = m.has(k) ? m.get(k).length : 0;
+        if (used() - had + v.length > limit) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+        m.set(k, v);
+      },
+    };
+  };
+  const pack = (id, n) => ({
+    format: EXTENSION_FORMAT,
+    id,
+    name: id,
+    blocks: Array.from({ length: n }, (_, i) => ({ kind: 'note', name: `n${i}`, text: 'x'.repeat(200) })),
+  });
+  // Room for the document but not for the index row that follows it.
+  const body = JSON.stringify(normalizeExtension(pack('big', 20)));
+  const storage = withCeiling(extensionKey('big').length + body.length + 20);
+  const store = extensionStore(storage);
+  await store.open();
+  let threw = null;
+  try { await store.save(pack('big', 20)); } catch (e) { threw = e.name; }
+  check('the save reports the browser is full', threw, 'QuotaExceededError');
+  check('and no orphaned document is left holding the space',
+    storage.keys().filter((k) => k.startsWith('character-sheet:ext:')), []);
+  check('so nothing is listed either', store.list(), []);
+
+  /*
+   * And on a *replace*, where the pack being updated was overwritten before
+   * the failure: losing the old one to a save that did not happen is worse
+   * than the orphan.
+   */
+  const roomy = withCeiling(1e6);
+  const s2 = extensionStore(roomy);
+  await s2.open();
+  await s2.save(pack('keep', 1));
+  const kept = roomy.getItem(extensionKey('keep'));
+  // Only the index write fails, which is the shape a real ceiling takes: the
+  // document went in, and the row that would have found it did not fit.
+  const write = roomy.setItem;
+  roomy.setItem = (k, v) => {
+    if (k === EXTENSIONS_KEY) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; }
+    return write(k, v);
+  };
+  let alsoThrew = false;
+  try { await s2.save(pack('keep', 40)); } catch { alsoThrew = true; }
+  check('a failed replace throws', alsoThrew, true);
+  check('and the pack it was replacing is still there', roomy.getItem(extensionKey('keep')), kept);
+  check('unchanged in the index too', s2.list().map((e) => e.blockCount), [1]);
+  check('and in memory, which followed the medium rather than leading it',
+    s2.read('keep').blocks.length, 1);
+}
+
+/**
+ * The smallest IndexedDB that answers what `pack-storage.js` asks of one:
+ * open with an upgrade, a transaction per call, `getAll`, `put`, `delete`.
+ *
+ * Writes are staged and applied on complete, which is not fake politeness --
+ * it is the property being tested. A transaction that aborts must leave the
+ * store exactly as it found it, and a fake that wrote through would pass a
+ * test the real thing would fail.
+ */
+function fakeIndexedDb({ limit = Infinity } = {}) {
+  const rows = new Map();
+  const later = (fn) => queueMicrotask(fn);
+  const weight = (m) => [...m.values()].reduce((n, r) => n + r.key.length + r.value.length, 0);
+
+  const db = {
+    objectStoreNames: { contains: (n) => n === PACK_STORE },
+    createObjectStore: () => ({}),
+    close: () => {},
+    transaction() {
+      const staged = new Map(rows);
+      const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
+      let failed = null;
+      tx.objectStore = () => ({
+        getAll() {
+          const req = { result: null, onsuccess: null, onerror: null };
+          later(() => { req.result = [...staged.values()]; req.onsuccess?.(); });
+          return req;
+        },
+        put(record) { staged.set(record.key, record); },
+        delete(key) { staged.delete(key); },
+      });
+      later(() => {
+        if (weight(staged) > limit) {
+          failed = new Error('quota');
+          failed.name = 'QuotaExceededError';
+        }
+        if (failed) { tx.error = failed; tx.onabort?.(); return; }
+        rows.clear();
+        for (const [k, v] of staged) rows.set(k, v);
+        tx.oncomplete?.();
+      });
+      return tx;
+    },
+  };
+
+  return {
+    rows,
+    open() {
+      const req = { result: db, onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null };
+      later(() => { req.onupgradeneeded?.(); req.onsuccess?.(); });
+      return req;
+    },
+  };
+}
+
+console.log('pack storage -- two mediums, the same two questions');
+{
+  for (const [where, make] of [
+    ['localStorage', () => storageMedium(fakeStorage(), { holds: isPackKey })],
+    ['IndexedDB', () => indexedDbMedium({ factory: fakeIndexedDb() })],
+  ]) {
+    const medium = make();
+    check(`${where}: empty to start`, [...await medium.all()], []);
+    await medium.commit([['character-sheet:ext:a', '{"a":1}'], [EXTENSIONS_KEY, '{"extensions":[]}']]);
+    const all = await medium.all();
+    check(`${where}: both keys land`, [...all.keys()].sort(), ['character-sheet:ext:a', EXTENSIONS_KEY]);
+    check(`${where}: values come back whole`, all.get('character-sheet:ext:a'), '{"a":1}');
+    await medium.commit([['character-sheet:ext:a', null]]);
+    check(`${where}: null deletes`, [...(await medium.all()).keys()], [EXTENSIONS_KEY]);
+  }
+
+  // Only the localStorage medium is asked about other people's keys: the
+  // database holds nothing but packs, so there is nothing there to filter.
+  const shared = fakeStorage();
+  shared.setItem('character-sheet:vesna', 'a character');
+  shared.setItem('character-sheet:ext:a', '{"a":1}');
+  const scoped = storageMedium(shared, { holds: isPackKey });
+  check('an origin shared with characters yields only packs',
+    [...(await scoped.all()).keys()], ['character-sheet:ext:a']);
+}
+
+console.log('pack storage -- a database transaction is all of the writes or none');
+{
+  /*
+   * The same guarantee the localStorage medium buys with a rollback,
+   * IndexedDB gives for nothing: the two writes are one transaction, and a
+   * failure aborts both. This is the check that the code is actually asking
+   * for that rather than putting each key in a transaction of its own.
+   */
+  const factory = fakeIndexedDb({ limit: 60 });
+  const medium = indexedDbMedium({ factory });
+  await medium.commit([['character-sheet:ext:small', '{}']]);
+  let threw = null;
+  try {
+    await medium.commit([
+      ['character-sheet:ext:big', `{"x":"${'y'.repeat(200)}"}`],
+      [EXTENSIONS_KEY, '{"extensions":[{"id":"big"}]}'],
+    ]);
+  } catch (e) { threw = e.name; }
+  check('the write reports the browser is full', threw, 'QuotaExceededError');
+  check('and neither key of it was kept', [...(await medium.all()).keys()], ['character-sheet:ext:small']);
+}
+
+console.log('pack storage -- packs move out of localStorage once, and orphans stay put');
+{
+  /*
+   * A player who has been using this app has packs in localStorage already.
+   * They move on the first load with a working database, which is also the
+   * load that gives them back the room those packs were holding.
+   */
+  const storage = fakeStorage();
+  storage.setItem(EXTENSIONS_KEY, JSON.stringify({ extensions: [{ id: 'a' }, { id: 'b' }], disabledBundled: ['x'] }));
+  storage.setItem(extensionKey('a'), '{"id":"a"}');
+  storage.setItem(extensionKey('b'), '{"id":"b"}');
+  storage.setItem(extensionKey('ghost'), '{"id":"ghost"}');
+  storage.setItem('character-sheet:vesna', 'a character');
+
+  const factory = fakeIndexedDb();
+  const { medium, moved } = await packMedium({ storage, factory, holds: isPackKey, keep: packsWorthMoving });
+  check('it chose the database', medium.name, 'IndexedDB');
+  check('the index and the packs it lists moved',
+    moved.sort(), [EXTENSIONS_KEY, extensionKey('a'), extensionKey('b')].sort());
+  check('and are readable there', [...(await medium.all()).keys()].sort(),
+    [EXTENSIONS_KEY, extensionKey('a'), extensionKey('b')].sort());
+  check('localStorage got the room back', storage.keys().sort(),
+    [extensionKey('ghost'), 'character-sheet:vesna'].sort());
+
+  /*
+   * The ghost is a document with no index row -- what a browser filling up
+   * between the two writes of a save used to leave behind. Nothing can reach
+   * it, so moving it would carry dead weight into the new home; it stays
+   * where `tools/storage-report.js` looks for it.
+   */
+  check('the orphan stayed behind', storage.getItem(extensionKey('ghost')), '{"id":"ghost"}');
+
+  const second = await packMedium({ storage, factory, holds: isPackKey, keep: packsWorthMoving });
+  check('a second load moves nothing', second.moved, []);
+  check('and the store still reads what moved', [...(await second.medium.all())].length, 3);
+
+  const store = extensionStore(second.medium);
+  await store.open();
+  check('the packs are listed after the move', store.list().map((e) => e.id), ['a', 'b']);
+  check('and so is a bundled pack that was switched off', [...store.disabledBundled()], ['x']);
+}
+
+console.log('pack storage -- no database is not an error, only a smaller budget');
+{
+  const storage = fakeStorage();
+  storage.setItem(EXTENSIONS_KEY, JSON.stringify({ extensions: [{ id: 'a' }] }));
+  storage.setItem(extensionKey('a'), '{"id":"a"}');
+
+  const none = await packMedium({ storage, factory: null, holds: isPackKey, keep: packsWorthMoving });
+  check('it falls back to localStorage', none.medium.name, 'localStorage');
+  check('moving nothing', none.moved, []);
+  check('and the packs are still readable where they are', [...(await none.medium.all())].length, 2);
+
+  // A database that will not open reads the same as no database at all.
+  const refuses = { open: () => { const req = { onerror: null, onsuccess: null, error: new Error('blocked') }; queueMicrotask(() => req.onerror?.()); return req; } };
+  const blocked = await packMedium({ storage, factory: refuses, holds: isPackKey, keep: packsWorthMoving });
+  check('a database that refuses to open reads the same', blocked.medium.name, 'localStorage');
+  check('and takes nothing with it', storage.keys().length, 2);
 }
 
 console.log('active set -- bundled first, disabled dropped, local packs after');
@@ -207,9 +499,10 @@ console.log('active set -- bundled first, disabled dropped, local packs after');
   const storage = fakeStorage();
   const store = extensionStore(storage);
   const bundled = [normalizeExtension({ id: 'b1', name: 'B1', blocks: [{ kind: 'note', name: 'from b1' }] }), normalizeExtension({ id: 'b2', name: 'B2' })];
-  store.save({ format: EXTENSION_FORMAT, id: 'l1', name: 'L1', blocks: [{ kind: 'note', name: 'from l1' }] });
-  store.save({ format: EXTENSION_FORMAT, id: 'l2', name: 'L2' }, { enabled: false });
-  store.setEnabled('b2', false, { bundled: true });
+  await store.open();
+  await store.save({ format: EXTENSION_FORMAT, id: 'l1', name: 'L1', blocks: [{ kind: 'note', name: 'from l1' }] });
+  await store.save({ format: EXTENSION_FORMAT, id: 'l2', name: 'L2' }, { enabled: false });
+  await store.setEnabled('b2', false, { bundled: true });
   const active = activeExtensions(bundled, store);
   check('order and filtering', active.map((e) => [e.id, e.bundled]), [['b1', true], ['l1', false]]);
   check('blocks tagged with their pack', activeBlocks(active).map((b) => [b.extId, b.extName, b.index, b.name]), [['b1', 'B1', 0, 'from b1'], ['l1', 'L1', 0, 'from l1']]);
@@ -232,8 +525,11 @@ console.log('merge -- later packs win by name, tables concatenate');
     cooking: { entrees: [{ name: 'rice', effect: 'b' }] },
   } });
   const m = mergeTables([a, b]);
-  check('discipline replaced by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 1], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
-  check('later entries win', m.maneuvers.disciplines[0].entries[0].name, 'Y');
+  // A discipline is the one table that adds up rather than replacing: two
+  // packs naming it join maneuver by maneuver, and the later pack's header
+  // still wins (its casing is the one kept).
+  check('same discipline joined by name, case-insensitively', m.maneuvers.disciplines.map((d) => [d.name, d.entries.length]), [['broken blade', 2], ['Iron Tortoise', 0], ['Solar Wind', 0]]);
+  check('both packs\' maneuvers are there', m.maneuvers.disciplines[0].entries.map((e) => e.name), ['X', 'Y']);
   check('vancian classes concatenate, spellLevels kept', [m.vancian.classes.map((c) => c.name), m.vancian.spellLevels], [['Cleric', 'Wizard'], ['0', '1st']]);
   check('psionic curve replaced by total', m.psionics.curves, [{ total: 52, points: [1] }]);
   check('cardcasting from the one pack', m.cardcasting.manipulations.length, 1);
@@ -242,6 +538,51 @@ console.log('merge -- later packs win by name, tables concatenate');
   const calls = [];
   registerTables(m, { setManeuverCatalogue: (d) => calls.push(['m', d.disciplines.length]), setCookingTables: (d) => calls.push(['c', d.entrees.length]) });
   check('registrars called with the merged docs, missing ones skipped', calls, [['m', 3], ['c', 1]]);
+
+  /*
+   * The case the joining rule exists for. A player pastes one maneuver off a
+   * wiki page; it is filed under Golden Lion, which the bundled catalogue
+   * already carries thirty-odd of. Under a replace-by-name rule the other
+   * thirty would vanish the moment the pack was switched on.
+   */
+  const pow = normalizeExtension({
+    id: 'pow',
+    name: 'Path of War',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [
+            { level: 1, kind: 'maneuver', name: 'Demoralizing Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost' },
+            { level: 1, kind: 'maneuver', name: 'Lion\'s Pounce', type: 'Strike' },
+          ],
+        }],
+      },
+    },
+  });
+  const pasted = normalizeExtension({
+    id: 'mine',
+    name: 'Mine',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Golden Lion',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Encouraging Roar', type: 'Boost',
+            action: 'Swift', text: 'Roars.',
+          }],
+        }],
+      },
+    },
+  });
+  const both = mergeTables([pow, pasted]).maneuvers.disciplines[0];
+  check('one pasted maneuver does not delete the discipline around it',
+    both.entries.map((e) => e.name), ['Demoralizing Roar', 'Encouraging Roar', 'Lion\'s Pounce']);
+  check('and the one it names is the corrected copy',
+    both.entries[1].text, 'Roars.');
+  check('the ones it did not name are untouched',
+    both.entries[0].text, undefined);
 }
 
 console.log('bundled -- the shipped packs load through the index and merge cleanly');
@@ -257,15 +598,269 @@ console.log('bundled -- the shipped packs load through the index and merge clean
     } catch { return { ok: false }; }
   };
   const base = new URL('../', import.meta.url);
-  const packs = await loadBundledExtensions(base, { fetcher });
+  // Pinned to the repository's own folder: a checkout may also hold a
+  // `private/extensions/`, and this block is about what is shipped.
+  const packs = await loadBundledExtensions(base, { fetcher, folders: ['data/extensions/'] });
   ok('five bundled packs', packs.length === 5);
   check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'deck-manipulations', 'iron-chef-ingredients']);
   const m = mergeTables(packs);
   check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length], [30, 34, 5, 33]);
   setManeuverCatalogue(m.maneuvers);
   ok('the catalogue answers by discipline name', disciplineEntries('Broken Blade').length > 0);
+  // The bundled catalogue is names and types only: the rules text of 1,033
+  // publisher maneuvers is not ours to ship, and this is the check that says
+  // so if somebody ever pastes it in.
+  const bundled = disciplineEntries('Broken Blade');
+  ok('every bundled entry has a type', bundled.every((e) => e.type !== ''));
+  check('and no bundled entry carries rules text',
+    bundled.filter((e) => ['action', 'range', 'target', 'duration', 'save', 'dc', 'text']
+      .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('bundled -- a git-ignored folder carries what the repository will not');
+{
+  /*
+   * Two folders, one fetcher, no filesystem. What matters is that the second
+   * index is read exactly like the first, that a checkout without one is
+   * silent rather than an error, and that an id in both resolves to the
+   * later copy -- the way you correct a shipped pack you cannot edit.
+   */
+  const doc = (id, name) => ({ format: EXTENSION_FORMAT, id, name });
+  const files = {
+    'data/extensions/index.json': { extensions: [{ id: 'shipped', file: 'shipped.json' }, { id: 'both', file: 'both.json' }] },
+    'data/extensions/shipped.json': doc('shipped', 'Shipped'),
+    'data/extensions/both.json': doc('both', 'The repository copy'),
+    'private/extensions/index.json': { extensions: [{ id: 'yours', file: 'veils.json' }, { id: 'both', file: 'both.json' }] },
+    'private/extensions/veils.json': doc('yours', 'Veils'),
+    'private/extensions/both.json': doc('both', 'The corrected copy'),
+  };
+  const here = new URL('https://example.test/sheet/');
+  const serve = (present) => async (url) => {
+    const path = String(url).slice(String(here).length);
+    return present(path) && files[path] ? { ok: true, json: async () => files[path] } : { ok: false };
+  };
+
+  const all = await loadBundledExtensions(here, { fetcher: serve(() => true) });
+  check('both folders load, the repository first', all.map((e) => e.id), ['shipped', 'both', 'yours']);
+  check('an id in both is the private copy', all.find((e) => e.id === 'both').name, 'The corrected copy');
+
+  const alone = await loadBundledExtensions(here, { fetcher: serve((p) => !p.startsWith('private/')) });
+  check('no private folder is not an error', alone.map((e) => e.id), ['shipped', 'both']);
+  check('and the shipped copy stands', alone.find((e) => e.id === 'both').name, 'The repository copy');
+}
+
+console.log('spheres -- a whole sphere as a shared table, tags and all');
+{
+  const sphere = {
+    name: 'Boxing',
+    kind: 'combat',
+    description: 'Boxers specialize in fighting with their fists.',
+    abilities: [{ name: 'Counter Punch', text: 'You may ready an action.' }],
+    talents: [
+      { name: 'Clinch', group: 'Counter Talents', tags: ['counter'], sources: [], prerequisites: '', text: 'Grapple.' },
+      { name: 'Elongated Step', group: 'Boxing Talents', tags: ['stance'], sources: ['3PP'], prerequisites: '', text: 'Reach.' },
+    ],
+  };
+  const pack = normalizeExtension({ id: 'som', name: 'SoM', provides: { spheres: { spheres: [sphere] } } });
+  const merged = mergeTables([pack]);
+  check('the sphere survives the merge', merged.spheres.spheres.map((s) => s.name), ['Boxing']);
+  check('a pack of spheres counts as spheres',
+    describeSummary({ tables: { spheres: 2 }, blocks: {} }), '2 spheres');
+
+  const calls = [];
+  registerTables(merged, { setSphereCatalogue: (d) => calls.push(d.spheres.length) });
+  check('and reaches its registrar', calls, [1]);
+
+  setSphereCatalogue(merged.spheres);
+  check('read back by name, however it was capitalised',
+    sphereEntry('boxing').talents.length, 2);
+  check('unknown sphere is null', sphereEntry('Nowhere'), null);
+  // The tags are what a table filters on -- both kinds are searched, since
+  // which of the two a wiki wrote a label in is its business, not ours.
+  check('found by a rules tag', talentsTagged('counter').map((t) => t.name), ['Clinch']);
+  check('and by a source tag', talentsTagged('3PP').map((t) => t.name), ['Elongated Step']);
+  check('case does not count', talentsTagged('3pp').length, 1);
+  check('a talent knows its sphere', talentsTagged('counter')[0].sphere, 'Boxing');
+
+  /*
+   * A sphere replaces a sphere of the same name outright -- unlike a
+   * discipline, which joins. One page is the whole sphere, so a later pack
+   * carrying it means a corrected copy of all of it, not an addition to it.
+   */
+  const fixed = normalizeExtension({
+    id: 'fix',
+    name: 'Fix',
+    provides: { spheres: { spheres: [{ ...sphere, talents: [sphere.talents[0]] }] } },
+  });
+  check('a later pack replaces the sphere whole',
+    mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
+
+  /*
+   * Matching a talent somebody typed on their sheet against the catalogue.
+   * The sheet has always taken a talent as free text and still does -- this
+   * is a second opinion, so a miss is silence rather than an error.
+   */
+  setSphereCatalogue(merged.spheres);
+  check('an exact name matches', sphereTalent('Boxing', 'Clinch').group, 'Counter Talents');
+  check('case and spacing do not count', !!sphereTalent('boxing', '  clinch '), true);
+  // A player writes what their book calls it, tags and all.
+  check('a tag the player typed is ignored', !!sphereTalent('Boxing', 'Clinch (counter)'), true);
+  check('a talent the sphere lacks is a miss', sphereTalent('Boxing', 'Nonesuch'), null);
+  check('a sphere no pack carries is a miss', sphereTalent('Alteration', 'Clinch'), null);
+  check('and nothing typed is a miss', sphereTalent('Boxing', '   '), null);
+  // With no sphere named the whole catalogue is searched, so the sheet can
+  // tell the player which sphere it came from rather than being told.
+  check('an unnamed sphere is found when only one has it',
+    sphereTalent('', 'Elongated Step').sphere, 'Boxing');
+
+  /*
+   * The sphere pickers offer what the packs carry as well as what rules.js
+   * knows, so a homebrew sphere turns up where a player looks for it.
+   */
+  check('a pack sphere joins the picker',
+    sphereNames(['Alteration', 'Death'], 'magic'), ['Alteration', 'Death']);
+  check('one of the other side stays out',
+    sphereNames(['Alteration'], 'magic'), ['Alteration']);
+  check('and joins its own side, after the built-in names',
+    sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
+  check('a name the engine already knows is not doubled',
+    sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+
+  /*
+   * Typing a talent fills in what the catalogue can answer for free -- the
+   * sphere it belongs to, and its rules text as the row's note. Only ever
+   * into cells that are empty: a note is where the table's own ruling goes,
+   * and having that overwritten by a book would be worse than never filling.
+   */
+  const c = new Character(blankDocument({ name: 'Boxer', level: 4 }));
+  const L = 'training.combat.bonusTalents';
+  c.data.training.combat.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+    { talent: '', sphere: 'Alchemy', source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+  ];
+  const row = (i) => c.data.training.combat.bonusTalents[i];
+  const cols = { sphere: 'sphere', notes: 'notes' };
+
+  c.setTalentEntry(L, 0, 'Clinch', cols);
+  check('an empty row takes the sphere and the text',
+    [row(0).sphere, row(0).notes], ['Boxing', 'Grapple.']);
+  c.setTalentEntry(L, 1, 'Clinch', cols);
+  check('a note already written is left alone',
+    [row(1).sphere, row(1).notes], ['Boxing', 'my own ruling']);
+  // A sphere already chosen is the row's own answer, and it is also what the
+  // match is made against -- so a talent that sphere does not have is a miss.
+  c.setTalentEntry(L, 2, 'Clinch', cols);
+  check('a sphere already chosen decides, and misses',
+    [row(2).sphere, row(2).notes], ['Alchemy', '']);
+  c.setTalentEntry(L, 3, 'Nothing Known', cols);
+  check('no match fills nothing', [row(3).sphere, row(3).notes], [null, '']);
+
+  // A table with no notes column must not grow one.
+  c.data.training.combat.tradition = { entries: [{ talent: '', sphere: null }] };
+  c.setTalentEntry('training.combat.tradition.entries', 0, 'Clinch', { sphere: 'sphere' });
+  check('a row without notes keeps its shape',
+    c.data.training.combat.tradition.entries[0], { talent: 'Clinch', sphere: 'Boxing' });
+
+  // Emptying a filled cell and leaving the talent alone leaves it empty --
+  // the fill happens on entry, not on every recompute.
+  row(0).notes = '';
+  c.recompute();
+  check('a cleared note stays cleared', row(0).notes, '');
+
+  /*
+   * Taking the sphere itself is not taking a talent in it: what it grants is
+   * the sphere's base abilities. The row reads as the sphere and what it
+   * opened, which is the name a player scanning their own list wants, and the
+   * abilities' full text -- far too long for a name -- goes in the note.
+   */
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Destruction',
+      kind: 'magic',
+      description: '*You can use destructive power.*',
+      abilities: [{ name: 'Destructive Blast', text: 'You deliver a burst of blunt magical force.' }],
+      talents: [{ name: 'Acid Blast', group: 'Basic', tags: [], sources: [], prerequisites: '', text: 'Acid.' }],
+    }],
+  });
+  check('a base pick reads as the sphere and what it opened',
+    sphereBasePick('Destruction').label, 'Destruction Sphere (Destructive Blast)');
+  check('a sphere with no base abilities has no pick', sphereBasePick('Nowhere'), null);
+
+  const d = new Character(blankDocument({ name: 'Caster', level: 4 }));
+  const M = 'training.magic.bonusTalents';
+  d.data.training.magic.bonusTalents = [
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: '' },
+    { talent: '', sphere: null, source: '', notes: 'my own ruling' },
+  ];
+  const mrow = (i) => d.data.training.magic.bonusTalents[i];
+  d.setTalentEntry(M, 0, 'Destruction Sphere', cols);
+  check('typing the sphere fills all three',
+    [mrow(0).talent, mrow(0).sphere, mrow(0).notes],
+    ['Destruction Sphere (Destructive Blast)', 'Destruction',
+      'Destructive Blast: You deliver a burst of blunt magical force.']);
+  // `isBasePick` strips parentheses before looking for the word, so the label
+  // it writes still counts as a base pick for the sphere tallies.
+  check('and the label it wrote is still a base pick', isBasePick(mrow(0).talent), true);
+  // Somebody who wrote their own parenthesis said something, and it is not
+  // ours to replace.
+  d.setTalentEntry(M, 1, 'Destruction Sphere (from a feat)', cols);
+  check('a pick with its own parenthesis is left alone',
+    mrow(1).talent, 'Destruction Sphere (from a feat)');
+  check('though the blanks beside it are still filled',
+    [mrow(1).sphere, !!mrow(1).notes], ['Destruction', true]);
+  d.setTalentEntry(M, 2, 'Destruction Sphere', cols);
+  check('and a note already written is never overwritten', mrow(2).notes, 'my own ruling');
+}
+
+console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');
+{
+  /*
+   * A discipline written in the Extensions editor: names, and the cells the
+   * sheet's maneuver card shows. Nothing between the file and the catalogue
+   * may quietly drop them -- which is exactly what happened before, where
+   * setManeuverCatalogue narrowed every entry to four keys.
+   */
+  const pack = normalizeExtension({
+    id: 'homebrew', name: 'Homebrew',
+    provides: {
+      maneuvers: {
+        disciplines: [{
+          name: 'Iron Tortoise',
+          entries: [{
+            level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+            action: 'Standard', range: 'Melee attack', target: 'One creature',
+            duration: 'Instantaneous', save: 'Fortitude', dc: '{= 10 + 1 + str.mod}',
+            text: 'Slams for {= level}d6.',
+          }],
+        }],
+      },
+    },
+  });
+  const cells = ['type', 'action', 'range', 'target', 'duration', 'save', 'dc', 'text'];
+  check('normalizeExtension keeps them',
+    cells.every((k) => k in pack.provides.maneuvers.disciplines[0].entries[0]), true);
+  const merged = mergeTables([pack]);
+  check('mergeTables keeps them',
+    cells.every((k) => k in merged.maneuvers.disciplines[0].entries[0]), true);
+  registerTables(merged, { setManeuverCatalogue });
+  const entry = disciplineEntries('Iron Tortoise')[0];
+  check('and the catalogue registers them', cells.map((k) => entry[k]), [
+    'Strike', 'Standard', 'Melee attack', 'One creature',
+    'Instantaneous', 'Fortitude', '{= 10 + 1 + str.mod}', 'Slams for {= level}d6.',
+  ]);
+  // A cell the pack left out is a blank string, never undefined -- every
+  // reader treats these as strings and one hole would show as "undefined".
+  registerTables(mergeTables([normalizeExtension({
+    id: 'bare', name: 'Bare',
+    provides: { maneuvers: { disciplines: [{ name: 'Bare', entries: [{ name: 'Thing' }] }] } },
+  })]), { setManeuverCatalogue });
+  check('a cell the pack left out is blank, not missing',
+    cells.map((k) => disciplineEntries('Bare')[0][k]), cells.map(() => ''));
 }
 
 console.log('apply -- blocks land on a blank character through the model');
@@ -785,6 +1380,234 @@ check('an entry keeps what its own text says it replaces', normalizeBlock({ kind
   options: parseMenuOptions('Gunsmith: Craft firearms. This replaces the Polish smithing insight.') }).options[0].replaces, ['Polish']);
 check('named lines keep later colons', parseNamedLines('Darkvision: sees 60 ft: really'), [{ name: 'Darkvision', text: 'sees 60 ft: really' }]);
 check('blank pack has an id and no blocks', [blankExtension({ name: 'A B' }).id, blankExtension().blocks], ['a-b', []]);
+
+console.log('copying a bundled pack -- what it costs, said before the Save');
+{
+  const veil = (i) => ({ kind: 'veil', name: `Veil ${i}`, text: 'x'.repeat(600) });
+  const small = normalizeExtension({ name: 'One class', blocks: [{ kind: 'note', name: 'A note', text: 'short' }] });
+  const big = normalizeExtension({ name: 'All the veils', blocks: Array.from({ length: 2000 }, (_, i) => veil(i)) });
+
+  check('kilobytes below a megabyte', packSize({ x: 'y'.repeat(20000) }), '20 KB');
+  ok('and megabytes above one', /^\d+\.\d MB$/.test(packSize(big)));
+
+  check('a small pack says nothing', copyCost(small), null);
+  const line = copyCost(big);
+  ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
+  ok('names the size the copy would take', line.includes(packSize(big)));
+  ok('and that editing is not what spends it', line.includes('only Save spends anything'));
+}
+
+console.log('veils -- a catalogue read where it stands, not copied onto the sheet');
+{
+  const pack = (id, veils) => normalizeExtension({ id, name: id, provides: { veils: { veils } } });
+  const wire = {
+    name: 'Aether Wire',
+    slot: 'Hands, Wrists',
+    descriptor: 'Enhanced, Force',
+    classes: ['Daevic', 'Vizier'],
+    text: 'A thin wire, {= 1 + essence.self} feet of it.',
+    source: 'A compilation',
+  };
+  const mass = { name: 'Acidic Mass', slot: 'Belt', classes: ['Eclipse'], text: 'Calcified skin.' };
+  const loose = { name: 'Nobody Placed This', slot: 'Hands', text: 'On no list at all.' };
+
+  setVeilCatalogue(mergeTables([pack('a', [wire, mass, loose])]).veils);
+  check('the catalogue holds what the pack carried', veilCatalogue().veils.length, 3);
+  check('a veil is found however it was capitalised', veilEntry('AETHER wire').descriptor, 'Enhanced, Force');
+  check('unknown reads null', veilEntry('Nothing'), null);
+  check('its chakras are split as well as kept', [veilEntry('Aether Wire').slot, veilEntry('Aether Wire').slots],
+    ['Hands, Wrists', ['Hands', 'Wrists']]);
+  check('every class any veil names', veilClasses(), ['Daevic', 'Eclipse', 'Vizier']);
+  check('every chakra any veil names', veilSlots(), ['Belt', 'Hands', 'Wrists']);
+
+  /*
+   * What a slot offers. Narrowing on a class the catalogue does not know
+   * about for a given veil has to *widen* the answer rather than empty it:
+   * the class lists are a second import, and a catalogue holding only half of
+   * them must not hide the half it cannot vouch for.
+   */
+  check('a chakra narrows it', veilsAvailable({ slot: 'Belt' }).map((v) => v.name), ['Acidic Mass']);
+  check('a class narrows it further', veilsAvailable({ slot: 'Hands', classes: ['Daevic'] }).map((v) => v.name),
+    ['Aether Wire', 'Nobody Placed This']);
+  check('a class that is on no list gets only the unplaced ones',
+    veilsAvailable({ slot: 'Hands', classes: ['Guru'] }).map((v) => v.name), ['Nobody Placed This']);
+  check('two classes see both lists', veilsAvailable({ classes: ['Eclipse', 'Vizier'] }).map((v) => v.name),
+    ['Acidic Mass', 'Aether Wire', 'Nobody Placed This']);
+  check('naming no class at all is every veil', veilsAvailable({}).length, 3);
+
+  /*
+   * The sheet keeps the name and the essence. What the veil says is read from
+   * the pack every time -- so a corrected pack corrects every sheet, and a
+   * character sent to a friend carries names rather than somebody's book.
+   */
+  const shaped = { name: 'Aether Wire', essence: 2, desc: '' };
+  const read = veilDetails(shaped);
+  check('what it says comes from the pack', read.desc, 'A thin wire, {= 1 + essence.self} feet of it.');
+  check('and so does everything the sheet never stored',
+    [read.slot, read.descriptor, read.classes, read.source],
+    ['Hands, Wrists', 'Enhanced, Force', ['Daevic', 'Vizier'], 'A compilation']);
+  check('the sheet knows the pack has it', [read.known, read.mine], [true, false]);
+  check('what the player owns is nothing yet', veilOwn(shaped), { desc: '' });
+  check('and nothing is written', veilIsWritten(shaped), false);
+
+  const written = { name: 'Aether Wire', essence: 2, desc: 'GM ruled: outdoors only.' };
+  check('their own text wins', veilDetails(written).desc, 'GM ruled: outdoors only.');
+  check('and says it is theirs', veilDetails(written).mine, true);
+  check('while the pack still supplies the rest', veilDetails(written).descriptor, 'Enhanced, Force');
+  check('emptying it hands the veil back', veilDetails({ ...written, desc: '' }).desc, wire.text);
+
+  const invented = { name: 'A Veil I Made Up', essence: 1, desc: 'Does a thing.' };
+  check('a veil no pack carries is all the player’s', veilDetails(invented).desc, 'Does a thing.');
+  check('and says so, so a card can drop the pen', veilDetails(invented).known, false);
+
+  /*
+   * The size of the win, stated as a number: what a shaped veil costs the
+   * character document now against the rules text it used to bank.
+   */
+  ok('a shaped veil is smaller than the text it reads',
+    JSON.stringify(shaped).length * 4 < JSON.stringify({ ...shaped, desc: wire.text }).length * 4 + 200);
+}
+
+console.log('veils -- one veil, assembled from two kinds of page');
+{
+  /*
+   * A veil's own page carries its rules text, its chakras and its descriptors
+   * and says nothing about who may shape it. The page listing a *class's*
+   * veils says exactly that and little else. Replace-by-name would mean
+   * whichever pack loaded second erased what the other knew, and which half
+   * survived would depend on the order the packs happened to be switched on.
+   */
+  const fromVeilPage = normalizeExtension({
+    id: 'veil-pages',
+    name: 'Veil pages',
+    provides: { veils: { veils: [{ name: 'Aether Wire', slot: 'Hands, Wrists', descriptor: 'Force', text: 'A thin wire.', source: 'A compilation' }] } },
+  });
+  const fromDaevicList = normalizeExtension({
+    id: 'daevic-list',
+    name: 'Daevic list',
+    provides: { veils: { veils: [{ name: 'Aether Wire', classes: ['Daevic'], effect: 'Wire that grapples.' }] } },
+  });
+  const fromViziersList = normalizeExtension({
+    id: 'vizier-list',
+    name: 'Vizier list',
+    provides: { veils: { veils: [{ name: 'aether wire', classes: ['Vizier'] }] } },
+  });
+
+  const merged = mergeTables([fromVeilPage, fromDaevicList, fromViziersList]).veils;
+  check('one veil, not three', merged.veils.length, 1);
+  const v = merged.veils[0];
+  check('the veil page’s text survives the class lists', v.text, 'A thin wire.');
+  check('and its chakras and descriptors with it', [v.slot, v.descriptor], ['Hands, Wrists', 'Force']);
+  check('every class that listed it is on it', v.classes, ['Daevic', 'Vizier']);
+  check('a summary a list page carried is kept beside the full text', v.effect, 'Wire that grapples.');
+
+  // And the other order, since which pack loads first is not something a
+  // player chooses on purpose.
+  const other = mergeTables([fromViziersList, fromDaevicList, fromVeilPage]).veils;
+  check('the same answer whichever way round the packs load',
+    [other.veils.length, other.veils[0].text, other.veils[0].classes.sort()],
+    [1, 'A thin wire.', ['Daevic', 'Vizier']]);
+
+  /*
+   * The duplicate question the per-chakra packs raised dissolves here: a veil
+   * shapeable in five chakras is on five of the wiki's slot pages with the
+   * same text each time, and as a table those five are one entry.
+   */
+  const perSlot = ['hands', 'wrists', 'shoulders'].map((slot) => normalizeExtension({
+    id: `${slot}-veils`,
+    name: `${slot} veils`,
+    provides: { veils: { veils: [{ name: 'Aether Wire', slot: 'Hands, Shoulders, Wrists', text: 'A thin wire.' }] } },
+  }));
+  check('three slot packs, one veil', mergeTables(perSlot).veils.veils.length, 1);
+
+  setVeilCatalogue(merged);
+  check('the catalogue reads the assembled veil', veilEntry('Aether Wire').classes, ['Daevic', 'Vizier']);
+  check('and a Daevic is offered it', veilsAvailable({ slot: 'Wrists', classes: ['Daevic'] }).map((x) => x.name), ['Aether Wire']);
+  check('while a Guru is not', veilsAvailable({ slot: 'Wrists', classes: ['Guru'] }), []);
+}
+
+console.log('veils -- a pack summarises them as a table, not as blocks');
+{
+  const doc = normalizeExtension({
+    id: 'veils',
+    name: 'Veils',
+    provides: { veils: { veils: [{ name: 'One', slot: 'Belt' }, { name: 'Two', slot: 'Belt' }] } },
+  });
+  const s = summarize(doc);
+  check('counted as a table', s.tables.veils, 2);
+  check('and none of it is blocks', s.blockCount, 0);
+  check('described in words', describeSummary(s), '2 veils');
+  check('and one of them reads singular', describeSummary({ tables: { veils: 1 }, blocks: {} }), '1 veil');
+}
+
+console.log('veils -- a pack of blocks converted into the table it should have been');
+{
+  /*
+   * Veils arrived as blocks before this, and `structuredVeil` had nowhere on
+   * a block to put "Classes Available", so it appended the line to the foot
+   * of the text rather than dropping it. A table has a field for it, and the
+   * conversion is where it comes back out of the prose.
+   */
+  const lift = liftClassAccess('The veil does a thing.\n\nAnd another.\n\nClass access: Daevic, Vizier, Daevic\n');
+  check('the class line comes out', lift.classes, ['Daevic', 'Vizier']);
+  check('and the rules text is what is left', lift.text, 'The veil does a thing.\n\nAnd another.');
+  check('a text with no class line is untouched', liftClassAccess('Just rules.').text, 'Just rules.');
+  /*
+   * The `Class access:` line sat in a paragraph of its own, between the rules
+   * text and the `Enhanced weapon:` line that follows it on 229 of the veils.
+   * Lifting it out left the blank line above it against the blank line below,
+   * and a converter that leaves a hole where it took something out is a
+   * converter whose diff nobody can read.
+   */
+  const middle = liftClassAccess('The rules text.\n\nClass access: Daevic\n\nEnhanced weapon: dagger');
+  check('the gap closes behind the lifted line', middle.text, 'The rules text.\n\nEnhanced weapon: dagger');
+  check('and the class still comes out', middle.classes, ['Daevic']);
+  check('a line at the end takes its blank with it',
+    liftClassAccess('The rules text.\n\nClass access: Daevic').text, 'The rules text.');
+  check('paragraphs the text meant to have are left alone',
+    liftClassAccess('One.\n\nTwo.\n\nThree.\n\nClass access: Guru').text, 'One.\n\nTwo.\n\nThree.');
+  // Nothing lifted, nothing reflowed -- a text with no class line comes back
+  // byte-identical however oddly it is spaced.
+  const odd = 'One.\n\n\n\nTwo.';
+  ok('no class line means no reflow', liftClassAccess(odd).text === odd);
+  check('and claims no classes', liftClassAccess('Just rules.').classes, []);
+
+  const veilBlock = (name, slot, text, extra = {}) => ({ kind: 'veil', name, slot, text, ...extra });
+  const { ext, moved, entries, classed } = convertPack({
+    format: EXTENSION_FORMAT,
+    id: 'scraped',
+    name: 'Scraped veils',
+    revision: 3,
+    blocks: [
+      veilBlock('Aether Wire', 'Hands, Wrists', 'A short stub.\n\nClass access: Daevic', { descriptor: 'Force' }),
+      // The same veil off a second slot page: same name, fuller text, and a
+      // class the first page did not name.
+      veilBlock('Aether Wire', 'Hands, Wrists', 'A thin wire, at rather more length than the other page gave it.\n\nClass access: Vizier', { source: 'A compilation' }),
+      veilBlock('Unplaced', 'Belt', 'Nobody said whose list this is on.'),
+      { kind: 'note', name: 'Keep me', text: 'Not a veil.' },
+    ],
+  });
+
+  check('every veil block moved', [moved, entries, classed], [3, 2, 1]);
+  check('and nothing else did', ext.blocks.map((b) => b.kind), ['note']);
+  check('the table is what carries them now', ext.provides.veils.veils.map((v) => v.name), ['Aether Wire', 'Unplaced']);
+
+  const wire = ext.provides.veils.veils[0];
+  check('two pages of one veil become one', wire.classes, ['Daevic', 'Vizier']);
+  check('the fuller page’s text is the one kept',
+    wire.text, 'A thin wire, at rather more length than the other page gave it.');
+  check('and neither page’s fields are lost', [wire.descriptor, wire.source, wire.slot],
+    ['Force', 'A compilation', 'Hands, Wrists']);
+  check('a veil on nobody’s list keeps an empty class list', ext.provides.veils.veils[1].classes, []);
+  check('the pack says it is a new revision', ext.revision, 4);
+
+  // And what comes out is a pack the app will take.
+  check('the converted pack still vets clean', inspectExtension(ext).ok, true);
+  check('summarised as a table', describeSummary(summarize(ext)), '2 veils · 1 note');
+
+  const untouched = convertPack({ format: EXTENSION_FORMAT, id: 'x', name: 'X', blocks: [{ kind: 'note', name: 'n' }] });
+  check('a pack with no veils is left alone', [untouched.moved, untouched.ext.revision], [0, 1]);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

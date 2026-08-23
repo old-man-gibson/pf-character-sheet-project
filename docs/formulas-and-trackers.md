@@ -784,6 +784,42 @@ Readable values include `level`, `bab`, `hp.total`, `mythic.tier`, `initiative`,
 tab lists every available name with its current value, searchable; the Trackers tab
 lists them too, beside the box you are typing into.
 
+**Capitals do not matter.** `Level`, `level` and `LEVEL` are one name. Names are shown
+in the list the way the sheet publishes them, but nothing is refused for the case it was
+typed in — and that holds for a destination too, so `{Saves.Will += 2}` lands where
+`{saves.will += 2}` does.
+
+**A total is also a family.** Where a number has parts, the parts hang off its own name
+and the name goes on meaning the number: `saves.will` is the save and `saves.will.luck`
+is what luck is worth in it; `ac` and `ac.total` are the same thing. Nothing written
+before a total grew parts has to be revisited.
+
+So each save publishes `saves.<save>.base`, `.ability` and one name per typed column of
+the Stats tab — `.resistance`, `.morale`, `.trait`, `.abpResistance` and the rest — and
+the armour class publishes its own columns (`ac.dodge`, `ac.natural`, `ac.deflection`,
+`ac.insight`, …) alongside `ac.armor` (the armour worn), `ac.shield` (every active
+shield together) and `ac.ability` (the ability bonus after the armour's Max Dex has
+capped it). `ac.size` is the Stats tab's *Size* column, a size-typed bonus — not the
+modifier for being Large, which is already in the total.
+
+**Several of a thing take a number.** Where a character keeps more than one row of the
+same kind, each row takes the family name and a number from one: `ac.shield1`,
+`ac.shield2`, matching the *Shield 1* / *Shield 2* the Equipment tab labels them with.
+The family name stays the total, so `ac.shield1 + ac.shield2` is `ac.shield` and a
+character with one shield never has to learn that the numbers exist. A row you are not
+holding — the *active* tick — contributes 0, which is what keeps the parts adding up.
+
+**The workbook's own names still work.** A formula carried over from the spreadsheet can
+be pasted in as it stands: `StrMod`, `Fort`, `Ref`, `Will`, `CharacterHP`, `MythicTier`,
+`ABPDef`, `ACBonusArmor`, `ACBonusShield1`, `MSBTotal`, `VeilEssenceHands` and the rest
+are published
+beside this sheet's own names for the same numbers. They are grouped under *Spreadsheet
+names* in the Formulas tab, each showing the value it stands for. Only names that were
+checked against the source workbooks are here — the other four hundred defined names
+were configuration cells with no number to point at. Note that the workbook's `StrMod`
+is the **working** modifier, buffs included, so it maps to `str.tempMod` rather than
+`str.mod`.
+
 ### Calling a tracker's numbers
 
 Every tracker publishes six numbers under its **id**:

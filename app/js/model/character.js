@@ -72,10 +72,13 @@ import {
 import {
   addCustomization, applyBudget, blendedClasses, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
+  setTalentEntry,
   removeCustomization, setBlended, setCustomizationActive, setCustomizationRule,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
-import { recomputeEquipment, recomputeUnarmed, weaponHandles } from './stats/attacks.js';
+import {
+  recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
+} from './stats/attacks.js';
 import {
   applyDamage, applyHealing, availableConditions, conditionState, healDamage, hpMax, hpState,
   meterSpec, meterStyle, mythicHp, resolveAcBonuses, resolveDefenceBonuses, restRefresh,
@@ -99,7 +102,9 @@ import {
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
-import { recomputeManeuvers, setManeuverNote, toggleManeuver } from './subsystems/maneuvers.js';
+import {
+  recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
+} from './subsystems/maneuvers.js';
 import { primordiaPrereq, primordiaTalents, recomputePrimordia } from './subsystems/primordia.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
 import {
@@ -470,6 +475,7 @@ export class Character {
   #sphereTally(...a) { return sphereTally(this, ...a); }
   #pairBlended(...a) { return pairBlended(this, ...a); }
   setBlended(...a) { return setBlended(this, ...a); }
+  setTalentEntry(...a) { return setTalentEntry(this, ...a); }
   blendedClasses(...a) { return blendedClasses(this, ...a); }
   #recomputeTraining(...a) { return recomputeTraining(this, ...a); }
   #sphereTalentKnowledge(...a) { return sphereTalentKnowledge(this, ...a); }
@@ -500,6 +506,7 @@ export class Character {
 
   // stats/attacks.js
   weaponHandles(...a) { return weaponHandles(this, ...a); }
+  setGearColumns(...a) { return setGearColumns(this, ...a); }
   #recomputeEquipment(...a) { return recomputeEquipment(this, ...a); }
   #recomputeUnarmed(...a) { return recomputeUnarmed(this, ...a); }
 
@@ -558,6 +565,7 @@ export class Character {
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
   toggleManeuver(...a) { return toggleManeuver(this, ...a); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
+  setManeuverField(...a) { return setManeuverField(this, ...a); }
 
   // subsystems/psionics.js
   #recomputePsionics(...a) { return recomputePsionics(this, ...a); }

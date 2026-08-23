@@ -8,12 +8,16 @@
  * added at the destination. See forwardTargets() for what can be aimed at.
  */
 
-import { ABILITIES, FORWARD_FAMILIES, FORWARD_STATS, skillLabel } from '../rules.js';
+import {
+  ABILITIES, AC_BONUS_TYPES, FORWARD_FAMILIES, FORWARD_STATS, MANEUVER_FIELDS,
+  SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, skillLabel, statMod,
+} from '../rules.js';
 import { COMPANION_KINDS, companionScope } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
+import { NameIndex, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
@@ -30,8 +34,52 @@ import { classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey } fr
  */
 const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
 
+/**
+ * A typed-bonus block as names, one per column, under the column's own key.
+ *
+ * The Stats tab keeps saves and AC as a table -- a column per bonus type, a
+ * Total beside them -- and until now only the Total had a name. Half the
+ * rules a player wants to write are about one column ("your shield bonus",
+ * "while you have no dodge bonus to AC"), and the sheet already knows every
+ * one of those numbers, so the names are generated from the same tables the
+ * columns are drawn from rather than listed out a second time here: add a
+ * bonus type to AC_BONUS_TYPES and `ac.<key>` exists.
+ *
+ * These are the cells as the last recompute resolved them, which is the same
+ * footing the totals beside them are on: a bonus cell reading one is reading
+ * the pass before it, so write cells in terms of abilities and level, not in
+ * terms of each other.
+ */
+function bonusColumns(resolved, types) {
+  const out = {};
+  for (const [key] of types) out[key] = Number(resolved?.[key]) || 0;
+  return out;
+}
+
+/**
+ * One saving throw: its total, and what the total is made of.
+ *
+ * The named keys go on after the columns so a bonus type can never take a
+ * name the row already owns, and `total` last of all -- it is what makes
+ * `saves.will` go on being the number it has always been (see carriesTotal in
+ * formula.js) rather than becoming an object the day it grew parts.
+ */
+function saveScope(c, key) {
+  const sv = c.saves?.[key] || {};
+  return {
+    ...bonusColumns(sv.bonusesResolved, SAVE_BONUS_TYPES),
+    base: Number(sv.base) || 0,
+    ability: statMod(c, sv.stat1, sv.stat2),
+    total: Number(sv.total) || 0,
+  };
+}
+
 export function characterScope(model) {
   const c = model.data;
+  // What is worn, split: the armour's own bonus, the shields', and the
+  // ability bonus after the armour has capped it -- the three parts of AC
+  // that are not typed bonuses and are not the flat 10.
+  const worn = armorParts(c);
   const s = {
     level: Number(c.identity.level) || 0,
     bab: Number(c.attack.bab) || 0,
@@ -45,16 +93,37 @@ export function characterScope(model) {
     // enlarge the moment it is ticked.
     size: model.sizeNow(),
     initiative: Number(c.hp.initiative) || 0,
+    // Each save is its total and the row that adds up to it: the base, the
+    // ability modifier, and every typed column by name. `saves.will` is still
+    // the number it always was -- reading a branch that carries a total gives
+    // the total -- so nothing written before this grew parts has to change.
     saves: {
-      fortitude: c.saves.fortitude.total,
-      reflex: c.saves.reflex.total,
-      will: c.saves.will.total,
+      fortitude: saveScope(c, 'fortitude'),
+      reflex: saveScope(c, 'reflex'),
+      will: saveScope(c, 'will'),
     },
+    // The armour classes, and what the first of them is made of. `ac.armor`
+    // and `ac.shield` are the two the rules ask for by name oftenest and the
+    // two the sheet could never be asked for; `ac.size` is the Stats tab's
+    // Size column, which is a size-typed bonus and not the modifier for being
+    // Large -- that one is already in the total and follows `size`.
+    //
+    // Where a character keeps several of a thing, each one takes the family
+    // name and a number from one: ac.shield1, ac.shield2, matching the Shield
+    // 1 / Shield 2 the equipment rows are labelled with and the workbook's own
+    // ACBonusShield1 / ACBonusShield2. The family name stays the total, so
+    // ac.shield1 + ac.shield2 is ac.shield, and a character with one shield
+    // need never learn that the numbers exist.
     ac: {
-      total: c.defenses.ac,
+      ...bonusColumns(c.defenses.acBonusesResolved, AC_BONUS_TYPES),
+      ...Object.fromEntries(worn.shields.map((v, i) => [`shield${i + 1}`, v])),
+      armor: worn.armor,
+      shield: worn.shield,
+      ability: Math.min(worn.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2)),
       touch: c.defenses.touch,
       flatFooted: c.defenses.flatFooted,
       cmd: c.defenses.cmd,
+      total: c.defenses.ac,
     },
     attack: {
       melee: c.attack.totalMelee,
@@ -197,7 +266,50 @@ export function characterScope(model) {
     if (!clash && node[leaf] === undefined) node[leaf] = value;
   }
 
+  addSheetAliases(s, c);
   return s;
+}
+
+/**
+ * The workbook's own names for numbers this sheet already has, published
+ * beside them so a formula pasted out of a spreadsheet still works.
+ *
+ * Last, and only into names nothing has taken: an alias is a courtesy to
+ * someone porting a rule, and must never be the reason a value the character
+ * really has cannot be read. Anything the alias points at that this character
+ * has not got -- essence on a character with no veils -- simply does not
+ * appear, which is the same answer the workbook gave.
+ */
+function addSheetAliases(s, c) {
+  const put = (alias, path) => {
+    if (s[alias] !== undefined) return;
+    const v = resolvePath(s, path);
+    if (v !== undefined) s[alias] = v;
+  };
+  for (const [alias, path] of Object.entries(SHEET_ALIASES)) put(alias, path);
+
+  // The essence invested in each receptacle, under the workbook's own
+  // VeilEssenceHands / VeilEssenceShoulder2 -- generated from the slots the
+  // character actually has, because that is where the list came from. These
+  // are the named ranges veil formulas use more than any other.
+  for (const slot of c.akashic?.slots || []) {
+    const key = slug(slot.slot);
+    if (key === 'x') continue;
+    const Name = key.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+    put(`VeilEssence${Name}`, `essence.${key}`);
+    put(`VeilEssence${Name}2`, `essence.${key}2`);
+  }
+
+  // Shield rows, the same way. A sheet with extra shields numbers its named
+  // ranges from one, and the numbers line up because both count rows: the
+  // workbook's ACBonusShield2 and this sheet's ac.shield2 are the same row of
+  // the same block. What the two say about a shield the character is not
+  // holding differs -- the cell keeps the bonus typed into it, this sheet
+  // reports what the row is contributing -- which is the whole of what the
+  // active tick is for, and the number an armour class ought to answer with.
+  for (let i = 0; i < (c.equipment?.shields || []).length; i++) {
+    put(`ACBonusShield${i + 1}`, `ac.shield${i + 1}`);
+  }
 }
 
 /** Every variable name a formula may legally use -- drives validation + autocomplete. */
@@ -331,11 +443,21 @@ export function forwardTargets(model) {
     }
   }
 
+  // A destination answers to the same spellings a value does: whatever case
+  // it is typed in, and the workbook's name for it where there is one. It is
+  // one rule -- "the name means the name" -- and it would be a poor sheet
+  // that read `Fort` happily and then refused `{Fort += 2}`.
+  const folded = new Map([...expand.keys()].map((n) => [n.toLowerCase(), n]));
+  for (const [alias, path] of Object.entries(SHEET_ALIASES)) {
+    if (expand.has(path)) folded.set(alias.toLowerCase(), path);
+  }
+  const canonical = (name) => folded.get(String(name).toLowerCase());
+
   let names = null;
   return {
     list,
-    expand: (name) => expand.get(name) || weaponTarget(name),
-    known: (name) => (names ??= new Set(model.scopeNames())).has(name),
+    expand: (name) => expand.get(name) || expand.get(canonical(name)) || weaponTarget(name),
+    known: (name) => (names ??= new NameIndex(model.scopeNames())).has(name),
   };
 }
 
@@ -409,8 +531,11 @@ export function resolveInlineNames(model) {
   model.inlineNames = {};
   const base = model.scope();
   // What the sheet works out for itself, captured before `skill` is emptied
-  // so that a definition cannot take a skill's name either.
-  const builtin = new Set(flatNames(base));
+  // so that a definition cannot take a skill's name either. A NameIndex
+  // rather than a Set, because `{Level = 30}` shadows `level` just as surely
+  // as `{level = 30}` does -- the lookup would find the capitalised one first
+  // and the sheet would show two different numbers for the same word.
+  const builtin = new NameIndex(flatNames(base));
   base.skill = {};
   const { values, errors, duplicates } = resolveDefinitions(defs, base);
 
@@ -514,9 +639,36 @@ export function proseSources(model) {
     push(`mythic:${i}:featChoice`, a.featChoice, null, ahead);
     push(`mythic:${i}:featEffect`, a.featEffect, null, ahead);
   });
+  /*
+   * Every feat's note, in the groups and among the granted ones alike.
+   *
+   * The note column is prose, so a feat that hands over a pool or a DC can
+   * define it where the feat itself is written down -- which is the whole
+   * point of putting it beside the feat rather than in a tracker somewhere
+   * else. The granted feats have carried this column all along and were never
+   * walked; they are now, under the same name.
+   */
+  (d.featGroups || []).forEach((group, gi) => {
+    (group.entries || []).forEach((f, i) => push(`feat:${gi}:${i}`, f?.note));
+  });
+  for (const key of ['drawback', 'specialty']) {
+    push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
+  }
+  (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note));
   for (const [lvl, text] of Object.entries(d.primordia?.picks || {})) push(`primordia:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.primordia?.rowNotes || {})) {
+    push(`primordiaNote:${lvl}`, text);
+  }
   push('primordia:notes', d.primordia?.notes);
-  for (const [k, v] of Object.entries(d.mythic?.tradition || {})) push(`mythicTradition:${k}`, v);
+  // `notes` is the sibling map of one note per slot, not an eighth slot, so it
+  // is walked rather than pushed as though it were a name.
+  for (const [k, v] of Object.entries(d.mythic?.tradition || {})) {
+    if (k === 'notes') continue;
+    push(`mythicTradition:${k}`, v);
+  }
+  for (const [k, v] of Object.entries(d.mythic?.tradition?.notes || {})) {
+    push(`mythicTraditionNote:${k}`, v);
+  }
   (d.crafting?.projects || []).forEach((p, i) => {
     push(`crafting:${i}:resources`, p.resources);
     push(`crafting:${i}:notes`, p.notes);
@@ -529,15 +681,33 @@ export function proseSources(model) {
   // buff is off); a value that should switch with something says so itself,
   // with if(…), exactly as the dials do.
   (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
-  // A maneuver's overview note is prose too, and so is a prepared spell's.
+  // Every cell of a maneuver's own entry is prose -- its range as often as
+  // its description, since "Close (25 ft. + 5 ft./2 levels)" is a formula
+  // written out longhand. The description keeps the source name it has always
+  // had, so a formula named in one still answers to `maneuverNote:…` in the
+  // audit; the cells beside it are new and say which they are.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
-    for (const [name, text] of Object.entries(disc.notes || {})) {
-      push(`maneuverNote:${di}:${name}`, text);
+    for (const [name, entry] of Object.entries(disc.notes || {})) {
+      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry); continue; }
+      for (const f of MANEUVER_FIELDS) {
+        // The name goes last in both, because it is the part that can hold a
+        // colon of its own ("Lesson I: Balance") and split the path.
+        push(f.key === 'text' ? `maneuverNote:${di}:${name}` : `maneuver:${di}:${f.key}:${name}`,
+          entry?.[f.key]);
+      }
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
-  (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
-  (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
+  // An item's Other columns and the description on its card: a ring that
+  // grants a pool can size it where the ring is written down.
+  (d.equipment?.gear || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o));
+    push(`gearNote:${i}`, g.note);
+  });
+  (d.equipment?.other || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o));
+    push(`otherNote:${i}`, g.note);
+  });
   // Everything a player writes on a training side reads {…}: the talent
   // itself, the note beside it, the talents a tradition or a feat handed
   // over, and the drawbacks -- a locus priced in mana or a pool sized off

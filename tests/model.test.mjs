@@ -17,7 +17,8 @@ import {
 } from './fixtures.mjs';
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
-  setManeuverCatalogue, disciplineEntries,
+  setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
+  maneuverOwn,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
@@ -25,6 +26,7 @@ import {
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
+  gearColumnCount, gearColumnInUse, importAnimalCompanion,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -36,12 +38,15 @@ import {
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
+  AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { defaultCompanion } from '../app/js/companions.js';
 import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
+import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 
 let pass = 0;
 let fail = 0;
@@ -102,6 +107,235 @@ for (const id of IDS) {
     .filter((s, i) => s.bonus !== raw.skills[i].bonus)
     .map((s) => s.name);
   check(`${id} all ${raw.skills.length} skills match`, mismatched, []);
+}
+
+console.log('every typed column publishes itself under its own name');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const s = c.scope();
+  const names = c.scopeNames();
+
+  // The names are generated from the bonus tables rather than listed here, so
+  // this asks the thing that would actually break: that adding a column to
+  // AC_BONUS_TYPES adds a name, and that the name reads the resolved cell.
+  const wrongAc = AC_BONUS_TYPES
+    .filter(([key]) => s.ac[key] !== (Number(c.data.defenses.acBonusesResolved?.[key]) || 0));
+  check(`${id} all ${AC_BONUS_TYPES.length} AC columns read their cell`, wrongAc.map(([k]) => k), []);
+  const wrongSaves = [];
+  for (const save of ['fortitude', 'reflex', 'will']) {
+    const resolved = c.data.saves[save].bonusesResolved;
+    for (const [key] of SAVE_BONUS_TYPES) {
+      if (s.saves[save][key] !== (Number(resolved?.[key]) || 0)) wrongSaves.push(`${save}.${key}`);
+    }
+  }
+  check(`${id} all ${SAVE_BONUS_TYPES.length * 3} save columns read their cell`, wrongSaves, []);
+
+  // A total that grew parts is still a name, and still the same number.
+  const missingNames = ['saves.will', 'saves.will.luck', 'saves.fortitude.base', 'ac', 'ac.total',
+    'ac.armor', 'ac.shield', 'ac.ability', 'ac.dodge'].filter((n) => !names.includes(n));
+  check(`${id} the new names are all published`, missingNames, []);
+  check(`${id} saves.will still reads the total`, evaluateFormula('saves.will', s), c.data.saves.will.total);
+  check(`${id} ac still reads the total`, evaluateFormula('ac', s), c.data.defenses.ac);
+
+  // Armour and shield, split the way the equipment rows are: only what is
+  // ticked active counts, and the two together are what AC was already using.
+  const worn = armorParts(c.data);
+  const armorAc = c.data.equipment?.armor?.active ? (Number(c.data.equipment.armor.acBonus) || 0) : 0;
+  const shieldAc = (c.data.equipment?.shields || [])
+    .filter((sh) => sh.active).reduce((t, sh) => t + (Number(sh.acBonus) || 0), 0);
+  check(`${id} ac.armor is the armour worn`, s.ac.armor, armorAc);
+  check(`${id} ac.shield is the shields carried`, s.ac.shield, shieldAc);
+  check(`${id} the two still come to the AC bonus`, worn.armor + worn.shield, worn.ac);
+
+  // One name per shield row, numbered from one the way the rows are
+  // labelled, and adding up to the total. A row nobody is holding reads 0
+  // rather than the bonus it would give if they were.
+  const rows = c.data.equipment?.shields || [];
+  const numbered = rows.map((_, i) => s.ac[`shield${i + 1}`]);
+  check(`${id} every shield row has a name`, numbered.filter((v) => v === undefined).length, 0);
+  check(`${id} no name for a row that is not there`, s.ac[`shield${rows.length + 1}`], undefined);
+  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), s.ac.shield);
+  check(`${id} a row that is not held contributes nothing`,
+    rows.map((sh, i) => (sh.active ? (Number(sh.acBonus) || 0) : 0)), numbered);
+  check(`${id} ACBonusShield<n> names the same row`,
+    rows.map((_, i) => resolvePath(s, `ACBonusShield${i + 1}`)), numbered);
+  check(`${id} ac.ability is capped by the armour`, s.ac.ability,
+    Math.min(worn.maxDex, statMod(c.data, c.data.defenses.acStat1, c.data.defenses.acStat2)));
+}
+
+console.log('the workbook’s own names still read, and read the same number');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const s = c.scope();
+  const names = new Set(c.scopeNames());
+
+  // An alias is worth having only if it is the same number as the thing it
+  // stands for. Where the path does not exist on this character the alias
+  // must not exist either -- a name reading 0 because it points at nothing is
+  // exactly the silent wrongness this is meant to avoid.
+  const wrong = [];
+  for (const [alias, path] of Object.entries(SHEET_ALIASES)) {
+    const target = resolvePath(s, path);
+    const via = resolvePath(s, alias);
+    if (target === undefined) { if (via !== undefined) wrong.push(`${alias} (points at nothing)`); continue; }
+    if (via !== target) wrong.push(`${alias}: ${via} vs ${path} = ${target}`);
+    if (!names.has(alias)) wrong.push(`${alias} (not published)`);
+  }
+  check(`${id} all ${Object.keys(SHEET_ALIASES).length} sheet aliases agree`, wrong, []);
+
+  // Case is not part of a name, here or in the list that judges one.
+  const known = new NameIndex(c.scopeNames());
+  const shouted = ['LEVEL', 'Ac.Total', 'SAVES.WILL', 'strmod', 'FORT'];
+  check(`${id} case-blind lookup`, shouted.map((n) => resolvePath(s, n)),
+    ['level', 'ac.total', 'saves.will', 'StrMod', 'Fort'].map((n) => resolvePath(s, n)));
+  check(`${id} case-blind validation`, shouted.filter((n) => !known.has(n)), []);
+
+  // An alias means the same name when a bonus is sent to it, not only when
+  // one is read from it.
+  const targets = c.forwardTargets();
+  check(`${id} {Fort += …} lands where {saves.fortitude += …} does`,
+    targets.expand('Fort'), targets.expand('saves.fortitude'));
+  check(`${id} and case does not change a destination`,
+    targets.expand('SAVES.WILL'), targets.expand('saves.will'));
+}
+
+console.log('companions -- a filled Animal Companion tab is read, not left as a grid');
+{
+  // The workbook's Animal Companion tab with a companion on it. The layout is
+  // the template's, addresses and all, and the numbers the sheet worked out
+  // for itself are left where they were -- the level and HD, the BAB, the
+  // saves, the AC line, the skill totals -- because none of them may be read
+  // back. Only what a player types is.
+  //
+  // Cells go in by their column letter so the fixture reads like a worksheet.
+  const row = (r, cells) => ({
+    r,
+    cells: Object.entries(cells).reduce((out, [col, v]) => {
+      const i = col.charCodeAt(0) - 65;
+      while (out.length < i) out.push(null);
+      out[i] = v;
+      return out;
+    }, []),
+  });
+  const raw = blankDocument({ id: 'pete', name: 'Pete’s Owner', level: 13 });
+  raw.extraTabs['Animal Companion'] = {
+    hidden: false,
+    rows: [
+      row(1, { B: 'Name', C: 'Rustle', H: 'Spheres', I: false }),
+      row(3, {
+        B: 'Animal Companion', D: 'Master Class', E: 'Beastmaster', H: 'Saves', J: 'Ability',
+        L: 'Familiar Skills', N: 'Skill Bonus', O: 'Class Skill', P: 'Ranks', Q: 'Race', R: 'Ability', T: 'Misc',
+      }),
+      row(4, { B: 'Class Level', C: 13, D: 'Master Lvl Penalty', E: 1, H: 'Fort', I: 9, J: 'Con', L: 'Acrobatics', N: 17, O: 3, P: 9, Q: 2, R: 'Dex' }),
+      row(5, { B: 'HP', C: 76, D: 'Effective Level', E: 12, H: 'Ref', I: 9, J: 'Dex', L: 'Climb', N: 6, O: 3, R: 'Str' }),
+      row(6, { B: 'Bonus HP', C: 4, D: 'Size', E: 'Large', H: 'Will', I: 3, J: 'Wis', L: 'Escape Artist', N: 3, O: 0, R: 'Dex' }),
+      row(7, { B: 'HD', C: 9, D: 'Ability Score', E: 'Con', F: 9, H: 'Good Fort', I: 'Good Ref', J: 'Good Will', L: 'Fly', N: 3, O: 3, R: 'Dex' }),
+      row(8, { B: 'Type', C: 'Dire wolf', D: 'Body Type', E: 'Quadruped (claws)', H: true, I: true, J: false, L: 'Intimidate', N: 1, O: 0, R: 'Cha' }),
+      row(9, { B: 'Archetype', C: 'Charger', L: 'Perception', N: 6, O: 3, P: 3, R: 'Wis', T: 1 }),
+      row(10, { B: 'BAB', C: 6, D: 'Ability', E: 'Str', H: 'Initiative', I: 'Bonus', J: 'Total', L: 'Stealth', N: 3, O: 3, R: 'Dex' }),
+      row(11, { B: 'Attack Bonus', C: 4, D: 'Total Attack', E: 10, H: 'Dex', I: 2, J: 7, L: 'Survival', N: 1, O: 0, R: 'Wis' }),
+      row(12, { B: 'Special Qualities', C: 'Scent, low-light vision', L: 'Swim', N: 6, O: 3, R: 'Str' }),
+      row(13, { B: 'Trip on a bite', H: 'AC', J: 'Ability', M: 'Skill Ranks', N: 8, O: 'Total Ranks', P: 12 }),
+      row(14, { H: 'AC', I: 17, J: 'Dex' }),
+      row(15, { B: 'Scores', C: 'Base', D: 'Lvl up Bonuses', E: 'Total', F: 'Modifier', H: 'Touch', I: 13, J: 'Dex', L: 'Attacks', N: 'CMB', O: 10 }),
+      row(16, { B: 'Str', C: 17, D: 3, E: 20, F: 5, H: 'Flat-Footed', I: 15, J: 'Dex', L: 'Type', M: 'Bite', N: 'Damage Type', P: 'Primary?', Q: 'Yes' }),
+      row(17, { B: 'Dex', C: 15, D: 3, E: 18, F: 4, H: 'Bonus AC (All)', I: 'Bonus AC (Touch)', J: 'Natural & other FF', L: 'Qualities', M: 'Trip' }),
+      row(18, { B: 'Con', C: 15, D: 0, E: 15, F: 2, H: 1, I: 2, J: 3, L: 'To-Hit Bonus', M: 10, N: 'Damage', O: '1d8', P: 'Crit', Q: '20/', R: 'x2' }),
+      row(19, { B: 'Int', C: 2, D: 0, E: 2, F: -4, H: 'CMD', I: 'Other Bonus', J: 'Total CMD' }),
+      row(20, { B: 'Wis', C: 12, D: 0, E: 12, F: 1, H: 'CMD', I: 1, J: 24, L: 'Type', M: 'Claw', N: 'Damage Type', P: 'Primary?', Q: 'No' }),
+      row(21, { B: 'Cha', C: 6, D: 0, E: 6, F: -2, H: 'FF CMD', J: 19, L: 'Qualities' }),
+      row(22, { L: 'To-Hit Bonus', M: 10, N: 'Damage', O: '1d4', P: 'Crit', Q: '19-20/', R: 'x2' }),
+      row(23, { B: 'Ability Score Increase', E: 'Speed', H: 'Tricks', I: 'Bonus Tricks', J: 4 }),
+      row(24, { B: 4, C: 'Str', E: 'Base', F: 50, H: 'Attack' }),
+      row(25, { B: 9, C: 'Con', E: 'Fly', H: 'Come' }),
+      row(26, { B: 14, C: 'Str', E: 'Burrow', H: 'Heel' }),
+      row(27, { B: 20, C: 'Con', E: 'Swim', F: 20 }),
+      row(29, { B: 'Class Level', C: 'Feat' }),
+      row(30, { B: 1, C: 'Weapon Focus (bite)' }),
+      row(31, { B: 2, C: 'Multiattack' }),
+      row(32, { B: 5, C: 'Toughness' }),
+      row(39, { B: 'Items', D: 'Can Grasp', E: 'No', F: 'Cost' }),
+      row(40, { B: 'Belt (saddle)', C: 'Belt of giant strength', F: 4000 }),
+      row(41, { B: 'Chest', H: 'Slotless Items', J: 'Cost' }),
+      row(42, { B: 'Eyes', H: 'Cracked pale green ioun stone', J: 4000 }),
+    ],
+  };
+  const gridRows = JSON.parse(JSON.stringify(raw.extraTabs['Animal Companion'].rows));
+  const c = new Character(raw);
+  const b = c.data.animalCompanion;
+  check('the grid retires once it has been read',
+    (c.data.sheetTabs || []).some((t) => t.name === 'Animal Companion'), false);
+  check('name, creature, archetype, body type',
+    [b.name, b.creature, b.archetype, b.bodyType], ['Rustle', 'Dire wolf', 'Charger', 'Quadruped (claws)']);
+  check('where the level comes from', [b.levelSource, b.masterClass, b.masterLevelPenalty], ['class', 'Beastmaster', 1]);
+  check('size, the hit-point ability, the attack ability', [b.size, b.hpAbility, b.attackAbility], ['Large', 'Con', 'Str']);
+  check('bonus hit points', b.hp.bonus, 4);
+  check('the base scores, not the totals beside them',
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((a) => b.scores[a].base), [17, 15, 15, 2, 12, 6]);
+  check('the increases chosen', b.abilityIncreases.map((x) => `${x.level}:${x.ability}`),
+    ['4:Str', '9:Con', '14:Str', '20:Con']);
+  check('the good saves ticked', b.goodSaves, { fort: true, ref: true, will: false });
+  check('the typed AC, CMD and initiative bonuses',
+    [b.ac.all, b.ac.touch, b.ac.ff, b.cmdOther, b.initBonus], [1, 2, 3, 1, 2]);
+  check('the speeds', [b.speed.base, b.speed.fly, b.speed.swim], ['50', '', '20']);
+  check('special qualities, both merged lines', b.specialQualities, 'Scent, low-light vision\nTrip on a bite');
+  check('the tricks', b.tricks.map((t) => t.name), ['Attack', 'Come', 'Heel']);
+  check('the feats, with the level each was taken at', b.feats.map((f) => `${f.name} @ ${f.notes}`),
+    ['Weapon Focus (bite) @ Level 1', 'Multiattack @ Level 2', 'Toughness @ Level 5']);
+  check('the attacks, three rows each', b.attacks.map((a) => [a.type, a.damage, a.crit, a.primary, a.qualities]),
+    [['Bite', '1d8', '20/×2', true, 'Trip'], ['Claw', '1d4', '19-20/×2', false, '']]);
+  check('the skills: ranks, the class tick and the racial and misc columns, never the total',
+    b.skills.map((s) => `${s.name} ${s.ranks}${s.classSkill ? 'c' : '-'}${s.misc}`),
+    ['Acrobatics 9c2', 'Climb 0c0', 'Escape Artist 0-0', 'Fly 0c0', 'Intimidate 0-0',
+      'Perception 3c1', 'Stealth 0c0', 'Survival 0-0', 'Swim 0c0']);
+  check('the item in its slot, and the slotless one', [b.items['Belt (saddle)'], b.slotless],
+    [{ name: 'Belt of giant strength', cost: 4000 }, [{ name: 'Cracked pale green ioun stone', cost: 4000 }]]);
+
+  // The sheet's own cells said 9 HD, BAB +6, 4 bonus tricks and 8 ranks --
+  // it looked the level-keyed table up by hit dice. Read again by level, at
+  // 13 less the master-level penalty, the table says otherwise.
+  c.set('animalCompanion.levelOverride', 13);
+  const k = c.data.animalCompanion.calc;
+  check('and every number is worked out again rather than read off the grid',
+    [k.level, k.hd, k.bab, k.tableNatural, k.bonusTricks, k.ranksAllowed], [12, 10, 7, 8, 5, 10]);
+  check('a natural attack still knows its damage type and role',
+    c.data.animalCompanion.attacks.map((a) => `${a.damageType} ${a.toHit}`),
+    [`B, P, and S ${k.totalAttack}`, `B and S ${k.totalAttack - 2}`]);
+
+  // Ticking Spheres takes the level from the skill named beside the box.
+  const spheres = JSON.parse(JSON.stringify(raw));
+  delete spheres.animalCompanion;
+  spheres.extraTabs['Animal Companion'].rows[0].cells[8] = true;
+  spheres.extraTabs['Animal Companion'].rows[0].cells[9] = 'Ride';
+  check('the Spheres box switches where the level is counted',
+    new Character(spheres).data.animalCompanion.levelSource, 'ride');
+
+  // What a document saved by the older import looks like: the grid kept as a
+  // worksheet beside a block nothing was ever read into. Loading it now reads
+  // the one into the other -- but a companion somebody has since typed is
+  // never overwritten by the grid it came from.
+  const stranded = JSON.parse(JSON.stringify(raw));
+  stranded.animalCompanion = defaultCompanion('animalCompanion');
+  stranded.sheetTabs = [{ name: 'Animal Companion', hidden: false, rows: stranded.extraTabs['Animal Companion'].rows }];
+  const rescued = new Character(stranded);
+  check('a companion stranded on the grid by an older import is recovered',
+    [rescued.data.animalCompanion.name, (rescued.data.sheetTabs || []).length], ['Rustle', 0]);
+  const typed = JSON.parse(JSON.stringify(stranded));
+  typed.animalCompanion = { ...defaultCompanion('animalCompanion'), name: 'Someone else' };
+  check('and one already typed in is left alone',
+    new Character(typed).data.animalCompanion.name, 'Someone else');
+
+  // The grid reaches the importer with no row numbers on it: `normalise`
+  // drops them when it builds `sheetTabs`, and a document saved by an older
+  // build never carried them at all. So the tab has to read the same either
+  // way, and nothing may depend on a blank worksheet row still being there.
+  const withRows = importAnimalCompanion({ rows: gridRows });
+  const withoutRows = importAnimalCompanion({ rows: gridRows.map((r) => ({ cells: r.cells })) });
+  check('row numbers on the grid change nothing -- they are gone before it is read',
+    withoutRows, withRows);
+  check('and it is the whole companion either way',
+    [withoutRows.name, withoutRows.tricks.length, withoutRows.attacks.length, withoutRows.feats.length],
+    ['Rustle', 3, 2, 3]);
 }
 
 /* ------------------------------------------------------------------ *
@@ -201,6 +435,75 @@ console.log('base attack bonus -- the class table, gestalt-style');
   check('an unexplained BAB is pinned as an override', [odd.data.attack.babBase, odd.data.attack.babOverride, odd.data.attack.bab], [0, 7, 7]);
   const again = new Character(JSON.parse(JSON.stringify(odd.toJSON())));
   check('and stays pinned across a save', again.data.attack.bab, 7);
+
+  // Being beaten is counted, because that is the only reason moving one of
+  // these dropdowns can leave the sheet exactly as it was.
+  const s = new Character(load('saburo'));
+  const wizard = s.data.classes.findIndex((x) => /Wizard/.test(x.name || ''));
+  check('the half-BAB Wizard is beaten at every level it runs',
+    s.data.classes[wizard].gestaltBeaten.bab, s.data.classes[wizard].gestaltBeaten.levels);
+  check('and the full-BAB Samurai at none', s.data.classes[0].gestaltBeaten.bab, 0);
+}
+
+console.log('hit points -- the class table, the same way');
+{
+  /*
+   * The workbook worked the maximum out on Character Info and this sheet
+   * only kept the answer, which is why hit points were the one number on the
+   * page that never moved when the classes under them did. The sum is the
+   * workbook's own: the best hit die on each level, the hit-point ability at
+   * every level, the favoured-class points, Toughness, the mythic tiers.
+   */
+  for (const [id, hp] of [['angou', 550], ['bryva', 430], ['narockro', 160], ['nico', 230], ['saburo', 111]]) {
+    const c = new Character(load(id));
+    check(`${id}: computed, not pinned`, [c.data.hp.base, c.data.hp.totalOverride, c.hpMax],
+      [hp, null, hp]);
+  }
+
+  // Fifteen levels of d8 at maximum, Con +6 on each of them, and a
+  // Spheremaster's four a tier over five tiers.
+  const n = new Character(load('nico'));
+  check('the parts add up the way the sheet says they do',
+    [n.data.gestalt.hdTotal, n.data.gestalt.hp.abilityMod, n.mythicHp], [120, 6, 20]);
+
+  // A hit die is a field now, and the total follows it -- which was the whole
+  // complaint: HD was a read-out, so nothing downstream of it could move.
+  n.setItem('classes', 0, 'hd', 12);
+  check('raising a hit die raises the maximum', [n.data.gestalt.hpPerLevel, n.hpMax], [12, 290]);
+  n.setItem('classes', 0, 'hd', 8);
+  check('and lowering it puts it back', n.hpMax, 230);
+
+  // The other parts, each worth what the workbook's formula says.
+  n.set('hp.toughness', 1);
+  check('Toughness is per level', n.hpMax, 245);
+  n.set('hp.fcb', 7);
+  check('favoured class HP is not', n.hpMax, 252);
+  n.set('hp.misc', 3);
+  check('and misc is flat', n.hpMax, 255);
+  n.set('hp.toughness', 0);
+  n.set('hp.fcb', 0);
+  n.set('hp.misc', 0);
+
+  // Pinned and unpinned, the same arrangement as the base attack bonus.
+  n.set('hp.totalOverride', 300);
+  check('a pinned total wins', [n.data.hp.total, n.data.hp.base, n.hpMax], [300, 230, 300]);
+  const saved = new Character(JSON.parse(JSON.stringify(n.toJSON())));
+  check('and survives a save', saved.hpMax, 300);
+  n.set('hp.totalOverride', null);
+  check('cleared, the class table takes it back', n.hpMax, 230);
+
+  // A sheet whose classes cannot explain its hit points keeps them, which is
+  // what every rolled-HP character depends on.
+  const rolled = new Character({ ...load('nico'), hp: { ...load('nico').hp, total: 187 } });
+  check('an unexplained total is pinned as an override',
+    [rolled.data.hp.base, rolled.data.hp.totalOverride, rolled.hpMax], [230, 187, 187]);
+
+  // Energy Drain is not in the base: the condition already takes five off the
+  // maximum for each negative level, and twice would be twice.
+  const drained = new Character(load('nico'));
+  drained.set('conditions.Energy Drain', 2);
+  check('negative levels come off once', drained.conditionState.adjusted.hp, 220);
+  check('and leave the base alone', drained.data.hp.base, 230);
 }
 
 console.log('carry capacity follows Strength');
@@ -1981,14 +2284,24 @@ console.log('mythic tier, HP, tradition and stat picks');
   s.set('mythic.tierOverride', null);
   check('cleared override falls back to auto', s.data.identity.mythicTier, 1);
 
-  // Bonus HP per tier on top of the normal maximum.
+  /*
+   * Bonus HP per tier, which is part of the maximum rather than an addition
+   * to it: the workbook counted the tiers when it worked the total out, so a
+   * sheet that added them again on top was counting them twice -- which is
+   * why every imported character carried a zero in this field.
+   *
+   * Angou is a Champion at tier 10, so the path is worth 50 of his 550.
+   */
   const max0 = c.hpState.max;
-  c.set('mythic.bonusHpPerTier', 5);
-  check('bonus HP adds 5 × tier', c.hpState.max, max0 + 50);
-  check('and reaches the formula scope', c.scope().hp.total, max0 + 50);
+  check('the path fills the field in', c.mythicHp, 50);
+  check('and is already inside the maximum', max0, c.data.hp.base);
+  c.set('mythic.bonusHpPerTier', 7);
+  check('a typed figure overrides the path', c.hpState.max, max0 + 20);
+  check('and reaches the formula scope', c.scope().hp.total, max0 + 20);
   c.restoreAll();
-  check('rest fills to the boosted maximum', c.hpState.current, max0 + 50);
-  c.set('mythic.bonusHpPerTier', 0);
+  check('rest fills to the boosted maximum', c.hpState.current, max0 + 20);
+  c.set('mythic.bonusHpPerTier', null);
+  check('cleared, the path takes it back', c.hpState.max, max0);
 
   // Tradition extracted as slots, not junk ability rows.
   const tr = c.data.mythic.tradition;
@@ -2265,6 +2578,58 @@ console.log('equipment: weapons, armor, load');
   check('worsening ACP lowers Acrobatics', b.data.skills.find((s) => s.name === 'Acrobatics').bonus, bonus0 - 3);
   b.set('equipment.armor.acp', -3);
   check('restored', b.data.skills.find((s) => s.name === 'Acrobatics').bonus, bonus0);
+}
+
+console.log('gear -- the table is as wide as it needs to be, and every item opens out');
+{
+  /*
+   * Three typed bonuses and four Other columns is how wide the workbook's
+   * Equipment sheet happened to be, never a rule. The count is the longest
+   * row in the list, so the rows are their own answer -- nothing is stored
+   * to keep in step with them, and a document saved by an older build
+   * reports exactly the columns it has.
+   */
+  const c = new Character(load('nico'));
+  const gear = () => c.data.equipment.gear;
+  const other = () => c.data.equipment.other;
+  check('the import is three and four', [gearColumnCount(gear(), 'bonuses'), gearColumnCount(gear(), 'others')], [3, 4]);
+
+  c.setGearColumns('equipment.gear', 'bonuses', 1);
+  check('a fourth bonus lands on every row',
+    [gearColumnCount(gear(), 'bonuses'), new Set(gear().map((g) => g.bonuses.length)).size], [4, 1]);
+  check('and it is an empty pair, not a hole',
+    gear()[0].bonuses[3], { value: null, type: null });
+
+  // The two lists are two tables: widening one leaves the other alone.
+  check('other items keep their own width', gearColumnCount(other(), 'bonuses'), 3);
+
+  c.setGearColumns('equipment.gear', 'bonuses', -1);
+  check('and dropping it takes it off every row', gearColumnCount(gear(), 'bonuses'), 3);
+
+  // The floor: a table with no columns has nothing to fill in.
+  for (let n = 0; n < 6; n++) c.setGearColumns('equipment.gear', 'others', -1);
+  check('never fewer than one', gearColumnCount(gear(), 'others'), 1);
+
+  // Whether the last column is in use is what decides if dropping it asks
+  // twice, so it has to notice either box of a bonus pair.
+  c.setItem('equipment.gear', 0, 'others.0', 'Resist fire 10');
+  check('a written Other counts as in use', gearColumnInUse(gear(), 'others'), true);
+  c.setItem('equipment.gear', 0, 'others.0', '');
+  check('and an emptied one does not', gearColumnInUse(gear(), 'others'), false);
+  c.setItem('equipment.gear', 0, 'bonuses.2.type', 'Enhancement');
+  check('a bonus type alone is enough', gearColumnInUse(gear(), 'bonuses'), true);
+  c.setItem('equipment.gear', 0, 'bonuses.2.type', null);
+  c.setItem('equipment.gear', 0, 'bonuses.2.value', 2);
+  check('and so is a value alone', gearColumnInUse(gear(), 'bonuses'), true);
+
+  // The description on an item's card is prose like the rest of the sheet.
+  c.setItem('equipment.other', 0, 'note', 'Adds {circlet.cha = 3} to Charisma checks.');
+  check('an item description defines a name', c.scope().circlet.cha, 3);
+  check('and says which item it came from',
+    c.audit().find((r) => r.name === '{circlet.cha}').where, 'gear 1, description');
+  const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('the widened table survives a save', gearColumnCount(saved.data.equipment.gear, 'bonuses'), 3);
+  check('and so does the description', saved.scope().circlet.cha, 3);
 }
 {
   // Carried weight reconciles and follows item weights.
@@ -3017,6 +3382,150 @@ console.log('maneuver notes -- the player\'s line under a readied maneuver');
   c.setManeuverNote('maneuvers.disciplines.0', 'Demoralizing Roar', '   ');
   check('an emptied note is removed, not stored blank',
     'Demoralizing Roar' in c.data.maneuvers.disciplines[0].notes, false);
+
+  /*
+   * The cells beside the description. The bundled catalogue fills in only the
+   * type -- the rest is a publisher's rules text -- so on this discipline the
+   * action, range, target, duration and save are the player's to write, and
+   * they read {…} the way the description always has.
+   */
+  const disc = () => c.data.maneuvers.disciplines[0];
+  check('nothing written yet', maneuverIsWritten(maneuverOwn(disc(), 'Demoralizing Roar')), false);
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'action', 'Standard');
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'range', '{= 5 * level} ft.');
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'save', 'Will');
+  check('a cell is stored under its own key',
+    disc().notes['Demoralizing Roar'],
+    { action: 'Standard', range: '{= 5 * level} ft.', save: 'Will' });
+  check('the player wrote just those three',
+    maneuverOwn(disc(), 'Demoralizing Roar'),
+    {
+      type: '', action: 'Standard', range: '{= 5 * level} ft.', target: '',
+      duration: '', save: 'Will', dc: '', text: '',
+    });
+  // ...and reading it back lays the catalogue's type underneath them.
+  check('the card reads them over the catalogue',
+    maneuverDetails(disc(), 'Demoralizing Roar'),
+    {
+      type: 'Boost', action: 'Standard', range: '{= 5 * level} ft.', target: '',
+      duration: '', save: 'Will', dc: '', text: '',
+    });
+  check('something is written now', maneuverIsWritten(maneuverOwn(disc(), 'Demoralizing Roar')), true);
+  check('the cells round-trip',
+    maneuverDetails(new Character(c.toJSON()).data.maneuvers.disciplines[0], 'Demoralizing Roar').range,
+    '{= 5 * level} ft.');
+  // Every cell is prose, so a formula in one is a formula the sheet knows about.
+  check('a formula in a cell is collected',
+    c.proseSources().some((f) => f.path === 'maneuver:0:range:Demoralizing Roar'), true);
+  // The audit says where a formula was written, and a name with a colon in it
+  // ("Lesson I: Balance") must not lose half of itself to the path separator.
+  check('the audit names the cell it came from',
+    describeSource('maneuver:0:range:Lesson I: Balance'), 'Lesson I: Balance, its range');
+  check('and the description by its own name',
+    describeSource('maneuverNote:0:Lesson I: Balance'), 'Lesson I: Balance, its description');
+
+  // A field that is not one of the cells is refused rather than invented.
+  c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', 'flavour', 'loud');
+  check('an unknown field writes nothing', 'flavour' in disc().notes['Demoralizing Roar'], false);
+
+  /*
+   * A description on its own is still stored as the bare string it always was,
+   * so a character who never opens the other cells round-trips unchanged.
+   */
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar of Command', 'Allies gain {2 + int.mod}');
+  check('description alone stays a plain string',
+    typeof disc().notes['Roar of Command'], 'string');
+  check('and still reads back as an entry',
+    maneuverDetails(disc(), 'Roar of Command').text, 'Allies gain {2 + int.mod}');
+  c.setManeuverField('maneuvers.disciplines.0', 'Roar of Command', 'duration', '1 round');
+  check('a second cell promotes it to a record',
+    disc().notes['Roar of Command'],
+    { duration: '1 round', text: 'Allies gain {2 + int.mod}' });
+  check('the description keeps its own source name',
+    c.proseSources().some((f) => f.path === 'maneuverNote:0:Roar of Command'), true);
+
+  // Emptying the last cell takes the whole entry with it.
+  for (const f of ['action', 'range', 'save']) {
+    c.setManeuverField('maneuvers.disciplines.0', 'Demoralizing Roar', f, '');
+  }
+  check('an entry with nothing left is dropped',
+    'Demoralizing Roar' in disc().notes, false);
+}
+
+console.log('maneuvers from a pack -- the catalogue fills the cells, the sheet writes over them');
+{
+  /*
+   * A discipline somebody wrote in the Extensions manager, carrying the cells
+   * the bundled Path of War catalogue is not allowed to (its rules text is a
+   * publisher's). What a player writes on their own sheet sits over the top,
+   * cell by cell, and is the only thing ever saved with the character -- so a
+   * corrected pack reaches every sheet, including the ones already in play.
+   */
+  setManeuverCatalogue({
+    disciplines: [{
+      name: 'Iron Tortoise',
+      entries: [
+        {
+          level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+          action: 'Standard', range: 'Melee attack', save: 'Fortitude',
+          text: 'Slams for {= level}d6.',
+        },
+        { level: 1, kind: 'stance', name: 'Wall of Iron', type: 'Stance' },
+      ],
+    }],
+  });
+  const c = new Character(blankDocument({ name: 'Turtle', level: 6 }));
+  c.listAdd('maneuvers.disciplines', { name: 'Iron Tortoise', known: ['Shield Slam'] });
+  const disc = () => c.data.maneuvers.disciplines[0];
+  const entry = (n) => disc().entries.find((e) => e.name === n);
+
+  check('the pack fills the card', maneuverDetails(disc(), 'Shield Slam'), {
+    type: 'Strike', action: 'Standard', range: 'Melee attack', target: '',
+    duration: '', save: 'Fortitude', dc: '', text: 'Slams for {= level}d6.',
+  });
+  check('and the row it was built from carries them too',
+    entry('Shield Slam').action, 'Standard');
+  check('but the player has written nothing',
+    maneuverIsWritten(maneuverOwn(disc(), 'Shield Slam')), false);
+  check('a pack formula resolves against the character',
+    c.renderProse(maneuverDetails(disc(), 'Shield Slam').text)
+      .map((s) => (s.kind === 'text' ? s.text : s.value)).join(''),
+    'Slams for 6d6.');
+
+  // A ruling at the table: one cell, and only that cell, becomes the player's.
+  c.setManeuverField('maneuvers.disciplines.0', 'Shield Slam', 'action', 'Swift');
+  check('only the cell written is stored', disc().notes['Shield Slam'], { action: 'Swift' });
+  check('the card shows it over the pack',
+    maneuverDetails(disc(), 'Shield Slam').action, 'Swift');
+  check('the cells beside it still come from the pack',
+    maneuverDetails(disc(), 'Shield Slam').range, 'Melee attack');
+  check('and the character carries no copy of them',
+    JSON.stringify(new Character(c.toJSON()).data.maneuvers.disciplines[0].notes),
+    '{"Shield Slam":{"action":"Swift"}}');
+
+  // Clearing it hands the cell back rather than leaving a hole.
+  c.setManeuverField('maneuvers.disciplines.0', 'Shield Slam', 'action', '');
+  check('clearing it falls back to the pack',
+    maneuverDetails(disc(), 'Shield Slam').action, 'Standard');
+  check('and the entry is gone entirely', 'Shield Slam' in disc().notes, false);
+
+  // A pack that corrects itself reaches a sheet already in play.
+  setManeuverCatalogue({
+    disciplines: [{
+      name: 'Iron Tortoise',
+      entries: [{
+        level: 1, kind: 'maneuver', name: 'Shield Slam', type: 'Strike',
+        action: 'Swift', range: 'Melee attack', save: 'Fortitude',
+        text: 'Slams for {= level}d8.',
+      }],
+    }],
+  });
+  c.recompute();
+  check('a corrected pack corrects the sheet',
+    maneuverDetails(disc(), 'Shield Slam').text, 'Slams for {= level}d8.');
+
+  // Put the real catalogue back for whatever runs after this.
+  setManeuverCatalogue(catalogue);
 
   // A prepared spell's note is prose data too, and survives the round trip.
   c.listAdd('vancian.prepared', {
@@ -5514,6 +6023,97 @@ console.log('primordia -- the choice is one thing, the writing beside it another
   check('and none of the ladder', 'calc' in saved.primordia, false);
 }
 
+console.log('primordia -- the name the rules gave, and the note beside it');
+{
+  /*
+   * The ladder is four columns: the level, what the rules hand over, what was
+   * taken for it, and a note. A level the rules settle themselves carries its
+   * own name in the third, so the player is not asked to copy it across from
+   * the sentence beside it.
+   */
+  const c = new Character(load('nico'));
+  check('Keen Mind (Spheres) is the technique', c.data.identity.primordiaTechnique, 'Keen Mind (Spheres)');
+  const at = (lvl) => c.data.primordia.calc.rows.find((r) => r.level === lvl);
+  check('1st names both of the things it hands over',
+    at(1).auto, 'Divination sphere + Practiced Seer');
+  check('3rd and 5th name the talent', [at(3).auto, at(5).auto],
+    ['Detect Spellcaster', 'Fast Divinations']);
+  check('a level that only offers a choice names nothing', at(7).auto, '');
+  check('and the name a row shows is the rules\' until something is typed',
+    [at(3).name, at(7).name], ['Detect Spellcaster', '']);
+  c.set('primordia.picks.3', 'Sense Divination');
+  check('typed over, the name is the player\'s', [at(3).name, at(3).auto],
+    ['Sense Divination', 'Detect Spellcaster']);
+
+  /*
+   * A grant the player chooses is a choice even where the rules name the
+   * sphere it comes from. Light Body's 1st hands over two things at once: a
+   * feat the rules name outright, and an Athletics package the player picks.
+   * The row shows the one and asks for the other, and it is the package the
+   * sphere skill rows go looking for -- so the Acrobatics row, which either
+   * package satisfies, is met while the rest wait on the pick.
+   */
+  const s = new Character(load('saburo'));
+  const light = s.data.primordia.calc.rows.find((r) => r.level === 1);
+  check('Light Body\'s 1st names its feat and asks for its package',
+    [light.auto, light.pick?.label], ['Unarmed Combatant', 'Package']);
+  const acro = s.trainingSkillRanks.find((r) => r.skill === 'Acrobatics');
+  const swim = s.trainingSkillRanks.find((r) => r.skill === 'Swim');
+  check('so the package is a choice, not a settled talent',
+    [acro.state, swim.state], ['met', 'unknown']);
+
+  // The note is its own column and takes formulas, like every other note.
+  c.set('primordia.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
+  check('a row note defines a name', c.scope().seer.range, 150);
+  check('and says where it came from',
+    c.audit().find((r) => r.name === '{seer.range}').where, 'Primordia notes, level 5');
+  check('the picks are untouched by it', c.data.primordia.picks[5], undefined);
+  const kept = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and it survives a save', kept.scope().seer.range, 150);
+}
+
+console.log('mythic tradition -- a note beside each slot');
+{
+  const c = new Character(load('nico'));
+  const tr = c.data.mythic.tradition;
+  check('the seven slots are still seven', Object.keys(tr).filter((k) => k !== 'notes').length, 7);
+  check('and the notes are a map of their own', typeof tr.notes, 'object');
+  c.set('mythic.tradition.notes.boon1', 'Leaves {teeth.hp = floor(hp.total / 4)} behind.');
+  check('a slot note defines a name', c.scope().teeth.hp, Math.floor(c.data.hp.total / 4));
+  check('and says where it came from',
+    c.audit().find((r) => r.name === '{teeth.hp}').where, 'a mythic tradition note');
+  // The notes map is a sibling of the slots, not an eighth slot: anything
+  // walking the tradition by key has to see seven names, not seven and a map.
+  check('nothing reads the map as a slot',
+    c.scopeSources?.().some?.((s) => s.location === 'mythicTradition:notes') ?? false, false);
+}
+
+console.log('feats -- every feat takes a note, and the note takes formulas');
+{
+  const c = new Character(load('nico'));
+  const groups = c.data.featGroups || [];
+  check('every entry in every group has the field',
+    groups.every((g) => (g.entries || []).every((e) => e.note !== undefined)), true);
+  check('and a group added now has it too', (() => {
+    c.listAdd('featGroups', { name: 'Test', entries: [] });
+    const gi = c.data.featGroups.length - 1;
+    c.listAdd(`featGroups.${gi}.entries`, { name: 'A feat', detail: '', note: '' });
+    return c.data.featGroups[gi].entries[0].note;
+  })(), '');
+
+  c.setItem('featGroups.0.entries', 0, 'note', 'Crafts at {tech.dc = 10 + level + int.mod}.');
+  check('a feat note defines a name', c.scope().tech.dc, 10 + 15 + c.data.abilities.int.totalMod);
+  check('and says which group it is in',
+    c.audit().find((r) => r.name === '{tech.dc}').where, 'a feat’s note, group 1');
+
+  // The granted feats have carried this column all along and were never
+  // walked, so a name defined in one went nowhere.
+  c.set('grantedFeats.specialty.note', 'Once per day, {villain.uses = 1 + floor(level / 5)}.');
+  check('a granted feat\'s note defines one too', c.scope().villain.uses, 1 + 3);
+  check('under its own label',
+    c.audit().find((r) => r.name === '{villain.uses}').where, 'a granted feat’s note');
+}
+
 console.log('psionics -- five curves, chosen by what they reach at level 20');
 {
   const t = psionicTables();
@@ -6157,8 +6757,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   c.set('cardcasting.mods.tightHand', true);
   check('Tight Hand caps the hand at 3 + Loaded Hand', c.data.cardcasting.calc.handMax, 3);
   c.set('cardcasting.mods.lifeboundDeck', true);
-  const hp = c.data.hp.total + c.mythicHp;
-  check('Lifebound is HP / 3 / deck size, at least 1', c.data.cardcasting.calc.lifebound, Math.max(1, Math.floor(hp / 3 / 54)));
+  check('Lifebound is HP / 3 / deck size, at least 1', c.data.cardcasting.calc.lifebound, Math.max(1, Math.floor(c.hpMax / 3 / 54)));
   c.set('cardcasting.mods.tightHand', false);
   c.set('cardcasting.mods.lifeboundDeck', false);
   c.setItem('cardcasting.cards', 0, 'qty', 20);
@@ -6480,7 +7079,7 @@ console.log('companions -- a familiar is its master, halved');
   const f = c.data.familiar;
   // The worksheet's own cached numbers for Angou: HP 275, HD 20, BAB 20, Int 15,
   // saves 12, Acrobatics 20 from the master's ranks.
-  check('half the master\'s hit points', f.calc.hpMax, Math.floor((c.data.hp.total + c.mythicHp) / 2));
+  check('half the master\'s hit points', f.calc.hpMax, Math.floor(c.hpMax / 2));
   check('the master\'s level and BAB', [f.calc.level, f.calc.hd, f.calc.bab], [20, 20, c.data.attack.bab]);
   check('Intelligence off the familiar table at 20th', f.calc.scores.int.total, 15);
   check('natural armour off the table at 20th', f.calc.tableNatural, 10);
@@ -6496,7 +7095,7 @@ console.log('companions -- a familiar is its master, halved');
   check('touch leaves the natural armour out', c.data.familiar.calc.touch, 10 + 3 + 2);
   check('CMD takes the size the other way', c.data.familiar.calc.cmd, 10 + c.data.attack.bab + 0 + 3 - 2);
   c.set('familiar.protector', true);
-  check('a Protector at 11th has double', c.data.familiar.calc.hpMax, Math.floor((c.data.hp.total + c.mythicHp) / 2) * 2);
+  check('a Protector at 11th has double', c.data.familiar.calc.hpMax, Math.floor(c.hpMax / 2) * 2);
   c.set('familiar.masterLevelPenalty', 3);
   check('the master-level penalty lowers the level and the table row', [c.data.familiar.calc.level, c.data.familiar.calc.scores.int.total], [17, 14]);
   c.set('familiar.scores.int.base', 20);

@@ -5,7 +5,7 @@
  * of them. Nothing in this file knows what a character is.
  */
 
-import { evaluateFormula } from '../formula.js';
+import { carriesTotal, evaluateFormula } from '../formula.js';
 
 export const slug = (s) => String(s || '')
   .toLowerCase()
@@ -74,13 +74,20 @@ export function safe(fn, fallback) {
  * One definition, used both for the character's own names and for the little
  * local scopes a field brings with it, so "what may this formula read" is
  * answered the same way in both places.
+ *
+ * A branch that carries its own `total` is a name in its own right as well as
+ * a prefix, and is listed both ways -- `saves.will` and `saves.will.luck` are
+ * both things to read. resolvePath() is what makes the first of those a
+ * number; this is what makes it a name the sheet admits to having.
  */
 export function flatNames(obj, prefix = '') {
   const out = [];
   for (const [k, v] of Object.entries(obj || {})) {
     const path = prefix ? `${prefix}.${k}` : k;
-    if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...flatNames(v, path));
-    else out.push(path);
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      if (carriesTotal(v)) out.push(path);
+      out.push(...flatNames(v, path));
+    } else out.push(path);
   }
   return out;
 }

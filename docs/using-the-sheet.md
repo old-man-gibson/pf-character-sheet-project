@@ -304,10 +304,13 @@ actually uses; the first change pins the arrangement (`uiPrefs.dashCards`), and
 
 In Spells &amp; slots the prepared list packs into columns, and every row's
 squares hang off the same left edge — the first use is always top-left, spending
-rightward. A readied maneuver can carry **the player's own line** for the
-dashboard: the ✎ on its row (Maneuvers tab) opens a note that reads `{…}` like any
-prose — *"Allies heal `{5 * floor(level / 2)}`"* shows the resolved number under
-the maneuver's name on the card, and keeps up with the level.
+rightward. A readied maneuver carries **what you wrote about it** on the Maneuvers
+tab — click its name to read it, the ✎ to fill it in: type, action, range, target,
+duration, saving throw, DC and a description, every one of them reading `{…}` like
+any prose. *"Allies heal `{5 * floor(level / 2)}`"* shows the resolved number, and
+keeps up with the level. The dashboard runs the header cells together as one line
+(*Standard · Close (40 ft.) · One ally · Will DC 19*) with the description under it,
+and leaves out whatever you never filled in.
 
 ### Buffs
 

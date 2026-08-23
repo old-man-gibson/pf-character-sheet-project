@@ -47,7 +47,7 @@ import {
   TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
-  classForwardKey,
+  classForwardKey, gearColumnInUse,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -86,7 +86,7 @@ import {
   BACKGROUND_SKILLS, UNARMED_SPHERES, TRAIT_CATEGORIES, TRAIT_SLOTS,
   PERFORM_CATEGORIES, VARIANT_SKILLS, skillVariantKind, skillVariantRoot, skillLabel,
   parseLevelRule, levelRuleLevels, summariseLevels,
-  MYTHIC_STAT_TIERS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
+  MYTHIC_PATH_HP, MYTHIC_STAT_TIERS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
   MYTHIC_TIER_LEVEL, mythicTierGrant,
   GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
   WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
@@ -376,6 +376,15 @@ export class CharacterSheetElement extends HTMLElement {
   #editDraft = { name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null) };
   #showAllSkills = false;
   #showAllGear = false;
+  /**
+   * Which gear item is open as a card ("equipment.gear|3"), or null.
+   *
+   * Element state, not the character's: which row somebody is reading is a
+   * way of looking at the list, not a fact about what they are carrying.
+   */
+  #openGear = null;
+  /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
+  #armedGearCol = null;
   #confirmDelete = null;
   /** The class whose feature group is one click from being deleted, or null. */
   #confirmGroup = null;
@@ -389,8 +398,16 @@ export class CharacterSheetElement extends HTMLElement {
   #confirmReset = false;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
-  /** Which maneuver's overview note is being edited ("<list>|<name>", or null). */
-  #openManeuverNote = null;
+  /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
+  #openManeuver = null;
+  /** Whether the open maneuver is showing its cells rather than reading them. */
+  #maneuverEdit = false;
+
+  /**
+   * Which shaped veil is showing what the player wrote rather than what its
+   * pack says. Not saved with the character: it is a way of reading the tab.
+   */
+  #veilEdit = null;
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -1511,22 +1528,33 @@ export class CharacterSheetElement extends HTMLElement {
       <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
   }
 
-  /** One group's feats: the table and the button that adds a row to it. */
+  /**
+   * One group's feats: the table and the button that adds a row to it.
+   *
+   * Three columns of writing, not two. A feat's name and where it came from
+   * were all a group held, so what a feat actually *does* had nowhere to go
+   * but the source cell -- and the granted feats beside it had carried a
+   * proper notes column all along. This is that column, on every group, and
+   * it takes formulas like the rest of the prose on the sheet: a feat that
+   * grants a pool can define it where the feat is written down.
+   */
   #featGroupTable(group, g) {
     return `<div class="tablewrap"><table class="feats">
-        <thead><tr><th class="grip"></th><th>Feat</th><th>Source / level</th><th></th></tr></thead>
+        <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
+          <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
           <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
           <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
           <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          <td class="fnote">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
           ${this.#rowRemove(`featGroups.${g}.entries`, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
-          <td colspan="4" class="empty">No feats here yet — add one, or drag one in.</td>
+          <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
         </tr>`}</tbody>
       </table></div>
       <div style="margin-top:8px">
-        ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '' })}
+        ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '', note: '' })}
       </div>`;
   }
 
@@ -1536,44 +1564,43 @@ export class CharacterSheetElement extends HTMLElement {
     const m = c.mythic || {};
     const tier = Number(c.identity.mythicTier) || 0;
     /*
-     * The feats read as two columns, not four panels. On the left, everything
-     * that arrives in ones and twos: the feats something handed over, then the
-     * smaller groups, each a section of the one panel. On the right, the group
-     * a character actually fills -- the level-up list -- standing beside them
-     * at its own height, because eight rows beside three sections of one or
-     * two is what balances the row.
+     * The feats stack, each panel the width of the page.
      *
-     * The right-hand column is the FIRST group, not the biggest: a layout that
-     * rearranged itself as feats were added would be worse than one that is
-     * merely arbitrary, and first is where the import puts the level-up list.
+     * They used to read as two columns -- the granted feats and the smaller
+     * groups on the left, the level-up list beside them -- which balanced the
+     * row while a feat was a name and a source. It stopped balancing once
+     * every row grew a notes column: half a page is not enough width for
+     * three columns of writing, and the level-up list is the one a character
+     * actually fills. So the first group stands on its own, full width, and
+     * the rest stack under the granted feats as they always did.
      */
     const groups = c.featGroups || [];
     const featured = groups[0]
-      ? `<section class="panel featgroup">
+      ? this.#collapsible('featgroup-0', `<section class="panel span2 featgroup">
           <h3>${this.#featGroupTitle(groups[0], 0)}</h3>
           ${this.#featGroupTable(groups[0], 0)}
-        </section>`
+        </section>`)
       : '';
-    const main = `<section class="panel span2 featmain">
+    const main = this.#collapsible('feats', `<section class="panel span2 featmain">
       <h3>Feats</h3>
       ${this.#grantedFeatsSection()}
       ${groups.slice(1).map((group, i) => `<div class="featsection">
         <h4 class="subhead">${this.#featGroupTitle(group, i + 1)}</h4>
         ${this.#featGroupTable(group, i + 1)}
       </div>`).join('')}
-    </section>`;
+    </section>`);
 
     return `<div class="grid">
-      ${featured ? `<div class="pairrow even">${main}${featured}</div>` : main}
+      ${featured}${main}
       <div class="addgroup">
         ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
         <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
-          Oaths, Attunement, Class, and so on. The first group stands on the right; the rest
+          Oaths, Attunement, Class, and so on. The first group stands on its own; the rest
           stack under the granted feats. Drag a feat by its grip to reorder it, or onto
           another group to move it there.</span>
       </div>
 
-      <section class="panel span2">
+      ${this.#collapsible('mythic', `<section class="panel span2">
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${this.#field('Path', this.#text('mythic.path', m.path))}
@@ -1582,14 +1609,20 @@ export class CharacterSheetElement extends HTMLElement {
               data-set="mythic.tierOverride" data-kind="number-or-null" style="width:3.6rem"
               title="Automatic from level; enter a number to override.">
             <span class="value">→ ${c.identity.mythicTier ?? 0}</span></span>`)}
-          ${this.#field('Bonus HP / tier', this.#num('mythic.bonusHpPerTier', m.bonusHpPerTier))}
+          ${this.#field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
+    `<input type="number" class="autonum${m.bonusHpPerTier == null ? ' auto' : ''}"
+            value="${m.bonusHpPerTier ?? ''}" placeholder="${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0}"
+            data-set="mythic.bonusHpPerTier" data-kind="number-or-null" style="width:3.6rem"
+            title="From the path; enter a number to override it."
+            aria-label="Bonus hit points per mythic tier">`)}
           ${this.#field('Base path ability', this.#text('mythic.basePathAbility', m.basePathAbility))}
         </div>
         <p class="hint">
           Tier comes from character level (8→1, 10→2, 12→3, 14→4, then one per level to
-          20→10). Bonus HP/tier adds ${(Number(m.bonusHpPerTier) || 0)} × ${c.identity.mythicTier ?? 0}
-          = <strong>${this.#model.mythicHp}</strong> HP on top of the normal maximum
-          (Champion/Guardian 5, Marshal/Trickster 4, Archmage/Hierophant 3).
+          20→10). Bonus HP/tier is ${(Number(this.#model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
+          × ${c.identity.mythicTier ?? 0} = <strong>${this.#model.mythicHp}</strong> hit points, counted
+          into the maximum on the Hit points panel (Champion/Guardian 5, Marshal/Trickster 4,
+          Archmage/Hierophant 3).
         </p>
         ${rows.collapsibleSub(this.#model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic">
@@ -1669,9 +1702,9 @@ export class CharacterSheetElement extends HTMLElement {
             somewhere. A bonus written above tier ${tier} does not apply until it is
             reached.
           </p>`, 'mythladder')}
-      </section>
+      </section>`)}
 
-      ${this.#mythicTraditionPanel(m)}
+      ${this.#collapsible('mythic-tradition', this.#mythicTraditionPanel(m))}
     </div>`;
   }
 
@@ -1685,8 +1718,8 @@ export class CharacterSheetElement extends HTMLElement {
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
           <span>Flowing Power</span></label>
       </h3>
-      <div class="tablewrap"><table>
-        <thead><tr><th>Slot</th><th>Choice</th></tr></thead>
+      <div class="tablewrap"><table class="tradition">
+        <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>
         <tbody>${MYTHIC_TRADITION_SLOTS.map((def) => {
           const locked = def.requires && !filled(def.requires);
           return `<tr class="${locked ? 'lockedslot' : ''}">
@@ -1694,12 +1727,15 @@ export class CharacterSheetElement extends HTMLElement {
               ${def.requires ? `<div class="hint">needs ${esc(MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}
               ${def.kind === 'quality' ? '<div class="hint">bonus + drawback</div>' : ''}</td>
             <td>${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
+            <td>${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
       <p class="hint">
         One mandatory drawback unlocks one boon; each further drawback (up to two)
-        unlocks another. The quality carries both a bonus and a drawback.
+        unlocks another. The quality carries both a bonus and a drawback. The name and
+        the note both resolve <code>{name = expr}</code>, so a boon that grants a pool
+        can define it where it is written down.
       </p>
     </section>`;
   }
@@ -1708,7 +1744,13 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** Both tabs live in ui/panels/gear.js. */
   #gearCtx() {
-    return { draft: this.#draft, openPosts: this.#openPosts, showAllGear: this.#showAllGear };
+    return {
+      draft: this.#draft,
+      openPosts: this.#openPosts,
+      showAllGear: this.#showAllGear,
+      openGear: this.#openGear,
+      armedGearCol: this.#armedGearCol,
+    };
   }
 
   #gearPanel() { return renderGearPanel(this.#model, this.#gearCtx()); }
@@ -1724,12 +1766,18 @@ export class CharacterSheetElement extends HTMLElement {
 
   /**
    * Every sub-system tab lives in ui/panels/subsystems.js. What they need from
-   * the element is the model and the three bits of view state their tabs keep:
-   * which deck view is showing, which maneuver's note is open, and the cards
-   * currently peeked at.
+   * the element is the model and the few bits of view state their tabs keep:
+   * which deck view is showing, which maneuver is open and whether it is being
+   * read or written, and the cards currently peeked at.
    */
   #systemCtx() {
-    return { deckView: this.#deckView, openManeuverNote: this.#openManeuverNote, peek: this.#peek };
+    return {
+      deckView: this.#deckView,
+      openManeuver: this.#openManeuver,
+      maneuverEdit: this.#maneuverEdit,
+      veilEdit: this.#veilEdit,
+      peek: this.#peek,
+    };
   }
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
@@ -3118,8 +3166,25 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    /*
+     * A sphere talent, which writes more than the cell it was typed in: a
+     * name the pack catalogue knows settles the row's sphere, and its rules
+     * text is what the player was about to go and look up. Both are filled
+     * only when blank -- see setTalentEntry. The cell is skipped by the
+     * generic writer below, so this is the one write and the one render.
+     */
+    root.querySelectorAll('[data-talent-fill]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [list, index] = input.dataset.item.split('|');
+        const fill = JSON.parse(input.dataset.talentFill);
+        this.#model.setTalentEntry(list, Number(index), input.value, fill);
+        this.#rerender(input);
+      });
+    });
+
     // Generic list-item field -> model path.
     root.querySelectorAll('[data-item]').forEach((input) => {
+      if (input.dataset.talentFill) return;
       input.addEventListener('change', () => {
         const [list, index, field] = input.dataset.item.split('|');
         this.#model.setItem(list, Number(index), field, readControl(input));
@@ -3653,41 +3718,106 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // Readying a maneuver adds or removes its name on the discipline. The row
-    // itself belongs to the shared catalogue, so only the name is stored.
+    /*
+     * Opening a gear item out into its card. One at a time -- the card is
+     * most of a screen and two of them open at once would put the second
+     * one somewhere nobody is looking -- so clicking a second closes the
+     * first, and the card's own caret carries an empty key to close it.
+     */
+    root.querySelectorAll('[data-gearopen]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const key = b.dataset.gearopen;
+        this.#openGear = !key || this.#openGear === key ? null : key;
+        this.#render();
+        if (this.#openGear) {
+          this.shadowRoot.querySelector('.gearcard input, .gearcard textarea')?.focus();
+        }
+      });
+    });
+
+    /*
+     * Readying a maneuver adds or removes its name on the discipline. The row
+     * itself belongs to the shared catalogue, so only the name is stored.
+     *
+     * The name is everything past the first "|", not the second field of a
+     * split: it is whatever a player typed, and a homebrew maneuver with a
+     * pipe in its name must tick the same row the card opens.
+     */
+    const maneuverRef = (key) => [key.slice(0, key.indexOf('|')), key.slice(key.indexOf('|') + 1)];
     root.querySelectorAll('[data-ready]').forEach((box) => {
       box.addEventListener('change', () => {
-        const [path, name] = box.dataset.ready.split('|');
+        const [path, name] = maneuverRef(box.dataset.ready);
         this.#model.toggleManeuver(path, name, box.checked);
         this.#rerender(box);
       });
     });
 
-    // The ✎ on a readied maneuver: its overview note. The button sits inside
-    // the row's label, so its click must not also toggle the readied box.
-    root.querySelectorAll('[data-mnote-toggle]').forEach((b) => {
+    /*
+     * Opening a maneuver. The name reads it, the ✎ writes it, and both are
+     * their own buttons -- the row used to be one big <label>, so a click
+     * anywhere on it readied the maneuver and the ✎ was the only thing you
+     * could safely hit. Now the tick box is the only thing that ticks.
+     *
+     * One maneuver is open at a time, and which one is not saved with the
+     * character: it is a way of reading the tab, not something about the
+     * character.
+     */
+    const showManeuver = (key, edit) => {
+      // Asking for the face that is already up shuts it; asking for the other
+      // one turns the card over instead of closing it.
+      const showing = this.#openManeuver === key && this.#maneuverEdit === edit;
+      this.#openManeuver = showing ? null : key;
+      this.#maneuverEdit = showing ? false : edit;
+      this.#render();
+    };
+    root.querySelectorAll('[data-mopen]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
-        const key = b.dataset.mnoteToggle;
-        this.#openManeuverNote = this.#openManeuverNote === key ? null : key;
+        showManeuver(b.dataset.mopen, false);
+      });
+    });
+    root.querySelectorAll('[data-medit]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        showManeuver(b.dataset.medit, true);
+      });
+    });
+    // The pen on a veil card turns it over to what the player wrote. Pressing
+    // it again turns it back, which is how you read the pack's text after
+    // writing your own -- your text is still there, under the pen.
+    root.querySelectorAll('[data-vedit]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        this.#veilEdit = this.#veilEdit === b.dataset.vedit ? null : b.dataset.vedit;
         this.#render();
       });
     });
-    root.querySelectorAll('[data-mnote]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const [path, name] = input.dataset.mnote.split('|');
-        this.#model.setManeuverNote(path, name, input.value);
+    root.querySelectorAll('[data-mclose]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        this.#openManeuver = null;
+        this.#maneuverEdit = false;
         this.#render();
       });
     });
 
-    // Right-click a maneuver for its rules text. The row is a label whose
-    // left-click readies the maneuver, so the wiki gets the button that was
-    // otherwise unused; the native menu is given up only on these rows.
-    root.querySelectorAll('.mrow[data-wiki]').forEach((row) => {
-      row.addEventListener('contextmenu', (ev) => {
+    // One cell of a maneuver's entry. Which cell rides beside the key rather
+    // than on the end of it, for the same reason the name is read whole.
+    root.querySelectorAll('[data-mfield]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [path, name] = maneuverRef(input.dataset.mfield);
+        this.#model.setManeuverField(path, name, input.dataset.mf, input.value);
+        this.#render();
+      });
+    });
+
+    // Right-click a maneuver for its rules text. Left-click opens what the
+    // player wrote, so the wiki gets the button that was otherwise unused;
+    // the native menu is given up only on these names.
+    root.querySelectorAll('.mname[data-wiki]').forEach((name) => {
+      name.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
-        window.open(row.dataset.wiki, '_blank', 'noopener,noreferrer');
+        window.open(name.dataset.wiki, '_blank', 'noopener,noreferrer');
       });
     });
 
@@ -5152,6 +5282,25 @@ export class CharacterSheetElement extends HTMLElement {
         this.#showAllGear = !this.#showAllGear;
         this.#render();
         break;
+      // Widen or narrow a gear table. Dropping a column that has something
+      // written in it asks twice, because it takes that writing off every row
+      // at once and there is no row-level undo to reach for.
+      case 'gear-col': {
+        const list = button?.dataset.list;
+        const kind = button?.dataset.kind;
+        const delta = Number(button?.dataset.delta) || 0;
+        const armKey = `${list}|${kind}`;
+        if (delta < 0 && gearColumnInUse(this.#model.list(list), kind)
+          && this.#armedGearCol !== armKey) {
+          this.#armedGearCol = armKey;
+          this.#render();
+          break;
+        }
+        this.#armedGearCol = null;
+        this.#model.setGearColumns(list, kind, delta);
+        this.#render();
+        break;
+      }
       case 'take-technique':
         // Same write the dropdown makes; the chooser is just a wider way to
         // read the five before making it.
