@@ -44,7 +44,7 @@ export function primordiaPrereq(model, technique) {
     if (c.training?.magic?.mythicAmt) return met('Mythic Advanced Magic Training casts as Mid.');
     return casters.length
       ? unmet(`${casters.map((x) => x.name).join(', ')} — none casts at Mid or High.`)
-      : unmet('No spherecasting class on the Spheres & Magic tab.');
+      : unmet('No spherecasting class on the Magic Spheres tab.');
   }
   if (key === 'vancian') {
     const named = (c.vancian?.classes || []).filter((x) => String(x.name || '').trim());

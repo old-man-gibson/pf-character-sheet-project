@@ -97,8 +97,8 @@ another at 3rd and every four levels after. A bare number is a count that never 
 (`"sets": 2`), a bare string is where it goes up from one (`"talents": "4, +4"`). `spheres`
 is `combat` (the default), `magic` or `both`. Attaching
 copies the rules onto the character like everything else a pack lands, and the weapons
-themselves live on Spheres & Magic (see
-[Customized weapons](sub-systems.md#spheres--magic-training)).
+themselves live on Martial Spheres (see
+[Customized weapons](sub-systems.md#martial-and-magic-spheres-training)).
 
 **An archetype may change a track**, and carries only the parts it changes: the one that
 lets an armiger's customized weapons teach magic is `"tracks": {"spheres": "both"}` and

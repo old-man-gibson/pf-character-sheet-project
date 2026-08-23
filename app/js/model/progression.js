@@ -131,13 +131,174 @@ export function resolveOptionMenu(names) {
   return { ...found[found.length - 1], name: found.map((c) => c.name).join(' + '), options: out };
 }
 
+/**
+ * Make an edit that moves a class's levels, and carry its feature cells along.
+ *
+ * A feature cell is stored under the character level it sits at, because that
+ * is the row the player types on. What the text is *about*, though, is the
+ * class's own level -- "the veil I picked at Kheshig 6" -- and so is every
+ * rule that decides which cells are writable, which counts class levels for
+ * exactly that reason. The two agree only while the class runs every level.
+ * Open a gap in a gestalt track, or close one, and every class level past it
+ * lands on a different row: the grants move, because they are computed, and
+ * the text stays behind, because it is stored. A column written on
+ * `1, 2, +4` comes back one row out, its veils sitting between the levels
+ * that grant them.
+ *
+ * So an edit that changes which levels a class occupies re-keys that class's
+ * cells to match, and class level 6's text follows class level 6 wherever it
+ * went. What a shortened class has no room for is parked rather than dropped;
+ * see `reanchorFeatureCells` below.
+ */
+function movingClassLevels(model, mutate) {
+  const groups = model.data.progression?.classFeatures || {};
+  const before = Object.keys(groups).map((name) => [name, classLevelsIn(model, name)]);
+  mutate();
+  const rows = (model.data.progression?.levels || []).map((r) => r.level);
+  for (const [name, was] of before) {
+    const now = classLevelsIn(model, name);
+    if (was.length === now.length && was.every((lvl, i) => lvl === now[i])) continue;
+    reanchorFeatureCells(groups[name], was, now, rows);
+  }
+  model.recompute();
+  return model;
+}
+
+/** A cell's text, whatever shape it is stored in, as one string. */
+const cellText = (v) => (v && typeof v === 'object'
+  ? Object.values(v).map((x) => String(x ?? '').trim()).filter(Boolean).join('\n')
+  : String(v ?? ''));
+
+const hasText = (cells) => Object.values(cells || {}).some((v) => cellText(v).trim());
+
+/**
+ * Re-key one group's cells from the rows its class had onto the rows it has.
+ *
+ * Cells are gathered by class level for the length of the move, because that
+ * is what they belong to; where each lands is then just `now[level - 1]`.
+ *
+ * A class that has shrunk has levels with no row to land on -- its last one or
+ * two, the end the ladder just lost. Those cells go to `overflow`, under the
+ * class level they were written for and the row they were on, and come back
+ * the moment the class is long enough to have that level again. Parking rather
+ * than folding them into the row that took their place is what makes taking a
+ * level away and putting it back the no-op it looks like: a group whose class
+ * is being pushed about does not grind its capstone into the level below.
+ */
+function reanchorFeatureCells(g, was, now, rows = []) {
+  if (!g?.byLevel) return;
+  // A class that has just joined the progression has no old ladder to line its
+  // cells up against, and re-keying them against nothing would only move text
+  // the player put where they wanted it.
+  if (!was.length) return;
+  // One that has left has no new ladder: the group falls back to showing the
+  // rows it holds text for, so everything parked comes back out onto the row
+  // it was parked from and the bay closes. Otherwise a class removed a level
+  // at a time would empty itself into a bay nothing on the page mentions.
+  if (!now.length) return unparkAll(g, rows);
+
+  const byClassLevel = new Map();
+  was.forEach((row, i) => { if (g.byLevel[row]) byClassLevel.set(i + 1, { row, cells: g.byLevel[row] }); });
+  // Levels the class has grown back into take their cells out of the bay.
+  for (const [key, held] of Object.entries(g.overflow || {})) {
+    if (!byClassLevel.has(Number(key)) && held?.cells) byClassLevel.set(Number(key), held);
+  }
+
+  const next = {};
+  const overflow = {};
+  const place = (level, cells) => {
+    for (const [col, text] of Object.entries(cells || {})) {
+      if (!cellText(text).trim()) continue;
+      const row = (next[level] ||= {});
+      // Two cells on one row happens only where a row the class never held
+      // carried text of its own; the class level that owns the row keeps what
+      // it has and the rest is folded in beside it rather than dropped.
+      if (row[col] === undefined) row[col] = text;
+      else row[col] = [cellText(row[col]), cellText(text)].filter(Boolean).join('\n');
+    }
+  };
+
+  for (const level of [...byClassLevel.keys()].sort((a, b) => a - b)) {
+    const held = byClassLevel.get(level);
+    const to = now[level - 1];
+    if (to === undefined) { if (hasText(held.cells)) overflow[level] = held; continue; }
+    place(to, held.cells);
+  }
+  // A row the class never occupied is nobody's class level, so it keeps its own.
+  for (const [key, cells] of Object.entries(g.byLevel)) {
+    if (!was.includes(Number(key))) place(Number(key), cells);
+  }
+
+  g.byLevel = next;
+  if (Object.keys(overflow).length) g.overflow = overflow;
+  else delete g.overflow;
+}
+
+/**
+ * Put every parked cell back on a row, lowest class level first, and close
+ * the bay.
+ *
+ * The row each was parked from is the first choice, but a class that retreated
+ * a level at a time parked several of them off the same row -- each shrink
+ * pushed a new class level onto the end of the ladder before losing it -- so a
+ * cell whose old row is spoken for takes the first row that has nothing in
+ * that column. Which row exactly matters little here: the class is out of the
+ * progression, and the group is showing whatever rows it holds text for.
+ */
+function unparkAll(g, rows = []) {
+  for (const level of Object.keys(g.overflow || {}).map(Number).sort((a, b) => a - b)) {
+    const held = g.overflow[level];
+    for (const [col, text] of Object.entries(held?.cells || {})) {
+      if (!cellText(text).trim()) continue;
+      const free = (lvl) => lvl !== undefined && g.byLevel[lvl]?.[col] === undefined;
+      const at = free(held.row) ? held.row : rows.find(free);
+      if (at === undefined) continue;              // every row already answers for this column
+      (g.byLevel[at] ||= {})[col] = text;
+    }
+  }
+  delete g.overflow;
+}
+
+/**
+ * Delete a feature group whose class no longer appears in the progression.
+ *
+ * A group outliving its class is deliberate: the text in it is the player's,
+ * and losing a column of picks to a mistyped dropdown would be worse than a
+ * stale panel, so it stays put and says "not in progression". What was
+ * missing is the other end of that -- a way to say the class is really gone,
+ * which a character who has renamed a class, or imported one twice, needs or
+ * else carries the ghost for ever.
+ *
+ * Only a group with no levels can go. One the progression still names holds
+ * the levels it is showing, and would be built again empty on the next
+ * render, so deleting it would read as a bug rather than as a delete.
+ */
+export function removeClassFeatureGroup(model, className) {
+  const p = model.data.progression;
+  if (!p?.classFeatures?.[className]) return model;
+  if (classLevelsIn(model, className).length) return model;
+  delete p.classFeatures[className];
+  model.recompute();
+  return model;
+}
+
+/**
+ * Cells parked by a class that shrank, by the class level each is waiting on.
+ *
+ * What the feature group's heading counts, so a player who shortens a class
+ * can see that the text on the levels it lost is being held rather than gone.
+ */
+export function classFeatureParked(model, className) {
+  return model.data.progression?.classFeatures?.[className]?.overflow || {};
+}
+
 export function setProgressionClass(model, level, track, className) {
   const row = model.data.progression?.levels?.[level - 1];
   if (!row) return model;
-  while (row.classes.length < model.data.progression.tracks) row.classes.push(null);
-  row.classes[track] = className || null;
-  model.recompute();
-  return model;
+  return movingClassLevels(model, () => {
+    while (row.classes.length < model.data.progression.tracks) row.classes.push(null);
+    row.classes[track] = className || null;
+  });
 }
 
 /**
@@ -151,12 +312,12 @@ export function fillProgressionTrack(model, track, className) {
   const p = model.data.progression;
   if (!p || track < 0 || track >= p.tracks) return model;
   const value = className ? String(className) : null;
-  for (const row of p.levels || []) {
-    while (row.classes.length < p.tracks) row.classes.push(null);
-    row.classes[track] = value;
-  }
-  model.recompute();
-  return model;
+  return movingClassLevels(model, () => {
+    for (const row of p.levels || []) {
+      while (row.classes.length < p.tracks) row.classes.push(null);
+      row.classes[track] = value;
+    }
+  });
 }
 
 export function addProgressionTrack(model) {
@@ -171,12 +332,12 @@ export function addProgressionTrack(model) {
 export function removeProgressionTrack(model, index) {
   const p = model.data.progression;
   if (!p || p.tracks <= 1 || index < 0 || index >= p.tracks) return model;
-  p.tracks -= 1;
-  for (const row of p.levels) {
-    if (row.classes.length > index) row.classes.splice(index, 1);
-  }
-  model.recompute();
-  return model;
+  return movingClassLevels(model, () => {
+    p.tracks -= 1;
+    for (const row of p.levels) {
+      if (row.classes.length > index) row.classes.splice(index, 1);
+    }
+  });
 }
 
 /** Every class named anywhere in the progression, in first-appearance order. */

@@ -838,7 +838,7 @@ function dashSpheresCard(model) {
     const m = t.magic;
     if (!m) {
       return `<section class="panel"><h3>Casting numbers</h3>
-        <p class="empty">No magic training — the Spheres &amp; Magic tab starts it.</p></section>`;
+        <p class="empty">No magic training — the Magic Spheres tab starts it.</p></section>`;
     }
     return `<section class="panel">
       <h3>Casting numbers</h3>
@@ -850,7 +850,7 @@ function dashSpheresCard(model) {
       ${line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}
       ${t.combat ? lineHtml('Practitioner DC', dcShown(model, t.combat.practitionerDC), true) : ''}
       <p class="hint">Points spent in play live on their tracker in Resources; the
-        talents are on Spheres &amp; Magic.</p>
+        talents are on Magic Spheres.</p>
     </section>`;
   }
 
@@ -938,8 +938,8 @@ function dashTalentsCard(model) {
     const body = `${side('combat', 'Combat')}${side('magic', 'Magic')}`;
     return `<section class="panel">
       <h3>Talents</h3>
-      ${body || '<p class="empty">No talents yet — they are written on Spheres &amp; Magic.</p>'}
-      ${body ? '<p class="hint">Hover a line for its full text; the training grids are on Spheres &amp; Magic.</p>' : ''}
+      ${body || '<p class="empty">No talents yet — they are written on Martial and Magic Spheres.</p>'}
+      ${body ? '<p class="hint">Hover a line for its full text; the training grids are on Martial and Magic Spheres.</p>' : ''}
     </section>`;
   }
 

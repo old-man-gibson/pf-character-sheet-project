@@ -19,7 +19,7 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
 - **Read a workbook's customization block into its track.** Bryva's Item Crafting tab
   carries her two customized weapons as cells (`M2:S9`: a *Weapon* row, then talent/sphere
   pairs down two columns), and the model now has
-  [Customized weapons](sub-systems.md#spheres--magic-training) to put them in — but the
+  [Customized weapons](sub-systems.md#martial-and-magic-spheres-training) to put them in — but the
   converter still leaves them in *From the source tab* to be retyped. Reading that shape
   across in `convert.py` / `convert.js` would close the loop. It is one workbook's layout,
   so it wants the fixture to hand.

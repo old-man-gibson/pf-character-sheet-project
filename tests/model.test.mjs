@@ -2857,16 +2857,18 @@ console.log('sub-systems in use, marked on classes, and the two views of the bar
 {
   const c = new Character(blankDocument({ name: 'Viewy' }));
 
-  // A blank sheet uses nothing -- Spheres & Magic and Crafting included,
+  // A blank sheet uses nothing -- the two sphere tabs and Crafting included,
   // which is what the ⚙ manager's empty/in-use badges read.
   const inUse = c.systemTabsInUse();
   check('the badge list covers the sphere and crafting tabs too',
-    ['combat', 'crafting'].every((k) => k in inUse), true);
+    ['martial', 'magic', 'crafting'].every((k) => k in inUse), true);
   check('a blank sheet uses nothing', Object.values(inUse).some(Boolean), false);
 
   // Data arriving flips a system to in use.
   c.set('training.magic.tradition.name', 'Fey Adept');
-  check('a named tradition puts Spheres & Magic in use', c.systemTabsInUse().combat, true);
+  check('a named casting tradition puts Magic Spheres in use', c.systemTabsInUse().magic, true);
+  // The sides answer for themselves: a caster is not a practitioner.
+  check('and leaves Martial Spheres empty', c.systemTabsInUse().martial, false);
   c.listAdd('crafting.projects', { name: 'Cloak of Resistance', value: 1000 });
   check('a crafting project puts Crafting in use', c.systemTabsInUse().crafting, true);
 
@@ -2889,9 +2891,9 @@ console.log('sub-systems in use, marked on classes, and the two views of the bar
   const buildOrder = c.tabOrder();
   c.setViewMode('session');
   check('the session bar carries what is in use or marked',
-    ['combat', 'crafting', 'maneuvers'].every((k) => c.tabOrder().includes(k)), true);
+    ['magic', 'crafting', 'maneuvers'].every((k) => c.tabOrder().includes(k)), true);
   check('and skips the empty systems and the build machinery',
-    ['vancian', 'akashic', 'stats', 'progression'].some((k) => c.tabOrder().includes(k)), false);
+    ['martial', 'vancian', 'akashic', 'stats', 'progression'].some((k) => c.tabOrder().includes(k)), false);
   c.hideTab('lore');
   check('hiding in the session view edits the session bar', c.tabOrder().includes('lore'), false);
   c.setViewMode('build');
@@ -4453,6 +4455,87 @@ console.log('a gap in a track moves a rule off the character levels');
   c.setClassFeatureRuleGroup(cls, at(), 0, { rule: 'char: 2, +4' });
   check('char: puts them back on the character levels',
     granting().map((r) => r.level), [6, 10, 14, 18]);   // character level 2 is not a Warlord level at all
+}
+
+console.log('feature cells follow their class level when a track gains or loses one');
+{
+  // A cell is stored under the character level it sits on; the rule that says
+  // which cells are writable counts class levels. Close the gap in Saburo's
+  // Kheshig and every class level lands a row lower -- the grants move,
+  // because they are computed, and the text used to stay where it was, so a
+  // column written on "2, +4" came back with its veils on the rows between
+  // the ones that grant them.
+  const c = new Character(load('saburo'));
+  const cls = 'Kheshig';
+  const track = c.data.progression.levels[0].classes.indexOf(cls);
+  const at = () => c.data.progression.classFeatures[cls].columns.indexOf('Veil');
+  c.addClassFeatureColumn(cls, 'Veil');
+  c.addClassFeatureRuleGroup(cls, at(), { name: 'Veils', rule: '2, +4' });
+
+  // One pick per granted level, each naming the class level it was written for.
+  const granting = () => c.classFeatureRows(cls).filter((r) => r.cells.Veil.on);
+  for (const row of granting()) c.setClassFeature(cls, row.level, 'Veil', `veil ${row.classLevel}`);
+  const written = () => c.classFeatureRows(cls)
+    .flatMap((r) => r.cells.Veil.fields.filter((f) => f.text.trim())
+      .map((f) => `${r.classLevel}:${f.text}`));
+  const want = [2, 6, 10, 14, 18].map((n) => `${n}:veil ${n}`);
+
+  check('the picks start on the class levels the rule grants', written(), want);
+  check('which are shifted rows, because the track skips one',
+    granting().map((r) => r.level), [3, 7, 11, 15, 19]);
+
+  c.setProgressionClass(2, track, cls);
+  check('closing the gap moves the grants down a row',
+    granting().map((r) => r.level), [2, 6, 10, 14, 18]);
+  check('and carries every pick with them', written(), want);
+  check('so nothing is left stranded',
+    c.classFeatureRows(cls).some((r) => r.cells.Veil.stranded), false);
+
+  c.setProgressionClass(2, track, null);
+  check('opening it again is the way back', written(), want);
+
+  // A class that loses its last level has a class level with no row. Its cell
+  // is parked rather than folded into the row that took its place.
+  const last = c.classFeatureRows(cls).at(-1);
+  check('the last row is the class\'s 19th level', [last.level, last.classLevel], [20, 19]);
+  c.setClassFeature(cls, last.level, 'Veil', 'the last one');
+  c.setProgressionClass(20, track, null);
+  check('a class level the character no longer has is parked, not dropped',
+    Object.keys(c.classFeatureParked(cls)), ['19']);
+  check('and the picks that still have a level are untouched', written(), want);
+  c.setProgressionClass(20, track, cls);
+  check('the parked cell comes back with the level',
+    c.classFeatureRows(cls).at(-1).cells.Veil.fields.map((f) => f.text), ['the last one']);
+  check('leaving the bay empty', Object.keys(c.classFeatureParked(cls)).length, 0);
+
+  // Whole-track edits move by the same rule.
+  c.fillProgressionTrack(track, cls);
+  check('filling the track keeps every pick on its class level',
+    written().filter((x) => !x.startsWith('19:')), want);
+}
+
+console.log('a feature group whose class has left the progression can be deleted');
+{
+  const c = new Character(load('saburo'));
+  const groups = () => Object.keys(c.data.progression.classFeatures);
+  const track = c.data.progression.levels[1].classes.indexOf('Wizard');
+  check('Wizard runs for one level of the progression', c.classLevelsIn('Wizard'), [2]);
+  c.removeClassFeatureGroup('Wizard');
+  check('so its group will not be deleted', groups().includes('Wizard'), true);
+
+  c.setProgressionClass(2, track, null);
+  check('taking that level away leaves the group behind',
+    [c.classLevelsIn('Wizard').length, groups().includes('Wizard')], [0, true]);
+  check('still showing what it holds',
+    c.classFeatureRows('Wizard').some((r) => Object.values(r.cells)
+      .some((cell) => cell.fields.some((f) => f.text.trim()))), true);
+
+  c.removeClassFeatureGroup('Wizard');
+  check('and now it can go', groups().includes('Wizard'), false);
+  check('while the classes the progression still names stay',
+    ['L. Samurai', 'Kheshig'].every((n) => groups().includes(n)), true);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('the delete survives a save', Object.keys(back.data.progression.classFeatures).includes('Wizard'), false);
 }
 
 console.log('imported characters gain no rules');

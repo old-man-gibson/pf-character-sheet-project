@@ -95,6 +95,29 @@ operators, and a red wavy underline a name or function the character does not ha
 marked where it is written, not only in an error message underneath. A tracker's
 `max = …` line, the Formula Audit, the guide and the scratchpad all use it.
 
+**Brackets are coloured by how deep they are**, and a pair shares its colour, so
+`floor(min(level, 20) / 2)` is read by matching teal to teal and pink to pink rather than
+by counting inwards. The hues are outside the palette above on purpose — a bracket is
+structure, not a value, and must never be mistaken for a name. Three depths get a colour
+before the cycle repeats; a comma takes the colour of the call it separates.
+
+### The bracket you are standing next to
+
+Put the caret beside a `(`, `[` or `{` — before it or after it — **and that bracket and
+the one that answers it light up** in the field you are typing in. It works in every field
+that understands formulas: the scratchpad, the expression fields, and prose, where the
+`{…}` of a token counts as a bracket like any other. A bracket with no partner is lit in
+red instead, which is how a missing `)` shows itself while it is still being typed.
+
+A native input cannot colour part of its own text, so the pair is drawn on a **mirror**: a
+copy of the text in the same metrics, sitting behind the field, blank but for the two
+marks. Nothing is inserted into what you typed and nothing is saved — a browser that fails
+to draw it loses a hint and nothing else. The matching itself (`ui/brackets.js`) is a pure
+function over text and a caret position: brackets inside a quoted string are characters
+rather than nests, and a closer answers only the nearest opener of its own kind, since a
+formula being written is unbalanced most of the time and a wrong guess would be worse than
+no answer.
+
 Hovering any of them shows the working on one line:
 
 ```

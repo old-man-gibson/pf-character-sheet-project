@@ -171,8 +171,8 @@ plus the marketplace post with the buyer, the price sold and what you have left.
 > (`M2:S9`) that is hers alone — a weapon name and the talents it grants, twice over.
 > Those cells are not read into the model, but they are not dropped either: they are
 > kept verbatim in a *From the source tab* grid at the bottom, and there is now
-> somewhere to put them — [Customized weapons](sub-systems.md#spheres--magic-training)
-> on the Spheres & Magic tab is that block modelled. On the other four sheets nothing
+> somewhere to put them — [Customized weapons](sub-systems.md#martial-and-magic-spheres-training)
+> on the Martial Spheres tab is that block modelled. On the other four sheets nothing
 > is left over.
 
 Everything above is verified against Bryva's filled-in sheet in `tests/model.test.mjs`:
@@ -194,15 +194,20 @@ ring, 110,000 gross, a sale at cost, 20 days, and a take-10 check of 56.
   even rows only, rather than five empty cells pretending otherwise. Tiers above the
   current one are greyed, the way the progression planner greys levels you have not
   reached. Each row also shows the level its tier arrives at.
-- **The path ability and the granted feat each get a name and an effect.** Nine
-  columns across: Tier, Level, Path, Ability, Effect, Grants, Name, Effect, Stat.
+- **The path ability and the granted feat each get a name and an effect**, on two
+  ladders rather than one: *Mythic path abilities* (Tier, Level, Path, Ability, Effect,
+  Stat) and, under it, *Mythic Feats* (Tier, Level, Grants, Name, Effect). Nine columns
+  across a single table left both prose columns squeezed between seven known
+  quantities; split, each Effect gets the width the row has to spare. Tier and Level
+  head both, so a row is read across either ladder the same way.
   Both **Effect** columns are prose and read [inline formulas](formulas-and-trackers.md#inline-formulas-in-prose),
   so a path power worth `{= tier * 2}`, or one that forwards `{skill.bluff += 2}`,
   is written where the power is rather than copied to the field it lands on. A
   bonus written in a tier the character has not reached does not apply until they
   reach it — the same rule the progression planner follows.
-- **The effects fold.** Nine columns leave no room for prose, so each Effect cell
-  shows one line, cut off with an ellipsis, and the whole of it on the tooltip.
+- **The effects fold.** Even split in two, a tier row is mostly known quantities, so
+  each Effect cell shows one line, cut off with an ellipsis, and the whole of it on
+  the tooltip.
   Click one (or tab to it and press Enter) and it opens in place, pushing the rows
   below it down; click anywhere else, or press Escape, and it shuts again. One is
   open at a time, and which one is not saved with the character.
@@ -240,7 +245,9 @@ migrates into the right group using the workbook's column blocks (Class 2's bloc
 carried Wild Talent / Talent Level / Burn, so those land under Legendary Monk).
 Feature text is keyed by **class name**, not track position, so deleting or
 reshuffling tracks never loses it; a group whose class leaves the progression stays
-visible, flagged "not in progression". Everything that reads the progression —
+visible, flagged "not in progression", and carries a **×** to delete it outright once
+no track names it — the way to be rid of a class renamed or imported twice, asked
+twice because History is the only way back. Everything that reads the progression —
 spheres training, gestalt saves, the budget — updates live when a track changes.
 
 Feature cells are **multi-line** (they grow as the text wraps, so a Monk 1 or
@@ -277,6 +284,15 @@ statement about the class and not the character carrying it; the two diverge the
 a gestalt track has a gap, and each row's level cell carries a tooltip naming both
 ("character level 5 — Legendary Monk level 2"). Prefix the rule with `char:` to count
 character levels instead.
+
+**What is written in a cell belongs to the class level too**, so giving a track a level
+or taking one away carries the text with it: close the gap in a Kheshig that skips
+character level 2 and the veil picked at Kheshig 6 moves from row 7 to row 6, still on
+the level that grants it. Without that the grants move — they are computed — and the
+text does not, so a column on `1, 2, +4` comes back one row out, its picks sitting
+between the levels that grant them. Shorten a class past a level that had text and that
+cell is **parked** rather than dropped: the group's heading counts what is waiting, and
+each one returns the moment the class is that long again.
 
 Anything that is not a list of terms is handed to the same sandboxed evaluator the
 formula fields use, with `classLevel`, `charLevel` and `level` in scope — so

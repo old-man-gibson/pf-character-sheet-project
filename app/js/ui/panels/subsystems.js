@@ -148,7 +148,7 @@ export const shortType = (t) => {
 
   /**
    * The sub-system tabs with an "in use" state, keyed by tab id. The data
-   * checks live on the model (`systemTabsInUse` -- Spheres & Magic and
+   * checks live on the model (`systemTabsInUse` -- the sphere tabs and
    * Crafting included); `tagged` says a class on the Overview marks the
    * system even though nothing is typed into its tab yet.
    */
@@ -270,7 +270,7 @@ function essencePanel(ctx, model, a) {
       <p class="hint">The Veilweaving sphere condenses
         ${SP_PER_TEMP_ESSENCE} spell points into 1 temporary essence for the day.
         Those points are spent whether or not the essence is invested, so they
-        come off the total on <strong>Spheres &amp; Magic</strong>.</p>
+        come off the total on <strong>Magic Spheres</strong>.</p>
     </section>`;
   }
 
@@ -330,7 +330,7 @@ function akashicClassesPanel(a) {
             <tr><th scope="row">Pool</th>
               <td class="num">${num('akashic.essence.pool', e.pool)}</td></tr>
             ${ESSENCE_SOURCES.map(([key, label]) => (key === 'boon' && a.calc?.traditionBoon ? `<tr>
-              <th scope="row" title="The casting tradition's own pool, taken as essence rather than spell points — set on the Spheres &amp; Magic tab">
+              <th scope="row" title="The casting tradition's own pool, taken as essence rather than spell points — set on the Magic Spheres tab">
                 ${esc(label)}</th>
               <td class="num total">${a.calc.traditionBoon}</td>
             </tr>` : `<tr>

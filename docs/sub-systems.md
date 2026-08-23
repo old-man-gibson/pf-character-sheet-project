@@ -1,14 +1,18 @@
 # Sub-systems: spheres, techniques, Akashic, Maneuvers, Vancian, Psionics, cards, cooking, companions
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The modelled sub-systems, each read once off its worksheet: Spheres & Magic training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The modelled sub-systems, each read once off its worksheet: Martial and Magic Spheres training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions._
 
 ---
 
-## Spheres & Magic (training)
+## Martial and Magic Spheres (training)
 
-The Combat/Magic Training tabs are structured panels reproducing the workbook's own
-formulas (extracted from the `DUMMYFUNCTION` strings in the export and verified
-against every cached value):
+Two tabs, one subsystem: **Martial Spheres** holds the practitioner side — its classes,
+tradition, customized weapons, unarmed damage and the skill ranks talents grant — and
+**Magic Spheres** holds the casting side, its tradition and the casting numbers. Most
+characters play only one of them, and the pair that trains both ways sits at the head
+of both (see *Blended classes* below). They are structured panels reproducing the
+workbook's own Combat/Magic Training formulas (extracted from the `DUMMYFUNCTION`
+strings in the export and verified against every cached value):
 
 **Per class** (up to three per side, plus extended-page classes): pick the class
 (from the Planner), its **type** (Low/Mid/High casting, Proficient/Adept/Expert
@@ -39,7 +43,9 @@ advances as an Expert practitioner and a High caster — so caster level, practi
 DC and the spell-point pool are unchanged; what changes is that each talent is now
 counted once, on the side its **sphere** belongs to, instead of all twenty landing in
 both sphere tables. Any class can be blended (or split again) from the Blended
-checkbox on its class head.
+checkbox on its class head. The **Blended training** group heads *both* sphere tabs
+and is the same group on either — one set of rows, shown twice, so it can be read and
+edited from whichever side you are working on.
 
 **Customized weapons** — talents that arrive on several tracks at once, with one of them
 live. Every other talent source here is a list that grows and they all add up; the
@@ -269,7 +275,7 @@ naming it, so the tally counts levels reached and the ladder reports the unnamed
 owed. Armored Discipline and the Vancian techniques grant no talents and add nothing.
 
 **The prerequisite is checked, and says so when it can't be.** BAB comes off the Classes
-table, spherecasting off the Spheres & Magic types (Advanced Magic Training's mythic
+table, spherecasting off the Magic Spheres types (Advanced Magic Training's mythic
 version counts as Mid), Vancian casting off the Vancian tab, armor off the Overview's
 proficiencies. It is a note, never a lock — Bryva has had Armored Discipline for sixteen
 levels and her sheet never imported an armor proficiency, so hers reads *prerequisite
@@ -328,7 +334,7 @@ type how many temporary essence to make and the bar widens by that much — the
 temporary part of the capacity is tinted, since it is borrowed rather than granted.
 
 The points are spent whether or not the essence is ever invested, so they come off
-the caster's own pool: **Spheres & Magic** keeps *Total SP* as the character's total
+the caster's own pool: **Magic Spheres** keeps *Total SP* as the character's total
 and adds *Condensed to essence* and *Available to cast with* under it. Asking for
 more essence than the pool can pay for is **flagged rather than clamped** — both tabs
 say how many points short it falls and the number you typed is kept, so it can be
