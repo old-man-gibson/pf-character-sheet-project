@@ -12,6 +12,7 @@ import {
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
+  copyCost, packSize,
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
@@ -369,7 +370,9 @@ console.log('bundled -- the shipped packs load through the index and merge clean
     } catch { return { ok: false }; }
   };
   const base = new URL('../', import.meta.url);
-  const packs = await loadBundledExtensions(base, { fetcher });
+  // Pinned to the repository's own folder: a checkout may also hold a
+  // `private/extensions/`, and this block is about what is shipped.
+  const packs = await loadBundledExtensions(base, { fetcher, folders: ['data/extensions/'] });
   ok('five bundled packs', packs.length === 5);
   check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'deck-manipulations', 'iron-chef-ingredients']);
   const m = mergeTables(packs);
@@ -386,6 +389,38 @@ console.log('bundled -- the shipped packs load through the index and merge clean
       .some((k) => (e[k] || '') !== '')).length, 0);
   const none = await loadBundledExtensions(new URL('nowhere/', base), { fetcher });
   check('a missing index is no packs', none, []);
+}
+
+console.log('bundled -- a git-ignored folder carries what the repository will not');
+{
+  /*
+   * Two folders, one fetcher, no filesystem. What matters is that the second
+   * index is read exactly like the first, that a checkout without one is
+   * silent rather than an error, and that an id in both resolves to the
+   * later copy -- the way you correct a shipped pack you cannot edit.
+   */
+  const doc = (id, name) => ({ format: EXTENSION_FORMAT, id, name });
+  const files = {
+    'data/extensions/index.json': { extensions: [{ id: 'shipped', file: 'shipped.json' }, { id: 'both', file: 'both.json' }] },
+    'data/extensions/shipped.json': doc('shipped', 'Shipped'),
+    'data/extensions/both.json': doc('both', 'The repository copy'),
+    'private/extensions/index.json': { extensions: [{ id: 'yours', file: 'veils.json' }, { id: 'both', file: 'both.json' }] },
+    'private/extensions/veils.json': doc('yours', 'Veils'),
+    'private/extensions/both.json': doc('both', 'The corrected copy'),
+  };
+  const here = new URL('https://example.test/sheet/');
+  const serve = (present) => async (url) => {
+    const path = String(url).slice(String(here).length);
+    return present(path) && files[path] ? { ok: true, json: async () => files[path] } : { ok: false };
+  };
+
+  const all = await loadBundledExtensions(here, { fetcher: serve(() => true) });
+  check('both folders load, the repository first', all.map((e) => e.id), ['shipped', 'both', 'yours']);
+  check('an id in both is the private copy', all.find((e) => e.id === 'both').name, 'The corrected copy');
+
+  const alone = await loadBundledExtensions(here, { fetcher: serve((p) => !p.startsWith('private/')) });
+  check('no private folder is not an error', alone.map((e) => e.id), ['shipped', 'both']);
+  check('and the shipped copy stands', alone.find((e) => e.id === 'both').name, 'The repository copy');
 }
 
 console.log('spheres -- a whole sphere as a shared table, tags and all');
@@ -1117,6 +1152,22 @@ check('an entry keeps what its own text says it replaces', normalizeBlock({ kind
   options: parseMenuOptions('Gunsmith: Craft firearms. This replaces the Polish smithing insight.') }).options[0].replaces, ['Polish']);
 check('named lines keep later colons', parseNamedLines('Darkvision: sees 60 ft: really'), [{ name: 'Darkvision', text: 'sees 60 ft: really' }]);
 check('blank pack has an id and no blocks', [blankExtension({ name: 'A B' }).id, blankExtension().blocks], ['a-b', []]);
+
+console.log('copying a bundled pack -- what it costs, said before the Save');
+{
+  const veil = (i) => ({ kind: 'veil', name: `Veil ${i}`, text: 'x'.repeat(600) });
+  const small = normalizeExtension({ name: 'One class', blocks: [{ kind: 'note', name: 'A note', text: 'short' }] });
+  const big = normalizeExtension({ name: 'All the veils', blocks: Array.from({ length: 2000 }, (_, i) => veil(i)) });
+
+  check('kilobytes below a megabyte', packSize({ x: 'y'.repeat(20000) }), '20 KB');
+  ok('and megabytes above one', /^\d+\.\d MB$/.test(packSize(big)));
+
+  check('a small pack says nothing', copyCost(small), null);
+  const line = copyCost(big);
+  ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
+  ok('names the size the copy would take', line.includes(packSize(big)));
+  ok('and that editing is not what spends it', line.includes('only Save spends anything'));
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -62,13 +62,26 @@ A pack carries two kinds of thing:
 }
 ```
 
-**Where packs come from.** *Bundled* packs are listed in `data/extensions/index.json`
-and sit beside it — the same arrangement as `data/characters/`, and like it the
-published engine can ship the index empty. This repository's five bundled packs are the
-campaign's shared tables (disciplines, casting and manifesting tables, deck
-manipulations, cooking ingredients), which used to be bare files under `data/`; the
-`tools/*_ref.py` scripts now write them as packs, keeping an existing pack's header and
-bumping its revision. *Local* packs live in the visitor's browser only
+**Where packs come from.** *Bundled* packs are listed in an `index.json` and sit beside
+it, in either of two folders. `data/extensions/` is the repository's own — the same
+arrangement as `data/characters/`, and like it the published engine can ship the index
+empty. This repository's five bundled packs are the campaign's shared tables (disciplines,
+casting and manifesting tables, deck manipulations, cooking ingredients), which used to be
+bare files under `data/`; the `tools/*_ref.py` scripts now write them as packs, keeping an
+existing pack's header and bumping its revision. `private/extensions/` is the folder git
+ignores — the same bargain as `private/` characters: yours to hold, not the repository's
+to publish, so a deployment carries content the published engine will not.
+
+A pack in either folder is **fetched into memory at load and never written to storage**,
+and that is the reason to prefer one for anything large: a 4 MB catalogue that will not go
+into localStorage in every browser costs nothing at all from here. `node
+tools/pack-index.mjs` writes the index for you — it walks the folder, names anything that
+is not a pack rather than dropping it quietly, and passes over any file or folder starting
+with `_`, which is how a pack stays in the folder without being offered. An id in both
+folders resolves to the private copy, which is how you correct a bundled pack you cannot
+edit.
+
+*Local* packs are the ones that cost storage: they live in the visitor's browser only
 (`character-sheet:extensions` index, `character-sheet:ext:<id>` documents), alongside
 imported characters.
 
@@ -81,7 +94,9 @@ fields, then the discipline catalogue (below) and blocks as one small form each 
 and traits are typed one per line — `1: Fast movement, Rage`, `Darkvision: text`), or the
 whole document as JSON. The other four tables are big, regular and usually built by a
 tool, so they stay JSON-only. **Copy
-to mine** clones a bundled pack into an editable local one; **From this character…**
+to mine** clones a bundled pack into an editable local one, and says what that will cost
+when the pack is a big one -- editing the copy is free, saving it is what spends the
+storage the original was not using; **From this character…**
 lifts the open sheet's classes, race, feature groups and trackers into a new pack, which
 is how something built by hand gets shared. A pack imported with the same id as one
 already here replaces it (that is how a friend's rev 2 lands); a local pack cannot take
@@ -457,11 +472,16 @@ sequence, and without one it is alphabetical: no chakra ladder is assumed, becau
 veils' own slot lists contradict each other as an ordering (Shoulders precedes Body 34
 times and follows it 13).
 
-Write the packs somewhere git-ignored: packs are content, and content is a publisher's.
-Size is worth a look but rarely a problem — 1,496 veils in one 4.2 MB pack imports in a
-few seconds and opens for editing in 298 ms, and this app's Chromium held 49.8 MB in the
-origin before localStorage threw. Per-page packs are still the friendlier default, since a
-player switches on the chakras they use.
+Write the packs into `private/extensions/`: packs are content, content is a publisher's,
+and that folder is both git-ignored and loaded. Run `node tools/pack-index.mjs` afterwards
+and the sheet offers them on the next load — fetched into memory, never stored, which is
+what takes size off the table. *Importing* one is the different matter: 1,496 veils in a
+4.2 MB pack goes in and opens for editing in 298 ms in this app's Chromium, which held
+49.8 MB in the origin before localStorage threw, and Brave refused the same pack with a
+discipline pack after it. There is no number to design against — there is a folder that
+does not ask you for one. Per-page packs stay useful for a player who wants a single
+chakra rather than all of them; keep them beside the combined catalogue under a name
+starting with `_` and the indexer passes over them until they are wanted.
 
 **There is no bind level in a scrape.** On the wiki a bind is the template call
 `{{Chakra Bind|Belt}}`, whose only argument is the slot — checked across all 2,149 — and

@@ -735,35 +735,63 @@ export function extensionStore(storage = globalThis.localStorage) {
 /* ---------------- bundled packs ---------------- */
 
 /**
- * The packs a deployment ships: `data/extensions/index.json` lists them and
- * each is a plain extension document beside it. Missing index, missing file
- * and bad JSON all read as "none" -- the engine runs content-free.
+ * Where a deployment keeps the packs it carries, in the order they load.
  *
- * `base` is the URL `data/extensions/` resolves against; the sheet element
- * passes its own module URL, a host page can pass `document.baseURI`.
+ * `data/extensions/` is the repository's own, and ships empty of anybody
+ * else's content on purpose. `private/extensions/` is the folder git ignores
+ * -- the same bargain as `private/` characters: yours to hold, not the
+ * repository's to publish.
+ *
+ * Both are *fetched and kept in memory*, never written to storage, so a pack
+ * sitting in either costs nothing at all against the browser's storage
+ * budget. That is the point of the second one: a catalogue too big to import
+ * -- 4 MB of akashic veils will not go into localStorage in every browser --
+ * loads from here without asking for a byte of it.
  */
-export async function loadBundledExtensions(base, { fetcher = globalThis.fetch } = {}) {
+export const PACK_FOLDERS = ['data/extensions/', 'private/extensions/'];
+
+/**
+ * The packs a deployment ships: each folder's `index.json` lists them, and
+ * each pack is a plain extension document beside it. Missing index, missing
+ * file and bad JSON all read as "none" -- the engine runs content-free, and a
+ * checkout with no `private/` folder is the ordinary case, not an error.
+ *
+ * A later folder wins a tie: a pack in `private/extensions/` carrying an id
+ * the repository also ships replaces it, keeping the shipped one's place in
+ * the list. That is how you correct a bundled pack you cannot edit.
+ *
+ * `base` is the URL those folders resolve against; the sheet element passes
+ * its own module URL, a host page can pass `document.baseURI`.
+ */
+export async function loadBundledExtensions(base, { fetcher = globalThis.fetch, folders = PACK_FOLDERS } = {}) {
   if (!fetcher) return [];
   const url = (path) => new URL(path, base);
-  let index;
-  try {
-    const res = await fetcher(url('data/extensions/index.json'));
-    index = res.ok ? await res.json() : null;
-  } catch { index = null; }
-  const rows = arr(index?.extensions).filter((e) => e && (e.file || e.id));
-  const docs = await Promise.all(rows.map(async (row) => {
+
+  const readFolder = async (folder) => {
+    let index;
     try {
-      const res = await fetcher(url(`data/extensions/${row.file || `${row.id}.json`}`));
-      if (!res.ok) return null;
-      const doc = await res.json();
-      const verdict = inspectExtension(doc);
-      if (!verdict.ok) return null;
-      const ext = normalizeExtension(doc);
-      if (row.id) ext.id = slugId(row.id) || ext.id;
-      return ext;
-    } catch { return null; }
-  }));
-  return docs.filter(Boolean);
+      const res = await fetcher(url(`${folder}index.json`));
+      index = res.ok ? await res.json() : null;
+    } catch { index = null; }
+    const rows = arr(index?.extensions).filter((e) => e && (e.file || e.id));
+    return Promise.all(rows.map(async (row) => {
+      try {
+        const res = await fetcher(url(`${folder}${row.file || `${row.id}.json`}`));
+        if (!res.ok) return null;
+        const doc = await res.json();
+        const verdict = inspectExtension(doc);
+        if (!verdict.ok) return null;
+        const ext = normalizeExtension(doc);
+        if (row.id) ext.id = slugId(row.id) || ext.id;
+        return ext;
+      } catch { return null; }
+    }));
+  };
+
+  const found = (await Promise.all(arr(folders).map(readFolder))).flat().filter(Boolean);
+  const byId = new Map();
+  for (const ext of found) byId.set(ext.id, ext);
+  return [...byId.values()];
 }
 
 /* ---------------- merging the tables ---------------- */
