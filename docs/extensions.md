@@ -522,6 +522,32 @@ does not ask you for one. Per-page packs stay useful for a player who wants a si
 chakra rather than all of them; keep them beside the combined catalogue under a name
 starting with `_` and the indexer passes over them until they are wanted.
 
+**What a cut page leaves behind.** A scrape that stops mid-construct leaves marks, and
+`tidyScrapeResidue` takes out the three that turned up across the akashic veils:
+
+- **a template close with nothing that opened it.** A `{{…}}` call written across two
+  lines has its head on one and its tail on the next, and a scrape that took the second
+  without the first leaves a line reading `(Akasha Retold)}}` standing over the article
+  it was heading — 75 of the 1,496 veils began on one. That is the argument list of a
+  call whose name is gone, so the line goes. **Only where the text holds no `{{` at
+  all**: a template taken whole is content, and `{{Chakra Bind|Belt}}` is the call that
+  says which chakra a paragraph belongs to.
+- **a raw wiki link** — `[[Target|what it reads as]]` shows its second half, `[[Target]]`
+  is its own text. The markdown spellings were already handled; this is the one that
+  arrives unconverted.
+- **non-breaking spaces**, which are spaces everywhere the sheet shows them and only make
+  a word un-findable.
+
+**Text with nothing wrong with it comes back byte-identical**, which is the property that
+makes the pass safe to run over a pack full of somebody's paragraphs: it cannot quietly
+reflow fifteen hundred of them on its way to fixing a hundred. It is idempotent, so a
+second run is a no-op.
+
+`node tools/tidy-pack-text.mjs <pack.json|dir>` runs it over a pack built before the
+reader did — every text a pack holds, not only its veils — and reports what changed
+before it changes anything under `--dry`. It calls the same function the reader calls, so
+a re-scrape and a tidied-up pack come out agreeing rather than nearly agreeing.
+
 **There is no bind level in a scrape.** On the wiki a bind is the template call
 `{{Chakra Bind|Belt}}`, whose only argument is the slot — checked across all 2,149 — and
 the level is what the template works out from the veil's class list and prints as a

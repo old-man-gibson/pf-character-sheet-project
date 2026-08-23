@@ -3,7 +3,7 @@
  *  Run: node tests/paste-import.test.mjs */
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
-  splitTalentName, looksStructured, parseStructured, unwikiTables, entryDepth,
+  splitTalentName, looksStructured, tidyScrapeResidue, parseStructured, unwikiTables, entryDepth,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -1690,6 +1690,64 @@ check('label line', splitChunk("Editor's Note: Discipline Exchanges\nMore text h
 check('typed label', splitChunk('Rage (Ex): A barbarian can rage.'), { name: 'Rage', type: 'Ex', text: 'A barbarian can rage.' });
 check('title over a paragraph', splitChunk('Alternate Capstones\nWhen a character reaches 20th level she gains a capstone.'), { name: 'Alternate Capstones', type: null, text: 'When a character reaches 20th level she gains a capstone.' });
 check('plain paragraph gets a stub title', splitChunk('All of the following are class features of the warlord.').name, 'All of the following are class…');
+
+console.log('scrape residue -- what a cut page leaves behind, and what it does not');
+{
+  /*
+   * A `{{…}}` written across two lines: the scrape took the closing line and
+   * not the opening one, so what is left is the tail of a call whose name is
+   * gone. 75 of the 1,496 akashic veils opened on one.
+   */
+  const torn = '(Akasha Retold)}}\n\n*A hissing mass of shadows.*\n\nThe rest of it.';
+  check('the orphaned close goes, and the blank line it left with it',
+    tidyScrapeResidue(torn), '*A hissing mass of shadows.*\n\nThe rest of it.');
+  check('a close mid-line takes the argument list before it',
+    tidyScrapeResidue('Veil Name (Retold)}} and then prose'), 'and then prose');
+
+  /*
+   * But only where nothing opened one. A template the scrape took whole is
+   * content -- `{{Chakra Bind|Belt}}` is the call that says which chakra a
+   * paragraph belongs to, and eating it would take the bind with it.
+   */
+  const whole = '{{Chakra Bind|Belt}}\n\nBound to the belt.';
+  check('a template that was taken whole is left alone', tidyScrapeResidue(whole), whole);
+  check('and so is a close that follows one, however far down',
+    tidyScrapeResidue('{{Open}}\n\nprose\n\n(Something)}}'), '{{Open}}\n\nprose\n\n(Something)}}');
+
+  /* Wiki links, in both spellings. */
+  check('a piped link reads as its second half',
+    tidyScrapeResidue('the [[Sagitta Stellaris#New Rule: Trail|[Trail] descriptor]].'), 'the [Trail] descriptor.');
+  check('a bare one is its own text', tidyScrapeResidue('see [[Chakra Bind]] for more'), 'see Chakra Bind for more');
+
+  /* Non-breaking spaces are spaces, and only make a word un-findable. */
+  check('a non-breaking space becomes one', tidyScrapeResidue('Essence:\u00a0A weapon'), 'Essence: A weapon');
+
+  /*
+   * The one that matters most for a pass run over packs already written:
+   * text with nothing wrong with it comes back byte-identical, so the tidy
+   * cannot quietly reflow 1,500 paragraphs on its way to fixing 127.
+   */
+  const fine = '*Plain text.*\n\nA second paragraph, with trailing spaces.  \n\nA third.';
+  ok('clean text is untouched, trailing spaces and all', tidyScrapeResidue(fine) === fine);
+  check('and so is the empty string', tidyScrapeResidue(''), '');
+  check('null reads as empty', tidyScrapeResidue(null), '');
+
+  // Idempotent: running it twice is running it once.
+  check('twice is once', tidyScrapeResidue(tidyScrapeResidue(torn)), tidyScrapeResidue(torn));
+
+  /* And it is wired into the reader, not only exported for the tool. */
+  const doc = [
+    '# Veils', '', '---', '', '## Veils', '', '### Torn Veil', '',
+    // Three field lines is what `looksStructured` takes as past coincidence.
+    '* **Shapeable Slot(s):** Belt',
+    '* **Descriptors:** Acid',
+    '* **Source:** A Compilation p. 1', '',
+    '(Akasha Retold)}}', '', 'The veil does a thing.',
+  ].join('\n');
+  const veil = parsePaste(doc).blocks.find((b) => b.kind === 'veil');
+  ok('a veil read off a scrape comes in clean', !/\}\}/.test(veil.text));
+  check('with its text intact', veil.text, 'The veil does a thing.');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
