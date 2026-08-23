@@ -492,10 +492,12 @@ function feats(model, add) {
   const trad = c.mythic?.tradition;
   if (trad) {
     for (const [key, value] of Object.entries(trad)) {
-      if (!text(value)) continue;
+      // `notes` is the map of one note per slot, not a slot of its own.
+      if (key === 'notes' || !text(value)) continue;
       add({
         kind: 'feat', title: text(value), tab: 'features',
-        sub: bits('Mythic tradition', key.replace(/(\d)$/, ' $1')), keys: 'tradition boon drawback',
+        sub: bits('Mythic tradition', key.replace(/(\d)$/, ' $1'), text(trad.notes?.[key])),
+        keys: 'tradition boon drawback',
       });
     }
   }

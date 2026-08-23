@@ -89,6 +89,8 @@ export function describeSource(path) {
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'gear':
     case 'other': return `gear ${nth(a)}`;
+    case 'gearNote':
+    case 'otherNote': return `gear ${nth(a)}, description`;
     case 'talent':
     case 'bonusTalent': return `a ${a} talent`;
     case 'tradition': return `${a} tradition`;

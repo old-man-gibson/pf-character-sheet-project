@@ -746,6 +746,10 @@ function extractHp(bk) {
     fcb: num(bk.cell(CI, 19, 10)),
     ability2: bk.cell(CI, 19, 12),
     toughness: num(bk.cell(CI, 20, 10)),
+    // Beside Toughness, and the last part of the workbook's own HP sum. It
+    // is empty on every sheet converted so far, which is exactly why it was
+    // missed: the total was kept and the parts that made it were not.
+    misc: num(bk.cell(CI, 20, 12)),
     initiative: num(bk.cell(CI, 15, 9)),
     initAbility: bk.cell(CI, 15, 10),
     initAbility2: bk.cell(CI, 15, 11),

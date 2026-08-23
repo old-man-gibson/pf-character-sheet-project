@@ -698,8 +698,16 @@ export function proseSources(model) {
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
-  (d.equipment?.gear || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o)));
-  (d.equipment?.other || []).forEach((g, i) => (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o)));
+  // An item's Other columns and the description on its card: a ring that
+  // grants a pool can size it where the ring is written down.
+  (d.equipment?.gear || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o));
+    push(`gearNote:${i}`, g.note);
+  });
+  (d.equipment?.other || []).forEach((g, i) => {
+    (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o));
+    push(`otherNote:${i}`, g.note);
+  });
   // Everything a player writes on a training side reads {…}: the talent
   // itself, the note beside it, the talents a tradition or a feat handed
   // over, and the drawbacks -- a locus priced in mana or a pool sized off

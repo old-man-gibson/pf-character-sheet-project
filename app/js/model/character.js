@@ -74,7 +74,9 @@ import {
   removeCustomization, setBlended, setCustomizationActive, setCustomizationRule,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
-import { recomputeEquipment, recomputeUnarmed, weaponHandles } from './stats/attacks.js';
+import {
+  recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
+} from './stats/attacks.js';
 import {
   applyDamage, applyHealing, availableConditions, conditionState, healDamage, hpMax, hpState,
   meterSpec, meterStyle, mythicHp, resolveAcBonuses, resolveDefenceBonuses, restRefresh,
@@ -498,6 +500,7 @@ export class Character {
 
   // stats/attacks.js
   weaponHandles(...a) { return weaponHandles(this, ...a); }
+  setGearColumns(...a) { return setGearColumns(this, ...a); }
   #recomputeEquipment(...a) { return recomputeEquipment(this, ...a); }
   #recomputeUnarmed(...a) { return recomputeUnarmed(this, ...a); }
 

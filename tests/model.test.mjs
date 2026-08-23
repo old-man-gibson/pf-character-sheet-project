@@ -26,6 +26,7 @@ import {
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
+  gearColumnCount, gearColumnInUse,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -294,6 +295,75 @@ console.log('base attack bonus -- the class table, gestalt-style');
   check('an unexplained BAB is pinned as an override', [odd.data.attack.babBase, odd.data.attack.babOverride, odd.data.attack.bab], [0, 7, 7]);
   const again = new Character(JSON.parse(JSON.stringify(odd.toJSON())));
   check('and stays pinned across a save', again.data.attack.bab, 7);
+
+  // Being beaten is counted, because that is the only reason moving one of
+  // these dropdowns can leave the sheet exactly as it was.
+  const s = new Character(load('saburo'));
+  const wizard = s.data.classes.findIndex((x) => /Wizard/.test(x.name || ''));
+  check('the half-BAB Wizard is beaten at every level it runs',
+    s.data.classes[wizard].gestaltBeaten.bab, s.data.classes[wizard].gestaltBeaten.levels);
+  check('and the full-BAB Samurai at none', s.data.classes[0].gestaltBeaten.bab, 0);
+}
+
+console.log('hit points -- the class table, the same way');
+{
+  /*
+   * The workbook worked the maximum out on Character Info and this sheet
+   * only kept the answer, which is why hit points were the one number on the
+   * page that never moved when the classes under them did. The sum is the
+   * workbook's own: the best hit die on each level, the hit-point ability at
+   * every level, the favoured-class points, Toughness, the mythic tiers.
+   */
+  for (const [id, hp] of [['angou', 550], ['bryva', 430], ['narockro', 160], ['nico', 230], ['saburo', 111]]) {
+    const c = new Character(load(id));
+    check(`${id}: computed, not pinned`, [c.data.hp.base, c.data.hp.totalOverride, c.hpMax],
+      [hp, null, hp]);
+  }
+
+  // Fifteen levels of d8 at maximum, Con +6 on each of them, and a
+  // Spheremaster's four a tier over five tiers.
+  const n = new Character(load('nico'));
+  check('the parts add up the way the sheet says they do',
+    [n.data.gestalt.hdTotal, n.data.gestalt.hp.abilityMod, n.mythicHp], [120, 6, 20]);
+
+  // A hit die is a field now, and the total follows it -- which was the whole
+  // complaint: HD was a read-out, so nothing downstream of it could move.
+  n.setItem('classes', 0, 'hd', 12);
+  check('raising a hit die raises the maximum', [n.data.gestalt.hpPerLevel, n.hpMax], [12, 290]);
+  n.setItem('classes', 0, 'hd', 8);
+  check('and lowering it puts it back', n.hpMax, 230);
+
+  // The other parts, each worth what the workbook's formula says.
+  n.set('hp.toughness', 1);
+  check('Toughness is per level', n.hpMax, 245);
+  n.set('hp.fcb', 7);
+  check('favoured class HP is not', n.hpMax, 252);
+  n.set('hp.misc', 3);
+  check('and misc is flat', n.hpMax, 255);
+  n.set('hp.toughness', 0);
+  n.set('hp.fcb', 0);
+  n.set('hp.misc', 0);
+
+  // Pinned and unpinned, the same arrangement as the base attack bonus.
+  n.set('hp.totalOverride', 300);
+  check('a pinned total wins', [n.data.hp.total, n.data.hp.base, n.hpMax], [300, 230, 300]);
+  const saved = new Character(JSON.parse(JSON.stringify(n.toJSON())));
+  check('and survives a save', saved.hpMax, 300);
+  n.set('hp.totalOverride', null);
+  check('cleared, the class table takes it back', n.hpMax, 230);
+
+  // A sheet whose classes cannot explain its hit points keeps them, which is
+  // what every rolled-HP character depends on.
+  const rolled = new Character({ ...load('nico'), hp: { ...load('nico').hp, total: 187 } });
+  check('an unexplained total is pinned as an override',
+    [rolled.data.hp.base, rolled.data.hp.totalOverride, rolled.hpMax], [230, 187, 187]);
+
+  // Energy Drain is not in the base: the condition already takes five off the
+  // maximum for each negative level, and twice would be twice.
+  const drained = new Character(load('nico'));
+  drained.set('conditions.Energy Drain', 2);
+  check('negative levels come off once', drained.conditionState.adjusted.hp, 220);
+  check('and leave the base alone', drained.data.hp.base, 230);
 }
 
 console.log('carry capacity follows Strength');
@@ -2074,14 +2144,24 @@ console.log('mythic tier, HP, tradition and stat picks');
   s.set('mythic.tierOverride', null);
   check('cleared override falls back to auto', s.data.identity.mythicTier, 1);
 
-  // Bonus HP per tier on top of the normal maximum.
+  /*
+   * Bonus HP per tier, which is part of the maximum rather than an addition
+   * to it: the workbook counted the tiers when it worked the total out, so a
+   * sheet that added them again on top was counting them twice -- which is
+   * why every imported character carried a zero in this field.
+   *
+   * Angou is a Champion at tier 10, so the path is worth 50 of his 550.
+   */
   const max0 = c.hpState.max;
-  c.set('mythic.bonusHpPerTier', 5);
-  check('bonus HP adds 5 × tier', c.hpState.max, max0 + 50);
-  check('and reaches the formula scope', c.scope().hp.total, max0 + 50);
+  check('the path fills the field in', c.mythicHp, 50);
+  check('and is already inside the maximum', max0, c.data.hp.base);
+  c.set('mythic.bonusHpPerTier', 7);
+  check('a typed figure overrides the path', c.hpState.max, max0 + 20);
+  check('and reaches the formula scope', c.scope().hp.total, max0 + 20);
   c.restoreAll();
-  check('rest fills to the boosted maximum', c.hpState.current, max0 + 50);
-  c.set('mythic.bonusHpPerTier', 0);
+  check('rest fills to the boosted maximum', c.hpState.current, max0 + 20);
+  c.set('mythic.bonusHpPerTier', null);
+  check('cleared, the path takes it back', c.hpState.max, max0);
 
   // Tradition extracted as slots, not junk ability rows.
   const tr = c.data.mythic.tradition;
@@ -2358,6 +2438,58 @@ console.log('equipment: weapons, armor, load');
   check('worsening ACP lowers Acrobatics', b.data.skills.find((s) => s.name === 'Acrobatics').bonus, bonus0 - 3);
   b.set('equipment.armor.acp', -3);
   check('restored', b.data.skills.find((s) => s.name === 'Acrobatics').bonus, bonus0);
+}
+
+console.log('gear -- the table is as wide as it needs to be, and every item opens out');
+{
+  /*
+   * Three typed bonuses and four Other columns is how wide the workbook's
+   * Equipment sheet happened to be, never a rule. The count is the longest
+   * row in the list, so the rows are their own answer -- nothing is stored
+   * to keep in step with them, and a document saved by an older build
+   * reports exactly the columns it has.
+   */
+  const c = new Character(load('nico'));
+  const gear = () => c.data.equipment.gear;
+  const other = () => c.data.equipment.other;
+  check('the import is three and four', [gearColumnCount(gear(), 'bonuses'), gearColumnCount(gear(), 'others')], [3, 4]);
+
+  c.setGearColumns('equipment.gear', 'bonuses', 1);
+  check('a fourth bonus lands on every row',
+    [gearColumnCount(gear(), 'bonuses'), new Set(gear().map((g) => g.bonuses.length)).size], [4, 1]);
+  check('and it is an empty pair, not a hole',
+    gear()[0].bonuses[3], { value: null, type: null });
+
+  // The two lists are two tables: widening one leaves the other alone.
+  check('other items keep their own width', gearColumnCount(other(), 'bonuses'), 3);
+
+  c.setGearColumns('equipment.gear', 'bonuses', -1);
+  check('and dropping it takes it off every row', gearColumnCount(gear(), 'bonuses'), 3);
+
+  // The floor: a table with no columns has nothing to fill in.
+  for (let n = 0; n < 6; n++) c.setGearColumns('equipment.gear', 'others', -1);
+  check('never fewer than one', gearColumnCount(gear(), 'others'), 1);
+
+  // Whether the last column is in use is what decides if dropping it asks
+  // twice, so it has to notice either box of a bonus pair.
+  c.setItem('equipment.gear', 0, 'others.0', 'Resist fire 10');
+  check('a written Other counts as in use', gearColumnInUse(gear(), 'others'), true);
+  c.setItem('equipment.gear', 0, 'others.0', '');
+  check('and an emptied one does not', gearColumnInUse(gear(), 'others'), false);
+  c.setItem('equipment.gear', 0, 'bonuses.2.type', 'Enhancement');
+  check('a bonus type alone is enough', gearColumnInUse(gear(), 'bonuses'), true);
+  c.setItem('equipment.gear', 0, 'bonuses.2.type', null);
+  c.setItem('equipment.gear', 0, 'bonuses.2.value', 2);
+  check('and so is a value alone', gearColumnInUse(gear(), 'bonuses'), true);
+
+  // The description on an item's card is prose like the rest of the sheet.
+  c.setItem('equipment.other', 0, 'note', 'Adds {circlet.cha = 3} to Charisma checks.');
+  check('an item description defines a name', c.scope().circlet.cha, 3);
+  check('and says which item it came from',
+    c.audit().find((r) => r.name === '{circlet.cha}').where, 'gear 1, description');
+  const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('the widened table survives a save', gearColumnCount(saved.data.equipment.gear, 'bonuses'), 3);
+  check('and so does the description', saved.scope().circlet.cha, 3);
 }
 {
   // Carried weight reconciles and follows item weights.
@@ -5668,6 +5800,97 @@ console.log('primordia -- the choice is one thing, the writing beside it another
   check('and none of the ladder', 'calc' in saved.primordia, false);
 }
 
+console.log('primordia -- the name the rules gave, and the note beside it');
+{
+  /*
+   * The ladder is four columns: the level, what the rules hand over, what was
+   * taken for it, and a note. A level the rules settle themselves carries its
+   * own name in the third, so the player is not asked to copy it across from
+   * the sentence beside it.
+   */
+  const c = new Character(load('nico'));
+  check('Keen Mind (Spheres) is the technique', c.data.identity.primordiaTechnique, 'Keen Mind (Spheres)');
+  const at = (lvl) => c.data.primordia.calc.rows.find((r) => r.level === lvl);
+  check('1st names both of the things it hands over',
+    at(1).auto, 'Divination sphere + Practiced Seer');
+  check('3rd and 5th name the talent', [at(3).auto, at(5).auto],
+    ['Detect Spellcaster', 'Fast Divinations']);
+  check('a level that only offers a choice names nothing', at(7).auto, '');
+  check('and the name a row shows is the rules\' until something is typed',
+    [at(3).name, at(7).name], ['Detect Spellcaster', '']);
+  c.set('primordia.picks.3', 'Sense Divination');
+  check('typed over, the name is the player\'s', [at(3).name, at(3).auto],
+    ['Sense Divination', 'Detect Spellcaster']);
+
+  /*
+   * A grant the player chooses is a choice even where the rules name the
+   * sphere it comes from. Light Body's 1st hands over two things at once: a
+   * feat the rules name outright, and an Athletics package the player picks.
+   * The row shows the one and asks for the other, and it is the package the
+   * sphere skill rows go looking for -- so the Acrobatics row, which either
+   * package satisfies, is met while the rest wait on the pick.
+   */
+  const s = new Character(load('saburo'));
+  const light = s.data.primordia.calc.rows.find((r) => r.level === 1);
+  check('Light Body\'s 1st names its feat and asks for its package',
+    [light.auto, light.pick?.label], ['Unarmed Combatant', 'Package']);
+  const acro = s.trainingSkillRanks.find((r) => r.skill === 'Acrobatics');
+  const swim = s.trainingSkillRanks.find((r) => r.skill === 'Swim');
+  check('so the package is a choice, not a settled talent',
+    [acro.state, swim.state], ['met', 'unknown']);
+
+  // The note is its own column and takes formulas, like every other note.
+  c.set('primordia.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
+  check('a row note defines a name', c.scope().seer.range, 150);
+  check('and says where it came from',
+    c.audit().find((r) => r.name === '{seer.range}').where, 'Primordia notes, level 5');
+  check('the picks are untouched by it', c.data.primordia.picks[5], undefined);
+  const kept = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and it survives a save', kept.scope().seer.range, 150);
+}
+
+console.log('mythic tradition -- a note beside each slot');
+{
+  const c = new Character(load('nico'));
+  const tr = c.data.mythic.tradition;
+  check('the seven slots are still seven', Object.keys(tr).filter((k) => k !== 'notes').length, 7);
+  check('and the notes are a map of their own', typeof tr.notes, 'object');
+  c.set('mythic.tradition.notes.boon1', 'Leaves {teeth.hp = floor(hp.total / 4)} behind.');
+  check('a slot note defines a name', c.scope().teeth.hp, Math.floor(c.data.hp.total / 4));
+  check('and says where it came from',
+    c.audit().find((r) => r.name === '{teeth.hp}').where, 'a mythic tradition note');
+  // The notes map is a sibling of the slots, not an eighth slot: anything
+  // walking the tradition by key has to see seven names, not seven and a map.
+  check('nothing reads the map as a slot',
+    c.scopeSources?.().some?.((s) => s.location === 'mythicTradition:notes') ?? false, false);
+}
+
+console.log('feats -- every feat takes a note, and the note takes formulas');
+{
+  const c = new Character(load('nico'));
+  const groups = c.data.featGroups || [];
+  check('every entry in every group has the field',
+    groups.every((g) => (g.entries || []).every((e) => e.note !== undefined)), true);
+  check('and a group added now has it too', (() => {
+    c.listAdd('featGroups', { name: 'Test', entries: [] });
+    const gi = c.data.featGroups.length - 1;
+    c.listAdd(`featGroups.${gi}.entries`, { name: 'A feat', detail: '', note: '' });
+    return c.data.featGroups[gi].entries[0].note;
+  })(), '');
+
+  c.setItem('featGroups.0.entries', 0, 'note', 'Crafts at {tech.dc = 10 + level + int.mod}.');
+  check('a feat note defines a name', c.scope().tech.dc, 10 + 15 + c.data.abilities.int.totalMod);
+  check('and says which group it is in',
+    c.audit().find((r) => r.name === '{tech.dc}').where, 'a feat’s note, group 1');
+
+  // The granted feats have carried this column all along and were never
+  // walked, so a name defined in one went nowhere.
+  c.set('grantedFeats.specialty.note', 'Once per day, {villain.uses = 1 + floor(level / 5)}.');
+  check('a granted feat\'s note defines one too', c.scope().villain.uses, 1 + 3);
+  check('under its own label',
+    c.audit().find((r) => r.name === '{villain.uses}').where, 'a granted feat’s note');
+}
+
 console.log('psionics -- five curves, chosen by what they reach at level 20');
 {
   const t = psionicTables();
@@ -6311,8 +6534,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   c.set('cardcasting.mods.tightHand', true);
   check('Tight Hand caps the hand at 3 + Loaded Hand', c.data.cardcasting.calc.handMax, 3);
   c.set('cardcasting.mods.lifeboundDeck', true);
-  const hp = c.data.hp.total + c.mythicHp;
-  check('Lifebound is HP / 3 / deck size, at least 1', c.data.cardcasting.calc.lifebound, Math.max(1, Math.floor(hp / 3 / 54)));
+  check('Lifebound is HP / 3 / deck size, at least 1', c.data.cardcasting.calc.lifebound, Math.max(1, Math.floor(c.hpMax / 3 / 54)));
   c.set('cardcasting.mods.tightHand', false);
   c.set('cardcasting.mods.lifeboundDeck', false);
   c.setItem('cardcasting.cards', 0, 'qty', 20);
@@ -6634,7 +6856,7 @@ console.log('companions -- a familiar is its master, halved');
   const f = c.data.familiar;
   // The worksheet's own cached numbers for Angou: HP 275, HD 20, BAB 20, Int 15,
   // saves 12, Acrobatics 20 from the master's ranks.
-  check('half the master\'s hit points', f.calc.hpMax, Math.floor((c.data.hp.total + c.mythicHp) / 2));
+  check('half the master\'s hit points', f.calc.hpMax, Math.floor(c.hpMax / 2));
   check('the master\'s level and BAB', [f.calc.level, f.calc.hd, f.calc.bab], [20, 20, c.data.attack.bab]);
   check('Intelligence off the familiar table at 20th', f.calc.scores.int.total, 15);
   check('natural armour off the table at 20th', f.calc.tableNatural, 10);
@@ -6650,7 +6872,7 @@ console.log('companions -- a familiar is its master, halved');
   check('touch leaves the natural armour out', c.data.familiar.calc.touch, 10 + 3 + 2);
   check('CMD takes the size the other way', c.data.familiar.calc.cmd, 10 + c.data.attack.bab + 0 + 3 - 2);
   c.set('familiar.protector', true);
-  check('a Protector at 11th has double', c.data.familiar.calc.hpMax, Math.floor((c.data.hp.total + c.mythicHp) / 2) * 2);
+  check('a Protector at 11th has double', c.data.familiar.calc.hpMax, Math.floor(c.hpMax / 2) * 2);
   c.set('familiar.masterLevelPenalty', 3);
   check('the master-level penalty lowers the level and the table row', [c.data.familiar.calc.level, c.data.familiar.calc.scores.int.total], [17, 14]);
   c.set('familiar.scores.int.base', 20);

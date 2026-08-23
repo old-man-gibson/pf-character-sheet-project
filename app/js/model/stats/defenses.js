@@ -18,6 +18,7 @@ import {
 } from '../../tracker-style.js';
 import { emit } from '../events.js';
 import { forwarded } from '../scope.js';
+import { mythicHpPerTier } from '../progression.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock } from '../util.js';
 
@@ -308,15 +309,21 @@ export function availableConditions(model) {
  * The source sheets only record a maximum, so play state is initialised to
  * full the first time it is needed and then tracked here.
  */
-/** Bonus hit points from mythic tiers (bonus HP/tier × tier). */
+/**
+ * Bonus hit points from mythic tiers (bonus HP/tier × tier).
+ *
+ * A component of `hp.base` rather than something added on top of it, since
+ * the class table started working the whole maximum out; it stays a getter of
+ * its own because the hit-points panel names it separately, and because a
+ * sheet whose total is pinned still wants to say what the tiers were worth.
+ */
 export function mythicHp(model) {
-  return (Number(model.data.mythic?.bonusHpPerTier) || 0)
-    * (Number(model.data.identity?.mythicTier) || 0);
+  return (Number(model.data.identity?.mythicTier) || 0) * mythicHpPerTier(model.data);
 }
 
 /**
- * The maximum: the sheet's own total, the mythic tiers' bonus, and whatever
- * a feature forwards here with `{hp.total += ...}`.
+ * The maximum: the total the class table came to (or the one pinned over it),
+ * and whatever a feature forwards here with `{hp.total += ...}`.
  *
  * One getter rather than the same sum written out at every place that needs
  * it -- the table, the companions' master block, the deck's lifebound cards,
@@ -324,7 +331,7 @@ export function mythicHp(model) {
  * points the character has.
  */
 export function hpMax(model) {
-  return (Number(model.data.hp?.total) || 0) + model.mythicHp + forwarded(model, 'hp.total');
+  return (Number(model.data.hp?.total) || 0) + forwarded(model, 'hp.total');
 }
 
 export function hpState(model) {

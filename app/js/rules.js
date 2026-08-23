@@ -514,7 +514,9 @@ export const PRIMORDIA_TECHNIQUES = [
           talent: true,
           pick: { label: 'Package', placeholder: '(leap) or (run)', options: ['(leap)', '(run)'] },
         },
-        { text: 'Unarmed Combatant as a bonus feat', feat: true, cite: 'EitR' },
+        {
+          text: 'Unarmed Combatant as a bonus feat', feat: true, name: 'Unarmed Combatant', cite: 'EitR',
+        },
       ],
       3: [{ text: 'Wall Stunt as a bonus talent', talent: true, name: 'Wall Stunt' }],
       5: [{ text: 'Air Stunt (legendary) as a bonus talent', talent: true, name: 'Air Stunt' }],
@@ -538,6 +540,7 @@ export const PRIMORDIA_TECHNIQUES = [
           text: 'Psionic Talent as a bonus feat — its power points may only be spent on '
             + 'Clairsentience powers',
           feat: true,
+          name: 'Psionic Talent',
         },
         {
           text: 'One Clairsentience power added to your powers known',
@@ -549,6 +552,7 @@ export const PRIMORDIA_TECHNIQUES = [
         {
           text: 'Psionic Talent as a bonus feat again — again restricted to Clairsentience',
           feat: true,
+          name: 'Psionic Talent',
         },
         {
           text: 'One Clairsentience power added to your powers known',
@@ -575,8 +579,8 @@ export const PRIMORDIA_TECHNIQUES = [
     talents: { side: 'magic', sphere: 'Divination' },
     grants: {
       1: [
-        { text: 'Divination sphere as a bonus talent', talent: true },
-        { text: 'Practiced Seer as a bonus feat', feat: true },
+        { text: 'Divination sphere as a bonus talent', talent: true, name: 'Divination sphere' },
+        { text: 'Practiced Seer as a bonus feat', feat: true, name: 'Practiced Seer' },
       ],
       3: [{ text: 'Detect Spellcaster as a bonus talent', talent: true, name: 'Detect Spellcaster' }],
       5: [{ text: 'Fast Divinations as a bonus talent', talent: true, name: 'Fast Divinations' }],
@@ -623,11 +627,12 @@ export const PRIMORDIA_TECHNIQUES = [
     name: 'Armored Discipline',
     prereq: { key: 'armor', text: 'Medium or Heavy Armor Proficiency' },
     grants: {
-      1: [{ text: 'Endurance and Armor Adept as bonus feats', feat: 2 }],
+      1: [{ text: 'Endurance and Armor Adept as bonus feats', feat: 2, name: 'Endurance, Armor Adept' }],
       3: [{
         text: 'Armor Trick as a bonus feat. Armor crafted for you to wear can also be '
           + 'upgraded with two different armor modifications.',
         feat: true,
+        name: 'Armor Trick',
       }],
       5: [{
         text: 'Armor Focus (Medium) or Armor Focus (Heavy) as a bonus feat',
@@ -908,10 +913,54 @@ export function tierAtLevel(level) {
   return 0;
 }
 
-/** Bonus hit points per tier by path (Mythic Adventures). */
+/**
+ * Bonus hit points per tier by path.
+ *
+ * The first six are Mythic Adventures'; the rest are the campaign's own, read
+ * off the workbook's `MythicPathLookup` table the same way `tierAtLevel` was
+ * read off its Mythic tab. A path this table has no row for contributes
+ * nothing until the player types a number into Bonus HP / tier.
+ */
 export const MYTHIC_PATH_HP = {
   Champion: 5, Guardian: 5, Marshal: 4, Trickster: 4, Archmage: 3, Hierophant: 3,
+  Bound: 3, Genius: 3, Gifted: 4, 'Living Saint': 4, Mystic: 3, Overmind: 3,
+  'Reluctant Hero': 4, Spheremaster: 4, Stranger: 4,
 };
+
+/**
+ * The maximum hit points the class table comes to.
+ *
+ * The workbook worked this out on Character Info and the sheet only kept the
+ * answer, which is why hit points were the one number on the page that never
+ * moved when the classes under them did. The parts, in the workbook's own
+ * order:
+ *
+ *   - `perLevel`: the hit die rolled at each character level. Gestalt takes
+ *     the best among the classes present, which is what the Planner's
+ *     "HP/ Level" column held, and this campaign takes it at maximum.
+ *   - the favoured-class points, whole, not per level.
+ *   - the hit-point ability's modifier at every level -- twice over on a
+ *     sheet that names a second one.
+ *   - Toughness, and any miscellany, per level and flat respectively.
+ *   - the mythic path's bonus for each tier reached.
+ *
+ * Negative levels are deliberately not here: the Energy Drain condition
+ * already takes five hit points off the maximum for each one, and a number
+ * subtracted in both places is subtracted twice.
+ */
+export function hitPointBase({
+  perLevel = [], level = 0, abilityMod = 0, fcb = 0, toughness = 0, misc = 0,
+  mythicTier = 0, mythicHpPerTier = 0,
+} = {}) {
+  const levels = Math.max(0, Math.floor(Number(level) || 0));
+  const dice = perLevel.slice(0, levels).reduce((n, hd) => n + (Number(hd) || 0), 0);
+  return dice
+    + (Number(fcb) || 0)
+    + (Number(abilityMod) || 0) * levels
+    + (Number(toughness) || 0) * levels
+    + (Number(misc) || 0)
+    + (Number(mythicTier) || 0) * (Number(mythicHpPerTier) || 0);
+}
 
 /** Mythic ability-score picks: +2 at every even tier, assignable like ABP. */
 export const MYTHIC_STAT_TIERS = [2, 4, 6, 8, 10];
