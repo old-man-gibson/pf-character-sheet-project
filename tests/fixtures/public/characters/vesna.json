@@ -791,6 +791,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -823,6 +824,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -855,6 +857,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -887,6 +890,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -919,6 +923,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -951,6 +956,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -983,6 +989,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -1015,6 +1022,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1047,6 +1055,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1079,6 +1088,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1111,6 +1121,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1143,6 +1154,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -1175,6 +1187,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1207,6 +1220,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -1239,6 +1253,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -1271,6 +1286,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1303,6 +1319,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -1335,6 +1352,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1367,6 +1385,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1399,6 +1418,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1431,6 +1451,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1463,6 +1484,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1495,6 +1517,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1527,6 +1550,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1559,6 +1583,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1591,6 +1616,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1623,6 +1649,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1655,6 +1682,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1687,6 +1715,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1719,6 +1748,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1751,6 +1781,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1783,6 +1814,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1815,6 +1847,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -1847,6 +1880,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -1879,6 +1913,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1911,6 +1946,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   },
   {
@@ -1943,6 +1979,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -1975,6 +2012,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -2007,6 +2045,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -2039,6 +2078,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -2071,6 +2111,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -2103,6 +2144,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 8
   },
   {
@@ -2135,6 +2177,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 6
   },
   {
@@ -2167,6 +2210,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -2199,6 +2243,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 2
   },
   {
@@ -2231,6 +2276,7 @@
    "miscError": null,
    "miscResolved": 0,
    "forwarded": 0,
+   "competence": 0,
    "abilityMod": 1
   }
  ],
@@ -3302,6 +3348,22 @@
    "spShort": 0,
    "availableSP": 0,
    "sphereRows": []
+  },
+  "guile": {
+   "classes": [],
+   "bonusTalents": [],
+   "tradition": {
+    "name": "",
+    "rank": null,
+    "entries": []
+   },
+   "operativeMod": null,
+   "spheres": [],
+   "leverageBonus": 0,
+   "leverageDaily": false,
+   "leverageSkills": [],
+   "planBonus": 0,
+   "utilityPlanBonus": 0
   }
  },
  "named": {},
