@@ -64,8 +64,8 @@ import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, select, text } from '../fields.js';
 import {
-  addButton, bigStat, exprField, itemCheck, itemNum, itemSelect, itemText, line, miniStat,
-  rowRemove, rowRemoveArmed, rowTools,
+  addButton, bigStat, collapsible, exprField, itemCheck, itemNum, itemSelect, itemText, line,
+  miniStat, rowRemove, rowRemoveArmed, rowTools,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -1782,11 +1782,29 @@ export function cardcastingPanel(model, ctx) {
     </nav>`;
     if (ctx.deckView === 'table') return `${views}<div class="grid">${tablePanel(model, ctx, p, k)}</div>`;
 
+    /*
+     * The deck view is long -- the summary, the drawback ladder, four groups
+     * of manipulations, the colour table, then the deck itself -- and most of
+     * it is settled at build time and never touched again. So every group
+     * that is a *decision already made* folds, and the fold state rides in
+     * uiPrefs with the character like every other one on the sheet. The deck
+     * table and the sideboard do not: they are the list you came here to
+     * read.
+     */
+    const wrap = (key, html) => collapsible(model, key, html);
+    // The three that head the view sit in a strip, so folding them turns three
+    // full rows into one row of pills rather than three half-empty rows. The
+    // colour table gets a strip of its own because the manipulations sit
+    // between: it is alone on its row either way, and in a strip it at least
+    // shrinks to its header instead of holding a row open.
     return `${views}<div class="grid">
-      ${deckSummaryPanel(p, k)}
-      ${deckLadderPanel(p, k)}
+      <div class="foldstrip">
+        ${wrap('deck-summary', deckSummaryPanel(p, k))}
+        ${wrap('deck-drawback', deckLadderPanel(p, k))}
+        ${deckManipulationsHead(model, p, k)}
+      </div>
       ${deckManipulationsPanel(model, p, k)}
-      ${landAttunedPanel(p, k)}
+      <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
       ${deckTablePanel(model, p, k)}
       ${sideboardPanel(model, p)}
       <section class="panel span2">
@@ -2126,18 +2144,39 @@ function deckLadderPanel(p, k) {
   }
 
   /** Deck manipulations by group, taken against what is available. */
-function deckManipulationsPanel(model, p, k) {
-    const list = 'cardcasting.manipulations';
-    const items = (p.manipulations || []).map((m, i) => ({ m, i }));
-    const groups = [...new Set(['General', 'Cooldown', 'Mana Pool', 'Specialized Mana Cards',
-      ...items.map(({ m }) => String(m.group || 'General'))])];
-    const groupOptions = groups.map((g) => [g, g]);
+/**
+ * The groups a deck's manipulations are filed under: the four the system
+ * names, and any the player invented. Both halves of the panel below want
+ * this list -- the head to build its picker, the groups to draw themselves --
+ * so it is worked out once here rather than twice.
+ */
+function manipulationGroups(p) {
+  return [...new Set(['General', 'Cooldown', 'Mana Pool', 'Specialized Mana Cards',
+    ...(p.manipulations || []).map((m) => String(m.group || 'General'))])];
+}
+
+/** What a manipulation's `requires` are called when a row is missing one. */
+const MANIP_NEED = {
+  cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana',
+  singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard',
+};
+
+/**
+ * The totals and the picker, which head the manipulations.
+ *
+ * Its own function rather than the first line of the panel below, because it
+ * is the only part of that panel that belongs in the strip at the top of the
+ * tab: folded, it is a pill beside Card casting and The drawback, while the
+ * groups it heads keep their own layout underneath. It folds on its own too
+ * -- shutting it puts the picker and the counts away without taking the
+ * groups with them, since each of those already folds for itself.
+ */
+function deckManipulationsHead(model, p, k) {
+    const groups = manipulationGroups(p);
     const left = k.manipulationsLeft ?? 0;
     const catalogue = deckManipulationCatalogue();
     const featList = (k.deckFeats || []).map((f) => f.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
-    const NEED = { cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' };
-    // One panel per group in a grid of their own, so they sit two or three
-    // abreast with room for the note. The first carries the totals.
+    const NEED = MANIP_NEED;
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
         <span class="badge ${left < 0 ? 'err' : ''}">${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
@@ -2161,12 +2200,30 @@ function deckManipulationsPanel(model, p, k) {
         for Card Shark; the field overrides that. Hover a name for its rule. Readable as
         <code>deck.manip.&lt;name&gt;</code> — <code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code> — and <code>deck.feats</code>.</p>
     </section>`;
+    return collapsible(model, 'deck-manipulations', head);
+  }
 
+  /**
+   * One panel per group of manipulations, in a column layout of their own so
+   * they sit two or three abreast with room for each note.
+   *
+   * Each folds on its own, keyed by the group's name rather than by its
+   * position, so a player who only uses Cooldown can shut the other three and
+   * have them stay shut -- and a group of their own invention folds like the
+   * four that come with the system. They need no `foldstrip`: the column
+   * layout already packs a folded one against its neighbours.
+   */
+function deckManipulationsPanel(model, p, k) {
+    const list = 'cardcasting.manipulations';
+    const items = (p.manipulations || []).map((m, i) => ({ m, i }));
+    const groups = manipulationGroups(p);
+    const groupOptions = groups.map((g) => [g, g]);
+    const NEED = MANIP_NEED;
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
-      return `<section class="panel">
-        <h3>${esc(g)}${taken ? `<span class="badge">${taken} taken</span>` : ''}</h3>
+      return collapsible(model, `deck-manip-${slug(g)}`, `<section class="panel">
+        <h3>${esc(g)} ${taken ? `<span class="badge">${taken} taken</span>` : ''}</h3>
         ${rows.length ? `<div class="tablewrap"><table class="manips"><thead><tr>
           <th>Manipulation · note</th><th style="width:3.4rem">Taken</th><th></th>
         </tr></thead><tbody>
@@ -2194,9 +2251,9 @@ function deckManipulationsPanel(model, p, k) {
   }).join('')}
         </tbody></table></div>` : '<p class="empty">None listed.</p>'}
         <div style="margin-top:6px">${addButton(list, `Add to ${g}`, { group: g, name: '', note: '', count: 1 })}</div>
-      </section>`;
+      </section>`);
     }).join('');
-    return `${head}<div class="span2 grid manipgrid">${panels}</div>`;
+    return `<div class="span2 grid manipgrid">${panels}</div>`;
   }
 
   /** Land-attuned magic: which spheres each colour covers, and which are attuned. */

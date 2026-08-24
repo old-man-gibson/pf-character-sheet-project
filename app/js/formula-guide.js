@@ -46,7 +46,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
 const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon']);
 const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves']);
-const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed']);
+const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed',
+  'operative', 'sphere']);
 const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed']);
 
 /** The groups, in the order the browser shows them. */
@@ -58,7 +59,7 @@ export const VALUE_SECTIONS = [
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill total, by its slugged name.' },
-  { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck.' },
+  { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck, and each skill sphere.' },
   { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion or eidolon, when the character has one.' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },

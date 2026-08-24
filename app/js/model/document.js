@@ -27,6 +27,7 @@ import {
 import { COMPANION_DERIVED, importAnimalCompanion } from './subsystems/companions.js';
 import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
+import { GUILE_DERIVED, normalizeGuileTraining } from './subsystems/guile.js';
 import { MANEUVER_DERIVED, importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
 import { PRIMORDIA_DERIVED } from './subsystems/primordia.js';
 import { PSIONIC_DERIVED, importPsionics } from './subsystems/psionics.js';
@@ -1395,6 +1396,13 @@ export function normalise(model) {
   const emptyTrainingClass = (cls) => !cls.type && !cls.talentsPerLevel && !cls.mod1 && !cls.mod2
     && !cls.blended && cls.classLevelsOverride == null
     && (cls.levels || []).every((lv) => !lv.talent && !lv.sphere && !lv.notes);
+  // Spheres of Guile: a third training side, and the only one no workbook
+  // ever had a tab for. It is conjured empty rather than imported, so every
+  // character has somewhere for skill talents to go the moment the tab is
+  // shown, and an untouched one stays empty and off the bar.
+  if (!d.training || typeof d.training !== 'object') d.training = {};
+  d.training.guile = normalizeGuileTraining(d.training.guile);
+
   if (d.training?.combat) {
     const combat = d.training.combat;
     if (!Array.isArray(combat.customizations)) combat.customizations = [];
@@ -1465,6 +1473,12 @@ export function toDocument(model) {
       .filter((t) => t.source === 'player')
       .map(({ resolvedZones, edited, ...t }) => t),
     sheetTrackerState,
+    // The guile side sits inside `training` beside the two that predate it,
+    // so it is stripped in place rather than as a block of its own.
+    training: model.data.training && {
+      ...model.data.training,
+      guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
+    },
     akashic: stripDerived(model.data.akashic, AKASHIC_DERIVED),
     maneuvers: stripDerived(model.data.maneuvers, MANEUVER_DERIVED),
     vancian: stripDerived(model.data.vancian, VANCIAN_DERIVED),

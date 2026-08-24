@@ -65,6 +65,7 @@ import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import * as combat from './ui/panels/combat.js';
+import * as guile from './ui/panels/guile.js';
 import * as subsystems from './ui/panels/subsystems.js';
 import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -169,6 +170,7 @@ const TABS = [
   ['skills', 'Skills'],
   ['martial', 'Martial Spheres'],
   ['magic', 'Magic Spheres'],
+  ['guile', 'Guile Spheres'],
   ['features', 'Feats & Mythic'],
   ['primordia', 'Primordia'],
   ['gear', 'Equipment'],
@@ -1364,6 +1366,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'skills': return this.#skillsPanel();
       case 'martial': return this.#martialPanel();
       case 'magic': return this.#magicPanel();
+      case 'guile': return this.#guilePanel();
       case 'template': return this.#templatePanel();
       case 'systabs': return this.#systemManagerPanel();
       case 'features': return this.#featuresPanel();
@@ -1448,6 +1451,7 @@ export class CharacterSheetElement extends HTMLElement {
   #combatCtx() { return { showCells: this.#showCells }; }
 
   #martialPanel() { return combat.renderMartialPanel(this.#model); }
+  #guilePanel() { return guile.renderGuilePanel(this.#model); }
 
   #magicPanel() { return combat.renderMagicPanel(this.#model); }
 
@@ -3175,9 +3179,15 @@ export class CharacterSheetElement extends HTMLElement {
      */
     root.querySelectorAll('[data-talent-fill]').forEach((input) => {
       input.addEventListener('change', () => {
-        const [list, index] = input.dataset.item.split('|');
+        const [list, index, field] = input.dataset.item.split('|');
         const fill = JSON.parse(input.dataset.talentFill);
-        this.#model.setTalentEntry(list, Number(index), input.value, fill);
+        // The cell it was typed in is the cell it is written to. `fill` names
+        // the row's *other* columns; the talent's own comes off the binding
+        // and overrides anything the fill says, because a row can hold two
+        // talents -- a guile level has a free pick and a [utility] one -- and
+        // a fill that forgot to say which would quietly write to the wrong
+        // one. It did, once.
+        this.#model.setTalentEntry(list, Number(index), input.value, { ...fill, talent: field });
         this.#rerender(input);
       });
     });
@@ -4656,6 +4666,14 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       }
+      case 'add-guile-class':
+        this.#model.addGuileClass();
+        this.#render();
+        break;
+      case 'add-guile-sphere':
+        this.#model.addGuileSphere();
+        this.#render();
+        break;
       case 'add-customization': {
         // Named after whichever class on the sheet has none yet, since that is
         // nearly always the one meant; blank when they all have.

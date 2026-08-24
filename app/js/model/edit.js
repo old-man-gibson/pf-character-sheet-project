@@ -13,6 +13,7 @@ import { COMPANION_KINDS, companionInUse } from '../companions.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies } from './document.js';
 import { emit } from './events.js';
 import { COOKING_COURSES } from './subsystems/cooking.js';
+import { guileInUse } from './subsystems/guile.js';
 import { getPath, setPath, skillKey } from './util.js';
 
 /**
@@ -272,6 +273,7 @@ export function systemTabsInUse(model) {
   const out = {
     martial: trainingSide(d.training?.combat),
     magic: trainingSide(d.training?.magic),
+    guile: guileInUse(d.training?.guile),
     crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
       || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
     akashic: !!(d.akashic?.slots || []).length,

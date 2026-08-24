@@ -24,7 +24,7 @@
  */
 
 import { normalizeBlock, featureKey } from './extensions.js';
-import { sphereSide } from './rules.js';
+import { isGuileSphere, sphereSide } from './rules.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -111,6 +111,22 @@ const WIKIDOT_FOOTER = /^(?:Powered by Wikidot\.com|This website uses cookies\b.
 const BREADCRUMB = /\S\s»\s\S/;
 /** ...and the part of it that says the page is a sphere rather than a class. */
 const SPHERE_CRUMB = /»\s*Spheres?\s+Of\s+(?:Might|Power)\s*»/i;
+/**
+ * A breadcrumb that says "this page is a sphere".
+ *
+ * Might and Power pages carry a section of their own to say so. Spheres of
+ * Guile's do not -- its pages hang straight off the wiki's home page, so a
+ * skill sphere's breadcrumb is the site title and the sphere with nothing in
+ * between. The name has to answer for those, and it can: the sixteen are
+ * named in the engine. Only the crumb's last segment is asked, so the side
+ * menu listing every sphere by name cannot vouch for a page.
+ */
+const isSphereCrumb = (line) => {
+  const l = String(line || '');
+  if (SPHERE_CRUMB.test(l)) return true;
+  if (!BREADCRUMB.test(l)) return false;
+  return isGuileSphere(l.split('»').pop().trim());
+};
 /** A footer's navigation: short cells, tab-separated or not, and no sentences. */
 const NAVISH = (l) => !l || (!/[.!?]$/.test(l) && (l.includes('\t') ? true : words(l) <= 8));
 
@@ -288,7 +304,7 @@ export function findSegments(lines, pre = [], pageStarts = []) {
    * too, so the page has to vouch for it first.
    */
   const sphereCrumbs = [];
-  lines.forEach((l, i) => { if (SPHERE_CRUMB.test(l)) sphereCrumbs.push(i); });
+  lines.forEach((l, i) => { if (isSphereCrumb(l)) sphereCrumbs.push(i); });
   const onSpherePage = (i) => {
     if (!sphereCrumbs.length) return false;
     const page = pageStarts.filter((p) => p <= i).pop() ?? 0;
@@ -1863,9 +1879,24 @@ export function splitTalentName(raw) {
  * "...	Special	Combat Talents", and a heading is a line of its own.
  */
 const GROUP_HEADING = /^([^	]{1,40}?)\s+Talents$/i;
-/** Which side of the line a sphere sits on, from its breadcrumb. */
-const SPHERE_KIND = (crumb) => (/spheres?\s+of\s+might/i.test(crumb) ? 'combat'
-  : /spheres?\s+of\s+power/i.test(crumb) ? 'magic' : '');
+/**
+ * Which of the three lists a sphere belongs to.
+ *
+ * The breadcrumb answers for two of them -- *… » Spheres Of Might » Boxing* --
+ * but its first segment is the *site* title, "Spheres of Power Wiki Home Page",
+ * so it has to be dropped before anything is tested against it or every page on
+ * the wiki reads as a magic sphere. That is exactly what a skill sphere's
+ * breadcrumb is: the site title and the sphere, with no section between them,
+ * because Spheres of Guile's pages hang straight off the home page. So the
+ * name settles those, and it can: the sixteen are named in the engine.
+ */
+export const SPHERE_KIND = (crumb, name = '') => {
+  if (isGuileSphere(name)) return 'guile';
+  const trail = String(crumb || '').replace(/^[^»]*»/, '');
+  if (/spheres?\s+of\s+might/i.test(trail)) return 'combat';
+  if (/spheres?\s+of\s+power/i.test(trail)) return 'magic';
+  return '';
+};
 
 /**
  * A whole sphere off the Spheres of Power / Spheres of Might wiki.
@@ -1957,7 +1988,7 @@ export function readSphere(lines, pre = new Set()) {
   }
 
   const description = lead.join('\n').trim();
-  const kind = SPHERE_KIND(crumb);
+  const kind = SPHERE_KIND(crumb, name);
   const tagged = talents.filter((x) => x.tags.length).length;
   const sourced = talents.filter((x) => x.sources.length).length;
   return {

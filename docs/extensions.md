@@ -161,6 +161,10 @@ whole sphere, so a corrected copy is a copy of all of it.
   ] }
 ```
 
+`kind` is `"combat"`, `"magic"` or `"guile"` — which of the three sphere tabs' dropdowns
+the sphere joins. A page that never said is offered on all three, since a name in the wrong
+list is easier to ignore than one missing from the right one.
+
 **Base abilities are lifted out of the description.** A scraper writes them into the
 sphere's blockquote as an emphasised label — `*Destructive Blast:* As a standard action…` —
 and everything under one belongs to it until the next. They land in `abilities`, and the

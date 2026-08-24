@@ -236,6 +236,7 @@ export const GAME_SYSTEMS = [
   { id: 'spheres-of-power', label: 'Spheres of Power', tabs: ['magic'] },
   { id: 'spheres-of-might', label: 'Spheres of Might', tabs: ['martial'] },
   { id: 'champion-of-the-spheres', label: 'Champion of the Spheres', tabs: ['martial', 'magic'] },
+  { id: 'spheres-of-guile', label: 'Spheres of Guile', tabs: ['guile'] },
   { id: 'vancian', label: 'Vancian magic', tabs: ['vancian'] },
   { id: 'path-of-war', label: 'Path of War', tabs: ['maneuvers'] },
   { id: 'psionics', label: 'Psionics', tabs: ['psionics'] },
@@ -304,6 +305,168 @@ const SPHERE_SIDES = new Map([
  */
 export function sphereSide(sphere, fallback = null) {
   return SPHERE_SIDES.get(String(sphere || '').trim()) ?? fallback;
+}
+
+/* ------------------------------------------------------------------ *
+ * Spheres of Guile -- the third side.
+ *
+ * The skill spheres read like the other two from a distance and are built
+ * differently underneath. There is no practitioner level and no caster
+ * level: every number a guile sphere produces -- its save DC, its ranges,
+ * how far its talents scale -- is read off the operative's *ranks in that
+ * sphere's associated skill*. So the sphere table on the guile tab is not a
+ * second copy of Sphere CL / DC; it is the skill-rank block and the DC block
+ * fused, because in this system they are the same fact seen twice.
+ * ------------------------------------------------------------------ */
+
+export const GUILE_SPHERES = ['Artifice', 'Bluster', 'Body Control', 'Communication',
+  'Faction', 'Herbalism', 'Infiltration', 'Investigation', 'Navigation', 'Performance',
+  'Spellhacking', 'Study', 'Subterfuge', 'Survivalism', 'Vocation', 'Occultism'];
+
+const GUILE_SPHERE_SET = new Set(GUILE_SPHERES);
+
+/** Whether a name is one of the skill spheres, however it was capitalised. */
+export function isGuileSphere(sphere) {
+  return GUILE_SPHERE_SET.has(String(sphere || '').trim());
+}
+
+/**
+ * What each sphere associates itself with, in the rulebook's own words.
+ *
+ * Deliberately prose and not a list of skill rows. A sphere names a *family*
+ * -- "Craft (baskets, blacksmithing, carpentry, …)", "a single Knowledge or
+ * Lore skill" -- and which member of it a character took is a choice they
+ * make once and write down. The sheet already keeps every skill the
+ * character has, variants and all, so the pick is made from that list and
+ * this string is what the row says it has to satisfy.
+ *
+ * A sphere divided into packages lists them: gaining the sphere grants one
+ * package, and the package is what carries the associated skill. Vocation is
+ * the odd one out and says so -- it has no base ability, no associated skill
+ * and unlocks no leverage; its talents borrow whichever skill they name.
+ */
+export const GUILE_SPHERE_SKILLS = {
+  Artifice: { packages: [
+    ['Artwork', 'Artistry (choreography, literature, musical composition, or playwriting) '
+      + 'or Craft (books, calligraphy, carpentry, cloth, clothing, glass, jewelry, musical '
+      + 'instruments, paintings, pottery, sculptures, stonemasonry, tattoos, or taxidermy)'],
+    ['Fabrication', 'Craft (baskets, blacksmithing, carpentry, clockwork, cloth, clothing, '
+      + 'glass, leather, locks, mechanical, shoes, or stonemasonry)'],
+    ['Gear', 'Craft (alchemy, armor, blacksmithing, bows, clothing, firearms, leather, '
+      + 'shoes, traps, or weapons)'],
+  ] },
+  Bluster: { skill: 'Bluff or Intimidate' },
+  'Body Control': { skill: 'Escape Artist' },
+  Communication: { skill: 'Diplomacy or Linguistics' },
+  Faction: { packages: [
+    ['Retainer', 'Knowledge (local), or one other Knowledge or Profession skill that could '
+      + 'recall knowledge about members of your faction'],
+    ['Supply', 'Appraise'],
+  ] },
+  Herbalism: { packages: [
+    ['Herbal', 'Profession (herbalist)'],
+    ['Remedy', 'Heal'],
+  ] },
+  // Disable Device by default; Skilled Sneak adds Stealth, and the sphere's
+  // alternate-start drawback swaps the two round. Both are talents the player
+  // writes down, so the pick below is the last word either way.
+  Infiltration: { skill: 'Disable Device (Stealth, with Skilled Sneak or an alternate start)' },
+  Investigation: { skill: 'Sense Motive' },
+  Navigation: { packages: [
+    ['Aerial', 'Fly or Profession (pilot)'],
+    ['Nautical', 'Profession (sailor) or Swim'],
+    ['Urban', 'Acrobatics or Climb'],
+    ['Wilderness', 'Climb, Profession (guide), Profession (driver), or Survival'],
+  ] },
+  Performance: { packages: [
+    ['Act', 'Perform (act or comedy)'],
+    ['Dance', 'Perform (dance)'],
+    ['Instrumental', 'Perform (keyboard, percussion, string, or wind)'],
+    ['Lyric', 'Perform (comedy, oratory, or sing)'],
+  ] },
+  Spellhacking: { skill: 'Use Magic Device' },
+  Study: { skill: 'A single Knowledge or Lore skill' },
+  Subterfuge: { skill: 'Disguise' },
+  // Two packages, one skill between them: Dredge and Harvest both work off
+  // Survival, so the package is a choice about what the sphere *does* rather
+  // than about where its ranks land.
+  Survivalism: { skill: 'Survival', packages: [['Dredge', 'Survival'], ['Harvest', 'Survival']] },
+  Vocation: { skill: null },
+  Occultism: { skill: 'Knowledge (arcana, nature, religion, or planes)' },
+};
+
+/** The packages a sphere is divided into, or [] for one that is not. */
+export function guilePackages(sphere) {
+  return (GUILE_SPHERE_SKILLS[String(sphere || '').trim()]?.packages || []).map(([name]) => name);
+}
+
+/**
+ * What a sphere (or one of its packages) asks its associated skill to be.
+ * The package's own words where it has them, the sphere's otherwise.
+ */
+export function guileSkillHint(sphere, pkg = '') {
+  const def = GUILE_SPHERE_SKILLS[String(sphere || '').trim()];
+  if (!def) return '';
+  const named = (def.packages || []).find(([name]) => name === String(pkg || '').trim());
+  return named ? named[1] : (def.skill || '');
+}
+
+/** Int, Wis or Cha: the one score an operative's talent DCs are read off. */
+export const OPERATIVE_ABILITIES = ['Int', 'Wis', 'Cha'];
+
+/**
+ * Skill expertise: how fast an operative gains talents, by tier.
+ *
+ * Two columns rather than one, which is the shape that makes guile guile. A
+ * tier grants unrestricted talents ("Any") *and* [utility] talents on a
+ * second, faster ladder, and the two are gained in addition to each other --
+ * a 1st-level Trained operative has no free pick at all and one utility
+ * talent. The three rates already sit in TALENT_RATES because the Any column
+ * is exactly 3/4, 1/2 and 1/4 of a talent per level; the utility ladders do
+ * not fit that table, so both columns are stated here as the book prints
+ * them.
+ */
+export const EXPERTISE_TIERS = ['Virtuoso', 'Journeyman', 'Trained'];
+
+const EXPERTISE_LADDERS = {
+  Virtuoso: { any: (l) => Math.ceil(l * 3 / 4), utility: (l) => Math.floor(l / 2) },
+  Journeyman: { any: (l) => Math.floor(l / 2), utility: (l) => Math.ceil(l / 2) },
+  Trained: { any: (l) => Math.floor(l / 4), utility: (l) => Math.ceil(l / 2) },
+};
+
+/** Talents an expertise tier has granted by `level`, as {any, utility}. */
+export function expertiseTalents(tier, level) {
+  const ladder = EXPERTISE_LADDERS[String(tier || '').trim()];
+  const l = Math.max(0, Math.floor(Number(level) || 0));
+  if (!ladder || !l) return { any: 0, utility: 0 };
+  return { any: ladder.any(l), utility: ladder.utility(l) };
+}
+
+/**
+ * The two trade ranks, and what each gets from a trade tradition. A
+ * competent operative takes the automatic talents and the tradition's skill
+ * sphere; an adroit one also takes the bonus talents listed for it.
+ */
+export const TRADE_RANKS = ['Competent', 'Adroit'];
+
+/** Every trade tradition grants these outright, whichever one was chosen. */
+export const TRADE_CLASS_SKILLS = ['Craft', 'Perception', 'Perform', 'Profession'];
+/** And these two more, in a game playing with the background-skills variant. */
+export const TRADE_BACKGROUND_SKILLS = ['Artistry', 'Lore'];
+
+/** Uses of skill leverage: one, and another per three Hit Dice. */
+export function leveragePool(hitDice) {
+  return 1 + Math.floor(Math.max(0, Number(hitDice) || 0) / 3);
+}
+
+/**
+ * Close, medium and long for a sphere ability, off ranks in the associated
+ * skill rather than off a caster level -- 25 ft. + 5 ft. per 2 ranks,
+ * 100 ft. + 10 ft. per rank, 400 ft. + 40 ft. per rank.
+ */
+export function guileRanges(ranks) {
+  const r = Math.max(0, Math.floor(Number(ranks) || 0));
+  return { close: 25 + 5 * Math.floor(r / 2), medium: 100 + 10 * r, long: 400 + 40 * r };
 }
 
 /**
