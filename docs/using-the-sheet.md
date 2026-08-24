@@ -370,9 +370,9 @@ build bar, and both arrangements survive a reload and travel with an export.
 ### Marking a class's systems
 
 On the Overview's **Classes** table, the **Systems** column expands into a row of
-toggles — Spheres of Power, Spheres of Might, Champion of the Spheres, Vancian magic,
-Path of War, Psionics, Akashic, Cardcasting, the three companions, Techniques,
-Cooking, Item crafting. Marking one says "this class plays with that machinery"
+toggles — Spheres of Power, Spheres of Might, Champion of the Spheres, Spheres of Guile,
+Vancian magic, Path of War, Psionics, Akashic, Cardcasting, the three companions,
+Techniques, Cooking, Item crafting. Marking one says "this class plays with that machinery"
 before anything is typed into its tab: the tab shows *marked* in the ⚙ manager and
 joins the session view's bar. Extension-pack classes can carry these tags with them
 (see [Extensions](extensions.md)).
@@ -388,8 +388,8 @@ is not working.
 The manager lists what is off the bar **alphabetically**, in three groups:
 
 - **Hidden tabs** — the rest of the built-in tabs (Extras & Notes), the modelled
-  sub-systems (Martial Spheres, Magic Spheres, Crafting, Akashic, Maneuvers, Vancian, Psionics,
-  Template, and the three companions), and the workbook's own worksheets. A
+  sub-systems (Martial Spheres, Magic Spheres, Guile Spheres, Crafting, Akashic, Maneuvers,
+  Vancian, Psionics, Template, and the three companions), and the workbook's own worksheets. A
   sub-system that already holds the character's data is badged *in use*, so a
   character with veils sees which waiting tab has them; one a class names without
   data yet is badged *marked*; **Show** puts a tab at the end of the bar.

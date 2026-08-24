@@ -503,6 +503,53 @@ function feats(model, add) {
   }
 }
 
+/**
+ * Spheres of Guile, which the loop above cannot walk with the other two.
+ *
+ * Its class rows carry two talent slots rather than one, its tradition rows
+ * have no drawbacks to list, and its sphere rows are searchable by the skill
+ * they are associated with as well as by name -- "which sphere is my
+ * Disguise?" is a question only this system's tab can answer.
+ */
+function guileSpheres(model, add) {
+  const g = model.data.training?.guile;
+  if (!g) return;
+  for (const row of g.sphereRows || []) {
+    if (!text(row.sphere)) continue;
+    add({
+      kind: 'sphere', title: text(row.sphere), tab: 'guile',
+      value: row.dc == null ? '' : `DC ${row.dc}`,
+      sub: bits('Skill sphere', text(row.package), text(row.skill),
+        row.talents ? `${row.talents} talent${row.talents === 1 ? '' : 's'}` : ''),
+      keys: `sphere guile skill ${text(row.skill)}`,
+    });
+  }
+  for (const cl of g.classes || []) {
+    for (const lv of cl.levels || []) {
+      for (const [talent, sphere, kind] of [[lv.talent, lv.sphere, ''],
+        [lv.utilityTalent, lv.utilitySphere, '[utility]']]) {
+        if (!text(talent)) continue;
+        add({
+          kind: 'talent', title: text(talent), tab: 'guile',
+          sub: bits(text(sphere), kind, text(cl.name), lv.level ? `level ${lv.level}` : ''),
+          keys: 'talent guile skill',
+        });
+      }
+    }
+  }
+  for (const [rows, what] of [[g.bonusTalents || [], 'Bonus talent'],
+    [g.tradition?.entries || [], 'Trade tradition']]) {
+    for (const e of rows) {
+      if (!text(e.talent)) continue;
+      add({
+        kind: 'talent', title: text(e.talent), tab: 'guile',
+        sub: bits(text(e.sphere), what, text(e.source), e.utility ? '[utility]' : ''),
+        keys: 'talent guile skill',
+      });
+    }
+  }
+}
+
 /** Spheres of Power and of Might: the talents, the traditions, the numbers. */
 function spheres(model, add) {
   const t = model.data.training || {};
@@ -551,6 +598,7 @@ function spheres(model, add) {
       }
     }
   }
+  guileSpheres(model, add);
   // A customized weapon is a thing with a name and a talent list of its own,
   // and both are worth finding: "which one has Reach on it?"
   for (const block of t.combat?.customizations || []) {

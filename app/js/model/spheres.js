@@ -75,9 +75,9 @@ export function setSphereCatalogue(doc) {
   SPHERE_CATALOGUE = {
     spheres: list.map((s) => ({
       name: String(s.name || ''),
-      // 'combat' or 'magic', the two sides the sheet already counts
+      // 'combat', 'magic' or 'guile', the three sides the sheet counts
       // separately; '' when a page never said.
-      kind: s.kind === 'combat' || s.kind === 'magic' ? s.kind : '',
+      kind: ['combat', 'magic', 'guile'].includes(s.kind) ? s.kind : '',
       description: String(s.description || ''),
       abilities: (s.abilities || []).map((a) => ({
         name: String(a.name || ''), text: String(a.text || ''),
@@ -161,10 +161,10 @@ export function sphereTalent(sphere, talent) {
 
 /**
  * The spheres a picker offers: the names the engine knows, then any a pack
- * carries that it does not. `side` is 'combat', 'magic', or null for both; a
- * pack sphere whose page never said which side it was on is offered either
- * way, since a name in the wrong list is easier to ignore than one missing
- * from the right one.
+ * carries that it does not. `side` is 'combat', 'magic', 'guile', or null for
+ * all of them; a pack sphere whose page never said which side it was on is
+ * offered on every list, since a name in the wrong one is easier to ignore
+ * than one missing from the right one.
  */
 export function sphereNames(base, side = null) {
   const have = new Set((base || []).map((s) => String(s).trim().toLowerCase()));
@@ -232,14 +232,18 @@ export const basePickSphere = (talent, sphere) => {
  * only way to ask for it back.
  *
  * `fields` names the row's own columns, because they differ: a customized
- * weapon and a martial tradition have a sphere and no notes.
+ * weapon and a martial tradition have a sphere and no notes -- and a guile
+ * class's level row has *two* talents on it, the free pick and the [utility]
+ * one, so even the talent's own column has to be named rather than assumed.
  */
 export function setTalentEntry(model, path, index, value, fields = {}) {
-  const { sphere: sphereField = 'sphere', notes: notesField = null } = fields;
+  const {
+    talent: talentField = 'talent', sphere: sphereField = 'sphere', notes: notesField = null,
+  } = fields;
   const row = model.list(path)?.[index];
   if (!row || typeof row !== 'object') return model;
 
-  row.talent = String(value ?? '');
+  row[talentField] = String(value ?? '');
   const filled = [];
 
   /*
@@ -252,11 +256,11 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
    * somebody who wrote "Destruction Sphere (from the feat)" said something,
    * and it is not ours to replace.
    */
-  const base = isBasePick(row.talent)
-    ? sphereBasePick(basePickSphere(row.talent, sphereField ? row[sphereField] : null))
+  const base = isBasePick(row[talentField])
+    ? sphereBasePick(basePickSphere(row[talentField], sphereField ? row[sphereField] : null))
     : null;
   if (base) {
-    if (!/\(/.test(row.talent)) { row.talent = base.label; filled.push('talent'); }
+    if (!/\(/.test(row[talentField])) { row[talentField] = base.label; filled.push('talent'); }
     if (sphereField && !String(row[sphereField] ?? '').trim()) {
       row[sphereField] = base.sphere;
       filled.push('sphere');
@@ -267,7 +271,7 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
     }
   }
 
-  const hit = base ? null : sphereTalent(sphereField ? row[sphereField] : null, row.talent);
+  const hit = base ? null : sphereTalent(sphereField ? row[sphereField] : null, row[talentField]);
   if (hit) {
     if (sphereField && !String(row[sphereField] ?? '').trim()) {
       row[sphereField] = hit.sphere;
@@ -280,7 +284,7 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
   }
   model.recompute();
   emit(model, {
-    type: 'set-item', path, index, field: 'talent', value: row.talent, filled,
+    type: 'set-item', path, index, field: talentField, value: row[talentField], filled,
   });
   return model;
 }

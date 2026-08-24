@@ -1017,6 +1017,27 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
 .sidepanels > .panel.wide { flex: 1.5 1 400px; max-width: 70%; }
 .sidepanels > .panel.collapsed { flex: 1 1 240px; }
 
+/* A run of full-width panels that folds down into a row of pills.
+   ------------------------------------------------------------------
+   A folded panel is one line of header, so a column of folded ones spends a
+   row apiece on almost nothing. Grid tracks cannot fix that: the row is cut
+   into equal columns before anybody knows how wide a header is, so a folded
+   panel is either the whole row or a fixed fraction of it -- and at three
+   tracks a half-row panel wastes the third with nothing able to sit beside it.
+
+   So a run of them is a flex row instead, and each panel asks for the width it
+   actually needs. Open, that is the whole row, one panel per line, exactly as
+   the grid gave them. Folded, it is the width of the header and its badges,
+   and as many as fit sit side by side; the rest wrap. `min-width: 0` is what
+   lets a long header be squeezed by the ones beside it rather than forcing a
+   wrap of the whole row -- its badges spill onto a second line inside the
+   panel, which is cheaper than a second row outside it. */
+.foldstrip {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: start;
+}
+.foldstrip > .panel { flex: 1 1 100%; min-width: 0; }
+.foldstrip > .panel.collapsed { flex: 0 1 auto; }
+
 .trainclass { border: 1px solid var(--cs-line); border-radius: 6px; padding: 9px 10px; margin-bottom: 10px; }
 .trainhead {
   display: grid; gap: 8px; align-items: end; margin-bottom: 8px;
@@ -1130,9 +1151,51 @@ td.needsbase .prose-view, td.needsbase textarea {
   text-decoration: underline wavy var(--cs-bad); text-underline-offset: 3px;
 }
 
+/* ---------- Spheres of Guile ---------- */
+
+/* The skill-expertise ladder runs two talent tracks across one row, because a
+   tier grants them in addition to each other and a reader has to be able to
+   see that a level lit one, the other, or both. The rule down the middle is
+   the whole point of the layout: it says the two halves are separate ladders
+   and not two columns of one. */
+table.guileladder col.notes { width: 16%; }
+table.guileladder th.util, table.guileladder td.util:first-of-type { border-left: 1px solid var(--cs-line); }
+table.guileladder th.util { color: var(--cs-muted); }
+
+/* The sphere table: a wide row of choices on the left and derived numbers on
+   the right, so the two dropdowns get the width and everything after them is
+   sized to its digits. */
+table.guilespheres td { vertical-align: top; }
+table.guilespheres select { width: 100%; min-width: 0; }
+table.guilespheres input[type="number"] { width: 3.2rem; text-align: right; }
+table.guilespheres .req { color: var(--cs-muted); font-size: 0.68rem; line-height: 1.25; margin-top: 2px; }
+
+/* Two spheres associated with the same skill: the second never stacks its
+   ranks, it pays a competence bonus instead. Marked rather than hidden --
+   the ranks were genuinely earned and the reason they are not being paid is
+   the thing the row has to say. */
+td.dupskill select { border-left: 3px solid var(--cs-formula-strong); }
+.dupskill { color: var(--cs-formula-strong); }
+.guilespheres .was { text-decoration: line-through; color: var(--cs-muted); }
+
+/* A skill the sphere names and the Skills tab has no row for -- a row renamed
+   out from under it, nearly always. Red rather than gold: this one is a
+   mistake and the sphere is reading zero because of it. */
+td.lostskill select { border-left: 3px solid var(--cs-bad); }
+td.lostskill .req { color: var(--cs-bad); }
+
+/* The same bonus where it lands: beside the Skills tab's Spheres column, so
+   the row adds up in view rather than gaining a number from nowhere. */
+.skillcomp {
+  font-size: 0.68rem; color: var(--cs-formula-strong); margin-left: 3px; cursor: help;
+}
+
 /* ---------- collapse / system tabs / trait slots / budget ---------- */
 .panel.collapsed { padding-bottom: 8px; opacity: 0.85; }
 .panel > h3 [data-collapse] { margin-left: auto; padding: 1px 8px; }
+/* Folded, the header *is* the panel, so it keeps no gap under it for a body
+   that is not there. (It already wraps: `.panel > h3` is a flex row.) */
+.panel.collapsed > h3 { margin: 0; }
 tr.lockedslot { opacity: 0.45; }
 tr.lockedslot input, tr.lockedslot select { pointer-events: auto; }
 /* The mythic tradition: the slot is a label and the choice is a boon's name,

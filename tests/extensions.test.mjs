@@ -815,6 +815,32 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     [mrow(1).sphere, !!mrow(1).notes], ['Destruction', true]);
   d.setTalentEntry(M, 2, 'Destruction Sphere', cols);
   check('and a note already written is never overwritten', mrow(2).notes, 'my own ruling');
+
+  /*
+   * Which three columns, though. A guile class's level row holds two talents
+   * -- the free pick and the [utility] one -- so `fields` names the talent's
+   * own column as well as the two beside it, and every fill has to follow
+   * what it was told. `setTalentEntry` wrote `row.talent` outright until the
+   * second slot existed, so typing a utility talent overwrote the pick next
+   * to it.
+   */
+  const two = { talent: '', sphere: null, notes: '', utilityTalent: '', utilitySphere: null, utilityNotes: '' };
+  d.data.training.magic.bonusTalents = [{ ...two }, { ...two }];
+  const urow = (i) => d.data.training.magic.bonusTalents[i];
+  const ucols = { talent: 'utilityTalent', sphere: 'utilitySphere', notes: 'utilityNotes' };
+  d.setTalentEntry(M, 0, 'Acid Blast', cols);
+  d.setTalentEntry(M, 0, 'Destruction Sphere', ucols);
+  check('two talents on one row stay apart',
+    [urow(0).talent, urow(0).utilityTalent],
+    ['Acid Blast', 'Destruction Sphere (Destructive Blast)']);
+  check('and each fill lands in the columns it was named',
+    [urow(0).sphere, urow(0).notes, urow(0).utilitySphere, !!urow(0).utilityNotes],
+    ['Destruction', 'Acid.', 'Destruction', true]);
+  // The second slot on its own, so nothing is riding on the first having run.
+  d.setTalentEntry(M, 1, 'Acid Blast', ucols);
+  check('the named column alone is written',
+    [urow(1).utilityTalent, urow(1).utilitySphere, urow(1).talent, urow(1).sphere],
+    ['Acid Blast', 'Destruction', '', null]);
 }
 
 console.log('a pack may carry a maneuver\'s cells, and they survive the whole path');

@@ -45,8 +45,13 @@ import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { defaultCompanion } from '../app/js/companions.js';
 import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import {
+  GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
+  leveragePool,
+} from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
+import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 
 let pass = 0;
 let fail = 0;
@@ -7274,6 +7279,201 @@ console.log('character colour');
   const c2 = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('survives a round trip', c2.data.identity.color, '#6ea8fe');
   check('and moves no derived number', c2.diffFromSource(), []);
+}
+
+console.log('spheres of guile -- two talent ladders, and DCs read off a skill');
+{
+  // The printed Skill Talents by Expertise Tier table, all sixty rows of it.
+  // Two columns per tier, gained in addition to each other, and the two do
+  // not keep step -- which is the whole reason this system needed a table of
+  // its own rather than another rate in TALENT_RATES.
+  const TIER_TABLE = {
+    Virtuoso: [[1, 0], [2, 1], [3, 1], [3, 2], [4, 2], [5, 3], [6, 3], [6, 4], [7, 4], [8, 5],
+      [9, 5], [9, 6], [10, 6], [11, 7], [12, 7], [12, 8], [13, 8], [14, 9], [15, 9], [15, 10]],
+    Journeyman: [[0, 1], [1, 1], [1, 2], [2, 2], [2, 3], [3, 3], [3, 4], [4, 4], [4, 5], [5, 5],
+      [5, 6], [6, 6], [6, 7], [7, 7], [7, 8], [8, 8], [8, 9], [9, 9], [9, 10], [10, 10]],
+    Trained: [[0, 1], [0, 1], [0, 2], [1, 2], [1, 3], [1, 3], [1, 4], [2, 4], [2, 5], [2, 5],
+      [2, 6], [3, 6], [3, 7], [3, 7], [3, 8], [4, 8], [4, 9], [4, 9], [4, 10], [5, 10]],
+  };
+  const wrong = [];
+  for (const [tier, rows] of Object.entries(TIER_TABLE)) {
+    rows.forEach(([any, utility], i) => {
+      const got = expertiseTalents(tier, i + 1);
+      if (got.any !== any || got.utility !== utility) wrong.push(`${tier} ${i + 1}`);
+    });
+  }
+  check('every row of the expertise table', wrong, []);
+  check('and no tier at all is no talents', expertiseTalents(null, 20), { any: 0, utility: 0 });
+
+  // A live operative. Nothing imports a guile side -- no workbook ever had
+  // the tab -- so it is conjured empty on load and grows from what is typed.
+  const doc = blankDocument({ name: 'Operative', level: 9 });
+  const m = new Character(doc);
+  check('a blank sheet gets an empty guile side', !!m.data.training.guile, true);
+  check('and it is not "in use" until something is typed', m.systemTabsInUse().guile, false);
+
+  const g = m.data.training.guile;
+  g.classes.push({ ...blankGuileClass('Envoy'), expertise: 'Virtuoso', classLevelsOverride: 9 });
+  g.operativeMod = 'Cha';
+  m.recompute();
+  const cls = g.classes[0];
+  check('a Virtuoso 9 has seven free talents and four utility ones',
+    [cls.totalTalents, cls.totalUtility], [7, 4]);
+  check('granted on their own rungs',
+    [cls.levels.filter((l) => l.granted).map((l) => l.level),
+      cls.levels.filter((l) => l.utilityGranted).map((l) => l.level)],
+    [[1, 2, 3, 5, 6, 7, 9], [2, 4, 6, 8]]);
+  check('the tab now counts as in use', m.systemTabsInUse().guile, true);
+
+  // Spend them. A base pick is a talent spent like any other -- taking the
+  // sphere is what the first one buys.
+  const put = (level, sphere, talent, util = false) => {
+    const lv = cls.levels[level - 1];
+    if (util) Object.assign(lv, { utilitySphere: sphere, utilityTalent: talent });
+    else Object.assign(lv, { sphere, talent });
+  };
+  put(1, 'Bluster', 'Bluster Sphere (Base)');
+  put(2, 'Bluster', 'Piercing Wit');
+  put(3, 'Bluster', 'Never Gets Old');
+  put(2, 'Bluster', 'Fascinating Bluster', true);
+  put(5, 'Study', 'Study Sphere (Base)');
+  put(6, 'Study', 'Flawless Recall');
+  m.recompute();
+  check('both ladders feed the same tally', g.tally, { Bluster: 4, Study: 2 });
+  check('and a row appears for each sphere', g.spheres.map((r) => r.sphere), ['Bluster', 'Study']);
+
+  // The associated skill is a choice, so nothing pays out until it is made.
+  const row = (name) => g.sphereRows.find((r) => r.sphere === name);
+  check('no skill chosen is no ranks',
+    [row('Bluster').ranksGranted, row('Bluster').skillIndex], [0, -1]);
+
+  g.spheres.find((r) => r.sphere === 'Bluster').skill = 'Bluff';
+  g.spheres.find((r) => r.sphere === 'Study').skill = 'Kn. (local)';
+  m.recompute();
+  const cha = m.data.abilities.cha.totalMod;
+  check('5 ranks a talent, capped at Hit Dice',
+    [row('Bluster').ranksGranted, row('Study').ranksGranted], [9, 9]);
+  check('which land in the Skills tab where they were sent',
+    [m.data.skills.find((s) => s.name === 'Bluff').sphereRanks,
+      m.data.skills.find((s) => s.name === 'Kn. (local)').sphereRanks], [9, 9]);
+  check('the DC is 10 + half the ranks + the operative modifier',
+    row('Bluster').dc, 10 + 4 + cha);
+  check('and the ranges come off the same ranks',
+    [row('Bluster').close, row('Bluster').medium, row('Bluster').long], [45, 190, 760]);
+  check('guileRanges agrees on its own', guileRanges(9), { close: 45, medium: 190, long: 760 });
+
+  // Readable from a formula, per sphere -- there is no one number to read.
+  const scope = m.scope();
+  check('and readable from a formula', scope.sphere.bluster.dc, 10 + 4 + cha);
+  check('with the operative under its own name',
+    [scope.operative.mod, scope.operative.leverage], [cha, 4]);
+
+  // Two spheres on one skill: the ranks do not stack, the overlap is worth a
+  // competence bonus of half the character's level instead.
+  g.spheres.find((r) => r.sphere === 'Study').skill = 'Bluff';
+  m.recompute();
+  const bluff = m.data.skills.find((s) => s.name === 'Bluff');
+  check('sharing a skill pays it once', bluff.sphereRanks, 9);
+  check('and the overlap pays half a level in competence instead', bluff.competence, 4);
+  check('which the skill total actually carries', bluff.bonus, 9 + 4);
+  check('one sphere is shown paying and the rest as sharing',
+    g.sphereRows.map((r) => [r.paysRanks, r.duplicate, r.competence]),
+    [[true, true, 4], [false, true, 0]]);
+  check('and the skill they left is empty again',
+    m.data.skills.find((s) => s.name === 'Kn. (local)').sphereRanks, 0);
+
+  // A bonus talent handed over by a base sphere or a drawback is not a talent
+  // spent, so it buys no ranks -- a counting rule with no counterpart on
+  // either of the other two sides.
+  g.spheres.find((r) => r.sphere === 'Study').skill = 'Kn. (local)';
+  g.bonusTalents.push({ talent: 'Verbal Trap', sphere: 'Bluster', source: 'Alternate start', free: true });
+  m.recompute();
+  check('a free talent is known', g.tally.Bluster, 5);
+  check('but not spent', g.tallySpent.Bluster, 4);
+  check('so the ranks do not move', row('Bluster').ranksGranted, 9);
+  g.bonusTalents[0].free = false;
+  m.recompute();
+  check('untick it and it counts', g.tallySpent.Bluster, 5);
+
+  // Two talents on one row, and setTalentEntry has to be told which. It used
+  // to write `row.talent` whatever it was called from, so typing a utility
+  // talent landed in the free pick beside it and overwrote it.
+  const slots = 'training.guile.classes.0.levels';
+  m.setTalentEntry(slots, 1, 'Piercing Wit', { sphere: 'sphere', notes: 'notes' });
+  m.setTalentEntry(slots, 1, 'Fascinating Bluster',
+    { talent: 'utilityTalent', sphere: 'utilitySphere', notes: 'utilityNotes' });
+  check('each slot keeps its own talent',
+    [cls.levels[1].talent, cls.levels[1].utilityTalent],
+    ['Piercing Wit', 'Fascinating Bluster']);
+  check('and the write is reported under the column it landed in',
+    m.setTalentEntry(slots, 3, 'Breath Control',
+      { talent: 'utilityTalent', sphere: 'utilitySphere' })
+      && [cls.levels[3].utilityTalent, cls.levels[3].talent],
+    ['Breath Control', null]);
+  // (What the *catalogue* fills in beside a talent has to land in the named
+  // columns too; that half needs a sphere catalogue and is checked in
+  // tests/extensions.test.mjs, where one is registered.)
+  // Put the row back the way the checks below expect it.
+  Object.assign(cls.levels[3], { talent: null, sphere: null, notes: null });
+  Object.assign(cls.levels[3], { utilityTalent: null, utilitySphere: null, utilityNotes: null });
+  Object.assign(cls.levels[1], { talent: 'Piercing Wit', sphere: 'Bluster' });
+  Object.assign(cls.levels[1], { utilityTalent: 'Fascinating Bluster', utilitySphere: 'Bluster' });
+  m.recompute();
+
+  // The pools.
+  check('leverage is 1 + a third of the Hit Dice', g.leverage.pool, 4);
+  check('unlocked by every sphere but Vocation', g.leverage.spheres, ['Bluster', 'Study']);
+  check('no plan talents is no plan pool', g.plans.pool, 0);
+  g.planBonus = 2;
+  g.utilityPlanBonus = 1;
+  m.recompute();
+  check('and 1 + the non-utility ones once there are',
+    [g.plans.pool, g.plans.utilityPool], [3, 1]);
+
+  // A saved sheet carries only what was typed, and comes back the same.
+  const saved = m.toJSON();
+  const sg = saved.training.guile;
+  check('saves no tally, rows or pools',
+    ['tally', 'tallySpent', 'sphereRows', 'plans', 'leverage', 'operativeAbilityMod']
+      .filter((k) => k in sg), []);
+  check('nor a class ladder it can recount',
+    Object.keys(sg.classes[0]).filter((k) => k !== 'name' && k !== 'expertise'
+      && k !== 'classLevelsOverride' && k !== 'levels'), []);
+  check('nor a level slot flag', 'granted' in sg.classes[0].levels[0], false);
+  check('nor a sphere row it derives', 'ranksGranted' in sg.spheres[0], false);
+  check('but keeps every choice', [sg.classes[0].expertise, sg.operativeMod,
+    sg.spheres.map((r) => r.skill)], ['Virtuoso', 'Cha', ['Bluff', 'Kn. (local)']]);
+
+  const back = new Character(JSON.parse(JSON.stringify(saved)));
+  check('a round trip keeps the ladder and the DCs',
+    [back.data.training.guile.classes[0].totalTalents,
+      back.data.training.guile.sphereRows.find((r) => r.sphere === 'Bluster').dc],
+    [7, 10 + 4 + cha]);
+
+  // A sphere pointed at a skill row that is not there reads as no ranks
+  // rather than quietly picking a neighbour.
+  back.data.training.guile.spheres.find((r) => r.sphere === 'Bluster').skill = 'Bluffing';
+  back.recompute();
+  const lost = back.data.training.guile.sphereRows.find((r) => r.sphere === 'Bluster');
+  check('a skill the sheet has not got is marked, not guessed',
+    [lost.skillIndex, lost.ranksGranted, lost.ranks], [-1, 0, 0]);
+}
+
+console.log('spheres of guile -- the associated skills the book prints');
+{
+  check('the six spheres divided into packages',
+    GUILE_SPHERES.filter((s) => guilePackages(s).length),
+    ['Artifice', 'Faction', 'Herbalism', 'Navigation', 'Performance', 'Survivalism']);
+  check('Performance names one Perform skill per package',
+    guilePackages('Performance').map((p) => guileSkillHint('Performance', p)),
+    ['Perform (act or comedy)', 'Perform (dance)',
+      'Perform (keyboard, percussion, string, or wind)', 'Perform (comedy, oratory, or sing)']);
+  check('a sphere with no packages answers with its own skill',
+    [guileSkillHint('Investigation'), guileSkillHint('Subterfuge'), guileSkillHint('Spellhacking')],
+    ['Sense Motive', 'Disguise', 'Use Magic Device']);
+  check('and Vocation, which has neither', guileSkillHint('Vocation'), '');
+  check('leverage pools by Hit Dice',
+    [1, 2, 3, 6, 9, 20].map(leveragePool), [1, 1, 2, 3, 4, 7]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

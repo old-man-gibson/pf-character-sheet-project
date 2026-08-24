@@ -1,6 +1,6 @@
 # Sub-systems: spheres, techniques, Akashic, Maneuvers, Vancian, Psionics, cards, cooking, companions
 
-_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The modelled sub-systems, each read once off its worksheet: Martial and Magic Spheres training, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions._
+_Part of the [Pathfinder Character Sheet Program](../README.md) docs. The modelled sub-systems, each read once off its worksheet: Martial and Magic Spheres training, Guile Spheres, Primordia techniques (the panel, and the Technique List / AutoTechnique tabs), Akashic, Maneuvers and Vancian, Card casting, Auto-Cooking, and the three companions._
 
 ---
 
@@ -252,6 +252,113 @@ offering picks. Angou: 19 effective talents → 2d8
 base → 5 size increases → **12d8**, byte-identical to his sheet. Improved Unarmed
 Strike is flagged at 1+ talents, and a "native progression" toggle surfaces the
 one-size-larger rule instead.
+
+---
+
+## Guile Spheres (skill talents)
+
+The third sphere tab, and the one that stops looking like the other two as soon as you
+reach its numbers. **Spheres of Guile** trains *skill talents* in *skill spheres*, and a
+skill sphere has no caster level and no practitioner level: every save DC, every range
+and every scaling talent it owns is read off the operative's **ranks in that sphere's
+associated skill**, and those ranks are bought by the talents she spent in it. So the
+table at the bottom of this tab is the sphere table and the bonus-skill-ranks block at
+once — in this system they are one fact seen twice — and the associated skill is a
+dropdown rather than a lookup, because it is a choice the character made.
+
+Nothing imports a guile side. None of the source workbooks has the tab, so the block is
+conjured empty on load and grows only from what is typed; an untouched one stays empty
+and off the tab bar, and the ⚙ manager shows it with the same *empty* / *in use* /
+*marked* badges as every other modelled sub-system. Marking a class **Spheres of Guile**
+on the Classes table lights it, exactly as Spheres of Power lights *Magic Spheres*.
+
+**Skill expertise** is the class ladder, and it runs two tracks at once. A tier grants
+unrestricted talents *in addition to* `[utility]` talents, on rungs that do not keep
+step — so each level is one row with two halves, and a level can light neither, one, or
+both. The three tiers are the book's:
+
+| Tier | Any | `[utility]` |
+|---|---|---|
+| Virtuoso | ¾ a talent per level | one per 2 levels |
+| Journeyman | ½ a talent per level | one per 2 levels, from 1st |
+| Trained | ¼ a talent per level | one per 2 levels, from 1st |
+
+which is why a 1st-level Trained operative has no free pick at all and one utility
+talent, and a Virtuoso the reverse. All sixty printed rows are checked in the suite.
+**Class levels (override)** covers a sparse Planner the same way the other two sides do,
+and a class that trades its feat progression or its spellcasting for a tier (the two
+conversion tables) is just one of these blocks.
+
+**The sphere table** carries, per sphere: the **package** it was taken as (six spheres
+are divided into them, and gaining the sphere grants one), the **associated skill** that
+package was pointed at, the talents spent, the ranks those talents bought, the save DC
+those ranks *are*, and the three ranges. The rules behind the columns:
+
+- **Ranks** — 5 on taking the sphere and 5 per further talent spent in it, capped at Hit
+  Dice, flowing into the Skills tab's *Spheres* column like the martial side's do.
+- **DC** — `10 + half your ranks in the associated skill + your operative modifier`. It
+  reads the skill's *total* ranks, not just the ones the sphere paid for: the rulebook
+  asks for the operative's ranks, and a character who bought more of them has them.
+- **Ranges** — close `25 ft. + 5 ft. per 2 ranks`, medium `100 ft. + 10 ft. per rank`,
+  long `400 ft. + 40 ft. per rank`.
+- **No skill chosen, no DC.** Not a DC worth zero ranks — the whole number is built on a
+  skill the sphere has not been pointed at yet, and `10 + your modifier` would read as
+  real. Vocation never has one at all: it is the one sphere with no base ability, no
+  associated skill and no leverage, and its talents borrow whichever skill they name.
+
+**Two spheres on one skill do not stack their ranks.** The sheet marks the rows, pays the
+skill once, and grants the competence bonus the rule gives instead — half the character's
+level, minimum +1, once for the overlap however many spheres piled onto it. One sphere is
+shown paying and the rest read as sharing, with their earned-and-unpaid ranks struck
+through, so the ranks arrive from somewhere visible rather than from nowhere. The bonus
+appears again where it lands, in gold beside the Skills tab's *Spheres* column. This
+crosses systems: the *Spheres Variants* rule extends it to a **combat** sphere already
+filling the same skill, and takes precedence over that sphere's own half-BAB rule.
+
+A skill named here that the Skills tab has no row for — a row renamed out from under it —
+is marked red and kept rather than blanked. The name is still the answer to what the
+sphere is associated with; it is the row that has gone missing.
+
+**The operative** panel holds the one ability score the whole system leans on — Int, Wis
+or Cha, chosen once for the character — and the two pools nothing else on the sheet has:
+
+- **Skill leverage**, `1 + a third of your Hit Dice`, unlocked by every skill sphere but
+  Vocation. It is not a daily pool by default: it refills on a full rest *and* a use at a
+  time whenever the operative gets somewhere by being clever, which is a table judgement
+  and not a number this sheet can work out — so the pool is sized here and spent on a
+  tracker like any other resource that comes back mid-day. The daily-pool variant is a
+  tick, and adds the book's suggested 2 for a four-encounter day.
+- **Plans**, `1 + your [plan] talents without the [utility] tag`, with talents carrying
+  both tags making a second pool spendable only on utility plans. That is a fact about
+  the talents rather than about the character, so it is counted off the
+  [sphere catalogue's](extensions.md#spheres) `[plan]` and `[utility]` tags where a pack
+  carries them, and typed in where none does — the panel says which case it is in.
+
+**Bonus skill talents** are the ones a feat, an archetype or an item handed over, with
+two ticks the other sides have no need of. *`[u]`* marks a talent that had to be a
+`[utility]` one, because retraining it has to replace it with another of the same kind.
+*free* marks one a base sphere or a drawback granted — the rulebook is explicit that
+those are not talents *spent*, so they buy no skill ranks, and nothing about the name
+says so.
+
+**Trade tradition** is not a casting tradition wearing a hat. Guile's drawbacks are
+per-sphere, chosen when the sphere is taken, and live on the sphere pages rather than on
+the tradition; what a trade tradition trades is *class skills* — you give up your class's
+list for a shorter, sharper one and get talents for it. Three come to everybody and three
+more wait on **adroit** rank, so each row carries the tick that says which kind it is and
+the adroit rows grey out at competent rank. The four skills every tradition grants
+outright (Craft, Perception, Perform, Profession — and Artistry and Lore in a game using
+background skills) are stated in the panel; tick them in the Skills tab's *Class* column.
+
+Every sphere publishes itself to the formula language under its own name —
+`sphere.body_control.dc`, `sphere.study.ranks`, `sphere.bluster.close` — because there is
+no single number to read, and `operative.mod`, `operative.leverage` and `operative.plans`
+carry the three that belong to the character rather than to a sphere. Both talent slots
+on every level row read `{…}` like the rest.
+
+Talents are marked by the sphere catalogue exactly as the other two tabs' are, and every
+sphere dropdown offers what a pack carries after the sixteen built-in names — a pack
+sphere marked `"kind": "guile"` lands on this tab's lists.
 
 ---
 

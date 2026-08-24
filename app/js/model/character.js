@@ -77,6 +77,9 @@ import {
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
 import {
+  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
+} from './subsystems/guile.js';
+import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
 } from './stats/attacks.js';
 import {
@@ -217,12 +220,18 @@ export class Character {
 
     this.#recomputeSpeeds();
     this.#recomputeTraining();
+    this.#recomputeGuile();
 
     // Skills: total ranks from their sources, then the bonus.
     // totalRanks = MIN(level, bought + (specialty+gear+other)*level + spheres)
     const level = Number(c.identity.level) || 0;
     const specialtyKeys = new Set(Object.values(c.specialtySkills || {}).filter(Boolean));
     const sphereRanksBySkill = this.#sphereRanksBySkill();
+    // Skill spheres pay into a skill the operative chose rather than one a
+    // table named, so their ranks are worked out against the martial side's
+    // map: where the two land on the same row they do not stack, and the
+    // overlap pays a competence bonus instead. See subsystems/guile.js.
+    const guileRanks = this.#guileRanksBySkill(sphereRanksBySkill);
 
     // Inline names ({skill_familiarity = …}) resolve before skill misc so a
     // misc formula can read them. Their scope has no skill totals yet, which
@@ -236,9 +245,9 @@ export class Character {
       const am = statMod(c, primary, null);
       const src = s.rankSources || { bought: 0, gear: false, other: false };
       const specialty = specialtyKeys.has(skillKey(s));
-      const spheres = sphereRanksBySkill.has(i)
-        ? sphereRanksBySkill.get(i)
-        : (Number(s.importedSphereRanks) || 0);
+      const spheres = guileRanks.ranks.has(i) ? guileRanks.ranks.get(i)
+        : sphereRanksBySkill.has(i) ? sphereRanksBySkill.get(i)
+          : (Number(s.importedSphereRanks) || 0);
 
       // Bought ranks accept a plain number or a level-derived formula
       // ("level", "floor(level - 2)"), evaluated in the same sandbox as
@@ -296,13 +305,23 @@ export class Character {
       // the Misc the player typed, never folded into it: the column has to go
       // on saying what was written in it, and the row has to go on adding up.
       s.forwarded = this.#forwarded(skillForwardKey(s));
-      s.bonus = computed + misc + s.forwarded;
+      // Half the character's level, where two skill spheres (or a skill
+      // sphere and a combat one) both associate themselves with this row and
+      // so cannot both pay it ranks. Kept beside Misc rather than folded into
+      // it for the same reason `forwarded` is: the column has to go on saying
+      // what was typed in it.
+      s.competence = guileRanks.competence.get(i) || 0;
+      s.bonus = computed + misc + s.forwarded + s.competence;
       s.abilityMod = am;
     });
 
     this.#applyBudget();
     this.#recomputeLanguages();
     this.#recomputeSphereRows();
+    // After the skills, like the sphere rows above it and for the same
+    // reason: every guile save DC and range is read off the ranks the loop
+    // has just settled.
+    this.#recomputeGuileSpheres();
     this.#recomputeEquipment();
     this.#recomputeCrafting();
     this.#recomputeAkashic();
@@ -481,6 +500,13 @@ export class Character {
   #sphereTalentKnowledge(...a) { return sphereTalentKnowledge(this, ...a); }
   #sphereRanksBySkill(...a) { return sphereRanksBySkill(this, ...a); }
   #recomputeSphereRows(...a) { return recomputeSphereRows(this, ...a); }
+
+  // subsystems/guile.js
+  #recomputeGuile(...a) { return recomputeGuile(this, ...a); }
+  #guileRanksBySkill(...a) { return guileRanksBySkill(this, ...a); }
+  #recomputeGuileSpheres(...a) { return recomputeGuileSpheres(this, ...a); }
+  addGuileClass(...a) { return addGuileClass(this, ...a); }
+  addGuileSphere(...a) { return addGuileSphere(this, ...a); }
 
   // stats/saves.js
   #resolveSaveBonuses(...a) { return resolveSaveBonuses(this, ...a); }

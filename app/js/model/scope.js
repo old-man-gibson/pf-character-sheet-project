@@ -142,6 +142,31 @@ export function characterScope(model) {
       spAvailable: Number(c.training?.magic?.availableSP ?? c.training?.magic?.totalSP) || 0,
     },
     practitioner: { dc: Number(c.training?.combat?.practitionerDC) || 0 },
+    // The operative: the one ability modifier every skill-sphere DC is built
+    // on, and the two pools guile hands out. There is no `dc` here on
+    // purpose -- a skill sphere's DC is per sphere, off the ranks in *its*
+    // associated skill, so `operative.dc` would be a number that does not
+    // exist. `sphere.<name>.dc` below is where those live.
+    operative: {
+      mod: Number(c.training?.guile?.operativeAbilityMod) || 0,
+      leverage: Number(c.training?.guile?.leverage?.pool) || 0,
+      plans: Number(c.training?.guile?.plans?.pool) || 0,
+      utilityPlans: Number(c.training?.guile?.plans?.utilityPool) || 0,
+    },
+    // Each skill sphere under its own slugged name -- sphere.body_control.dc,
+    // sphere.study.ranks, sphere.bluster.close -- because every guile talent
+    // that scales says "per rank in the associated skill" and a sheet that
+    // cannot be asked leaves the number to be typed in and go stale.
+    sphere: Object.fromEntries((c.training?.guile?.sphereRows || [])
+      .filter((r) => r.sphere)
+      .map((r) => [slug(r.sphere), {
+        ranks: Number(r.ranks) || 0,
+        talents: Number(r.talents) || 0,
+        dc: Number(r.dc) || 0,
+        close: Number(r.close) || 0,
+        medium: Number(r.medium) || 0,
+        long: Number(r.long) || 0,
+      }])),
     // Movement, under the type each rate is called by: speed.land,
     // speed.fly. "Half your speed", "equal to your land speed" and "10 ft.
     // per point of Dex bonus" are all rules about a number that moves with
@@ -716,6 +741,11 @@ export function proseSources(model) {
     (t?.classes || []).forEach((cls, ci) => (cls.levels || []).forEach((lv, li) => {
       push(`talent:${side}:${ci}:${li}`, lv.talent);
       push(`talent:${side}:${ci}:${li}:notes`, lv.notes);
+      // The guile side's rows carry a second slot -- the [utility] talent
+      // its expertise tier grants on its own ladder -- and it is prose like
+      // any other talent.
+      push(`talent:${side}:${ci}:${li}:u`, lv.utilityTalent);
+      push(`talent:${side}:${ci}:${li}:u:notes`, lv.utilityNotes);
     }));
     (t?.bonusTalents || []).forEach((b, bi) => {
       push(`bonusTalent:${side}:${bi}`, b.talent);

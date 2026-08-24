@@ -31,6 +31,7 @@ import { Character } from '../app/js/model.js';
 import { hasFixtures, fixtureIds, loadCharacter } from './fixtures.mjs';
 import * as overview from '../app/js/ui/panels/overview.js';
 import * as combat from '../app/js/ui/panels/combat.js';
+import * as guile from '../app/js/ui/panels/guile.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
 import * as lore from '../app/js/ui/panels/lore.js';
 import * as admin from '../app/js/ui/panels/admin.js';
@@ -137,6 +138,7 @@ const panelsWith = (CTX) => [
   ['Skills', (m) => renderSkillsPanel(m, CTX.skills)],
   ['Martial Spheres', (m) => combat.renderMartialPanel(m)],
   ['Magic Spheres', (m) => combat.renderMagicPanel(m)],
+  ['Guile Spheres', (m) => guile.renderGuilePanel(m)],
   ['Template', (m) => combat.renderTemplatePanel(m, CTX.combat)],
   ['Equipment', (m) => gear.renderGearPanel(m, CTX.gear)],
   ['Crafting', (m) => gear.renderCraftingPanel(m, CTX.gear)],
@@ -194,6 +196,30 @@ const sweep = (who, model) => {
     renders(`${who} (session view, folds open)`, name, draw, model);
   }
   model.setViewMode('build');
+
+  /*
+   * And once with every panel fold *shut*, which is a different branch again
+   * and until now an untested one. `collapsible()` keeps a collapsed panel's
+   * header by regex-matching its own <h3>, and falls back to a bare button
+   * when it finds none -- so a panel whose header is not shaped the way it
+   * expects loses its whole body the moment somebody folds it, silently.
+   *
+   * The state lives in uiPrefs rather than in ctx, and the keys are strings
+   * chosen panel by panel, so there is no list of them to iterate. A `get`
+   * that answers yes to every key folds all of them at once without needing
+   * one.
+   */
+  const realCollapsed = model.data.uiPrefs.collapsed;
+  model.data.uiPrefs.collapsed = new Proxy({}, { get: () => true });
+  for (const [name, draw] of PANELS) {
+    const html = renders(`${who} (folds shut)`, name, draw, model);
+    // A fold that ate its own header is the failure this is here to catch.
+    if (html && html.includes('class="panel') && !/<h[34]/.test(html) && html.length > 40) {
+      fail++;
+      console.log(`  FAIL ${who} — ${name} collapsed to a body with no heading`);
+    }
+  }
+  model.data.uiPrefs.collapsed = realCollapsed;
 };
 
 console.log('a blank sheet draws every panel');

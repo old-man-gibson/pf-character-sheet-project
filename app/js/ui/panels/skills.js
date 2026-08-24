@@ -170,7 +170,10 @@ export function renderSkillsPanel(model, ctx) {
                 <td class="mid">${s.specialtyFlag ? '★' : ''}</td>
                 <td class="mid">${itemCheck('skills', i, 'rankSources.gear', s.rankSources?.gear)}</td>
                 <td class="mid">${itemCheck('skills', i, 'rankSources.other', s.rankSources?.other)}</td>
-                <td class="num">${s.sphereRanks || ''}</td>
+                <td class="num">${s.sphereRanks || ''}${s.competence
+                  ? `<span class="skillcomp" title="${esc('Two spheres associate themselves with this skill, '
+                    + 'so only one of them pays it ranks. The other grants a +' + s.competence
+                    + ' competence bonus instead — half your level, minimum +1.')}">+${s.competence}</span>` : ''}</td>
                 <td>${itemSelect('skills', i, 'abilities.0', (s.abilities || [])[0], ABILITIES.map((k) => ABILITY_LABELS[k]))}</td>
                 <td class="num">${fmt(s.abilityMod || 0)}</td>
                 <td class="num bought">${exprField(`data-item="skills|${i}|offset"`, s.offset ?? 0, {
@@ -201,7 +204,9 @@ export function renderSkillsPanel(model, ctx) {
         </div>
         <p class="hint">
           Total ranks = min(level, Bought + (★ + Gear + Other) × level + Spheres).
-          <strong>Spheres</strong> comes from the training tab's talent counts.
+          <strong>Spheres</strong> comes from the training tabs' talent counts. A gold figure
+          beside it is a <em>competence</em> bonus: two spheres associated themselves with this
+          skill, so only one of them pays it ranks and the other pays half your level instead.
           <strong>Misc</strong> holds flat bonuses from gear, traits and the like — a number, or a
           formula such as <code>int.mod</code>, <code>floor(level/2)</code>, or a name defined
           in prose like <code>skill_familiarity</code>. A gold figure beside it is a bonus

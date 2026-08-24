@@ -4,6 +4,7 @@
 import {
   parsePaste, findSegments, readClassTable, readFeatureProse, featureKey, raceName, singular, splitChunk,
   splitTalentName, looksStructured, tidyScrapeResidue, parseStructured, unwikiTables, entryDepth,
+  SPHERE_KIND,
 } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -1563,6 +1564,76 @@ This website uses cookies. See the Legal & OGL page for important information.`;
   // The side menu lists two dozen other spheres; none of them is content.
   check('nothing but the wikidot banner is left over',
     r.leftovers.map((l) => l.text), ['site-name']);
+}
+
+console.log('a skill sphere page -- no section in the breadcrumb to go by');
+{
+  /*
+   * Spheres of Guile's pages hang straight off the wiki's home page, so a
+   * skill sphere's breadcrumb is the *site* title and the sphere with nothing
+   * in between -- and the site is called "Spheres of Power Wiki", which used
+   * to make every one of them read as a magic sphere. The trail past the
+   * first arrow is what the two other systems are named in; the sphere's own
+   * name is what settles this one.
+   */
+  const BLUSTER = `site-name
+.wikidot.com
+Spheres of Power Wiki
+A Quick Reference Site
+Home
+Skill Spheres
+
+Bluster
+Study
+Vocation
+
+Page tags
+
+home
+Bluster
+Spheres of Power Wiki Home Page \u00bb Bluster
+Fold
+Table of Contents
+Flaunt Secrets
+Quip
+Bluster Talents
+Piercing Wit
+Skilled Bluster [utility]
+Quip Talents
+Infuriating Insult (quip)
+Bluster is the art of getting under somebody's skin and staying there.
+Associated Skill: Bluff or Intimidate. Choose one to be the associated skill when you gain the sphere.
+Flaunt Secrets
+As a standard action, you may outwit a creature within close range by hinting at what you know of it.
+Quip
+As a standard action, you make a quip to a creature within close range.
+Bluster Talents
+Piercing Wit
+Your quips ignore an amount of damage reduction equal to your ranks in the associated skill.
+Skilled Bluster [utility]
+You gain the skill you did not choose as another associated skill for the Bluster sphere.
+Quip Talents
+Infuriating Insult (quip)
+The target must succeed at a Will save or become angry with you for 1 round.`;
+
+  const r = parsePaste(BLUSTER);
+  const s2 = r.spheres[0];
+  check('the sphere is read', [s2.name, s2.kind], ['Bluster', 'guile']);
+  check('and its base abilities lifted out',
+    s2.abilities.map((a) => a.name), ['Flaunt Secrets', 'Quip']);
+  check('with its talents in their groups',
+    s2.talents.map((t) => [t.name, t.group]),
+    [['Piercing Wit', 'Bluster Talents'], ['Skilled Bluster', 'Bluster Talents'],
+      ['Infuriating Insult', 'Quip Talents']]);
+  check('[utility] is still read as a rule, not a source',
+    [s2.talents[1].tags, s2.talents[1].sources], [['utility'], []]);
+  ok('and the description keeps what the sphere is',
+    /getting under somebody's skin/.test(s2.description));
+  // The two that do have a section in the trail are unmoved by the fix.
+  check('a might page still reads combat and a power page magic',
+    [SPHERE_KIND('Spheres of Power Wiki Home Page \u00bb Spheres Of Might \u00bb Boxing', 'Boxing'),
+      SPHERE_KIND('Spheres of Power Wiki Home Page \u00bb Spheres Of Power \u00bb Destruction', 'Destruction')],
+    ['combat', 'magic']);
 }
 
 console.log('splitTalentName -- tags off a name, both kinds');
