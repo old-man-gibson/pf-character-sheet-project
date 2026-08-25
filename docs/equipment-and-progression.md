@@ -13,7 +13,7 @@ The worksheet's four systems, separated and computed:
   dice + floor(ability × multiplier) + misc + enhancement, with crit, groups, size,
   handedness, special properties and the rest. Imports reproduce the cached attack
   rolls (Angou's unarmed 40 = 34+5+1, damage 12d8+26), and the 🥊 toggle links a
-  weapon's dice to the unarmed practitioner calculator live. Where the workbook noted
+  weapon's dice to [Unarmed strike](#unarmed-strike) live. Where the workbook noted
   a different total (e.g. Impact-sized dice), a hint shows it. The **Adj.** field is
   the import reconciliation offset (sheet attack − computed), doubling as a manual
   catch-all. Size/groups/handedness/familiarity/crit-mult are dropdowns; the ability
@@ -95,6 +95,68 @@ The worksheet's four systems, separated and computed:
   four freeform ones each, plus an **Other items** list.
 - **Load & value** — weights per section, a reconciling adjustment, total carried
   against light load, and total value. Item weights flow into carry live.
+
+### Unarmed strike
+
+Two ways a character comes by unarmed dice, and one number at the end of them that
+the 🥊 on a weapon row reads. This sits on **Equipment** rather than on Martial
+Spheres because it is a weapon: a monk with a class progression and no talents at all
+has unarmed dice, and used to have nowhere to put them — the whole calculator lived
+inside the Spheres of Might side, so a character without that side had no panel, no
+dice, and a 🥊 that resolved to nothing.
+
+**A class's own progression** is a **ladder**: rows of *from this class level, these
+dice*, six of which is a monk. The highest rung at or below the level wins, rungs may
+be typed in any order, and below the lowest there is no progression yet. It has to be
+a ladder rather than a count of die steps because a printed table does not walk the
+sheet's chain — the monk's own 2d8 → 2d10 skips 3d6, which no number of steps
+reproduces. An empty ladder offers **+ monk ladder** to fill all six rungs at once,
+as a worked example to type over rather than a rule.
+
+The **class** is a dropdown of the character's own classes and the progression counts
+*that class's* levels, for the same reason the Planner's rule groups do: "at 4th
+level" on a class table is a statement about the class, and a gestalt build's other
+side does not advance it. Named nothing, it counts character levels.
+
+**Formula** is the escape hatch, and wins over the rungs when it is filled in — for a
+table that is not a table, one scaling off two classes or off something the rungs
+cannot say. It reads the same sandbox everything else does, with `unarmed.classLevel`
+in scope, and returns dice text (`unarmed.classLevel >= 16 ? '2d8' : '1d8'`).
+
+**One size larger with 3+ unarmed talents** is the clause most such classes carry, and
+it is two fields rather than a constant: the threshold and how many sizes it grants,
+because the number is the class's to name. It counts **unarmed-associated talents** —
+the four unarmed spheres plus whatever Unorthodox Unarmed Training added to them —
+which is a *narrower* count than the practitioner table's `effective talents`, and
+deliberately so: Talented Knuckle and the Brawler's Vest buy dice on that table, they
+are not talents a class threshold is counting. *Count extra as associated* says
+otherwise for a table that reads the clause the other way. The panel shows the count,
+the threshold, and which way the comparison went.
+
+**Step and size increases belong to both progressions** — Enlarge Person does not care
+which table the base die came off — so they sit under *Applies either way*, outside the
+fold below, where a class-progression character can still reach them. Worth knowing on
+an imported sheet: the five size increases Angou's workbook carries were how *it*
+reached 12d8 off the practitioner table, and they still apply when the class ladder
+takes over, which sends 2d10 up six sizes and clamps at 16d6. Zero them when the class
+progression is meant to be the whole story.
+
+**Nothing is thrown away.** Turning the class progression on leaves the practitioner
+table computed, and if the progression cannot produce a die — no rung reached, a
+formula that does not parse — the table is what the weapon falls back on, so the toggle
+can never leave a weapon with no dice. A broken formula is named on the panel rather
+than swallowed.
+
+What it does do is **fold the practitioner table down to its subhead**, badged *not in
+use* with its own reading (`Practitioner table — not in use — 12d8`), because once a
+class table is what the character uses the sphere toggles are a reading to compare
+against rather than controls to reach for. The ▸ opens it, and **that click is
+remembered** — both ways round: unfold it and it stays unfolded, fold it while it is
+live and it stays folded. Only a block nobody has clicked follows the default.
+
+In formulas: `unarmed.dice` is whichever progression is live, `unarmed.talents` the
+practitioner count, `unarmed.associated` the narrower one, `unarmed.classLevel` the
+level the ladder is being read at.
 
 ---
 

@@ -174,9 +174,15 @@ export function characterScope(model) {
     // asked for it leaves them to be typed in and go stale. Read before
     // conditions, exactly as the saves and the armour classes are.
     speed: {},
+    // `talents` is what the practitioner table counts; `associated` is the
+    // narrower question a class progression's threshold asks, and the two
+    // differ by every virtual talent an item grants. `dice` is whichever of
+    // the two progressions is live, which is what a weapon reads.
     unarmed: {
       talents: Number(c.training?.combat?.unarmed?.effectiveTalents) || 0,
+      associated: Number(c.training?.combat?.unarmed?.assocTalents) || 0,
       dice: c.training?.combat?.unarmed?.dice || '',
+      classLevel: Number(c.training?.combat?.unarmed?.native?.classLevel) || 0,
     },
     skill: {},
     // Levels in each class, under its own slugged name -- Legendary

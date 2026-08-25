@@ -156,6 +156,15 @@ export function addButton(list, label, template) {
   return `<button class="primary" data-add="${list}" data-template="${esc(JSON.stringify(template))}">+ ${esc(label)}</button>`;
 }
 
+/**
+ * A whole list seeded in one click, for a table that is copied rather than
+ * composed: a class's printed progression is six rows that are already right,
+ * and adding them one at a time is six clicks before the first correction.
+ */
+export function addManyButton(list, label, items) {
+  return `<button data-add-many="${list}" data-template="${esc(JSON.stringify(items))}">+ ${esc(label)}</button>`;
+}
+
 /** `now` is the conditioned reading, shown under the base when it differs. */
 export function bigStat(k, v, sub, now = '', roll = '') {
   // `v` as {html} is trusted markup -- a moved value shown in the base's place.
@@ -203,9 +212,31 @@ export function collapsible(model, key, panelHtml) {
   return `<section class="panel${cls} collapsed">${header}</section>`;
 }
 
-/** The ▾/▸ that folds whatever `key` names; the click lands on the element. */
-export function foldButton(model, key) {
-  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+/**
+ * Whether `key` is folded right now.
+ *
+ * Unset is not the same as open: a block may want to start folded in one
+ * situation and open in another -- the practitioner table is controls while it
+ * is what the character uses and reference once a class progression takes
+ * over. So `fallback` decides only while nothing has been clicked, and the
+ * moment it is, the choice is stored and outranks it.
+ */
+export function isCollapsed(model, key, fallback = false) {
+  const stored = model.data.uiPrefs?.collapsed?.[key];
+  return stored === undefined ? !!fallback : !!stored;
+}
+
+/**
+ * The ▾/▸ that folds whatever `key` names; the click lands on the element.
+ *
+ * `collapsedNow` is the state being drawn, which is the stored one unless a
+ * caller has a default of its own. The click handler reads it back off
+ * `aria-expanded` rather than off storage, so the first click on a block that
+ * started folded by default opens it instead of storing the fold it is
+ * already showing.
+ */
+export function foldButton(model, key, collapsedNow = null) {
+  const collapsed = collapsedNow === null ? isCollapsed(model, key) : !!collapsedNow;
   return `<button data-collapse="${key}" title="${collapsed ? 'Expand' : 'Minimize'}"
     aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
 }
@@ -218,11 +249,11 @@ export function foldButton(model, key) {
  * which is what a panel holding two tables of its own wants. Collapsed it
  * keeps the subhead exactly where it was, so nothing moves but the body.
  */
-export function collapsibleSub(model, key, title, bodyHtml, className = '') {
-  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+export function collapsibleSub(model, key, title, bodyHtml, className = '', defaultCollapsed = false) {
+  const collapsed = isCollapsed(model, key, defaultCollapsed);
   const classes = `${className}${className ? ' ' : ''}foldsub${collapsed ? ' collapsed' : ''}`;
   return `<div class="${classes}">
-    <h4 class="subhead">${title} ${foldButton(model, key)}</h4>
+    <h4 class="subhead">${title} ${foldButton(model, key, collapsed)}</h4>
     ${collapsed ? '' : bodyHtml}
   </div>`;
 }

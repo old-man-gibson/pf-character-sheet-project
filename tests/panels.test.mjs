@@ -307,6 +307,41 @@ ok('a field wraps both layers',
 ok('a folded cell computes its peek',
   drew('a folded cell', () => foldedProse(proseModel, { openCell: null }, 'k', 'data-item="x|0|y"', '{= 1 + 1} hits')).includes('class="tok'));
 
+console.log('\nthe unarmed practitioner table folds, and the shared increases do not go with it');
+{
+  // A default fold is not the same as a stored one: the practitioner table
+  // starts folded once a class progression is live, but a click still has to
+  // open it -- which it would not if the handler toggled storage rather than
+  // what is on screen (`!undefined` is `true`, so the first click would store
+  // the fold it was already showing and nothing would move).
+  const KEY = 'unarmed-practitioner';
+  const c = new Character(blankDocument('Fold Test'));
+  const seen = () => {
+    const html = gear.renderGearPanel(c, {});
+    const sub = html.slice(html.indexOf('Practitioner table'));
+    return {
+      folded: /foldsub collapsed/.test(html),
+      expanded: sub.match(/aria-expanded="(\w+)"/)?.[1],
+      controls: /usesBoxing/.test(html),
+      shared: /sizeIncreases/.test(html),
+    };
+  };
+  // What the click handler in sheet-element.js does, in one line.
+  const click = () => { c.data.uiPrefs.collapsed[KEY] = seen().expanded === 'true'; };
+
+  ok('the practitioner table is open while it is what the character uses', !seen().folded && seen().controls);
+  c.set('training.combat.unarmed.nativeProgression', true);
+  ok('a class progression folds it by default', seen().folded && !seen().controls);
+  ok('but the step and size increases stay reachable', seen().shared);
+  click();
+  ok('the first click opens it rather than doing nothing', !seen().folded && seen().controls);
+  click();
+  ok('and the second folds it again', seen().folded);
+  c.set('training.combat.unarmed.nativeProgression', false);
+  ok('a fold asked for by hand outranks the default', seen().folded);
+  ok('the shared increases were never inside the fold', seen().shared);
+}
+
 if (hasFixtures()) {
   console.log('\nevery character on the roster, every panel');
   for (const id of fixtureIds()) sweep(id, new Character(loadCharacter(id)));
