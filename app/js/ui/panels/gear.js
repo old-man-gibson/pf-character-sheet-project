@@ -21,15 +21,17 @@ import { roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
 import { group, pct, round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
-  CRAFT_TIME_BASES, GEAR_BONUS_TYPES, SIZE_MODIFIERS, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
+  ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
+  CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
+  CRAFT_TIME_BASES, GEAR_BONUS_TYPES, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
+  TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt,
 } from '../../rules.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, rowRemove, rowTools,
+  addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
+  itemNum, itemSelect, itemText, line, rowRemove, rowTools,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -40,11 +42,143 @@ export function renderGearPanel(model, ctx) {
     const e = c.equipment;
     return `<div class="grid">
       ${weaponsPanel(model, e)}
+      ${unarmedPanel(model)}
       ${armorPanel(e)}
       ${gearSlotsPanel(model, ctx, e)}
       ${otherItemsPanel(model, ctx, e)}
       ${loadPanel(model, e)}
     </div>`;
+  }
+
+  /**
+   * Unarmed strike dice, and the two ways a character comes by them.
+   *
+   * This sits on Gear rather than on Martial Spheres because it is a weapon:
+   * the 🥊 on a weapon row reads the number it produces, and a monk with a
+   * class progression and no talents at all has unarmed dice while having no
+   * martial side for the panel to have lived on. The practitioner half is
+   * still the Spheres of Might table, and says so.
+   */
+function unarmedPanel(model) {
+    const u = model.data.training?.combat?.unarmed || {};
+    const n = u.native || {};
+    const per = u.perSphere || {};
+    const base = 'training.combat.unarmed';
+    const native = !!u.nativeProgression;
+    const sub = native
+      ? (u.nativeDice ? `${n.className || 'class'} ${n.classLevel || 0}` : 'no rung reached yet')
+      : `${u.effectiveTalents ?? 0} effective talents`;
+    return `<section class="panel">
+      <h3>Unarmed strike</h3>
+      <div class="bigstats" style="margin-bottom:8px">
+        ${bigStat('Dice', u.dice ?? '—', esc(sub))}
+      </div>
+      <div class="statline" title="A class that prints its own unarmed damage table uses that instead of the practitioner one">
+        <span class="label">Class has its own progression</span>
+        <span class="value">${check(`${base}.nativeProgression`, u.nativeProgression)}</span></div>
+      ${native ? nativeUnarmedBlock(model, u, n, base) : ''}
+      ${collapsibleSub(model, 'unarmed-practitioner',
+    `Practitioner table${native ? ` <span class="badge">not in use — ${esc(u.practitionerDice || '—')}</span>` : ''}`,
+    practitionerUnarmedBlock(u, per, base), '',
+    // Folded by default once a class progression is what the character uses:
+    // it is then a reading to compare against rather than a set of controls.
+    // Unfolding it is remembered, and so is folding it while it is live.
+    native)}
+      ${sharedUnarmedBlock(u, base)}
+    </section>`;
+  }
+
+  /** The class's own table: which class, its rungs, and the talent bonus. */
+function nativeUnarmedBlock(model, u, n, base) {
+    const list = `${base}.native.ladder`;
+    const ladder = n.ladder || [];
+    const classes = model.classNames();
+    const rungs = ladder.map((r, i) => `<tr>
+        <td>${itemNum(list, i, 'from', r.from)}</td>
+        <td>${itemText(list, i, 'dice', r.dice, '1d6')}</td>
+        ${rowRemove(list, i)}
+      </tr>`).join('');
+    return `<div class="unarmed-native">
+      ${field('Class', select(`${base}.native.className`, n.className || '', classes, '— character level —'))}
+      <table class="grid-table">
+        <thead><tr><th style="width:5rem">From</th><th>Dice</th><th></th></tr></thead>
+        <tbody>${rungs || '<tr><td colspan="3" class="hint">No rungs yet — add the class’s table.</td></tr>'}</tbody>
+      </table>
+      <div class="rowtools">
+        ${addButton(list, 'rung', { from: (ladder.length ? Math.max(...ladder.map((r) => Number(r.from) || 0)) + 4 : 1), dice: '' })}
+        ${ladder.length ? '' : addManyButton(list, 'monk ladder', MONK_UNARMED_LADDER)}
+      </div>
+      ${n.rung != null ? `<p class="hint">Reading rung <strong>${n.rung}</strong> at ${esc(n.className || 'character')} level ${n.classLevel || 0} — <strong>${esc(n.baseDice || '—')}</strong>.</p>`
+        : (ladder.length && !n.formula ? `<p class="hint warn">No rung at ${esc(n.className || 'character')} level ${n.classLevel || 0} yet — the practitioner table is what the weapon reads.</p>` : '')}
+      ${field('Formula', text(`${base}.native.formula`, n.formula || '', '{= … } — wins over the rungs'))}
+      ${n.error ? `<p class="hint warn">${esc(n.error)}</p>` : ''}
+      <div class="unarmed-grid" style="margin-top:6px">
+        ${editLine('Extra size at N talents', `${base}.native.threshold`, n.threshold)}
+        ${editLine('Sizes it grants', `${base}.native.bonusSizes`, n.bonusSizes)}
+      </div>
+      <div class="statline" title="Talents in Boxing, Brute, Open Hand and Wrestling, plus whatever Unorthodox Unarmed Training added to them">
+        <span class="label">Unarmed-associated talents</span>
+        <span class="value">${u.assocTalents ?? 0}${n.qualifies ? ' ✓' : ''}</span></div>
+      ${editLine('Count extra as associated', `${base}.native.extraAssoc`, n.extraAssoc ?? 0)}
+      <p class="hint">${n.qualifies
+        ? `${u.assocTalents} associated talent${u.assocTalents === 1 ? '' : 's'} meets ${n.threshold}, so the strike is ${n.sizeBonus} size${n.sizeBonus === 1 ? '' : 's'} larger.`
+        : `${u.assocTalents ?? 0} of ${n.threshold} associated talents — no extra size yet.`}</p>
+    </div>`;
+  }
+
+  /**
+   * The Spheres of Might practitioner table. Shown under the class one rather
+   * than hidden by it, because the two are worth comparing and because the
+   * step and size increases below belong to both.
+   */
+function practitionerUnarmedBlock(u, per, base) {
+    const chk = (label, path, value, count) => `<div class="statline">
+      <span class="label">${label} <span class="badge">${count ?? 0} talents</span></span>
+      <span class="value">${check(path, value)}</span></div>`;
+    // Unorthodox Unarmed Training: two sphere picks per feat on the character.
+    const slots = Number(u.unorthodoxSlots) || 0;
+    const picks = u.otherSpheres || [];
+    const unorthodox = slots ? `<div class="fld" style="margin-top:6px"><span>Unorthodox Unarmed Training spheres
+        <span class="badge">${u.unorthodoxFeats || 0} feat${u.unorthodoxFeats === 1 ? '' : 's'} · ${slots} picks</span></span>
+      <div class="picks">${Array.from({ length: slots }, (_, i) => select(`${base}.otherSpheres.${i}`, picks[i] || '', COMBAT_SPHERES.filter((s) => !UNARMED_SPHERES.includes(s)))).join('')}</div>
+      </div>`
+      : '<p class="hint">Unorthodox Unarmed Training, once taken as a feat, gives two more sphere picks here — two per time it is taken.</p>';
+    return `<div class="unarmed-grid">
+        ${chk('Boxing', `${base}.usesBoxing`, u.usesBoxing, per.Boxing)}
+        ${chk('Brute', `${base}.usesBrute`, u.usesBrute, per.Brute)}
+        ${chk('Open Hand', `${base}.usesOpenHand`, u.usesOpenHand, per['Open Hand'])}
+        ${chk('Wrestling', `${base}.usesWrestling`, u.usesWrestling, per.Wrestling)}
+      </div>
+      ${unorthodox}
+      <div class="unarmed-grid" style="margin-top:6px">
+        <div class="statline" title="Counts as ${TALENTED_KNUCKLE_TALENTS} virtual talents">
+          <span class="label">Talented Knuckle <span class="badge">+${TALENTED_KNUCKLE_TALENTS}</span></span>
+          <span class="value">${check(`${base}.talentedKnuckle`, u.talentedKnuckle)}</span></div>
+        <div class="statline" title="Counts as ${BRAWLERS_VEST_TALENTS} virtual talents">
+          <span class="label">Brawler's Vest <span class="badge">+${BRAWLERS_VEST_TALENTS}</span></span>
+          <span class="value">${check(`${base}.brawlersVest`, u.brawlersVest)}</span></div>
+      </div>
+      ${u.asuraEssence ? `<div class="statline" title="The essence invested in the Bands of the Asura veil, ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents a point">
+        <span class="label">Bands of the Asura <span class="badge">${u.asuraEssence} essence</span></span>
+        <span class="value">+${u.asuraEssence * ASURA_TALENTS_PER_ESSENCE} talents</span></div>` : ''}
+      ${editLine('Extra effective talents', `${base}.extraTalents`, u.extraTalents ?? 0)}
+      <div class="statline"><span class="label">Count tradition talents too</span>
+        <span class="value">${check(`${base}.includeTradition`, u.includeTradition)}</span></div>`;
+  }
+
+  /**
+   * What applies whichever progression is live, so it stays out of the fold.
+   *
+   * Enlarge Person and an Impact weapon do not care which table the base die
+   * came off, so folding the practitioner table away must not take the step
+   * and size increases with it -- a class-progression character still needs
+   * to reach them, and they were the only controls down here worth losing.
+   */
+function sharedUnarmedBlock(u, base) {
+    return `<h4 style="margin:10px 0 4px">Applies either way</h4>
+      ${editLine('Step increases (+1 die step)', `${base}.stepIncreases`, u.stepIncreases)}
+      ${editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}
+      ${u.improvedUnarmedStrike ? '<p class="hint">Gains Improved Unarmed Strike (1+ unarmed-sphere talents).</p>' : ''}`;
   }
 
   /** The six-block weapon layout from the workbook, as editable cards. */
@@ -93,10 +227,10 @@ export function weaponsPanel(model, e) {
               // something to resolve to.
               value: /^\s*(\{|\[\[)/.test(String(w.dice ?? '')) && !w.useUnarmedDice ? w.diceResolved : null,
               error: w.diceError,
-              title: w.useUnarmedDice ? 'Overridden by the unarmed calculator'
+              title: w.useUnarmedDice ? 'Overridden by the Unarmed strike panel'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
-            <label class="chk" title="Use the unarmed practitioner dice from Martial Spheres">
+            <label class="chk" title="Use the dice from the Unarmed strike panel below">
               ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
@@ -175,8 +309,8 @@ export function weaponsPanel(model, e) {
       })}</div>
       <p class="hint">
         Attack = base mode total + enhancement + misc + adjustment; damage = dice +
-        floor(ability × mult) + misc + enhancement. 🥊 links the dice to the unarmed
-        practitioner calculator.
+        floor(ability × mult) + misc + enhancement. 🥊 links the dice to the Unarmed
+        strike panel below — a class progression, or the practitioner table.
       </p>
     </section>`;
   }

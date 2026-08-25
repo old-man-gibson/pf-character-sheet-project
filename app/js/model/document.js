@@ -1404,6 +1404,18 @@ export function normalise(model) {
   if (!d.training || typeof d.training !== 'object') d.training = {};
   d.training.guile = normalizeGuileTraining(d.training.guile);
 
+  // Unarmed damage is a fact about a fist, not about Spheres of Might: a monk
+  // with a class progression and no talents at all still has dice, and until
+  // now had nowhere to put them because the block lived inside the combat
+  // side and a character without that side simply had none. So it is conjured
+  // the way the guile side is -- an empty block on every character, which
+  // costs nothing and stays off the Martial Spheres tab, since that tab reads
+  // classes and traditions rather than the mere existence of a side.
+  if (!d.training.combat || typeof d.training.combat !== 'object') d.training.combat = {};
+  if (!d.training.combat.unarmed || typeof d.training.combat.unarmed !== 'object') {
+    d.training.combat.unarmed = {};
+  }
+
   if (d.training?.combat) {
     const combat = d.training.combat;
     if (!Array.isArray(combat.customizations)) combat.customizations = [];

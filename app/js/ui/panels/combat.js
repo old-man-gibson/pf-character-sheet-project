@@ -33,15 +33,15 @@ const NEW_TEMPLATE_TABLE = () => ({
 });
 import { TEMPLATE_TYPES, classForwardKey, sphereNames } from '../../model.js';
 import {
-  ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BLENDED_SPHERES,
-  BRAWLERS_VEST_TALENTS, CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
-  SP_PER_TEMP_ESSENCE, TALENTED_KNUCKLE_TALENTS, TALENT_RATES, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, UNARMED_SPHERES, fmt, isBasePick, mergeLayout,
+  ABILITIES, ABILITY_LABELS, BLENDED_SPHERES,
+  CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
+  SP_PER_TEMP_ESSENCE, TALENT_RATES, TRACK_SPHERE_LABELS,
+  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
   sphereSide, trackSpheres,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, itemCheck, itemNum, itemSelect, itemText, line, lineHtml,
+  addButton, editLine, itemCheck, itemNum, itemSelect, itemText, line, lineHtml,
   rowRemove, rowTools,
 } from '../rows.js';
 
@@ -60,8 +60,29 @@ import {
    * What they still share is the blended classes, which belong to neither and
    * so head both.
    */
+/**
+ * Whether a training side is a side at all.
+ *
+ * Every character now carries a `training.combat` because the unarmed block
+ * is conjured into one (see document.js) -- a monk with a class progression
+ * and no talents needs somewhere to put their dice. That bare holder is not a
+ * martial side, and drawing this tab for it would be four empty grids, so the
+ * question asked here is the one the ⚙ manager's badges already ask: does it
+ * name a class, a tradition or a talent?
+ */
+const martialSideInUse = (side) => !!side && !!(
+  (side.classes || []).length
+  || (side.bonusTalents || []).length
+  || (side.customizations || []).length
+  || side.tradition
+  || side.sphereBonuses
+  || side.skillRanks
+  || side.sheetBaseDC != null
+);
+
 export function renderMartialPanel(model) {
     const t = model.data.training || {};
+    const side = martialSideInUse(t.combat) ? t.combat : null;
     const wrap = (key, html) => collapsible(model, key, html);
     // The full-width groups sit in a strip: folded, they shrink to their
     // headers and pile up in a row of pills instead of holding a row apiece
@@ -70,19 +91,18 @@ export function renderMartialPanel(model) {
     // empty strip would still spend the grid's gap on itself.
     const groups = [
       blendedSection(model, wrap),
-      t.combat ? wrap('combat-training', trainingSide(model, 'combat', t.combat)) : '',
-      t.combat && (t.combat.customizations || []).length
-        ? wrap('customized-weapons', customizationPanel(model, t.combat.customizations)) : '',
-      t.combat ? wrap('combat-bonus', bonusTalentPanel(model, 'combat', t.combat)) : '',
+      side ? wrap('combat-training', trainingSide(model, 'combat', side)) : '',
+      side && (side.customizations || []).length
+        ? wrap('customized-weapons', customizationPanel(model, side.customizations)) : '',
+      side ? wrap('combat-bonus', bonusTalentPanel(model, 'combat', side)) : '',
     ].filter(Boolean).join('');
     return `<div class="grid">
       ${groups ? `<div class="foldstrip">${groups}</div>` : ''}
-      ${t.combat ? `
+      ${side ? `
         <div class="sidepanels">
-          ${wrap('combat-tradition', combatTraditionPanel(model, t.combat))}
-          ${wrap('unarmed', unarmedPanel(t.combat))}
+          ${wrap('combat-tradition', combatTraditionPanel(model, side))}
           ${wrap('sphere-skills', sphereSkillPanel(model))}
-          ${wrap('combat-spheres', sphereBonusPanel('combat', t.combat))}
+          ${wrap('combat-spheres', sphereBonusPanel('combat', side))}
         </div>` : ''}
     </div>`;
   }
@@ -726,56 +746,6 @@ function sphereSkillPanel(model) {
     </section>`;
   }
 
-
-function unarmedPanel(t) {
-    const u = t.unarmed || {};
-    const per = u.perSphere || {};
-    const base = 'training.combat.unarmed';
-    const chk = (label, path, value, count) => `<div class="statline">
-      <span class="label">${label} <span class="badge">${count ?? 0} talents</span></span>
-      <span class="value">${check(path, value)}</span></div>`;
-    // Unorthodox Unarmed Training: two sphere picks per feat on the character.
-    const slots = Number(u.unorthodoxSlots) || 0;
-    const picks = u.otherSpheres || [];
-    const unorthodox = slots ? `<div class="fld" style="margin-top:6px"><span>Unorthodox Unarmed Training spheres
-        <span class="badge">${u.unorthodoxFeats || 0} feat${u.unorthodoxFeats === 1 ? '' : 's'} · ${slots} picks</span></span>
-      <div class="picks">${Array.from({ length: slots }, (_, i) => select(`${base}.otherSpheres.${i}`, picks[i] || '', COMBAT_SPHERES.filter((s) => !UNARMED_SPHERES.includes(s)))).join('')}</div>
-      </div>`
-      : '<p class="hint">Unorthodox Unarmed Training, once taken as a feat, gives two more sphere picks here — two per time it is taken.</p>';
-    return `<section class="panel">
-      <h3>Unarmed damage</h3>
-      <div class="bigstats" style="margin-bottom:8px">
-        ${bigStat('Dice', u.dice ?? '—', `${u.effectiveTalents ?? 0} effective talents`)}
-      </div>
-      <div class="unarmed-grid">
-        ${chk('Boxing', `${base}.usesBoxing`, u.usesBoxing, per.Boxing)}
-        ${chk('Brute', `${base}.usesBrute`, u.usesBrute, per.Brute)}
-        ${chk('Open Hand', `${base}.usesOpenHand`, u.usesOpenHand, per['Open Hand'])}
-        ${chk('Wrestling', `${base}.usesWrestling`, u.usesWrestling, per.Wrestling)}
-      </div>
-      ${unorthodox}
-      <div class="unarmed-grid" style="margin-top:6px">
-        <div class="statline" title="Counts as ${TALENTED_KNUCKLE_TALENTS} virtual talents">
-          <span class="label">Talented Knuckle <span class="badge">+${TALENTED_KNUCKLE_TALENTS}</span></span>
-          <span class="value">${check(`${base}.talentedKnuckle`, u.talentedKnuckle)}</span></div>
-        <div class="statline" title="Counts as ${BRAWLERS_VEST_TALENTS} virtual talents">
-          <span class="label">Brawler's Vest <span class="badge">+${BRAWLERS_VEST_TALENTS}</span></span>
-          <span class="value">${check(`${base}.brawlersVest`, u.brawlersVest)}</span></div>
-      </div>
-      ${u.asuraEssence ? `<div class="statline" title="The essence invested in the Bands of the Asura veil, ${ASURA_TALENTS_PER_ESSENCE} Open Hand talents a point">
-        <span class="label">Bands of the Asura <span class="badge">${u.asuraEssence} essence</span></span>
-        <span class="value">+${u.asuraEssence * ASURA_TALENTS_PER_ESSENCE} talents</span></div>` : ''}
-      ${editLine('Extra effective talents', `${base}.extraTalents`, u.extraTalents ?? 0)}
-      ${editLine('Step increases (+1 die step)', `${base}.stepIncreases`, u.stepIncreases)}
-      ${editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}
-      <div class="statline"><span class="label">Count tradition talents too</span>
-        <span class="value">${check('training.combat.unarmed.includeTradition', u.includeTradition)}</span></div>
-      ${u.improvedUnarmedStrike ? '<p class="hint">Gains Improved Unarmed Strike (1+ unarmed-sphere talents).</p>' : ''}
-      <div class="statline"><span class="label">Class has its own unarmed progression</span>
-        <span class="value">${check('training.combat.unarmed.nativeProgression', u.nativeProgression)}</span></div>
-      ${u.nativeProgression ? '<p class="hint warn">Native progression: treat unarmed strikes as one size larger with 3+ talents instead of using this table.</p>' : ''}
-    </section>`;
-  }
 
   /* ----- templates -----
 
