@@ -115,6 +115,16 @@
   button.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
     border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; }
   button.ext:hover { border-color: var(--accent); color: var(--accent); }
+  /* Printing: the sheet does its own print styling (see app/css/sheet.css).
+     All this page has to do is get out of the way -- the picker, the roster
+     chrome and the dark backdrop are for choosing a character, not for the
+     page that comes out of the printer. */
+  @media print {
+    :root { color-scheme: light; }
+    body { background: #fff; color: #000; }
+    header.app, #banner, .welcome, dialog { display: none !important; }
+    character-sheet { border: 0; }
+  }
 </style>
 </head>
 <body>

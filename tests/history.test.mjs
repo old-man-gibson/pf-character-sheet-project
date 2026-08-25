@@ -189,6 +189,74 @@ console.log('\ncompression -- what a snapshot actually costs');
   check('awkward text survives', await unpack(await pack(odd)), odd);
 }
 
+/* ---------------------------------------------------------------------- *
+ * asking the browser to keep it
+ * ---------------------------------------------------------------------- */
+
+/*
+ * `requestPersistence()` remembers its answer for the life of the module, so
+ * each case wants a module of its own: a query string makes a fresh instance
+ * without disturbing the one the rest of this file imported. `navigator` is a
+ * getter in Node and ignores assignment, hence defineProperty.
+ */
+let instance = 0;
+async function withNavigator(stub) {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: stub, configurable: true, writable: true,
+  });
+  const mod = await import(`../app/js/history.js?persist=${++instance}`);
+  return mod.requestPersistence;
+}
+
+console.log('\nasking the browser for durable storage');
+{
+  // A browser with no Storage API at all, which is also what Node is.
+  const ask = await withNavigator({});
+  check('no API to ask: null, and no throw', await ask(), null);
+}
+{
+  let persistCalls = 0;
+  const ask = await withNavigator({
+    storage: { persisted: async () => true, persist: async () => { persistCalls++; return true; } },
+  });
+  check('already durable from an earlier visit', await ask(), true);
+  check('and the player is not prompted a second time', persistCalls, 0);
+}
+{
+  let persistCalls = 0;
+  const ask = await withNavigator({
+    storage: { persisted: async () => false, persist: async () => { persistCalls++; return true; } },
+  });
+  check('granted', await ask(), true);
+  check('asked once', persistCalls, 1);
+  check('asked again in the same page: the remembered answer', await ask(), true);
+  check('and still only one prompt', persistCalls, 1);
+}
+{
+  let persistCalls = 0;
+  const ask = await withNavigator({
+    storage: { persisted: async () => false, persist: async () => { persistCalls++; return false; } },
+  });
+  check('refused', await ask(), false);
+  // The point of remembering a refusal: Firefox prompts, and a sheet that
+  // asked on every load would prompt on every load.
+  check('a refusal is not put to the player twice', await ask(), false);
+  check('one prompt for two asks', persistCalls, 1);
+}
+{
+  const ask = await withNavigator({
+    storage: {
+      persisted: async () => { throw new Error('blocked by permissions policy'); },
+      persist: async () => true,
+    },
+  });
+  check('a throwing Storage API is swallowed, not propagated', await ask(), null);
+}
+// Leave the global as it was found, so nothing after this sees a stub.
+Object.defineProperty(globalThis, 'navigator', {
+  value: undefined, configurable: true, writable: true,
+});
+
 console.log('\nconstants and keys');
 check('the working key is the one the app already used',
   workingKey('saburo'), 'character-sheet:saburo');

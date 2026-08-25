@@ -254,6 +254,23 @@ If IndexedDB is unavailable — private browsing, a blocked frame, a zero quota 
 no saved version and no history, and the sheet behaves as it did before any of this
 existed: edits are kept continuously and it reopens where you left off.
 
+**If `localStorage` will not take the write either**, that fallback is gone too, and the
+sheet says so rather than letting you find out when you close the tab: a red **"Not being
+saved"** banner appears under the header with **Export JSON** beside it, and stays until a
+write lands. It has no dismiss, because it is not reporting something that happened — it
+is reporting something that is still true. This is the one notice on the sheet that is a
+standing condition rather than an event.
+
+**Keeping it.** Both stores are *best-effort* by default, which means the browser may
+evict them under disk pressure, and WebKit clears script-writable storage after seven days
+without a visit. So the sheet asks once per load for [durable
+storage](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist), which
+takes eviction out of the browser's hands. Whether it is granted is the browser's call and
+they disagree — Firefox asks you, Chromium decides from its own engagement signals, Safari
+mostly declines — so nothing depends on the answer, and a refusal leaves things exactly as
+they were. A published view never asks: it writes nothing down. It is still worth an
+**Export all** now and then; a browser profile is not a backup.
+
 `tests/history.test.mjs` covers the parts that need no database: what counts as a change,
 what gets evicted, and the compression, against the real characters.
 

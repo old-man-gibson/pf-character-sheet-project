@@ -125,7 +125,9 @@ import {
   targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
-import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
+import {
+  historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
+} from './history.js';
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
@@ -414,6 +416,7 @@ export class CharacterSheetElement extends HTMLElement {
   #showHistory = false;
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
+  #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -631,6 +634,11 @@ export class CharacterSheetElement extends HTMLElement {
     this.#sourceDoc = structuredClone(doc);
     this.#history = historyFor(doc?.id ?? 'character',
       { storageKey: this.getAttribute('storage-key') });
+    // Ask once that this browser keep what it is about to be given. A published
+    // view is exempt: it writes nothing down, so asking a stranger's browser to
+    // set aside durable room for a sheet it will not keep is a prompt for
+    // nothing. Deliberately not awaited -- the answer changes no code path here.
+    if (!this.isPublished) requestPersistence();
     this.#resume = null;
     this.#historyNote = null;
     this.#showHistory = false;
@@ -683,7 +691,7 @@ export class CharacterSheetElement extends HTMLElement {
      * that id before the picker renames it, and a write here would land on the
      * other character's state.
      */
-    if (drifted) this.#history.writeWorking(this.#model.toJSON());
+    if (drifted) this.#writeWorking();
     if (!this.isPublished) await this.#refreshSnapshots();
     this.#render();
   }
@@ -830,10 +838,35 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #persist() {
     if (!this.#model || !this.#history) return;
-    this.#history.writeWorking(this.#model.toJSON());
+    this.#writeWorking();
 
     clearTimeout(this.#snapshotTimer);
     this.#snapshotTimer = setTimeout(() => this.#considerSnapshot(), 800);
+  }
+
+  /**
+   * Write the working state, and say so when it does not land.
+   *
+   * `writeWorking` has always returned whether the write happened, and until
+   * now every caller threw the answer away -- so a player whose localStorage
+   * was full, or who was in a private window that gives none, kept editing a
+   * sheet that had quietly stopped being written down and found out when they
+   * closed the tab. Silence is the one wrong answer here: the sheet cannot fix
+   * it, but it can stop the player from spending an evening on a character
+   * that is not going to be there.
+   *
+   * The banner is toggled in place rather than through `#render()`, because
+   * this is called on every edit and a wholesale re-render mid-word takes the
+   * caret out of whatever is being typed. It is only touched when the state
+   * actually turns over, so the ordinary path costs one boolean compare.
+   */
+  #writeWorking() {
+    const ok = this.#history.writeWorking(this.#model.toJSON()) !== false;
+    if (ok === !this.#storageFailed) return ok;   // nothing has changed
+    this.#storageFailed = !ok;
+    const banner = this.shadowRoot?.querySelector('.savefail');
+    if (banner) banner.hidden = ok;
+    return ok;
   }
 
   /**
@@ -929,7 +962,7 @@ export class CharacterSheetElement extends HTMLElement {
         try { await this.#history.snapshot(current, this.#changes); } catch { /* best effort */ }
       }
       this.#adoptDocument(doc);
-      this.#history.writeWorking(this.#model.toJSON());
+      this.#writeWorking();
       this.#snapshotAt = this.#changes;
       this.#resume = null;
       const when = this.#snapshots.find((s) => s.key === key);
@@ -1129,16 +1162,21 @@ export class CharacterSheetElement extends HTMLElement {
       ${SHEET_LINK}
       <div class="wrap">
         ${this.#header()}
-        <nav class="tabs" role="tablist">
+        <nav class="tabs" role="tablist" aria-label="Character sheet sections">
           ${bar.map((e) => `
-            <button role="tab" data-tab="${e.id}" data-tabkey="${esc(e.key)}" aria-pressed="${this.#tab === e.id}"
+            <button role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
+              aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
+              tabindex="${this.#tab === e.id ? '0' : '-1'}"
               ${e.kind === 'visiting' ? 'class="visiting" title="Not on this view’s bar — search took you here"' : ''}
               ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
           `).join('')}
-          <button role="tab" data-tab="systabs" aria-pressed="${this.#tab === 'systabs'}" title="Show, hide and rearrange tabs">⚙</button>
+          <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
+            aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
+            title="Show, hide and rearrange tabs">⚙</button>
         </nav>
         <div class="rollslot">${this.#rollToastHtml()}</div>
-        <div class="body">${this.#panel()}</div>
+        <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
+          tabindex="0">${this.#panel()}</div>
       </div>`;
     this.#applyCharacterColor();
     this.#bind();
@@ -1269,6 +1307,18 @@ export class CharacterSheetElement extends HTMLElement {
           ${esc(this.#importError)}
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
+        ${/*
+           * Always in the markup, hidden until it is true, so `#writeWorking`
+           * can turn it on without a re-render (see there). There is no dismiss
+           * on it: every other notice here reports something that has finished
+           * happening, and this one reports something that is still the case.
+           */''}
+        <div class="savefail" role="alert" ${this.#storageFailed ? '' : 'hidden'}>
+          <strong>Not being saved.</strong> This browser refused to store the sheet —
+          a private window, or storage that is full. Your edits are here on screen but
+          will not survive closing the tab.
+          <button data-action="export" class="primary">Export JSON</button>
+        </div>
       </header>`;
   }
 
@@ -3198,6 +3248,51 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Arrow keys along the tab bar, which is the half of `role="tablist"` that
+   * is a promise rather than a label.
+   *
+   * A tablist tells a screen reader "these are the sections, and one of them
+   * is open" -- and having said so, it owes the reader the navigation that
+   * comes with it: the bar is *one* stop on the Tab key (the roving tabindex
+   * in `#render`), and the arrows move within it. Without this the reader is
+   * told there are twenty sections and given no way to walk them.
+   *
+   * Selection follows focus, which the ARIA practices allow where showing a
+   * panel is cheap and is what clicking already does here. That costs a
+   * re-render per arrow press, and a re-render replaces the button the key
+   * came from -- so focus is put back on the tab that is now selected, or the
+   * bar would drop the reader on the document after one press.
+   *
+   * Bound to the bar rather than the root on purpose: a sheet is mostly text
+   * inputs, and a document-level arrow handler would fight every one of them.
+   */
+  #bindTabKeys(root) {
+    const bar = root.querySelector('nav.tabs');
+    if (!bar) return;
+    bar.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const tabs = [...bar.querySelectorAll('[role="tab"]')];
+      const at = tabs.findIndex((t) => t === e.target);
+      if (at < 0) return;
+      let to = at;
+      switch (e.key) {
+        // Wrapping at both ends, so the bar is a loop rather than a dead stop.
+        case 'ArrowRight': to = (at + 1) % tabs.length; break;
+        case 'ArrowLeft': to = (at - 1 + tabs.length) % tabs.length; break;
+        case 'Home': to = 0; break;
+        case 'End': to = tabs.length - 1; break;
+        default: return;
+      }
+      e.preventDefault();
+      const id = tabs[to].dataset.tab;
+      if (id === this.#tab) return;
+      this.#tab = id;
+      this.#render();
+      this.shadowRoot.getElementById(`tab-${id}`)?.focus();
+    });
+  }
+
+  /**
    * Rearranging by drag: the tabs on the bar, and the rows of the manager's
    * "Tab bar" list. Both carry `data-tabkey`; dropping one on another puts it
    * before that one (or after, when dropped on the right/lower half), and a
@@ -3265,6 +3360,7 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-tab]').forEach((b) => {
       b.addEventListener('click', () => { this.#tab = b.dataset.tab; this.#render(); });
     });
+    this.#bindTabKeys(root);
     this.#bindTabDrag(root);
 
     // The d20 buttons. One listener per button rather than one on the root,
@@ -4931,7 +5027,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (this.#resume?.key) this.#restoreSnapshot(this.#resume.key);
         else if (this.#resume?.doc) {
           this.#adoptDocument(this.#resume.doc);
-          this.#history?.writeWorking(this.#model.toJSON());
+          if (this.#history) this.#writeWorking();
           this.#resume = null;
           this.#render();
         }

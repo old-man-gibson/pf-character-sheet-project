@@ -128,7 +128,7 @@ export function renderOverviewPanel(model, ctx) {
         </h3>
         <div class="bigstats">
           ${bigStat('HP', { html: movedInline(cs, 'hp', c.hp.total, String) }, c.hp.ability ? `${c.hp.ability} based` : '')}
-          ${bigStat('AC', { html: movedInline(cs, 'ac', d.ac, String) }, `touch ${d.touch} &middot; FF ${d.flatFooted}`)}
+          ${bigStat('AC', { html: movedInline(cs, 'ac', d.ac, String) }, { html: `touch ${d.touch} &middot; FF ${d.flatFooted}` })}
           ${bigStat('CMD', { html: movedInline(cs, 'cmd', d.cmd, String) }, `FF ${d.ffCmd}`)}
           ${bigStat('Init', { html: movedInline(cs, 'initiative', c.hp.initiative) }, c.hp.initAbility || '', '',
     rollButton(model, 'initiative', 'self', 'initiative', cs))}
@@ -522,11 +522,11 @@ function dashResourcesCard(model) {
         <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
         <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
         <span class="tracker-controls">
-          <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
-          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
+          <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
+          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
             aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
           <span class="pool">${range}</span>
-          <button data-tracker-step="${t.id}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
+          <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
         </span>
       </div>`;
     };

@@ -1777,8 +1777,8 @@ export function cardcastingPanel(model, ctx) {
     const t = p.table || {};
 
     const views = `<nav class="subtabs" role="tablist" aria-label="Cardcasting views">
-      <button role="tab" data-deck-view="table" aria-pressed="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
-      <button role="tab" data-deck-view="deck" aria-pressed="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
+      <button role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
+      <button role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
     </nav>`;
     if (ctx.deckView === 'table') return `${views}<div class="grid">${tablePanel(model, ctx, p, k)}</div>`;
 

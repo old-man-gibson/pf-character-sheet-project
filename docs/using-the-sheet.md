@@ -229,6 +229,22 @@ to send it back to the manager, or **reset** to the default nine. The bar is sav
 with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
 export.
 
+### Keyboard
+
+The bar is one stop on the **Tab** key, not twenty: land on it and the **←/→** arrows
+move along it (wrapping at both ends), **Home** and **End** jump to the first and last.
+The tab you move to opens as you reach it, which is what a click does too. From the bar,
+one more **Tab** press is into the panel itself.
+
+### Printing a tab
+
+**Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
+header buttons or any of the controls — fields print as the values in them, and a
+proficiency chip prints only if it is one the character has. That is the whole rule:
+the section on screen is the section that comes out, so a sheet for the table is a
+few prints rather than one very long one. Long tables repeat their headings on each
+page, and rows, cards and stat blocks are kept from splitting across a break.
+
 ### Session view and build view
 
 The header's **Build view / Session view** button switches between two arrangements

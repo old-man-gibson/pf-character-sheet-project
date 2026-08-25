@@ -50,6 +50,48 @@ const BY_CHARACTER = 'by-character';
 export const workingKey = (id) => `character-sheet:${id}`;
 
 /* ---------------------------------------------------------------------- *
+ * keeping it
+ * ---------------------------------------------------------------------- */
+
+/** The one ask per page load, so a refusal is not put to the player twice. */
+let persistence = null;
+
+/**
+ * Ask the browser to keep this origin's storage instead of evicting it.
+ *
+ * Both stores are *best-effort* until asked otherwise, and best-effort means
+ * exactly what it sounds like: under disk pressure the browser may throw any
+ * such origin away, and WebKit clears script-writable storage outright after
+ * seven days without a visit. For a sheet that lives nowhere but this browser
+ * that is the one failure an export cannot undo afterwards -- a player who
+ * misses a fortnight of sessions comes back to an empty picker.
+ *
+ * Granting it is the browser's call, not ours, and the three of them disagree:
+ * Firefox asks the player, Chromium decides from its own engagement signals,
+ * and Safari mostly declines. So the ask is made once, quietly, and nothing
+ * here depends on the answer -- a refusal leaves the storage exactly as good
+ * as it was before the call, which is what every build until now shipped.
+ *
+ * Resolves true if the origin is durable, false if the browser said no, and
+ * null if there was nothing to ask.
+ */
+export function requestPersistence() {
+  if (persistence) return persistence;
+  persistence = (async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.storage?.persist) return null;
+      // Already durable from an earlier visit: asking again earns a second
+      // prompt in the one browser that prompts, for an answer already given.
+      if (await navigator.storage.persisted()) return true;
+      return await navigator.storage.persist();
+    } catch {
+      return null;                       // no API here, or not allowed to ask
+    }
+  })();
+  return persistence;
+}
+
+/* ---------------------------------------------------------------------- *
  * counting changes
  * ---------------------------------------------------------------------- */
 
