@@ -10,7 +10,8 @@
 
 import { GAME_SYSTEMS, cleanSkillVariant } from '../rules.js';
 import { COMPANION_KINDS, companionInUse } from '../companions.js';
-import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies } from './document.js';
+import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
+import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
 import { COOKING_COURSES } from './subsystems/cooking.js';
 import { guileInUse } from './subsystems/guile.js';
@@ -218,6 +219,11 @@ export function renameSystemTab(model, index, name) {
       prefs[listKey] = prefs[listKey].map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
     }
   }
+  // And so does its colour, for the same reason.
+  if (prefs?.tabColors && `sys:${tab.name}` in prefs.tabColors) {
+    prefs.tabColors[`sys:${next}`] = prefs.tabColors[`sys:${tab.name}`];
+    delete prefs.tabColors[`sys:${tab.name}`];
+  }
   tab.name = next;
   model.recompute();
   return model;
@@ -234,6 +240,8 @@ export function removeSystemTab(model, index) {
       model.data.uiPrefs[listKey] = model.data.uiPrefs[listKey].filter((k) => k !== `sys:${tab.name}`);
     }
   }
+  // A colour left behind would be inherited by the next tab to take the name.
+  if (model.data.uiPrefs?.tabColors) delete model.data.uiPrefs.tabColors[`sys:${tab.name}`];
   model.recompute();
   return model;
 }
@@ -276,7 +284,14 @@ export function systemTabsInUse(model) {
     guile: guileInUse(d.training?.guile),
     crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
       || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
-    akashic: !!(d.akashic?.slots || []).length,
+    // Not `slots.length`: the workbook's Akashic tab prints the chakra rows
+    // ("Storm Veil", "Feet Veil", …) whether or not anyone weaves, so the
+    // importer finds fifteen receptacles on a character who has never shaped a
+    // veil and this read true for every character carrying the tab. It asks
+    // whether anything is *in* them instead -- a veil shaped, a chakra bound,
+    // a class named, essence allocated -- which is what the manager's `in use`
+    // badge has always claimed to mean.
+    akashic: akashicInUse(d.akashic),
     maneuvers: !!(d.maneuvers?.disciplines || []).length,
     vancian: !!(d.vancian?.classes || []).length,
     psionics: !!(d.psionics?.classes || []).length,
@@ -289,6 +304,25 @@ export function systemTabsInUse(model) {
   };
   for (const kind of COMPANION_KINDS) out[kind] = companionInUse(kind, d[kind]);
   return out;
+}
+
+/**
+ * Whether anyone has actually woven with this character's akashic block.
+ *
+ * The receptacles arrive pre-printed from the workbook and an untouched one is
+ * `{ slot: 'Storm', bound: false, twinveil: false, veils: [] }`, so their
+ * *existence* says nothing. Anything a player could have put there does:
+ * a veil in a receptacle, a chakra bound, a twin veil, a veilweaving class
+ * named, essence allocated, or a receptacle of their own.
+ */
+function akashicInUse(a) {
+  if (!a || typeof a !== 'object') return false;
+  const named = (list) => (list || []).some((x) => String(x?.name || '').trim());
+  const holding = (r) => (r?.veils || []).length > 0 || !!r?.bound || !!r?.twinveil;
+  return named(a.classes)
+    || [...(a.slots || []), ...(a.kheshig || [])].some(holding)
+    || (a.otherReceptacles || []).some((r) => String(r?.name || '').trim() || Number(r?.essence) > 0)
+    || Object.values(a.essence || {}).some((v) => Number(v) > 0);
 }
 
 /** The tab ids lit up by the systems marked on the Classes table. */
@@ -346,10 +380,33 @@ export function setTabOrder(model, keys) {
   return model;
 }
 
-/** Put the active view's bar back to its default. */
+/**
+ * Put the active view's bar back to its default.
+ *
+ * `buildDefaultTabs` rather than the bare nine, so Reset gives back exactly
+ * the bar an import would have produced -- including this character's
+ * sub-systems. Resetting to something thinner than what you started with is
+ * not what the button says.
+ */
 export function resetTabOrder(model) {
   return model.setTabOrder(model.viewMode() === 'session'
-    ? model.sessionDefaultTabs() : DEFAULT_TAB_ORDER);
+    ? model.sessionDefaultTabs() : buildDefaultTabs(model));
+}
+
+/** The colour on one tab, or null where it wears the theme's own. */
+export function tabColor(model, key) {
+  return normalizeHex(model.data.uiPrefs?.tabColors?.[key]) || null;
+}
+
+/** Colour one tab; a blank or unreadable hex clears it back to the theme. */
+export function setTabColor(model, key, hex) {
+  const prefs = model.data.uiPrefs || (model.data.uiPrefs = {});
+  if (!prefs.tabColors || typeof prefs.tabColors !== 'object') prefs.tabColors = {};
+  const clean = normalizeHex(hex);
+  if (clean) prefs.tabColors[key] = clean;
+  else delete prefs.tabColors[key];
+  model.recompute();
+  return model;
 }
 
 /** Put a tab on the bar (at the end, or at `at`) -- a no-op if it is already there. */

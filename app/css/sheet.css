@@ -112,7 +112,10 @@
 
 * { box-sizing: border-box; }
 
-.wrap { padding: 14px; }
+/* Positioned so the tab-colour panel can be placed against the sheet rather
+   than the page: `:host` carries no padding or border, so this box and the
+   host's line up and a coordinate measured off the host lands here unchanged. */
+.wrap { padding: 14px; position: relative; }
 
 /* ---------- header ---------- */
 .head {
@@ -431,6 +434,52 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   margin: 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
 }
 .tabs button { border-radius: 6px 6px 0 0; }
+/* A coloured tab. `--tab-color` is set inline per button, and the rules read
+   it the way the theme's own accent is read one row up -- so a coloured tab
+   is the same shape as an uncoloured one, in a different hue. Resting state
+   is deliberately quiet: the colour is a label for finding a tab in a bar of
+   fifteen, not a second selected-state competing with the real one. */
+.tabs button.tinted {
+  color: var(--tab-color);
+  border-color: color-mix(in srgb, var(--tab-color) 45%, var(--cs-line));
+}
+.tabs button.tinted:hover { border-color: var(--tab-color); }
+.tabs button.tinted[aria-selected="true"] {
+  color: var(--tab-color);
+  border-color: var(--tab-color);
+  background: color-mix(in srgb, var(--tab-color) 16%, transparent);
+}
+/* On the light theme the same hue has to carry on near-white, and the palette
+   is picked for a dark bar: a pale blue that reads well at the top of this
+   file is barely there at the top of that one. So the tint is taken towards
+   ink for the text, which is the same move the light theme already makes on
+   its own accent and edit blue. The edges keep more of the hue -- they are
+   shape rather than text, and have no contrast ratio to meet. */
+:host([theme="light"]) .tabs button.tinted {
+  color: color-mix(in srgb, var(--tab-color) 62%, #000);
+  border-color: color-mix(in srgb, var(--tab-color) 60%, var(--cs-line));
+}
+:host([theme="light"]) .tabs button.tinted[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--tab-color) 72%, #000);
+  background: color-mix(in srgb, var(--tab-color) 18%, transparent);
+}
+/* The row swatch in the ⚙ manager, and the panel both entry points open. */
+.swatch.tabswatch { width: 18px; height: 18px; }
+.tabmenu {
+  position: absolute; z-index: 30; width: 232px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 9px 10px; background: var(--cs-panel); color: var(--cs-text);
+  border: 1px solid var(--cs-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.tabmenu-head { display: flex; align-items: center; gap: 8px; }
+.tabmenu-name {
+  font-size: 0.78rem; font-weight: 620; color: var(--cs-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabmenu-head button { margin-left: auto; padding: 0 6px; }
+.tabmenu .pair { display: flex; gap: 6px; align-items: center; }
+.tabmenu input.hexin { flex: 1; width: auto; }
 /* The panel is a tab stop so a keyboard can reach a section that holds nothing
    focusable -- a published sheet's prose, mostly. Inset, because an outline
    drawn round the whole body would otherwise sit half off the edge. */
@@ -3097,6 +3146,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .histnote,
   .resume,
   .resetconfirm,
+  .tabmenu,
   dialog { display: none !important; }
 
   /* Buttons go as a class, then the two kinds that are not affordances come

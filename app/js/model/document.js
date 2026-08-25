@@ -939,10 +939,19 @@ export function normalise(model) {
     }
   }
   delete d.uiPrefs.hiddenTabs['Item Crafting'];   // now a panel, not a system tab
-  // The tab bar: which tabs are on it, in what order. Everything not listed
-  // waits in the ⚙ manager. Started from the standard eight; the player
-  // rearranges, hides and shows from there.
-  if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = [...DEFAULT_TAB_ORDER];
+  // A colour per tab, keyed by tab key, `{ overview: '#6ea8fe', … }`. A
+  // preference like the order beside it, so it travels with an export and is
+  // shared by both views: a tab's colour is the tab's, not the bar's.
+  if (!d.uiPrefs.tabColors || typeof d.uiPrefs.tabColors !== 'object') d.uiPrefs.tabColors = {};
+  for (const [key, value] of Object.entries(d.uiPrefs.tabColors)) {
+    const hex = normalizeHex(value);
+    if (hex) d.uiPrefs.tabColors[key] = hex;
+    else delete d.uiPrefs.tabColors[key];        // anything unreadable is no colour
+  }
+  // The tab bar itself is seeded at the *end* of this function rather than
+  // here: it now depends on which sub-systems the character uses, and the
+  // blocks that answer that -- training, the companions, the conditions --
+  // are normalised below. See `buildDefaultTabs`.
   // Spheres & Magic became two tabs -- Martial Spheres and Magic Spheres --
   // so a bar saved with the old one carries both in its place, in that order
   // and where the old tab stood. Cheaper than a schema bump: the document is
@@ -1455,6 +1464,42 @@ export function normalise(model) {
   if (on.length === 2 && on[0] === 'helpless' && on[1] === 'paralyzed') {
     for (const name of Object.keys(d.conditions)) d.conditions[name] = 0;
   }
+
+  // Last, because it reads everything above: the bar a character opens on.
+  if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = buildDefaultTabs(model);
+}
+
+/**
+ * The build bar a character starts from: the standard nine, then every
+ * sub-system it actually uses.
+ *
+ * A workbook that arrives carrying maneuvers, veils and a familiar used to
+ * land on the same nine tabs as a plain fighter, with all three waiting in the
+ * ⚙ manager for someone to know to go and look. The character's own data is a
+ * better answer to "which tabs does this character want" than a fixed list is,
+ * and the session view has been seeding its bar that way from the start -- so
+ * this is the build view catching up rather than a new idea.
+ *
+ * *Uses* means the same thing it means in the manager's badges: the sub-system
+ * holds data (`in use`), or a class on the Overview names it (`marked`). The
+ * marked half matters as much as the first: it is how a player says "this
+ * character is a veilweaver" before there is a veil on the sheet.
+ *
+ * Appended rather than woven in, so the nine stay in the order people already
+ * know them in and the extras arrive as a predictable block at the end.
+ *
+ * This is a *default*, not a rule -- the moment the player hides, shows or
+ * drags anything, the resulting order is stored and this is never consulted
+ * again. So a tab put back in the manager stays there.
+ */
+export function buildDefaultTabs(model) {
+  const base = [...DEFAULT_TAB_ORDER];
+  // Called during `normalise`, so be defensive about what is on the model.
+  if (typeof model?.systemTabsInUse !== 'function') return base;
+  const inUse = model.systemTabsInUse();
+  const tagged = model.taggedSystemTabs?.() ?? new Set();
+  const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
+  return [...new Set([...base, ...systems])];
 }
 
 export function toDocument(model) {
