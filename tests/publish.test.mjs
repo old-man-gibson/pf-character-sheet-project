@@ -57,7 +57,7 @@ const richest = fixtureIds()
   .map((id) => {
     const doc = new Character(loadCharacter(id)).toJSON();
     const { report } = publishDocument(doc);
-    return { id, doc, weight: report.carried };
+    return { id, doc, weight: report.carried + report.outline.length };
   })
   .sort((a, b) => b.weight - a.weight)[0];
 
@@ -74,6 +74,30 @@ check('a published document is still a character the model accepts',
 check('publishing twice changes nothing the first pass did not',
   JSON.stringify(publishDocument(published).doc), JSON.stringify(published));
 check('the report says something a button could print', /carrying/.test(describePublish(report)), true);
+
+/*  Every entry the character references lands in exactly one bucket. If the
+ *  four do not add up to what was referenced, something travelled unreported
+ *  or was reported twice -- and the whole point of the report is that an
+ *  author can trust it about a sheet only a stranger can judge. */
+const referenced = (richest.doc.akashic?.slots || [])
+  .flatMap((s) => s.veils || []).filter((v) => v?.name).length
+  + (richest.doc.maneuvers?.disciplines || [])
+    .reduce((n, d) => n + (d.known || []).length + (d.custom || []).length, 0);
+check('every referenced entry is accounted for exactly once',
+  report.carried + report.outline.length + report.blank.length + report.unknown.length,
+  referenced);
+
+/*  "Carried" has to mean a reader can read it. A maneuver whose pack gave only
+ *  its type is an outline, not content: the bundled Path of War catalogue is
+ *  deliberately that way, and counting it as carried is how an author sends
+ *  out a sheet of names with badges beside them believing it readable. */
+for (const d of published.maneuvers?.disciplines || []) {
+  const outlined = report.outline
+    .filter((o) => o.startsWith(`maneuver: ${d.name} / `))
+    .map((o) => o.slice(`maneuver: ${d.name} / `.length));
+  check(`${d.name}: nothing counted as an outline has rules text`,
+    outlined.filter((n) => String(d.notes?.[n]?.text ?? '').trim()), []);
+}
 
 /*  A discipline gives up its name and the maneuvers this character listed --
  *  never its catalogue. */
