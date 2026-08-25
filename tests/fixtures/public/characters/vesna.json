@@ -3288,8 +3288,25 @@
      "Wrestling": 0
     },
     "effectiveTalents": 0,
-    "dice": "1d3",
-    "improvedUnarmedStrike": false
+    "practitionerDice": "1d3",
+    "improvedUnarmedStrike": false,
+    "assocTalents": 0,
+    "native": {
+     "ladder": [],
+     "className": "",
+     "formula": "",
+     "threshold": 3,
+     "bonusSizes": 1,
+     "classLevel": 12,
+     "error": null,
+     "rung": null,
+     "baseDice": null,
+     "qualifies": false,
+     "sizeBonus": 0
+    },
+    "nativeDice": null,
+    "source": "practitioner",
+    "dice": "1d3"
    },
    "sheetBaseDC": 0,
    "customizations": [],

@@ -39,6 +39,7 @@ import {
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES,
+  MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, unarmedDice,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
@@ -51,6 +52,7 @@ import {
 } from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
+import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 
 let pass = 0;
@@ -341,6 +343,44 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('and it is the whole companion either way',
     [withoutRows.name, withoutRows.tricks.length, withoutRows.attacks.length, withoutRows.feats.length],
     ['Rustle', 3, 2, 3]);
+}
+
+console.log('a class’s own unarmed progression -- rungs, and the die chain they sit on');
+{
+  // The chain, walked and clamped. A size increase is two steps, which is the
+  // only arithmetic either progression does to a base die.
+  check('one step up', stepDice('1d6', 1), '1d8');
+  // Two steps *of this chain*, which is not the same as the size chart's own
+  // walk: here 1d6 -> 1d8 -> 1d10, where the size chart would say 2d6.
+  check('a size is two of them', stepDice('1d6', 2), '1d10');
+  check('and down again', stepDice('2d6', -2), '1d8');
+  check('clamped at the top', stepDice('16d6', 3), '16d6');
+  check('clamped at the bottom', stepDice('1d2', -5), '1d2');
+  check('a die the chain never lists says so rather than guessing', stepDice('1d5', 1), null);
+
+  // The ladder: the highest rung at or below the level, and nothing below the
+  // first rung -- a progression that has not started is not 1d2, it is absent.
+  const L = MONK_UNARMED_LADDER;
+  check('the first rung', ladderDice(L, 1), '1d6');
+  check('between rungs, the one below', ladderDice(L, 7), '1d8');
+  check('on a rung, that rung', ladderDice(L, 8), '1d10');
+  check('past the last, the last', ladderDice(L, 40), '2d10');
+  check('below the first, nothing at all', ladderDice(L, 0), null);
+  check('an empty ladder is nothing too', ladderDice([], 20), null);
+  // Rungs are typed by hand, so they are not required to arrive in order and
+  // a rung with no dice in it yet is not a rung.
+  check('out of order reads the same', ladderDice([{ from: 8, dice: '1d10' }, { from: 1, dice: '1d6' }], 9), '1d10');
+  check('a half-typed rung is skipped', ladderDice([{ from: 1, dice: '1d6' }, { from: 4, dice: '  ' }], 20), '1d6');
+  check('a later rung wins a tie, so correcting one by typing under it works',
+    ladderDice([{ from: 4, dice: '1d8' }, { from: 4, dice: '2d6' }], 4), '2d6');
+
+  // The monk's own table is why a ladder exists rather than a step count:
+  // 2d8 -> 2d10 is one rung but two chain steps, so no "+N steps" reproduces it.
+  check('the ladder is not walkable as steps', stepDice('2d8', 1), '3d6');
+  check('the threshold the classes print', UNARMED_NATIVE_THRESHOLD, 3);
+  // The practitioner table is untouched by any of this.
+  check('19 talents and five size increases is still Angou’s 12d8',
+    unarmedDice(19, { sizeIncreases: 5 }), '12d8');
 }
 
 /* ------------------------------------------------------------------ *
@@ -1414,6 +1454,107 @@ console.log('unarmed practitioner damage');
   c.set('training.combat.unarmed.usesOpenHand', false);
   check('toggling Open Hand off removes its talents', u().effectiveTalents, 16);
   c.set('training.combat.unarmed.usesOpenHand', true);
+}
+
+console.log('a class progression on a real character, and the weapon that reads it');
+{
+  const c = new Character(load('angou'));
+  const u = () => c.data.training.combat.unarmed;
+  const n = () => u().native;
+  const LADDER = 'training.combat.unarmed.native.ladder';
+
+  // Associated talents are a narrower count than the practitioner table's:
+  // the four unarmed spheres and whatever Unorthodox added to them, with none
+  // of the virtual talents Talented Knuckle and the vest grant.
+  check('associated talents exclude the virtual ones',
+    [u().assocTalents < u().effectiveTalents, u().assocTalents], [true, 13]);
+
+  // Off, nothing changes: the practitioner table still rules, which is how
+  // all five imported sheets load.
+  check('the toggle off leaves the sheet exactly as it was', [u().source, u().dice], ['practitioner', '12d8']);
+
+  c.set('training.combat.unarmed.nativeProgression', true);
+  check('on but with no rungs, the table is still there to fall back on',
+    [u().source, u().dice, u().nativeDice], ['practitioner', '12d8', null]);
+
+  c.set('training.combat.unarmed.native.className', 'Legendary Monk');
+  for (const rung of MONK_UNARMED_LADDER) c.listAdd(LADDER, { ...rung });
+  check('the class’s own levels, not the character’s', n().classLevel, 20);
+
+  // Angou's sheet carries five size increases of its own, and those are his
+  // however his base die is arrived at -- Enlarge and the rest do not care
+  // which table the die came off. Zeroed here to read the ladder plainly,
+  // and put back below to check they still stack.
+  c.set('training.combat.unarmed.sizeIncreases', 0);
+  check('rung 20 is 2d10, and 13 associated talents earn a size on top',
+    [n().rung, n().baseDice, n().qualifies, n().sizeBonus, u().dice], [20, '2d10', true, 1, '4d8']);
+  // The rung it read is the model's answer, so the panel states the reading
+  // rather than working it out again -- and a formula is not a rung.
+  c.set('identity.level', 11);
+  check('a shorter class reads a lower rung', [n().classLevel, n().rung, n().baseDice], [11, 8, '1d10']);
+  c.set('identity.level', 20);
+  check('and the weapon carrying the 🥊 reads it',
+    c.data.equipment.weapons.find((w) => w.useUnarmedDice)?.diceResolved, '4d8');
+  check('the practitioner reading is kept beside it, not thrown away',
+    [u().practitionerDice, u().effectiveTalents], ['2d8', 19]);
+
+  // The threshold is the class's to name, so it is a field rather than a 3.
+  c.set('training.combat.unarmed.native.threshold', 99);
+  check('a threshold out of reach drops the extra size', [n().qualifies, u().dice], [false, '2d10']);
+  c.set('training.combat.unarmed.native.threshold', UNARMED_NATIVE_THRESHOLD);
+
+  // The size and step increases belong to both progressions.
+  c.set('training.combat.unarmed.sizeIncreases', 1);
+  check('a size increase stacks with the class’s own', u().dice, '6d8');
+  c.set('training.combat.unarmed.sizeIncreases', 5);
+  check('all five of his stack too, and the chain clamps rather than running off it',
+    [u().dice, u().practitionerDice], ['16d6', '12d8']);
+  c.set('training.combat.unarmed.sizeIncreases', 0);
+
+  // The formula override wins over the rungs, and a broken one says why
+  // rather than leaving a weapon with no dice at all.
+  c.set('training.combat.unarmed.native.formula', "unarmed.classLevel >= 16 ? '2d8' : '1d8'");
+  check('a formula beats the ladder, and is not a rung',
+    [n().baseDice, u().dice, n().rung], ['2d8', '2d10', null]);
+  c.set('training.combat.unarmed.native.formula', 'no_such_name + 1');
+  check('a broken one is named and falls back to the table',
+    [/no_such_name/.test(n().error || ''), u().source, u().dice, u().practitionerDice],
+    [true, 'practitioner', '2d8', '2d8']);
+  c.set('training.combat.unarmed.native.formula', '');
+  check('clearing it returns to the rungs', u().dice, '4d8');
+
+  // With no class named the progression counts character levels, which is
+  // right for a single-classed sheet and visible as a hint on a gestalt one.
+  c.set('training.combat.unarmed.native.className', '');
+  check('with no class named it counts character levels', n().classLevel, 20);
+}
+
+console.log('a non-spheres unarmed fighter -- a class progression and no talents at all');
+{
+  // The whole point of the block being conjured: this character has no combat
+  // training side, so before it there was no unarmed panel, no dice, and the
+  // 🥊 on a weapon row had nothing to read.
+  const raw = JSON.parse(readFileSync(`${CHARACTERS_DIR}/angou.json`, 'utf8'));
+  delete raw.training.combat;
+  const c = new Character(raw);
+  const u = () => c.data.training.combat.unarmed;
+  check('the block is there even with no martial side', !!u(), true);
+  check('and it counts no talents, because there are none', u().assocTalents, 0);
+
+  c.set('training.combat.unarmed.nativeProgression', true);
+  c.set('training.combat.unarmed.sizeIncreases', 0);
+  for (const rung of MONK_UNARMED_LADDER) c.listAdd('training.combat.unarmed.native.ladder', { ...rung });
+  check('the ladder alone produces dice', [u().source, u().dice], ['native', '2d10']);
+  check('no associated talents, so no extra size', u().native.qualifies, false);
+  // The 🥊 is normally seeded from the workbook's cached unarmed dice, which
+  // this character no longer has -- so it is ticked here as a player would.
+  c.setItem('equipment.weapons', 0, 'useUnarmedDice', true);
+  check('the weapon reads them', c.data.equipment.weapons[0].diceResolved, '2d10');
+  check('and a formula can too', c.scope().unarmed.dice, '2d10');
+
+  // ...while the Martial Spheres tab stays off, because a bare holder for the
+  // unarmed block is not a martial side.
+  check('the martial tab is not lit by it', c.systemTabsInUse().martial, false);
 }
 
 console.log('customized weapons -- parallel talent tracks with one of them live');
@@ -7279,6 +7420,67 @@ console.log('character colour');
   const c2 = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('survives a round trip', c2.data.identity.color, '#6ea8fe');
   check('and moves no derived number', c2.diffFromSource(), []);
+}
+
+/* A tab the converter hands over keeps only the rows that hold something, and
+ * records what number each one had. For several tabs that number is the whole
+ * meaning: a blank worksheet row is what separates one Template feature from
+ * the next, and what ends a column of notes on ExtrasNotes. These check that
+ * the number survives the trip into `sheetTabs`, because for a while it did
+ * not -- three importers each kept a private copy of the converter's grid to
+ * work around it, and a fourth would have had to do the same. */
+console.log('sheet tabs keep their row numbers');
+{
+  const doc = blankDocument({ name: 'Row Numbers' });
+  doc.extraTabs = {
+    'Combat Training': {
+      rows: [
+        { r: 1, cells: ['Stance', 'Iron Tortoise'] },
+        // Worksheet rows 2 to 4 are blank, so the converter dropped them.
+        { r: 5, cells: ['Boost', 'Broken Blade'] },
+      ],
+    },
+  };
+  const c = new Character(doc);
+  const kept = (c.data.sheetTabs || []).find((t) => t.name === 'Combat Training');
+  check('the tab survives as a grid', kept?.rows?.length, 2);
+  check('each row keeps its sheet position', kept?.rows?.map((x) => x.r), [1, 5]);
+  check('so the blank rows come back', positionedRows(kept).length, 5);
+  check('with the last row where the sheet had it', positionedRows(kept)[4]?.cells[1], 'Broken Blade');
+
+  // Saving and reopening has to keep them, or the first reload reads a packed
+  // grid the converter never produced.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const back = (again.data.sheetTabs || []).find((t) => t.name === 'Combat Training');
+  check('and a round trip keeps them', back?.rows?.map((x) => x.r), [1, 5]);
+}
+
+console.log('a row typed into the grid editor has no number of its own');
+{
+  // The grid editor adds rows carrying no `r`, and they sit beside rows that
+  // have one. Neither may land on top of the other.
+  const mixed = { rows: [{ r: 1, cells: ['a'] }, { cells: ['added'] }, { r: 2, cells: ['b'] }] };
+  const placed = positionedRows(mixed).map((x) => x.cells[0] ?? null);
+  check('every row is placed', placed.filter((x) => x !== null).length, 3);
+  check('in the order they were given', placed, ['a', 'added', 'b']);
+}
+
+console.log('a blank worksheet row ends a column of notes');
+{
+  const doc = blankDocument({ name: 'Extras Gaps' });
+  doc.extraTabs = {
+    ExtrasNotes: {
+      rows: [
+        { r: 1, cells: ['Range 1'] },
+        { r: 2, cells: ['first line'] },
+        { r: 3, cells: ['second line'] },
+        // Worksheet row 4 is blank, which is where the column ends.
+        { r: 5, cells: ['a note about something else'] },
+      ],
+    },
+  };
+  const note = (new Character(doc).data.notes || []).find((n) => n.title === 'Range 1');
+  check('the column stops at the gap', note?.body, 'first line\nsecond line');
 }
 
 console.log('spheres of guile -- two talent ladders, and DCs read off a skill');

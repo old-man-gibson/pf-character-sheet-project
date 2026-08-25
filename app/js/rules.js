@@ -1606,6 +1606,20 @@ export const STEP_DIE = {
 };
 
 /**
+ * One die value moved along that chain, clamped to its ends. A size increase
+ * is two steps and a plain step increase one, which is the sheet's own rule
+ * and the only arithmetic either progression does to a base die.
+ *
+ * Returns null for a die the chain does not list, so a caller can say so
+ * rather than silently substituting something else.
+ */
+export function stepDice(die, steps = 0) {
+  const at = DIE_STEP[String(die ?? '').trim().toLowerCase()];
+  if (at === undefined) return null;
+  return STEP_DIE[Math.max(2, Math.min(20, at + (Number(steps) || 0)))];
+}
+
+/**
  * Unarmed damage dice, exactly as the sheet computes them: effective talents
  * pick the Medium-column base die, then each size increase is worth two die
  * steps and each step increase one, capped at the top of the chain.
@@ -1613,11 +1627,58 @@ export const STEP_DIE = {
 export function unarmedDice(talents, { stepIncreases = 0, sizeIncreases = 0 } = {}) {
   const row = UNARMED_TABLE[Math.max(0, Math.min(20, Math.floor(Number(talents) || 0)))];
   const base = row[1]; // Medium
-  let step = (DIE_STEP[base] ?? 4)
-    + 2 * (Number(sizeIncreases) || 0)
-    + (Number(stepIncreases) || 0);
-  step = Math.max(2, Math.min(20, step));
-  return STEP_DIE[step];
+  return stepDice(base, 2 * (Number(sizeIncreases) || 0) + (Number(stepIncreases) || 0))
+    ?? STEP_DIE[4];
+}
+
+/* ----- a class's own unarmed progression ----- */
+
+/**
+ * How many unarmed-associated talents earn the extra size increase a class
+ * progression grants on top of its table. Three, as the classes that carry
+ * such a table state it -- and editable per character, because the number is
+ * the class's to name and not every class names the same one.
+ */
+export const UNARMED_NATIVE_THRESHOLD = 3;
+
+/**
+ * The monk's ladder, as the seed a new progression starts from.
+ *
+ * It is here as a worked example rather than as a rule: a class progression
+ * is a table the class prints, so the sheet cannot derive one, and starting
+ * from six rungs that are already right beats starting from an empty grid.
+ * Note that it is not walkable by DIE_STEP -- 2d8 to 2d10 skips 3d6 -- which
+ * is exactly why a progression is rungs and not a count of steps.
+ */
+export const MONK_UNARMED_LADDER = [
+  { from: 1, dice: '1d6' }, { from: 4, dice: '1d8' }, { from: 8, dice: '1d10' },
+  { from: 12, dice: '2d6' }, { from: 16, dice: '2d8' }, { from: 20, dice: '2d10' },
+];
+
+/**
+ * The dice a ladder reads at a class level: the highest rung at or below it.
+ *
+ * Rungs are not required to be in order -- they are typed by hand, and a
+ * rung added late belongs where its level puts it, not where it was written.
+ * A tie goes to the later rung, so correcting one by typing another under it
+ * works the way it looks like it should. Below the lowest rung there is no
+ * progression yet, which is a null rather than a guess.
+ */
+export function ladderRung(ladder, level) {
+  const at = Math.floor(Number(level) || 0);
+  let best = null;
+  for (const rung of ladder || []) {
+    const from = Math.floor(Number(rung?.from) || 0);
+    const dice = String(rung?.dice ?? '').trim();
+    if (!dice || from > at) continue;
+    if (!best || from >= best.from) best = { from, dice };
+  }
+  return best;
+}
+
+/** Just the dice of that rung, which is what the progression is after. */
+export function ladderDice(ladder, level) {
+  return ladderRung(ladder, level)?.dice ?? null;
 }
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */

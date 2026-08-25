@@ -9,8 +9,10 @@
 
 import {
   ALT_ATTACK_OF, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL, BRAWLERS_VEST_TALENTS,
-  TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, UNORTHODOX_FEAT, UNORTHODOX_SPHERES_PER_FEAT,
-  addDice, diceAverage, diceString, fmt, parseDiceExpr, sizeMod, statMod, unarmedDice,
+  TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
+  UNORTHODOX_SPHERES_PER_FEAT,
+  addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeMod, statMod,
+  stepDice, unarmedDice,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { weaponProficient } from '../document.js';
@@ -502,11 +504,110 @@ export function recomputeUnarmed(model) {
 
   u.perSphere = per;
   u.effectiveTalents = Math.floor(talents);
-  u.dice = unarmedDice(u.effectiveTalents, {
+  u.practitionerDice = unarmedDice(u.effectiveTalents, {
     stepIncreases: u.stepIncreases,
     sizeIncreases: u.sizeIncreases,
   });
   const anyUnarmedTalent = UNARMED_SPHERES.some((s) => (tally[s] || 0) > 0)
     || (u.otherSpheres || []).some((s) => (tally[s] || 0) > 0);
   u.improvedUnarmedStrike = anyUnarmedTalent;
+
+  // How many talents are *associated with unarmed strikes*, which is a
+  // different question from how many the practitioner table counts: the four
+  // unarmed spheres and whatever Unorthodox Unarmed Training added to them,
+  // and none of the virtual talents an item or feat grants "for determining
+  // unarmed damage" -- those buy dice on that table, they are not talents a
+  // class progression's threshold is counting. `extraAssoc` is the way to say
+  // otherwise for a table that reads the clause the other way.
+  u.assocTalents = Math.floor(
+    UNARMED_SPHERES.reduce((n, s) => n + (per[s] || 0), 0)
+    + [...new Set((u.otherSpheres || []).filter(Boolean))]
+      .reduce((n, s) => n + (tally[s] || 0), 0)
+    + (Number(u.native?.extraAssoc) || 0),
+  );
+
+  recomputeNativeUnarmed(model, u);
+
+  // The dice everything else reads -- the weapon rows' 🥊, the formula
+  // sandbox's `unarmed.dice`. A class progression replaces the practitioner
+  // table rather than adding to it, which is what "instead of" means on every
+  // class that prints one; where the progression cannot produce a die (no
+  // rungs reached yet, a bad formula) the table is still there to fall back
+  // on, so turning the toggle on can never leave a weapon with nothing.
+  u.source = u.nativeProgression && u.nativeDice ? 'native' : 'practitioner';
+  u.dice = u.source === 'native' ? u.nativeDice : u.practitionerDice;
+}
+
+/**
+ * A class's own unarmed damage: the rung its table has reached, plus the
+ * extra size increase the class grants for having unarmed talents at all.
+ *
+ * The ladder is the class's printed table and the formula is the escape
+ * hatch for a table that is not a table -- one that scales off two classes,
+ * or off something the rungs cannot say. The formula wins when it is filled
+ * in, because a player who wrote one meant it.
+ */
+function recomputeNativeUnarmed(model, u) {
+  if (!u.native || typeof u.native !== 'object') u.native = {};
+  const n = u.native;
+  if (!Array.isArray(n.ladder)) n.ladder = [];
+  n.className = String(n.className ?? '');
+  n.formula = String(n.formula ?? '');
+  // Blank means "the usual", not zero: a threshold of 0 would grant the extra
+  // size to a character with no talents at all, which is not what an empty
+  // field is asking for. Both are the class's to name, so both are fields.
+  const orDefault = (v, fallback) => (v === undefined || v === null || v === '' ? fallback : Number(v) || 0);
+  n.threshold = orDefault(n.threshold, UNARMED_NATIVE_THRESHOLD);
+  n.bonusSizes = orDefault(n.bonusSizes, 1);
+
+  // The progression counts the class's own levels, for the same reason the
+  // Planner's rule groups do: "at 4th level" on a class table is a statement
+  // about that class, and a gestalt build's other side does not advance it.
+  // No class named falls back to the character's level, which is right for a
+  // single-classed sheet and visible as a hint on the panel for one that is not.
+  n.classLevel = n.className
+    ? model.classLevelCount(n.className)
+    : (Number(model.data.identity?.level) || 0);
+
+  n.error = null;
+  n.rung = null;
+  let base = null;
+  if (n.formula.trim()) {
+    try {
+      const v = evaluateFormula(n.formula.replace(/^\s*\{=?\s*|\s*\}\s*$/g, ''), model.scope());
+      base = String(v ?? '').trim() || null;
+      if (!base) n.error = 'The formula produced nothing.';
+    } catch (err) {
+      n.error = err.message;
+    }
+  } else {
+    // Which rung, not just its dice: the panel shows the reading it made, so
+    // the level a die came from is the model's answer rather than the view's.
+    const rung = ladderRung(n.ladder, n.classLevel);
+    n.rung = rung ? rung.from : null;
+    base = rung ? rung.dice : null;
+  }
+  n.baseDice = base;
+
+  // "One size larger with 3+ unarmed talents", which is two steps along the
+  // same chain every other increase walks. Counted whether or not the ladder
+  // is what produced the base, so a formula gets it too.
+  n.qualifies = u.assocTalents >= (Number(n.threshold) || 0);
+  n.sizeBonus = n.qualifies ? (Number(n.bonusSizes) || 0) : 0;
+
+  const steps = 2 * ((Number(u.sizeIncreases) || 0) + n.sizeBonus)
+    + (Number(u.stepIncreases) || 0);
+  if (!base) {
+    u.nativeDice = null;
+  } else if (!steps) {
+    // No increase to apply, so a die the chain does not list is still fine --
+    // a class may print dice the practitioner chain never mentions.
+    u.nativeDice = base;
+  } else {
+    u.nativeDice = stepDice(base, steps);
+    if (!u.nativeDice) {
+      n.error = n.error || `${base} is not on the die chain, so it cannot be stepped up.`;
+      u.nativeDice = base;
+    }
+  }
 }

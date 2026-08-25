@@ -542,23 +542,24 @@ export function normalise(model) {
   // Tabs we did not model explicitly keep their raw cell grid, but the
   // object was keyed by tab title ("Combat Training", "Auto-Cooking"), which
   // is awkward to address. An ordered list keeps them editable.
+  //
+  // The converter keeps only rows that hold something and records each one's
+  // number, and for several tabs below that number is the whole meaning: a
+  // blank row on the worksheet is what separates one Template feature from the
+  // next, and what ends a column of notes on ExtrasNotes. So `r` travels with
+  // the row. Without it a reader sees the rows packed together and the gaps
+  // gone -- see `positionedRows`.
   if (!Array.isArray(d.sheetTabs)) {
     d.sheetTabs = Object.entries(d.extraTabs || {}).map(([name, tab]) => ({
       name,
       hidden: !!tab.hidden,
-      rows: (tab.rows || []).map((r) => ({ cells: [...(r.cells || [])] })),
+      rows: (tab.rows || []).map((row) => {
+        const n = Number(row?.r);
+        const cells = [...(row?.cells || [])];
+        return Number.isFinite(n) && n > 0 ? { r: n, cells } : { cells };
+      }),
     }));
   }
-  // The Template tab is read below, and its blank rows are what separate one
-  // feature from the next -- so keep the converter's row numbers, which the
-  // list above drops, for as long as they are still here.
-  const templateGrids = Object.fromEntries(Object.entries(d.extraTabs || {})
-    .filter(([name]) => TEMPLATE_TABS.includes(name)));
-  // ExtrasNotes wants them too: its columns end at a blank row.
-  const extrasGrid = d.extraTabs?.ExtrasNotes ?? null;
-  // And techRef, whose fields are one per row: keep the converter's copy for
-  // the techniques import below.
-  const techRefGrid = d.extraTabs?.techRef ?? null;
   delete d.extraTabs;
 
   // Item Crafting is a calculator, not a grid: read the workbook's tab into
@@ -605,7 +606,7 @@ export function normalise(model) {
   {
     const index = d.sheetTabs.findIndex((t) => t.name === 'ExtrasNotes');
     if (!d.extras) {
-      const got = importExtras(extrasGrid ?? (index < 0 ? null : d.sheetTabs[index]));
+      const got = importExtras(index < 0 ? null : d.sheetTabs[index]);
       d.extras = { approvals: got.approvals, sourceExtras: got.sourceExtras };
       if (!Array.isArray(d.notes)) d.notes = [];
       d.notes.push(...got.notes);
@@ -671,7 +672,7 @@ export function normalise(model) {
   const importedTemplates = d.templates.length > 0;
   for (const name of TEMPLATE_TABS) {
     const index = d.sheetTabs.findIndex((t) => t.name === name);
-    const grid = templateGrids[name] ?? (index < 0 ? null : d.sheetTabs[index]);
+    const grid = index < 0 ? null : d.sheetTabs[index];
     if (grid && !importedTemplates) {
       const doc = importTemplateTab(grid, name);
       if (doc) d.templates.push(doc);
@@ -696,7 +697,7 @@ export function normalise(model) {
       const i = d.sheetTabs.findIndex((t) => t.name === name);
       return i < 0 ? null : d.sheetTabs.splice(i, 1)[0];
     };
-    const refTab = take('techRef') ?? techRefGrid;
+    const refTab = take('techRef');
     const listTab = take('Technique List');
     const autoTab = take('AutoTechnique');
     if (!d.techniques) d.techniques = importTechniques(refTab, listTab, autoTab);
@@ -1402,6 +1403,18 @@ export function normalise(model) {
   // shown, and an untouched one stays empty and off the bar.
   if (!d.training || typeof d.training !== 'object') d.training = {};
   d.training.guile = normalizeGuileTraining(d.training.guile);
+
+  // Unarmed damage is a fact about a fist, not about Spheres of Might: a monk
+  // with a class progression and no talents at all still has dice, and until
+  // now had nowhere to put them because the block lived inside the combat
+  // side and a character without that side simply had none. So it is conjured
+  // the way the guile side is -- an empty block on every character, which
+  // costs nothing and stays off the Martial Spheres tab, since that tab reads
+  // classes and traditions rather than the mere existence of a side.
+  if (!d.training.combat || typeof d.training.combat !== 'object') d.training.combat = {};
+  if (!d.training.combat.unarmed || typeof d.training.combat.unarmed !== 'object') {
+    d.training.combat.unarmed = {};
+  }
 
   if (d.training?.combat) {
     const combat = d.training.combat;

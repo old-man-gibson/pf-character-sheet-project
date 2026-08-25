@@ -7,7 +7,7 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. The modell
 ## Martial and Magic Spheres (training)
 
 Two tabs, one subsystem: **Martial Spheres** holds the practitioner side — its classes,
-tradition, customized weapons, unarmed damage and the skill ranks talents grant — and
+tradition, customized weapons and the skill ranks talents grant — and
 **Magic Spheres** holds the casting side, its tradition and the casting numbers. Most
 characters play only one of them, and the pair that trains both ways sits at the head
 of both (see *Blended classes* below). They are structured panels reproducing the
@@ -239,19 +239,12 @@ character has two or three, and a row that can only ever read zero is not inform
 A character with no such talent at all gets a sentence saying so instead of a table of
 noughts.
 
-**Unarmed damage** implements the practitioner table (dataSheet F80:L101) with the
-sheet's exact die-step chain: talents in Boxing/Brute/Open Hand/Wrestling (each
-toggleable, laid out two abreast) + Unorthodox Unarmed Training spheres + Talented
-Knuckle (a toggle, +2) + Brawler's Vest (a toggle, +4 — hover either for what it grants)
-+ the Bands of the Asura veil (+4 Open Hand talents per essence invested in it, read
-off the Akashic tab and shown only while that veil is shaped) + extra talents; then
-step increases (+1 die step each) and size increases (+2 each). The Unorthodox spheres
-are dropdown picks, two per *Unorthodox Unarmed Training* feat found on the character
-(it can be taken more than once); without the feat the field says so instead of
-offering picks. Angou: 19 effective talents → 2d8
-base → 5 size increases → **12d8**, byte-identical to his sheet. Improved Unarmed
-Strike is flagged at 1+ talents, and a "native progression" toggle surfaces the
-one-size-larger rule instead.
+**Unarmed damage** has moved to the Equipment tab — see
+[Unarmed strike](equipment-and-progression.md#unarmed-strike). It is a weapon, the 🥊
+on a weapon row is what reads it, and a monk with a class progression and no talents at
+all has unarmed dice while having no martial side for the panel to have lived on. The
+practitioner half of it is still Spheres of Might and still says so; what a talent in
+Boxing or Open Hand is worth is described there.
 
 ---
 

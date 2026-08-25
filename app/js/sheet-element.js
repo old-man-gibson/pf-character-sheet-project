@@ -3505,6 +3505,16 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    // A list seeded whole rather than a row at a time: see addManyButton.
+    root.querySelectorAll('[data-add-many]').forEach((b) => {
+      b.addEventListener('click', () => {
+        let items = [];
+        try { items = JSON.parse(b.dataset.template || '[]'); } catch { /* default */ }
+        for (const item of items) this.#model.listAdd(b.dataset.addMany, item);
+        this.#render();
+      });
+    });
+
     // A condition taken off the list altogether -- keyed by name, since the
     // list is a map and not a row array.
     root.querySelectorAll('[data-remove-condition]').forEach((b) => {
@@ -3867,8 +3877,11 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.collapse;
-        const collapsed = this.#model.data.uiPrefs.collapsed;
-        collapsed[key] = !collapsed[key];
+        // Against what is on screen, not what is in storage. The two agree
+        // everywhere except a block that starts folded by default and has
+        // never been clicked -- where reading storage would toggle `undefined`
+        // to `true` and fold something that already looked folded.
+        this.#model.data.uiPrefs.collapsed[key] = b.getAttribute('aria-expanded') === 'true';
         this.#model.recompute();
         this.#render();
       });
