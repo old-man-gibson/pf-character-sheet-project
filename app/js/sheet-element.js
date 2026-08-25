@@ -9,6 +9,13 @@
  * Attributes
  *   src    URL of a character JSON document
  *   role   "player" (default) or "admin" -- admin reveals the formula audit tab
+ *   published  present on a sheet the reader was sent rather than owns: hides
+ *          Save, History, Import and Reset, and keeps Export JSON
+ *   packs  "none" skips this browser's extension packs entirely, so the sheet
+ *          shows only what the document itself carries. This is what a
+ *          published view wants: a reader who happens to own the same packs
+ *          would otherwise see them quietly filling in gaps that a stranger
+ *          gets empty, which is the one thing a preview must not do.
  *   theme  "dark" (default) or "light"
  *   storage-key  localStorage key for edits; omit to disable persistence
  *   snapshot-every  changes between automatic snapshots (default 20)
@@ -53,6 +60,7 @@ import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
   applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype, swapLabel,
 } from './extensions.js';
+import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
   esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
@@ -241,6 +249,46 @@ const isWeirdTab = (label) => WEIRD_TAB_LABELS.has(String(label || '').trim().to
 function loadSharedTables() {
   return extensionRuntime.load(new URL('../../', import.meta.url));
 }
+
+/**
+ * The same, unless this sheet was asked to stand on its own.
+ *
+ * `packs="none"` is for a published document, which carries the entries the
+ * character had and nothing else (see publish.js). Loading the reader's own
+ * packs on top would fill in whatever they happen to own, so the sheet would
+ * look complete to the one person who cannot tell whether it is.
+ */
+function loadTablesFor(el) {
+  return el.getAttribute('packs') === 'none' ? Promise.resolve() : loadSharedTables();
+}
+
+/**
+ * The buttons a published sheet leaves working, as one selector.
+ *
+ * Everything here moves the reader around the character or takes a copy of it;
+ * nothing here changes it. `data-collapse` folds a panel, `data-tab` opens one,
+ * `data-mopen` and `data-mclose` open and shut a maneuver's card, `data-gearopen`
+ * does the same for an item, `data-foldcell` unfolds a cell of prose. The named
+ * actions are the sheet's own furniture -- search, the view switch, the theme,
+ * the formula tab -- plus Export JSON, because a read-only sheet is still the
+ * reader's to take away, and the two dismiss buttons, which only close a notice
+ * this page put up.
+ *
+ * Anything that opens is paired with what shuts it. Leaving a card openable and
+ * not closeable is the kind of half-locked state that reads as a broken sheet
+ * rather than a read-only one.
+ *
+ * `<details>` needs no help: the browser opens it whatever this does.
+ */
+const READERS_KEEP = [
+  '[data-tab]', '[data-collapse]', '[data-foldcell]', '[data-wiki]',
+  '[data-mopen]', '[data-mclose]', '[data-gearopen]',
+  '[data-action="palette"]', '[data-action="view-mode"]', '[data-action="formulas"]',
+  '[data-action="theme"]', '[data-action="export"]', '[data-action="copy-text"]',
+  '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
+  '[data-action="toggle-gear"]', '[data-action="toggle-weapon"]', '[data-action="toggle-skills"]',
+  '[data-action="dismiss-history-note"]', '[data-action="dismiss-import-error"]',
+].join(',');
 
 
 
@@ -577,7 +625,7 @@ export class CharacterSheetElement extends HTMLElement {
     // they were fetched by `load(src)` alone, and a character handed in through
     // this property (every imported one, and every one at all now that the app
     // bundles none) opened with its disciplines "not in the catalogue".
-    await loadSharedTables();
+    await loadTablesFor(this);
     // Kept pristine so Reset works for a document handed in directly, where
     // there is no src to re-fetch.
     this.#sourceDoc = structuredClone(doc);
@@ -588,8 +636,17 @@ export class CharacterSheetElement extends HTMLElement {
     this.#showHistory = false;
     this.#snapshotAt = 0;
 
-    const working = this.#history.readWorking();
-    const canonical = await this.#history.readSaved();
+    /*
+     * A published document is the whole truth and nothing stored here outranks
+     * it. What this browser holds under the same id is a different copy of the
+     * character -- and on a preview it is the author's own, which would quietly
+     * replace the document being previewed with the one it was made from. That
+     * is the single thing a preview must never do, and it is not only a preview
+     * problem: two people can each be sent a sheet whose id matches one they
+     * already have.
+     */
+    const working = this.isPublished ? null : this.#history.readWorking();
+    const canonical = this.isPublished ? null : await this.#history.readSaved();
     this.#savedDoc = canonical?.data ?? null;
 
     // A canonical version written for an older schema cannot be loaded, but the
@@ -599,7 +656,7 @@ export class CharacterSheetElement extends HTMLElement {
         + ' and cannot be opened by this build. The sheet has opened where you left off instead.';
     }
 
-    const open = this.#savedDoc ?? working?.data ?? doc;
+    const open = this.isPublished ? doc : (this.#savedDoc ?? working?.data ?? doc);
     let drifted = false;
     if (this.#savedDoc && working) {
       const drift = countChanges(this.#savedDoc, working.data);
@@ -627,7 +684,7 @@ export class CharacterSheetElement extends HTMLElement {
      * other character's state.
      */
     if (drifted) this.#history.writeWorking(this.#model.toJSON());
-    await this.#refreshSnapshots();
+    if (!this.isPublished) await this.#refreshSnapshots();
     this.#render();
   }
 
@@ -674,7 +731,7 @@ export class CharacterSheetElement extends HTMLElement {
       // character and never change, so they are fetched once and kept. A
       // character still opens without them -- its disciplines simply have no
       // maneuvers to offer, and its casting classes no table to derive from.
-      await loadSharedTables();
+      await loadTablesFor(this);
       const res = await fetch(src);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       this.character = await res.json();
@@ -688,7 +745,53 @@ export class CharacterSheetElement extends HTMLElement {
 
   audit() { return this.#model?.audit() ?? []; }
 
+  /**
+   * Open this character the way someone you sent it to would receive it.
+   *
+   * Two things make the preview honest rather than flattering. The document is
+   * put through `publishDocument` first, so it carries the pack entries this
+   * character actually has and none of the catalogues they came from; and the
+   * page it opens in mounts the sheet with `packs="none"`, so the reader's own
+   * packs -- which here are the author's own packs -- cannot quietly fill in
+   * the gaps a stranger would be left with.
+   *
+   * The handover goes through localStorage rather than sessionStorage, which
+   * is per-tab: a tab opened with `noopener` does not inherit the opener's
+   * session, and dropping `noopener` to make it would be a worse trade than
+   * one key written and removed on read.
+   */
+  #previewPublished() {
+    const { doc, report } = publishDocument(this.#model.toJSON());
+    const key = `published-preview:${doc?.id || 'character'}:${Date.now()}`;
+    try {
+      localStorage.setItem(key, JSON.stringify({ doc, summary: describePublish(report) }));
+    } catch (err) {
+      this.#historyNote = `Could not open the preview — ${err.message}`;
+      this.#render();
+      return;
+    }
+    const url = new URL('../published.html', import.meta.url);
+    url.searchParams.set('k', key);
+    const opened = window.open(url.href, '_blank', 'noopener');
+    this.#historyNote = opened
+      ? `Published preview opened — ${describePublish(report)}`
+      : 'The preview was blocked by the browser. Allow pop-ups for this page and try again.';
+    this.#render();
+  }
+
   get isAdmin() { return this.getAttribute('role') === 'admin'; }
+
+  /**
+   * A sheet someone was sent rather than one they own.
+   *
+   * It hides the controls that act on a character this reader does not have:
+   * Save and History write to a store keyed by a character that is not theirs,
+   * Import and Reset would replace what they were sent. Export JSON stays --
+   * being handed a read-only sheet is not a reason to be unable to take the
+   * data away. Nothing here is a permission: it is an honest set of controls
+   * for a document that has already left its author.
+   */
+  get isPublished() { return this.hasAttribute('published'); }
 
   /* ---------------- persistence ---------------- */
 
@@ -1039,9 +1142,48 @@ export class CharacterSheetElement extends HTMLElement {
       </div>`;
     this.#applyCharacterColor();
     this.#bind();
+    if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
     if (this.#palette) this.shadowRoot.append(this.#palette);
+  }
+
+  /**
+   * Take the writing out of a published sheet, and leave the reading in.
+   *
+   * A reader still has to be able to get around: open a tab, fold a panel
+   * down, click a maneuver's name to see what it does. Those are the whole
+   * value of being sent a sheet rather than a screenshot, and all three only
+   * move `uiPrefs`, which on a published sheet is discarded with the tab. So
+   * the split is not "interactive or not" -- it is between what changes the
+   * character and what changes the view of it.
+   *
+   * Deny by default, because the actions that change a character outnumber the
+   * ones that do not by about ten to one, and a mutation left live by an
+   * oversight is worse than a fold that stops working. Fields go `readonly`
+   * rather than `disabled` wherever the browser will still let the text be
+   * selected: a reader who wants to copy a number out should be able to.
+   *
+   * This runs after every render because `#render` rewrites the markup
+   * wholesale, so there is nothing here to keep in sync -- the lock is simply
+   * re-applied to whatever was just drawn.
+   */
+  #lockPublished() {
+    const root = this.shadowRoot;
+    for (const el of root.querySelectorAll('input, select, textarea')) {
+      // A checkbox, radio, colour well or file input has no readonly state the
+      // browser honours, so those are the ones that have to be disabled.
+      if (el.matches('input[type="checkbox"], input[type="radio"], input[type="color"], input[type="file"], select')) {
+        el.disabled = true;
+      } else {
+        el.readOnly = true;
+      }
+    }
+    for (const el of root.querySelectorAll('[draggable="true"]')) el.draggable = false;
+    for (const el of root.querySelectorAll('[contenteditable="true"]')) el.contentEditable = 'false';
+    for (const btn of root.querySelectorAll('button')) {
+      if (!btn.matches(READERS_KEEP)) btn.disabled = true;
+    }
   }
 
   /**
@@ -1097,6 +1239,7 @@ export class CharacterSheetElement extends HTMLElement {
           ${this.#viewModeButton()}
           ${this.#formulaButton()}
           <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
+          ${this.isPublished ? '' : `
           <button data-action="save" class="${this.#changes ? 'primary' : ''}"
             ${this.#changes ? '' : 'disabled'}
             title="${this.#changes
@@ -1105,12 +1248,15 @@ export class CharacterSheetElement extends HTMLElement {
             Save${this.#changes ? ` (${this.#changes})` : ''}
           </button>
           <button data-action="history" aria-pressed="${this.#showHistory}"
-            title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>
+            title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
           <button data-action="export">Export JSON</button>
+          ${this.isPublished ? '' : `
+          <button data-action="preview-published"
+            title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
           <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import</button>
           <input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>
           <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
-            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>
+            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
         </div>
         ${this.#resumeBanner()}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
@@ -4708,6 +4854,9 @@ export class CharacterSheetElement extends HTMLElement {
         URL.revokeObjectURL(a.href);
         break;
       }
+      case 'preview-published':
+        this.#previewPublished();
+        break;
       case 'import':
         this.shadowRoot.querySelector('[data-importfile]')?.click();
         break;

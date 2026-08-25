@@ -22,6 +22,7 @@ export * from './model/character.js';
 export * from './model/util.js';
 export * from './model/events.js';
 export * from './model/reconcile.js';
+export * from './model/diff.js';
 export * from './model/document.js';
 export * from './model/edit.js';
 export * from './model/abilities.js';

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Published character sheet</title>
+<!--
+  What a published character looks like to someone who is not you.
+
+  The point of this page is what it deliberately does not do. It mounts the
+  sheet with `packs="none"`, so none of this browser's extension packs are
+  registered and the only content on screen is content the document itself
+  carried; and it passes no `storage-key`, so nothing it shows is written down
+  and nothing here can touch the character it came from. A reader who happens
+  to own the same packs as the author would otherwise see them quietly filling
+  in the gaps a stranger gets empty -- which would make this page agree with
+  the author about a sheet only a stranger can judge.
+
+  In the prototype the document arrives through localStorage under a one-shot
+  key, written by the Preview published button one tab over and removed the
+  moment it is read. When there is a server behind this, the same page takes an
+  id instead and fetches it; nothing else on this page changes.
+-->
+<style>
+  :root { color-scheme: dark light; }
+  body {
+    margin: 0; background: #14161a; color: #e6e6e6;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .bar {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px;
+    padding: 10px 16px; background: #1d2027; border-bottom: 1px solid #2c313b;
+  }
+  .bar strong { font-weight: 600; }
+  .bar .note { color: #9aa3b2; font-size: 0.87rem; }
+  .bar .tag {
+    font-size: 0.74rem; letter-spacing: 0.04em; text-transform: uppercase;
+    background: #2c313b; color: #b9c2d0; padding: 2px 7px; border-radius: 3px;
+  }
+  .wrap { padding: 14px; }
+  .empty { padding: 40px 16px; text-align: center; color: #9aa3b2; }
+  @media (prefers-color-scheme: light) {
+    body { background: #f4f5f7; color: #1b1d21; }
+    .bar { background: #fff; border-bottom-color: #dfe2e8; }
+    .bar .note { color: #5c6472; }
+    .bar .tag { background: #eceef2; color: #475065; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="tag">Published view</span>
+  <strong id="who">a character</strong>
+  <span class="note" id="what"></span>
+  <span class="note">Read-only preview — nothing here is saved, and none of your packs are loaded.</span>
+</div>
+
+<div class="wrap" id="wrap">
+  <p class="empty" id="empty">Nothing to show. Open this from “Preview published” on a sheet.</p>
+</div>
+
+<script type="module">
+import './js/sheet-element.js';
+
+const params = new URLSearchParams(location.search);
+const key = params.get('k');
+let payload = null;
+
+if (key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) payload = JSON.parse(raw);
+  } catch { payload = null; }
+  // A preview is a one-shot: the tab that opened this owns the character, and
+  // leaving a copy behind in storage would outlive the look at it.
+  try { localStorage.removeItem(key); } catch { /* nothing to clean up */ }
+}
+
+if (payload?.doc) {
+  document.getElementById('empty')?.remove();
+  document.getElementById('who').textContent = payload.doc.identity?.name || 'a character';
+  document.getElementById('what').textContent = payload.summary || '';
+  const sheet = document.createElement('character-sheet');
+  sheet.setAttribute('packs', 'none');   // the whole point: no packs but the document's own
+  sheet.setAttribute('published', '');   // no Save, History, Import or Reset; Export JSON stays
+  sheet.setAttribute('role', 'player');
+  sheet.setAttribute('hotkeys', 'off');
+  document.getElementById('wrap').append(sheet);
+  sheet.character = payload.doc;
+}
+</script>
+
+</body>
+</html>
