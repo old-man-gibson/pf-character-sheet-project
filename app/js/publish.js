@@ -97,7 +97,14 @@ function publishManeuvers(doc, report) {
       }
       if (Object.keys(written).length) {
         discipline.notes[name] = { ...(discipline.notes[name] || {}), ...written };
-        report.carried++;
+        // Classification is not description. The bundled Path of War catalogue
+        // fills in `type` and nothing else on purpose -- the rest is a
+        // publisher's rules text -- so an entry can travel complete as far as
+        // this file is concerned and still reach a reader as a name with a
+        // badge beside it. Counting that as carried is how an author ends up
+        // sending out a sheet they believe is readable.
+        if (String(written.text ?? '').trim()) report.carried++;
+        else report.outline.push(`maneuver: ${discipline.name} / ${name}`);
       } else if (from) {
         report.blank.push(`maneuver: ${discipline.name} / ${name}`);
       } else {
@@ -134,21 +141,23 @@ function dropOffered(doc, report) {
  * The report counts what a reader will actually be able to read, which is the
  * only count worth printing. An entry lands in one of three places:
  *
- *   carried   there is text on it now, whether the player's own or a pack's.
- *   blank     a pack here knows the entry but has no text to give -- the
- *             bundled Path of War catalogue is deliberately like this, filling
- *             in only `type`, because the rest is a publisher's rules text and
- *             not this project's to ship.
- *   unknown   no pack here knows it at all.
+ *   carried   there is description on it now, the player's own or a pack's.
+ *   outline   something travelled but no rules text did -- the bundled Path of
+ *             War catalogue is deliberately like this, filling in `type` and
+ *             nothing else, because the rest is a publisher's rules text and
+ *             not this project's to ship. A reader gets a name and a badge.
+ *   blank     a pack here knows the entry but had nothing at all to give.
+ *   unknown   no pack here knows it.
  *
- * `blank` and `unknown` are the half worth showing before anyone publishes.
- * Neither is an error -- a player may name a veil from a book nobody has
- * packed -- but both mean a reader gets a name and nothing under it, and the
- * author is the last person able to notice that on their own screen.
+ * The last three are the half worth showing before anyone publishes. None is
+ * an error -- a player may name a veil from a book nobody has packed -- but
+ * each means a reader gets less than the author sees, and the author is the
+ * one person who cannot notice that on their own screen, because their packs
+ * fill in the gaps for them.
  */
 export function publishDocument(doc) {
   const out = clone(doc);
-  const report = { carried: 0, blank: [], unknown: [], dropped: [] };
+  const report = { carried: 0, outline: [], blank: [], unknown: [], dropped: [] };
   if (!out || typeof out !== 'object') return { doc: out, report };
   publishVeils(out, report);
   publishManeuvers(out, report);
@@ -165,10 +174,13 @@ export function publishDocument(doc) {
  */
 export function describePublish(report) {
   const n = report.carried;
-  const carried = n
+  const parts = [n
     ? `carrying ${n} entr${n === 1 ? 'y' : 'ies'} of pack content`
-    : 'carrying no pack content';
+    : 'carrying no pack content'];
+  if (report.outline.length) {
+    parts.push(`${report.outline.length} with no rules text behind the name`);
+  }
   const short = report.blank.length + report.unknown.length;
-  if (!short) return `${carried}.`;
-  return `${carried}; ${short} more will reach a reader as a name with nothing under it.`;
+  if (short) parts.push(`${short} with nothing at all`);
+  return `${parts.join('; ')}.`;
 }

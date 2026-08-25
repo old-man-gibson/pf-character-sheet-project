@@ -17,10 +17,17 @@
   in the gaps a stranger gets empty -- which would make this page agree with
   the author about a sheet only a stranger can judge.
 
-  In the prototype the document arrives through localStorage under a one-shot
-  key, written by the Preview published button one tab over and removed the
-  moment it is read. When there is a server behind this, the same page takes an
-  id instead and fetches it; nothing else on this page changes.
+  The document arrives one of two ways, and the page does not care which:
+
+    ?k=<key>   a one-shot localStorage handover from the Preview published
+               button one tab over, removed the moment it is read. This is a
+               pointer into one browser and travels nowhere.
+    ?src=<url> a published document fetched from wherever it is hosted -- a
+               file in a Pages deploy, a gist, anything that answers with JSON
+               and permissive CORS. This is the one you can send someone.
+
+  A server, when there is one, adds `?s=<id>` and resolves it to a URL. That is
+  the whole of the difference, which is why the fetch path is worth having now.
 -->
 <style>
   :root { color-scheme: dark light; }
@@ -54,28 +61,72 @@
   <span class="tag">Published view</span>
   <strong id="who">a character</strong>
   <span class="note" id="what"></span>
-  <span class="note">Read-only preview — nothing here is saved, and none of your packs are loaded.</span>
+  <span class="note">Read-only — nothing here is saved, and none of your own packs are loaded,
+    so this is what the character carries and nothing else.</span>
 </div>
 
 <div class="wrap" id="wrap">
-  <p class="empty" id="empty">Nothing to show. Open this from “Preview published” on a sheet.</p>
+  <p class="empty" id="empty">Nothing to show. Open this from “Preview published” on a sheet,
+    or point it at a published character with <code>?src=</code>.</p>
 </div>
 
 <script type="module">
 import './js/sheet-element.js';
 
 const params = new URLSearchParams(location.search);
-const key = params.get('k');
-let payload = null;
 
-if (key) {
+/** Say what went wrong where the sheet would have been. */
+function fail(message) {
+  const empty = document.getElementById('empty');
+  if (empty) empty.textContent = message;
+}
+
+/**
+ * The handover from the Preview published button in another tab.
+ *
+ * A preview is a one-shot: the tab that opened this owns the character, and a
+ * copy left behind in storage would outlive the look at it.
+ */
+function fromStorage(key) {
+  let payload = null;
   try {
     const raw = localStorage.getItem(key);
     if (raw) payload = JSON.parse(raw);
   } catch { payload = null; }
-  // A preview is a one-shot: the tab that opened this owns the character, and
-  // leaving a copy behind in storage would outlive the look at it.
   try { localStorage.removeItem(key); } catch { /* nothing to clean up */ }
+  return payload;
+}
+
+/**
+ * A published document from wherever it is hosted.
+ *
+ * Relative links resolve against this page, which is what makes a file sitting
+ * beside the app in a Pages deploy the simplest thing that works. Only http and
+ * https are fetched, and without credentials: this URL arrived in a query
+ * string, so it is a stranger's, and a stranger's URL should not be handed the
+ * reader's cookies.
+ */
+async function fromUrl(raw) {
+  const url = new URL(raw, location.href);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`${url.protocol} links are not fetched — only http and https.`);
+  }
+  const res = await fetch(url, { credentials: 'omit' });
+  if (!res.ok) throw new Error(`${url.href} answered ${res.status} ${res.statusText}.`);
+  return { doc: await res.json(), summary: '' };
+}
+
+let payload = null;
+const key = params.get('k');
+const src = params.get('src');
+
+if (key) payload = fromStorage(key);
+else if (src) {
+  try {
+    payload = await fromUrl(src);
+  } catch (err) {
+    fail(`Could not open that published character — ${err.message}`);
+  }
 }
 
 if (payload?.doc) {
@@ -89,6 +140,8 @@ if (payload?.doc) {
   sheet.setAttribute('hotkeys', 'off');
   document.getElementById('wrap').append(sheet);
   sheet.character = payload.doc;
+} else if (key) {
+  fail('That preview has already been opened. Press “Preview published” again to make a new one.');
 }
 </script>
 
