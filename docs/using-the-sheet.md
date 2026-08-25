@@ -222,12 +222,48 @@ the one exception, and that is the same edit the group's own **▸** makes.
 ## The tab bar and the ⚙ manager
 
 A sheet opens with nine tabs across the top — **Overview, Stats, Lore, Skills, Progression,
-Feats & Mythic, Primordia, Trackers, Equipment** — and everything else waits in the
-**⚙** manager at the end of the bar. That order is a preference, not a rule: drag a
-tab along the bar (or a row in the manager's *Tab bar* list) to move it, **Hide** it
-to send it back to the manager, or **reset** to the default nine. The bar is saved
-with the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an
-export.
+Feats & Mythic, Primordia, Trackers, Equipment** — **plus every sub-system the character
+actually uses**, and everything else waits in the **⚙** manager at the end of the bar. A
+workbook that arrives carrying maneuvers, veils and a familiar opens on all three rather
+than leaving them in the manager for you to know to go and look for. *Uses* means what the
+manager's badges mean: the sub-system holds data (*in use*), or a class on the Overview
+names it (*marked*) — so you can say "this one is a veilweaver" before there is a veil on
+the sheet, and the tab is there when you go to add one.
+
+That is a starting point, not a rule. Drag a tab along the bar (or a row in the manager's
+*Tab bar* list) to move it, **Hide** it to send it back to the manager, or **reset** to go
+back to the bar an import would have made. **A tab you hide stays hidden** — the moment you
+touch the bar, the arrangement is yours and is what loads next time. The bar is saved with
+the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an export.
+
+### Colouring a tab
+
+**Right-click a tab** to colour it, or use the swatch on its row in the **⚙** manager —
+both open the same small picker: the sixteen palette colours, a *theme default* to clear
+it, a hex box and your system colour picker. A colour belongs to the tab rather than to
+the bar, so it is the same on the build and session views, and it travels with the
+character in `uiPrefs.tabColors`.
+
+It is deliberately quiet — a coloured tab is tinted, not filled, so it still reads as one
+tab among many and the *selected* tab is still obviously the selected one. The point is
+finding *Maneuvers* at a glance in a bar of fifteen, not decorating the sheet. Colouring a
+tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown.
+
+### Keyboard
+
+The bar is one stop on the **Tab** key, not twenty: land on it and the **←/→** arrows
+move along it (wrapping at both ends), **Home** and **End** jump to the first and last.
+The tab you move to opens as you reach it, which is what a click does too. From the bar,
+one more **Tab** press is into the panel itself.
+
+### Printing a tab
+
+**Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
+header buttons or any of the controls — fields print as the values in them, and a
+proficiency chip prints only if it is one the character has. That is the whole rule:
+the section on screen is the section that comes out, so a sheet for the table is a
+few prints rather than one very long one. Long tables repeat their headings on each
+page, and rows, cards and stat blocks are kept from splitting across a break.
 
 ### Session view and build view
 

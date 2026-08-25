@@ -392,6 +392,80 @@ console.log('a class’s own unarmed progression -- rungs, and the die chain the
  * it managed and stops here rather than failing 2,000 checks about a character
  * it does not have.
  * ------------------------------------------------------------------ */
+/*
+ * The bar a character opens on, built rather than read off a roster.
+ *
+ * This sits above the guard on purpose. The seeding is written against
+ * `systemTabsInUse`, the private five are the only characters that carry any
+ * of those systems, and CI has none of them -- so tested down there it would
+ * be tested nowhere that runs on every push. A blank sheet with one tradition,
+ * one project and one class tag exercises all three answers it depends on.
+ */
+console.log('\nthe build bar is seeded from what the character uses');
+{
+  const c = new Character(blankDocument({ name: 'Seedy' }));
+  check('a blank sheet opens on the standard nine and nothing else',
+    c.tabOrder(), DEFAULT_TAB_ORDER);
+  // The receptacles every workbook prints must not read as veilweaving, or
+  // each of these bars would carry an Akashic tab nobody asked for.
+  check('empty veil receptacles are not use', c.systemTabsInUse().akashic, false);
+
+  c.set('training.magic.tradition.name', 'Fey Adept');
+  c.listAdd('crafting.projects', { name: 'Cloak of Resistance', value: 1000 });
+  c.listAdd('classes', {
+    name: 'Warlord', hd: 10, bab: 1, goodFort: true, goodRef: true, goodWill: false,
+    skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
+  });
+  c.toggleClassSystem(c.data.classes.length - 1, 'path-of-war');
+
+  // `uiPrefs: {}` is a document that has never had its bar touched, which is
+  // what an import is.
+  const seeded = new Character({ ...c.toJSON(), uiPrefs: {} });
+  check('the standard nine still lead it', seeded.tabOrder().slice(0, 9), DEFAULT_TAB_ORDER);
+  check('a system in use is on it', seeded.tabOrder().includes('magic'), true);
+  check('so is a crafting project', seeded.tabOrder().includes('crafting'), true);
+  check('and a system only marked on a class', seeded.tabOrder().includes('maneuvers'), true);
+  check('a system it does not use is not', seeded.tabOrder().includes('psionics'), false);
+
+  // Hiding outranks the seeding, or a tab put away would return on every load.
+  seeded.hideTab('maneuvers');
+  const reopened = new Character(JSON.parse(JSON.stringify(seeded.toJSON())));
+  check('a seeded tab that was hidden stays hidden', reopened.tabOrder().includes('maneuvers'), false);
+  check('and the others are left alone', reopened.tabOrder().includes('magic'), true);
+  reopened.resetTabOrder();
+  check('reset brings it back', reopened.tabOrder().includes('maneuvers'), true);
+}
+
+console.log('\ntab colours -- a preference on the tab, not on the bar');
+{
+  const c = new Character(blankDocument({ name: 'Tinty' }));
+  check('no colour to begin with', c.tabColor('skills'), null);
+  c.setTabColor('skills', '#6EA8FE');
+  check('set, and normalised to lower case', c.tabColor('skills'), '#6ea8fe');
+  check('shorthand is expanded', new Character({
+    ...blankDocument({ name: 'Tinty' }), uiPrefs: { tabColors: { skills: '#ABC' } },
+  }).tabColor('skills'), '#aabbcc');
+  c.setTabColor('lore', 'not a colour');
+  check('an unreadable value colours nothing', c.tabColor('lore'), null);
+  check('and is not stored', 'lore' in c.data.uiPrefs.tabColors, false);
+  c.setTabColor('skills', '');
+  check('blank clears it back to the theme', c.tabColor('skills'), null);
+
+  // It rides in uiPrefs, so it exports with the character and is the same
+  // colour on whichever bar the tab appears on.
+  c.setTabColor('maneuvers', '#3fb8a5');
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('survives a round trip through JSON', back.tabColor('maneuvers'), '#3fb8a5');
+  back.setViewMode('session');
+  check('the session bar sees the same colour', back.tabColor('maneuvers'), '#3fb8a5');
+  back.setViewMode('build');
+  // A colour is not a place: colouring a tab does not put it on the bar.
+  check('colouring an off-bar tab does not show it', back.tabOrder().includes('cooking'), false);
+  back.setTabColor('cooking', '#f07f3c');
+  check('still off the bar', back.tabOrder().includes('cooking'), false);
+  check('but the colour is remembered for when it is shown', back.tabColor('cooking'), '#f07f3c');
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
@@ -3336,9 +3410,18 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
 console.log('the tab bar -- an ordered preference, saved with the character');
 {
   const c = new Character(load('angou'));
-  check('starts on the default eight', c.tabOrder(), DEFAULT_TAB_ORDER);
-  check('the default is the requested order', DEFAULT_TAB_ORDER,
+  check('the standard nine are the standard nine', DEFAULT_TAB_ORDER,
     ['overview', 'stats', 'lore', 'skills', 'progression', 'features', 'primordia', 'trackers', 'gear']);
+  // The bar a character opens on is those nine *plus its own sub-systems*, so
+  // a workbook carrying maneuvers or veils does not land with them hidden in
+  // the manager for someone to go and find. See `buildDefaultTabs`.
+  check('starts on the standard nine', c.tabOrder().slice(0, 9), DEFAULT_TAB_ORDER);
+  check('then the systems this character actually has', c.tabOrder().slice(9),
+    ['martial', 'magic', 'akashic', 'techniques', 'autoTechnique']);
+  check('every one of them is a system it actually uses',
+    c.tabOrder().slice(9).filter((k) => !c.systemTabsInUse()[k] && !c.taggedSystemTabs().has(k)), []);
+  // A system it does not use stays off until it is asked for.
+  check('and nothing it does not', c.tabOrder().includes('cooking'), false);
   c.showTab('crafting');
   check('show appends', c.tabOrder().at(-1), 'crafting');
   c.showTab('crafting');
@@ -3352,16 +3435,32 @@ console.log('the tab bar -- an ordered preference, saved with the character');
   c.hideTab('crafting');
   check('hide removes', c.tabOrder().includes('crafting'), false);
   check('the preference is what is exported', c.toJSON().uiPrefs.tabOrder, c.tabOrder());
-  check('a document without one gets the default', new Character({ ...load('saburo'), uiPrefs: {} }).tabOrder(), DEFAULT_TAB_ORDER);
+  const fresh = new Character({ ...load('saburo'), uiPrefs: {} });
+  check('a document without one gets the default', fresh.tabOrder().slice(0, 9), DEFAULT_TAB_ORDER);
+  check('with its systems after them', fresh.tabOrder().slice(9), ['martial', 'magic', 'akashic']);
+  // Hiding has to outrank the default, or a tab put away would come back on
+  // the next load and the seeding would be a rule rather than a starting point.
+  fresh.hideTab('akashic');
+  const reopened = new Character(JSON.parse(JSON.stringify(fresh.toJSON())));
+  check('a seeded tab that was hidden stays hidden', reopened.tabOrder().includes('akashic'), false);
+  check('and the rest of the bar is untouched', reopened.tabOrder().length, fresh.tabOrder().length);
+  // Reset gives back the bar an import would have made, not the bare nine.
+  reopened.resetTabOrder();
+  check('reset restores the systems too', reopened.tabOrder().includes('akashic'), true);
 
   // A worksheet's place is keyed by name, so it follows a rename and goes with a delete.
   const tab = c.addSystemTab('Spellbook');
   const idx = c.data.sheetTabs.indexOf(tab);
   c.showTab('sys:Spellbook');
+  c.setTabColor('sys:Spellbook', '#6ea8fe');
   c.renameSystemTab(idx, 'Grimoire');
   check('rename carries the bar entry', c.tabOrder().includes('sys:Grimoire') && !c.tabOrder().includes('sys:Spellbook'), true);
+  check('rename carries the colour too', c.tabColor('sys:Grimoire'), '#6ea8fe');
+  check('and leaves none behind under the old name', c.tabColor('sys:Spellbook'), null);
   c.removeSystemTab(idx);
   check('delete drops the bar entry', c.tabOrder().includes('sys:Grimoire'), false);
+  // Otherwise the next worksheet to take the name would inherit the colour.
+  check('delete drops the colour', c.tabColor('sys:Grimoire'), null);
 }
 
 console.log('sub-systems in use, marked on classes, and the two views of the bar');

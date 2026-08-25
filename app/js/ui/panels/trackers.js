@@ -146,13 +146,13 @@ function trackerRow(model, ctx, t) {
         ${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}
       </div>
       <div class="tracker-controls">
-        <button data-tracker-step="${t.id}" data-delta="-1" aria-label="${minusLabel}">−</button>
-        <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${t.id}"
+        <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${minusLabel}">−</button>
+        <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
           aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
         <span class="pool">${range}</span>
-        <button data-tracker-step="${t.id}" data-delta="1" aria-label="${plusLabel}">+</button>
-        <button data-tracker-edit="${t.id}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
-        ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${t.id}" aria-label="Remove ${esc(t.name)}">×</button>`}
+        <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${plusLabel}">+</button>
+        <button data-tracker-edit="${esc(t.id)}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
+        ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${esc(t.id)}" aria-label="Remove ${esc(t.name)}">×</button>`}
       </div>
     </div>`;
 }
@@ -209,7 +209,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
     }
     const shownValue = draining ? max - cur : cur;
     const title = twoSided ? signed(cur) : `${shownValue} of ${max}`;
-    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-bar="${t.id}"` : ''}
+    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-bar="${esc(t.id)}"` : ''}
           title="${esc(title)}${interactive ? ' — click to set' : ''}">
         ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
           ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
@@ -242,7 +242,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         // `data-n` is the pip's own number; the click handler converts it for
         // a draining tracker and spends one when the last lit pip is clicked.
         return `<${tag} class="pip ${on ? 'used' : ''}" style="${paint}"
-            ${interactive ? `data-pip="${t.id}" data-n="${n}"` : ''}
+            ${interactive ? `data-pip="${esc(t.id)}" data-n="${n}"` : ''}
             title="${esc(`${n} of ${max}`)}"
             aria-label="Set ${esc(t.name)} to ${n}"></${tag}>`;
       }).join('')
@@ -255,7 +255,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   for (let k = min; k <= max; k++) if (k !== 0) steps.push(k);
   const tag = interactive ? 'button' : 'span';
   const remaining = max - cur;
-  const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pip="${t.id}" data-n="0"` : ''} title="0"
+  const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pip="${esc(t.id)}" data-n="0"` : ''} title="0"
       aria-label="Set ${esc(t.name)} to 0"></${tag}>`;
   return `<div class="pips">${steps.map((k, i) => {
     const lit = twoSided ? (k > 0 ? cur >= k : cur <= k)
@@ -272,7 +272,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         .map((l) => l.label).filter(Boolean).join(' · '))
       : '';
     const label = `${twoSided ? signed(k) : `${k} of ${max}`}${zone?.label ? ` · ${zone.label}` : ''}${layerLabel ? ` · ${layerLabel}` : ''}`;
-    const pip = `<${tag} class="pip ${k < 0 ? 'neg' : ''} ${lit ? 'used' : ''} ${marks}" ${interactive ? `data-pip="${t.id}" data-n="${k}"` : ''}
+    const pip = `<${tag} class="pip ${k < 0 ? 'neg' : ''} ${lit ? 'used' : ''} ${marks}" ${interactive ? `data-pip="${esc(t.id)}" data-n="${k}"` : ''}
           style="${paint}" title="${esc(label)}" aria-label="Set ${esc(t.name)} to ${twoSided ? signed(k) : k}"></${tag}>`;
     // The zero mark sits between the last negative pip and the first positive one.
     const markBefore = twoSided && k > 0 && (i === 0 || steps[i - 1] < 0);
@@ -400,9 +400,9 @@ function trackerEditRow(model, ctx, t) {
         ${trackerNoteField(model, t, d.note)}
         ${t.source === 'sheet' ? `<p class="hint">Seeded from the sheet’s Resource Tracker — your
           changes are saved against it, and Reset restores the sheet’s version.</p>` : ''}
-        <div class="tstyle" data-tstyle-for="${t.id}">${trackerStyleEditor(model, ctx, t)}</div>
+        <div class="tstyle" data-tstyle-for="${esc(t.id)}">${trackerStyleEditor(model, ctx, t)}</div>
         <div style="display:flex;gap:6px">
-          <button class="primary" data-action="save-tracker" data-id="${t.id}">Save</button>
+          <button class="primary" data-action="save-tracker" data-id="${esc(t.id)}">Save</button>
           <button data-action="cancel-tracker">Cancel</button>
         </div>
       </div>

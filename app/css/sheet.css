@@ -112,7 +112,10 @@
 
 * { box-sizing: border-box; }
 
-.wrap { padding: 14px; }
+/* Positioned so the tab-colour panel can be placed against the sheet rather
+   than the page: `:host` carries no padding or border, so this box and the
+   host's line up and a coordinate measured off the host lands here unchanged. */
+.wrap { padding: 14px; position: relative; }
 
 /* ---------- header ---------- */
 .head {
@@ -238,6 +241,17 @@
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .importerr button { margin-left: auto; padding: 0 6px; }
+/* "Not being saved": the one notice here that is a standing condition rather
+   than a thing that just happened, so it has no dismiss and stays put until
+   a write lands. `hidden` has to be forced -- the flex display would win. */
+.savefail {
+  flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
+  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  border: 1px solid var(--cs-bad); border-radius: 6px;
+}
+.savefail[hidden] { display: none; }
+.savefail button { margin-left: auto; }
 /* The armed Reset: loud enough to read, dead until the word is typed. */
 .resetconfirm {
   flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -309,7 +323,12 @@ button {
   border-radius: 6px; padding: 5px 10px; cursor: pointer;
 }
 button:hover { border-color: var(--cs-accent); }
-button[aria-pressed="true"], button.primary {
+/* Pressed and selected look the same and mean different things: `aria-pressed`
+   is a toggle that is on, `aria-selected` is the one tab of a set that is open.
+   A tab is not a toggle -- the attribute is the difference between a reader
+   hearing "Skills, selected, 4 of 20" and hearing nothing at all -- so the two
+   are separate in the markup and share one rule here. */
+button[aria-pressed="true"], button[aria-selected="true"], button.primary {
   background: var(--cs-accent-soft); border-color: var(--cs-accent); color: var(--cs-accent);
 }
 button.danger:hover { border-color: var(--cs-bad); color: var(--cs-bad); }
@@ -415,6 +434,56 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   margin: 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
 }
 .tabs button { border-radius: 6px 6px 0 0; }
+/* A coloured tab. `--tab-color` is set inline per button, and the rules read
+   it the way the theme's own accent is read one row up -- so a coloured tab
+   is the same shape as an uncoloured one, in a different hue. Resting state
+   is deliberately quiet: the colour is a label for finding a tab in a bar of
+   fifteen, not a second selected-state competing with the real one. */
+.tabs button.tinted {
+  color: var(--tab-color);
+  border-color: color-mix(in srgb, var(--tab-color) 45%, var(--cs-line));
+}
+.tabs button.tinted:hover { border-color: var(--tab-color); }
+.tabs button.tinted[aria-selected="true"] {
+  color: var(--tab-color);
+  border-color: var(--tab-color);
+  background: color-mix(in srgb, var(--tab-color) 16%, transparent);
+}
+/* On the light theme the same hue has to carry on near-white, and the palette
+   is picked for a dark bar: a pale blue that reads well at the top of this
+   file is barely there at the top of that one. So the tint is taken towards
+   ink for the text, which is the same move the light theme already makes on
+   its own accent and edit blue. The edges keep more of the hue -- they are
+   shape rather than text, and have no contrast ratio to meet. */
+:host([theme="light"]) .tabs button.tinted {
+  color: color-mix(in srgb, var(--tab-color) 62%, #000);
+  border-color: color-mix(in srgb, var(--tab-color) 60%, var(--cs-line));
+}
+:host([theme="light"]) .tabs button.tinted[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--tab-color) 72%, #000);
+  background: color-mix(in srgb, var(--tab-color) 18%, transparent);
+}
+/* The row swatch in the ⚙ manager, and the panel both entry points open. */
+.swatch.tabswatch { width: 18px; height: 18px; }
+.tabmenu {
+  position: absolute; z-index: 30; width: 232px;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 9px 10px; background: var(--cs-panel); color: var(--cs-text);
+  border: 1px solid var(--cs-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.tabmenu-head { display: flex; align-items: center; gap: 8px; }
+.tabmenu-name {
+  font-size: 0.78rem; font-weight: 620; color: var(--cs-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabmenu-head button { margin-left: auto; padding: 0 6px; }
+.tabmenu .pair { display: flex; gap: 6px; align-items: center; }
+.tabmenu input.hexin { flex: 1; width: auto; }
+/* The panel is a tab stop so a keyboard can reach a section that holds nothing
+   focusable -- a published sheet's prose, mostly. Inset, because an outline
+   drawn round the whole body would otherwise sit half off the edge. */
+.body:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
 /* Rearranging by drag: the tab (or manager row) being carried fades, and the
    one under the pointer shows which side the drop lands on. */
 .tabs button.dragging, .tabrow.dragging { opacity: 0.4; }
@@ -2470,7 +2539,7 @@ select.manip-pick option { font-size: 0.85rem; }
 /* The table: the two faces of the tab, and the zones a card can sit in. */
 .subtabs { display: flex; gap: 4px; margin: 0 0 12px; }
 .subtabs button { border-radius: 6px; }
-.subtabs button[aria-pressed="true"] { border-color: var(--cs-accent); color: var(--cs-accent); background: var(--cs-accent-soft); }
+.subtabs button[aria-selected="true"] { border-color: var(--cs-accent); color: var(--cs-accent); background: var(--cs-accent-soft); }
 .tablectl { flex-wrap: wrap; gap: 6px; }
 .zone { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px; margin-top: 6px; }
 .mcard.mini { padding: 5px 5px 4px; gap: 3px; border-radius: 9px; font-size: 0.78rem; }
@@ -3025,4 +3094,117 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
 @media (prefers-reduced-motion: reduce) {
   dialog.cmdk[open], dialog.cmdk[open]::backdrop, .cmdk-found { animation: none; }
   .cmdk-found { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
+}
+
+/* ---------- print ---------- *
+ *
+ * A character sheet is a thing people bring to a table, and until now this one
+ * could only be brought on a laptop: printing it gave you the dark theme, the
+ * tab bar, every button, and the tables cut off at whatever width the scroll
+ * containers were holding.
+ *
+ * What prints is *the tab you are looking at*, on white. Not the whole
+ * character -- there are twenty-odd sections and no one wants them all -- and
+ * not a print-only re-layout either: the section you can see is the section
+ * that comes out, which is a rule you can hold in your head while deciding
+ * what to hand someone. Open a tab, print, repeat.
+ *
+ * The palette is flipped by redefining the same custom properties the rest of
+ * this file already reads, so every rule above lands on white without being
+ * written twice.
+ */
+@media print {
+  :host {
+    --cs-bg: #fff;
+    --cs-panel: #fff;
+    --cs-panel-2: #fff;
+    /* Zebra survives as the faintest grey that still separates two rows on a
+       page: a wide table is exactly where the eye needs the help. */
+    --cs-zebra: #f2f2f2;
+    --cs-line: #9a9a9a;
+    --cs-text: #000;
+    --cs-muted: #4a4a4a;
+    /* Gold on white is unreadable. These are the same three meanings -- a
+       value the character supplies, good, bad -- at ink strength. */
+    --cs-accent: #7a5500;
+    --cs-accent-soft: transparent;
+    --cs-formula: transparent;
+    --cs-formula-strong: #7a5500;
+    --cs-good: #1a6b2c;
+    --cs-bad: #a32320;
+    --cs-edit: #14448c;
+    color-scheme: light;
+  }
+
+  /* The chrome. Everything here is a way to *change* the sheet or move around
+     it, and neither survives the trip to paper. */
+  nav.tabs,
+  .head-actions,
+  .rollslot,
+  .savefail,
+  .importerr,
+  .histnote,
+  .resume,
+  .resetconfirm,
+  .tabmenu,
+  dialog { display: none !important; }
+
+  /* Buttons go as a class, then the two kinds that are not affordances come
+     back. A maneuver's name is the content of its row, not a control on it. */
+  button { display: none !important; }
+  button.mname {
+    display: inline !important;
+    padding: 0; border: 0; background: none; color: var(--cs-text);
+    font: inherit; text-align: left;
+  }
+  /* And a proficiency chip is a value wearing a button: the set that is *on*
+     is what the character is trained in, which is one of the things a printed
+     sheet is most often consulted for. The chosen ones print; the rest, which
+     are only the options that were on offer, go with the other controls. */
+  button.chip-toggle[aria-pressed="true"] {
+    display: inline-block !important;
+    padding: 1px 7px; border: 1px solid var(--cs-line); border-radius: 10px;
+    background: none; color: var(--cs-text); font: inherit; font-size: 0.76rem;
+  }
+
+  /* Fields print as what they hold, not as boxes to type in. A border round
+     every value would put a grid over the whole page. */
+  input, select, textarea {
+    border: 0 !important; background: none !important; color: var(--cs-text) !important;
+    padding-left: 0; padding-right: 0;
+    -webkit-appearance: none; appearance: none;
+  }
+  /* A checkbox is the exception: its box *is* the value. */
+  input[type="checkbox"], input[type="radio"] {
+    -webkit-appearance: auto; appearance: auto;
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  /* A textarea sized to its scrollback shows one line of a paragraph on paper. */
+  textarea { height: auto !important; max-height: none !important; overflow: visible !important; }
+
+  /* Every scroll container is a pair of scissors once there is no scrollbar:
+     what it was clipping is simply gone from the page. */
+  .tablewrap, .discipline-wrap, .body {
+    overflow: visible !important; max-height: none !important;
+  }
+  /* Truncation is the same problem one line down. On paper there is room to
+     wrap, and no hover to reveal the rest. */
+  .cname, .tname, .sname, .mdetail-name, .dashtalent, .manacard .mname {
+    white-space: normal !important; overflow: visible !important;
+    text-overflow: clip !important; max-width: none !important;
+  }
+
+  /* Page breaks: keep a row, a card or a stat whole, and repeat a long
+     table's headings on each sheet it runs onto. */
+  thead { display: table-header-group; }
+  tr, .bigstat, .mcard, .manacard, .statline { break-inside: avoid; }
+  .panel { break-inside: avoid-page; }
+  h3, h4 { break-after: avoid; }
+
+  /* Backgrounds are dropped by default when printing, which would take the
+     zebra and the ability hues with them; these are meaning, not decoration. */
+  table, .panel, .bigstat { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  /* Neither a shadow nor a rounded corner survives a laser printer usefully. */
+  * { box-shadow: none !important; text-shadow: none !important; }
 }

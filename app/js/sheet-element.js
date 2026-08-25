@@ -125,7 +125,9 @@ import {
   targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { hasTokens, formatValue } from './inline.js';
-import { historyFor, countChanges, SNAPSHOT_EVERY, AUTO_KEEP } from './history.js';
+import {
+  historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
+} from './history.js';
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
@@ -414,6 +416,8 @@ export class CharacterSheetElement extends HTMLElement {
   #showHistory = false;
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
+  #storageFailed = false;   // the working state is not being written -- see #writeWorking
+  #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -568,6 +572,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#renderShell();
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
+    this.shadowRoot.addEventListener('pointerdown', this.#onPointerDownAway, true);
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
   }
@@ -575,6 +580,7 @@ export class CharacterSheetElement extends HTMLElement {
   disconnectedCallback() {
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
+    this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
     this.#closePalette();
   }
 
@@ -631,6 +637,11 @@ export class CharacterSheetElement extends HTMLElement {
     this.#sourceDoc = structuredClone(doc);
     this.#history = historyFor(doc?.id ?? 'character',
       { storageKey: this.getAttribute('storage-key') });
+    // Ask once that this browser keep what it is about to be given. A published
+    // view is exempt: it writes nothing down, so asking a stranger's browser to
+    // set aside durable room for a sheet it will not keep is a prompt for
+    // nothing. Deliberately not awaited -- the answer changes no code path here.
+    if (!this.isPublished) requestPersistence();
     this.#resume = null;
     this.#historyNote = null;
     this.#showHistory = false;
@@ -683,7 +694,7 @@ export class CharacterSheetElement extends HTMLElement {
      * that id before the picker renames it, and a write here would land on the
      * other character's state.
      */
-    if (drifted) this.#history.writeWorking(this.#model.toJSON());
+    if (drifted) this.#writeWorking();
     if (!this.isPublished) await this.#refreshSnapshots();
     this.#render();
   }
@@ -830,10 +841,35 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #persist() {
     if (!this.#model || !this.#history) return;
-    this.#history.writeWorking(this.#model.toJSON());
+    this.#writeWorking();
 
     clearTimeout(this.#snapshotTimer);
     this.#snapshotTimer = setTimeout(() => this.#considerSnapshot(), 800);
+  }
+
+  /**
+   * Write the working state, and say so when it does not land.
+   *
+   * `writeWorking` has always returned whether the write happened, and until
+   * now every caller threw the answer away -- so a player whose localStorage
+   * was full, or who was in a private window that gives none, kept editing a
+   * sheet that had quietly stopped being written down and found out when they
+   * closed the tab. Silence is the one wrong answer here: the sheet cannot fix
+   * it, but it can stop the player from spending an evening on a character
+   * that is not going to be there.
+   *
+   * The banner is toggled in place rather than through `#render()`, because
+   * this is called on every edit and a wholesale re-render mid-word takes the
+   * caret out of whatever is being typed. It is only touched when the state
+   * actually turns over, so the ordinary path costs one boolean compare.
+   */
+  #writeWorking() {
+    const ok = this.#history.writeWorking(this.#model.toJSON()) !== false;
+    if (ok === !this.#storageFailed) return ok;   // nothing has changed
+    this.#storageFailed = !ok;
+    const banner = this.shadowRoot?.querySelector('.savefail');
+    if (banner) banner.hidden = ok;
+    return ok;
   }
 
   /**
@@ -929,7 +965,7 @@ export class CharacterSheetElement extends HTMLElement {
         try { await this.#history.snapshot(current, this.#changes); } catch { /* best effort */ }
       }
       this.#adoptDocument(doc);
-      this.#history.writeWorking(this.#model.toJSON());
+      this.#writeWorking();
       this.#snapshotAt = this.#changes;
       this.#resume = null;
       const when = this.#snapshots.find((s) => s.key === key);
@@ -1129,16 +1165,29 @@ export class CharacterSheetElement extends HTMLElement {
       ${SHEET_LINK}
       <div class="wrap">
         ${this.#header()}
-        <nav class="tabs" role="tablist">
-          ${bar.map((e) => `
-            <button role="tab" data-tab="${e.id}" data-tabkey="${esc(e.key)}" aria-pressed="${this.#tab === e.id}"
-              ${e.kind === 'visiting' ? 'class="visiting" title="Not on this view’s bar — search took you here"' : ''}
-              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange"'}>${esc(e.label)}</button>
-          `).join('')}
-          <button role="tab" data-tab="systabs" aria-pressed="${this.#tab === 'systabs'}" title="Show, hide and rearrange tabs">⚙</button>
+        <nav class="tabs" role="tablist" aria-label="Character sheet sections">
+          ${bar.map((e) => {
+    // A colour is a normalised `#rrggbb` or nothing, so it is safe in the
+    // style attribute; the class list is built rather than written inline
+    // because a tab can be both a guest and coloured.
+    const color = this.#model.tabColor(e.key);
+    const cls = [e.kind === 'visiting' ? 'visiting' : '', color ? 'tinted' : ''].filter(Boolean).join(' ');
+    return `
+            <button role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
+              aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
+              tabindex="${this.#tab === e.id ? '0' : '-1'}"
+              ${cls ? `class="${cls}"` : ''}${color ? ` style="--tab-color:${color}"` : ''}
+              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"' : ''}
+              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange, right-click to colour"'}>${esc(e.label)}</button>`;
+  }).join('')}
+          <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
+            aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
+            title="Show, hide and rearrange tabs">⚙</button>
         </nav>
+        ${this.#tabColorMenuHtml()}
         <div class="rollslot">${this.#rollToastHtml()}</div>
-        <div class="body">${this.#panel()}</div>
+        <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
+          tabindex="0">${this.#panel()}</div>
       </div>`;
     this.#applyCharacterColor();
     this.#bind();
@@ -1269,6 +1318,18 @@ export class CharacterSheetElement extends HTMLElement {
           ${esc(this.#importError)}
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
+        ${/*
+           * Always in the markup, hidden until it is true, so `#writeWorking`
+           * can turn it on without a re-render (see there). There is no dismiss
+           * on it: every other notice here reports something that has finished
+           * happening, and this one reports something that is still the case.
+           */''}
+        <div class="savefail" role="alert" ${this.#storageFailed ? '' : 'hidden'}>
+          <strong>Not being saved.</strong> This browser refused to store the sheet —
+          a private window, or storage that is full. Your edits are here on screen but
+          will not survive closing the tab.
+          <button data-action="export" class="primary">Export JSON</button>
+        </div>
       </header>`;
   }
 
@@ -2403,12 +2464,20 @@ export class CharacterSheetElement extends HTMLElement {
       ? `<button class="danger" data-action="delete-system" data-index="${e.index}"
            title="Delete this tab and its data" aria-label="Delete tab">×</button>` : '');
 
+    // The same panel the tabs' own right-click opens, reached from a row.
+    const colorBtn = (e) => {
+      const hex = this.#model.tabColor(e.key);
+      return `<button class="swatch tabswatch${hex ? '' : ' none'}" data-tabcolor-open="${esc(e.key)}"
+        data-tabcolor-label="${esc(e.label)}"${hex ? ` style="background:${hex}"` : ''}
+        title="${esc(hex ? `Colour: ${hex}` : 'Colour this tab')}" aria-label="Colour ${esc(e.label)}"></button>`;
+    };
     const barRow = (e, i) => `<div class="item statline tabrow" draggable="true" data-tabkey="${esc(e.key)}">
       <span class="label pair" style="flex:1">
         <span class="grip" aria-hidden="true">⋮⋮</span>
         ${name(e)} ${badges(e)}
       </span>
       <span class="value pair">
+        ${colorBtn(e)}
         <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} left" title="Move left">↑</button>
         <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="1" ${i === bar.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} right" title="Move right">↓</button>
         <button data-action="tab-hide" data-key="${esc(e.key)}" ${bar.length === 1 ? 'disabled' : ''}>Hide</button>
@@ -2433,11 +2502,14 @@ export class CharacterSheetElement extends HTMLElement {
       <p class="hint">
         The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
         to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact. Each view keeps its own bar: the <em>build</em> view starts from
-        Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic, Primordia, Trackers,
-        Equipment; the <em>session</em> view starts from what comes up at the table -- the
-        tabs above plus every sub-system in use or marked on a class, minus the build
-        machinery. <button data-action="tab-reset">Reset this view's bar</button>
+        its data intact, and it stays hidden. The swatch on each row colours that tab
+        (right-clicking the tab itself opens the same picker); a colour is the tab's own
+        and shows on both bars. Each view keeps its own bar: the <em>build</em> view
+        starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
+        Primordia, Trackers and Equipment, <em>plus every sub-system this character
+        uses</em>; the <em>session</em> view starts from what comes up at the table --
+        those sub-systems again, minus the build machinery.
+        <button data-action="tab-reset">Reset this view's bar</button>
       </p>
       <div class="rowlist tabbar-list">
         ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
@@ -3198,6 +3270,230 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * The colour picker for one tab: a small panel, opened two ways.
+   *
+   * Right-clicking a tab is the fast way and the one nobody discovers, so the
+   * ⚙ manager gives every row on the bar a swatch that opens the same thing.
+   * One panel with two triggers rather than two controls, because the second
+   * would be the first with a different way of being wrong.
+   *
+   * It rides in `#render` like every other piece of view state instead of
+   * being a floating node: a right-click is not a keystroke, so the re-render
+   * it causes costs nothing, and this way the panel cannot outlive the tab it
+   * is colouring.
+   */
+  #tabColorMenuHtml() {
+    const m = this.#tabColorFor;
+    if (!m || !this.#model) return '';
+    const cur = this.#model.tabColor(m.key);
+    const swatch = (hex, name) => `<button class="swatch${hex ? '' : ' none'}" data-tabswatch
+      data-hex="${hex}"${hex ? ` style="background:${hex}"` : ''}
+      title="${esc(hex ? `${name} ${hex}` : 'Theme default')}" aria-label="${esc(hex ? name : 'Theme default')}"
+      aria-pressed="${(cur || '') === hex}"></button>`;
+    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab colour">
+      <div class="tabmenu-head">
+        <span class="tabmenu-name">${esc(m.label)}</span>
+        <button data-action="tabcolor-close" title="Close" aria-label="Close">×</button>
+      </div>
+      <div class="swatches" role="group" aria-label="Tab colour">
+        ${swatch('', '')}
+        ${TRACKER_PALETTE.map(([h, n]) => swatch(h, n)).join('')}
+      </div>
+      <div class="pair">
+        <input class="mono hexin" data-tabhex value="${esc(cur || '')}" placeholder="#rrggbb"
+          maxlength="7" aria-label="Tab colour hex">
+        <input type="color" data-tabpick value="${esc(cur || THEME_ACCENT.hex)}" aria-label="Tab colour picker">
+      </div>
+    </div>`;
+  }
+
+  /**
+   * Open the colour panel for one tab, positioned inside the sheet.
+   *
+   * The coordinates are relative to the host so the panel travels with the
+   * component rather than the page, and they are clamped to keep it on the
+   * sheet when a tab near the right edge is the one clicked.
+   */
+  #openTabColor(key, label, atX, atY) {
+    if (this.isPublished) return;            // a reader's colours go nowhere
+    const box = this.getBoundingClientRect();
+    const WIDTH = 232;
+    const x = Math.max(6, Math.min(atX - box.left, box.width - WIDTH - 6));
+    this.#tabColorFor = { key, label, x, y: Math.max(6, atY - box.top) };
+    this.#render();
+  }
+
+  /**
+   * The colour panel's own controls, plus the two ways out of it.
+   *
+   * A swatch, the hex box and the native picker all land on the same setter,
+   * and none of them re-renders. That is the same bargain `#bindCharacterColor`
+   * strikes one panel over, for a sharper version of the same reason: the
+   * native picker sends `input` continuously while its hue slider is dragged,
+   * and a re-render replaces the `<input type="color">` node it is attached to
+   * -- so re-rendering there tears down the very popup the player is dragging
+   * in. Everything the colour shows on is repainted in place instead, and the
+   * one re-render happens when the panel closes.
+   *
+   * Nothing calls `#persist` either: `setTabColor` recomputes, every model
+   * change notifies the subscriber set up with the document, and saving is
+   * what that subscriber does.
+   */
+  #bindTabColor(root) {
+    root.querySelectorAll('[data-tabcolor-open]').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        const r = b.getBoundingClientRect();
+        this.#openTabColor(b.dataset.tabcolorOpen, b.dataset.tabcolorLabel || 'Tab', r.left, r.bottom + 4);
+        e.stopPropagation();
+      });
+    });
+
+    const menu = root.querySelector('.tabmenu');
+    if (!menu) return;
+    const hexBox = menu.querySelector('[data-tabhex]');
+
+    /** Write the colour, then repaint everything wearing it, in place. */
+    const apply = (hex, { fromHexBox = false } = {}) => {
+      const key = this.#tabColorFor.key;
+      this.#model.setTabColor(key, hex);
+      const sel = `[data-tabkey="${CSS.escape(key)}"]`;
+      const tab = root.querySelector(`nav.tabs ${sel}`);
+      if (tab) {
+        tab.classList.toggle('tinted', !!hex);
+        if (hex) tab.style.setProperty('--tab-color', hex);
+        else tab.style.removeProperty('--tab-color');
+      }
+      const rowSwatch = root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
+      if (rowSwatch) {
+        rowSwatch.classList.toggle('none', !hex);
+        if (hex) rowSwatch.style.background = hex;
+        else rowSwatch.style.removeProperty('background');
+      }
+      menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
+        b.setAttribute('aria-pressed', String((normalizeHex(b.dataset.hex) || '') === (hex || '')));
+      });
+      // Not while it is the field being typed in, or the caret jumps.
+      if (hexBox && !fromHexBox) {
+        hexBox.value = hex || '';
+        hexBox.classList.remove('bad');
+      }
+    };
+
+    menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
+      b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
+    });
+    menu.querySelector('[data-tabpick]')?.addEventListener('input', (e) => {
+      apply(normalizeHex(e.target.value));
+    });
+    hexBox?.addEventListener('input', () => {
+      // Typed a character at a time, so an incomplete hex is not an error yet
+      // -- it is only marked, and nothing is written until it reads.
+      const hex = normalizeHex(hexBox.value);
+      hexBox.classList.toggle('bad', !!hexBox.value.trim() && !hex);
+      if (hex || !hexBox.value.trim()) apply(hex, { fromHexBox: true });
+    });
+
+    const close = () => { this.#tabColorFor = null; this.#render(); };
+    menu.querySelector('[data-action="tabcolor-close"]')?.addEventListener('click', close);
+    menu.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    });
+    // Closing on a click elsewhere is *not* bound here: `#bind` runs after
+    // every render and the shadow root outlives all of them, so a listener
+    // added here would be added again on each one, and the stale copies --
+    // closing over a menu node that has since been replaced -- would see every
+    // later click as "elsewhere" and shut the panel before the swatch under
+    // the pointer could act. It is one listener for the element's life
+    // instead: `#onPointerDownAway`, installed in `connectedCallback`.
+  }
+
+  /**
+   * A press anywhere but the colour panel closes it.
+   *
+   * `pointerdown` rather than `click` so it lands before whatever is underneath
+   * acts, and `composedPath` rather than `contains` because an event from
+   * inside the shadow root is retargeted at the host on its way out. Reads the
+   * live state rather than closing over a node, which is what lets it be bound
+   * once and survive every re-render.
+   */
+  #onPointerDownAway = (e) => {
+    if (!this.#tabColorFor) return;
+    const path = e.composedPath?.() || [];
+    // Inside the panel, or on a control whose own handler opens it: not away.
+    if (path.some((n) => n?.classList?.contains?.('tabmenu')
+      || n?.dataset?.tabcolorOpen !== undefined)) return;
+    /*
+     * The native colour picker is browser chrome, drawn outside this document
+     * entirely -- so a press on its hue slider, its saturation square or its
+     * own hex box is not in `path` and reads exactly like a press somewhere
+     * else on the sheet. That shut the panel the instant anyone touched it,
+     * which made the control useless: it could be opened and not used.
+     *
+     * While `<input type="color">` holds focus its popup is what is being
+     * used and nothing out here is, so the press is not ours to act on. The
+     * input keeps focus for as long as the popup is open, which is what makes
+     * this self-clearing rather than a flag with a lifetime to get wrong.
+     */
+    if (this.shadowRoot.activeElement?.matches?.('[data-tabpick]')) return;
+    this.#tabColorFor = null;
+    this.#render();
+  };
+
+  /**
+   * Arrow keys along the tab bar, which is the half of `role="tablist"` that
+   * is a promise rather than a label.
+   *
+   * A tablist tells a screen reader "these are the sections, and one of them
+   * is open" -- and having said so, it owes the reader the navigation that
+   * comes with it: the bar is *one* stop on the Tab key (the roving tabindex
+   * in `#render`), and the arrows move within it. Without this the reader is
+   * told there are twenty sections and given no way to walk them.
+   *
+   * Selection follows focus, which the ARIA practices allow where showing a
+   * panel is cheap and is what clicking already does here. That costs a
+   * re-render per arrow press, and a re-render replaces the button the key
+   * came from -- so focus is put back on the tab that is now selected, or the
+   * bar would drop the reader on the document after one press.
+   *
+   * Bound to the bar rather than the root on purpose: a sheet is mostly text
+   * inputs, and a document-level arrow handler would fight every one of them.
+   */
+  #bindTabKeys(root) {
+    const bar = root.querySelector('nav.tabs');
+    if (!bar) return;
+    // Right-click a tab to colour it. The native menu is given up on the tabs
+    // only -- everywhere else on the sheet it is left alone, because "copy
+    // this cell" is worth more there than any menu of ours would be.
+    bar.addEventListener('contextmenu', (e) => {
+      const btn = e.target?.closest?.('[role="tab"][data-tabkey]');
+      if (!btn || this.isPublished) return;
+      e.preventDefault();
+      this.#openTabColor(btn.dataset.tabkey, btn.textContent.trim(), e.clientX, e.clientY);
+    });
+    bar.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const tabs = [...bar.querySelectorAll('[role="tab"]')];
+      const at = tabs.findIndex((t) => t === e.target);
+      if (at < 0) return;
+      let to = at;
+      switch (e.key) {
+        // Wrapping at both ends, so the bar is a loop rather than a dead stop.
+        case 'ArrowRight': to = (at + 1) % tabs.length; break;
+        case 'ArrowLeft': to = (at - 1 + tabs.length) % tabs.length; break;
+        case 'Home': to = 0; break;
+        case 'End': to = tabs.length - 1; break;
+        default: return;
+      }
+      e.preventDefault();
+      const id = tabs[to].dataset.tab;
+      if (id === this.#tab) return;
+      this.#tab = id;
+      this.#render();
+      this.shadowRoot.getElementById(`tab-${id}`)?.focus();
+    });
+  }
+
+  /**
    * Rearranging by drag: the tabs on the bar, and the rows of the manager's
    * "Tab bar" list. Both carry `data-tabkey`; dropping one on another puts it
    * before that one (or after, when dropped on the right/lower half), and a
@@ -3265,6 +3561,8 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-tab]').forEach((b) => {
       b.addEventListener('click', () => { this.#tab = b.dataset.tab; this.#render(); });
     });
+    this.#bindTabKeys(root);
+    this.#bindTabColor(root);
     this.#bindTabDrag(root);
 
     // The d20 buttons. One listener per button rather than one on the root,
@@ -4931,7 +5229,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (this.#resume?.key) this.#restoreSnapshot(this.#resume.key);
         else if (this.#resume?.doc) {
           this.#adoptDocument(this.#resume.doc);
-          this.#history?.writeWorking(this.#model.toJSON());
+          if (this.#history) this.#writeWorking();
           this.#resume = null;
           this.#render();
         }

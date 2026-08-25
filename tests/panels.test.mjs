@@ -347,5 +347,73 @@ if (hasFixtures()) {
   for (const id of fixtureIds()) sweep(id, new Character(loadCharacter(id)));
 }
 
+/* ---------------------------------------------------------------------- *
+ * nothing a character carries becomes markup
+ * ---------------------------------------------------------------------- */
+
+/*
+ * Every panel is a string builder writing straight into `innerHTML`, and every
+ * value it writes came out of a spreadsheet cell or a text box. So a character
+ * document that holds `"><svg onload=...>` in a field nobody escaped puts a
+ * script on the page of whoever opens it -- and since `app/published.html`
+ * takes a `?src=` URL, whoever opens it need not be the person who wrote it.
+ * There is no CSP behind this and a shadow root is not a boundary, so the
+ * escaping *is* the defence.
+ *
+ * Two helpers had holes when this was written: `bigStat`'s `sub`, which took
+ * raw markup while carrying ability names straight off the workbook, and
+ * `foldButton`, which built `data-collapse` out of a feature group's name.
+ * Both are shared, so the leak showed up in panels neither one is named in --
+ * which is the argument for sweeping all of them rather than testing the two.
+ *
+ * Poison every string in the document, render everything, and look for the
+ * payload still able to open a tag. Four shapes, because a value can land in a
+ * double- or single-quoted attribute, inside a <textarea>, or as element text,
+ * and each leaves by a different door.
+ */
+console.log('\nno character text reaches the page as markup');
+{
+  const SHAPES = {
+    'a double-quoted attribute': 'Zq"><svg/onload=x(1)>',
+    'a single-quoted attribute': "Zq'><svg/onload=x(1)>",
+    'a textarea': 'Zq</textarea><svg/onload=x(1)>',
+    'element content': 'Zq</td></tr><svg/onload=x(1)>',
+  };
+  const poisonWith = (payload) => function walk(v) {
+    if (typeof v === 'string') return v === '' ? '' : payload;
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') {
+      const o = {};
+      // The schema version steers which importers run; poisoning it would
+      // test a document shape the app never loads.
+      for (const [k, x] of Object.entries(v)) o[k] = k === 'schemaVersion' ? x : walk(x);
+      return o;
+    }
+    return v;
+  };
+
+  const ids = hasFixtures() ? fixtureIds() : [];
+  for (const [where, payload] of Object.entries(SHAPES)) {
+    const poison = poisonWith(payload);
+    let leaked = 0;
+    let drawn = 0;
+    for (const id of ids) {
+      const model = new Character(poison(loadCharacter(id)));
+      for (const [name, draw] of [...PANELS, ...panelsWith(openCtx(model))]) {
+        let html;
+        try { html = String(draw(model) ?? ''); } catch { continue; }
+        drawn++;
+        // Escaped, the payload is still in the output -- as text. What must
+        // not survive is the `<` that makes it a tag again.
+        if (html.includes('<svg/onload=x')) {
+          leaked++;
+          if (leaked === 1) console.log(`  FAIL first leak: ${id} — ${name}`);
+        }
+      }
+    }
+    if (drawn) check(`escaped on the way out of ${where}`, leaked, 0);
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -5000,6 +5000,16 @@
  },
  "uiPrefs": {
   "hiddenTabs": {},
+  "tabColors": {},
+  "viewMode": "build",
+  "collapsed": {
+   "cooking-ref": true,
+   "atk:melee": true,
+   "atk:ranged": true,
+   "atk:cmb": true,
+   "hp:build": true
+  },
+  "colWidths": {},
   "tabOrder": [
    "overview",
    "stats",
@@ -5010,16 +5020,7 @@
    "primordia",
    "trackers",
    "gear"
-  ],
-  "viewMode": "build",
-  "collapsed": {
-   "cooking-ref": true,
-   "atk:melee": true,
-   "atk:ranged": true,
-   "atk:cmb": true,
-   "hp:build": true
-  },
-  "colWidths": {}
+  ]
  },
  "effects": [],
  "buffs": [],

@@ -71,7 +71,7 @@ function unarmedPanel(model) {
     return `<section class="panel">
       <h3>Unarmed strike</h3>
       <div class="bigstats" style="margin-bottom:8px">
-        ${bigStat('Dice', u.dice ?? '—', esc(sub))}
+        ${bigStat('Dice', u.dice ?? '—', sub)}
       </div>
       <div class="statline" title="A class that prints its own unarmed damage table uses that instead of the practitioner one">
         <span class="label">Class has its own progression</span>
@@ -580,11 +580,11 @@ function craftSummaryPanel(cr) {
     return `<section class="panel span2">
       <h3>Crafting ${k.errors?.length ? `<span class="badge err">${k.errors.length} formula problem(s)</span>` : ''}</h3>
       <div class="bigstats">
-        ${bigStat('Progress / day', group(k.speedPerDay), `${esc(cr.currency || '')} of base price`)}
+        ${bigStat('Progress / day', group(k.speedPerDay), `${cr.currency || ''} of base price`)}
         ${bigStat('Base cost', pct(k.baseFraction), 'of base price')}
         ${bigStat('Reductions', `×${round(k.compounding, 4)}`, `${(cr.costReductions || []).filter((r) => r.enabled !== false).length} applied`)}
         ${bigStat('You pay', pct(k.ratio), 'value : craft ratio')}
-        ${bigStat('Craft check', fmt(k.checkBase), `${esc(mode)}${k.skill ? ` · ${esc(k.skill)}` : ''}`)}
+        ${bigStat('Craft check', fmt(k.checkBase), `${mode}${k.skill ? ` · ${k.skill}` : ''}`)}
       </div>
       ${k.errors?.length ? `<p class="hint warn" style="margin-top:8px">${k.errors.map(esc).join(' · ')}</p>` : ''}
     </section>`;

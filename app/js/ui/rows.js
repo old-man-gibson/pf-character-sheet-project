@@ -165,11 +165,24 @@ export function addManyButton(list, label, items) {
   return `<button data-add-many="${list}" data-template="${esc(JSON.stringify(items))}">+ ${esc(label)}</button>`;
 }
 
-/** `now` is the conditioned reading, shown under the base when it differs. */
+/**
+ * `now` is the conditioned reading, shown under the base when it differs.
+ *
+ * `v` and `sub` take either a value or `{html}`. A value is escaped; `{html}`
+ * is markup we built ourselves -- a moved value shown in the base's place, or
+ * a line with an entity in it. The opt-in is that way round because `sub` is
+ * mostly *workbook text*: an ability name, an iterative line, a companion's
+ * attack stat, each of which is whatever was typed into a spreadsheet cell and
+ * none of which the model constrains. It used to be interpolated raw, which
+ * made a character document able to put markup on the page of whoever opened
+ * it -- and since a published sheet is fetched from a URL and opened by a
+ * stranger, "whoever opened it" is not only its author.
+ */
 export function bigStat(k, v, sub, now = '', roll = '') {
-  // `v` as {html} is trusted markup -- a moved value shown in the base's place.
-  const shown = v && typeof v === 'object' && 'html' in v ? v.html : esc(v);
-  return `<div class="bigstat${now ? ' has-now' : ''}"><div class="k">${esc(k)}</div><div class="v">${shown}</div><div class="sub">${sub || '&nbsp;'}</div>${now}${roll}</div>`;
+  const markup = (x) => (x && typeof x === 'object' && 'html' in x ? x.html : esc(x));
+  const shown = markup(v);
+  const under = markup(sub);
+  return `<div class="bigstat${now ? ' has-now' : ''}"><div class="k">${esc(k)}</div><div class="v">${shown}</div><div class="sub">${under || '&nbsp;'}</div>${now}${roll}</div>`;
 }
 
 /** A stat for a header strip: one line, sized to read rather than to fill. */
@@ -237,7 +250,11 @@ export function isCollapsed(model, key, fallback = false) {
  */
 export function foldButton(model, key, collapsedNow = null) {
   const collapsed = collapsedNow === null ? isCollapsed(model, key) : !!collapsedNow;
-  return `<button data-collapse="${key}" title="${collapsed ? 'Expand' : 'Minimize'}"
+  // Escaped because a fold key is not always ours: `progfeat-${name}` builds
+  // one out of a feature group's name, which is workbook text. The reader
+  // decodes character references in an attribute value, so `dataset.collapse`
+  // still hands the click handler back the exact key that went in.
+  return `<button data-collapse="${esc(key)}" title="${collapsed ? 'Expand' : 'Minimize'}"
     aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
 }
 
