@@ -88,6 +88,7 @@ tools/convert.mjs       the same converter as a Node CLI, no dependencies
 tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
 tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
 tools/extension_pack.py what the *_ref tools use to write a table as a pack
+tools/audit-diff.mjs    the audit diff between two character JSON documents, for a GM
 tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
                         reader the Paste text… panel uses
 app/index.html          local host page (character picker)
@@ -109,6 +110,9 @@ app/js/paste-import.js  rules text off a page -> extension blocks + leftovers to
 app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/roll20.js        a row's totals as text a Roll20 chat box will roll
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry
+app/js/publish.js       a character as a third party receives it: only the pack entries it
+                        actually carries, never the catalogues they came from
+app/published.html      what a published character looks like to someone who is not you
 app/js/sheet-element.js the <character-sheet> custom element
 app/js/ui/palette.js    the Ctrl+K search palette: the character as searchable rows
 app/js/styles.js        loads the stylesheet and shares it as one adopted sheet
@@ -124,7 +128,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/model.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the
