@@ -35,10 +35,18 @@ const SUB_ABILITY = /^\s*[:–—]\s*\S/;
  */
 export function positionedRows(tab) {
   const rows = [];
-  (tab?.rows || []).forEach((row, i) => {
+  let next = 0;
+  for (const row of tab?.rows || []) {
     const n = Number(row?.r);
-    rows[(Number.isFinite(n) && n > 0 ? n : i + 1) - 1] = { cells: [...(row?.cells || [])] };
-  });
+    let at = Number.isFinite(n) && n > 0 ? n - 1 : next;
+    // A row typed into the grid editor has no number of its own, and a tab
+    // can carry both kinds at once. Such a row follows the one before it, and
+    // never lands on top of a row already placed -- the alternative is one
+    // row silently replacing another.
+    while (rows[at]) at++;
+    rows[at] = { cells: [...(row?.cells || [])] };
+    next = at + 1;
+  }
   for (let i = 0; i < rows.length; i++) if (!rows[i]) rows[i] = { cells: [] };
   return rows;
 }
