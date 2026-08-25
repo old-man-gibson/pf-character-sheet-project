@@ -51,6 +51,7 @@ import {
 } from '../app/js/rules.js';
 import { rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
+import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 
 let pass = 0;
@@ -7279,6 +7280,67 @@ console.log('character colour');
   const c2 = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('survives a round trip', c2.data.identity.color, '#6ea8fe');
   check('and moves no derived number', c2.diffFromSource(), []);
+}
+
+/* A tab the converter hands over keeps only the rows that hold something, and
+ * records what number each one had. For several tabs that number is the whole
+ * meaning: a blank worksheet row is what separates one Template feature from
+ * the next, and what ends a column of notes on ExtrasNotes. These check that
+ * the number survives the trip into `sheetTabs`, because for a while it did
+ * not -- three importers each kept a private copy of the converter's grid to
+ * work around it, and a fourth would have had to do the same. */
+console.log('sheet tabs keep their row numbers');
+{
+  const doc = blankDocument({ name: 'Row Numbers' });
+  doc.extraTabs = {
+    'Combat Training': {
+      rows: [
+        { r: 1, cells: ['Stance', 'Iron Tortoise'] },
+        // Worksheet rows 2 to 4 are blank, so the converter dropped them.
+        { r: 5, cells: ['Boost', 'Broken Blade'] },
+      ],
+    },
+  };
+  const c = new Character(doc);
+  const kept = (c.data.sheetTabs || []).find((t) => t.name === 'Combat Training');
+  check('the tab survives as a grid', kept?.rows?.length, 2);
+  check('each row keeps its sheet position', kept?.rows?.map((x) => x.r), [1, 5]);
+  check('so the blank rows come back', positionedRows(kept).length, 5);
+  check('with the last row where the sheet had it', positionedRows(kept)[4]?.cells[1], 'Broken Blade');
+
+  // Saving and reopening has to keep them, or the first reload reads a packed
+  // grid the converter never produced.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const back = (again.data.sheetTabs || []).find((t) => t.name === 'Combat Training');
+  check('and a round trip keeps them', back?.rows?.map((x) => x.r), [1, 5]);
+}
+
+console.log('a row typed into the grid editor has no number of its own');
+{
+  // The grid editor adds rows carrying no `r`, and they sit beside rows that
+  // have one. Neither may land on top of the other.
+  const mixed = { rows: [{ r: 1, cells: ['a'] }, { cells: ['added'] }, { r: 2, cells: ['b'] }] };
+  const placed = positionedRows(mixed).map((x) => x.cells[0] ?? null);
+  check('every row is placed', placed.filter((x) => x !== null).length, 3);
+  check('in the order they were given', placed, ['a', 'added', 'b']);
+}
+
+console.log('a blank worksheet row ends a column of notes');
+{
+  const doc = blankDocument({ name: 'Extras Gaps' });
+  doc.extraTabs = {
+    ExtrasNotes: {
+      rows: [
+        { r: 1, cells: ['Range 1'] },
+        { r: 2, cells: ['first line'] },
+        { r: 3, cells: ['second line'] },
+        // Worksheet row 4 is blank, which is where the column ends.
+        { r: 5, cells: ['a note about something else'] },
+      ],
+    },
+  };
+  const note = (new Character(doc).data.notes || []).find((n) => n.title === 'Range 1');
+  check('the column stops at the gap', note?.body, 'first line\nsecond line');
 }
 
 console.log('spheres of guile -- two talent ladders, and DCs read off a skill');
