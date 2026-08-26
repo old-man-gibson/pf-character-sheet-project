@@ -365,6 +365,19 @@ function readControl(input) {
 const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
+/**
+ * The input types a caret can be put back into after a re-render.
+ *
+ * `setSelectionRange` throws on the rest -- number, email, date, colour -- so
+ * `#rerender` has to ask before it restores. This was `type === 'text'`, which
+ * quietly excluded the block shelf's `type="search"` box: the caret landed at
+ * 0 after every keystroke and each new character was inserted in front of the
+ * last, so a search for "asdf" filtered on "fdsa". The set is the standard
+ * one rather than "text and search", so the next field to be typed into is not
+ * the next thing to type backwards.
+ */
+const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password']);
+
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
   if (!input) return null;
@@ -1103,7 +1116,7 @@ export class CharacterSheetElement extends HTMLElement {
     // is not itself focused never fires.
     next.closest('.xf')?.classList.add('editing');
     next.focus();
-    if (caret !== null && typeof next.setSelectionRange === 'function' && next.type === 'text') {
+    if (caret !== null && typeof next.setSelectionRange === 'function' && CARET_TYPES.has(next.type)) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
     }
   }
