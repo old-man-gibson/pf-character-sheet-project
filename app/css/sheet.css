@@ -351,7 +351,7 @@ input[type="number"] { text-align: center; }
 textarea { resize: vertical; min-height: 60px; font-family: inherit; }
 input.mono { font-family: var(--cs-mono); font-size: 0.8rem; text-align: left; }
 /* A value that is read, not typed: the same box as a field, in the derived colour. */
-input.ro, input.ro:focus {
+input.ro, input.ro:focus, textarea.ro, textarea.ro:focus {
   color: var(--cs-accent); font-weight: 620; text-align: center;
   background: var(--cs-accent-soft); border-color: var(--cs-accent-soft);
   outline: none; cursor: default; font-variant-numeric: tabular-nums;
@@ -2154,8 +2154,13 @@ input.autonum.auto::placeholder { color: var(--cs-accent); opacity: 1; font-weig
 .lang.drop-after { box-shadow: 3px 0 0 0 var(--cs-accent); }
 /* Folded: the whole list on one line, in a box that can be selected and a
    button that saves the selecting. */
-.langcopy { display: flex; gap: 6px; align-items: center; margin-top: 2px; }
-.langcopy input.ro { flex: 1; min-width: 0; }
+/* The folded language list: a box of every language spoken, ready to be copied
+   into a post. It wraps, so the row aligns to the top -- Copy beside the first
+   line of the list rather than floating in the middle of four. Sized to its
+   content by `#bind`, hence no scrollbar and no resize grip. */
+.langcopy { display: flex; gap: 6px; align-items: flex-start; margin-top: 2px; }
+.langcopy .ro { flex: 1; min-width: 0; }
+.langcopy textarea.ro { resize: none; overflow: hidden; line-height: 1.4; }
 
 /* Proficiencies: rows of toggle chips, weapons on the left, armor and shields
    on the right, and the specific weapons as a chip list like the languages.

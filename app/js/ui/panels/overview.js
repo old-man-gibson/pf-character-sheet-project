@@ -1100,11 +1100,23 @@ function languagesPanel(model) {
           title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
       </h3>`;
     if (shut) {
+      /*
+       * A textarea rather than an input, because an input is one line by
+       * definition: a character with a good Int bonus and ranks in Linguistics
+       * speaks more languages than fit across a third of a row, and the rest
+       * of them scrolled out of sight with nothing to say they were there.
+       *
+       * It is still a form control rather than a div, because the Copy button
+       * beside it reads `.value`, and because a field is what you can click
+       * into and select all of. `#bindReadOnlyBoxes` sizes it to its content
+       * after every render, so the box is as tall as the list and never grows
+       * a scrollbar of its own.
+       */
       return `<section class="panel collapsed">
         ${head}
         <div class="langcopy">
-          <input class="ro" data-post="languages" readonly value="${esc(spoken.join(', '))}"
-            placeholder="No languages yet." aria-label="Every language spoken">
+          <textarea class="ro" data-post="languages" readonly rows="1" spellcheck="false"
+            placeholder="No languages yet." aria-label="Every language spoken">${esc(spoken.join(', '))}</textarea>
           <button data-copy="languages" title="Copy the whole list">Copy</button>
         </div>
       </section>`;
