@@ -660,6 +660,23 @@ export function proseSources(model) {
     if (k === 'additional') (slot || []).forEach((t, i) => push(`trait:additional:${i}`, t.text));
     else push(`trait:${k}`, slot?.text);
   }
+  /*
+   * Race traits, on the same footing as the trait slots above.
+   *
+   * They were the one kind of trait never walked, which was hard to catch from
+   * the sheet: the text is drawn with `prose`, so a `{skill.disguise += 2}`
+   * written in a race trait *resolved and showed its 2* — it simply never
+   * reached the skill. A racial bonus is one of the most ordinary things a
+   * player writes ("Oni-Spawn Tieflings gain a +2 racial bonus on Disguise and
+   * Intimidate"), and every drawback beside it worked, so the sheet looked
+   * like it had taken the bonus and quietly had not.
+   *
+   * An older document stores a race trait as a bare string rather than
+   * `{ name, text }` — the palette already reads both — so both are taken.
+   */
+  (d.raceTraits || []).forEach((t, i) => {
+    push(`raceTrait:${i}`, typeof t === 'string' ? t : t?.text);
+  });
   // A tier above the one the character has reached is a plan: its text still
   // resolves and still shows, but a bonus written there has not been earned.
   const mythicTier = Number(d.identity?.mythicTier) || 0;

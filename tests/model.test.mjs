@@ -466,6 +466,50 @@ console.log('\ntab colours -- a preference on the tab, not on the bar');
   check('but the colour is remembered for when it is shown', back.tabColor('cooking'), '#f07f3c');
 }
 
+/*
+ * A race trait forwards a bonus, like every other kind of trait.
+ *
+ * It was the one prose field on the sheet carrying `{…}` that the forwarding
+ * scan never walked, and nothing caught it: the text is drawn with `prose`, so
+ * the bonus resolved and showed its number on the page and simply never
+ * reached the skill. No character in either roster had ever written one, which
+ * is why this is built here rather than read off a fixture -- a sweep can only
+ * find what somebody already wrote down.
+ */
+console.log('\na race trait forwards a bonus, like the trait slots beside it');
+{
+  const c = new Character(blankDocument({ name: 'Oni-Spawn' }));
+  const skill = (n) => (c.data.skills || []).find((s) => s.name === n);
+  check('nothing forwarded to begin with',
+    [skill('Intimidate').bonus, c.forwardedInto('skill.intimidate')], [0, null]);
+
+  // The shape a player actually writes, two destinations at once.
+  c.listAdd('raceTraits', {
+    name: 'Fiendish Presence',
+    text: 'Oni-Spawn gain a {skill.disguise, skill.intimidate += 2} racial bonus.',
+  });
+  c.recompute();
+  check('it reaches the skill', [skill('Intimidate').bonus, skill('Intimidate').forwarded], [2, 2]);
+  check('and every destination named, not just the first', c.forwardedInto('skill.disguise')?.total, 2);
+  check('reported against the trait it came from',
+    c.forwardedInto('skill.intimidate')?.from?.[0]?.where, 'race trait 4');
+
+  // The trap this shares with every other forwarded source: a bonus that is
+  // written down and visible must not be folded into an offset on reload.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and reopening leaves it forwarded rather than absorbed',
+    [again.forwardedInto('skill.intimidate')?.total,
+      (again.data.skills || []).find((s) => s.name === 'Intimidate').bonus], [2, 2]);
+
+  // A document old enough to store a race trait as a bare string, which the
+  // palette already reads both ways.
+  const old = new Character(blankDocument({ name: 'Older' }));
+  old.data.raceTraits = ['Stonecunning: a {skill.stealth += 3} racial bonus.'];
+  old.recompute();
+  check('a race trait stored as a bare string forwards too',
+    old.forwardedInto('skill.stealth')?.total, 3);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
