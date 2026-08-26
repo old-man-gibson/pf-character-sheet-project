@@ -26,3 +26,33 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
 - **Class-side sub-ability granularity.** An archetype that replaces a *sub-ability*
   (Ronin's *Honorless Tactics* for Resolve's *Determined*) marks the parent as altered and
   sits beside it; it does not edit inside the parent's text. Fine to read, coarse to model.
+- **Improve the print view.** Ctrl-P prints the tab you are looking at, on white, with the
+  chrome hidden — see [Using the sheet](using-the-sheet.md#printing-a-tab). That much
+  works, but it has only ever been checked *structurally*: every rule parsed, every
+  selector matched a real element, and the buttons were audited across every panel. **No
+  page has ever been put through a print preview**, which is the first thing to do, and
+  probably the thing that finds most of what is below.
+  - **Trackers print with no meter.** Pips are `<button>` when interactive
+    (`tag = interactive ? 'button' : 'span'`, `ui/panels/trackers.js`) and the print block
+    hides every button except the two it names back, so hit points, essence, power points
+    and every resource tracker come out as a name and a number with nothing beside them.
+    Restoring `button.pip` alongside `button.mname` and `button.chip-toggle` is most of the
+    fix; the fills also want `print-color-adjust: exact`, which today only `table`, `.panel`
+    and `.bigstat` carry, or a spent pip and an unspent one print identically.
+  - **The palette flip is only half done.** `@media print` redefines the `--cs-*`
+    properties, but the ability hues (`--ab-wash`, `--ab-edge`, `--ab-ink`) and the formula
+    colours (`--fx-*`) have light values only under `:host([theme="light"])`, and printing
+    does not set that attribute. A sheet printed from the dark theme puts the dark versions
+    of both onto white paper.
+  - **Nothing scales a wide table.** `.tablewrap` gets `overflow: visible` so a scroll
+    container cannot clip what it was holding — but a table wider than the page then simply
+    runs off it, which is worse than a scrollbar was. The Progression grid and a full
+    Equipment table are both wider than portrait A4. Wants a landscape `@page` for those
+    tabs, or a scale factor.
+  - **There is no `@page` rule at all**, so margins and orientation are whatever the
+    browser defaults to.
+  - **The portrait prints at screen size**, which is a lot of ink for a decoration.
+
+  Worth deciding at the same time whether *the tab you are looking at* stays the rule. It
+  is a rule you can hold in your head while choosing what to hand someone, but a player who
+  wants a sheet for the table prints four or five tabs one at a time to get one.

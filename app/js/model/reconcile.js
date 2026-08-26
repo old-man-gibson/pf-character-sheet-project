@@ -75,6 +75,7 @@ export function describeSource(path) {
     case 'note': return `note ${nth(a)} on Lore`;
     case 'background': return `background section ${nth(a)}`;
     case 'trait': return a === 'additional' ? `additional trait ${nth(b)}` : `${a} trait`;
+    case 'raceTrait': return `race trait ${nth(a)}`;
     case 'mythic': return b === 'effect' ? `the tier ${nth(a)} ability’s effect`
       : b === 'featChoice' ? `the tier ${nth(a)} feat`
         : b === 'featEffect' ? `the tier ${nth(a)} feat’s effect`

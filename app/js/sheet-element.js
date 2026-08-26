@@ -365,6 +365,19 @@ function readControl(input) {
 const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
+/**
+ * The input types a caret can be put back into after a re-render.
+ *
+ * `setSelectionRange` throws on the rest -- number, email, date, colour -- so
+ * `#rerender` has to ask before it restores. This was `type === 'text'`, which
+ * quietly excluded the block shelf's `type="search"` box: the caret landed at
+ * 0 after every keystroke and each new character was inserted in front of the
+ * last, so a search for "asdf" filtered on "fdsa". The set is the standard
+ * one rather than "text and search", so the next field to be typed into is not
+ * the next thing to type backwards.
+ */
+const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password']);
+
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
   if (!input) return null;
@@ -418,6 +431,7 @@ export class CharacterSheetElement extends HTMLElement {
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
+  #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -1102,7 +1116,7 @@ export class CharacterSheetElement extends HTMLElement {
     // is not itself focused never fires.
     next.closest('.xf')?.classList.add('editing');
     next.focus();
-    if (caret !== null && typeof next.setSelectionRange === 'function' && next.type === 'text') {
+    if (caret !== null && typeof next.setSelectionRange === 'function' && CARET_TYPES.has(next.type)) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
     }
   }
@@ -3270,6 +3284,60 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Read-only boxes that stand as tall as what is in them.
+   *
+   * Today that is the folded language list, which wraps to as many lines as
+   * the character has languages for. Sized here rather than with a `rows`
+   * count in the markup because the count depends on how wide the box ended
+   * up, and that is not knowable while the string is being built: the same
+   * list wraps differently across a third of a wide row and the whole of a
+   * narrow one, and it rewraps again when the window changes.
+   *
+   * Deliberately narrow -- `textarea.ro`, not every `[data-post]`. The
+   * generated Discord posts next door are also `[data-post]` and are meant to
+   * be a fixed height with a resize grip; worse, they sit inside a `<details>`
+   * that may be shut, where `scrollHeight` reads 0 and this would flatten them
+   * to nothing the moment they were opened.
+   */
+  #bindReadOnlyBoxes(root) {
+    const fit = (t) => {
+      t.style.height = 'auto';
+      // Plus the borders. Everything here is `box-sizing: border-box`, so the
+      // height set includes them, while `scrollHeight` is the content and its
+      // padding and no more -- and a box set to exactly `scrollHeight` is two
+      // pixels short and clips its own last line.
+      const cs = getComputedStyle(t);
+      const borders = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+      t.style.height = `${t.scrollHeight + (Number.isFinite(borders) ? borders : 0)}px`;
+    };
+    const boxes = [...root.querySelectorAll('textarea.ro[data-post]')];
+    boxes.forEach(fit);
+    if (!boxes.length || typeof ResizeObserver !== 'function') return;
+
+    /*
+     * A narrowed sheet rewraps the list, so the box has to follow it -- the
+     * height set above is only right for the width it was measured at.
+     *
+     * Two things this has to be careful about. It watches *width*: setting the
+     * height is itself a resize, so a callback that refits on any change would
+     * feed itself. And it is one observer for the element rather than one per
+     * render -- `#bind` runs after every one of them, and a fresh observer
+     * each time would leave a trail of them pointed at detached textareas.
+     */
+    this.#roBoxObserver?.disconnect();
+    const seen = new WeakMap();
+    this.#roBoxObserver = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const width = e.contentRect.width;
+        if (seen.get(e.target) === width) continue;
+        seen.set(e.target, width);
+        fit(e.target);
+      }
+    });
+    boxes.forEach((t) => this.#roBoxObserver.observe(t));
+  }
+
+  /**
    * The colour picker for one tab: a small panel, opened two ways.
    *
    * Right-clicking a tab is the fast way and the one nobody discovers, so the
@@ -3894,6 +3962,8 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-postbox]').forEach((d) => {
       d.addEventListener('toggle', () => this.#openPosts.set(d.dataset.postbox, d.open));
     });
+
+    this.#bindReadOnlyBoxes(root);
 
     // Generated Discord posts, and the folded language list: hand the text to
     // the clipboard, or select it when the browser refuses (a page served over
