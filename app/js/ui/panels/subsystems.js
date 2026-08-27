@@ -462,7 +462,12 @@ function veilSlotCard(model, ctx, a, list, s, i) {
  * "every list" rather than "no veils".
  */
 function veilweavingClasses(a) {
-  return (a?.classes || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+  return [
+    ...(a?.classes || []).map((c) => String(c?.name || '').trim()),
+    // The Veilweaving sphere's (tradition) talents open a class's list without
+    // a level in the class; see `veilTraditionClasses`.
+    ...(a?.calc?.traditions || []),
+  ].filter(Boolean);
 }
 
 /**

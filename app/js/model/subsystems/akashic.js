@@ -9,6 +9,7 @@ import {
   ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, tempEssence, tempEssenceCost, veilDC,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
+import { sphereTalentKnowledge } from '../spheres.js';
 import { slug } from '../util.js';
 
 export const AKASHIC_DERIVED = [
@@ -17,6 +18,43 @@ export const AKASHIC_DERIVED = [
   { path: 'slots', list: 'veils', keys: ['dc'] },
   { path: 'kheshig', list: 'veils', keys: ['dc'] },
 ];
+
+/**
+ * The Veilweaving sphere's (tradition) talents, and the class list each opens.
+ *
+ * A sphere veilweaver reaches veils two ways. Without a tradition they know a
+ * handful they picked one at a time; with one, they know a whole class's list
+ * -- *"You gain knowledge of every veil on the daevic veil list"* -- without
+ * having a level in that class. Three of them are printed, one per class.
+ *
+ * Keyed on the class rather than the talent so the catalogue's own `classes`
+ * field is what answers: the narrowing that already works for someone with
+ * levels in a class is the same narrowing, from a different source.
+ */
+export const VEIL_TRADITIONS = [
+  ['daevic', 'Daevic'],
+  ['guru', 'Guru'],
+  ['vizier', 'Vizier'],
+];
+
+/**
+ * Which of those a character has taken.
+ *
+ * The talent cell is the player's own text -- "Daevic's Tradition", and often
+ * with what it was taken for in brackets after it -- so this asks whether the
+ * printed name is in there rather than whether the cell equals it. Both
+ * apostrophes, because a sheet typed on a phone gets the curly one and a sheet
+ * typed on a keyboard gets the straight one, and neither is wrong.
+ */
+export function veilTraditionClasses(model) {
+  const known = sphereTalentKnowledge(model, model.data.training?.magic, 'magic');
+  let names = [];
+  for (const [sphere, row] of known) {
+    if (String(sphere).trim().toLowerCase() === 'veilweaving') names = names.concat(row.names || []);
+  }
+  const said = names.join(' | ').toLowerCase().replace(/\u2019/g, "'");
+  return VEIL_TRADITIONS.filter(([key]) => said.includes(`${key}'s tradition`)).map(([, label]) => label);
+}
 
 /**
  * Split a veil's cell into its name and what it does.
@@ -267,8 +305,14 @@ export function recomputeAkashic(model) {
   const spSpent = tempEssenceCost(a);
   const spPool = Number(model.data.training?.magic?.totalSP) || 0;
 
+  // A (tradition) talent hands over a whole class's veil list, so the veil
+  // catalogue narrows by it exactly as it does for someone with levels in
+  // that class. Derived, so it lives under `calc` and is never saved.
+  const traditions = veilTraditionClasses(model);
+
   a.calc = {
     base,
+    traditions,
     totalCap: cap,
     pool,
     sources,

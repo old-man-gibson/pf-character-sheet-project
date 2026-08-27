@@ -27,7 +27,7 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
-  rowLabel, UNDO_DEPTH,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -7883,6 +7883,58 @@ console.log('undo -- one step back from a row that should not have gone');
   check('named on the way out', c.undoLabel, 'Removed Test Pool');
   c.undo();
   check('and comes back', c.trackers.length, n);
+}
+
+console.log('veilweaving sphere -- a tradition opens a class list without the class');
+{
+  const c = new Character(load(IDS[0]));
+  const talents = () => {
+    c.data.training = c.data.training || {};
+    c.data.training.magic = c.data.training.magic || {};
+    c.data.training.magic.bonusTalents = c.data.training.magic.bonusTalents || [];
+    return c.data.training.magic.bonusTalents;
+  };
+  const say = (talent) => {
+    const list = talents();
+    list.push({ sphere: 'Veilweaving', talent });
+    c.recompute();
+    const got = c.data.akashic?.calc?.traditions ?? [];
+    list.pop();
+    c.recompute();
+    return got;
+  };
+
+  check('the three the book prints', VEIL_TRADITIONS.map(([, label]) => label),
+    ['Daevic', 'Guru', 'Vizier']);
+  check('a sphere veilweaver with no tradition has none', say('Shape Additional Veil'), []);
+  check("Daevic's Tradition opens the daevic list", say("Daevic's Tradition"), ['Daevic']);
+  check("Guru's", say("Guru's Tradition"), ['Guru']);
+  check("Vizier's", say("Vizier's Tradition"), ['Vizier']);
+
+  // The cell is the player's own text, so it is asked whether the printed name
+  // is in it rather than whether it equals it.
+  check('with what it was taken for after it',
+    say("Daevic's Tradition (Wrath)"), ['Daevic']);
+  check('the curly apostrophe a phone types', say('Vizier’s Tradition'), ['Vizier']);
+  check('however it was capitalised', say("vizier's TRADITION"), ['Vizier']);
+  check('a talent that merely mentions a class is not one',
+    say('Shape Additional Veil (Vizier of the Ninth Gate)'), []);
+
+  // A talent of the same name under another sphere is a different talent.
+  {
+    const list = talents();
+    list.push({ sphere: 'Mind', talent: "Guru's Tradition" });
+    c.recompute();
+    check('and only the Veilweaving sphere grants one', c.data.akashic.calc.traditions, []);
+    list.pop();
+    c.recompute();
+  }
+
+  // Derived, so it must not reach a saved document -- see AKASHIC_DERIVED.
+  talents().push({ sphere: 'Veilweaving', talent: "Guru's Tradition" });
+  c.recompute();
+  check('it narrows while it is live', c.data.akashic.calc.traditions, ['Guru']);
+  check('and is stripped on the way out', 'calc' in (c.toJSON().akashic || {}), false);
 }
 
 console.log('row labels -- what a toast calls the thing that just went');

@@ -456,6 +456,24 @@ offers 235 rather than the 369 veils that shape in Hands, or the 1,496 that exis
 is still a text field: a veil nobody has published is typed in as it always was, and
 one the catalogue does not recognise simply has no pack half to read.
 
+**A tradition counts as a class list.** The [Veilweaving
+sphere](http://spheresofpower.wikidot.com/veilweaving) reaches veils two ways: without a
+tradition you know a handful picked one at a time, and with one you know a whole class's
+list — *“You gain knowledge of every veil on the daevic veil list”* — with no level in
+that class. Three are printed, **Daevic's**, **Guru's** and **Vizier's**, and taking one
+on the Magic Spheres tab widens the slot's offer exactly as a level in that class would:
+Narockro's Hands slot goes from 19 to 235 with Daevic's, 187 with Vizier's. The talent
+cell is your own text, so the printed name has to appear in it — *Daevic's Tradition
+(Wrath)* counts and either apostrophe will do, but *Shape Additional Veil (Vizier of the
+Ninth Gate)* is not a tradition and is not read as one.
+
+> What is **not** modelled yet is the other half of that sphere: without a tradition your
+> known veils are the specific ones your talents name, and the sheet has no list of them
+> — so it offers the whole catalogue for the chakra rather than your handful. The
+> sphere's own essence capacity table, its veilweaving level (casting levels plus
+> veilweaving class levels) and the chakras its *Bind X Chakra* talents open are not read
+> either. See [To do](todo.md).
+
 The card has two faces, the way a maneuver's does. It **reads** by default — the pack's
 text, with `{…}` formulas resolving against the essence invested — and the **pen** turns
 it over to a box holding what *you* wrote, which is all that is ever saved.
