@@ -1005,24 +1005,38 @@ function detailsPanel(model) {
     const c = model.data;
     return `<section class="panel details">
       <h3>Details</h3>
+      ${/* The `col*` classes are how many of six columns each field takes once
+            the panel is a phone's width, and they do nothing at any other --
+            the rules for them live inside the container query, so this grid is
+            still `auto-fit` on a desktop and untouched by them. A level is two
+            characters and a size is one word; a row each spent 1,064px on
+            sixteen fields holding a line of text between them.
+
+            The order is the one that tiles: each line adds to exactly six, so
+            nothing is left half a line and no field is squeezed under its own
+            longest value. Three drove it -- `Gargantuan` and `Chaotic Neutral`
+            do not fit a sixth-of-a-panel box (a select cannot even be scrolled
+            to read the rest), and the two mythic fields are one thing asked
+            twice, so they start a line together rather than wherever the
+            packing left off. */''}
       <div class="fieldgrid">
-        ${field('Character name', text('identity.name', c.identity.name))}
-        ${field('Player', text('identity.player', c.identity.player))}
-        ${field('Race', text('identity.race', c.identity.race))}
-        ${field('Variant', text('identity.variant', c.identity.variant))}
-        ${field('Level', num('identity.level', c.identity.level))}
-        ${field('Size', select('identity.size', c.identity.size, Object.keys(SIZE_MODIFIERS)))}
-        ${field('Alignment', text('identity.alignment', c.identity.alignment))}
-        ${field('Deity', text('identity.deity', c.identity.deity))}
-        ${field('Gender', text('identity.gender', c.identity.gender))}
-        ${field('Age', text('identity.age', c.identity.age))}
-        ${field('Height', text('identity.height', c.identity.height))}
-        ${field('Weight', text('identity.weight', c.identity.weight))}
-        ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath))}
-        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${c.identity.mythicTier ?? 0}</span>`)}
+        ${field('Character name', text('identity.name', c.identity.name), 'col6')}
+        ${field('Player', text('identity.player', c.identity.player), 'col3')}
+        ${field('Race', text('identity.race', c.identity.race), 'col3')}
+        ${field('Variant', text('identity.variant', c.identity.variant), 'col3')}
+        ${field('Deity', text('identity.deity', c.identity.deity), 'col3')}
+        ${field('Size', select('identity.size', c.identity.size, Object.keys(SIZE_MODIFIERS)), 'col3')}
+        ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
+        ${field('Level', num('identity.level', c.identity.level), 'col2')}
         ${field('Hero points', `<span class="pair">
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
-          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`)}
+          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4')}
+        ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
+        ${field('Age', text('identity.age', c.identity.age), 'col3')}
+        ${field('Height', text('identity.height', c.identity.height), 'col3')}
+        ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
+        ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
+        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${c.identity.mythicTier ?? 0}</span>`, 'col3')}
         ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
       </div>
       ${characterColorRow(c.identity.color)}
@@ -1282,19 +1296,19 @@ function savesPanel(model) {
     const cs = model.conditionState;
     return `<section class="panel">
       <h3>Saving throws</h3>
-      <div class="tablewrap"><table class="saves">
+      <div class="tablewrap"><table class="saves stacked" data-fold="shut">
         <thead><tr><th>Save</th><th class="num">Total</th>
           <th class="num" title="Computed from the class table (gestalt)">Base</th>
           <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
           ${sheetBonusHead()}</tr></thead>
         <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => `
           <tr>
-            <td>${label}</td>
-            <td class="num total"><span class="rollpair">${movedInline(cs, k, s[k].total)}${
+            <td data-stack="name">${label}</td>
+            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, k, s[k].total)}${
   rollButton(model, 'save', k, `a ${label} save`, cs)}</span></td>
-            <td class="num" title="From the Classes table">${s[k].base}</td>
-            <td>${abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
-            <td>${abilitySelect(`saves.${k}.stat2`, s[k].stat2)}</td>
+            <td class="num" data-label="Base" title="From the Classes table">${s[k].base}</td>
+            <td data-label="Ability">${abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
+            <td data-label="2nd ability">${abilitySelect(`saves.${k}.stat2`, s[k].stat2)}</td>
             ${sheetBonusCell(model, `saves.${k}.total`)}
           </tr>`).join('')}</tbody>
       </table></div>
@@ -1361,6 +1375,11 @@ function attackPanel(model) {
             ? `<td class="num"><span class="hint" title="${esc(`Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}">as ${esc(ATTACK_MODE_LABELS[alt].toLowerCase())}</span></td>`
             : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
           return `
+          ${/* Not a stacked table, deliberately. Folded to a name and a total it
+                would say exactly what the three big stat lines above it already
+                say, and every row here carries a disclosure of its own for its
+                alternate -- a second caret beside that one reads as a bug. It
+                keeps its 188px of scroll. */''}
           <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
             <td class="num total"><span class="rollpair">${movedInline(cs, k, total)}${
   rollButton(model, 'mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
@@ -1394,7 +1413,7 @@ function speedPanel(model) {
     const speeds = c.identity.speeds || [];
     return `<section class="panel">
       <h3>Speed</h3>
-      <div class="tablewrap"><table class="speeds">
+      <div class="tablewrap"><table class="speeds stacked" data-fold="shut">
         <thead><tr><th>Type</th><th class="num">Base</th>
           <th class="num" title="A number, or a formula — e.g. floor(level / 3) * 10">Bonus</th>
           <th class="num">Final</th><th></th></tr></thead>
@@ -1402,18 +1421,18 @@ function speedPanel(model) {
           const adj = cs.speeds[i];
           const slowed = cs.changed && adj && adj.adjusted !== adj.final;
           return `<tr>
-          <td>${itemText('identity.speeds', i, 'type', sp.type, 'Land')}
+          <td data-stack="name">${itemText('identity.speeds', i, 'type', sp.type, 'Land')}
             <div class="hint speedname">${sp.handle
     ? `<code>${esc(sp.handle)}</code>`
     : 'name it to use it in a formula'}</div></td>
-          <td class="num">${itemNum('identity.speeds', i, 'base', sp.base)}</td>
-          <td class="num">${exprField(`data-item="identity.speeds|${i}|bonus"`, sp.bonus, {
+          <td class="num" data-label="Base">${itemNum('identity.speeds', i, 'base', sp.base)}</td>
+          <td class="num" data-label="Bonus">${exprField(`data-item="identity.speeds|${i}|bonus"`, sp.bonus, {
             width: '5.6rem',
             value: typeof sp.bonus === 'string' && sp.bonus.trim() ? sp.bonusNum : null,
             error: sp.bonusError,
             title: 'A number, or a formula — e.g. floor(level / 3) * 10 for fast movement',
           })}</td>
-          <td class="num total">${slowed
+          <td class="num total" data-stack="head">${slowed
     ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
         title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
     : `${Number(sp.final) || 0} ft.`}${(() => {
@@ -1589,7 +1608,7 @@ function classesPanel(model, ctx) {
     };
     return `<section class="panel span2">
       <h3>Classes</h3>
-      <div class="tablewrap"><table class="classes">
+      <div class="tablewrap"><table class="classes stacked cardrows">
         <colgroup><col class="cls"><col class="lvl"><col class="hd"><col class="bab">
           <col class="save"><col class="save"><col class="save">
           <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
@@ -1610,29 +1629,34 @@ function classesPanel(model, ctx) {
             ? `Featured on ${auto} of ${level} level${level === 1 ? '' : 's'} in the Planner. Type a number to override it.`
             : `Pinned at ${over}. The Planner features it on ${auto} of ${level}; clear the box to go back to that.`;
           return `<tr>
-          <td>${itemText('classes', i, 'name', x.name)}</td>
-          <td class="num"><input type="number" class="autonum${over == null ? ' auto' : ''}"
+          <td data-stack="name">${itemText('classes', i, 'name', x.name)}</td>
+          <td class="num" data-label="Levels" data-inline="spec"><input type="number" class="autonum${over == null ? ' auto' : ''}"
             value="${over ?? ''}" placeholder="${auto}" title="${esc(why)}"
             data-item="classes|${i}|levelsOverride" data-kind="number-or-null"
             aria-label="Levels of ${esc(x.name || 'this class')}"></td>
-          <td class="num">${progressionSelect(i, 'hd', x.hd,
+          <td class="num" data-label="Hit die" data-inline="spec">${progressionSelect(i, 'hd', x.hd,
     HIT_DICE.map((d) => [d, `d${d}`]), `Hit die for ${x.name || 'this class'}`, (d) => `d${d}`,
     { count: x.gestaltBeaten?.hd, levels: x.gestaltBeaten?.levels, noun: 'hit die' })}</td>
           ${/* The progression, not a bonus: what the class adds to BAB per level.
               Kept as the fraction the rules state it in, because that is what
               the gestalt sum adds up and floors. */ ''}
-          <td>${progressionSelect(i, 'bab', x.bab, BAB_RATES,
+          <td data-label="BAB" data-inline="spec">${progressionSelect(i, 'bab', x.bab, BAB_RATES,
     `BAB progression for ${x.name || 'this class'}`, String,
     { count: x.gestaltBeaten?.bab, levels: x.gestaltBeaten?.levels, noun: 'progression' })}</td>
-          <td class="mid">${itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
-          <td class="mid">${itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
-          <td class="mid">${itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
-          <td class="num">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
-          <td>${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
+          <td class="mid" data-label="Good Fort" data-inline="save">${itemCheck('classes', i, 'goodFort', x.goodFort)}</td>
+          <td class="mid" data-label="Good Ref" data-inline="save">${itemCheck('classes', i, 'goodRef', x.goodRef)}</td>
+          <td class="mid" data-label="Good Will" data-inline="save">${itemCheck('classes', i, 'goodWill', x.goodWill)}</td>
+          ${/* Ranks is the fourth of the four numbers a class advances at, and
+                sits after the saves only because that is the column order. The
+                card puts it back with the other three; see `data-inline` in the
+                stylesheet, which groups by `order` rather than by markup so the
+                table's columns are left alone. */''}
+          <td class="num" data-label="Ranks" data-inline="spec">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
+          <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
             <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
               ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
             </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
-          <td class="mid">${sysButton(x, i)}</td>
+          <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
           ${rowTools('classes', i)}
         </tr>${sysPicker(x, i)}`;
         }).join('')}</tbody>
@@ -1947,12 +1971,12 @@ function traitsPanel(model, ctx) {
             <span class="badge">${race.filter((t) => String(t.name || '').trim() || String(t.text || '').trim()).length}${race.some((t) => !String(t.name || '').trim() && !String(t.text || '').trim()) ? ` of ${race.length}` : ''}</span>
             ${c.identity.race ? `<span class="hint">${esc(c.identity.race)}${c.identity.variant ? ` (${esc(c.identity.variant)})` : ''}</span>` : ''}
           </h4>
-          <div class="tablewrap"><table class="racetraits">
+          <div class="tablewrap"><table class="racetraits stacked">
             <thead><tr><th>Trait</th><th>Effect</th><th></th></tr></thead>
             <tbody>${race.map((t, i) => `<tr${String(t.name || '').trim() || String(t.text || '').trim() ? '' : ' class="needsfill" title="A race-trait slot still to fill"'}>
-              <td>${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
+              <td data-stack="name">${itemText('raceTraits', i, 'name', t.name, 'Darkvision')}${Array.isArray(t.replaced) && t.replaced.length
     ? ` <span class="badge player" title="${esc(`Alternate racial trait — took the place of ${t.replaced.map((r) => r.name).join(' and ')}. Removing this row does not put them back; add them again from the race's pack if you need them.`)}">alt</span>` : ''}</td>
-              <td>${prose(model, `data-item="raceTraits|${i}|text"`, t.text, 1, 'grow')}</td>
+              <td data-label="Effect">${prose(model, `data-item="raceTraits|${i}|text"`, t.text, 1, 'grow')}</td>
               ${rowTools('raceTraits', i)}
             </tr>`).join('')}
             ${race.length ? '' : '<tr><td colspan="3" class="empty">No race traits yet — add what the race grants.</td></tr>'}

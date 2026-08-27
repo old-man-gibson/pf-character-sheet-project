@@ -197,7 +197,7 @@ function trainingSide(model, sideKey, side) {
               <span class="hint">also ${isMagic ? 'martial' : 'magical'}</span></label></label>
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
-        <div class="tablewrap"><table class="talents">
+        <div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
           <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
           <tbody>${(cls.levels || []).map((lv, li) => {
@@ -208,16 +208,16 @@ function trainingSide(model, sideKey, side) {
             // the same thing as a tooltip on the level it belongs to.
             const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}`
               : `Level ${lv.level} grants no talent`;
-            return `<tr class="${lv.future ? 'future' : ''}">
-              <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${talentCell(model,
+            return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="${state}" data-stack="name">${talentCell(model,
     `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
-              <td class="${state}">
+              <td class="${state}" data-label="Sphere">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}
               </td>
-              <td class="${state}">${prose(model, 
+              <td class="${state}" data-label="Notes">${prose(model,
     `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
             </tr>`;
           }).join('')}</tbody>
@@ -415,7 +415,7 @@ function blendedPanel(model, pairs) {
               <input type="checkbox" checked data-blend="${owner.side}|${owner.index}">
               <span class="hint">${counts.combat} martial · ${counts.magic} magical</span></label></label>
         </div>
-        <div class="tablewrap"><table class="talents">
+        <div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
           <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
           <tbody>${(cls.levels || []).map((lv, li) => {
@@ -426,16 +426,16 @@ function blendedPanel(model, pairs) {
       const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
         side ? ` — counts as ${side === 'magic' ? 'magical' : 'martial'}` : ''}`
         : `Level ${lv.level} grants no talent`;
-      return `<tr class="${lv.future ? 'future' : ''}">
-              <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${talentCell(model,
+      return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="${state}" data-stack="name">${talentCell(model,
         `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
         on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
-              <td class="${state}${side ? ` side-${side}` : ''}">
+              <td class="${state}${side ? ` side-${side}` : ''}" data-label="Sphere">
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, BLENDED_SPHERES)
         : '<select disabled><option></option></select>'}
               </td>
-              <td class="${state}">${prose(model, 
+              <td class="${state}" data-label="Notes">${prose(model,
         `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
             </tr>`;
     }).join('')}</tbody>
@@ -473,13 +473,13 @@ function combatTraditionPanel(model, t) {
       <h3>Martial tradition</h3>
       <label class="fld"><span>Tradition</span>
         ${text('training.combat.tradition.name', t.tradition?.name)}</label>
-      <div class="tablewrap" style="margin-top:6px"><table class="talents">
+      <div class="tablewrap" style="margin-top:6px"><table class="talents stacked">
         <colgroup><col class="talent"><col class="sphere"><col class="tool"></colgroup>
         <thead><tr><th>Grants</th><th>Sphere</th><th></th></tr></thead>
         <tbody>${(t.tradition?.entries || []).map((e, i) => `<tr>
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere' })}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(COMBAT_SPHERES, 'combat'))}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(COMBAT_SPHERES, 'combat'))}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>

@@ -420,18 +420,37 @@ function isTypingIn(el) {
  * once the field on the end is taken off. Read off the first control in the
  * row rather than written into the markup, so a table opts in by marking its
  * name cell and nothing else has to change.
+ *
+ * `data-rowkey` on the row overrides that, for the case the derivation cannot
+ * tell apart: the mythic ladder and the mythic feats are two tables on one tab
+ * writing into the same `mythic.abilities|N`, so without it folding tier 3 in
+ * one folds tier 3 in the other. Whatever it says is prefixed onto the derived
+ * key rather than replacing it, so the row still moves with its own data.
  */
 function stackRowKey(row) {
+  const own = row.dataset?.rowkey;
   const el = row.querySelector('[data-item], [data-set]');
   if (!el) return '';
   const item = el.dataset.item;
-  if (item) return item.split('|').slice(0, 2).join('|');
-  const set = el.dataset.set || '';
-  return set.split('.').slice(0, -1).join('.');
+  const derived = item
+    ? item.split('|').slice(0, 2).join('|')
+    : (el.dataset.set || '').split('.').slice(0, -1).join('.');
+  if (!derived) return '';
+  return own ? `${own}:${derived}` : derived;
 }
 
 /** Longer than this and a hint is a paragraph rather than a caption. */
 const HELP_LENGTH = 180;
+
+/**
+ * More blocks than this in one supergroup and it arrives folded.
+ *
+ * Measured rather than chosen per pack, the way `HELP_LENGTH` is: a chakra
+ * carrying sixty veils is an index you open one line of, and a class with two
+ * option menus and an archetype under it is worth reading whole. Folding that
+ * second one by default would put a pack's content behind a click for nothing.
+ */
+const EXT_GROUP_FOLD = 12;
 
 /**
  * What the help is about.
@@ -447,9 +466,21 @@ function helpLabel(hint) {
   // paragraph about class tracks "Help — Stats".
   const first = [...hint.childNodes].find((n) => n.nodeType !== 3 || n.textContent.trim());
   const lead = first?.nodeType === 1 && /^(STRONG|B)$/.test(first.tagName) ? first.textContent : '';
+  // The nearest heading before the panel's own, which on a panel carrying
+  // several helps is the thing that tells them apart: the three under Feats &
+  // Mythic all read "Help — Mythic" off the panel, and are the panel's note,
+  // "Mythic path abilities" and "Mythic Feats". `childNodes[0]` for the same
+  // reason as the h3 below -- the heading ends in a fold button.
+  const sub = hint.closest('.foldsub')
+    ?.querySelector(':scope > h4.subhead')?.childNodes[0]?.textContent ?? '';
   const panel = hint.closest('section.panel, .supergroup')
     ?.querySelector('h3, .supergroup-title')?.childNodes[0]?.textContent ?? '';
-  return (lead || panel || 'this panel')
+  // Two hints have nothing above them to be named by: one sits outside any
+  // panel and one is in a panel with no heading at all. The tab they are on
+  // beats "this panel", which names the thing you are already looking at.
+  const tab = hint.getRootNode()
+    ?.querySelector?.('[role="tab"][aria-selected="true"]')?.textContent ?? '';
+  return (lead || sub || panel || tab || 'this panel')
     .replace(/\s+/g, ' ').replace(/[.:—-]\s*$/, '').trim()
     .slice(0, 40);
 }
@@ -552,8 +583,12 @@ export class CharacterSheetElement extends HTMLElement {
   #openText = new Set();
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
   #openHelp = new Set();
-  /* Which stacked rows are folded to their name; see `#stackRows`. */
-  #shutRows = new Set();
+  /* Which stacked rows the player has moved off the fold their table starts
+     on -- so on an ordinary table these are the rows folded to their name, and
+     on a `data-fold="shut"` one they are the rows opened out. Holding the
+     departures rather than the state is what lets a table pick its own default
+     without a second set to keep in step; see `#stackRows`. */
+  #foldFlips = new Set();
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -2050,7 +2085,20 @@ export class CharacterSheetElement extends HTMLElement {
           <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
           <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
           <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
-          ${this.#rowRemove(`featGroups.${g}.entries`, i)}
+          ${/* The grip in column one is the only way this table reorders, and a
+               card hides it -- a drag between groups is not a gesture a phone
+               has. So the two buttons every other list already carries are
+               written here too and shown only where the grip is not; see
+               `button.cardmove` in the stylesheet. Within the group only:
+               moving a feat to another group stays a drag, on a desktop. */''}
+          <td class="tools">
+            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|-1"
+              title="Move up" aria-label="Move up">&#8593;</button>
+            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|1"
+              title="Move down" aria-label="Move down">&#8595;</button>
+            <button class="danger" data-remove="featGroups.${g}.entries|${i}"
+              title="Remove" aria-label="Remove">&times;</button>
+          </td>
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
           <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
@@ -2128,7 +2176,7 @@ export class CharacterSheetElement extends HTMLElement {
           Archmage/Hierophant 3).
         </p>
         ${rows.collapsibleSub(this.#model, 'mythic-abilities', 'Mythic path abilities', `
-          <div class="tablewrap"><table class="mythic">
+          <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
                  reached at, the path and the ability's name are all a few words,
                  so they are held narrow and Effect takes what is left. -->
@@ -2147,14 +2195,14 @@ export class CharacterSheetElement extends HTMLElement {
             <tbody>${MYTHIC_TIERS.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}">
-                <td class="num">${t}</td>
-                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
-                <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
-                <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
+              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
+                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
+                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td data-label="Path">${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
                 ${t % 2 === 0
-                  ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
+                  ? `<td data-label="Stat">${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
                   : '<td class="noslot"></td>'}
               </tr>`;
             }).join('')}</tbody>
@@ -2168,7 +2216,7 @@ export class CharacterSheetElement extends HTMLElement {
           </p>`, 'mythladder')}
 
         ${rows.collapsibleSub(this.#model, 'mythic-feats', 'Mythic Feats', `
-          <div class="tablewrap"><table class="mythic">
+          <div class="tablewrap"><table class="mythic stacked">
             <!-- The slot, then what was taken for it, then what that does. Off
                  the ladder above so both halves have room: nine columns across
                  one table left the two Effects sharing a third of the width. -->
@@ -2186,12 +2234,12 @@ export class CharacterSheetElement extends HTMLElement {
             <tbody>${MYTHIC_TIERS.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}">
-                <td class="num">${t}</td>
-                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-                <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
-                <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
+              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
+                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
+                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
+                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
+                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
               </tr>`;
             }).join('')}</tbody>
           </table></div>
@@ -2939,9 +2987,7 @@ export class CharacterSheetElement extends HTMLElement {
       if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
       return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
     };
-    const rows = [...byPack.entries()].map(([id, p]) => `
-      <h4 class="ext-pack">${esc(p.name)}</h4>
-      ${p.blocks.map((b) => { const g = gate(b); return `<div class="item statline">
+    const blockRow = (id, b) => { const g = gate(b); return `<div class="item statline">
         <span class="label pair" style="flex:1">
           <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
           <strong>${esc(b.name || '(unnamed)')}</strong>
@@ -2952,7 +2998,88 @@ export class CharacterSheetElement extends HTMLElement {
           <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
             title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
         </span>
-      </div>`; }).join('')}`).join('');
+      </div>`; };
+
+    /*
+     * Which supergroup a block sits in, inside its pack.
+     *
+     * What the pack says first, so a block can always be filed by hand; then
+     * the class it is for, which is how an archetype and an option menu name
+     * theirs; then, for a class, its own name -- so the class heads the group
+     * its archetypes and menus have already joined, and folding it takes the
+     * lot. A veil groups by the chakra it is worn on, an alternate trait by
+     * the race it is an alternative for.
+     *
+     * A block with none of those is loose in its pack rather than filed under
+     * a guess. Notes are the ones that land there: a note carries no link to
+     * what it is about, so a pack that wants "Favored class options" to fold
+     * with its class says `"group": "<class name>"` on it.
+     */
+    const groupOf = (b) => b.group
+      || b.class
+      || (b.kind === 'class' ? b.name : '')
+      || (b.kind === 'veil' ? b.slot : '')
+      || (b.kind === 'trait' ? b.race : '')
+      || '';
+    // Searching folds nothing: a hit inside a shut group is a hit you cannot
+    // see, which reads as the search having missed it.
+    const seeking = words.length > 0;
+    const packList = [...byPack.entries()].map(([id, p]) => {
+      const groups = new Map();
+      for (const b of p.blocks) {
+        const key = groupOf(b);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(b);
+      }
+      const loose = groups.get('') || [];
+      groups.delete('');
+      /*
+       * A note, filed by what it is called.
+       *
+       * Every other kind says where it belongs -- an option menu and an
+       * archetype name their class, a veil its chakra -- and a note says
+       * nothing at all: `kind, name, text, source` is the whole of it. So a
+       * note whose name contains one of its own pack's group names is taken to
+       * be about it, which is what "Favored class options — Legendary Samurai"
+       * plainly is. Notes only: the other kinds have a field to be believed
+       * instead of a string to be guessed at, and `group` overrides this for a
+       * pack that would rather say so outright.
+       *
+       * Longest name first, so a pack holding both Samurai and Legendary
+       * Samurai files the note under the one it actually named.
+       */
+      const groupNames = [...groups.keys()].sort((a, b) => b.length - a.length);
+      for (const note of [...loose]) {
+        if (note.kind !== 'note') continue;
+        const hay = String(note.name || '').toLowerCase();
+        const owner = groupNames.find((n) => n && hay.includes(n.toLowerCase()));
+        if (!owner) continue;
+        groups.get(owner).push(note);
+        loose.splice(loose.indexOf(note), 1);
+      }
+      const packKey = `extpack:${id}`;
+      const packShut = !seeking && rows.isCollapsed(this.#model, packKey);
+      const groupHtml = [...groups.entries()].map(([name, list]) => {
+        const key = `extgrp:${id}:${name}`;
+        // Big groups arrive folded, small ones open. A chakra of sixty veils
+        // is an index to open one line of; a class with three menus under it
+        // is worth reading whole, and folding it by default would hide the
+        // pack's content behind a click for nothing.
+        const shut = !seeking && rows.isCollapsed(this.#model, key, list.length > EXT_GROUP_FOLD);
+        return `<div class="foldsub extgroup${shut ? ' collapsed' : ''}">
+          <h4 class="subhead">${esc(name)}
+            <span class="badge">${list.length}</span>
+            ${rows.foldButton(this.#model, key, shut)}</h4>
+          ${shut ? '' : list.map((b) => blockRow(id, b)).join('')}
+        </div>`;
+      }).join('');
+      return `<div class="foldsub extpack${packShut ? ' collapsed' : ''}">
+        <h4 class="subhead ext-pack">${esc(p.name)}
+          <span class="badge">${p.blocks.length}</span>
+          ${rows.foldButton(this.#model, packKey, packShut)}</h4>
+        ${packShut ? '' : `${loose.map((b) => blockRow(id, b)).join('')}${groupHtml}`}
+      </div>`;
+    }).join('');
 
     return `<section class="panel span2">
       <h3>Extensions — building blocks</h3>
@@ -2973,7 +3100,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
       </p>` : ''}
       <div class="rowlist">
-        ${rows || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
+        ${packList || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
     : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
       </div>
     </section>`;
@@ -4117,14 +4244,28 @@ export class CharacterSheetElement extends HTMLElement {
    *
    * Rows start open. Folding is for a list you are looking through, and a list
    * that hid itself before you asked would be a list you have to open to read.
+   *
+   * A table says otherwise with `data-fold="shut"`, and two do. The rule holds
+   * while a card is a few fields and the whole of it is worth reading; it
+   * stops holding when the card is mostly empty boxes. A skill is a name and a
+   * total and eleven columns of how that total was arrived at, sixty-one times
+   * over; a gear row with three bonus columns and four properties is fourteen
+   * fields of which an item fills two. Open by default those are a page you
+   * scroll past rather than read, and the fold -- name and total, name and
+   * slot -- is the list. So the default is per table, and the set above holds
+   * whichever rows have been moved off it.
    */
   #stackRows() {
     if (this.clientWidth > 620) return;
     for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
+      // A rung that grants nothing is already one line; there is no body under
+      // it for a caret to open. See `tr.emptyslot` in the stylesheet.
+      if (row.classList.contains('emptyslot')) continue;
       const head = row.querySelector('td[data-stack="name"]');
       const key = head && stackRowKey(row);
       if (!key) continue;
-      const shut = this.#shutRows.has(key);
+      const startsShut = row.closest('table')?.dataset.fold === 'shut';
+      const shut = startsShut !== this.#foldFlips.has(key);
       row.classList.toggle('shut', shut);
       const button = this.ownerDocument.createElement('button');
       button.className = 'rowfold';
@@ -4179,18 +4320,36 @@ export class CharacterSheetElement extends HTMLElement {
   #clampHints() {
     const wrap = this.shadowRoot.querySelector('.wrap');
     if (!wrap || this.clientWidth > 620) return;
-    for (const hint of this.shadowRoot.querySelectorAll('.body .hint')) {
-      if (hint.textContent.trim().length <= HELP_LENGTH) continue;
-      const key = helpKey(hint);
+    const long = [...this.shadowRoot.querySelectorAll('.body .hint')]
+      .filter((hint) => hint.textContent.trim().length > HELP_LENGTH)
+      .map((hint) => ({ hint, key: helpKey(hint), label: helpLabel(hint) }));
+    // Where a heading still does not tell two helps apart -- two notes at the
+    // foot of one panel, neither with a subhead of its own -- say which is
+    // which, because a column of identical "Help \u2014 Skills" is a column you
+    // cannot navigate or remember your place in. Counted by key, not by
+    // occurrence: the same paragraph written under three sibling weapons is
+    // one help shown three times, it already shares a key and opens in all
+    // three at once, and numbering it would claim a difference there is not.
+    const byLabel = new Map();
+    for (const entry of long) {
+      const keys = byLabel.get(entry.label) ?? new Map();
+      if (!keys.has(entry.key)) keys.set(entry.key, keys.size + 1);
+      byLabel.set(entry.label, keys);
+    }
+    for (const entry of long) {
+      const keys = byLabel.get(entry.label);
+      if (keys.size > 1) entry.label = `${entry.label} (${keys.get(entry.key)} of ${keys.size})`;
+    }
+    for (const { hint, key, label } of long) {
       const open = this.#openHelp.has(key);
       hint.classList.add('longhint');
       hint.classList.toggle('is-open', open);
       const button = this.ownerDocument.createElement('button');
       button.className = 'helpopen';
       button.dataset.help = key;
-      button.dataset.helpLabel = helpLabel(hint);
+      button.dataset.helpLabel = label;
       button.setAttribute('aria-expanded', String(open));
-      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${label}`;
       hint.parentNode.insertBefore(button, hint);
     }
   }
@@ -4937,9 +5096,13 @@ export class CharacterSheetElement extends HTMLElement {
       const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-rowfold]');
       if (!button) return;
       const key = button.dataset.rowfold;
-      const shut = !this.#shutRows.has(key);
-      if (shut) this.#shutRows.add(key);
-      else this.#shutRows.delete(key);
+      // The set holds departures from the table's own default, so the click
+      // flips membership and the visible state is read back off both.
+      const flipped = !this.#foldFlips.has(key);
+      if (flipped) this.#foldFlips.add(key);
+      else this.#foldFlips.delete(key);
+      const startsShut = button.closest('table')?.dataset.fold === 'shut';
+      const shut = startsShut !== flipped;
       button.closest('tr')?.classList.toggle('shut', shut);
       button.setAttribute('aria-expanded', String(!shut));
       button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');

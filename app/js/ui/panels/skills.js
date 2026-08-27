@@ -138,7 +138,7 @@ export function renderSkillsPanel(model, ctx) {
           </button>
         </h3>
         <div class="tablewrap">
-          <table>
+          <table class="skills stacked" data-fold="shut">
             <thead><tr>
               <th>Skill</th><th class="num">Total</th>
               <th class="num" title="Total ranks: min(level, bought + flags × level + spheres)">Ranks</th>
@@ -154,12 +154,12 @@ export function renderSkillsPanel(model, ctx) {
             </tr></thead>
             <tbody>
               ${rows.map(({ s, i }) => `<tr class="${s.totalRanks > 0 ? 'trained' : 'untrained'}${s.hidden ? ' hiddenskill' : ''}">
-                <td>${skillNameCell(s, i)}</td>
-                <td class="num total"><span class="rollpair">${fmt(s.bonus)}${
+                <td data-stack="name">${skillNameCell(s, i)}</td>
+                <td class="num total" data-stack="head"><span class="rollpair">${fmt(s.bonus)}${
                   rollButton(model, 'skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
-                <td class="num">${s.totalRanks}</td>
-                <td class="mid">${itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
-                <td class="num bought">${exprField(`data-item="skills|${i}|rankSources.bought"`,
+                <td class="num" data-label="Ranks">${s.totalRanks}</td>
+                <td class="mid" data-label="Class skill">${itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
+                <td class="num bought" data-label="Bought">${exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {
                     kind: 'rank',
                     width: '5.4rem',
@@ -167,24 +167,24 @@ export function renderSkillsPanel(model, ctx) {
                     error: s.boughtError,
                     title: 'Number or formula, e.g. level or floor(level-2)',
                   })}</td>
-                <td class="mid">${s.specialtyFlag ? '★' : ''}</td>
-                <td class="mid">${itemCheck('skills', i, 'rankSources.gear', s.rankSources?.gear)}</td>
-                <td class="mid">${itemCheck('skills', i, 'rankSources.other', s.rankSources?.other)}</td>
-                <td class="num">${s.sphereRanks || ''}${s.competence
+                <td class="mid" data-label="Specialty">${s.specialtyFlag ? '★' : ''}</td>
+                <td class="mid" data-label="Gear grants ranks">${itemCheck('skills', i, 'rankSources.gear', s.rankSources?.gear)}</td>
+                <td class="mid" data-label="Other grants ranks">${itemCheck('skills', i, 'rankSources.other', s.rankSources?.other)}</td>
+                <td class="num" data-label="From spheres">${s.sphereRanks || ''}${s.competence
                   ? `<span class="skillcomp" title="${esc('Two spheres associate themselves with this skill, '
                     + 'so only one of them pays it ranks. The other grants a +' + s.competence
                     + ' competence bonus instead — half your level, minimum +1.')}">+${s.competence}</span>` : ''}</td>
-                <td>${itemSelect('skills', i, 'abilities.0', (s.abilities || [])[0], ABILITIES.map((k) => ABILITY_LABELS[k]))}</td>
-                <td class="num">${fmt(s.abilityMod || 0)}</td>
-                <td class="num bought">${exprField(`data-item="skills|${i}|offset"`, s.offset ?? 0, {
+                <td data-label="Ability">${itemSelect('skills', i, 'abilities.0', (s.abilities || [])[0], ABILITIES.map((k) => ABILITY_LABELS[k]))}</td>
+                <td class="num" data-label="Ability mod">${fmt(s.abilityMod || 0)}</td>
+                <td class="num bought" data-label="Misc">${exprField(`data-item="skills|${i}|offset"`, s.offset ?? 0, {
                   kind: 'rank',
                   width: '5.4rem',
                   value: s.miscResolved,
                   error: s.miscError,
                   title: 'Number or formula, e.g. int.mod, skill_familiarity, floor(level/2)',
                 })}${forwardedBadge(model, skillForwardKey(s))}</td>
-                <td class="mid">${itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
-                <td>${itemText('skills', i, 'situational', s.situational)}</td>
+                <td class="mid" data-label="Trained only">${itemCheck('skills', i, 'requiresTraining', s.requiresTraining)}</td>
+                <td data-label="Notes">${itemText('skills', i, 'situational', s.situational)}</td>
                 <td class="tools"><button data-action="toggle-skill-hidden" data-index="${i}" class="eye"
                   title="${s.hidden ? 'Hidden — show this skill again' : 'Hide this skill from the list'}"
                   aria-pressed="${!!s.hidden}" aria-label="${s.hidden ? 'Show skill' : 'Hide skill'}">${s.hidden ? '◌' : '👁'}</button></td>

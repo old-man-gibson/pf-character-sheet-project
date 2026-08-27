@@ -1148,7 +1148,7 @@ function primordiaLadder(model, k) {
     // seven times, so it is the one that names the column.
     const noun = k.repeat?.pick?.label || 'Taken';
     return `<section class="panel span2">
-      <div class="tablewrap"><table class="build primordia">
+      <div class="tablewrap"><table class="build primordia stacked">
         <thead><tr>
           <th class="num">Lvl</th>
           <th class="grants">Grants</th>
@@ -1159,8 +1159,8 @@ function primordiaLadder(model, k) {
     const pick = row.pick;
     const state = !pick ? '' : row.due ? ' due' : row.filled ? '' : ' planned';
     return `<tr class="${row.reached ? '' : 'future'}">
-          <td class="num" title="${row.repeating ? 'Every two levels from the 7th' : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
-          <td class="grants">${row.grants.map((g) => `
+          <td class="num" data-stack="head" data-headlabel="Level" title="${row.repeating ? 'Every two levels from the 7th' : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
+          <td class="grants" data-label="Grants">${row.grants.map((g) => `
             <span class="grant"${row.repeating && g.short ? ` title="${esc(g.text)}"` : ''}>${
   esc(row.repeating && g.short ? g.short : g.text)}${g.cite === 'EitR' && !row.repeating
     ? ` <a href="${esc(EITR_URL)}" target="_blank" rel="noopener noreferrer" title="Elephant in the Room">[EitR]</a>` : ''}</span>
@@ -1170,8 +1170,8 @@ function primordiaLadder(model, k) {
               <span>already had the feat, so this level grants ${esc(g.base.alt.text
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
-          <td class="choice${state}">${primordiaPick(model, row)}</td>
-          <td class="picknote">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
+          <td class="choice${state}" data-stack="name">${primordiaPick(model, row)}</td>
+          <td class="picknote" data-label="Notes">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>

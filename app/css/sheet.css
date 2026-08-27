@@ -367,6 +367,11 @@ button[aria-pressed="true"], button[aria-selected="true"], button.primary {
   background: var(--cs-accent-soft); border-color: var(--cs-accent); color: var(--cs-accent);
 }
 button.danger:hover { border-color: var(--cs-bad); color: var(--cs-bad); }
+/* Reordering for a list whose only handle is a drag grip. Off wherever the
+   grip is there to be used, and turned on with it in the card layout below --
+   a feats group had no way at all to be reordered on a phone, because the one
+   control it has is hidden there. */
+button.cardmove { display: none; }
 /* Save with nothing to save, and Keep checkpoint with nothing typed. */
 button:disabled { opacity: 0.45; cursor: default; }
 button:disabled:hover { border-color: var(--cs-line); }
@@ -1220,11 +1225,19 @@ tr.untrained { color: var(--cs-muted); }
  */
 @container (max-width: 620px) {
   /* More specific than the floors above, which are `.tablewrap > table.feats`
-     and would otherwise keep a stack of cards 30rem wide and scrolling. */
-  .tablewrap > table.stacked { min-width: 0; }
+     and would otherwise keep a stack of cards 30rem wide and scrolling. The
+     second selector is not decoration: `.sidepanels .tablewrap > table.talents`
+     carries three classes to this one's two and beats it on specificity, not
+     on order, so a stacked talents table in a side panel kept its 24rem floor
+     and went on scrolling. Any floor written with an ancestor needs its twin
+     here. */
+  .tablewrap > table.stacked,
+  .sidepanels .tablewrap > table.stacked { min-width: 0; }
   /* The grip drags a feat between groups, which is a mouse gesture and is not
-     one of the three things a card is: name, where it came from, what it does. */
+     one of the three things a card is: name, where it came from, what it does.
+     What replaces it, since it was the only way that list reordered at all: */
   table.stacked > tbody > tr > td.grip { display: none; }
+  button.cardmove { display: inline-block; }
   table.stacked, table.stacked > tbody, table.stacked > tbody > tr { display: block; }
   table.stacked > thead { display: none; }
   table.stacked > tbody > tr {
@@ -1235,22 +1248,193 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr > td { display: block; border: 0; padding: 0; width: auto; }
   table.stacked td[data-stack="name"] { order: -2; display: flex; align-items: center; gap: 6px; }
   table.stacked td[data-stack="head"] { order: -1; font-size: 0.74rem; color: var(--cs-muted); }
+  /* A head cell whose value only means something under its column heading --
+     a mythic tier is the number 3, and "3" alone at the top of a card says
+     nothing. Written here rather than into the cell so the desktop table,
+     which still has the heading, is untouched. */
+  table.stacked td[data-stack="head"][data-headlabel]::before { content: attr(data-headlabel) " "; }
   table.stacked td[data-label]::before {
     content: attr(data-label); display: block;
     font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.07em;
     color: var(--cs-muted); margin-bottom: 1px;
   }
+  /* A card is not a column. `num` right-aligns a figure under a heading that
+     is right-aligned too, and `mid` centres a checkbox in its column; both are
+     correct in a table and wrong the moment the column is gone and the cell is
+     the whole width of the card -- a lone "9" against the right edge with
+     LEVELS floating above it. The label is a `::before` on the cell, so it
+     inherits the same alignment and lands in the same wrong place. */
+  table.stacked > tbody > tr > td.num,
+  table.stacked > tbody > tr > td.mid { text-align: left; }
   /* Folded: the name and whatever rides with it, and the controls. What goes
      is the body, which is exactly the labelled part. */
   table.stacked > tbody > tr.shut > td[data-label] { display: none; }
+  /* And what is left is one line, not three. The card is a column because its
+     fields are; a fold has a name, the one figure worth keeping beside it and
+     the row's buttons, and stacking those spent 78px on "Acrobatics / +8 / 👁"
+     -- sixty-one of them, 4,700px of list to find one skill in. Across a line
+     it is the 30px it looks like.
+     `nowrap` on purpose. Wrapping looks like the kinder choice and is not:
+     flex wraps an item that does not fit rather than shrinking it, so a skill
+     carrying a specialty box -- Craft (…), 18rem of `.skillcell` -- took the
+     whole line and pushed its own total onto a second one, 26 rows of 61. The
+     name yields instead, and keeps its `title`. */
+  table.stacked > tbody > tr.shut {
+    flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
+  }
+  table.stacked > tbody > tr.shut > td[data-stack="name"] {
+    flex: 1 1 auto; min-width: 0; overflow: hidden;
+  }
+  table.stacked > tbody > tr.shut > td[data-stack="name"] .sname {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Which half gives way. A flex item shrinks in proportion to its base size
+     until it hits a floor, and `.skillcell input` floors at 4rem -- so the box
+     stopped shrinking and the name kept giving, leaving "Arti… (which one?)":
+     four characters of the thing you are looking for beside 120px of the thing
+     you have not filled in. The name holds its width, and the empty box is
+     what closes up. */
+  table.stacked > tbody > tr.shut > td[data-stack="name"] .sname { flex: 0 1 auto; }
+  table.stacked > tbody > tr.shut > td[data-stack="name"] .variant { flex: 1 1 3rem; }
+  table.stacked > tbody > tr.shut > td[data-stack="name"] .variant input,
+  table.stacked > tbody > tr.shut > td[data-stack="name"] .variant select {
+    min-width: 2.5rem; width: 100%;
+  }
+  table.stacked > tbody > tr.shut > td[data-stack="head"],
+  table.stacked > tbody > tr.shut > td.tools { flex: none; }
+  /* A checkbox and the words for it are one line, not two: three good-save
+     cells stacked label-over-box spent six lines on what reads as three.
+     `:not(.shut)` so this cannot outrank the fold rule above -- the two are
+     otherwise the same specificity and this one, being later, would win and
+     re-show a folded row's cells. */
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] {
+    display: flex; align-items: center; gap: 6px;
+  }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label]::before {
+    margin-bottom: 0; flex: none; white-space: nowrap;
+  }
+  /* A bare checkbox is `display: block` under `input { width: 100% }`, so as a
+     flex item it resolves its basis from that width and takes the whole line
+     -- 289px of checkbox with the tick drawn in the middle of it, an inch away
+     from the words it answers. `flex: none` alone does not fix that: the basis
+     comes from `width`, so the width is what has to go. */
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > * { flex: none; }
+  table.stacked > tbody > tr:not(.shut) > td.mid[data-label] > input[type="checkbox"] { width: auto; }
+  /* Same bargain for a figure: the column that made right-alignment read is
+     gone, so a full-width box with a lone 9 against its far edge is all the
+     alignment is doing now.
+     `[data-label]` is carrying specificity here, not meaning. A table names
+     its own columns -- `table.classes td.num input[type="number"]` is two
+     classes and an attribute, (0,3,3) -- and beats a rule written against
+     `table.stacked` alone however deeply nested it is, because class count is
+     compared before element count. Naming the attribute takes this to (0,3,5),
+     above every per-table rule in the file. The same trap as the `.sidepanels`
+     floor above: a card rule that loses to a column rule leaves the card
+     wearing the column's shape. */
+  table.stacked > tbody > tr > td.num[data-label] input { width: 6rem; text-align: left; }
   table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
   button.rowfold {
-    flex: none; padding: 0 5px; font-size: 0.7rem; line-height: 1.5;
+    flex: none; padding: 0 5px; font-size: 0.85rem; line-height: 1.5;
     color: var(--cs-muted); background: none; border-color: transparent;
   }
   button.rowfold:hover { color: var(--cs-accent); }
   /* An empty list still says so, and a colspan cell has no name to fold to. */
   table.stacked > tbody > tr > td.empty { text-align: left; }
+
+  /* A `.statline` is a label and a value pushed to opposite ends, so it needs
+     the width to have two ends. `.fieldgrid` is `auto-fit` at `minmax(140px,
+     1fr)` and still finds two columns inside a 289px panel, which left the
+     summary under the classes table reading "Save bases | Fort 4 · Ref 9 ·
+     Will 9 | Base attack bonus | +11" as four wrapped stacks. The labelled
+     fields either side of it are fine two-up -- their label sits *above* the
+     box -- so this moves only the statlines. */
+  .fieldgrid > .statline { grid-column: 1 / -1; }
+
+  /* A block's row is a name and what it is for on the left and a gate reason
+     and + Add on the right, which needs a width the panel does not have here:
+     the left half was squeezed to about 40px and set an archetype's swaps one
+     word per line, with the button printing over the top of them. Stacked, the
+     description gets the width and the button sits under it. */
+  .rowlist .item.statline { flex-direction: column; align-items: stretch; gap: 4px; }
+  .rowlist .item.statline > .value { justify-content: flex-start; flex-wrap: wrap; }
+
+  /* ---- the Details panel, in columns ----
+   *
+   * `auto-fit` at `minmax(150px, 1fr)` wants 306px for two tracks and the
+   * panel is 303px, so it fell to one and every field took a row of its own:
+   * sixteen rows, 1,064px, for a level, a size and a handful of words. Three
+   * pixels. Rather than shave the floor and leave the layout to a coincidence,
+   * the panel gets a fixed six columns here and each field says how many it
+   * takes -- so a level and a size and an alignment sit on one line because
+   * they were told to, and stay there.
+   *
+   * `.fieldgrid` is named twice on purpose. The desktop rule that pairs this
+   * panel beside another -- `.pairrow > .panel.details .fieldgrid`, four
+   * classes -- ties with any honest way of writing this one and sits later in
+   * the file, so it won; and losing here does not fall back to one tidy
+   * column, it leaves `auto-fit` with a single explicit track while the spans
+   * below conjure five implicit content-sized ones (150px, 0px, 36px…). The
+   * doubled class takes this to five classes and settles it. Same trap as the
+   * card rules further down: a narrow-screen rule that loses to a wide-screen
+   * one leaves the layout wearing the wrong shape.
+   */
+  .pairrow > .panel.details .fieldgrid.fieldgrid,
+  .panel.details .fieldgrid.fieldgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fieldgrid label.fld.col2 { grid-column: span 2; }
+  .fieldgrid label.fld.col3 { grid-column: span 3; }
+  .fieldgrid label.fld.col4 { grid-column: span 4; }
+  .fieldgrid label.fld.col6 { grid-column: span 6; }
+
+  /* ---- a card whose short fields share a line ----
+   *
+   * One field per line is right for a name and a paragraph and wrong for a
+   * number: a class is `20`, `d12`, `full`, `6` and three ticks, and one per
+   * line spent 400px of card on eleven characters of data. `cardrows` on the
+   * table lays the cells marked `data-inline` across it instead, in the two
+   * groups they read as -- what the class advances at, then which of its saves
+   * are good. The marker is on the table because `:has()` does not survive
+   * this stylesheet (see `gearHead` in gear.js).
+   *
+   * Grouping is by `order`, not by markup: Ranks is the fourth of those four
+   * numbers but sits after the three saves in the table, and the table's column
+   * order is not this layout's to rewrite. `flex-wrap` then packs each group
+   * greedily -- the four numbers fill a line and leave too little for a save,
+   * so the saves take the next one.
+   *
+   * `:not(.shut)` throughout: the fold rules above are the same specificity as
+   * these, and these being later would win and re-open a folded card. And the
+   * two `data-stack` orders have to be said again here, because this selector
+   * outranks the ones that set them.
+   */
+  table.stacked.cardrows > tbody > tr:not(.shut) {
+    flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 5px 9px;
+  }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td { flex: 1 1 100%; order: 3; }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-stack="name"] { flex: 1 1 100%; order: -2; }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-stack="head"] { flex: 1 1 100%; order: -1; }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-inline="spec"] { flex: 0 0 auto; order: 1; }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-inline="save"] { flex: 0 0 auto; order: 2; }
+  /* Sized to the widest value each one actually takes -- 20, d12, full, 6 --
+     rather than to the 6rem a lone figure gets when it has a line to itself. */
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-inline="spec"] input { width: 3.4rem; }
+  table.stacked.cardrows > tbody > tr:not(.shut) > td[data-inline="spec"] select {
+    width: auto; min-width: 4.2rem;
+  }
+  /* A rung of a ladder that grants nothing. As a table it is a greyed row and
+     reads as one of twenty; as a card it would be a bordered box with three
+     empty fields in it, thirteen times over on a twenty-level ladder. So it
+     keeps the shape it has as a row: one dashed line saying which level it is
+     and that nothing comes at it. `emptyslot`, not `noslot` -- that one is a
+     `td` on the mythic ladder and means something else. */
+  table.stacked > tbody > tr.emptyslot {
+    flex-direction: row; align-items: baseline; gap: 6px;
+    border-style: dashed; padding: 2px 6px; margin-bottom: 3px;
+    color: var(--cs-muted); font-size: 0.78rem;
+  }
+  table.stacked > tbody > tr.emptyslot > td { display: none; }
+  table.stacked > tbody > tr.emptyslot > td[data-stack="head"] { display: block; }
+  table.stacked > tbody > tr.emptyslot > td[data-stack="head"]::after {
+    content: " — no talent"; }
 }
 
 /* ---------- ability build (Stats tab) ---------- */
@@ -2386,6 +2570,28 @@ input[type="color"] {
 .pill button:hover { opacity: 1; color: var(--cs-bad); }
 /* The extension shelf on the manager: one heading per pack above its blocks. */
 .rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
+
+/* ---------- the two folds on the blocks panel ----------
+ *
+ * A pack, and inside it whatever it groups its blocks under -- a class with
+ * its option menus and its archetype, a chakra with its veils. The two need
+ * telling apart at a glance, and a pack named after the one class it carries
+ * prints the same words twice over, so the group is the one that indents and
+ * takes a rule down its side. `.foldsub` gives both the fold and the button;
+ * this is only the nesting.
+ */
+.rowlist .extpack + .extpack { margin-top: 10px; }
+.rowlist .extgroup {
+  margin: 4px 0 0 10px; padding-left: 9px;
+  border-left: 2px solid var(--cs-line);
+}
+.rowlist .extgroup > h4.subhead {
+  margin: 0 0 2px; font-size: 0.72rem; text-transform: none; letter-spacing: 0;
+  color: var(--cs-text);
+}
+/* Folded, a group is a line you read a count off, so it keeps no bottom gap. */
+.rowlist .extgroup.collapsed { padding-bottom: 0; }
+.rowlist .extgroup.collapsed > h4.subhead { margin-bottom: 0; }
 
 /* ---------- what the furniture costs on a phone ----------
  *

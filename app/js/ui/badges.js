@@ -21,7 +21,9 @@ export function sheetBonusHead() {
 }
 
 export function sheetBonusCell(model, key) {
-  return `<td class="num"><input type="number" value="${model.offsetOf(key)}"
+  // `data-label` for the card layout on a narrow screen, where the column
+  // heading this sits under is gone; see `table.stacked` in the stylesheet.
+  return `<td class="num" data-label="Other"><input type="number" value="${model.offsetOf(key)}"
       data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"
       >${forwardedBadge(model, FORWARD_BY_DERIVED[key])}</td>`;
 }
