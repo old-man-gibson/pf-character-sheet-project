@@ -305,7 +305,10 @@ function dashArrangePanel(model) {
 
   /** The card's corner control: one click between the summary and the full read. */
 function dashExpand(key, openNow) {
+    // `dash:*` is one of the two keys that stores *open* rather than
+    // *collapsed*, so what the click writes is the opposite of what is showing.
     return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
+      data-collapse-to="${!openNow}"
       aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
   }
 
@@ -1125,7 +1128,8 @@ function languagesPanel(model) {
       .map((s) => String(s).trim()).filter(Boolean);
     const head = `<h3>Languages
         <span class="badge${spare < 0 ? ' err' : ''}" title="Known, against the slots Int, Linguistics and Extra grant">${slots.known} / ${slots.total}</span>
-        <button class="disclose" data-collapse="languages" aria-expanded="${!shut}"
+        <button class="disclose" data-collapse="languages" data-collapse-to="${!shut}"
+          aria-expanded="${!shut}"
           title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
       </h3>`;
     if (shut) {
@@ -1346,6 +1350,7 @@ function attackPanel(model) {
           const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
           const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
           const caret = altOf ? `<button class="disclose" data-collapse="atk:${k}"
+            data-collapse-to="${!shut}"
             aria-expanded="${!shut}" title="${esc(shut
     ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
@@ -1487,7 +1492,8 @@ function proficienciesPanel(model) {
            column is a dozen rows. -->
       <div class="profrow profwide">
         <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
-          <button class="disclose" data-collapse="${wkey}" aria-expanded="${!wshut}"
+          <button class="disclose" data-collapse="${wkey}" data-collapse-to="${!wshut}"
+            aria-expanded="${!wshut}"
             title="${wshut ? 'Expand' : 'Collapse'}">${wshut ? '▸' : '▾'}</button>
           Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
         </span>
@@ -1728,7 +1734,8 @@ function hpBuild(model) {
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
         = <strong>${base}</strong>${over == null ? '' : `, overridden to <strong>${over}</strong>`}
-        <button class="disclose" data-collapse="hp:build" aria-expanded="${!shut}"
+        <button class="disclose" data-collapse="hp:build" data-collapse-to="${!shut}"
+          aria-expanded="${!shut}"
           title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
       ${shut ? '' : `<div class="fieldgrid two">
         ${field('2nd HP ability', abilitySelect('hp.ability2', c.hp.ability2))}

@@ -372,7 +372,9 @@ function akashicSlotsPanel(model, ctx, a) {
         <span class="badge">${slots.length} slots</span>
         <span class="pair" style="margin-left:auto">
           ${veilColumnsControl(model)}
-          <button data-collapse="veil:showEmpty" aria-pressed="${showEmpty}">
+          ${/* The second key that stores *shown* rather than *collapsed*. */''}
+          <button data-collapse="veil:showEmpty" data-collapse-to="${!showEmpty}"
+            aria-pressed="${showEmpty}">
             ${showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`}
           </button>
           ${addButton(list, 'Add slot', {
@@ -435,7 +437,7 @@ function veilSlotCard(model, ctx, a, list, s, i) {
 
     return `<div class="veilslot${collapsed ? ' is-collapsed' : ''}">
       <div class="veilslot-head">
-        <button class="disclose" data-collapse="${esc(key)}"
+        <button class="disclose" data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
           aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
         ${select(`${base}.slot`, s.slot, VEIL_SLOTS, null)}
         <span class="vcount" title="veils shaped / slots available">${veils.length}<i>/</i>${max}</span>
@@ -687,7 +689,7 @@ function disciplineColumn(model, ctx, d, i) {
 
     return `<div class="discipline${collapsed ? ' is-collapsed' : ''}">
       <div class="discipline-head">
-        <button class="disclose" data-collapse="disc:${esc(d.name)}"
+        <button class="disclose" data-collapse="disc:${esc(d.name)}" data-collapse-to="${!collapsed}"
           aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
         <span class="dname" title="${esc(d.name)}">${esc(d.name) || '<em>Unnamed</em>'}</span>
         <span class="dcount" title="readied maneuvers / stances">${d.knownManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>

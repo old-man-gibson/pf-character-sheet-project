@@ -254,7 +254,8 @@ export function foldButton(model, key, collapsedNow = null) {
   // one out of a feature group's name, which is workbook text. The reader
   // decodes character references in an attribute value, so `dataset.collapse`
   // still hands the click handler back the exact key that went in.
-  return `<button data-collapse="${esc(key)}" title="${collapsed ? 'Expand' : 'Minimize'}"
+  return `<button data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
+    title="${collapsed ? 'Expand' : 'Minimize'}"
     aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
 }
 

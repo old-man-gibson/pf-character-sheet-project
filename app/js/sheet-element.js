@@ -4803,14 +4803,31 @@ export class CharacterSheetElement extends HTMLElement {
       if (el === root.activeElement && el?.matches?.('input[type="number"]')) el.blur();
     });
 
+    /*
+     * Folding something away, or opening it back up.
+     *
+     * The button says what to store rather than the handler working it out.
+     * It used to read `aria-expanded` off the button and store that, which is
+     * a rule with two things hidden in it: that the attribute is the *negation*
+     * of the stored value, and that the key means "collapsed". Eight of the ten
+     * places that emit one of these obeyed both. Two did not -- the session
+     * dashboard's Expand, whose key means *open*, and the veil slots' "Show
+     * empty", whose key means *shown* and which carries `aria-pressed` rather
+     * than `aria-expanded` -- and both were dead controls: they wrote back the
+     * state they were already in, so nothing ever moved. There is no way to
+     * look at one of those buttons and see that, which is why the rule is now
+     * written down in the markup instead of inferred here.
+     *
+     * (What the old rule was reaching for is still true and still matters: the
+     * value has to come from what is *on screen*, not from storage, because a
+     * block that starts folded by default and has never been clicked has
+     * nothing stored -- and toggling `undefined` would fold something that
+     * already looked folded. `data-collapse-to` is computed by the renderer,
+     * which is the one place that knows both.)
+     */
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {
-        const key = b.dataset.collapse;
-        // Against what is on screen, not what is in storage. The two agree
-        // everywhere except a block that starts folded by default and has
-        // never been clicked -- where reading storage would toggle `undefined`
-        // to `true` and fold something that already looked folded.
-        this.#model.data.uiPrefs.collapsed[key] = b.getAttribute('aria-expanded') === 'true';
+        this.#model.data.uiPrefs.collapsed[b.dataset.collapse] = b.dataset.collapseTo === 'true';
         this.#model.recompute();
         this.#render();
       });
