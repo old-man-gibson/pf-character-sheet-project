@@ -456,9 +456,21 @@ function helpLabel(hint) {
   // paragraph about class tracks "Help — Stats".
   const first = [...hint.childNodes].find((n) => n.nodeType !== 3 || n.textContent.trim());
   const lead = first?.nodeType === 1 && /^(STRONG|B)$/.test(first.tagName) ? first.textContent : '';
+  // The nearest heading before the panel's own, which on a panel carrying
+  // several helps is the thing that tells them apart: the three under Feats &
+  // Mythic all read "Help — Mythic" off the panel, and are the panel's note,
+  // "Mythic path abilities" and "Mythic Feats". `childNodes[0]` for the same
+  // reason as the h3 below -- the heading ends in a fold button.
+  const sub = hint.closest('.foldsub')
+    ?.querySelector(':scope > h4.subhead')?.childNodes[0]?.textContent ?? '';
   const panel = hint.closest('section.panel, .supergroup')
     ?.querySelector('h3, .supergroup-title')?.childNodes[0]?.textContent ?? '';
-  return (lead || panel || 'this panel')
+  // Two hints have nothing above them to be named by: one sits outside any
+  // panel and one is in a panel with no heading at all. The tab they are on
+  // beats "this panel", which names the thing you are already looking at.
+  const tab = hint.getRootNode()
+    ?.querySelector?.('[role="tab"][aria-selected="true"]')?.textContent ?? '';
+  return (lead || sub || panel || tab || 'this panel')
     .replace(/\s+/g, ' ').replace(/[.:—-]\s*$/, '').trim()
     .slice(0, 40);
 }
@@ -4219,18 +4231,36 @@ export class CharacterSheetElement extends HTMLElement {
   #clampHints() {
     const wrap = this.shadowRoot.querySelector('.wrap');
     if (!wrap || this.clientWidth > 620) return;
-    for (const hint of this.shadowRoot.querySelectorAll('.body .hint')) {
-      if (hint.textContent.trim().length <= HELP_LENGTH) continue;
-      const key = helpKey(hint);
+    const long = [...this.shadowRoot.querySelectorAll('.body .hint')]
+      .filter((hint) => hint.textContent.trim().length > HELP_LENGTH)
+      .map((hint) => ({ hint, key: helpKey(hint), label: helpLabel(hint) }));
+    // Where a heading still does not tell two helps apart -- two notes at the
+    // foot of one panel, neither with a subhead of its own -- say which is
+    // which, because a column of identical "Help \u2014 Skills" is a column you
+    // cannot navigate or remember your place in. Counted by key, not by
+    // occurrence: the same paragraph written under three sibling weapons is
+    // one help shown three times, it already shares a key and opens in all
+    // three at once, and numbering it would claim a difference there is not.
+    const byLabel = new Map();
+    for (const entry of long) {
+      const keys = byLabel.get(entry.label) ?? new Map();
+      if (!keys.has(entry.key)) keys.set(entry.key, keys.size + 1);
+      byLabel.set(entry.label, keys);
+    }
+    for (const entry of long) {
+      const keys = byLabel.get(entry.label);
+      if (keys.size > 1) entry.label = `${entry.label} (${keys.get(entry.key)} of ${keys.size})`;
+    }
+    for (const { hint, key, label } of long) {
       const open = this.#openHelp.has(key);
       hint.classList.add('longhint');
       hint.classList.toggle('is-open', open);
       const button = this.ownerDocument.createElement('button');
       button.className = 'helpopen';
       button.dataset.help = key;
-      button.dataset.helpLabel = helpLabel(hint);
+      button.dataset.helpLabel = label;
       button.setAttribute('aria-expanded', String(open));
-      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${label}`;
       hint.parentNode.insertBefore(button, hint);
     }
   }
