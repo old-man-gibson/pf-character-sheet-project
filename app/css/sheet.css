@@ -105,10 +105,15 @@
   --cs-line: #d3d7e0;
   --cs-text: #1a1d26;
   --cs-muted: #5c6478;
-  --cs-accent: #9a6b12;
-  --cs-accent-soft: rgba(154, 107, 18, 0.12);
-  --cs-formula: rgba(154, 107, 18, 0.38);
-  --cs-formula-strong: rgba(154, 107, 18, 0.80);
+  /* One step darker than the gold it started as (#9a6b12), which measured
+     4.68 on white and 4.11 on the panel behind a button -- clearing on the one
+     surface and failing on the other, for the colour that carries every panel
+     heading and every derived value. This clears 4.95 on the worst of them and
+     is not tellable from the old one side by side. */
+  --cs-accent: #8a5f0d;
+  --cs-accent-soft: rgba(138, 95, 13, 0.12);
+  --cs-formula: rgba(138, 95, 13, 0.38);
+  --cs-formula-strong: rgba(138, 95, 13, 0.80);
   --cs-edit: #2563c9;
   /* Good and bad have to be redeclared here, not inherited: the dark theme's
      pair are pastels drawn to glow on #14161c, and on near-white they measure
@@ -342,6 +347,12 @@ button {
   border-radius: 6px; padding: 5px 10px; cursor: pointer;
 }
 button:hover { border-color: var(--cs-accent); }
+/* Mouse hover has said "this one" since the first version of this file; the
+   keyboard was left with whatever ring the browser drew. Same blue the fields
+   take, so focus looks like one thing wherever it is standing. Offset outwards
+   rather than inset: a button is not a box you type into, and half the ones
+   here are small enough that an inset ring would land on the glyph. */
+button:focus-visible { outline: 2px solid var(--cs-edit); outline-offset: 1px; }
 /* Pressed and selected look the same and mean different things: `aria-pressed`
    is a toggle that is on, `aria-selected` is the one tab of a set that is open.
    A tab is not a toggle -- the attribute is the difference between a reader
@@ -490,28 +501,26 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
    is the same shape as an uncoloured one, in a different hue. Resting state
    is deliberately quiet: the colour is a label for finding a tab in a bar of
    fifteen, not a second selected-state competing with the real one. */
+/* The label takes `--tab-ink` and the edges take `--tab-color`. Both are set
+   per button by the element: the first is the picked hue taken far enough to be
+   read on whichever theme is up, the second is that hue as picked. Which way
+   round matters -- a pale blue that reads well at the top of a dark bar is
+   barely there at the top of a pale one, and the reverse for a deep one, so a
+   fixed correction per theme was always going to be wrong for half the palette.
+   The edges are shape rather than text and have no ratio to meet, so they keep
+   the colour that was chosen. See `readableOn` in tracker-style.js. */
 .tabs button.tinted {
-  color: var(--tab-color);
+  color: var(--tab-ink, var(--tab-color));
   border-color: color-mix(in srgb, var(--tab-color) 45%, var(--cs-line));
 }
 .tabs button.tinted:hover { border-color: var(--tab-color); }
 .tabs button.tinted[aria-selected="true"] {
-  color: var(--tab-color);
   border-color: var(--tab-color);
   background: color-mix(in srgb, var(--tab-color) 16%, transparent);
 }
-/* On the light theme the same hue has to carry on near-white, and the palette
-   is picked for a dark bar: a pale blue that reads well at the top of this
-   file is barely there at the top of that one. So the tint is taken towards
-   ink for the text, which is the same move the light theme already makes on
-   its own accent and edit blue. The edges keep more of the hue -- they are
-   shape rather than text, and have no contrast ratio to meet. */
-:host([theme="light"]) .tabs button.tinted {
-  color: color-mix(in srgb, var(--tab-color) 62%, #000);
-  border-color: color-mix(in srgb, var(--tab-color) 60%, var(--cs-line));
-}
+/* The wash sits on paper rather than under it here, so it can carry more hue
+   before it starts competing with the words on top of it. */
 :host([theme="light"]) .tabs button.tinted[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--tab-color) 72%, #000);
   background: color-mix(in srgb, var(--tab-color) 18%, transparent);
 }
 /* The row swatch in the ⚙ manager, and the panel both entry points open. */
@@ -2049,7 +2058,14 @@ table.build td.linked {
   width: 18px; height: 18px; padding: 0; border-radius: 4px;
   border: 1px solid var(--cs-line); cursor: pointer;
 }
-.swatch[aria-pressed="true"] { outline: 2px solid var(--cs-edit); outline-offset: 1px; }
+/* Chosen, in the colour every other `aria-pressed` on the sheet wears. It used
+   to be the edit blue, which is now what focus draws -- and a swatch is the one
+   control small enough that a ring is the whole of what you can see, so the two
+   states have to be told apart by hue rather than by shape. */
+.swatch[aria-pressed="true"] {
+  outline: 2px solid var(--cs-accent); outline-offset: 1px;
+}
+.swatch[aria-pressed="true"]:focus-visible { outline-color: var(--cs-edit); outline-width: 3px; }
 .swatch.none {
   background: var(--cs-panel-2);
   background-image: linear-gradient(135deg, transparent 44%, var(--cs-muted) 44%, var(--cs-muted) 56%, transparent 56%);
@@ -3219,11 +3235,17 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
     --cs-text: #000;
     --cs-muted: #4a4a4a;
     /* Gold on white is unreadable. These are the same three meanings -- a
-       value the character supplies, good, bad -- at ink strength. */
-    --cs-accent: #7a5500;
-    --cs-accent-soft: transparent;
-    --cs-formula: transparent;
-    --cs-formula-strong: #7a5500;
+       value the character supplies, good, bad -- at ink strength.
+
+       `!important` on the four the character's own colour overrides: those are
+       set inline on the host by `#applyCharacterColor`, and an inline property
+       beats a rule in here however specific. Without it a character who picked
+       a bright hue printed the whole sheet's headings and totals in it, on
+       white, at whatever ratio that came to. */
+    --cs-accent: #7a5500 !important;
+    --cs-accent-soft: transparent !important;
+    --cs-formula: transparent !important;
+    --cs-formula-strong: #7a5500 !important;
     --cs-good: #1a6b2c;
     --cs-bad: #a32320;
     --cs-edit: #14448c;

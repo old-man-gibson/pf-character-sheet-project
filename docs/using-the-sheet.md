@@ -260,7 +260,9 @@ character in `uiPrefs.tabColors`.
 It is deliberately quiet — a coloured tab is tinted, not filled, so it still reads as one
 tab among many and the *selected* tab is still obviously the selected one. The point is
 finding *Maneuvers* at a glance in a bar of fifteen, not decorating the sheet. Colouring a
-tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown.
+tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown. The
+label is corrected for the theme it is being read on the same way the character colour is
+(see *[Character colour](#character-colour)*); the tab's edge keeps the hue as picked.
 
 ### Keyboard
 
@@ -996,6 +998,16 @@ sheet's accent, which is the one colour everything unstyled already reads: panel
 headings, tracker pips, the underline on a computed value, the edge that marks a field
 as accepting formulas. So one choice colours the character throughout, and a tracker
 with no colour of its own is drawn in it.
+
+**Where it is read, it is made readable.** A colour is picked for what it looks like,
+not for what it measures, and the sheet then sets body text in it — so a pale yellow on
+the light theme would be a preference that costs you the sheet. The hue is kept and its
+lightness is spent: taken towards ink on a pale background or towards paper on a dark
+one, in small steps, stopping at the first that clears 4.5:1. Most picks are already
+past that and come back untouched, the correction flips direction when you switch
+themes, and it applies only where the colour is *read* — swatches, borders, tracker
+fills and the wash behind a computed value all keep the hue exactly as chosen. The same
+goes for a tab's colour: the label is corrected, the edge is not.
 
 It is stored as `identity.color` and travels with the character's JSON. Embedders can
 still override it per instance with `--cs-accent`, since the character's own colour is

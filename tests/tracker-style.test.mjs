@@ -7,6 +7,7 @@ import {
   SQUARE_PIP_LIMIT, SHAPES,
   METERS, METER_DEFAULT_STYLE, meterDefaultStyle, isDefaultMeterStyle,
   trackPos, trackBand, dyingFraction,
+  contrastRatio, readableOn,
 } from '../app/js/tracker-style.js';
 
 let pass = 0;
@@ -311,6 +312,50 @@ console.log('meters -- the built-in gauges take a tracker style, with layers ove
   check('at the threshold it maxes out', dyingFraction(-14, -14), 1);
   check('and past it stays there', dyingFraction(-99, -14), 1);
   check('a threshold that is not below zero cannot be approached', dyingFraction(-5, 0), 0);
+}
+
+console.log('readable colour -- a hue a player picked, made legible where it is read');
+{
+  const LIGHT = '#eef0f5';        // --cs-panel-2 on the light theme
+  const DARK = '#232733';         // and on the dark one
+  const ratio = (a, b) => Math.round(contrastRatio(a, b) * 100) / 100;
+
+  check('black on white is the ceiling', ratio('#000000', '#ffffff'), 21);
+  check('a colour against itself is the floor', ratio('#d4a24a', '#d4a24a'), 1);
+  check('order does not matter', ratio('#1a6b2c', '#ffffff'), ratio('#ffffff', '#1a6b2c'));
+  check('junk cannot pretend to pass', contrastRatio('not a colour', '#fff'), 1);
+
+  // The two that started this: the character colour and a tab tint, both
+  // measured on the sheet at ratios a body of text cannot be read at.
+  check('a bright orange fails on the light theme', ratio('#f07f3c', LIGHT) < 4.5, true);
+  check('and is fixed', readableOn('#f07f3c', LIGHT) !== '#f07f3c', true);
+  check('to something that clears', contrastRatio(readableOn('#f07f3c', LIGHT), LIGHT) >= 4.5, true);
+  check('a deep red fails on the dark theme', ratio('#b8384e', DARK) < 4.5, true);
+  check('and clears once corrected', contrastRatio(readableOn('#b8384e', DARK), DARK) >= 4.5, true);
+
+  // Which way each theme moves. Ink on paper, paper on ink -- so the same hue
+  // darkens on one and lightens on the other, and neither ever crosses over.
+  const onLight = hexToRgb(readableOn('#f07f3c', LIGHT));
+  const onDark = hexToRgb(readableOn('#f07f3c', DARK));
+  check('the light theme darkens it', onLight.every((c, i) => c <= hexToRgb('#f07f3c')[i]), true);
+  check('the dark theme lightens it', onDark.every((c, i) => c >= hexToRgb('#f07f3c')[i]), true);
+
+  // A colour that is already readable is the common case, and it must come
+  // back untouched or every pick would drift a little on every render.
+  check('a colour that already clears is left alone', readableOn('#1a6b2c', LIGHT), '#1a6b2c');
+  check('and on the theme it was drawn for', readableOn('#e6e8ef', DARK), '#e6e8ef');
+  check('idempotent', readableOn(readableOn('#f07f3c', LIGHT), LIGHT), readableOn('#f07f3c', LIGHT));
+
+  // The whole suggested palette has to survive both themes, since it is what
+  // the picker offers and nothing in it should come out unreadable.
+  const fixed = (bg) => TRACKER_PALETTE.every(([h]) => contrastRatio(readableOn(h, bg), bg) >= 4.5);
+  check('every palette colour is readable on the light theme', fixed(LIGHT), true);
+  check('and on the dark one', fixed(DARK), true);
+  check('every correction is still a colour', TRACKER_PALETTE
+    .every(([h]) => normalizeHex(readableOn(h, LIGHT)) === readableOn(h, LIGHT)), true);
+
+  check('junk in, nothing out', readableOn('red', LIGHT), null);
+  check('an unreadable background is not guessed at', readableOn('#f07f3c', 'nope'), '#f07f3c');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

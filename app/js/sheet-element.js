@@ -131,7 +131,7 @@ import {
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
-  trackBand,
+  trackBand, readableOn,
 } from './tracker-style.js';
 import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
@@ -1175,6 +1175,10 @@ export class CharacterSheetElement extends HTMLElement {
     const allIds = [...bar.map((e) => e.id), 'systabs'];
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
 
+    // Read once for the whole bar rather than per coloured tab: it is a
+    // computed-style lookup, and the answer cannot change inside one render.
+    const surface = this.#surface();
+
     this.shadowRoot.innerHTML = `
       ${SHEET_LINK}
       <div class="wrap">
@@ -1187,18 +1191,22 @@ export class CharacterSheetElement extends HTMLElement {
     // style attribute; the class list is built rather than written inline
     // because a tab can be both a guest and coloured.
     const color = this.#model.tabColor(e.key);
+    // Two properties, not one: `--tab-color` draws the edge and the wash and is
+    // the hue as picked; `--tab-ink` is what the label is set in, and is that
+    // hue taken far enough to be read on this theme. See `#applyCharacterColor`.
+    const tint = color ? `--tab-color:${color};--tab-ink:${readableOn(color, surface)}` : '';
     const cls = [e.kind === 'visiting' ? 'visiting' : '', color ? 'tinted' : ''].filter(Boolean).join(' ');
     return `
             <button role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
-              ${cls ? `class="${cls}"` : ''}${color ? ` style="--tab-color:${color}"` : ''}
+              ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
               ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"' : ''}
-              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange, right-click to colour"'}>${esc(e.label)}</button>`;
+              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true"'}>${esc(e.label)}</button>`;
   }).join('')}
           <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            title="Show, hide and rearrange tabs">⚙</button>
+            aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
         <div class="rollslot">${this.#rollToastHtml()}</div>
         </div>
@@ -2393,11 +2401,37 @@ export class CharacterSheetElement extends HTMLElement {
    * theme's accent for everything inside the shadow root. Removing it hands
    * the theme back its own.
    */
+  /**
+   * The surface a player-chosen colour has to be legible on.
+   *
+   * `--cs-panel-2` rather than `--cs-panel`: it is the ground under buttons,
+   * inputs and the swatches, and it is the tighter of the two on both themes --
+   * paler than the panel on the light one, lighter than it on the dark. Read
+   * off the element rather than written down, so a host that themed the sheet
+   * is measured against its own colours; the built-in pair is the fallback for
+   * a host that set something `normalizeHex` cannot read, and for the moment
+   * before the stylesheet is adopted.
+   */
+  #surface() {
+    const declared = normalizeHex(getComputedStyle(this).getPropertyValue('--cs-panel-2'));
+    return declared || (this.getAttribute('theme') === 'light' ? '#eef0f5' : '#232733');
+  }
+
+  /**
+   * The character's own colour, wherever the sheet wears it.
+   *
+   * The accent is read as text far more often than it is seen as an edge -- it
+   * is every panel heading, every derived value, every big attack bonus -- so
+   * it takes the legible version of the hue. The three washes under it keep the
+   * raw one: they are backgrounds and borders, they have no ratio to meet, and
+   * they are most of what makes the sheet still look like the colour that was
+   * picked. See `readableOn`.
+   */
   #applyCharacterColor() {
     const hex = normalizeHex(this.#model?.data?.identity?.color);
     const vars = ['--cs-accent', '--cs-accent-soft', '--cs-formula', '--cs-formula-strong'];
     if (!hex) { vars.forEach((v) => this.style.removeProperty(v)); return; }
-    this.style.setProperty('--cs-accent', hex);
+    this.style.setProperty('--cs-accent', readableOn(hex, this.#surface()));
     this.style.setProperty('--cs-accent-soft', rgba(hex, 0.14));
     this.style.setProperty('--cs-formula', rgba(hex, 0.40));
     this.style.setProperty('--cs-formula-strong', rgba(hex, 0.85));
@@ -3431,8 +3465,13 @@ export class CharacterSheetElement extends HTMLElement {
       const tab = root.querySelector(`nav.tabs ${sel}`);
       if (tab) {
         tab.classList.toggle('tinted', !!hex);
-        if (hex) tab.style.setProperty('--tab-color', hex);
-        else tab.style.removeProperty('--tab-color');
+        if (hex) {
+          tab.style.setProperty('--tab-color', hex);
+          tab.style.setProperty('--tab-ink', readableOn(hex, this.#surface()));
+        } else {
+          tab.style.removeProperty('--tab-color');
+          tab.style.removeProperty('--tab-ink');
+        }
       }
       const rowSwatch = root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
       if (rowSwatch) {
@@ -4298,6 +4337,32 @@ export class CharacterSheetElement extends HTMLElement {
       if (isTypingIn(e.composedPath?.()[0] ?? e.target)) return;
       e.preventDefault();
       this.#openPalette();
+    });
+
+    /*
+     * A focused number input takes the wheel as an increment.
+     *
+     * That is the browser's own behaviour and it is fine on a short form. Here
+     * the Magic Spheres tab carries 213 number fields and runs past three
+     * screens, so "click a cell, keep scrolling" -- which is how you read a
+     * tab -- silently edits the cell you just clicked, and the sheet has no
+     * undo to notice it with.
+     *
+     * Blurring drops the increment without touching the scroll: the value
+     * change is the *default action* of the wheel event, and an input with no
+     * focus has none. Nothing is preventDefault-ed, so the page moves exactly
+     * as far as it was going to, and a value genuinely typed is committed by
+     * the blur rather than lost by it.
+     *
+     * On `.wrap`, like the handler above and for the same reason: every render
+     * replaces it, so these cannot pile up.
+     */
+    root.querySelector('.wrap')?.addEventListener('wheel', (e) => {
+      const el = e.composedPath?.()[0] ?? e.target;
+      // `shadowRoot.activeElement` rather than `:focus`, which needs the window
+      // itself to be focused and so would answer no to a question that is only
+      // about which field the wheel is about to land on.
+      if (el === root.activeElement && el?.matches?.('input[type="number"]')) el.blur();
     });
 
     root.querySelectorAll('[data-collapse]').forEach((b) => {
@@ -5921,6 +5986,12 @@ export class CharacterSheetElement extends HTMLElement {
       case 'reset-cancel':
         this.#confirmReset = false;
         this.#render();
+        // Back where it came from. Opening the confirm moves focus into it, so
+        // closing it owes the reader the other half: without this the render
+        // that takes the panel away takes the caret to the document with it,
+        // and a keyboard is left at the top of the sheet having pressed a
+        // button in the header.
+        this.shadowRoot.querySelector('[data-action="reset"]')?.focus();
         break;
       case 'reset-confirm': {
         // The button only exists armed, but check the word anyway -- the DOM
