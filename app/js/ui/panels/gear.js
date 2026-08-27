@@ -327,22 +327,22 @@ export function weaponsPanel(model, e) {
 
 function armorPanel(e) {
     const row = (piece, path, tools = '') => `<tr class="${piece.active ? '' : 'untrained'}">
-      <td class="mid">${check(`${path}.active`, piece.active)}</td>
-      <td>${esc(piece.kind || 'Armor')}</td>
-      <td>${text(`${path}.name`, piece.name)}</td>
-      <td class="num">${num(`${path}.acBonus`, piece.acBonus, 'style="width:3.2rem"')}</td>
-      <td class="num"><input type="number" value="${piece.maxDex ?? ''}" placeholder="—"
+      <td class="mid" data-label="Worn">${check(`${path}.active`, piece.active)}</td>
+      <td data-stack="head">${esc(piece.kind || 'Armor')}</td>
+      <td data-stack="name">${text(`${path}.name`, piece.name)}</td>
+      <td class="num" data-label="AC">${num(`${path}.acBonus`, piece.acBonus, 'style="width:3.2rem"')}</td>
+      <td class="num" data-label="Max Dex"><input type="number" value="${piece.maxDex ?? ''}" placeholder="—"
         data-set="${path}.maxDex" data-kind="number-or-null" style="width:3.2rem"></td>
-      <td class="num">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
-      <td>${text(`${path}.type`, piece.type)}</td>
-      <td class="mid">${check(`${path}.ghostTouch`, piece.ghostTouch)}</td>
-      <td class="num">${num(`${path}.weight`, piece.weight, 'style="width:3.6rem"')}</td>
-      <td class="num">${num(`${path}.cost`, piece.cost, 'style="width:4rem"')}</td>
+      <td class="num" data-label="Armor check penalty">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
+      <td data-label="Type">${text(`${path}.type`, piece.type)}</td>
+      <td class="mid" data-label="Ghost touch">${check(`${path}.ghostTouch`, piece.ghostTouch)}</td>
+      <td class="num" data-label="Weight">${num(`${path}.weight`, piece.weight, 'style="width:3.6rem"')}</td>
+      <td class="num" data-label="Cost">${num(`${path}.cost`, piece.cost, 'style="width:4rem"')}</td>
       ${tools}
     </tr>`;
     return `<section class="panel span2">
       <h3>Armor &amp; shields</h3>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="armor stacked">
         <thead><tr><th title="Worn — counts toward AC">On</th><th></th><th>Name</th>
           <th class="num">AC</th><th class="num">Max Dex</th><th class="num">ACP</th>
           <th>Type</th><th>Ghost</th><th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>
@@ -372,22 +372,22 @@ function armorPanel(e) {
  */
 function gearRow(model, ctx, list, i, g, cols, tools) {
     const bonus = (bi) => `
-      <td class="num"><input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
+      <td class="num" data-label="Bonus ${bi + 1}"><input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
         data-item="${list}|${i}|bonuses.${bi}.value" data-kind="number-or-null" style="width:3rem"></td>
-      <td>${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</td>`;
+      <td data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</td>`;
     const key = `${list}|${i}`;
     const open = ctx.openGear === key;
     const label = String(g.name || '').trim() || g.slot || 'this item';
     return `<tr class="gearrow${open ? ' open' : ''}">
-      <td class="slot"><button class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
+      <td class="slot" data-stack="head"><button class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
         title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
         aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
         >${esc(g.slot ?? '')}</td>
-      <td>${itemText(list, i, 'name', g.name)}</td>
+      <td data-stack="name">${itemText(list, i, 'name', g.name)}</td>
       ${Array.from({ length: cols.bonuses }, (_, bi) => bonus(bi)).join('')}
-      ${Array.from({ length: cols.others }, (_, oi) => `<td>${itemText(list, i, `others.${oi}`, g.others?.[oi])}</td>`).join('')}
-      <td class="num">${itemNum(list, i, 'weight', g.weight)}</td>
-      <td class="num">${itemNum(list, i, 'cost', g.cost)}</td>
+      ${Array.from({ length: cols.others }, (_, oi) => `<td data-label="Other ${oi + 1}">${itemText(list, i, `others.${oi}`, g.others?.[oi])}</td>`).join('')}
+      <td class="num" data-label="Weight">${itemNum(list, i, 'weight', g.weight)}</td>
+      <td class="num" data-label="Cost">${itemNum(list, i, 'cost', g.cost)}</td>
       ${tools || '<td></td>'}
     </tr>
     ${open ? gearCard(model, list, i, g, cols) : ''}`;
@@ -506,7 +506,7 @@ function gearSlotsPanel(model, ctx, e) {
         <span class="badge">${rows.length} of ${(e.gear || []).length}</span>
         <button data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
       </h3>
-      <div class="tablewrap"><table class="gear">
+      <div class="tablewrap"><table class="gear stacked" data-fold="shut">
         ${gearHead('equipment.gear', cols, {
     bonuses: gearColumnInUse(e.gear, 'bonuses'), others: gearColumnInUse(e.gear, 'others'),
   }, ctx.armedGearCol)}
@@ -523,7 +523,7 @@ function otherItemsPanel(model, ctx, e) {
     const cols = gearCols(e.other);
     return `<section class="panel span2">
       <h3>Other items <span class="badge">${(e.other || []).length}</span></h3>
-      <div class="tablewrap"><table class="gear">
+      <div class="tablewrap"><table class="gear stacked" data-fold="shut">
         ${gearHead('equipment.other', cols, {
     bonuses: gearColumnInUse(e.other, 'bonuses'), others: gearColumnInUse(e.other, 'others'),
   }, ctx.armedGearCol)}
@@ -607,13 +607,13 @@ function craftSpeedPanel(cr) {
     return `<section class="panel">
       <h3>Crafting speed</h3>
       ${field('Base progress / day', num('crafting.baseSpeed', cr.baseSpeed, 'style="width:6rem"'))}
-      <div class="tablewrap"><table class="craftlist">
+      <div class="tablewrap"><table class="craftlist stacked">
         <thead><tr><th>On</th><th>Increase</th><th>Kind</th><th>Amount</th><th></th></tr></thead>
         <tbody>${rows.map((s, i) => `<tr>
-          <td class="mid">${itemCheck(list, i, 'enabled', s.enabled !== false)}</td>
-          <td>${itemText(list, i, 'label', s.label, 'Rush, workshop…')}</td>
-          <td class="narrow">${itemSelect(list, i, 'kind', s.kind || 'flat', CRAFT_SPEED_KINDS, null)}</td>
-          <td class="narrow">${itemExpr(list, i, 'value', s, { width: '4.2rem' })}</td>
+          <td class="mid" data-label="On">${itemCheck(list, i, 'enabled', s.enabled !== false)}</td>
+          <td data-stack="name">${itemText(list, i, 'label', s.label, 'Rush, workshop…')}</td>
+          <td class="narrow" data-label="Kind">${itemSelect(list, i, 'kind', s.kind || 'flat', CRAFT_SPEED_KINDS, null)}</td>
+          <td class="narrow" data-label="Amount">${itemExpr(list, i, 'value', s, { width: '4.2rem' })}</td>
           ${rowRemove(list, i)}
         </tr>`).join('') || '<tr><td colspan="5"><span class="empty">No increases yet.</span></td></tr>'}</tbody>
       </table></div>
@@ -645,11 +645,11 @@ function craftCostPanel(cr) {
     String(cr.baseCostIndex ?? 0), presets.map((b, i) => [String(i), `${b.label} — ${b.percent}%`]), null))}
       <details style="margin:6px 0">
         <summary class="hint" style="cursor:pointer">Edit base costs (${presets.length})</summary>
-        <div class="tablewrap" style="margin-top:6px"><table class="craftlist">
+        <div class="tablewrap" style="margin-top:6px"><table class="craftlist stacked">
           <thead><tr><th>Name</th><th>%</th><th></th></tr></thead>
           <tbody>${presets.map((b, i) => `<tr>
-            <td>${itemText('crafting.baseCosts', i, 'label', b.label, 'Name')}</td>
-            <td class="narrow"><input type="number" value="${Number(b.percent) || 0}"
+            <td data-stack="name">${itemText('crafting.baseCosts', i, 'label', b.label, 'Name')}</td>
+            <td class="narrow" data-label="Percent"><input type="number" value="${Number(b.percent) || 0}"
               data-item="crafting.baseCosts|${i}|percent" data-kind="number" style="width:4.2rem"></td>
             ${rowRemove('crafting.baseCosts', i)}
           </tr>`).join('')}</tbody>
@@ -658,12 +658,12 @@ function craftCostPanel(cr) {
         <p class="hint">50, 33 and 25 mean a true half, third and quarter of market value, as the sheet's own dropdown did.</p>
       </details>
       <div class="subhead">Manufacturing cost reductions</div>
-      <div class="tablewrap"><table class="craftlist">
+      <div class="tablewrap"><table class="craftlist stacked">
         <thead><tr><th>On</th><th>Reduction</th><th>%</th><th></th></tr></thead>
         <tbody>${rows.map((r, i) => `<tr>
-          <td class="mid">${itemCheck(list, i, 'enabled', r.enabled !== false)}</td>
-          <td>${itemText(list, i, 'label', r.label, 'Hands of the Crafter…')}</td>
-          <td class="narrow">${itemExpr(list, i, 'value', r, { width: '4.2rem' })}</td>
+          <td class="mid" data-label="On">${itemCheck(list, i, 'enabled', r.enabled !== false)}</td>
+          <td data-stack="name">${itemText(list, i, 'label', r.label, 'Hands of the Crafter…')}</td>
+          <td class="narrow" data-label="Percent">${itemExpr(list, i, 'value', r, { width: '4.2rem' })}</td>
           ${rowRemove(list, i)}
         </tr>`).join('') || '<tr><td colspan="4"><span class="empty">No reductions yet.</span></td></tr>'}</tbody>
       </table></div>
@@ -763,12 +763,12 @@ function craftProject(ctx, model, cr, p, i) {
       <div class="craftcols">
         <div>
           <div class="subhead">Crafting DC</div>
-          <div class="tablewrap"><table class="craftlist">
+          <div class="tablewrap"><table class="craftlist stacked">
             <thead><tr><th>On</th><th>Note</th><th>DC</th><th></th></tr></thead>
             <tbody>${(p.dcAdjustments || []).map((a, j) => `<tr>
-              <td class="mid">${itemCheck(`${base}.dcAdjustments`, j, 'enabled', a.enabled !== false)}</td>
-              <td>${itemText(`${base}.dcAdjustments`, j, 'label', a.label, 'Rush, exotic material…')}</td>
-              <td class="narrow">${itemExpr(`${base}.dcAdjustments`, j, 'value', a, { width: '4rem' })}</td>
+              <td class="mid" data-label="On">${itemCheck(`${base}.dcAdjustments`, j, 'enabled', a.enabled !== false)}</td>
+              <td data-stack="name">${itemText(`${base}.dcAdjustments`, j, 'label', a.label, 'Rush, exotic material…')}</td>
+              <td class="narrow" data-label="DC">${itemExpr(`${base}.dcAdjustments`, j, 'value', a, { width: '4rem' })}</td>
               ${rowRemove(`${base}.dcAdjustments`, j)}
             </tr>`).join('') || '<tr><td colspan="4"><span class="empty">Base DC only.</span></td></tr>'}</tbody>
           </table></div>
@@ -776,11 +776,11 @@ function craftProject(ctx, model, cr, p, i) {
         </div>
         <div>
           <div class="subhead">Bypassed requirements <span class="hint">${fmt(cr.dcPerBypass)} DC each</span></div>
-          <div class="tablewrap"><table class="craftlist">
+          <div class="tablewrap"><table class="craftlist stacked">
             <thead><tr><th>On</th><th>Requirement</th><th></th></tr></thead>
             <tbody>${(p.bypassed || []).map((b, j) => `<tr>
-              <td class="mid">${itemCheck(`${base}.bypassed`, j, 'enabled', b.enabled !== false)}</td>
-              <td>${itemText(`${base}.bypassed`, j, 'label', b.label, 'Craft Wondrous Item…')}</td>
+              <td class="mid" data-label="On">${itemCheck(`${base}.bypassed`, j, 'enabled', b.enabled !== false)}</td>
+              <td data-stack="name">${itemText(`${base}.bypassed`, j, 'label', b.label, 'Craft Wondrous Item…')}</td>
               ${rowRemove(`${base}.bypassed`, j)}
             </tr>`).join('') || '<tr><td colspan="3"><span class="empty">None bypassed.</span></td></tr>'}</tbody>
           </table></div>

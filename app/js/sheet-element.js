@@ -420,14 +420,23 @@ function isTypingIn(el) {
  * once the field on the end is taken off. Read off the first control in the
  * row rather than written into the markup, so a table opts in by marking its
  * name cell and nothing else has to change.
+ *
+ * `data-rowkey` on the row overrides that, for the case the derivation cannot
+ * tell apart: the mythic ladder and the mythic feats are two tables on one tab
+ * writing into the same `mythic.abilities|N`, so without it folding tier 3 in
+ * one folds tier 3 in the other. Whatever it says is prefixed onto the derived
+ * key rather than replacing it, so the row still moves with its own data.
  */
 function stackRowKey(row) {
+  const own = row.dataset?.rowkey;
   const el = row.querySelector('[data-item], [data-set]');
   if (!el) return '';
   const item = el.dataset.item;
-  if (item) return item.split('|').slice(0, 2).join('|');
-  const set = el.dataset.set || '';
-  return set.split('.').slice(0, -1).join('.');
+  const derived = item
+    ? item.split('|').slice(0, 2).join('|')
+    : (el.dataset.set || '').split('.').slice(0, -1).join('.');
+  if (!derived) return '';
+  return own ? `${own}:${derived}` : derived;
 }
 
 /** Longer than this and a hint is a paragraph rather than a caption. */
@@ -552,8 +561,12 @@ export class CharacterSheetElement extends HTMLElement {
   #openText = new Set();
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
   #openHelp = new Set();
-  /* Which stacked rows are folded to their name; see `#stackRows`. */
-  #shutRows = new Set();
+  /* Which stacked rows the player has moved off the fold their table starts
+     on -- so on an ordinary table these are the rows folded to their name, and
+     on a `data-fold="shut"` one they are the rows opened out. Holding the
+     departures rather than the state is what lets a table pick its own default
+     without a second set to keep in step; see `#stackRows`. */
+  #foldFlips = new Set();
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -2128,7 +2141,7 @@ export class CharacterSheetElement extends HTMLElement {
           Archmage/Hierophant 3).
         </p>
         ${rows.collapsibleSub(this.#model, 'mythic-abilities', 'Mythic path abilities', `
-          <div class="tablewrap"><table class="mythic">
+          <div class="tablewrap"><table class="mythic stacked">
             <!-- Six columns and one of them prose. The tier, the level it is
                  reached at, the path and the ability's name are all a few words,
                  so they are held narrow and Effect takes what is left. -->
@@ -2147,14 +2160,14 @@ export class CharacterSheetElement extends HTMLElement {
             <tbody>${MYTHIC_TIERS.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}">
-                <td class="num">${t}</td>
-                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td>${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
-                <td>${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
-                <td>${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
+              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
+                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
+                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td data-label="Path">${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
+                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
                 ${t % 2 === 0
-                  ? `<td>${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
+                  ? `<td data-label="Stat">${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
                   : '<td class="noslot"></td>'}
               </tr>`;
             }).join('')}</tbody>
@@ -2168,7 +2181,7 @@ export class CharacterSheetElement extends HTMLElement {
           </p>`, 'mythladder')}
 
         ${rows.collapsibleSub(this.#model, 'mythic-feats', 'Mythic Feats', `
-          <div class="tablewrap"><table class="mythic">
+          <div class="tablewrap"><table class="mythic stacked">
             <!-- The slot, then what was taken for it, then what that does. Off
                  the ladder above so both halves have room: nine columns across
                  one table left the two Effects sharing a third of the width. -->
@@ -2186,12 +2199,12 @@ export class CharacterSheetElement extends HTMLElement {
             <tbody>${MYTHIC_TIERS.map((t) => {
               const a = (m.abilities || [])[t - 1] || {};
               const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}">
-                <td class="num">${t}</td>
-                <td class="num derived" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-                <td>${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
-                <td>${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
+              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
+                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
+                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
+                <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
+                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
+                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
               </tr>`;
             }).join('')}</tbody>
           </table></div>
@@ -4117,14 +4130,28 @@ export class CharacterSheetElement extends HTMLElement {
    *
    * Rows start open. Folding is for a list you are looking through, and a list
    * that hid itself before you asked would be a list you have to open to read.
+   *
+   * A table says otherwise with `data-fold="shut"`, and two do. The rule holds
+   * while a card is a few fields and the whole of it is worth reading; it
+   * stops holding when the card is mostly empty boxes. A skill is a name and a
+   * total and eleven columns of how that total was arrived at, sixty-one times
+   * over; a gear row with three bonus columns and four properties is fourteen
+   * fields of which an item fills two. Open by default those are a page you
+   * scroll past rather than read, and the fold -- name and total, name and
+   * slot -- is the list. So the default is per table, and the set above holds
+   * whichever rows have been moved off it.
    */
   #stackRows() {
     if (this.clientWidth > 620) return;
     for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
+      // A rung that grants nothing is already one line; there is no body under
+      // it for a caret to open. See `tr.emptyslot` in the stylesheet.
+      if (row.classList.contains('emptyslot')) continue;
       const head = row.querySelector('td[data-stack="name"]');
       const key = head && stackRowKey(row);
       if (!key) continue;
-      const shut = this.#shutRows.has(key);
+      const startsShut = row.closest('table')?.dataset.fold === 'shut';
+      const shut = startsShut !== this.#foldFlips.has(key);
       row.classList.toggle('shut', shut);
       const button = this.ownerDocument.createElement('button');
       button.className = 'rowfold';
@@ -4937,9 +4964,13 @@ export class CharacterSheetElement extends HTMLElement {
       const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-rowfold]');
       if (!button) return;
       const key = button.dataset.rowfold;
-      const shut = !this.#shutRows.has(key);
-      if (shut) this.#shutRows.add(key);
-      else this.#shutRows.delete(key);
+      // The set holds departures from the table's own default, so the click
+      // flips membership and the visible state is read back off both.
+      const flipped = !this.#foldFlips.has(key);
+      if (flipped) this.#foldFlips.add(key);
+      else this.#foldFlips.delete(key);
+      const startsShut = button.closest('table')?.dataset.fold === 'shut';
+      const shut = startsShut !== flipped;
       button.closest('tr')?.classList.toggle('shut', shut);
       button.setAttribute('aria-expanded', String(!shut));
       button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
