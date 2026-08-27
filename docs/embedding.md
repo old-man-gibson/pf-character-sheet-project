@@ -65,6 +65,24 @@ The six ability hues are properties too — `--ab-str`, `--ab-dex`, `--ab-con`,
 saying how much of a hue the background, the border and the word each take. See
 *[Ability colours](using-the-sheet.md#ability-colours)*.
 
+Two more are geometry rather than colour, and a host page that scrolls is likely to
+want both:
+
+`--cs-sticky-top` is where the tab rail — the tab bar, and in the session view the
+strip of hit points, AC and saves — comes to rest when the sheet is scrolled. It
+defaults to `0px`, against the top of the window. A host with a fixed header of its
+own should set this to that header's height, or the rail pins behind it:
+
+```css
+character-sheet { --cs-sticky-top: 56px; }
+```
+
+`--cs-table-max` is how tall a table may get before it scrolls inside its own box
+instead of running the page down; that inner scroll is also what holds its column
+headings in place. It defaults to `calc(100svh - var(--cs-sticky-top) - 10rem)`,
+which reads the *window* — so a sheet embedded in a short container of the host's
+wants its own value, and `none` turns the behaviour off entirely.
+
 There is no build step and no runtime dependency — plain ES modules.
 
 One thing to keep together: the component fetches its stylesheet, `app/css/sheet.css`,

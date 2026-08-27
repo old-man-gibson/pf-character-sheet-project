@@ -236,6 +236,19 @@ back to the bar an import would have made. **A tab you hide stays hidden** — t
 touch the bar, the arrangement is yours and is what loads next time. The bar is saved with
 the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an export.
 
+**The bar stays on screen.** It sits on a rail that pins itself to the top of the window
+once the header above it has scrolled away — a tab runs several screens deep, and the way
+through them should not be one of the things that leaves first. Clicking a tab lands you
+at the top of it rather than at whatever offset the last tab had, and leaves the keyboard
+on the tab you pressed. Below 700px the bar is one row that scrolls sideways instead of
+five that wrap, and it keeps the open tab in view. A host page embedding the sheet under
+a fixed header of its own sets `--cs-sticky-top` to that header's height; see
+*[Embedding](embedding.md)*.
+
+A table longer than the window scrolls inside its own box rather than running the page
+down, which is what keeps its column headings in place while you read the rows. The
+threshold is `--cs-table-max`.
+
 ### Colouring a tab
 
 **Right-click a tab** to colour it, or use the swatch on its row in the **⚙** manager —
@@ -271,11 +284,13 @@ The header's **Build view / Session view** button switches between two arrangeme
 of the same sheet. The *build* view is everything above. The *session* view is what
 comes up at the table: its bar starts from **Overview, Skills, Feats & Mythic,
 Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
-*marked* on a class (below), and a standing strip under the character's name shows
-the numbers a table asks for mid-fight — **HP, AC (touch/FF), the three saves and
-how far you move**, with a ticked condition's adjusted values in place of the base
-ones. The movement shown is the fastest rate the character actually has; the rest
-are on its tooltip, since a strip with four of them in it is a table.
+*marked* on a class (below), and a standing strip above the tab bar shows the numbers
+a table asks for mid-fight — **HP, AC (touch/FF), the three saves and how far you
+move**, with a ticked condition's adjusted values in place of the base ones. The
+movement shown is the fastest rate the character actually has; the rest are on its
+tooltip, since a strip with four of them in it is a table. The strip rides on the
+pinned rail with the tab bar (below), so it stays on screen wherever you are on
+whichever tab.
 
 In the session view the **Overview is a dashboard** rather than the full page:
 

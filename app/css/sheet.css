@@ -71,6 +71,18 @@
   --cs-radius: 8px;
   --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* Where the pinned tab rail comes to rest. Zero against the top of the
+     window; a host page with a fixed header of its own sets this to its
+     height, and the rail sits under it instead of behind it. Public --
+     see docs/embedding.md. */
+  --cs-sticky-top: 0px;
+  /* How tall a table is allowed to get before it scrolls inside its own box
+     rather than dragging the page down. A screen, less the rail and the panel
+     furniture above it, so a table shorter than the window is untouched and
+     only the long ones gain a scrollbar -- which is also what gives their
+     headings something to stick to. `svh` rather than `dvh` on purpose: a
+     mobile toolbar sliding away must not resize the box mid-scroll. */
+  --cs-table-max: calc(100svh - var(--cs-sticky-top) - 10rem);
 
   display: block;
   font-family: var(--cs-font);
@@ -98,6 +110,13 @@
   --cs-formula: rgba(154, 107, 18, 0.38);
   --cs-formula-strong: rgba(154, 107, 18, 0.80);
   --cs-edit: #2563c9;
+  /* Good and bad have to be redeclared here, not inherited: the dark theme's
+     pair are pastels drawn to glow on #14161c, and on near-white they measure
+     2.0:1 and 3.0:1 -- a damage total no one can read. These are the same two
+     meanings at ink strength, 6.6:1 and 7.5:1 on white, and they are the
+     values @media print already reached for when it hit the same wall. */
+  --cs-good: #1a6b2c;
+  --cs-bad: #a32320;
   --fx-number: #1f7a43;
   --fx-string: #6b3fa0;
   --fx-nest-0: #226b82;
@@ -237,7 +256,7 @@
 .importerr {
   flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start;
   margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
-  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-bad); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .importerr button { margin-left: auto; padding: 0 6px; }
@@ -247,7 +266,7 @@
 .savefail {
   flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
-  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-bad); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .savefail[hidden] { display: none; }
@@ -256,7 +275,7 @@
 .resetconfirm {
   flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   margin-top: 8px; padding: 8px 10px; font-size: 0.8rem;
-  color: var(--cs-text); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-text); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .resetconfirm > span:first-child { flex: 1 1 24rem; }
@@ -358,7 +377,7 @@ input.ro, input.ro:focus, textarea.ro, textarea.ro:focus {
 }
 table.build td.over input, table.build td.over .expr { color: var(--cs-muted); }
 /* A slot the character is still owed: the row carries a soft warning wash. */
-tr.needsfill td { background: rgba(224, 99, 95, 0.07); }
+tr.needsfill td { background: color-mix(in srgb, var(--cs-bad) 7%, transparent); }
 /* A skill hidden with the eye: shown only under Show all, dimmed, to be reopened. */
 tr.hiddenskill td { opacity: 0.45; }
 tr.hiddenskill td.tools { opacity: 1; }
@@ -419,7 +438,9 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 .offeringfields.dormant { opacity: 0.5; }
 .offeringfields.dormant input { cursor: not-allowed; }
 .wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
-.wealthactions .pair input, .wealthactions .pair select { width: auto; }
+/* The label field carries an inline `width: 15rem`, which is wider than a
+   phone: the inline rule wins on `width`, so the cap has to be a max. */
+.wealthactions .pair input, .wealthactions .pair select { width: auto; max-width: 100%; }
 table.ledger { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-top: 6px; }
 table.ledger th { text-align: left; font-weight: 600; color: var(--cs-muted); font-size: 0.72rem; padding: 2px 6px; border-bottom: 1px solid var(--cs-line); }
 table.ledger td { padding: 3px 6px; border-bottom: 1px solid var(--cs-line); }
@@ -429,9 +450,39 @@ table.ledger td.neg { color: var(--cs-bad); }
 table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
 
 /* ---------- tabs ---------- */
-.tabs {
-  display: flex; gap: 3px; flex-wrap: wrap;
-  margin: 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
+/* The one strip that stays.
+ *
+ * Everything above it -- portrait, name, the row of buttons -- is identity and
+ * errands: read once, then in the way. This is what the sheet is steered with,
+ * and on a tab that runs four screens deep it used to be the first thing off
+ * the top of the window. So it is what gets pinned, and the header scrolls
+ * away underneath it.
+ *
+ * The session strip rides here too rather than in the header. It exists to put
+ * hit points, AC and the saves in front of you mid-fight, which it cannot do
+ * from a header that left the screen two panels ago.
+ *
+ * `--cs-sticky-top` is where it comes to rest: zero against the top of the
+ * window, or a host page's own fixed header height. See docs/embedding.md.
+ */
+.tabrail {
+  position: sticky; top: var(--cs-sticky-top); z-index: 30;
+  margin: 6px 0 12px; padding: 6px 0 8px;
+  background: var(--cs-bg);
+  border-bottom: 1px solid var(--cs-line);
+}
+.tabrail .sessionstrip { margin: 0 0 6px; }
+.tabs { display: flex; gap: 3px; flex-wrap: wrap; }
+/* Pinned chrome has to have a bounded height, and sixteen tabs at phone width
+   wrap to five rows -- most of the screen, held there. One row that scrolls
+   sideways instead; the bar keeps the open tab in view after every render. */
+@media (max-width: 700px) {
+  .tabs {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    scroll-padding-inline: 12px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: 0 0 auto; }
 }
 .tabs button { border-radius: 6px 6px 0 0; }
 /* A coloured tab. `--tab-color` is set inline per button, and the rules read
@@ -498,6 +549,13 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
 /* Panels now hold editable controls rather than plain text, so they need more
    room than a display-only layout did. */
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+/* A grid item's automatic minimum is its content's, and a panel holding a wide
+   table reports that table's width -- through the scroll box that was put
+   there to contain it. On a track with a fixed floor that never showed; on a
+   `1fr` track it sets the floor, and one eight-column grid pushes the whole
+   page sideways on a phone. The panels shrink; the tables inside them scroll,
+   which is what they were wrapped for. */
+.grid > * { min-width: 0; }
 .panel {
   background: var(--cs-panel); border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius); padding: 11px 12px;
@@ -911,14 +969,33 @@ option[data-ab]:not([data-ab=""]) {
 .ability-head span:first-child { text-align: left; }
 
 /* ---------- tables ---------- */
-.tablewrap { overflow-x: auto; }
+/* A scroll box on both axes. Sideways is what it was always for; downwards is
+   what makes the sticky headings below work at all. `overflow-x: auto` alone
+   already computed `overflow-y: auto`, so this box was the scroll container
+   the headings resolved against -- and with no height to resolve against, they
+   stuck to a box that was itself moving up the page, which is to say they
+   never stuck to anything. Capping it gives them one. */
+.tablewrap { overflow: auto; max-height: var(--cs-table-max); scrollbar-width: thin; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
 th {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--cs-muted); font-weight: 600; position: sticky; top: 0;
-  background: var(--cs-panel); z-index: 1;
+  color: var(--cs-muted); font-weight: 600;
+  background: var(--cs-panel);
 }
+/* The heading block, not the cells. A `table.build` carries two heading rows --
+   the group band above the column names -- and sticking each cell to `top: 0`
+   would stack the second row on the first. Above the frozen first column
+   (`th[scope="row"]`, z-index 2), or the two would trade places at the corner
+   where both are stuck at once.
+
+   Under `border-collapse: collapse` the border belongs to the table rather
+   than the cell, and a row that lifts away from the table leaves its border
+   behind -- so the rule under the headings is traded for an inset shadow,
+   which travels with them. The border goes, or the two would draw a 2px line
+   between them everywhere the headings are not moving. */
+.tablewrap thead { position: sticky; top: 0; z-index: 4; }
+.tablewrap thead th { border-bottom: 0; box-shadow: inset 0 -1px 0 var(--cs-line); }
 /* Alternating rows, for a table wide enough that an eye can lose its place.
    Hover is the whole step, so it still reads on a striped row and a plain one
    alike; a cell with a wash of its own (a group band, a row that wants
@@ -1019,7 +1096,10 @@ label.fld > .value {
   text-transform: none; letter-spacing: 0;
 }
 label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
-.pair { display: flex; align-items: center; gap: 5px; }
+/* Wraps, because a pair is a row of controls inside something that is itself
+   a wrapping row: without this the outer row wraps and the pair does not, so
+   on a narrow screen one long pair carries the page sideways with it. */
+.pair { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .pair input { width: 3.4rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
@@ -1151,7 +1231,8 @@ table.talents.bonus col.source { width: 14%; }
 .sidepanels table.talents col.talent { width: auto; }
 /* Mirrors the sheet's conditional formatting: green = this level grants a talent. */
 td.slot-on input, td.slot-on select, td.slot-on textarea, td.slot-on .prose-view {
-  background: rgba(107, 191, 123, 0.10); border-color: rgba(107, 191, 123, 0.45);
+  background: color-mix(in srgb, var(--cs-good) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cs-good) 45%, transparent);
 }
 td.slot-off input, td.slot-off select, td.slot-off textarea { opacity: 0.25; background: transparent; }
 /* A blended class spends one pool either way, so its sphere cell says which
@@ -1440,9 +1521,12 @@ table.gear th.colhead { white-space: nowrap; }
   display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end;
   margin-bottom: 6px;
 }
-.weapongrid label.fld { flex: 0 0 auto; }
+/* Content-sized, but never wider than the row it sits in: the Groups select
+   is as wide as its longest option name, which on a phone is wider than the
+   card. It shrinks rather than pushing the page out from under itself. */
+.weapongrid label.fld { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .weapongrid input[type="number"] { width: 3.2rem; }
-.weapongrid select { width: auto; min-width: 0; }
+.weapongrid select { width: auto; min-width: 0; max-width: 100%; }
 .weapongrid input[type="text"] { width: 7rem; }
 .weapongrid input.w-dice { width: 5.5rem; font-family: var(--cs-mono); }
 .weapongrid input.w-dice.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
@@ -1992,8 +2076,8 @@ input[type="color"] {
   padding: 1px 4px; border-radius: 3px; color: var(--cs-text);
 }
 .preview { font-size: 0.78rem; font-family: var(--cs-mono); padding: 5px 8px; border-radius: 5px; }
-.preview.ok { background: rgba(107, 191, 123, 0.12); color: var(--cs-good); }
-.preview.err { background: rgba(224, 99, 95, 0.12); color: var(--cs-bad); }
+.preview.ok { background: color-mix(in srgb, var(--cs-good) 12%, transparent); color: var(--cs-good); }
+.preview.err { background: color-mix(in srgb, var(--cs-bad) 12%, transparent); color: var(--cs-bad); }
 
 /* ---------- audit ---------- */
 .audit-row {
@@ -2041,13 +2125,15 @@ input[type="color"] {
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
   border: 1px solid var(--cs-accent); color: var(--cs-accent); background: rgba(212,162,74,0.10); white-space: nowrap; }
 .pill button { font: inherit; font-size: 0.8rem; line-height: 1; padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; opacity: 0.7; }
-.pill button:hover { opacity: 1; color: #e0635f; }
+.pill button:hover { opacity: 1; color: var(--cs-bad); }
 /* The extension shelf on the manager: one heading per pack above its blocks. */
 .rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
 
 @container (max-width: 560px) {
-  /* Narrower than a single crafting column: one panel per row, tables scroll. */
-  .grid.crafting { grid-template-columns: 1fr; }
+  /* Narrower than a single crafting column: one panel per row, tables scroll.
+     `minmax(0, …)` and not a bare `1fr`, or the track takes its floor from the
+     widest table in it and the row stops being one panel wide. */
+  .grid.crafting { grid-template-columns: minmax(0, 1fr); }
   /* The temporary pair goes; the score, the modifier and the die stay. */
   .ability, .ability-head { grid-template-columns: 2.8rem 3.4rem 2.6rem 1.7rem; }
   .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
@@ -2931,9 +3017,12 @@ label.fld > .rollpair > input { flex: 1; min-width: 0; }
    nothing under the pointer should move because of it. The slot is a sticky
    strip of no height, so the card floats at the top of whatever part of the
    sheet is on screen and the table below it never shifts. */
-.rollslot { position: sticky; top: 6px; height: 0; z-index: 40; }
+/* Hung off the bottom of the pinned rail rather than stuck to the window on
+   its own: the rail is the fixed point now, so the toast has one place it
+   always appears and nothing to negotiate with. */
+.rollslot { position: absolute; top: 100%; left: 0; right: 0; height: 0; z-index: 40; }
 .rolltoast {
-  position: absolute; top: 0; right: 0; width: min(32rem, 100%);
+  position: absolute; top: 6px; right: 0; width: min(32rem, 100%);
   background: var(--cs-panel); border: 1px solid var(--cs-accent);
   border-radius: var(--cs-radius); padding: 8px 10px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
@@ -3153,6 +3242,15 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .resetconfirm,
   .tabmenu,
   dialog { display: none !important; }
+
+  /* The rail loses its tabs above but keeps the session strip, which is a row
+     of the character's numbers and belongs on paper. What goes is the pinning:
+     a sticky box on a page that does not scroll is a box that lands on page
+     one and nowhere else. */
+  .tabrail {
+    position: static; z-index: auto; background: none;
+    border-bottom: 0; padding: 0; margin: 0 0 8px;
+  }
 
   /* Buttons go as a class, then the two kinds that are not affordances come
      back. A maneuver's name is the content of its row, not a control on it. */

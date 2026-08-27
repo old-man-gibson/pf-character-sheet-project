@@ -1179,6 +1179,8 @@ export class CharacterSheetElement extends HTMLElement {
       ${SHEET_LINK}
       <div class="wrap">
         ${this.#header()}
+        <div class="tabrail">
+        ${this.#sessionStrip()}
         <nav class="tabs" role="tablist" aria-label="Character sheet sections">
           ${bar.map((e) => {
     // A colour is a normalised `#rrggbb` or nothing, so it is safe in the
@@ -1198,13 +1200,15 @@ export class CharacterSheetElement extends HTMLElement {
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
             title="Show, hide and rearrange tabs">⚙</button>
         </nav>
-        ${this.#tabColorMenuHtml()}
         <div class="rollslot">${this.#rollToastHtml()}</div>
+        </div>
+        ${this.#tabColorMenuHtml()}
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
       </div>`;
     this.#applyCharacterColor();
     this.#bind();
+    this.#showActiveTab();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
@@ -1295,7 +1299,6 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
           </div>
-          ${this.#sessionStrip()}
         </div>
         <div class="head-actions">
           ${this.#searchButton()}
@@ -3557,8 +3560,54 @@ export class CharacterSheetElement extends HTMLElement {
       if (id === this.#tab) return;
       this.#tab = id;
       this.#render();
-      this.shadowRoot.getElementById(`tab-${id}`)?.focus();
+      this.shadowRoot.getElementById(`tab-${id}`)?.focus({ preventScroll: true });
+      this.#showPanelTop();
     });
+  }
+
+  /**
+   * Where a tab switch leaves you.
+   *
+   * The panel that just opened starts at its top, so that is where the reader
+   * should be standing. Without this you keep whatever offset the last tab had
+   * -- clamped to the new panel's height, which is an arbitrary place inside
+   * it -- and the commonest way to open a tab is also the commonest way to
+   * arrive somewhere you did not ask for.
+   *
+   * Only ever upwards. Clicking a tab while the header is still on screen must
+   * not scroll the header away to satisfy a rule about panel tops.
+   *
+   * `scrollIntoView` rather than `window.scrollTo` because an embedded sheet
+   * may sit inside a scroll container belonging to the host, and the margin is
+   * measured rather than written in the stylesheet because the rail stands one
+   * row taller in the session view.
+   */
+  #showPanelTop() {
+    const body = this.shadowRoot.querySelector('.body');
+    if (!body) return;
+    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
+    body.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
+    if (body.getBoundingClientRect().top < (rail?.bottom ?? 0) - 1) {
+      body.scrollIntoView({ block: 'start' });
+    }
+  }
+
+  /**
+   * Keep the open tab in sight on a bar that scrolls sideways.
+   *
+   * Below 700px the bar is one scrolling row rather than five wrapped ones, so
+   * that pinning it costs a strip and not half the screen -- and a row that
+   * scrolls starts every render back at its left edge. Centring the open tab
+   * is what stops "which tab am I on" from being a horizontal search.
+   */
+  #showActiveTab() {
+    const bar = this.shadowRoot.querySelector('nav.tabs');
+    const tab = bar?.querySelector('[role="tab"][aria-selected="true"]');
+    if (!tab || bar.scrollWidth <= bar.clientWidth) return;
+    const t = tab.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    if (t.left >= b.left && t.right <= b.right) return;
+    bar.scrollLeft += (t.left - b.left) - (b.width - t.width) / 2;
   }
 
   /**
@@ -3627,7 +3676,16 @@ export class CharacterSheetElement extends HTMLElement {
     const root = this.shadowRoot;
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
-      b.addEventListener('click', () => { this.#tab = b.dataset.tab; this.#render(); });
+      b.addEventListener('click', () => {
+        this.#tab = b.dataset.tab;
+        this.#render();
+        // The button that was clicked no longer exists -- `#render` replaced
+        // the whole root -- so focus has to be put back on the one that took
+        // its place, or a keyboard is dropped on the document mid-bar. The
+        // arrow keys have always done this; the click path had not.
+        this.shadowRoot.getElementById(`tab-${this.#tab}`)?.focus({ preventScroll: true });
+        this.#showPanelTop();
+      });
     });
     this.#bindTabKeys(root);
     this.#bindTabColor(root);

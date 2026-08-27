@@ -302,7 +302,7 @@ function akashicClassesPanel(a) {
     return `<section class="panel span2">
       <h3>Veilweaving <span class="badge">${rows.length} class${rows.length === 1 ? '' : 'es'}</span></h3>
       <div class="akashic-head">
-        <div class="ak-classes">
+        <div class="ak-classes tablewrap">
           <table class="build"><thead><tr>
             <th>Class</th><th>Mod</th><th class="num">Lvl</th>
             <th class="num">Ess.</th><th class="num">Bonus</th><th class="num">Cap</th><th></th>
