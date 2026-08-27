@@ -443,6 +443,16 @@ function stackRowKey(row) {
 const HELP_LENGTH = 180;
 
 /**
+ * More blocks than this in one supergroup and it arrives folded.
+ *
+ * Measured rather than chosen per pack, the way `HELP_LENGTH` is: a chakra
+ * carrying sixty veils is an index you open one line of, and a class with two
+ * option menus and an archetype under it is worth reading whole. Folding that
+ * second one by default would put a pack's content behind a click for nothing.
+ */
+const EXT_GROUP_FOLD = 12;
+
+/**
  * What the help is about.
  *
  * The multi-paragraph hints already announce their own subject in bold --
@@ -2977,9 +2987,7 @@ export class CharacterSheetElement extends HTMLElement {
       if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
       return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
     };
-    const rows = [...byPack.entries()].map(([id, p]) => `
-      <h4 class="ext-pack">${esc(p.name)}</h4>
-      ${p.blocks.map((b) => { const g = gate(b); return `<div class="item statline">
+    const blockRow = (id, b) => { const g = gate(b); return `<div class="item statline">
         <span class="label pair" style="flex:1">
           <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
           <strong>${esc(b.name || '(unnamed)')}</strong>
@@ -2990,7 +2998,88 @@ export class CharacterSheetElement extends HTMLElement {
           <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
             title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
         </span>
-      </div>`; }).join('')}`).join('');
+      </div>`; };
+
+    /*
+     * Which supergroup a block sits in, inside its pack.
+     *
+     * What the pack says first, so a block can always be filed by hand; then
+     * the class it is for, which is how an archetype and an option menu name
+     * theirs; then, for a class, its own name -- so the class heads the group
+     * its archetypes and menus have already joined, and folding it takes the
+     * lot. A veil groups by the chakra it is worn on, an alternate trait by
+     * the race it is an alternative for.
+     *
+     * A block with none of those is loose in its pack rather than filed under
+     * a guess. Notes are the ones that land there: a note carries no link to
+     * what it is about, so a pack that wants "Favored class options" to fold
+     * with its class says `"group": "<class name>"` on it.
+     */
+    const groupOf = (b) => b.group
+      || b.class
+      || (b.kind === 'class' ? b.name : '')
+      || (b.kind === 'veil' ? b.slot : '')
+      || (b.kind === 'trait' ? b.race : '')
+      || '';
+    // Searching folds nothing: a hit inside a shut group is a hit you cannot
+    // see, which reads as the search having missed it.
+    const seeking = words.length > 0;
+    const packList = [...byPack.entries()].map(([id, p]) => {
+      const groups = new Map();
+      for (const b of p.blocks) {
+        const key = groupOf(b);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(b);
+      }
+      const loose = groups.get('') || [];
+      groups.delete('');
+      /*
+       * A note, filed by what it is called.
+       *
+       * Every other kind says where it belongs -- an option menu and an
+       * archetype name their class, a veil its chakra -- and a note says
+       * nothing at all: `kind, name, text, source` is the whole of it. So a
+       * note whose name contains one of its own pack's group names is taken to
+       * be about it, which is what "Favored class options — Legendary Samurai"
+       * plainly is. Notes only: the other kinds have a field to be believed
+       * instead of a string to be guessed at, and `group` overrides this for a
+       * pack that would rather say so outright.
+       *
+       * Longest name first, so a pack holding both Samurai and Legendary
+       * Samurai files the note under the one it actually named.
+       */
+      const groupNames = [...groups.keys()].sort((a, b) => b.length - a.length);
+      for (const note of [...loose]) {
+        if (note.kind !== 'note') continue;
+        const hay = String(note.name || '').toLowerCase();
+        const owner = groupNames.find((n) => n && hay.includes(n.toLowerCase()));
+        if (!owner) continue;
+        groups.get(owner).push(note);
+        loose.splice(loose.indexOf(note), 1);
+      }
+      const packKey = `extpack:${id}`;
+      const packShut = !seeking && rows.isCollapsed(this.#model, packKey);
+      const groupHtml = [...groups.entries()].map(([name, list]) => {
+        const key = `extgrp:${id}:${name}`;
+        // Big groups arrive folded, small ones open. A chakra of sixty veils
+        // is an index to open one line of; a class with three menus under it
+        // is worth reading whole, and folding it by default would hide the
+        // pack's content behind a click for nothing.
+        const shut = !seeking && rows.isCollapsed(this.#model, key, list.length > EXT_GROUP_FOLD);
+        return `<div class="foldsub extgroup${shut ? ' collapsed' : ''}">
+          <h4 class="subhead">${esc(name)}
+            <span class="badge">${list.length}</span>
+            ${rows.foldButton(this.#model, key, shut)}</h4>
+          ${shut ? '' : list.map((b) => blockRow(id, b)).join('')}
+        </div>`;
+      }).join('');
+      return `<div class="foldsub extpack${packShut ? ' collapsed' : ''}">
+        <h4 class="subhead ext-pack">${esc(p.name)}
+          <span class="badge">${p.blocks.length}</span>
+          ${rows.foldButton(this.#model, packKey, packShut)}</h4>
+        ${packShut ? '' : `${loose.map((b) => blockRow(id, b)).join('')}${groupHtml}`}
+      </div>`;
+    }).join('');
 
     return `<section class="panel span2">
       <h3>Extensions — building blocks</h3>
@@ -3011,7 +3100,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
       </p>` : ''}
       <div class="rowlist">
-        ${rows || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
+        ${packList || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
     : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
       </div>
     </section>`;

@@ -114,7 +114,14 @@ export function normalizeBlock(block) {
   const b = obj(block);
   const kind = lower(b.kind);
   if (!BLOCK_KINDS[kind]) return null;
-  const base = { kind, name: str(b.name).trim(), text: str(b.text), source: str(b.source) };
+  // `group` is on every kind, not just features: it is what a pack calls the
+  // supergroup a block belongs to, and the blocks panel folds by it. A note
+  // that belongs to a class has no other way to say so -- it carries no class
+  // field -- so without this it can only ever sit loose in its pack.
+  const base = {
+    kind, name: str(b.name).trim(), text: str(b.text), source: str(b.source),
+    group: str(b.group).trim(),
+  };
   switch (kind) {
     case 'class':
       return {
@@ -155,7 +162,7 @@ export function normalizeBlock(block) {
       return { ...base, race: str(b.race).trim(), replaces: given.length ? given : parseReplaces(base.text) };
     }
     case 'feature':
-      return { ...base, type: featureType(b.type), group: str(b.group).trim() };
+      return { ...base, type: featureType(b.type) };
     case 'template':
       return {
         ...base,
