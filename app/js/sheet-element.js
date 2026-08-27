@@ -437,6 +437,9 @@ export class CharacterSheetElement extends HTMLElement {
   #snapshotTimer = null;
   #adopting = null;
   #tab = 'overview';
+  /* What was last written to the view store, so a render that changed nothing
+     does not write. */
+  #tabWritten = null;
   #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '' };
   #menuLists = new Map();   // option menus a render's feature cells offer, name -> {id, menu}
   #editTracker = null;   // id of the custom tracker being edited in place
@@ -738,6 +741,10 @@ export class CharacterSheetElement extends HTMLElement {
     }
 
     this.#adoptDocument(open);
+    // The model is what names the store, so the tab can only be read back once
+    // there is one -- and it has to be read before the first render, or the
+    // sheet opens on Overview and then jumps.
+    this.#restoreTab();
     /*
      * The working slot is only rewritten when it had drifted, and then only to
      * settle it against what is now on screen -- otherwise the next reload would
@@ -1259,6 +1266,7 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
       </div>`;
+    this.#rememberTab();
     this.#applyCharacterColor();
     this.#bind();
     this.#showActiveTab();
@@ -3828,6 +3836,42 @@ export class CharacterSheetElement extends HTMLElement {
       this.shadowRoot.getElementById(`tab-${id}`)?.focus({ preventScroll: true });
       this.#showPanelTop();
     });
+  }
+
+  /**
+   * The tab you were on, per character.
+   *
+   * Reopening a sheet on Overview when you left it halfway down Magic Spheres
+   * is a small thing to have to undo and it happens on every reload. Kept in
+   * `localStorage` beside the working copy rather than in `uiPrefs`: which tab
+   * you were reading is not a fact about the character, and writing it there
+   * would make opening a tab an unsaved change.
+   *
+   * Written from `#render` rather than from the several places that set the
+   * tab, guarded by what was written last -- so it costs one comparison per
+   * render and a write only when the answer actually moved.
+   */
+  #viewKey() {
+    const custom = this.getAttribute('storage-key');
+    const id = this.#model?.data?.id ?? 'character';
+    return custom ? `${custom}:tab` : `character-sheet:tab:${id}`;
+  }
+
+  #rememberTab() {
+    if (this.isPublished || this.#tab === this.#tabWritten) return;
+    this.#tabWritten = this.#tab;
+    try { localStorage.setItem(this.#viewKey(), this.#tab); } catch { /* private window */ }
+  }
+
+  /** The tab to open on, if the one remembered is still on this character's bar. */
+  #restoreTab() {
+    if (this.isPublished) return;
+    let saved = null;
+    try { saved = localStorage.getItem(this.#viewKey()); } catch { /* private window */ }
+    // `#render` drops a tab this character does not have, so an id that has
+    // since gone simply falls back to the first on the bar.
+    if (saved) this.#tab = saved;
+    this.#tabWritten = saved;
   }
 
   /**

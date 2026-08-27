@@ -16,6 +16,14 @@
     margin: 0; background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+  /* Off-screen until it is the thing being used, which is the only time it is
+     any use. Not `display: none`: that takes it out of the tab order too. */
+  .skiplink {
+    position: absolute; left: -9999px; top: 0; z-index: 20;
+    background: var(--panel); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 0 0 6px 0; padding: 8px 14px; font-size: 0.85rem; text-decoration: none;
+  }
+  .skiplink:focus { left: 0; }
   /* Not sticky, deliberately. It grows a row per few characters -- five of them
      hold 170px of the window on a laptop and 314px on a phone -- to keep in
      view a strip that is touched once a session. The sheet's own tab rail is
@@ -125,12 +133,15 @@
   @media print {
     :root { color-scheme: light; }
     body { background: #fff; color: #000; }
-    header.app, #banner, .welcome, dialog { display: none !important; }
+    header.app, #banner, .welcome, .skiplink, dialog { display: none !important; }
     character-sheet { border: 0; }
   }
 </style>
 </head>
 <body>
+<!-- Two per character plus five standing buttons is sixteen tab stops before the
+     sheet, and it grows with the roster. This is the way past them. -->
+<a class="skiplink" href="#sheet">Skip to the sheet</a>
 
 <header class="app">
   <h1>Character Sheets</h1>
@@ -157,7 +168,7 @@
     </div>
     <p class="hint">You can also drop a file anywhere on this page.</p>
   </section>
-  <character-sheet id="sheet" theme="dark" hidden></character-sheet>
+  <character-sheet id="sheet" theme="dark" tabindex="-1" hidden></character-sheet>
 </main>
 
 <input type="file" id="importFile" accept="application/json,.json,.xlsx,.xlsm" hidden>
@@ -239,6 +250,12 @@
    * below is what makes it show up again after a reload.
    */
   const LIBRARY_KEY = 'character-sheet:library';
+  // Up here with the other keys rather than beside the code that reads it:
+  // `current` is worked out further down but still above where that code
+  // would naturally sit, and a `const` read before its declaration throws --
+  // into the try/catch that is there for a private window, which turned a
+  // reference error into a silent "nothing was remembered".
+  const LAST_KEY = 'character-sheet:last';
   const docKey = (id) => `character-sheet:doc:${id}`;
   const editsKey = (id) => `character-sheet:${id}`;
 
@@ -261,7 +278,22 @@
 
   let library = readLibrary();
   const all = () => [...bundled, ...library];
-  let current = all()[0]?.id;
+  /*
+   * The character you had open, not the first one on the list.
+   *
+   * Checked against the roster rather than trusted: a character can be removed
+   * between one visit and the next, and landing on "its data is missing" would
+   * be a worse greeting than landing on the wrong character. Per browser rather
+   * than in any document -- which character you were looking at is not a fact
+   * about any of them.
+   */
+  const lastOpened = () => {
+    try { return localStorage.getItem(LAST_KEY); } catch { return null; }
+  };
+  let current = (() => {
+    const want = lastOpened();
+    return all().some((c) => c.id === want) ? want : all()[0]?.id;
+  })();
 
   function say(kind, text) {
     banner.innerHTML = `<div class="banner ${kind}"><span></span><button>Dismiss</button></div>`;
@@ -319,7 +351,7 @@
         title="Fold the picker to just the open character">▾ Fold</button>`}`;
 
     picker.querySelectorAll('button.pick').forEach((b) => {
-      b.addEventListener('click', () => { current = b.dataset.id; select(); draw(); });
+      b.addEventListener('click', () => { current = b.dataset.id; rememberOpen(); select(); draw(); });
     });
     picker.querySelectorAll('button.drop').forEach((b) => {
       b.addEventListener('click', () => remove(b.dataset.drop));
@@ -425,6 +457,14 @@
     } catch {
       return null;
     }
+  }
+
+  /** Which character to open next time. Never worth failing a click over. */
+  function rememberOpen() {
+    try {
+      if (current) localStorage.setItem(LAST_KEY, current);
+      else localStorage.removeItem(LAST_KEY);
+    } catch { /* a private window keeps nothing; the picker still works */ }
   }
 
   function select() {

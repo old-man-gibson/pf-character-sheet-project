@@ -172,8 +172,17 @@ export function renderOverviewPanel(model, ctx) {
         ${conditionsPanel(model)}
         ${carryPanel(model)}
       </div>
-      ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
-      ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
+      ${/*
+           * Wealth is capped at 54rem -- a ledger reads worse the wider it gets --
+           * which on a laptop left 495px of empty grid beside it, and Buffs is a
+           * short row of chips directly above. Paired, so the gap holds the thing
+           * that was going to be under it anyway. Below 900px the pair is one
+           * column again, which is what `.pairrow` does on its own.
+           */''}
+      <div class="pairrow span2 wealthpair">
+        ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
+        ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
+      </div>
       ${traitsPanel(model, ctx, model, ctx)}
     </div>`;
   }
@@ -226,16 +235,25 @@ export function renderDashboardPanel(model, ctx) {
    * psionic pool, the Spheres casting numbers. The reference lists (veils,
    * readied maneuvers, talents) wait in the arranger, because which of those
    * belongs on a player's overview is a playstyle call, not a data one.
+   *
+   * `quick` leads. Damage, Heal and Rest are the controls pressed every round
+   * of every fight, and they were tenth -- a thousand pixels down, under
+   * Movement and Active effects, on the one view whose whole reason for
+   * existing is what a table asks for mid-fight. The strip above shows hit
+   * points and cannot change them, so this is the only place they move.
+   *
+   * A default, not a rule: `Arrange cards` has always been able to disagree,
+   * and a player who has already arranged theirs keeps the order they chose.
    */
 function dashDefaultCards(model) {
     const inUse = model.systemTabsInUse();
     const tagged = model.taggedSystemTabs();
     const on = (id) => inUse[id] || tagged.has(id);
-    const out = ['conditions', 'buffs', 'resources'];
+    const out = ['quick', 'conditions', 'buffs', 'resources'];
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
     if (on('combat') && model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects', 'quick');
+    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects');
     return out;
   }
 
@@ -1002,7 +1020,7 @@ function detailsPanel(model) {
         ${field('Hero points', `<span class="pair">
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
           <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`)}
-        ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'))}
+        ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
       </div>
       ${characterColorRow(c.identity.color)}
     </section>`;

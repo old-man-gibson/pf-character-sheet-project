@@ -442,6 +442,9 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
    Across the full width it was mostly rule, so it is capped and left where the
    column starts. */
 .panel.wealth { max-width: 54rem; }
+/* Already bounded by its column in the pair; a second cap would leave a gap
+   inside a gap. */
+.pairrow.wealthpair > .panel.wealth { max-width: none; }
 .wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
 .wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
@@ -1170,6 +1173,9 @@ table.build tr.costrow td, table.build tr.costrow th {
 /* ---------- editable fields ---------- */
 .fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .fieldgrid.two { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+/* A field whose value is longer than a track: a URL beside a hero-point count
+   got a sixth of what it held, and there was no reading it or checking it. */
+.fieldgrid label.fld.wide { grid-column: 1 / -1; }
 label.fld { display: flex; flex-direction: column; gap: 3px; }
 label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
@@ -2342,6 +2348,9 @@ input[type="color"] {
 .pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* The ledger takes the width it is worth and the buffs take the rest, rather
+     than the rest being nothing. */
+  .pairrow.wealthpair { grid-template-columns: minmax(0, 54rem) minmax(0, 1fr); }
 }
 
 /* ---------- the class table ----------

@@ -290,6 +290,19 @@ move along it (wrapping at both ends), **Home** and **End** jump to the first an
 The tab you move to opens as you reach it, which is what a click does too. From the bar,
 one more **Tab** press is into the panel itself.
 
+Getting *to* the sheet is one stop as well. The picker is two tab stops per character
+and grows with the roster, so the first thing on the page is a **Skip to the sheet**
+link — invisible until it is the thing being used, and from it one more **Tab** is into
+the rail.
+
+### Where it opens
+
+**On the character and the tab you left.** Which character was open, and which tab on
+each of them, are kept per browser rather than in any document: neither is a fact about
+a character, and writing them into one would make reading a tab an unsaved change. A
+character that has since been removed, or a tab this character does not have, falls back
+rather than complaining.
+
 ### Printing a tab
 
 **Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
