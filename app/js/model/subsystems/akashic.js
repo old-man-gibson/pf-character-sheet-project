@@ -9,7 +9,7 @@ import {
   ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, tempEssence, tempEssenceCost, veilDC,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { sphereTalentKnowledge } from '../spheres.js';
+import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
 import { slug } from '../util.js';
 
 export const AKASHIC_DERIVED = [
@@ -25,35 +25,88 @@ export const AKASHIC_DERIVED = [
  * A sphere veilweaver reaches veils two ways. Without a tradition they know a
  * handful they picked one at a time; with one, they know a whole class's list
  * -- *"You gain knowledge of every veil on the daevic veil list"* -- without
- * having a level in that class. Three of them are printed, one per class.
+ * having a level in that class. Three are printed, but the sphere marks them
+ * with a `(tradition)` tag the way it marks its others `(essence)` and
+ * `(bind)`, so the tag is what is read rather than a list of three names: a
+ * pack that adds a fourth works with nothing changed here.
  *
- * Keyed on the class rather than the talent so the catalogue's own `classes`
- * field is what answers: the narrowing that already works for someone with
- * levels in a class is the same narrowing, from a different source.
+ * What comes out is a class name, because the narrowing that already works for
+ * someone with levels in a class is the same narrowing from another source --
+ * the veil catalogue's own `classes` field answers both.
  */
-export const VEIL_TRADITIONS = [
-  ['daevic', 'Daevic'],
-  ['guru', 'Guru'],
-  ['vizier', 'Vizier'],
-];
+export const TRADITION_TAG = 'tradition';
+
+/** The three the book prints, for a test to name and a reader to recognise. */
+export const VEIL_TRADITIONS = ['Daevic', 'Guru', 'Vizier'];
 
 /**
- * Which of those a character has taken.
+ * A talent cell split into what it is called and what is bracketed after it.
  *
- * The talent cell is the player's own text -- "Daevic's Tradition", and often
- * with what it was taken for in brackets after it -- so this asks whether the
- * printed name is in there rather than whether the cell equals it. Both
- * apostrophes, because a sheet typed on a phone gets the curly one and a sheet
- * typed on a keyboard gets the straight one, and neither is wrong.
+ * The cell is the player's own text and carries two different kinds of
+ * bracket: the talent's own tag, `(tradition)`, and what they took it for,
+ * `(Wrath)`. Both are peeled, innermost last, so a cell reading
+ * "Daevic's Tradition (tradition) (Wrath)" gives up both and leaves the name.
+ */
+function peelTags(raw) {
+  let name = String(raw ?? '').trim();
+  const tags = [];
+  for (;;) {
+    const m = /\s*(?:\(([^()]*)\)|\[([^\][]*)\])\s*$/.exec(name);
+    if (!m) break;
+    tags.push(String(m[1] ?? m[2] ?? '').trim().toLowerCase());
+    name = name.slice(0, m.index).trim();
+  }
+  return { name, tags };
+}
+
+/**
+ * Which class a tradition talent opens.
+ *
+ * Its name says so -- "Daevic's Tradition" -- with either apostrophe, since a
+ * sheet typed on a phone gets the curly one. Where a pack's talent is called
+ * something else, its own rules text says it in the sentence the book uses,
+ * and that is asked second.
+ */
+function traditionClassOf(name, text) {
+  const named = /^(.+?)['\u2019]s\s+tradition$/i.exec(String(name || '').trim());
+  const said = named ? null : /every veil on the\s+(.+?)\s+veil list/i.exec(String(text || ''));
+  const cls = (named?.[1] ?? said?.[1] ?? '').trim();
+  // Titled, which is cosmetic and only that: the catalogue is matched
+  // case-insensitively, so this is for the day something shows the list rather
+  // than for the matching. The name comes out of a cell somebody typed and out
+  // of a sentence of rules text, and "vizier" beside "Legendary Monk" reads
+  // like a fault in the sheet rather than a shift key.
+  return cls.replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
+}
+
+/**
+ * The classes this character's Veilweaving talents open.
+ *
+ * A talent counts when it is tagged `(tradition)` -- either in the cell, which
+ * is how it reads before a Spheres of Power pack is imported, or in the
+ * catalogue entry the cell names once one is. Asked per talent and anchored to
+ * the whole name, so "Shape Additional Veil (see Daevic's Tradition)" is a
+ * note about one rather than one.
  */
 export function veilTraditionClasses(model) {
   const known = sphereTalentKnowledge(model, model.data.training?.magic, 'magic');
-  let names = [];
+  const cells = [];
   for (const [sphere, row] of known) {
-    if (String(sphere).trim().toLowerCase() === 'veilweaving') names = names.concat(row.names || []);
+    if (String(sphere).trim().toLowerCase() === 'veilweaving') cells.push(...(row.names || []));
   }
-  const said = names.join(' | ').toLowerCase().replace(/\u2019/g, "'");
-  return VEIL_TRADITIONS.filter(([key]) => said.includes(`${key}'s tradition`)).map(([, label]) => label);
+  const out = [];
+  for (const cell of cells) {
+    const { name, tags } = peelTags(cell);
+    const entry = sphereTalent('Veilweaving', name);
+    const tagged = [...tags, ...(entry?.tags || [])]
+      .some((t) => String(t).trim().toLowerCase() === TRADITION_TAG);
+    // A pack that has not been imported cannot tag anything, and the three
+    // printed names are unambiguous on their own -- so a talent that names a
+    // class's tradition counts whether or not anyone wrote the tag out.
+    const cls = traditionClassOf(entry?.name || name, entry?.text);
+    if (cls && (tagged || /['\u2019]s\s+tradition$/i.test(name))) out.push(cls);
+  }
+  return [...new Set(out)];
 }
 
 /**

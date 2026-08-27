@@ -462,10 +462,18 @@ tradition you know a handful picked one at a time, and with one you know a whole
 list — *“You gain knowledge of every veil on the daevic veil list”* — with no level in
 that class. Three are printed, **Daevic's**, **Guru's** and **Vizier's**, and taking one
 on the Magic Spheres tab widens the slot's offer exactly as a level in that class would:
-Narockro's Hands slot goes from 19 to 235 with Daevic's, 187 with Vizier's. The talent
-cell is your own text, so the printed name has to appear in it — *Daevic's Tradition
-(Wrath)* counts and either apostrophe will do, but *Shape Additional Veil (Vizier of the
-Ninth Gate)* is not a tradition and is not read as one.
+Narockro's Hands slot goes from 19 to 235 with Daevic's, 187 with Vizier's.
+
+What is read is the **`(tradition)` tag** — the one the sphere puts on those three the
+way it puts `(essence)` and `(bind)` on its others — either written in the cell or
+carried by the talent in an imported Spheres pack, so a pack adding a fourth tradition
+works with nothing changed here. The three printed ones are recognised by name as well,
+since a pack you have not imported cannot tag anything. Which list a tradition opens
+comes from its name (*Daevic's Tradition*, either apostrophe) or, for one named something
+else, from its own rules sentence. The cell is your own text, so what it was taken for can
+sit after it — *Daevic's Tradition (tradition) (Wrath)* reads — while a talent that merely
+mentions one does not: *Shape Additional Veil (see Daevic's Tradition)* is a note about a
+tradition, not one.
 
 > What is **not** modelled yet is the other half of that sphere: without a tradition your
 > known veils are the specific ones your talents name, and the sheet has no list of them

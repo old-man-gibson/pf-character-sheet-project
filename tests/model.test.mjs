@@ -27,7 +27,7 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
-  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -7904,20 +7904,26 @@ console.log('veilweaving sphere -- a tradition opens a class list without the cl
     return got;
   };
 
-  check('the three the book prints', VEIL_TRADITIONS.map(([, label]) => label),
-    ['Daevic', 'Guru', 'Vizier']);
+  check('the three the book prints', VEIL_TRADITIONS, ['Daevic', 'Guru', 'Vizier']);
   check('a sphere veilweaver with no tradition has none', say('Shape Additional Veil'), []);
   check("Daevic's Tradition opens the daevic list", say("Daevic's Tradition"), ['Daevic']);
   check("Guru's", say("Guru's Tradition"), ['Guru']);
   check("Vizier's", say("Vizier's Tradition"), ['Vizier']);
 
-  // The cell is the player's own text, so it is asked whether the printed name
-  // is in it rather than whether it equals it.
-  check('with what it was taken for after it',
-    say("Daevic's Tradition (Wrath)"), ['Daevic']);
+  // The cell is the player's own text and carries two kinds of bracket: the
+  // talent's own `(tradition)` tag, and what they took it for.
+  check('the tag written out', say("Guru's Tradition (tradition)"), ['Guru']);
+  check('the tag and what it was taken for',
+    say("Vizier's Tradition (tradition) (Wrath)"), ['Vizier']);
+  check('what it was taken for alone', say("Daevic's Tradition (Wrath)"), ['Daevic']);
   check('the curly apostrophe a phone types', say('Vizier’s Tradition'), ['Vizier']);
   check('however it was capitalised', say("vizier's TRADITION"), ['Vizier']);
-  check('a talent that merely mentions a class is not one',
+
+  // Anchored to the whole name, so a talent that mentions a tradition is not
+  // one. The first of these is what a substring match gets wrong.
+  check('a note pointing at one is not one',
+    say("Shape Additional Veil (see Daevic's Tradition)"), []);
+  check('and neither is a veil named after a class',
     say('Shape Additional Veil (Vizier of the Ninth Gate)'), []);
 
   // A talent of the same name under another sphere is a different talent.
@@ -7935,6 +7941,59 @@ console.log('veilweaving sphere -- a tradition opens a class list without the cl
   c.recompute();
   check('it narrows while it is live', c.data.akashic.calc.traditions, ['Guru']);
   check('and is stripped on the way out', 'calc' in (c.toJSON().akashic || {}), false);
+  talents().pop();
+  c.recompute();
+}
+
+console.log('veilweaving sphere -- the tag, so a pack can add a fourth tradition');
+{
+  // The three are printed, but the sphere tags them the way it tags its
+  // `(essence)` and `(bind)` talents -- so what is read is the tag, and a pack
+  // carrying a tradition the book never printed needs no code to work.
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Veilweaving',
+      kind: 'magic',
+      talents: [
+        {
+          name: 'Akashic Heritage',
+          tags: ['tradition'],
+          text: 'You gain knowledge of every veil on the nexus veil list.',
+        },
+        {
+          name: "Zodiac's Tradition",
+          tags: ['tradition'],
+          text: 'You gain knowledge of every veil on the zodiac veil list.',
+        },
+        { name: 'Shape Additional Veil', tags: [], text: 'You may shape an additional veil.' },
+      ],
+    }],
+  });
+  const c = new Character(load(IDS[0]));
+  const talents = () => {
+    c.data.training = c.data.training || {};
+    c.data.training.magic = c.data.training.magic || {};
+    c.data.training.magic.bonusTalents = c.data.training.magic.bonusTalents || [];
+    return c.data.training.magic.bonusTalents;
+  };
+  const say = (talent) => {
+    const list = talents();
+    list.push({ sphere: 'Veilweaving', talent });
+    c.recompute();
+    const got = c.data.akashic?.calc?.traditions ?? [];
+    list.pop();
+    c.recompute();
+    return got;
+  };
+
+  check('a pack tradition named for its class', say("Zodiac's Tradition"), ['Zodiac']);
+  // Named something else entirely: the tag says it is one, and its own rules
+  // text -- the sentence the book uses -- says which list it opens.
+  check('and one that is not', say('Akashic Heritage'), ['Nexus']);
+  check('an untagged talent from the same pack is still not one',
+    say('Shape Additional Veil'), []);
+
+  setSphereCatalogue({ spheres: [] });
 }
 
 console.log('row labels -- what a toast calls the thing that just went');
