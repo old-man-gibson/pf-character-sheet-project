@@ -27,6 +27,7 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
+  rowLabel, UNDO_DEPTH,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -7819,6 +7820,82 @@ console.log('spheres of guile -- the associated skills the book prints');
   check('and Vocation, which has neither', guileSkillHint('Vocation'), '');
   check('leverage pools by Hit Dice',
     [1, 2, 3, 6, 9, 20].map(leveragePool), [1, 1, 2, 3, 4, 7]);
+}
+
+console.log('undo -- one step back from a row that should not have gone');
+{
+  const c = new Character(load(IDS[0]));
+  const weapons = () => c.list('equipment.weapons');
+
+  check('nothing to undo on a document nobody has touched', c.undoLabel, null);
+  check('and undoing it changes nothing', c.undo(), null);
+
+  c.listAdd('equipment.weapons', { name: 'Test Halberd', dice: '1d10' });
+  c.listAdd('equipment.weapons', { name: 'Test Sling', dice: '1d4' });
+  const before = weapons().length;
+  const ac = c.data.defenses.ac;
+
+  c.listRemove('equipment.weapons', before - 2);
+  check('the row is gone', weapons().length, before - 1);
+  check('and the offer names it', c.undoLabel, 'Removed Test Halberd');
+  check('undo says what it put back', c.undo(), 'Removed Test Halberd');
+  check('the row is back', weapons().length, before);
+  check('in its own place', weapons()[before - 2].name, 'Test Halberd');
+  check('the stack is spent', c.undoLabel, null);
+  check('and the rest of the sheet is where it was', c.data.defenses.ac, ac);
+
+  // Restored *into* the same object: panels and the element hold `model.data`
+  // across a render, and swapping it would leave them on the old document.
+  const data = c.data;
+  c.listRemove('equipment.weapons', before - 1);
+  c.undo();
+  check('model.data keeps its identity', c.data === data, true);
+
+  // Several steps, taken back newest first.
+  c.listRemove('equipment.weapons', before - 1);
+  c.listRemove('equipment.weapons', before - 2);
+  check('two deep', weapons().length, before - 2);
+  check('newest first', c.undo(), 'Removed Test Halberd');
+  check('then the one before it', c.undo(), 'Removed Test Sling');
+  check('both back', weapons().length, before);
+
+  // Bounded: the oldest falls off rather than the stack growing without end.
+  for (let i = 0; i < UNDO_DEPTH + 5; i += 1) {
+    c.listAdd('equipment.weapons', { name: `Filler ${i}` });
+    c.listRemove('equipment.weapons', weapons().length - 1);
+  }
+  check('never deeper than its limit', c.undoStack.length, UNDO_DEPTH);
+
+  // A removal that cannot happen must not leave a step behind it, or Ctrl+Z
+  // would appear to work and put the document back unchanged.
+  c.clearUndo();
+  c.listRemove('equipment.weapons', 999);
+  check('an out-of-range remove marks nothing', c.undoLabel, null);
+  check('a protected tracker refuses', c.removeTracker('mythic_power'), false);
+  check('and marks nothing either', c.undoLabel, null);
+
+  // A tracker lives outside `equipment`, and the entry is the whole document,
+  // so where a thing lives is not something this has to know.
+  c.addTracker({ name: 'Test Pool', max: 3 });
+  const n = c.trackers.length;
+  c.removeTracker(c.trackers[n - 1].id);
+  check('the tracker is gone', c.trackers.length, n - 1);
+  check('named on the way out', c.undoLabel, 'Removed Test Pool');
+  c.undo();
+  check('and comes back', c.trackers.length, n);
+}
+
+console.log('row labels -- what a toast calls the thing that just went');
+{
+  check('a name', rowLabel({ name: 'Cloak of Resistance' }), 'Cloak of Resistance');
+  check('a label, where there is no name', rowLabel({ label: 'Second wind' }), 'Second wind');
+  check('the first field with anything in it',
+    rowLabel({ name: '', title: 'Untitled', text: 'body' }), 'Untitled');
+  check('whitespace is not a name', rowLabel({ name: '   ' }, 'row'), 'row');
+  check('a bare string is its own label', rowLabel('Wild Talent'), 'Wild Talent');
+  check('nothing at all falls back', rowLabel({}, 'weapon'), 'weapon');
+  check('and so does nothing', rowLabel(null, 'weapon'), 'weapon');
+  check('a long one is cut to fit a sentence', rowLabel({ name: 'x'.repeat(80) }).length, 40);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

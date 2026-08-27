@@ -50,6 +50,7 @@ import {
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
 } from './edit.js';
 import { emit, subscribe } from './events.js';
+import { markUndo, undo, undoLabel, clearUndo } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
@@ -367,6 +368,16 @@ export class Character {
 
   // edit.js
   set(...a) { return setValue(this, ...a); }
+  /* Taking back the last structural change. `markUndo` is called by the
+     operations themselves, before they touch anything; see model/undo.js. */
+  markUndo(...a) { return markUndo(this, ...a); }
+
+  undo(...a) { return undo(this, ...a); }
+
+  clearUndo(...a) { return clearUndo(this, ...a); }
+
+  get undoLabel() { return undoLabel(this); }
+
   list(...a) { return listAt(this, ...a); }
   listAdd(...a) { return listAdd(this, ...a); }
   listRemove(...a) { return listRemove(this, ...a); }

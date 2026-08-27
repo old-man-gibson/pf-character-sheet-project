@@ -502,6 +502,11 @@ export class CharacterSheetElement extends HTMLElement {
   /** The last roll copied, shown back so the player can see what they got. */
   #rollToast = null;    // { kind, ref, what, text, failed }
   #rollToastTimer = null;
+  /* What the last structural change was, offered back. One slot, shared with
+     the roll toast: both report the last thing that happened, and there is
+     only ever one last thing. */
+  #undoToast = null;    // { label }
+  #undoToastTimer = null;
   /**
    * Roll template or bare /roll. A preference of the person playing rather than
    * of the character -- their Roll20 game is what decides it -- so it lives in
@@ -573,7 +578,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.getAttribute('hotkeys') === 'off') return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     const key = e.key?.toLowerCase();
-    if (key !== 'k' && key !== 's') return;
+    if (key !== 'k' && key !== 's' && key !== 'z') return;
     // The path, not `contains`: an event from inside the shadow root is
     // retargeted at the host, and `contains` cannot see across the boundary.
     const path = e.composedPath?.() || [];
@@ -591,6 +596,22 @@ export class CharacterSheetElement extends HTMLElement {
       if (!inside || this.isPublished || !this.#changes) return;
       e.preventDefault();
       this.#action('save');
+      return;
+    }
+    /*
+     * Ctrl+Z takes back the last row that was removed -- and only ever that.
+     * A field has an undo of its own that works per character rather than per
+     * commit, and it is better at typing than anything here would be, so the
+     * key is left alone wherever a caret is standing. Shift is left alone too:
+     * there is no redo, and taking the key for nothing would be worse than not
+     * taking it.
+     */
+    if (key === 'z') {
+      if (!inside || e.shiftKey || this.isPublished) return;
+      if (isTypingIn(path[0] ?? e.target)) return;
+      if (!this.#model?.undoLabel) return;
+      e.preventDefault();
+      this.#undo();
       return;
     }
     // Typing somewhere else on the page: leave the key to whoever is typing.
@@ -759,7 +780,11 @@ export class CharacterSheetElement extends HTMLElement {
     // count would sit at zero forever.
     if (!this.#savedDoc) this.#openedDoc = structuredClone(normalized);
     this.#changes = this.#baseline ? countChanges(this.#baseline, normalized) : 0;
-    this.#model.subscribe(() => {
+    this.#model.subscribe((_model, detail) => {
+      // Something destructive is about to happen and has already saved the
+      // way back; offer it. Before the change rather than after, which is
+      // fine: the render that follows draws the toast from the same field.
+      if (detail?.type === 'undo-mark') this.#showUndoToast(detail.label);
       this.#persist();
       this.dispatchEvent(new CustomEvent('character-change', {
         detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
@@ -1227,7 +1252,7 @@ export class CharacterSheetElement extends HTMLElement {
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
             aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
-        <div class="rollslot">${this.#rollToastHtml()}</div>
+        <div class="rollslot">${this.#slotHtml()}</div>
         </div>
         ${this.#tabColorMenuHtml()}
         ${this.#notices()}
@@ -2913,14 +2938,61 @@ export class CharacterSheetElement extends HTMLElement {
     </div>`;
   }
 
+  /**
+   * What the slot under the rail is showing.
+   *
+   * A copied roll and an offer to undo are both "the last thing that
+   * happened", and there is only ever one of those, so they share the slot
+   * rather than stacking. Whichever was set last is the one that is up --
+   * setting either clears the other.
+   */
+  #slotHtml() {
+    if (this.#rollToast) return this.#rollToastHtml();
+    if (this.#undoToast) return this.#undoToastHtml();
+    return '';
+  }
+
+  /**
+   * "Removed Cloak of Resistance -- Undo".
+   *
+   * It leaves on its own after twelve seconds, which is longer than the roll
+   * toast gets because that one is confirming something you meant and this one
+   * is offering to reverse something you may not have. The stack outlives the
+   * toast either way: Ctrl+Z still works after it has gone.
+   */
+  #undoToastHtml() {
+    const t = this.#undoToast;
+    if (!t) return '';
+    // The button only while there is something behind it. After the last step
+    // has been taken back the toast is a receipt, and a receipt with a dead
+    // control on it reads as a control that stopped working.
+    const more = this.#model?.undoLabel;
+    return `<div class="rolltoast undotoast" role="status">
+      <div class="rollhead">
+        <strong>${esc(t.label)}</strong>
+        ${more ? '<button class="primary" data-undo>Undo <kbd>Ctrl</kbd><kbd>Z</kbd></button>' : ''}
+        <button class="rollclose" data-undoclose aria-label="Dismiss">×</button>
+      </div>
+    </div>`;
+  }
+
+  /** Offer the last structural change back. */
+  #showUndoToast(label) {
+    clearTimeout(this.#rollToastTimer);
+    this.#rollToast = null;
+    this.#undoToast = { label };
+    this.#renderRollToast();
+  }
+
   /** Redraw the toast alone -- copying a roll must not disturb the sheet. */
   #renderRollToast({ select = false } = {}) {
     const slot = this.shadowRoot.querySelector('.rollslot');
     if (!slot) return;
-    slot.innerHTML = this.#rollToastHtml();
+    slot.innerHTML = this.#slotHtml();
     this.#bindRollToast(slot);
     if (select) slot.querySelector('.rolltext')?.select();
     clearTimeout(this.#rollToastTimer);
+    clearTimeout(this.#undoToastTimer);
     // A failed copy is still needed -- it is the only copy of the text there
     // is -- so only a successful one clears itself.
     if (this.#rollToast && !this.#rollToast.failed) {
@@ -2928,6 +3000,12 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rollToast = null;
         if (this.isConnected) this.#renderRollToast();
       }, 6000);
+    }
+    if (this.#undoToast) {
+      this.#undoToastTimer = setTimeout(() => {
+        this.#undoToast = null;
+        if (this.isConnected) this.#renderRollToast();
+      }, 12000);
     }
   }
 
@@ -2948,6 +3026,7 @@ export class CharacterSheetElement extends HTMLElement {
     } catch {
       failed = true;
     }
+    this.#undoToast = null;
     this.#rollToast = {
       kind, ref, what: what || spec.name, text, failed,
     };
@@ -2970,6 +3049,32 @@ export class CharacterSheetElement extends HTMLElement {
         this.#renderRollToast();
       });
     });
+    scope.querySelectorAll('[data-undo]').forEach((b) => {
+      b.addEventListener('click', () => this.#undo());
+    });
+    scope.querySelectorAll('[data-undoclose]').forEach((b) => {
+      b.addEventListener('click', () => {
+        clearTimeout(this.#undoToastTimer);
+        this.#undoToast = null;
+        this.#renderRollToast();
+      });
+    });
+  }
+
+  /**
+   * Take back the last structural change, and say what came back.
+   *
+   * The toast that follows names the thing that was restored rather than
+   * going quiet: an undo that leaves no trace is indistinguishable from a
+   * keypress that did nothing, and this one can be pressed several times.
+   */
+  #undo() {
+    if (!this.#model) return;
+    const label = this.#model.undo();
+    if (!label) { this.#showUndoToast('Nothing left to undo'); return; }
+    this.#undoToast = null;
+    this.#render();
+    this.#showUndoToast(`${label} — put back`);
   }
 
   /* ---------------- the search palette ---------------- */
@@ -6032,8 +6137,10 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.removeClassFeatureColumn(button?.dataset.class, Number(button?.dataset.col));
         this.#render();
         break;
-      // Deleting a whole feature group takes a second click: it is a column of
-      // the player's own writing per level, and there is no undo but History.
+      // Deleting a whole feature group takes a second click even now that
+      // Ctrl+Z can put it back: it is a column of the player's own writing per
+      // level, and twenty levels of it is more than a toast should be the only
+      // thing standing between you and losing.
       case 'remove-cf-group':
         this.#confirmGroup = button?.dataset.class ?? null;
         this.#render();
@@ -6082,8 +6189,9 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       // Widen or narrow a gear table. Dropping a column that has something
-      // written in it asks twice, because it takes that writing off every row
-      // at once and there is no row-level undo to reach for.
+      // written in it still asks twice, because it takes that writing off
+      // every row at once -- a scale where being asked is worth more than
+      // being able to take it back afterwards.
       case 'gear-col': {
         const list = button?.dataset.list;
         const kind = button?.dataset.kind;

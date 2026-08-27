@@ -206,6 +206,15 @@ the reader are two halves of one format, so the honest test of either is the oth
 
 ### Saving, and going back
 
+**A mis-click has its own way back, before any of this.** Removing a row — a weapon, a
+feat, a tracker, a feature column — says what went with an **Undo** beside it, and
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back the last twenty of them from anywhere on the
+sheet. It is deliberately not the same machinery as what follows: History is a snapshot
+every twenty changes, which can put back a weapon you deleted but not without also
+putting back the twelve edits you made after it. The undo stack lives in memory for as
+long as the sheet is open and is not part of the document, so it does not survive a
+reload — the stores below are what does.
+
 Three things are kept per character, each in the store that suits it — and the
 extension packs a player has imported sit beside them, in a database of their own.
 

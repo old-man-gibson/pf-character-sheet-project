@@ -68,7 +68,12 @@ this as prose. Add a weapon and its attack bonus and iteratives follow your BAB,
 scores and size automatically.
 
 Rows can be reordered with ↑ / ↓ and removed with × — except a feat, which is dragged
-by its grip instead. Every change is saved as you make
+by its grip instead. **A × can be taken back**: removing anything says what went, with
+an **Undo** beside it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> does the same from anywhere on
+the sheet — twenty steps deep, and still there after the message has gone. It covers
+structural changes rather than typing, because a field's own <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+is better at typing than this would be, so the key is left alone wherever a caret is
+standing. Every change is saved as you make
 it, and **Save** — on the tab rail, or <kbd>Ctrl</kbd>+<kbd>S</kbd> — marks the version
 the sheet opens on; see
 [Saving, and going back](importing-and-saving.md#saving-and-going-back). Under the rail's

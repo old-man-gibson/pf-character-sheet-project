@@ -12,6 +12,7 @@ import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded } from './scope.js';
+import { markUndo, rowLabel } from './undo.js';
 import { slug } from './util.js';
 
 /**
@@ -266,6 +267,7 @@ export function removeTracker(model, id) {
   if (model.isProtectedTracker(id)) return false;
   const i = model.trackers.findIndex((t) => t.id === id);
   if (i < 0) return false;
+  markUndo(model, `Removed ${rowLabel(model.trackers[i], 'tracker')}`);
   model.trackers.splice(i, 1);
   model.recompute();
   return true;

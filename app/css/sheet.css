@@ -3088,6 +3088,12 @@ label.fld > .rollpair > input { flex: 1; min-width: 0; }
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .rolltoast.failed { border-color: var(--cs-bad); }
+/* The same box, sized to its sentence: an offer to undo is one line, and a
+   32rem panel holding one line reads as something that went wrong. */
+.undotoast { width: max-content; max-width: min(32rem, 100%); }
+.undotoast .rollhead { margin-bottom: 0; }
+.undotoast .rollhead strong { color: var(--cs-text); font-size: 0.85rem; flex: 0 1 auto; }
+.undotoast button.primary { display: inline-flex; align-items: center; gap: 5px; }
 .rollhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
 .rollhead strong { font-size: 0.82rem; color: var(--cs-accent); }
 .rolltoast.failed .rollhead strong { color: var(--cs-bad); }

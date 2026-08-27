@@ -19,6 +19,7 @@ import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { primordiaTalents } from './subsystems/primordia.js';
 import { techniqueTalents } from './subsystems/techniques.js';
+import { markUndo, rowLabel } from './undo.js';
 import { closestName, normalizeName, slug } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -489,6 +490,7 @@ export function setCustomizationSpec(model, className, spec) {
 export function removeCustomization(model, index) {
   const list = model.data.training?.combat?.customizations;
   if (!list?.[index]) return model;
+  markUndo(model, `Removed ${rowLabel(list[index], 'customized weapons')}`);
   list.splice(index, 1);
   model.recompute();
   emit(model, { type: 'customization-remove', index });
