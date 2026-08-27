@@ -1005,24 +1005,38 @@ function detailsPanel(model) {
     const c = model.data;
     return `<section class="panel details">
       <h3>Details</h3>
+      ${/* The `col*` classes are how many of six columns each field takes once
+            the panel is a phone's width, and they do nothing at any other --
+            the rules for them live inside the container query, so this grid is
+            still `auto-fit` on a desktop and untouched by them. A level is two
+            characters and a size is one word; a row each spent 1,064px on
+            sixteen fields holding a line of text between them.
+
+            The order is the one that tiles: each line adds to exactly six, so
+            nothing is left half a line and no field is squeezed under its own
+            longest value. Three drove it -- `Gargantuan` and `Chaotic Neutral`
+            do not fit a sixth-of-a-panel box (a select cannot even be scrolled
+            to read the rest), and the two mythic fields are one thing asked
+            twice, so they start a line together rather than wherever the
+            packing left off. */''}
       <div class="fieldgrid">
-        ${field('Character name', text('identity.name', c.identity.name))}
-        ${field('Player', text('identity.player', c.identity.player))}
-        ${field('Race', text('identity.race', c.identity.race))}
-        ${field('Variant', text('identity.variant', c.identity.variant))}
-        ${field('Level', num('identity.level', c.identity.level))}
-        ${field('Size', select('identity.size', c.identity.size, Object.keys(SIZE_MODIFIERS)))}
-        ${field('Alignment', text('identity.alignment', c.identity.alignment))}
-        ${field('Deity', text('identity.deity', c.identity.deity))}
-        ${field('Gender', text('identity.gender', c.identity.gender))}
-        ${field('Age', text('identity.age', c.identity.age))}
-        ${field('Height', text('identity.height', c.identity.height))}
-        ${field('Weight', text('identity.weight', c.identity.weight))}
-        ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath))}
-        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${c.identity.mythicTier ?? 0}</span>`)}
+        ${field('Character name', text('identity.name', c.identity.name), 'col6')}
+        ${field('Player', text('identity.player', c.identity.player), 'col3')}
+        ${field('Race', text('identity.race', c.identity.race), 'col3')}
+        ${field('Variant', text('identity.variant', c.identity.variant), 'col3')}
+        ${field('Deity', text('identity.deity', c.identity.deity), 'col3')}
+        ${field('Size', select('identity.size', c.identity.size, Object.keys(SIZE_MODIFIERS)), 'col3')}
+        ${field('Alignment', text('identity.alignment', c.identity.alignment), 'col3')}
+        ${field('Level', num('identity.level', c.identity.level), 'col2')}
         ${field('Hero points', `<span class="pair">
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
-          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`)}
+          <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`, 'col4')}
+        ${field('Gender', text('identity.gender', c.identity.gender), 'col3')}
+        ${field('Age', text('identity.age', c.identity.age), 'col3')}
+        ${field('Height', text('identity.height', c.identity.height), 'col3')}
+        ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
+        ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
+        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${c.identity.mythicTier ?? 0}</span>`, 'col3')}
         ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
       </div>
       ${characterColorRow(c.identity.color)}

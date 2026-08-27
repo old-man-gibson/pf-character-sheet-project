@@ -1341,6 +1341,42 @@ tr.untrained { color: var(--cs-muted); }
   /* An empty list still says so, and a colspan cell has no name to fold to. */
   table.stacked > tbody > tr > td.empty { text-align: left; }
 
+  /* A `.statline` is a label and a value pushed to opposite ends, so it needs
+     the width to have two ends. `.fieldgrid` is `auto-fit` at `minmax(140px,
+     1fr)` and still finds two columns inside a 289px panel, which left the
+     summary under the classes table reading "Save bases | Fort 4 · Ref 9 ·
+     Will 9 | Base attack bonus | +11" as four wrapped stacks. The labelled
+     fields either side of it are fine two-up -- their label sits *above* the
+     box -- so this moves only the statlines. */
+  .fieldgrid > .statline { grid-column: 1 / -1; }
+
+  /* ---- the Details panel, in columns ----
+   *
+   * `auto-fit` at `minmax(150px, 1fr)` wants 306px for two tracks and the
+   * panel is 303px, so it fell to one and every field took a row of its own:
+   * sixteen rows, 1,064px, for a level, a size and a handful of words. Three
+   * pixels. Rather than shave the floor and leave the layout to a coincidence,
+   * the panel gets a fixed six columns here and each field says how many it
+   * takes -- so a level and a size and an alignment sit on one line because
+   * they were told to, and stay there.
+   *
+   * `.fieldgrid` is named twice on purpose. The desktop rule that pairs this
+   * panel beside another -- `.pairrow > .panel.details .fieldgrid`, four
+   * classes -- ties with any honest way of writing this one and sits later in
+   * the file, so it won; and losing here does not fall back to one tidy
+   * column, it leaves `auto-fit` with a single explicit track while the spans
+   * below conjure five implicit content-sized ones (150px, 0px, 36px…). The
+   * doubled class takes this to five classes and settles it. Same trap as the
+   * card rules further down: a narrow-screen rule that loses to a wide-screen
+   * one leaves the layout wearing the wrong shape.
+   */
+  .pairrow > .panel.details .fieldgrid.fieldgrid,
+  .panel.details .fieldgrid.fieldgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fieldgrid label.fld.col2 { grid-column: span 2; }
+  .fieldgrid label.fld.col3 { grid-column: span 3; }
+  .fieldgrid label.fld.col4 { grid-column: span 4; }
+  .fieldgrid label.fld.col6 { grid-column: span 6; }
+
   /* ---- a card whose short fields share a line ----
    *
    * One field per line is right for a name and a paragraph and wrong for a
