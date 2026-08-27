@@ -404,6 +404,72 @@ function isTypingIn(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+/* ---------------- the help disclosures ----------------
+ *
+ * Below 620px an explanation longer than a paragraph is folded behind a line
+ * saying what it is about. Both of the things that line needs -- a name and a
+ * stable identity -- are read off the hint itself, because there are over a
+ * hundred of them across the panels and none was written with this in mind.
+ */
+
+/**
+ * A name for one stacked row that survives a render.
+ *
+ * Every one of these rows writes somewhere, and where it writes is what it is:
+ * `featGroups.0.entries|3|name` and `traitSlots.drawback.name` both name a row
+ * once the field on the end is taken off. Read off the first control in the
+ * row rather than written into the markup, so a table opts in by marking its
+ * name cell and nothing else has to change.
+ */
+function stackRowKey(row) {
+  const el = row.querySelector('[data-item], [data-set]');
+  if (!el) return '';
+  const item = el.dataset.item;
+  if (item) return item.split('|').slice(0, 2).join('|');
+  const set = el.dataset.set || '';
+  return set.split('.').slice(0, -1).join('.');
+}
+
+/** Longer than this and a hint is a paragraph rather than a caption. */
+const HELP_LENGTH = 180;
+
+/**
+ * What the help is about.
+ *
+ * The multi-paragraph hints already announce their own subject in bold --
+ * "**Rule groups.** Under each feature column's name…" -- and where one does
+ * not, the panel it sits in has a heading that names the same thing. Neither
+ * is a label anybody had to go and write.
+ */
+function helpLabel(hint) {
+  // Only a *leading* bold is a subject. One in the middle of a sentence is
+  // emphasis -- "…choices on the **Stats** tab" -- and taking it labelled a
+  // paragraph about class tracks "Help — Stats".
+  const first = [...hint.childNodes].find((n) => n.nodeType !== 3 || n.textContent.trim());
+  const lead = first?.nodeType === 1 && /^(STRONG|B)$/.test(first.tagName) ? first.textContent : '';
+  const panel = hint.closest('section.panel, .supergroup')
+    ?.querySelector('h3, .supergroup-title')?.childNodes[0]?.textContent ?? '';
+  return (lead || panel || 'this panel')
+    .replace(/\s+/g, ' ').replace(/[.:—-]\s*$/, '').trim()
+    .slice(0, 40);
+}
+
+/**
+ * A name for one hint that survives a render.
+ *
+ * Its own words, which is the only thing about it that does not move: a hint
+ * has no id, its position shifts as panels fold, and the same panel can hold
+ * three of them. djb2 over the first sentence-and-a-bit, which is plenty to
+ * tell a hundred paragraphs apart and short enough to be cheap on every
+ * render.
+ */
+function helpKey(hint) {
+  const text = hint.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+  let h = 5381;
+  for (let i = 0; i < text.length; i += 1) h = (((h << 5) + h) ^ text.charCodeAt(i)) >>> 0;
+  return `h${h.toString(36)}`;
+}
+
 export class CharacterSheetElement extends HTMLElement {
   static observedAttributes = ['src', 'role', 'theme'];
 
@@ -484,6 +550,10 @@ export class CharacterSheetElement extends HTMLElement {
   /* Which long pack texts have been opened out to read. View state, not a
      preference: it is where you are looking, not how you like the sheet. */
   #openText = new Set();
+  /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
+  #openHelp = new Set();
+  /* Which stacked rows are folded to their name; see `#stackRows`. */
+  #shutRows = new Set();
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -1280,6 +1350,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#showActiveTab();
     this.#fillJumpTo();
     this.#markLongText();
+    this.#stackRows();
     this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
@@ -1910,23 +1981,23 @@ export class CharacterSheetElement extends HTMLElement {
     const majorName = String(major.name || major.category || major.text || '').trim();
 
     const fixed = (key, label, hint) => `<tr>
-      <td><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
-      <td>${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
-      <td>${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
+      <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
+      <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
+      <td data-label="Notes">${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
-      <div class="tablewrap"><table class="granted">
+      <div class="tablewrap"><table class="granted stacked">
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
           ${(g.others || []).map((f, i) => `<tr>
-            <td>${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
-            <td>${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
-            <td>${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
+            <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
+            <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
+            <td data-label="Notes">${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
             ${this.#rowTools('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
@@ -1971,14 +2042,14 @@ export class CharacterSheetElement extends HTMLElement {
    * grants a pool can define it where the feat is written down.
    */
   #featGroupTable(group, g) {
-    return `<div class="tablewrap"><table class="feats">
+    return `<div class="tablewrap"><table class="feats stacked">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
           <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
-          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
-          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-          <td class="fnote">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
+          <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
+          <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
           ${this.#rowRemove(`featGroups.${g}.entries`, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
@@ -2150,16 +2221,16 @@ export class CharacterSheetElement extends HTMLElement {
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
           <span>Flowing Power</span></label>
       </h3>
-      <div class="tablewrap"><table class="tradition">
+      <div class="tablewrap"><table class="tradition stacked">
         <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>
         <tbody>${MYTHIC_TRADITION_SLOTS.map((def) => {
           const locked = def.requires && !filled(def.requires);
           return `<tr class="${locked ? 'lockedslot' : ''}">
-            <td>${esc(def.label)}${def.mandatory ? ' <span class="badge err">required</span>' : ''}
+            <td data-stack="head">${esc(def.label)}${def.mandatory ? ' <span class="badge err">required</span>' : ''}
               ${def.requires ? `<div class="hint">needs ${esc(MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}
               ${def.kind === 'quality' ? '<div class="hint">bonus + drawback</div>' : ''}</td>
-            <td>${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
-            <td>${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
+            <td data-stack="name">${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
+            <td data-label="Notes">${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -4037,6 +4108,35 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * The fold on a stacked row.
+   *
+   * Only below 620px, where a table has stopped being a table -- see
+   * `table.stacked` in the stylesheet. The caret goes into the name cell
+   * rather than a column of its own, because a column is the thing being got
+   * rid of.
+   *
+   * Rows start open. Folding is for a list you are looking through, and a list
+   * that hid itself before you asked would be a list you have to open to read.
+   */
+  #stackRows() {
+    if (this.clientWidth > 620) return;
+    for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
+      const head = row.querySelector('td[data-stack="name"]');
+      const key = head && stackRowKey(row);
+      if (!key) continue;
+      const shut = this.#shutRows.has(key);
+      row.classList.toggle('shut', shut);
+      const button = this.ownerDocument.createElement('button');
+      button.className = 'rowfold';
+      button.dataset.rowfold = key;
+      button.setAttribute('aria-expanded', String(!shut));
+      button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
+      button.textContent = shut ? '\u25b8' : '\u25be';
+      head.insertBefore(button, head.firstChild);
+    }
+  }
+
+  /**
    * Which pack texts are longer than the box they are in.
    *
    * Measured rather than guessed at, unlike the hints below: there are a
@@ -4065,16 +4165,33 @@ export class CharacterSheetElement extends HTMLElement {
    * By length rather than by measurement: asking each hint whether it would
    * overflow means clamping it, forcing layout, and reading it back, on every
    * render. 180 characters is about four lines at this size, and being a
-   * little wrong about a borderline one costs nothing -- it is a paragraph,
-   * clamped or not, and one tap either way.
+   * little wrong about a borderline one costs nothing.
    *
-   * Opened by a click, which `#bindHints` handles, and the class is not
-   * stored: a guide is read once, and the next render is a fresh page.
+   * A clamp was the first answer and was the wrong shape twice over. Three
+   * lines of a paragraph is neither the paragraph nor out of the way, and it
+   * only opened -- there was no folding one back, so a tab read once stayed
+   * read at full height for the rest of the session. This is a disclosure
+   * instead: one line saying what the help is about, and the help itself when
+   * it is asked for. Which are open is element state, so it survives a render
+   * and not a reload, which is the right lifetime for something you opened to
+   * read once.
    */
   #clampHints() {
-    if (this.clientWidth > 620) return;
+    const wrap = this.shadowRoot.querySelector('.wrap');
+    if (!wrap || this.clientWidth > 620) return;
     for (const hint of this.shadowRoot.querySelectorAll('.body .hint')) {
-      if (hint.textContent.trim().length > 180) hint.classList.add('longhint');
+      if (hint.textContent.trim().length <= HELP_LENGTH) continue;
+      const key = helpKey(hint);
+      const open = this.#openHelp.has(key);
+      hint.classList.add('longhint');
+      hint.classList.toggle('is-open', open);
+      const button = this.ownerDocument.createElement('button');
+      button.className = 'helpopen';
+      button.dataset.help = key;
+      button.dataset.helpLabel = helpLabel(hint);
+      button.setAttribute('aria-expanded', String(open));
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
+      hint.parentNode.insertBefore(button, hint);
     }
   }
 
@@ -4809,11 +4926,36 @@ export class CharacterSheetElement extends HTMLElement {
      * On `.wrap`, like the handler above and for the same reason: every render
      * replaces it, so these cannot pile up.
      */
-    // A clamped guide opens where it is. On `.wrap` with the rest, so it goes
-    // when the render that made it does.
+    /*
+     * A help disclosure, opened and shut. Toggled in place rather than through
+     * a render: it moves one class and one line of text, and a redraw of the
+     * whole tab to read a paragraph would lose the scroll position that put
+     * the paragraph in front of you.
+     */
+    // Folding a stacked row, in place for the same reason as the help above.
     root.querySelector('.wrap')?.addEventListener('click', (e) => {
-      const hint = (e.composedPath?.()[0] ?? e.target)?.closest?.('.hint.longhint');
-      if (hint) hint.classList.remove('longhint');
+      const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-rowfold]');
+      if (!button) return;
+      const key = button.dataset.rowfold;
+      const shut = !this.#shutRows.has(key);
+      if (shut) this.#shutRows.add(key);
+      else this.#shutRows.delete(key);
+      button.closest('tr')?.classList.toggle('shut', shut);
+      button.setAttribute('aria-expanded', String(!shut));
+      button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
+      button.textContent = shut ? '\u25b8' : '\u25be';
+    });
+
+    root.querySelector('.wrap')?.addEventListener('click', (e) => {
+      const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-help]');
+      if (!button) return;
+      const key = button.dataset.help;
+      const open = !this.#openHelp.has(key);
+      if (open) this.#openHelp.add(key);
+      else this.#openHelp.delete(key);
+      button.nextElementSibling?.classList.toggle('is-open', open);
+      button.setAttribute('aria-expanded', String(open));
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
     });
 
     root.querySelector('.wrap')?.addEventListener('wheel', (e) => {

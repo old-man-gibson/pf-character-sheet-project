@@ -65,8 +65,16 @@ same bands, panels and rules with less air around them. Three more things give w
 that width. A table sized in percentages stops dividing whatever width it is given and
 takes the width its columns need, scrolling inside its box rather than crushing a feat
 name to six characters. **Defenses** and **Offenses** fold to their labels, like any
-panel, and stay folded. And a guide longer than a paragraph folds to three lines with a
-**more** on the end — tap it for the rest.
+panel, and stay folded. And an explanation longer than a paragraph folds away behind a
+line saying what it is about — **Help — Rule groups** — which opens it and shuts it
+again.
+
+**The lists become cards.** Feats, granted feats, sphere talents, traits and the mythic
+tradition slots stop being tables below 620px: each row is a card with the **name first**,
+whichever column it sat in, and the rest under it with the heading it lost written above
+it. A card **folds to its name**, which is what makes a list of forty feats something you
+can look through — the one with three paragraphs of notes in it goes from 310px to 86.
+They start open, and folding is remembered for as long as the sheet is.
 
 **Ability-stat selectors.** AC, each save, and each attack mode let you pick which
 ability drives them, because these characters do not use the defaults — Angou's AC keys

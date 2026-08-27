@@ -1896,11 +1896,11 @@ function traitsPanel(model, ctx) {
       const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
         : owed ? 'Pick a trait' : '';
       return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="A standard trait pick, still to be chosen"' : ''}>
-        <td>${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
-        <td>${isDrawback ? '<span class="hint">—</span>'
+        <td data-stack="head">${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
+        <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
           : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
-        <td>${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
-        <td>${prose(model, `data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
+        <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
+        <td data-label="Trait / effect">${prose(model, `data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
       </tr>`;
     };
 
@@ -1912,16 +1912,16 @@ function traitsPanel(model, ctx) {
           <h4 class="subhead">Character traits
             <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
           </h4>
-          <div class="tablewrap"><table class="traits">
+          <div class="tablewrap"><table class="traits stacked">
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
               ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
               ${(slots.additional || []).map((x, i) => `<tr>
-                <td>Additional</td>
-                <td>${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
-                <td>${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
-                <td><span class="pair" style="width:100%">
+                <td data-stack="head">Additional</td>
+                <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
+                <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
+                <td data-label="Trait / effect"><span class="pair" style="width:100%">
                   ${prose(model, `data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
                   <button class="danger" data-remove="traitSlots.additional|${i}" aria-label="Remove">×</button>
                 </span></td>

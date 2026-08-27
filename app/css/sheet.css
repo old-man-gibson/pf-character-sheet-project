@@ -1202,6 +1202,57 @@ td.total { font-weight: 660; color: var(--cs-accent); }
 tr.trained td:first-child { font-weight: 600; }
 tr.untrained { color: var(--cs-muted); }
 
+/* ---------- a list of things, on a phone ----------
+ *
+ * A feat is a name, where it came from and what it does, and as a table row
+ * that is three columns fighting over 340px: the name gets six characters and
+ * the note gets a column an inch wide and forty lines tall. Below 620px the
+ * row stops being a row. Each becomes a card -- name first whatever column it
+ * sat in, then the rest under it with the heading it lost written above it as
+ * a label -- and folds to its name, because a list of forty feats is a list
+ * you are looking through rather than reading.
+ *
+ * `order` is what puts the name first: the granted feats table has the source
+ * in column one and the feat in column two, and stacking a table keeps the
+ * order the markup is in. Cells marked `head` ride up with it and stay when
+ * the card is folded -- which trait slot this is, when its name is still
+ * blank, is the half of the row that tells you what you are looking at.
+ */
+@container (max-width: 620px) {
+  /* More specific than the floors above, which are `.tablewrap > table.feats`
+     and would otherwise keep a stack of cards 30rem wide and scrolling. */
+  .tablewrap > table.stacked { min-width: 0; }
+  /* The grip drags a feat between groups, which is a mouse gesture and is not
+     one of the three things a card is: name, where it came from, what it does. */
+  table.stacked > tbody > tr > td.grip { display: none; }
+  table.stacked, table.stacked > tbody, table.stacked > tbody > tr { display: block; }
+  table.stacked > thead { display: none; }
+  table.stacked > tbody > tr {
+    display: flex; flex-direction: column; gap: 3px;
+    border: 1px solid var(--cs-line); border-radius: 6px;
+    padding: 5px 6px; margin-bottom: 6px;
+  }
+  table.stacked > tbody > tr > td { display: block; border: 0; padding: 0; width: auto; }
+  table.stacked td[data-stack="name"] { order: -2; display: flex; align-items: center; gap: 6px; }
+  table.stacked td[data-stack="head"] { order: -1; font-size: 0.74rem; color: var(--cs-muted); }
+  table.stacked td[data-label]::before {
+    content: attr(data-label); display: block;
+    font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--cs-muted); margin-bottom: 1px;
+  }
+  /* Folded: the name and whatever rides with it, and the controls. What goes
+     is the body, which is exactly the labelled part. */
+  table.stacked > tbody > tr.shut > td[data-label] { display: none; }
+  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
+  button.rowfold {
+    flex: none; padding: 0 5px; font-size: 0.7rem; line-height: 1.5;
+    color: var(--cs-muted); background: none; border-color: transparent;
+  }
+  button.rowfold:hover { color: var(--cs-accent); }
+  /* An empty list still says so, and a colspan cell has no name to fold to. */
+  table.stacked > tbody > tr > td.empty { text-align: left; }
+}
+
 /* ---------- ability build (Stats tab) ---------- */
 table.build th[scope="row"] {
   position: sticky; left: 0; background: var(--cs-panel);
@@ -2347,18 +2398,19 @@ input[type="color"] {
  * So the furniture gets thinner as the screen does. Nothing is removed: the
  * bands, the panels and the rules are all still there, drawn tighter. */
 @container (max-width: 620px) {
-  /* A guide folded to its first three lines, with somewhere to press for the
-     rest. `#clampHints` decides which ones by length; the `more` is drawn
-     inside the clipped box rather than under it, so it lands on the last line
-     instead of adding a fourth. */
-  .body .hint.longhint {
-    max-height: 3.9em; overflow: hidden; position: relative; cursor: pointer;
+  /* An explanation longer than a paragraph, folded behind a line that says
+     what it is about. Away entirely rather than clamped to three lines: three
+     lines of a paragraph is neither the paragraph nor out of the way, and the
+     line above it is a control that goes both ways, which a clamp was not. */
+  .body .hint.longhint { display: none; }
+  .body .hint.longhint.is-open { display: block; margin-top: 2px; }
+  button.helpopen {
+    display: block; width: 100%; text-align: left; margin: 4px 0 0;
+    padding: 3px 7px; font-size: 0.72rem; font-weight: 600;
+    color: var(--cs-muted); background: var(--cs-panel-2);
+    border-color: var(--cs-line); border-radius: 5px;
   }
-  .body .hint.longhint::after {
-    content: 'more'; position: absolute; right: 0; bottom: 0;
-    padding-left: 10px; color: var(--cs-accent); font-weight: 600;
-    background: linear-gradient(to right, transparent, var(--cs-panel) 40%);
-  }
+  button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
   .wrap { padding: 8px; }
   .panel { padding: 9px 8px; }
   .supergroup { padding: 8px 8px 9px; }
@@ -3579,7 +3631,8 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .tablewrap { background: none !important; }
   /* A block's text prints in full: there is no opening it out on paper. */
   .packtext { max-height: none !important; overflow: visible !important; mask-image: none !important; }
-  button.packmore { display: none !important; }
+  button.packmore, button.helpopen, button.rowfold { display: none !important; }
+  .body .hint.longhint { display: block !important; }
   /* Truncation is the same problem one line down. On paper there is room to
      wrap, and no hover to reveal the rest. */
   .cname, .tname, .sname, .mdetail-name, .dashtalent, .manacard .mname {
