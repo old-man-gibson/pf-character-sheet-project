@@ -550,13 +550,38 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
       ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
       ${writing
     ? itemArea(model, list, vi, 'desc', own.desc, 2, model.veilScope(v))
-    : `<div class="veil-text">${renderedProse(model, d.desc, model.veilScope(v))}</div>`}
+    : packText(ctx, `veil:${key}`, 'veil-text', renderedProse(model, d.desc, model.veilScope(v)))}
       ${d.known && d.bindEffect && !writing
     ? `<div class="veil-bind"><b>Bind:</b> ${esc(d.bindEffect)}</div>` : ''}
     </div>`;
   }
 
-  /** The × from #rowRemove, without the surrounding table cell. */
+  /**
+ * A block's rules text, in a box you can open.
+ *
+ * A pack's text is as long as its publisher wrote it, and the two places the
+ * sheet shows one used to fail in opposite directions: a veil's was penned
+ * into 11em with a scrollbar inside it, which for a 34,000-character veil is
+ * 1.1% of it visible at a time -- a peephole, not a panel -- and a maneuver's
+ * had no ceiling at all, so one long one ran its card off the screen.
+ *
+ * Both are this box now. Shut it is a paragraph's worth, which is the whole of
+ * most of them; open it is most of a screen with its own scroll, which is a
+ * thing you can read without being a card twelve screens tall. `Read all`
+ * appears only where there is more, which `#markLongText` decides by measuring
+ * -- a control offering to show you what you can already see is worse than no
+ * control.
+ */
+export function packText(ctx, key, className, html) {
+  const open = !!ctx?.openText?.has(key);
+  return `<div class="packwrap${open ? ' is-open' : ''}">
+      <div class="${className} packtext">${html}</div>
+      <button class="packmore" data-textopen="${esc(key)}"
+        aria-expanded="${open}">${open ? 'Show less' : 'Read all'}</button>
+    </div>`;
+}
+
+/** The × from #rowRemove, without the surrounding table cell. */
 export function rowRemoveButton(list, i, title) {
     return `<button class="danger tiny" data-remove="${list}|${i}"
       title="${esc(title)}" aria-label="${esc(title)}">×</button>`;
@@ -764,7 +789,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
         <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, entry)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key)}
     </div>`;
 }
 
@@ -775,7 +800,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
  * "Target: —", they are simply not part of the maneuver, and a card of seven
  * em-dashes is a form rather than a rules entry.
  */
-function maneuverRead(model, entry) {
+function maneuverRead(model, ctx, entry, key) {
   const shown = MANEUVER_FIELDS
     .map((f) => [f, entry[f.key]])
     .filter(([, v]) => String(v).trim() !== '');
@@ -784,7 +809,7 @@ function maneuverRead(model, entry) {
   const body = shown.find(([f]) => f.key === 'text');
   return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
       <dt>${esc(f.label)}</dt><dd>${value(v)}</dd>`).join('')}</dl>` : ''}
-    ${body ? `<div class="mdetail-text">${value(body[1])}</div>` : ''}
+    ${body ? packText(ctx, `man:${key}`, 'mdetail-text', value(body[1])) : ''}
     ${maneuverIsWritten(entry) ? '' : '<p class="empty">Nothing written down yet — <strong>Edit</strong> fills it in.</p>'}`;
 }
 

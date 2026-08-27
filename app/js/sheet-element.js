@@ -481,6 +481,9 @@ export class CharacterSheetElement extends HTMLElement {
    * pack says. Not saved with the character: it is a way of reading the tab.
    */
   #veilEdit = null;
+  /* Which long pack texts have been opened out to read. View state, not a
+     preference: it is where you are looking, not how you like the sheet. */
+  #openText = new Set();
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -1276,6 +1279,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bind();
     this.#showActiveTab();
     this.#fillJumpTo();
+    this.#markLongText();
     this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
@@ -2204,6 +2208,7 @@ export class CharacterSheetElement extends HTMLElement {
       openManeuver: this.#openManeuver,
       maneuverEdit: this.#maneuverEdit,
       veilEdit: this.#veilEdit,
+      openText: this.#openText,
       peek: this.#peek,
     };
   }
@@ -4032,6 +4037,22 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Which pack texts are longer than the box they are in.
+   *
+   * Measured rather than guessed at, unlike the hints below: there are a
+   * handful of these on a tab where there are dozens of hints, and the answer
+   * decides whether a control is offered at all -- a `Read all` on something
+   * already wholly visible is a button that does nothing.
+   */
+  #markLongText() {
+    for (const wrap of this.shadowRoot.querySelectorAll('.packwrap')) {
+      const text = wrap.querySelector('.packtext');
+      if (!text) continue;
+      wrap.classList.toggle('is-long', text.scrollHeight > text.clientHeight + 2);
+    }
+  }
+
+  /**
    * Fold the long guides down on a narrow screen.
    *
    * The hints are the sheet teaching itself, and on a desktop the space they
@@ -4907,6 +4928,26 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
       });
     });
+    /*
+     * Opening a block's rules text out to read it.
+     *
+     * A pack's text is as long as its publisher wrote it, and the two places
+     * the sheet shows one failed in opposite directions: a veil's was penned
+     * into 11em with a scrollbar inside it -- 1.1% of a 34,000-character veil
+     * visible at once, which is a peephole rather than a panel -- and a
+     * maneuver's had no ceiling at all, so one long one ran the card off the
+     * screen. Both are the same box now, and this is the way out of it.
+     */
+    root.querySelectorAll('[data-textopen]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const key = b.dataset.textopen;
+        if (this.#openText.has(key)) this.#openText.delete(key);
+        else this.#openText.add(key);
+        this.#render();
+      });
+    });
+
     root.querySelectorAll('[data-mclose]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();

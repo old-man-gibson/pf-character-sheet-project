@@ -458,7 +458,16 @@ one the catalogue does not recognise simply has no pack half to read.
 
 The card has two faces, the way a maneuver's does. It **reads** by default — the pack's
 text, with `{…}` formulas resolving against the essence invested — and the **pen** turns
-it over to a box holding what *you* wrote, which is all that is ever saved. The box
+it over to a box holding what *you* wrote, which is all that is ever saved.
+
+**A long one opens.** A pack's text is as long as its publisher wrote it, and some of
+them are very long indeed — the largest veil in the akashic scrape runs to 34,000
+characters, ten printed pages. Shut, the reading face is a paragraph's worth, which is
+the whole of most of them; **Read all** opens it to most of a screen with its own
+scroll, so a long one can be read without its card becoming twelve screens tall. The
+button appears only where there is more to show. A maneuver's text does the same and for
+the same reason: it had no ceiling at all before, so one long one ran its card off the
+bottom of the window. The box
 starts empty even where the pack has plenty to say, because filling it in for you would
 bank a copy of the catalogue on the sheet and quietly undo the whole arrangement.
 Emptying it again hands the veil back to the pack. Under the name sits what the pack

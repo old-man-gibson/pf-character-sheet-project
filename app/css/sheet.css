@@ -1017,10 +1017,26 @@ button.mname {
 }
 /* A veil the catalogue carries reads rather than edits: its text belongs to
    the pack, and the pen beside it turns the card over to what you wrote. */
-.veil-text {
-  font-size: 0.76rem; line-height: 1.4; white-space: pre-wrap;
-  max-height: 11em; overflow: auto;
+.veil-text { font-size: 0.76rem; line-height: 1.4; white-space: pre-wrap; }
+
+/* ---------- a block's rules text ----------
+ * A pack's text is as long as its publisher wrote it. Shut, this is a
+ * paragraph's worth -- the whole of most of them. Open, it is most of a screen
+ * with its own scroll: enough to read a long one without the card that holds
+ * it becoming twelve screens tall. `Read all` shows only where there is more,
+ * which `#markLongText` decides by measuring.
+ */
+.packwrap { position: relative; }
+.packtext { max-height: 11em; overflow: hidden; }
+.packwrap.is-long:not(.is-open) .packtext {
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
+.packwrap.is-open .packtext { max-height: min(60vh, 46em); overflow: auto; scrollbar-width: thin; }
+button.packmore {
+  display: none; margin-top: 2px; padding: 1px 7px; font-size: 0.68rem;
+  color: var(--cs-accent); background: none; border-color: var(--cs-accent-soft);
+}
+.packwrap.is-long > button.packmore, .packwrap.is-open > button.packmore { display: inline-block; }
 .veil-bind { font-size: 0.7rem; opacity: 0.8; }
 .veil-bind b { font-weight: 650; opacity: 0.75; }
 .veil.is-known .veil-top > input[type="text"] { border-color: color-mix(in srgb, var(--cs-accent) 35%, var(--cs-line)); }
@@ -3561,6 +3577,9 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
     overflow: visible !important; max-height: none !important;
   }
   .tablewrap { background: none !important; }
+  /* A block's text prints in full: there is no opening it out on paper. */
+  .packtext { max-height: none !important; overflow: visible !important; mask-image: none !important; }
+  button.packmore { display: none !important; }
   /* Truncation is the same problem one line down. On paper there is room to
      wrap, and no hover to reveal the rest. */
   .cname, .tname, .sname, .mdetail-name, .dashtalent, .manacard .mname {
