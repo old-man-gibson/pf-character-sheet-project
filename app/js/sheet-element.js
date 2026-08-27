@@ -528,6 +528,11 @@ export class CharacterSheetElement extends HTMLElement {
    * where the selection sits.
    */
   #palette = null;
+  /* The live region, and the headline values it is watching. Both outlive
+     every render; see `#announceChanges`. */
+  #live = null;
+  #watched = null;
+  #liveTimer = null;
   #paletteIndex = null;
   #paletteRows = [];
   #paletteAt = 0;
@@ -1270,11 +1275,79 @@ export class CharacterSheetElement extends HTMLElement {
     this.#applyCharacterColor();
     this.#bind();
     this.#showActiveTab();
+    this.#fillJumpTo();
     this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
     if (this.#palette) this.shadowRoot.append(this.#palette);
+    // Same trick, and for a stronger reason: a live region that is replaced is
+    // a live region a reader has stopped watching.
+    this.shadowRoot.append(this.#liveRegion());
+    this.#announceChanges();
+  }
+
+  /**
+   * The one thing the sheet is for, said out loud.
+   *
+   * Everything here recalculates: change Dex and AC moves, and Reflex, and
+   * initiative, and twelve skills. On screen that is the whole point and it is
+   * plain to see. To a screen reader it was silent -- the sheet had exactly one
+   * `aria-live` region in it, the palette's result count -- so the effect of an
+   * edit was something you had to go and look for, field by field, to find out
+   * whether the thing you came to do had worked.
+   *
+   * Six values rather than every derived one: hit points, AC, the three saves
+   * and initiative are what a player is watching when they change anything, and
+   * a region that reads out forty numbers is a region nobody leaves on. Capped
+   * at three, because past that the sentence stops being a sentence.
+   *
+   * `polite`, and on a timer: an edit can land several renders in a row (a
+   * recompute, then the change count, then a snapshot) and a region that
+   * re-announces the same move three times is worse than one that is quiet.
+   */
+  #liveRegion() {
+    if (!this.#live) {
+      this.#live = document.createElement('p');
+      this.#live.className = 'srlive';
+      this.#live.setAttribute('aria-live', 'polite');
+      this.#live.setAttribute('aria-atomic', 'true');
+    }
+    return this.#live;
+  }
+
+  /** The handful a player is watching when they change something. */
+  #headlineValues() {
+    const c = this.#model?.data;
+    if (!c) return null;
+    return {
+      'Hit points': this.#model.hpState?.max,
+      AC: c.defenses?.ac,
+      Fortitude: c.saves?.fortitude?.total,
+      Reflex: c.saves?.reflex?.total,
+      Will: c.saves?.will?.total,
+      Initiative: c.hp?.initiative,
+    };
+  }
+
+  #announceChanges() {
+    const now = this.#headlineValues();
+    if (!now) return;
+    const before = this.#watched;
+    this.#watched = now;
+    // Nothing to compare against on the first render of a character: opening a
+    // sheet is not a change to it.
+    if (!before) return;
+    const moved = Object.keys(now)
+      .filter((k) => before[k] !== undefined && now[k] !== undefined && before[k] !== now[k])
+      .map((k) => `${k} ${before[k]} to ${now[k]}`);
+    if (!moved.length) return;
+    const said = moved.slice(0, 3).join(', ')
+      + (moved.length > 3 ? `, and ${moved.length - 3} more` : '');
+    clearTimeout(this.#liveTimer);
+    this.#liveTimer = setTimeout(() => {
+      if (this.#live && this.isConnected) this.#live.textContent = said;
+    }, 400);
   }
 
   /**
@@ -1389,6 +1462,10 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #railActions() {
     return `<div class="railactions">
+        ${/* Filled from the panel headings after each render; see `#fillJumpTo`. */''}
+        <select class="jumpto" aria-label="Jump to a section on this tab" hidden>
+          <option value="">Jump to…</option>
+        </select>
         ${this.#searchButton()}
         ${this.isPublished ? '' : `
         <button data-action="save" class="${this.#changes ? 'primary' : ''}"
@@ -3406,6 +3483,16 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    scope.querySelectorAll('select.jumpto').forEach((box) => {
+      box.addEventListener('change', () => {
+        const to = box.value;
+        // Back to the placeholder: the box is a verb, not a state, and leaving
+        // it reading "Wealth" would say you are there long after you have gone.
+        box.value = '';
+        if (to !== '') this.#jumpToSection(to);
+      });
+    });
+
     scope.querySelectorAll('[data-importfile]').forEach((input) => {
       input.addEventListener('change', async () => {
         const file = input.files?.[0];
@@ -3902,6 +3989,49 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * A way about inside one tab.
+   *
+   * Half the tabs run past three screens and the only way through one was the
+   * scrollbar. Ctrl+K jumps to a *row*, which is a different question -- it
+   * answers "where is my Disguise modifier", not "take me to Wealth".
+   *
+   * Read off the headings rather than declared anywhere: every panel already
+   * announces itself with an `<h3>`, and a supergroup with its own title, so
+   * the list of sections is a fact about the rendered tab and cannot fall out
+   * of step with it. The cost is one query per render, which is the same walk
+   * `#clampHints` is doing beside it.
+   *
+   * Hidden below three sections, where a tab is short enough to see the whole
+   * of and the control would be one more thing to read past.
+   */
+  #fillJumpTo() {
+    const box = this.shadowRoot.querySelector('select.jumpto');
+    const body = this.shadowRoot.querySelector('.body');
+    if (!box || !body) return;
+    const heads = [...body.querySelectorAll('section.panel > h3, .supergroup > .supergroup-title')];
+    box.hidden = heads.length < 3;
+    if (box.hidden) { box.innerHTML = '<option value="">Jump to…</option>'; return; }
+    box.innerHTML = ['<option value="">Jump to…</option>', ...heads.map((h, i) => {
+      // The heading's own words, without the badges and fold buttons that sit
+      // in it: "Wealth", not "Wealth Mana 4,213 ▾".
+      const own = [...h.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ');
+      const label = (own.trim() || h.textContent).replace(/\s+/g, ' ').trim().slice(0, 34);
+      h.dataset.section = String(i);
+      return `<option value="${i}">${esc(label)}</option>`;
+    })].join('');
+  }
+
+  /** Take the reader to a section, landing it clear of the pinned rail. */
+  #jumpToSection(index) {
+    const head = this.shadowRoot.querySelector(`.body [data-section="${CSS.escape(index)}"]`);
+    if (!head) return;
+    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
+    const target = head.closest('section.panel, .supergroup') ?? head;
+    target.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
+    target.scrollIntoView({ block: 'start' });
+  }
+
+  /**
    * Fold the long guides down on a narrow screen.
    *
    * The hints are the sheet teaching itself, and on a desktop the space they
@@ -3938,7 +4068,12 @@ export class CharacterSheetElement extends HTMLElement {
   #showActiveTab() {
     const bar = this.shadowRoot.querySelector('nav.tabs');
     const tab = bar?.querySelector('[role="tab"][aria-selected="true"]');
-    if (!tab || bar.scrollWidth <= bar.clientWidth) return;
+    if (!tab) return;
+    // Whether the bar is a single row, which is what lets the open tab join
+    // the panel below it -- see `.tabs.oneline`.
+    const rows = new Set([...bar.children].map((c) => c.offsetTop)).size;
+    bar.classList.toggle('oneline', rows <= 1);
+    if (bar.scrollWidth <= bar.clientWidth) return;
     const t = tab.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
     if (t.left >= b.left && t.right <= b.right) return;

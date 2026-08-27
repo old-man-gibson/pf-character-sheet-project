@@ -85,6 +85,12 @@ headings in place. It defaults to `calc(100svh - var(--cs-sticky-top) - 10rem)`,
 which reads the *window* — so a sheet embedded in a short container of the host's
 wants its own value, and `none` turns the behaviour off entirely.
 
+`--cs-tablebg` is what a scroll box paints its edges against. A table that can scroll
+sideways carries a shadow at whichever end has something past it, and the trick that
+draws it needs to know the colour behind the box; it defaults to `--cs-panel`, which is
+what every table on the sheet sits on. Set it on any wrapper you put a table into that
+is a different colour, or the shadow leaves a band.
+
 There is no build step and no runtime dependency — plain ES modules.
 
 One thing to keep together: the component fetches its stylesheet, `app/css/sheet.css`,

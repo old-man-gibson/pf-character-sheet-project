@@ -295,6 +295,19 @@ and grows with the roster, so the first thing on the page is a **Skip to the she
 link — invisible until it is the thing being used, and from it one more **Tab** is into
 the rail.
 
+**A recalculation says so.** Everything here recomputes as you type, which is plain to
+see and was entirely silent to a screen reader. Hit points, AC, the three saves and
+initiative are watched: when an edit moves any of them the sheet reads out what moved
+— *“AC 50 to 48, Reflex +21 to +19”* — politely, capped at three, and quiet when the
+edit moved nothing.
+
+### Getting about inside a tab
+
+The tab rail carries a **Jump to…** box listing the sections of the tab you are on, read
+off their own headings. It is for the question Ctrl+K does not answer: the palette takes
+you to a *row* — *where is my Disguise modifier* — and this takes you to a *section*.
+Gone on a tab with fewer than three.
+
 ### Where it opens
 
 **On the character and the tab you left.** Which character was open, and which tab on

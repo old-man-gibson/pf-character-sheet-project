@@ -486,7 +486,7 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
  */
 .tabrail {
   position: sticky; top: var(--cs-sticky-top); z-index: 30;
-  margin: 6px 0 12px; padding: 6px 0 8px;
+  margin: 6px 0 12px; padding: 6px 0 0;
   background: var(--cs-bg);
   border-bottom: 1px solid var(--cs-line);
 }
@@ -552,6 +552,52 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   .tabs button { flex: 0 0 auto; }
 }
 .tabs button { border-radius: 6px 6px 0 0; }
+/* The open tab joins the panel it opens.
+ *
+ * Selected, pressed and primary have always shared one wash, and on a bar of
+ * sixteen that made the single most important state on the page look like the
+ * "Show all skills" toggle two rows down. The shape was already reaching for
+ * this -- the buttons have had a folder's corners since the first version --
+ * so the tab row sits *on* the rail's rule and the open one breaks through it.
+ *
+ * `.oneline` because it is only true when it is true: a wrapped bar has rows
+ * below the selected tab, and a tab joining a panel two rows away is a lie
+ * about where you are. The class is put on by `#showActiveTab`, which is
+ * measuring the bar anyway.
+ *
+ * The wash is layered over `--cs-bg` rather than left translucent: at 1px the
+ * rule it is covering would show straight through it. */
+.tabs.oneline { margin-bottom: -1px; position: relative; z-index: 1; }
+.tabs.oneline button[aria-selected="true"] {
+  border-bottom-color: transparent;
+  background:
+    linear-gradient(var(--cs-accent-soft), var(--cs-accent-soft)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+.tabs.oneline button.tinted[aria-selected="true"] {
+  border-bottom-color: transparent;
+  background:
+    linear-gradient(color-mix(in srgb, var(--tab-color) 16%, transparent),
+      color-mix(in srgb, var(--tab-color) 16%, transparent)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+:host([theme="light"]) .tabs.oneline button.tinted[aria-selected="true"] {
+  background:
+    linear-gradient(color-mix(in srgb, var(--tab-color) 18%, transparent),
+      color-mix(in srgb, var(--tab-color) 18%, transparent)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+
+/* Getting about inside a tab that runs four screens deep. Quiet, and beside
+   the two buttons rather than among them: it is a way of moving, not a thing
+   to do. Gone when the tab has too few sections to be worth one. */
+select.jumpto {
+  width: auto; max-width: 11rem; font-size: 0.75rem; padding: 4px 6px;
+  color: var(--cs-muted); background: var(--cs-panel-2);
+}
+select.jumpto:hover, select.jumpto:focus { color: var(--cs-text); }
+select.jumpto[hidden] { display: none; }
+@container (max-width: 620px) { select.jumpto { max-width: 7.5rem; } }
 /* A coloured tab. `--tab-color` is set inline per button, and the rules read
    it the way the theme's own accent is read one row up -- so a coloured tab
    is the same shape as an uncoloured one, in a different hue. Resting state
@@ -600,6 +646,13 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
    focusable -- a published sheet's prose, mostly. Inset, because an outline
    drawn round the whole body would otherwise sit half off the edge. */
 .body:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
+/* Read out, never drawn. The standard clip: `display: none` and
+   `visibility: hidden` both take a live region out of the accessibility tree,
+   which is the one thing this must not be. */
+.srlive {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 /* Rearranging by drag: the tab (or manager row) being carried fades, and the
    one under the pointer shows which side the drop lands on. */
 .tabs button.dragging, .tabrow.dragging { opacity: 0.4; }
@@ -1040,7 +1093,38 @@ option[data-ab]:not([data-ab=""]) {
    the headings resolved against -- and with no height to resolve against, they
    stuck to a box that was itself moving up the page, which is to say they
    never stuck to anything. Capping it gives them one. */
-.tablewrap { overflow: auto; max-height: var(--cs-table-max); scrollbar-width: thin; }
+/* An edge that says it is an edge.
+ *
+ * A scroll box with an overlay scrollbar looks exactly like a table that ends
+ * there, and four of these hide 400px or more of themselves on a laptop -- the
+ * Progression grid, a full Equipment row. So each end carries a shadow while
+ * there is something past it and nothing while there is not, which is the one
+ * thing a scrollbar was telling you and had stopped.
+ *
+ * Four background layers doing it, and no script: the two covers are attached
+ * `local` so they travel with the content and slide off the end they are
+ * covering; the two shadows are attached `scroll` so they stay pinned to the
+ * box. Painted in `--cs-tablebg` because the cover has to match what is behind
+ * the wrap -- every one of them today is a panel, and anything that puts one
+ * on another surface sets the property rather than living with a band. */
+.tablewrap {
+  overflow: auto; max-height: var(--cs-table-max); scrollbar-width: thin;
+  --cs-tablebg: var(--cs-panel);
+  background:
+    linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
+    linear-gradient(to left, var(--cs-tablebg) 40%, transparent) 100% 0 / 22px 100% no-repeat,
+    linear-gradient(to right, rgba(0, 0, 0, 0.30), transparent) 0 0 / 14px 100% no-repeat,
+    linear-gradient(to left, rgba(0, 0, 0, 0.30), transparent) 100% 0 / 14px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+:host([theme="light"]) .tablewrap {
+  background:
+    linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
+    linear-gradient(to left, var(--cs-tablebg) 40%, transparent) 100% 0 / 22px 100% no-repeat,
+    linear-gradient(to right, rgba(26, 29, 38, 0.18), transparent) 0 0 / 14px 100% no-repeat,
+    linear-gradient(to left, rgba(26, 29, 38, 0.18), transparent) 100% 0 / 14px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
 
 /* ---------- a floor under a table's columns ----------
  *
@@ -2178,6 +2262,9 @@ input[type="color"] {
 .hint code {
   font-family: var(--cs-mono); background: var(--cs-panel-2);
   padding: 1px 4px; border-radius: 3px; color: var(--cs-text);
+  /* `essence.shoulder` is one word to a line-breaker and wider than a narrow
+     column, and a hint is prose: it wraps rather than pushing the page out. */
+  overflow-wrap: anywhere;
 }
 .preview { font-size: 0.78rem; font-family: var(--cs-mono); padding: 5px 8px; border-radius: 5px; }
 .preview.ok { background: color-mix(in srgb, var(--cs-good) 12%, transparent); color: var(--cs-good); }
@@ -2348,9 +2435,10 @@ input[type="color"] {
 .pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  /* The ledger takes the width it is worth and the buffs take the rest, rather
-     than the rest being nothing. */
-  .pairrow.wealthpair { grid-template-columns: minmax(0, 54rem) minmax(0, 1fr); }
+  /* The ledger takes the width it is worth and the buffs take the rest -- with
+     a floor under "the rest", or between 900px and 1200px the ledger takes its
+     whole 54rem and leaves the buff chips 104px to fit a 16rem grid into. */
+  .pairrow.wealthpair { grid-template-columns: minmax(0, 54rem) minmax(18rem, 1fr); }
 }
 
 /* ---------- the class table ----------
@@ -3467,10 +3555,12 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   textarea { height: auto !important; max-height: none !important; overflow: visible !important; }
 
   /* Every scroll container is a pair of scissors once there is no scrollbar:
-     what it was clipping is simply gone from the page. */
+     what it was clipping is simply gone from the page. And nothing on paper
+     scrolls, so the shadows that say so come off with it. */
   .tablewrap, .discipline-wrap, .body {
     overflow: visible !important; max-height: none !important;
   }
+  .tablewrap { background: none !important; }
   /* Truncation is the same problem one line down. On paper there is room to
      wrap, and no hover to reveal the rest. */
   .cname, .tname, .sname, .mdetail-name, .dashtalent, .manacard .mname {
