@@ -79,7 +79,7 @@ export function formulaButton(model, ctx) {
       title="${broken
     ? `Formulas — ${broken} on this character ${broken === 1 ? 'is' : 'are'} not working`
     : 'Formulas: what you can read, what you have written, and how to write more'}"
-      >&fnof;x${broken ? ` (${broken})` : ''}</button>`;
+      >&fnof;x Formulas${broken ? ` (${broken})` : ''}</button>`;
   }
 
 

@@ -150,9 +150,6 @@
   width: 84px; height: 84px; flex: none; border-radius: var(--cs-radius);
   object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
 }
-/* A real minimum, not zero: when the header buttons would otherwise crush the
-   name and summary into a one-word column (768-1024px), the actions wrap to
-   their own row below instead. */
 .head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
 .name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
@@ -164,7 +161,6 @@
 .sessionstrip strong.now { display: inline; font-size: inherit; margin: 0; }
 .sessionstrip .dim { font-size: 0.75rem; }
 .sessionstrip .hptemp { font-size: 0.75rem; }
-.head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 /* ---------- the session dashboard ---------- */
 /* Cards over panels: the same .panel chrome, but each card leads with the
@@ -482,7 +478,55 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   background: var(--cs-bg);
   border-bottom: 1px solid var(--cs-line);
 }
-.tabrail .sessionstrip { margin: 0 0 6px; }
+/* The strip and the two standing controls share the rail's first line -- the
+   numbers on the left, the buttons on the right -- and the tab bar gets the
+   whole of the second. Sharing the tabs' line instead cost 220px of it, which
+   on a phone left room for two tabs, and a bar you cannot see is not
+   navigation. In the build view the strip is not there and the line is the
+   buttons alone. */
+.railtop {
+  display: flex; gap: 4px 14px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.railtop .sessionstrip { flex: 1 1 16rem; min-width: 0; margin: 0; }
+.railactions {
+  display: flex; gap: 5px; align-items: center;
+  margin-left: auto; position: relative;
+}
+.railactions button.railmore { padding: 4px 8px; line-height: 1; font-size: 0.95rem; }
+/* Sharing a line with the strip on a phone: the icon carries the search button
+   and its title says the rest, which is what the shortcut on its face was
+   teaching anyway. */
+@container (max-width: 620px) {
+  .railactions .searchbtn .searchlabel, .railactions .searchbtn kbd { display: none; }
+  .railactions .searchbtn { padding: 5px 8px; }
+}
+/* The other eight. A column of plain rows: this is a list of things to do, not
+   a second toolbar, so nothing in it competes with Save two inches to the left. */
+.chromemenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 41;
+  display: flex; flex-direction: column; gap: 3px; padding: 6px;
+  min-width: 12.5rem;
+  background: var(--cs-panel); border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.chromemenu button {
+  text-align: left; background: none; border: 0; border-radius: 5px;
+  padding: 5px 8px; width: 100%;
+}
+.chromemenu button:hover { background: var(--cs-panel-2); }
+.chromemenu button.danger:hover { background: color-mix(in srgb, var(--cs-bad) 12%, transparent); }
+.chromemenu p.menukeys {
+  margin: 4px 2px 1px; padding-top: 6px; border-top: 1px solid var(--cs-line);
+  font-size: 0.7rem; color: var(--cs-muted);
+}
+.chromemenu kbd {
+  font-family: var(--cs-mono); font-size: 0.68rem; background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 3px; margin-right: 1px;
+}
+/* What the rail raises, drawn under the rail rather than up in the header --
+   which is three screens away once anything is scrolled. */
+.notices { display: flex; flex-direction: column; }
 .tabs { display: flex; gap: 3px; flex-wrap: wrap; }
 /* Pinned chrome has to have a bounded height, and sixteen tabs at phone width
    wrap to five rows -- most of the screen, held there. One row that scrolls
@@ -3255,7 +3299,8 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   /* The chrome. Everything here is a way to *change* the sheet or move around
      it, and neither survives the trip to paper. */
   nav.tabs,
-  .head-actions,
+  .railactions,
+  .chromemenu,
   .rollslot,
   .savefail,
   .importerr,

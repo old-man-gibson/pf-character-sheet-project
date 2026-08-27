@@ -256,7 +256,7 @@ existed: edits are kept continuously and it reopens where you left off.
 
 **If `localStorage` will not take the write either**, that fallback is gone too, and the
 sheet says so rather than letting you find out when you close the tab: a red **"Not being
-saved"** banner appears under the header with **Export JSON** beside it, and stays until a
+saved"** banner appears under the tab rail with **Export JSON** beside it, and stays until a
 write lands. It has no dismiss, because it is not reporting something that happened — it
 is reporting something that is still true. This is the one notice on the sheet that is a
 standing condition rather than an event.

@@ -24,16 +24,18 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. The `<char
 | `theme` | `dark` (default) or `light` |
 | `storage-key` | localStorage key for edits; omit for the per-character default |
 | `snapshot-every` | changes between automatic snapshots (default 20) |
-| `hotkeys` | `off` stops the sheet claiming <kbd>Ctrl</kbd>+<kbd>K</kbd> from the host page (see below) |
+| `hotkeys` | `off` stops the sheet claiming <kbd>Ctrl</kbd>+<kbd>K</kbd> and <kbd>Ctrl</kbd>+<kbd>S</kbd> from the host page (see below) |
 
-**The one key it listens for on your page.** <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the
+**The two keys it listens for on your page.** <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the
 sheet's [search palette](using-the-sheet.md#finding-things-the-search-palette), and it is
 worth having when focus is anywhere on the page rather than only inside the sheet — so
 that one listener sits on the document. It stands down for a host that wants the key:
 if you handle the event first and call `preventDefault()` it is yours, if the person is
 typing into one of your own fields nothing happens, and `hotkeys="off"` turns it off
-outright. Everything else the sheet listens to is inside its own shadow root, `/`
-included.
+outright. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, and is claimed on a much shorter leash: only
+when focus is already inside the sheet and only when there is something to save, so a host
+page's own editor keeps the key it expects. Everything else the sheet listens to is inside
+its own shadow root, `/` included.
 
 **Properties / methods:** `.character` (get or set a document directly, no fetch),
 `.model`, `.toJSON()`, `.audit()`, `.resetToSource()`, `.whenReady()` (resolves once

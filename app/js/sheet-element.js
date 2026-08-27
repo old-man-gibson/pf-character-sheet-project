@@ -464,6 +464,8 @@ export class CharacterSheetElement extends HTMLElement {
   #openBuff = null;
   /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
   #confirmReset = false;
+  /** Whether the rail's `⋯` menu is open. */
+  #chromeMenu = false;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
   /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
@@ -569,11 +571,28 @@ export class CharacterSheetElement extends HTMLElement {
   #onDocumentKey = (e) => {
     if (e.defaultPrevented || !this.#model) return;
     if (this.getAttribute('hotkeys') === 'off') return;
-    if (e.key?.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const key = e.key?.toLowerCase();
+    if (key !== 'k' && key !== 's') return;
     // The path, not `contains`: an event from inside the shadow root is
     // retargeted at the host, and `contains` cannot see across the boundary.
     const path = e.composedPath?.() || [];
     const inside = path.includes(this);
+    /*
+     * Ctrl+S saves, which is the one verb on the sheet that had no key at all
+     * -- and the one the browser's own Ctrl+S is most likely to be mistaken
+     * for, since "save this page" is never what anyone meant here. Only when
+     * the sheet is what is being used, though: a host page's own field keeps
+     * the key, and so does a page with no sheet in focus, because taking
+     * Ctrl+S away from a document someone is editing elsewhere is worse than
+     * not having it.
+     */
+    if (key === 's') {
+      if (!inside || this.isPublished || !this.#changes) return;
+      e.preventDefault();
+      this.#action('save');
+      return;
+    }
     // Typing somewhere else on the page: leave the key to whoever is typing.
     if (!inside && isTypingIn(path[0] ?? e.target)) return;
     e.preventDefault();
@@ -1184,7 +1203,7 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="wrap">
         ${this.#header()}
         <div class="tabrail">
-        ${this.#sessionStrip()}
+        <div class="railtop">${this.#sessionStrip()}${this.#railActions()}</div>
         <nav class="tabs" role="tablist" aria-label="Character sheet sections">
           ${bar.map((e) => {
     // A colour is a normalised `#rrggbb` or nothing, so it is safe in the
@@ -1211,6 +1230,7 @@ export class CharacterSheetElement extends HTMLElement {
         <div class="rollslot">${this.#rollToastHtml()}</div>
         </div>
         ${this.#tabColorMenuHtml()}
+        ${this.#notices()}
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
       </div>`;
@@ -1287,6 +1307,15 @@ export class CharacterSheetElement extends HTMLElement {
     root.addEventListener('scroll', (e) => draw(e.target), true);
   }
 
+  /**
+   * Who this is: the portrait, the name, and the two lines under it.
+   *
+   * No controls. They used to live here -- ten buttons at one weight, in one
+   * row, wrapping to four rows and 104px on a phone -- and they went to the
+   * rail, which is the part of the sheet that stays on screen. What is left is
+   * the part you read once, which is also the part that can afford to scroll
+   * away. See `#railActions`.
+   */
   #header() {
     const c = this.#model.data;
     const i = c.identity;
@@ -1308,30 +1337,78 @@ export class CharacterSheetElement extends HTMLElement {
             ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
           </div>
         </div>
-        <div class="head-actions">
-          ${this.#searchButton()}
-          ${this.#viewModeButton()}
-          ${this.#formulaButton()}
-          <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
-          ${this.isPublished ? '' : `
-          <button data-action="save" class="${this.#changes ? 'primary' : ''}"
-            ${this.#changes ? '' : 'disabled'}
-            title="${this.#changes
-              ? 'Make this the version the sheet opens on'
-              : 'Nothing has changed since the last save'}">
-            Save${this.#changes ? ` (${this.#changes})` : ''}
-          </button>
-          <button data-action="history" aria-pressed="${this.#showHistory}"
-            title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
-          <button data-action="export">Export JSON</button>
-          ${this.isPublished ? '' : `
-          <button data-action="preview-published"
-            title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
-          <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import</button>
-          <input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>
-          <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
-            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
-        </div>
+      </header>`;
+  }
+
+  /**
+   * The two controls worth a permanent place, and a menu for the other eight.
+   *
+   * Ten buttons at equal weight is a list, not a toolbar: everything is
+   * findable and nothing is obvious, and the two that are pressed every few
+   * minutes -- Search and Save -- sat fifth and first among things pressed
+   * twice a month. So those two ride the rail, where they are always to hand,
+   * and the rest are one press away behind `⋯`.
+   *
+   * Search keeps its shortcut on its face, because that is how the second
+   * press of it stops needing the button. Save wears the change count and
+   * goes quiet when there is nothing to save.
+   */
+  #railActions() {
+    return `<div class="railactions">
+        ${this.#searchButton()}
+        ${this.isPublished ? '' : `
+        <button data-action="save" class="${this.#changes ? 'primary' : ''}"
+          ${this.#changes ? '' : 'disabled'}
+          title="${this.#changes
+            ? 'Make this the version the sheet opens on (Ctrl+S)'
+            : 'Nothing has changed since the last save'}">
+          Save${this.#changes ? ` (${this.#changes})` : ''}
+        </button>`}
+        <button class="railmore" data-action="chrome-menu" aria-haspopup="menu"
+          aria-expanded="${this.#chromeMenu}" aria-label="More"
+          title="Views, formulas, history, export">⋯</button>
+        ${this.#chromeMenu ? this.#chromeMenuHtml() : ''}
+        ${/* Out here rather than in the menu: choosing Import takes the menu
+             away with it, and the input the action reaches for has to outlive
+             that click. */''}
+        ${this.isPublished ? '' : '<input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>'}
+      </div>`;
+  }
+
+  /** Everything the rail does not keep on its face. */
+  #chromeMenuHtml() {
+    const light = this.getAttribute('theme') === 'light';
+    return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
+        ${this.#viewModeButton()}
+        ${this.#formulaButton()}
+        <button data-action="theme">${light ? 'Dark theme' : 'Light theme'}</button>
+        ${this.isPublished ? '' : `
+        <button data-action="history" aria-pressed="${this.#showHistory}"
+          title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
+        <button data-action="export">Export JSON</button>
+        ${this.isPublished ? '' : `
+        <button data-action="preview-published"
+          title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
+        <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
+        <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
+          title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
+        <p class="menukeys"><kbd>Ctrl</kbd><kbd>K</kbd> search
+          &middot; <kbd>Ctrl</kbd><kbd>S</kbd> save
+          &middot; <kbd>←</kbd><kbd>→</kbd> tabs</p>
+      </div>`;
+  }
+
+  /**
+   * What the sheet has to say to you, under the rail rather than up in the
+   * header.
+   *
+   * Every one of these is opened or raised by something on the rail, and the
+   * rail is pinned -- so a History panel that rendered where the buttons used
+   * to be would open three screens above wherever you were standing. Directly
+   * under the thing that opened them is the only place they can be.
+   */
+  #notices() {
+    return `<div class="notices">
         ${this.#resumeBanner()}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
@@ -1355,7 +1432,7 @@ export class CharacterSheetElement extends HTMLElement {
           will not survive closing the tab.
           <button data-action="export" class="primary">Export JSON</button>
         </div>
-      </header>`;
+      </div>`;
   }
 
   /**
@@ -1392,17 +1469,21 @@ export class CharacterSheetElement extends HTMLElement {
       title="Search this character — skills, feats, gear, spells, anything (Ctrl+K)">
       <svg class="cmdk-glass" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>
-      </svg>Search<kbd>Ctrl K</kbd></button>`;
+      </svg><span class="searchlabel">Search</span><kbd>Ctrl K</kbd></button>`;
   }
 
   /** The Session/Build switch: which view of the sheet is showing. */
   #viewModeButton() {
     const session = this.#model.viewMode() === 'session';
-    return `<button data-action="view-mode" aria-pressed="${session}"
+    // Named for where it goes, not for where you are. It reads the other way
+    // round as a toggle -- a pressed button says which state it is in -- but
+    // this is a row in a menu now, and a menu item is a thing you are about to
+    // do. The `⚙` panel's own switch has said it this way all along.
+    return `<button data-action="view-mode"
       title="${session
-    ? 'Session view: the tabs that come up at the table. Switch back to see everything.'
-    : 'Switch to the session view: only the tabs that come up at the table'}">
-      ${session ? 'Session' : 'Build'} view</button>`;
+    ? 'Everything the sheet can show, including the build machinery'
+    : 'Only the tabs that come up at the table, and the Overview as a dashboard'}">
+      Switch to ${session ? 'build' : 'session'} view</button>`;
   }
 
   /**
@@ -3193,7 +3274,22 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #bindActions(scope) {
     scope.querySelectorAll('[data-action]').forEach((b) => {
-      b.addEventListener('click', () => this.#action(b.dataset.action, b));
+      b.addEventListener('click', () => {
+        /*
+         * Choosing something from the `⋯` menu is also the gesture that shuts
+         * it. Taken out by hand rather than by a redraw: several of these
+         * actions render something and then put the caret in it -- the armed
+         * Reset does exactly that -- and a redraw chasing the action would
+         * take that field away again.
+         */
+        const menu = b.dataset.action === 'chrome-menu' ? null : b.closest('.chromemenu');
+        if (menu) {
+          this.#chromeMenu = false;
+          menu.remove();
+          this.shadowRoot.querySelector('[data-action="chrome-menu"]')?.setAttribute('aria-expanded', 'false');
+        }
+        this.#action(b.dataset.action, b);
+      });
     });
 
     scope.querySelectorAll('[data-importfile]').forEach((input) => {
@@ -3269,7 +3365,15 @@ export class CharacterSheetElement extends HTMLElement {
       this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
     });
     wrap.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || !this.#openCell) return;
+      if (e.key !== 'Escape') return;
+      // The `⋯` menu first: it is the thing most recently opened if both are,
+      // and Escape should shut one layer, not two.
+      if (this.#chromeMenu) {
+        e.stopPropagation();
+        this.#action('chrome-menu');
+        return;
+      }
+      if (!this.#openCell) return;
       this.#shutFoldedCell();
       this.#render();
     });
@@ -3300,11 +3404,16 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #renderHeader({ gentle = false } = {}) {
     const root = this.shadowRoot;
-    const old = root.querySelector('header.head');
-    if (!old || !this.#model) { this.#render(); return; }
+    // Two subtrees now rather than one: the buttons live on the rail and what
+    // they raise -- the History panel, the notices -- sits under it. Neither is
+    // inside `header.head` any more, and the header itself holds nothing this
+    // ever changes.
+    const parts = [['.railactions', () => this.#railActions()], ['.notices', () => this.#notices()]];
+    const found = parts.map(([sel]) => root.querySelector(sel));
+    if (found.some((n) => !n) || !this.#model) { this.#render(); return; }
 
-    if (gentle && old.contains(root.activeElement)) {
-      const save = old.querySelector('[data-action="save"]');
+    if (gentle && found.some((n) => n.contains(root.activeElement))) {
+      const save = root.querySelector('[data-action="save"]');
       if (save) {
         save.textContent = `Save${this.#changes ? ` (${this.#changes})` : ''}`;
         save.disabled = !this.#changes;
@@ -3313,11 +3422,13 @@ export class CharacterSheetElement extends HTMLElement {
       return;
     }
 
-    const holder = document.createElement('div');
-    holder.innerHTML = this.#header();
-    const fresh = holder.firstElementChild;
-    old.replaceWith(fresh);
-    this.#bindActions(fresh);
+    parts.forEach(([sel, html], i) => {
+      const holder = document.createElement('div');
+      holder.innerHTML = html();
+      const fresh = holder.firstElementChild;
+      found[i].replaceWith(fresh);
+      this.#bindActions(fresh);
+    });
   }
 
   /**
@@ -3527,8 +3638,17 @@ export class CharacterSheetElement extends HTMLElement {
    * once and survive every re-render.
    */
   #onPointerDownAway = (e) => {
-    if (!this.#tabColorFor) return;
     const path = e.composedPath?.() || [];
+    // The `⋯` menu shuts on a press outside it the same way, and on the same
+    // listener -- one for the element's life rather than one per render.
+    // Its own toggle is excluded, or the press that opens it would also be the
+    // press that closes it.
+    if (this.#chromeMenu && !path.some((n) => n?.classList?.contains?.('chromemenu')
+      || n?.dataset?.action === 'chrome-menu')) {
+      this.#chromeMenu = false;
+      this.#renderHeader();
+    }
+    if (!this.#tabColorFor) return;
     // Inside the panel, or on a control whose own handler opens it: not away.
     if (path.some((n) => n?.classList?.contains?.('tabmenu')
       || n?.dataset?.tabcolorOpen !== undefined)) return;
@@ -5361,6 +5481,14 @@ export class CharacterSheetElement extends HTMLElement {
       case 'preview-published':
         this.#previewPublished();
         break;
+      case 'chrome-menu':
+        this.#chromeMenu = !this.#chromeMenu;
+        this.#renderHeader();
+        // Focus lands on the first item so the menu can be walked from the
+        // keyboard; the toggle it came from is gone, replaced by the redraw.
+        if (this.#chromeMenu) this.shadowRoot.querySelector('.chromemenu button')?.focus();
+        else this.shadowRoot.querySelector('[data-action="chrome-menu"]')?.focus();
+        break;
       case 'import':
         this.shadowRoot.querySelector('[data-importfile]')?.click();
         break;
@@ -5990,8 +6118,10 @@ export class CharacterSheetElement extends HTMLElement {
         // closing it owes the reader the other half: without this the render
         // that takes the panel away takes the caret to the document with it,
         // and a keyboard is left at the top of the sheet having pressed a
-        // button in the header.
-        this.shadowRoot.querySelector('[data-action="reset"]')?.focus();
+        // button on the rail. Reset lives in the `⋯` menu, which closed on the
+        // way in, so the fallback is the control that menu hangs off.
+        (this.shadowRoot.querySelector('[data-action="reset"]')
+          ?? this.shadowRoot.querySelector('[data-action="chrome-menu"]'))?.focus();
         break;
       case 'reset-confirm': {
         // The button only exists armed, but check the word anyway -- the DOM

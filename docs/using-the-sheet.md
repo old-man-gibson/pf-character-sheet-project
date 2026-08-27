@@ -69,10 +69,12 @@ scores and size automatically.
 
 Rows can be reordered with ↑ / ↓ and removed with × — except a feat, which is dragged
 by its grip instead. Every change is saved as you make
-it, and **Save** marks the version the sheet opens on — see
-[Saving, and going back](importing-and-saving.md#saving-and-going-back). **Reset** returns the character to the
-converted sheet, **Export JSON** downloads the current state and **Import JSON** brings
-one back (see [Getting characters in](importing-and-saving.md#getting-characters-in)).
+it, and **Save** — on the tab rail, or <kbd>Ctrl</kbd>+<kbd>S</kbd> — marks the version
+the sheet opens on; see
+[Saving, and going back](importing-and-saving.md#saving-and-going-back). Under the rail's
+**⋯**: **Reset** returns the character to the converted sheet, **Export JSON** downloads
+the current state and **Import** brings one back (see
+[Getting characters in](importing-and-saving.md#getting-characters-in)).
 
 > Editing a value that nothing else depends on — a note, a planner cell, a sphere talent
 > — updates the model without re-rendering the panel. The largest grids run to several
@@ -157,7 +159,7 @@ kept per browser rather than in the document, and it applies to every character 
 <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens one box over the
 sheet that searches the whole character. Type three letters, press <kbd>↵</kbd>, and you
 are standing on the thing you were looking for. **/** opens it too when you are not
-typing into a field, and the **🔍 Search** button in the header is there for the first
+typing into a field, and the **🔍 Search** button on the tab rail is there for the first
 time, before the shortcut is muscle memory.
 
 It exists because the tab bar stops scaling somewhere around the twentieth tab. Knowing
@@ -182,7 +184,7 @@ chakras · maneuvers and disciplines · spells, powers, cards and techniques · 
 resources, buffs and the conditions that are on · every progression cell and class
 feature · templates · notes, background and approvals · the companions with their
 attacks, feats, evolutions and tricks · the cells the converter kept under *From the
-source tab* · the tabs themselves · and the header's own buttons as commands.
+source tab* · the tabs themselves · and the sheet's own commands.
 
 | Key | What it does |
 |---|---|
@@ -238,7 +240,10 @@ the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an 
 
 **The bar stays on screen.** It sits on a rail that pins itself to the top of the window
 once the header above it has scrolled away — a tab runs several screens deep, and the way
-through them should not be one of the things that leaves first. Clicking a tab lands you
+through them should not be one of the things that leaves first. **Search** and **Save**
+ride the rail with it, and everything else the sheet can do is under **⋯**: switching
+view, ƒx Formulas, the theme, History, Export JSON, Preview published, Import and Reset.
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves without going near the button. Clicking a tab lands you
 at the top of it rather than at whatever offset the last tab had, and leaves the keyboard
 on the tab you pressed. Below 700px the bar is one row that scrolls sideways instead of
 five that wrap, and it keeps the open tab in view. A host page embedding the sheet under
@@ -274,7 +279,7 @@ one more **Tab** press is into the panel itself.
 ### Printing a tab
 
 **Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
-header buttons or any of the controls — fields print as the values in them, and a
+rail's buttons or any of the controls — fields print as the values in them, and a
 proficiency chip prints only if it is one the character has. That is the whole rule:
 the section on screen is the section that comes out, so a sheet for the table is a
 few prints rather than one very long one. Long tables repeat their headings on each
@@ -434,8 +439,8 @@ Two tabs are not part of that arrangement and sit after it: **ƒx Formulas** —
 formula guide, scratchpad and value index, on every character, described in
 [Formulas & trackers](formulas-and-trackers.md#ƒx-formulas-tab) — and **Formula
 Audit**, which only appears under `role="admin"`. Neither can be hidden or dragged,
-because help you cannot find is not help; the header's **ƒx** button opens the
-Formulas tab from wherever you are, and wears a count when something on the character
+because help you cannot find is not help; **ƒx Formulas** in the rail's **⋯** menu
+opens the tab from wherever you are, and wears a count when something on the character
 is not working.
 
 The manager lists what is off the bar **alphabetically**, in three groups:
