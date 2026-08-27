@@ -15,6 +15,7 @@ import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { orphans } from './reconcile.js';
 import { forwarded } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
+import { markUndo, rowLabel } from './undo.js';
 import { closestName, normalizeName, slug } from './util.js';
 
 /**
@@ -280,6 +281,7 @@ export function removeClassFeatureGroup(model, className) {
   const p = model.data.progression;
   if (!p?.classFeatures?.[className]) return model;
   if (classLevelsIn(model, className).length) return model;
+  markUndo(model, `Removed the ${rowLabel(className, 'class')} features`);
   delete p.classFeatures[className];
   model.recompute();
   return model;
@@ -335,6 +337,7 @@ export function addProgressionTrack(model) {
 export function removeProgressionTrack(model, index) {
   const p = model.data.progression;
   if (!p || p.tracks <= 1 || index < 0 || index >= p.tracks) return model;
+  markUndo(model, `Removed track ${index + 1}`);
   return movingClassLevels(model, () => {
     p.tracks -= 1;
     for (const row of p.levels) {
@@ -637,6 +640,7 @@ export function setClassFeatureNote(model, className, index, patch = {}) {
 export function removeClassFeatureNote(model, className, index) {
   const notes = featureGroup(model, className)?.notes;
   if (!notes?.[index]) return model;
+  markUndo(model, `Removed ${rowLabel(notes[index], 'note')}`);
   notes.splice(index, 1);
   model.recompute();
   return model;
@@ -858,6 +862,7 @@ export function removeClassFeatureColumn(model, className, index) {
   const g = featureGroup(model, className);
   const name = g?.columns?.[index];
   if (!g || name === undefined) return model;
+  markUndo(model, `Removed the ${rowLabel(name, 'feature')} column`);
   g.columns.splice(index, 1);
   for (const row of Object.values(g.byLevel)) delete row[name];
   delete g.rules[name];

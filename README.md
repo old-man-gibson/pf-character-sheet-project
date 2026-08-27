@@ -103,6 +103,7 @@ app/js/inline.js        the {...} forms in prose: values, names and forwarded bo
 app/js/rules.js         Pathfinder tables + derived-stat definitions
 app/js/model.js         live character model
 app/js/history.js       saved versions, snapshots and checkpoints (IndexedDB)
+app/js/model/undo.js    one step back from a removed row, and the Ctrl+Z behind it
 app/js/extensions.js    extension packs: format, local store, table merge, attaching blocks
 app/js/extension-runtime.js  the page's one set of active packs, registered with the model
 app/js/extension-manager.js  the Extensions dialog a host page mounts

@@ -25,6 +25,7 @@ export * from './model/reconcile.js';
 export * from './model/diff.js';
 export * from './model/document.js';
 export * from './model/edit.js';
+export * from './model/undo.js';
 export * from './model/abilities.js';
 export * from './model/progression.js';
 export * from './model/scope.js';

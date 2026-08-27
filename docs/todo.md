@@ -23,6 +23,23 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
   converter still leaves them in *From the source tab* to be retyped. Reading that shape
   across in `convert.py` / `convert.js` would close the loop. It is one workbook's layout,
   so it wants the fixture to hand.
+- **The Veilweaving sphere, past its traditions.** A (tradition) talent now widens the
+  veil catalogue the way a level in that class would (see
+  [Sub-systems](sub-systems.md#shaping-a-veil-and-where-its-text-lives)), which is the
+  half of the sphere that maps onto something the sheet already had. The other half does
+  not: **without** a tradition a sphere veilweaver knows the specific veils their talents
+  name — one from the sphere itself, more from *Veil Knowledge* and *Shape Additional
+  Veil* — and the sheet has nowhere to keep that list, so the slot offers the whole
+  chakra instead of the four or five they actually know. Angou is the worked example: his
+  veils live as text inside talent cells (*“Shape Additional Veil (Marilith's Aspect)”*)
+  and his Akashic tab is empty. Three more of the sphere's numbers are unread as well —
+  its own essence capacity by character level (1/2/3/4 at 6th, 12th, 18th), its
+  veilweaving level (casting levels **plus** veilweaving class levels, counted once where
+  a class is both), and the chakras its *Bind X Chakra* talents open. Doing this properly
+  probably means a **known veils** list on the Akashic tab that the slots pick from, fed
+  by the tradition where there is one and by the player where there is not — which is a
+  rules call as much as a modelling one, so it wants agreeing before it is built.
+
 - **Class-side sub-ability granularity.** An archetype that replaces a *sub-ability*
   (Ronin's *Honorless Tactics* for Resolve's *Determined*) marks the parent as altered and
   sits beside it; it does not edit inside the parent's text. Fine to read, coarse to model.

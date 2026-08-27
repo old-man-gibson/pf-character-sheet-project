@@ -71,6 +71,18 @@
   --cs-radius: 8px;
   --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* Where the pinned tab rail comes to rest. Zero against the top of the
+     window; a host page with a fixed header of its own sets this to its
+     height, and the rail sits under it instead of behind it. Public --
+     see docs/embedding.md. */
+  --cs-sticky-top: 0px;
+  /* How tall a table is allowed to get before it scrolls inside its own box
+     rather than dragging the page down. A screen, less the rail and the panel
+     furniture above it, so a table shorter than the window is untouched and
+     only the long ones gain a scrollbar -- which is also what gives their
+     headings something to stick to. `svh` rather than `dvh` on purpose: a
+     mobile toolbar sliding away must not resize the box mid-scroll. */
+  --cs-table-max: calc(100svh - var(--cs-sticky-top) - 10rem);
 
   display: block;
   font-family: var(--cs-font);
@@ -93,11 +105,23 @@
   --cs-line: #d3d7e0;
   --cs-text: #1a1d26;
   --cs-muted: #5c6478;
-  --cs-accent: #9a6b12;
-  --cs-accent-soft: rgba(154, 107, 18, 0.12);
-  --cs-formula: rgba(154, 107, 18, 0.38);
-  --cs-formula-strong: rgba(154, 107, 18, 0.80);
+  /* One step darker than the gold it started as (#9a6b12), which measured
+     4.68 on white and 4.11 on the panel behind a button -- clearing on the one
+     surface and failing on the other, for the colour that carries every panel
+     heading and every derived value. This clears 4.95 on the worst of them and
+     is not tellable from the old one side by side. */
+  --cs-accent: #8a5f0d;
+  --cs-accent-soft: rgba(138, 95, 13, 0.12);
+  --cs-formula: rgba(138, 95, 13, 0.38);
+  --cs-formula-strong: rgba(138, 95, 13, 0.80);
   --cs-edit: #2563c9;
+  /* Good and bad have to be redeclared here, not inherited: the dark theme's
+     pair are pastels drawn to glow on #14161c, and on near-white they measure
+     2.0:1 and 3.0:1 -- a damage total no one can read. These are the same two
+     meanings at ink strength, 6.6:1 and 7.5:1 on white, and they are the
+     values @media print already reached for when it hit the same wall. */
+  --cs-good: #1a6b2c;
+  --cs-bad: #a32320;
   --fx-number: #1f7a43;
   --fx-string: #6b3fa0;
   --fx-nest-0: #226b82;
@@ -126,9 +150,6 @@
   width: 84px; height: 84px; flex: none; border-radius: var(--cs-radius);
   object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
 }
-/* A real minimum, not zero: when the header buttons would otherwise crush the
-   name and summary into a one-word column (768-1024px), the actions wrap to
-   their own row below instead. */
 .head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
 .name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
@@ -140,7 +161,6 @@
 .sessionstrip strong.now { display: inline; font-size: inherit; margin: 0; }
 .sessionstrip .dim { font-size: 0.75rem; }
 .sessionstrip .hptemp { font-size: 0.75rem; }
-.head-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 /* ---------- the session dashboard ---------- */
 /* Cards over panels: the same .panel chrome, but each card leads with the
@@ -229,15 +249,24 @@
 .dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
 .dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
 @media (max-width: 700px) {
-  .dashtracker { grid-template-columns: 1fr auto; }
-  .dashtracker .dashmeter { grid-column: 1 / -1; }
+  /* Placed rather than flowed. Left to auto-placement the meter takes the
+     whole of row two, which pushes the controls down to a row of their own and
+     leaves the second column empty -- and a `1 / -1` span across an empty
+     track still claims the gap beside it, so the meter came out 8px wider than
+     the card that held it and the pips ran off the right edge. Name and
+     controls share the first row; the meter has the second. */
+  .dashtracker { grid-template-columns: minmax(0, 1fr) auto; }
+  .dashtracker .tname { grid-area: 1 / 1; max-width: none; }
+  .dashtracker .tracker-controls { grid-area: 1 / 2; }
+  .dashtracker .dashmeter { grid-area: 2 / 1 / 3 / -1; min-width: 0; }
+  .dashtracker .pips { min-width: 0; }
 }
 /* Why an offered file was refused -- stays up until dismissed, because the
    fix (re-run the converter, pick a different file) happens elsewhere. */
 .importerr {
   flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start;
   margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
-  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-bad); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .importerr button { margin-left: auto; padding: 0 6px; }
@@ -247,7 +276,7 @@
 .savefail {
   flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-top: 8px; padding: 7px 10px; font-size: 0.8rem;
-  color: var(--cs-bad); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-bad); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .savefail[hidden] { display: none; }
@@ -256,7 +285,7 @@
 .resetconfirm {
   flex-basis: 100%; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   margin-top: 8px; padding: 8px 10px; font-size: 0.8rem;
-  color: var(--cs-text); background: rgba(224, 99, 95, 0.10);
+  color: var(--cs-text); background: color-mix(in srgb, var(--cs-bad) 10%, transparent);
   border: 1px solid var(--cs-bad); border-radius: 6px;
 }
 .resetconfirm > span:first-child { flex: 1 1 24rem; }
@@ -323,6 +352,12 @@ button {
   border-radius: 6px; padding: 5px 10px; cursor: pointer;
 }
 button:hover { border-color: var(--cs-accent); }
+/* Mouse hover has said "this one" since the first version of this file; the
+   keyboard was left with whatever ring the browser drew. Same blue the fields
+   take, so focus looks like one thing wherever it is standing. Offset outwards
+   rather than inset: a button is not a box you type into, and half the ones
+   here are small enough that an inset ring would land on the glyph. */
+button:focus-visible { outline: 2px solid var(--cs-edit); outline-offset: 1px; }
 /* Pressed and selected look the same and mean different things: `aria-pressed`
    is a toggle that is on, `aria-selected` is the one tab of a set that is open.
    A tab is not a toggle -- the attribute is the difference between a reader
@@ -358,7 +393,7 @@ input.ro, input.ro:focus, textarea.ro, textarea.ro:focus {
 }
 table.build td.over input, table.build td.over .expr { color: var(--cs-muted); }
 /* A slot the character is still owed: the row carries a soft warning wash. */
-tr.needsfill td { background: rgba(224, 99, 95, 0.07); }
+tr.needsfill td { background: color-mix(in srgb, var(--cs-bad) 7%, transparent); }
 /* A skill hidden with the eye: shown only under Show all, dimmed, to be reopened. */
 tr.hiddenskill td { opacity: 0.45; }
 tr.hiddenskill td.tools { opacity: 1; }
@@ -407,6 +442,9 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
    Across the full width it was mostly rule, so it is capped and left where the
    column starts. */
 .panel.wealth { max-width: 54rem; }
+/* Already bounded by its column in the pair; a second cap would leave a gap
+   inside a gap. */
+.pairrow.wealthpair > .panel.wealth { max-width: none; }
 .wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
 .wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
@@ -419,7 +457,9 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 .offeringfields.dormant { opacity: 0.5; }
 .offeringfields.dormant input { cursor: not-allowed; }
 .wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
-.wealthactions .pair input, .wealthactions .pair select { width: auto; }
+/* The label field carries an inline `width: 15rem`, which is wider than a
+   phone: the inline rule wins on `width`, so the cap has to be a max. */
+.wealthactions .pair input, .wealthactions .pair select { width: auto; max-width: 100%; }
 table.ledger { border-collapse: collapse; width: 100%; font-size: 0.82rem; margin-top: 6px; }
 table.ledger th { text-align: left; font-weight: 600; color: var(--cs-muted); font-size: 0.72rem; padding: 2px 6px; border-bottom: 1px solid var(--cs-line); }
 table.ledger td { padding: 3px 6px; border-bottom: 1px solid var(--cs-line); }
@@ -429,38 +469,160 @@ table.ledger td.neg { color: var(--cs-bad); }
 table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
 
 /* ---------- tabs ---------- */
-.tabs {
-  display: flex; gap: 3px; flex-wrap: wrap;
-  margin: 12px 0; padding-bottom: 8px; border-bottom: 1px solid var(--cs-line);
+/* The one strip that stays.
+ *
+ * Everything above it -- portrait, name, the row of buttons -- is identity and
+ * errands: read once, then in the way. This is what the sheet is steered with,
+ * and on a tab that runs four screens deep it used to be the first thing off
+ * the top of the window. So it is what gets pinned, and the header scrolls
+ * away underneath it.
+ *
+ * The session strip rides here too rather than in the header. It exists to put
+ * hit points, AC and the saves in front of you mid-fight, which it cannot do
+ * from a header that left the screen two panels ago.
+ *
+ * `--cs-sticky-top` is where it comes to rest: zero against the top of the
+ * window, or a host page's own fixed header height. See docs/embedding.md.
+ */
+.tabrail {
+  position: sticky; top: var(--cs-sticky-top); z-index: 30;
+  margin: 6px 0 12px; padding: 6px 0 0;
+  background: var(--cs-bg);
+  border-bottom: 1px solid var(--cs-line);
+}
+/* The strip and the two standing controls share the rail's first line -- the
+   numbers on the left, the buttons on the right -- and the tab bar gets the
+   whole of the second. Sharing the tabs' line instead cost 220px of it, which
+   on a phone left room for two tabs, and a bar you cannot see is not
+   navigation. In the build view the strip is not there and the line is the
+   buttons alone. */
+.railtop {
+  display: flex; gap: 4px 14px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.railtop .sessionstrip { flex: 1 1 16rem; min-width: 0; margin: 0; }
+.railactions {
+  display: flex; gap: 5px; align-items: center;
+  margin-left: auto; position: relative;
+}
+.railactions button.railmore { padding: 4px 8px; line-height: 1; font-size: 0.95rem; }
+/* Sharing a line with the strip on a phone: the icon carries the search button
+   and its title says the rest, which is what the shortcut on its face was
+   teaching anyway. */
+@container (max-width: 620px) {
+  .railactions .searchbtn .searchlabel, .railactions .searchbtn kbd { display: none; }
+  .railactions .searchbtn { padding: 5px 8px; }
+}
+/* The other eight. A column of plain rows: this is a list of things to do, not
+   a second toolbar, so nothing in it competes with Save two inches to the left. */
+.chromemenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 41;
+  display: flex; flex-direction: column; gap: 3px; padding: 6px;
+  min-width: 12.5rem;
+  background: var(--cs-panel); border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.chromemenu button {
+  text-align: left; background: none; border: 0; border-radius: 5px;
+  padding: 5px 8px; width: 100%;
+}
+.chromemenu button:hover { background: var(--cs-panel-2); }
+.chromemenu button.danger:hover { background: color-mix(in srgb, var(--cs-bad) 12%, transparent); }
+.chromemenu p.menukeys {
+  margin: 4px 2px 1px; padding-top: 6px; border-top: 1px solid var(--cs-line);
+  font-size: 0.7rem; color: var(--cs-muted);
+}
+.chromemenu kbd {
+  font-family: var(--cs-mono); font-size: 0.68rem; background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line); border-radius: 3px; padding: 0 3px; margin-right: 1px;
+}
+/* What the rail raises, drawn under the rail rather than up in the header --
+   which is three screens away once anything is scrolled. */
+.notices { display: flex; flex-direction: column; }
+.tabs { display: flex; gap: 3px; flex-wrap: wrap; }
+/* Pinned chrome has to have a bounded height, and sixteen tabs at phone width
+   wrap to five rows -- most of the screen, held there. One row that scrolls
+   sideways instead; the bar keeps the open tab in view after every render. */
+@media (max-width: 700px) {
+  .tabs {
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    scroll-padding-inline: 12px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: 0 0 auto; }
 }
 .tabs button { border-radius: 6px 6px 0 0; }
+/* The open tab joins the panel it opens.
+ *
+ * Selected, pressed and primary have always shared one wash, and on a bar of
+ * sixteen that made the single most important state on the page look like the
+ * "Show all skills" toggle two rows down. The shape was already reaching for
+ * this -- the buttons have had a folder's corners since the first version --
+ * so the tab row sits *on* the rail's rule and the open one breaks through it.
+ *
+ * `.oneline` because it is only true when it is true: a wrapped bar has rows
+ * below the selected tab, and a tab joining a panel two rows away is a lie
+ * about where you are. The class is put on by `#showActiveTab`, which is
+ * measuring the bar anyway.
+ *
+ * The wash is layered over `--cs-bg` rather than left translucent: at 1px the
+ * rule it is covering would show straight through it. */
+.tabs.oneline { margin-bottom: -1px; position: relative; z-index: 1; }
+.tabs.oneline button[aria-selected="true"] {
+  border-bottom-color: transparent;
+  background:
+    linear-gradient(var(--cs-accent-soft), var(--cs-accent-soft)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+.tabs.oneline button.tinted[aria-selected="true"] {
+  border-bottom-color: transparent;
+  background:
+    linear-gradient(color-mix(in srgb, var(--tab-color) 16%, transparent),
+      color-mix(in srgb, var(--tab-color) 16%, transparent)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+:host([theme="light"]) .tabs.oneline button.tinted[aria-selected="true"] {
+  background:
+    linear-gradient(color-mix(in srgb, var(--tab-color) 18%, transparent),
+      color-mix(in srgb, var(--tab-color) 18%, transparent)),
+    linear-gradient(var(--cs-bg), var(--cs-bg));
+}
+
+/* Getting about inside a tab that runs four screens deep. Quiet, and beside
+   the two buttons rather than among them: it is a way of moving, not a thing
+   to do. Gone when the tab has too few sections to be worth one. */
+select.jumpto {
+  width: auto; max-width: 11rem; font-size: 0.75rem; padding: 4px 6px;
+  color: var(--cs-muted); background: var(--cs-panel-2);
+}
+select.jumpto:hover, select.jumpto:focus { color: var(--cs-text); }
+select.jumpto[hidden] { display: none; }
+@container (max-width: 620px) { select.jumpto { max-width: 7.5rem; } }
 /* A coloured tab. `--tab-color` is set inline per button, and the rules read
    it the way the theme's own accent is read one row up -- so a coloured tab
    is the same shape as an uncoloured one, in a different hue. Resting state
    is deliberately quiet: the colour is a label for finding a tab in a bar of
    fifteen, not a second selected-state competing with the real one. */
+/* The label takes `--tab-ink` and the edges take `--tab-color`. Both are set
+   per button by the element: the first is the picked hue taken far enough to be
+   read on whichever theme is up, the second is that hue as picked. Which way
+   round matters -- a pale blue that reads well at the top of a dark bar is
+   barely there at the top of a pale one, and the reverse for a deep one, so a
+   fixed correction per theme was always going to be wrong for half the palette.
+   The edges are shape rather than text and have no ratio to meet, so they keep
+   the colour that was chosen. See `readableOn` in tracker-style.js. */
 .tabs button.tinted {
-  color: var(--tab-color);
+  color: var(--tab-ink, var(--tab-color));
   border-color: color-mix(in srgb, var(--tab-color) 45%, var(--cs-line));
 }
 .tabs button.tinted:hover { border-color: var(--tab-color); }
 .tabs button.tinted[aria-selected="true"] {
-  color: var(--tab-color);
   border-color: var(--tab-color);
   background: color-mix(in srgb, var(--tab-color) 16%, transparent);
 }
-/* On the light theme the same hue has to carry on near-white, and the palette
-   is picked for a dark bar: a pale blue that reads well at the top of this
-   file is barely there at the top of that one. So the tint is taken towards
-   ink for the text, which is the same move the light theme already makes on
-   its own accent and edit blue. The edges keep more of the hue -- they are
-   shape rather than text, and have no contrast ratio to meet. */
-:host([theme="light"]) .tabs button.tinted {
-  color: color-mix(in srgb, var(--tab-color) 62%, #000);
-  border-color: color-mix(in srgb, var(--tab-color) 60%, var(--cs-line));
-}
+/* The wash sits on paper rather than under it here, so it can carry more hue
+   before it starts competing with the words on top of it. */
 :host([theme="light"]) .tabs button.tinted[aria-selected="true"] {
-  border-color: color-mix(in srgb, var(--tab-color) 72%, #000);
   background: color-mix(in srgb, var(--tab-color) 18%, transparent);
 }
 /* The row swatch in the ⚙ manager, and the panel both entry points open. */
@@ -484,6 +646,13 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
    focusable -- a published sheet's prose, mostly. Inset, because an outline
    drawn round the whole body would otherwise sit half off the edge. */
 .body:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }
+/* Read out, never drawn. The standard clip: `display: none` and
+   `visibility: hidden` both take a live region out of the accessibility tree,
+   which is the one thing this must not be. */
+.srlive {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
 /* Rearranging by drag: the tab (or manager row) being carried fades, and the
    one under the pointer shows which side the drop lands on. */
 .tabs button.dragging, .tabrow.dragging { opacity: 0.4; }
@@ -498,6 +667,13 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
 /* Panels now hold editable controls rather than plain text, so they need more
    room than a display-only layout did. */
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
+/* A grid item's automatic minimum is its content's, and a panel holding a wide
+   table reports that table's width -- through the scroll box that was put
+   there to contain it. On a track with a fixed floor that never showed; on a
+   `1fr` track it sets the floor, and one eight-column grid pushes the whole
+   page sideways on a phone. The panels shrink; the tables inside them scroll,
+   which is what they were wrapped for. */
+.grid > * { min-width: 0; }
 .panel {
   background: var(--cs-panel); border: 1px solid var(--cs-line);
   border-radius: var(--cs-radius); padding: 11px 12px;
@@ -841,10 +1017,26 @@ button.mname {
 }
 /* A veil the catalogue carries reads rather than edits: its text belongs to
    the pack, and the pen beside it turns the card over to what you wrote. */
-.veil-text {
-  font-size: 0.76rem; line-height: 1.4; white-space: pre-wrap;
-  max-height: 11em; overflow: auto;
+.veil-text { font-size: 0.76rem; line-height: 1.4; white-space: pre-wrap; }
+
+/* ---------- a block's rules text ----------
+ * A pack's text is as long as its publisher wrote it. Shut, this is a
+ * paragraph's worth -- the whole of most of them. Open, it is most of a screen
+ * with its own scroll: enough to read a long one without the card that holds
+ * it becoming twelve screens tall. `Read all` shows only where there is more,
+ * which `#markLongText` decides by measuring.
+ */
+.packwrap { position: relative; }
+.packtext { max-height: 11em; overflow: hidden; }
+.packwrap.is-long:not(.is-open) .packtext {
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
+.packwrap.is-open .packtext { max-height: min(60vh, 46em); overflow: auto; scrollbar-width: thin; }
+button.packmore {
+  display: none; margin-top: 2px; padding: 1px 7px; font-size: 0.68rem;
+  color: var(--cs-accent); background: none; border-color: var(--cs-accent-soft);
+}
+.packwrap.is-long > button.packmore, .packwrap.is-open > button.packmore { display: inline-block; }
 .veil-bind { font-size: 0.7rem; opacity: 0.8; }
 .veil-bind b { font-weight: 650; opacity: 0.75; }
 .veil.is-known .veil-top > input[type="text"] { border-color: color-mix(in srgb, var(--cs-accent) 35%, var(--cs-line)); }
@@ -911,14 +1103,93 @@ option[data-ab]:not([data-ab=""]) {
 .ability-head span:first-child { text-align: left; }
 
 /* ---------- tables ---------- */
-.tablewrap { overflow-x: auto; }
+/* A scroll box on both axes. Sideways is what it was always for; downwards is
+   what makes the sticky headings below work at all. `overflow-x: auto` alone
+   already computed `overflow-y: auto`, so this box was the scroll container
+   the headings resolved against -- and with no height to resolve against, they
+   stuck to a box that was itself moving up the page, which is to say they
+   never stuck to anything. Capping it gives them one. */
+/* An edge that says it is an edge.
+ *
+ * A scroll box with an overlay scrollbar looks exactly like a table that ends
+ * there, and four of these hide 400px or more of themselves on a laptop -- the
+ * Progression grid, a full Equipment row. So each end carries a shadow while
+ * there is something past it and nothing while there is not, which is the one
+ * thing a scrollbar was telling you and had stopped.
+ *
+ * Four background layers doing it, and no script: the two covers are attached
+ * `local` so they travel with the content and slide off the end they are
+ * covering; the two shadows are attached `scroll` so they stay pinned to the
+ * box. Painted in `--cs-tablebg` because the cover has to match what is behind
+ * the wrap -- every one of them today is a panel, and anything that puts one
+ * on another surface sets the property rather than living with a band. */
+.tablewrap {
+  overflow: auto; max-height: var(--cs-table-max); scrollbar-width: thin;
+  --cs-tablebg: var(--cs-panel);
+  background:
+    linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
+    linear-gradient(to left, var(--cs-tablebg) 40%, transparent) 100% 0 / 22px 100% no-repeat,
+    linear-gradient(to right, rgba(0, 0, 0, 0.30), transparent) 0 0 / 14px 100% no-repeat,
+    linear-gradient(to left, rgba(0, 0, 0, 0.30), transparent) 100% 0 / 14px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+:host([theme="light"]) .tablewrap {
+  background:
+    linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
+    linear-gradient(to left, var(--cs-tablebg) 40%, transparent) 100% 0 / 22px 100% no-repeat,
+    linear-gradient(to right, rgba(26, 29, 38, 0.18), transparent) 0 0 / 14px 100% no-repeat,
+    linear-gradient(to left, rgba(26, 29, 38, 0.18), transparent) 100% 0 / 14px 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* ---------- a floor under a table's columns ----------
+ *
+ * `table-layout: fixed` and `width: 100%` between them will divide any width
+ * at all among the columns, so on a phone these tables did not overflow their
+ * scroll box -- they crushed. A feat name got 68px and read "Pumm", a note
+ * column got 10px and set one letter per line. A field you cannot read what
+ * you typed into is worse than one you have to scroll to.
+ *
+ * So each of them names the width below which its own columns stop working,
+ * and under that the wrap does what it was put there to do. Only the tables
+ * that size their columns by percentage need this: the ones with `<col>`
+ * widths in rem already overflow of their own accord. On any screen wide
+ * enough for `width: 100%` to be the larger of the two, nothing changes.
+ *
+ * `> table` on purpose -- a table that is not in a wrap has nothing to scroll
+ * inside, and forcing a floor on it would push the page out instead.
+ */
+.tablewrap > table.feats { min-width: 30rem; }
+.tablewrap > table.granted { min-width: 28rem; }
+.tablewrap > table.talents { min-width: 32rem; }
+.sidepanels .tablewrap > table.talents { min-width: 24rem; }
+.tablewrap > table.primordia { min-width: 32rem; }
+.tablewrap > table.build { min-width: 26rem; }
+.tablewrap > table.tradition { min-width: 28rem; }
+.tablewrap > table.attackmodes { min-width: 30rem; }
+.tablewrap > table.racetraits { min-width: 26rem; }
+.tablewrap > table.craftlist { min-width: 30rem; }
+.tablewrap > table.perks { min-width: 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
 th {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--cs-muted); font-weight: 600; position: sticky; top: 0;
-  background: var(--cs-panel); z-index: 1;
+  color: var(--cs-muted); font-weight: 600;
+  background: var(--cs-panel);
 }
+/* The heading block, not the cells. A `table.build` carries two heading rows --
+   the group band above the column names -- and sticking each cell to `top: 0`
+   would stack the second row on the first. Above the frozen first column
+   (`th[scope="row"]`, z-index 2), or the two would trade places at the corner
+   where both are stuck at once.
+
+   Under `border-collapse: collapse` the border belongs to the table rather
+   than the cell, and a row that lifts away from the table leaves its border
+   behind -- so the rule under the headings is traded for an inset shadow,
+   which travels with them. The border goes, or the two would draw a 2px line
+   between them everywhere the headings are not moving. */
+.tablewrap thead { position: sticky; top: 0; z-index: 4; }
+.tablewrap thead th { border-bottom: 0; box-shadow: inset 0 -1px 0 var(--cs-line); }
 /* Alternating rows, for a table wide enough that an eye can lose its place.
    Hover is the whole step, so it still reads on a striped row and a plain one
    alike; a cell with a wash of its own (a group band, a row that wants
@@ -930,6 +1201,57 @@ th.num {text-align: left}
 td.total { font-weight: 660; color: var(--cs-accent); }
 tr.trained td:first-child { font-weight: 600; }
 tr.untrained { color: var(--cs-muted); }
+
+/* ---------- a list of things, on a phone ----------
+ *
+ * A feat is a name, where it came from and what it does, and as a table row
+ * that is three columns fighting over 340px: the name gets six characters and
+ * the note gets a column an inch wide and forty lines tall. Below 620px the
+ * row stops being a row. Each becomes a card -- name first whatever column it
+ * sat in, then the rest under it with the heading it lost written above it as
+ * a label -- and folds to its name, because a list of forty feats is a list
+ * you are looking through rather than reading.
+ *
+ * `order` is what puts the name first: the granted feats table has the source
+ * in column one and the feat in column two, and stacking a table keeps the
+ * order the markup is in. Cells marked `head` ride up with it and stay when
+ * the card is folded -- which trait slot this is, when its name is still
+ * blank, is the half of the row that tells you what you are looking at.
+ */
+@container (max-width: 620px) {
+  /* More specific than the floors above, which are `.tablewrap > table.feats`
+     and would otherwise keep a stack of cards 30rem wide and scrolling. */
+  .tablewrap > table.stacked { min-width: 0; }
+  /* The grip drags a feat between groups, which is a mouse gesture and is not
+     one of the three things a card is: name, where it came from, what it does. */
+  table.stacked > tbody > tr > td.grip { display: none; }
+  table.stacked, table.stacked > tbody, table.stacked > tbody > tr { display: block; }
+  table.stacked > thead { display: none; }
+  table.stacked > tbody > tr {
+    display: flex; flex-direction: column; gap: 3px;
+    border: 1px solid var(--cs-line); border-radius: 6px;
+    padding: 5px 6px; margin-bottom: 6px;
+  }
+  table.stacked > tbody > tr > td { display: block; border: 0; padding: 0; width: auto; }
+  table.stacked td[data-stack="name"] { order: -2; display: flex; align-items: center; gap: 6px; }
+  table.stacked td[data-stack="head"] { order: -1; font-size: 0.74rem; color: var(--cs-muted); }
+  table.stacked td[data-label]::before {
+    content: attr(data-label); display: block;
+    font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--cs-muted); margin-bottom: 1px;
+  }
+  /* Folded: the name and whatever rides with it, and the controls. What goes
+     is the body, which is exactly the labelled part. */
+  table.stacked > tbody > tr.shut > td[data-label] { display: none; }
+  table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
+  button.rowfold {
+    flex: none; padding: 0 5px; font-size: 0.7rem; line-height: 1.5;
+    color: var(--cs-muted); background: none; border-color: transparent;
+  }
+  button.rowfold:hover { color: var(--cs-accent); }
+  /* An empty list still says so, and a colspan cell has no name to fold to. */
+  table.stacked > tbody > tr > td.empty { text-align: left; }
+}
 
 /* ---------- ability build (Stats tab) ---------- */
 table.build th[scope="row"] {
@@ -1002,6 +1324,9 @@ table.build tr.costrow td, table.build tr.costrow th {
 /* ---------- editable fields ---------- */
 .fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .fieldgrid.two { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+/* A field whose value is longer than a track: a URL beside a hero-point count
+   got a sixth of what it held, and there was no reading it or checking it. */
+.fieldgrid label.fld.wide { grid-column: 1 / -1; }
 label.fld { display: flex; flex-direction: column; gap: 3px; }
 label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
@@ -1019,7 +1344,10 @@ label.fld > .value {
   text-transform: none; letter-spacing: 0;
 }
 label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
-.pair { display: flex; align-items: center; gap: 5px; }
+/* Wraps, because a pair is a row of controls inside something that is itself
+   a wrapping row: without this the outer row wraps and the pair does not, so
+   on a narrow screen one long pair carries the page sideways with it. */
+.pair { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .pair input { width: 3.4rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
@@ -1151,7 +1479,8 @@ table.talents.bonus col.source { width: 14%; }
 .sidepanels table.talents col.talent { width: auto; }
 /* Mirrors the sheet's conditional formatting: green = this level grants a talent. */
 td.slot-on input, td.slot-on select, td.slot-on textarea, td.slot-on .prose-view {
-  background: rgba(107, 191, 123, 0.10); border-color: rgba(107, 191, 123, 0.45);
+  background: color-mix(in srgb, var(--cs-good) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cs-good) 45%, transparent);
 }
 td.slot-off input, td.slot-off select, td.slot-off textarea { opacity: 0.25; background: transparent; }
 /* A blended class spends one pool either way, so its sphere cell says which
@@ -1440,9 +1769,12 @@ table.gear th.colhead { white-space: nowrap; }
   display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end;
   margin-bottom: 6px;
 }
-.weapongrid label.fld { flex: 0 0 auto; }
+/* Content-sized, but never wider than the row it sits in: the Groups select
+   is as wide as its longest option name, which on a phone is wider than the
+   card. It shrinks rather than pushing the page out from under itself. */
+.weapongrid label.fld { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .weapongrid input[type="number"] { width: 3.2rem; }
-.weapongrid select { width: auto; min-width: 0; }
+.weapongrid select { width: auto; min-width: 0; max-width: 100%; }
 .weapongrid input[type="text"] { width: 7rem; }
 .weapongrid input.w-dice { width: 5.5rem; font-family: var(--cs-mono); }
 .weapongrid input.w-dice.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
@@ -1965,7 +2297,14 @@ table.build td.linked {
   width: 18px; height: 18px; padding: 0; border-radius: 4px;
   border: 1px solid var(--cs-line); cursor: pointer;
 }
-.swatch[aria-pressed="true"] { outline: 2px solid var(--cs-edit); outline-offset: 1px; }
+/* Chosen, in the colour every other `aria-pressed` on the sheet wears. It used
+   to be the edit blue, which is now what focus draws -- and a swatch is the one
+   control small enough that a ring is the whole of what you can see, so the two
+   states have to be told apart by hue rather than by shape. */
+.swatch[aria-pressed="true"] {
+  outline: 2px solid var(--cs-accent); outline-offset: 1px;
+}
+.swatch[aria-pressed="true"]:focus-visible { outline-color: var(--cs-edit); outline-width: 3px; }
 .swatch.none {
   background: var(--cs-panel-2);
   background-image: linear-gradient(135deg, transparent 44%, var(--cs-muted) 44%, var(--cs-muted) 56%, transparent 56%);
@@ -1990,10 +2329,13 @@ input[type="color"] {
 .hint code {
   font-family: var(--cs-mono); background: var(--cs-panel-2);
   padding: 1px 4px; border-radius: 3px; color: var(--cs-text);
+  /* `essence.shoulder` is one word to a line-breaker and wider than a narrow
+     column, and a hint is prose: it wraps rather than pushing the page out. */
+  overflow-wrap: anywhere;
 }
 .preview { font-size: 0.78rem; font-family: var(--cs-mono); padding: 5px 8px; border-radius: 5px; }
-.preview.ok { background: rgba(107, 191, 123, 0.12); color: var(--cs-good); }
-.preview.err { background: rgba(224, 99, 95, 0.12); color: var(--cs-bad); }
+.preview.ok { background: color-mix(in srgb, var(--cs-good) 12%, transparent); color: var(--cs-good); }
+.preview.err { background: color-mix(in srgb, var(--cs-bad) 12%, transparent); color: var(--cs-bad); }
 
 /* ---------- audit ---------- */
 .audit-row {
@@ -2041,13 +2383,49 @@ input[type="color"] {
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
   border: 1px solid var(--cs-accent); color: var(--cs-accent); background: rgba(212,162,74,0.10); white-space: nowrap; }
 .pill button { font: inherit; font-size: 0.8rem; line-height: 1; padding: 0 4px; border: 0; background: none; color: inherit; cursor: pointer; opacity: 0.7; }
-.pill button:hover { opacity: 1; color: #e0635f; }
+.pill button:hover { opacity: 1; color: var(--cs-bad); }
 /* The extension shelf on the manager: one heading per pack above its blocks. */
 .rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
 
+/* ---------- what the furniture costs on a phone ----------
+ *
+ * Every level of nesting pays twice, once on each side, and the sheet nests
+ * four deep: the wrap, a supergroup band, the panel inside it, and the cell.
+ * At 375px that came to 104px -- 28% of the screen spent on margins before
+ * any of the character got a look in, which is what makes an inner field
+ * measure 58px and a table crush.
+ *
+ * So the furniture gets thinner as the screen does. Nothing is removed: the
+ * bands, the panels and the rules are all still there, drawn tighter. */
+@container (max-width: 620px) {
+  /* An explanation longer than a paragraph, folded behind a line that says
+     what it is about. Away entirely rather than clamped to three lines: three
+     lines of a paragraph is neither the paragraph nor out of the way, and the
+     line above it is a control that goes both ways, which a clamp was not. */
+  .body .hint.longhint { display: none; }
+  .body .hint.longhint.is-open { display: block; margin-top: 2px; }
+  button.helpopen {
+    display: block; width: 100%; text-align: left; margin: 4px 0 0;
+    padding: 3px 7px; font-size: 0.72rem; font-weight: 600;
+    color: var(--cs-muted); background: var(--cs-panel-2);
+    border-color: var(--cs-line); border-radius: 5px;
+  }
+  button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
+  .wrap { padding: 8px; }
+  .panel { padding: 9px 8px; }
+  .supergroup { padding: 8px 8px 9px; }
+  .supergroup-body { gap: 8px; }
+  .grid { gap: 8px; }
+  th, td { padding: 4px 5px; }
+  .fieldgrid { gap: 6px; }
+  .mcard .text, .mcard .bar { padding-left: 8px; padding-right: 8px; }
+}
+
 @container (max-width: 560px) {
-  /* Narrower than a single crafting column: one panel per row, tables scroll. */
-  .grid.crafting { grid-template-columns: 1fr; }
+  /* Narrower than a single crafting column: one panel per row, tables scroll.
+     `minmax(0, …)` and not a bare `1fr`, or the track takes its floor from the
+     widest table in it and the row stops being one panel wide. */
+  .grid.crafting { grid-template-columns: minmax(0, 1fr); }
   /* The temporary pair goes; the score, the modifier and the die stay. */
   .ability, .ability-head { grid-template-columns: 2.8rem 3.4rem 2.6rem 1.7rem; }
   .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
@@ -2067,6 +2445,25 @@ input[type="color"] {
   border: 1px solid var(--cs-line); border-radius: var(--cs-radius);
   padding: 10px 12px 12px; background: var(--cs-panel-2);
   position: relative;
+}
+/* Folded, the band is its own label and nothing else -- the same trick every
+   panel's <h3> plays, a level up. */
+.supergroup.collapsed { padding-bottom: 9px; }
+.supergroup.collapsed .supergroup-title { margin-bottom: 0; }
+.supergroup-title button {
+  padding: 0 5px; font-size: 0.7rem; line-height: 1.4; vertical-align: middle;
+  margin-left: 4px;
+}
+/* The weapon's own description, folded under the numbers that roll it. Quiet:
+   it is a shelf, not a second heading competing with the weapon's name. */
+.weaponwhat { margin-top: 4px; }
+.weaponwhat > h4.subhead { margin: 0 0 4px; font-size: 0.68rem; color: var(--cs-muted); }
+.weaponwhat.collapsed > h4.subhead { margin-bottom: 0; }
+
+/* Two perks, side by side where there is room and stacked where there is not. */
+.perkfields {
+  display: grid; gap: 8px; margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 }
 .supergroup-title {
   font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em;
@@ -2106,6 +2503,10 @@ input[type="color"] {
 .pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* The ledger takes the width it is worth and the buffs take the rest -- with
+     a floor under "the rest", or between 900px and 1200px the ledger takes its
+     whole 54rem and leaves the buff chips 104px to fit a 16rem grid into. */
+  .pairrow.wealthpair { grid-template-columns: minmax(0, 54rem) minmax(18rem, 1fr); }
 }
 
 /* ---------- the class table ----------
@@ -2126,6 +2527,13 @@ table.classes col.bab { width: 4.6rem; }
 table.classes col.save { width: 3rem; }
 table.classes col.ranks { width: 4.2rem; }
 table.classes col.tools { width: 6.2rem; }
+/* The two that had no width of their own. Every other column here is measured
+   in rem, so between them they took the whole table and left these the
+   remainder -- which on a phone is 16px, and 16px of an archetype name is
+   nothing. Given widths, they push the table out and the wrap scrolls, which
+   is the behaviour the rest of the row already had. */
+table.classes col.arch { width: 11rem; }
+table.classes col.sys { width: 7rem; }
 table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
 table.classes td input[type="text"] { width: 100%; min-width: 0; }
 table.classes td.num input[type="number"] { width: 100%; text-align: right; }
@@ -2327,6 +2735,8 @@ table.traits { table-layout: fixed; }
 table.traits col.slot { width: 7.4rem; }
 table.traits col.cat { width: 8.6rem; }
 table.traits col.tname { width: 12.5rem; }
+/* Same as the classes grid: the effect column was the one left over. */
+table.traits col.effect { width: 16rem; }
 table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
 table.traits td { vertical-align: top; }
 table.racetraits td:first-child { width: 11rem; }
@@ -2931,14 +3341,23 @@ label.fld > .rollpair > input { flex: 1; min-width: 0; }
    nothing under the pointer should move because of it. The slot is a sticky
    strip of no height, so the card floats at the top of whatever part of the
    sheet is on screen and the table below it never shifts. */
-.rollslot { position: sticky; top: 6px; height: 0; z-index: 40; }
+/* Hung off the bottom of the pinned rail rather than stuck to the window on
+   its own: the rail is the fixed point now, so the toast has one place it
+   always appears and nothing to negotiate with. */
+.rollslot { position: absolute; top: 100%; left: 0; right: 0; height: 0; z-index: 40; }
 .rolltoast {
-  position: absolute; top: 0; right: 0; width: min(32rem, 100%);
+  position: absolute; top: 6px; right: 0; width: min(32rem, 100%);
   background: var(--cs-panel); border: 1px solid var(--cs-accent);
   border-radius: var(--cs-radius); padding: 8px 10px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .rolltoast.failed { border-color: var(--cs-bad); }
+/* The same box, sized to its sentence: an offer to undo is one line, and a
+   32rem panel holding one line reads as something that went wrong. */
+.undotoast { width: max-content; max-width: min(32rem, 100%); }
+.undotoast .rollhead { margin-bottom: 0; }
+.undotoast .rollhead strong { color: var(--cs-text); font-size: 0.85rem; flex: 0 1 auto; }
+.undotoast button.primary { display: inline-flex; align-items: center; gap: 5px; }
 .rollhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
 .rollhead strong { font-size: 0.82rem; color: var(--cs-accent); }
 .rolltoast.failed .rollhead strong { color: var(--cs-bad); }
@@ -3130,11 +3549,17 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
     --cs-text: #000;
     --cs-muted: #4a4a4a;
     /* Gold on white is unreadable. These are the same three meanings -- a
-       value the character supplies, good, bad -- at ink strength. */
-    --cs-accent: #7a5500;
-    --cs-accent-soft: transparent;
-    --cs-formula: transparent;
-    --cs-formula-strong: #7a5500;
+       value the character supplies, good, bad -- at ink strength.
+
+       `!important` on the four the character's own colour overrides: those are
+       set inline on the host by `#applyCharacterColor`, and an inline property
+       beats a rule in here however specific. Without it a character who picked
+       a bright hue printed the whole sheet's headings and totals in it, on
+       white, at whatever ratio that came to. */
+    --cs-accent: #7a5500 !important;
+    --cs-accent-soft: transparent !important;
+    --cs-formula: transparent !important;
+    --cs-formula-strong: #7a5500 !important;
     --cs-good: #1a6b2c;
     --cs-bad: #a32320;
     --cs-edit: #14448c;
@@ -3144,7 +3569,8 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   /* The chrome. Everything here is a way to *change* the sheet or move around
      it, and neither survives the trip to paper. */
   nav.tabs,
-  .head-actions,
+  .railactions,
+  .chromemenu,
   .rollslot,
   .savefail,
   .importerr,
@@ -3153,6 +3579,15 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .resetconfirm,
   .tabmenu,
   dialog { display: none !important; }
+
+  /* The rail loses its tabs above but keeps the session strip, which is a row
+     of the character's numbers and belongs on paper. What goes is the pinning:
+     a sticky box on a page that does not scroll is a box that lands on page
+     one and nowhere else. */
+  .tabrail {
+    position: static; z-index: auto; background: none;
+    border-bottom: 0; padding: 0; margin: 0 0 8px;
+  }
 
   /* Buttons go as a class, then the two kinds that are not affordances come
      back. A maneuver's name is the content of its row, not a control on it. */
@@ -3188,10 +3623,16 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   textarea { height: auto !important; max-height: none !important; overflow: visible !important; }
 
   /* Every scroll container is a pair of scissors once there is no scrollbar:
-     what it was clipping is simply gone from the page. */
+     what it was clipping is simply gone from the page. And nothing on paper
+     scrolls, so the shadows that say so come off with it. */
   .tablewrap, .discipline-wrap, .body {
     overflow: visible !important; max-height: none !important;
   }
+  .tablewrap { background: none !important; }
+  /* A block's text prints in full: there is no opening it out on paper. */
+  .packtext { max-height: none !important; overflow: visible !important; mask-image: none !important; }
+  button.packmore, button.helpopen, button.rowfold { display: none !important; }
+  .body .hint.longhint { display: block !important; }
   /* Truncation is the same problem one line down. On paper there is room to
      wrap, and no hover to reveal the rest. */
   .cname, .tname, .sname, .mdetail-name, .dashtalent, .manacard .mname {

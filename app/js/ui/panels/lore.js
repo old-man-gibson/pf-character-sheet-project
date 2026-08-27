@@ -218,7 +218,8 @@ function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
     return `<div class="cfnotes">
-      <button class="notehead" data-collapse="cfnotes-${esc(className)}" aria-expanded="${open}">
+      <button class="notehead" data-collapse="cfnotes-${esc(className)}"
+        data-collapse-to="${open}" aria-expanded="${open}">
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
       </button>
       ${open ? `${notes.map((f, i) => `<div class="cfnote">

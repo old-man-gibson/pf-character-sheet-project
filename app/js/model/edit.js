@@ -15,6 +15,7 @@ import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
 import { COOKING_COURSES } from './subsystems/cooking.js';
 import { guileInUse } from './subsystems/guile.js';
+import { markUndo, rowLabel } from './undo.js';
 import { getPath, setPath, skillKey } from './util.js';
 
 /**
@@ -50,6 +51,9 @@ export function listAdd(model, path, item = {}) {
 export function listRemove(model, path, index) {
   const arr = model.list(path);
   if (index < 0 || index >= arr.length) return model;
+  // The one place thirty `×` buttons pass through, which is why the undo
+  // hangs here rather than on each of them.
+  markUndo(model, `Removed ${rowLabel(arr[index], path.split('.').pop())}`);
   const [removed] = arr.splice(index, 1);
   model.recompute();
   emit(model, { type: 'list-remove', path, removed });
@@ -230,6 +234,7 @@ export function renameSystemTab(model, index, name) {
 }
 
 export function removeSystemTab(model, index) {
+  markUndo(model, `Removed ${rowLabel(model.data.sheetTabs?.[index], 'worksheet')}`);
   const tabs = model.data.sheetTabs || [];
   const tab = tabs[index];
   if (!tab) return model;

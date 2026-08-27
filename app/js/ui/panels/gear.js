@@ -246,6 +246,16 @@ export function weaponsPanel(model, e) {
           ${field('Mult', itemSelect('equipment.weapons', i, 'critMult', w.critMult, WEAPON_CRIT_MULTS))}
           ${field('Damage type', itemText('equipment.weapons', i, 'damageType', w.damageType))}
         </div>
+        ${/*
+           * What the weapon *is*, as against what it *rolls*.
+           *
+           * Sixteen fields in one card is a card nobody reads, and these ten
+           * are the ones set when the weapon is written down and not looked at
+           * again -- its size, its groups, how it is held, what it costs. The
+           * numbers that make the attack stay above, open; this folds, and
+           * starts folded. Opening it is remembered per weapon.
+           */''}
+        ${collapsibleSub(model, `weapon-what-${i}`, 'The weapon itself', `
         <div class="weapongrid">
           ${field('Size', itemSelect('equipment.weapons', i, 'size', w.size, Object.keys(SIZE_MODIFIERS)))}
           ${field('Groups', `<span class="pair">
@@ -270,7 +280,7 @@ export function weaponsPanel(model, e) {
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
-        </div>
+        </div>`, 'weaponwhat', true)}
         <label class="fld" style="margin-top:6px"><span>Special properties
           <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, a
             {name} you defined, or a mix. Tag a damage token <strong>Crit</strong> for crit-only

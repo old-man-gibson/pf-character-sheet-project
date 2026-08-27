@@ -15,7 +15,7 @@
  */
 import { esc } from '../html.js';
 import { field } from '../fields.js';
-import { collapsible } from '../rows.js';
+import { collapsible, foldButton, isCollapsed } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -158,30 +158,31 @@ export function renderOverviewPanel(model, ctx) {
 
       ${classesPanel(model, ctx, model, ctx)}
 
-      <div class="supergroup span2" aria-label="Defenses">
-        <div class="supergroup-title">Defenses</div>
-        <div class="supergroup-body">
+      ${supergroup(model, 'defenses', 'Defenses', '', `
           ${hitPointsPanel(ctx, model, model)}
           ${acPanel(model)}
-          ${savesPanel(model)}
-        </div>
-      </div>
+          ${savesPanel(model)}`)}
 
-      <div class="supergroup span2" aria-label="Offenses">
-        <div class="supergroup-title">Offenses</div>
-        <div class="supergroup-body offenses">
+      ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
           ${attackPanel(model)}
           ${speedPanel(model)}
-          ${proficienciesPanel(model)}
-        </div>
-      </div>
+          ${proficienciesPanel(model)}`)}
 
       <div class="pairrow span2 wide-first">
         ${conditionsPanel(model)}
         ${carryPanel(model)}
       </div>
-      ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
-      ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
+      ${/*
+           * Wealth is capped at 54rem -- a ledger reads worse the wider it gets --
+           * which on a laptop left 495px of empty grid beside it, and Buffs is a
+           * short row of chips directly above. Paired, so the gap holds the thing
+           * that was going to be under it anyway. Below 900px the pair is one
+           * column again, which is what `.pairrow` does on its own.
+           */''}
+      <div class="pairrow span2 wealthpair">
+        ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
+        ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
+      </div>
       ${traitsPanel(model, ctx, model, ctx)}
     </div>`;
   }
@@ -234,16 +235,25 @@ export function renderDashboardPanel(model, ctx) {
    * psionic pool, the Spheres casting numbers. The reference lists (veils,
    * readied maneuvers, talents) wait in the arranger, because which of those
    * belongs on a player's overview is a playstyle call, not a data one.
+   *
+   * `quick` leads. Damage, Heal and Rest are the controls pressed every round
+   * of every fight, and they were tenth -- a thousand pixels down, under
+   * Movement and Active effects, on the one view whose whole reason for
+   * existing is what a table asks for mid-fight. The strip above shows hit
+   * points and cannot change them, so this is the only place they move.
+   *
+   * A default, not a rule: `Arrange cards` has always been able to disagree,
+   * and a player who has already arranged theirs keeps the order they chose.
    */
 function dashDefaultCards(model) {
     const inUse = model.systemTabsInUse();
     const tagged = model.taggedSystemTabs();
     const on = (id) => inUse[id] || tagged.has(id);
-    const out = ['conditions', 'buffs', 'resources'];
+    const out = ['quick', 'conditions', 'buffs', 'resources'];
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
     if (on('combat') && model.data.training?.magic) out.push('spheres');
-    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects', 'quick');
+    out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects');
     return out;
   }
 
@@ -295,7 +305,10 @@ function dashArrangePanel(model) {
 
   /** The card's corner control: one click between the summary and the full read. */
 function dashExpand(key, openNow) {
+    // `dash:*` is one of the two keys that stores *open* rather than
+    // *collapsed*, so what the click writes is the opposite of what is showing.
     return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
+      data-collapse-to="${!openNow}"
       aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
   }
 
@@ -1010,7 +1023,7 @@ function detailsPanel(model) {
         ${field('Hero points', `<span class="pair">
           ${num('identity.heroPoints.current', c.identity.heroPoints?.current ?? 0)}
           <span>/</span>${num('identity.heroPoints.max', c.identity.heroPoints?.max ?? 3)}</span>`)}
-        ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'))}
+        ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
       </div>
       ${characterColorRow(c.identity.color)}
     </section>`;
@@ -1043,29 +1056,48 @@ function characterColorRow(value) {
   }
 
   /**
+   * A labelled band of panels, foldable down to its label.
+   *
+   * Defenses and Offenses are the two tallest things on the Overview and the
+   * two a player is least often here to edit -- on a phone they are most of
+   * the scrolling between the top of the tab and everything under them. The
+   * fold uses the same key store and the same button as every panel's own, so
+   * a band left shut stays shut and travels with the character.
+   */
+function supergroup(model, key, title, bodyClass, body) {
+    const shut = isCollapsed(model, `sg-${key}`);
+    return `<div class="supergroup span2${shut ? ' collapsed' : ''}" aria-label="${esc(title)}">
+        <div class="supergroup-title">${esc(title)} ${foldButton(model, `sg-${key}`)}</div>
+        ${shut ? '' : `<div class="supergroup-body ${bodyClass}">${body}</div>`}
+      </div>`;
+  }
+
+  /**
    * The specialty: what the character did before, the feat it grants and its
    * perks. The feat is the same field as the Granted feats row on Feats &
    * Mythic -- one home, seen from two places.
+   *
+   * Two perks, always. A specialty grants the pair; there is no order to them
+   * and neither is optional, so the row carries no arrows and no cross -- and
+   * nothing offers to add a third. A document that arrived with more shows
+   * them all rather than hiding what it holds.
    */
 function specialtyPanel(model) {
     const c = model.data;
     const perks = c.identity.specialtyPerks || [];
+    const slots = Math.max(2, perks.length);
     return `<section class="panel">
       <h3>Specialty</h3>
       <div class="fieldgrid two">
         ${field('Specialty', text('identity.specialty', c.identity.specialty, 'Chef, Gambling Villain…'))}
         ${field('Specialty feat', text('grantedFeats.specialty.name', c.grantedFeats?.specialty?.name, 'Which feat?'))}
       </div>
-      <div class="tablewrap" style="margin-top:8px"><table class="perks">
-        <thead><tr><th>Perk</th><th></th></tr></thead>
-        <tbody>${perks.map((p, i) => `<tr>
-          <td>${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, p, 1, 'grow')}</td>
-          ${rowTools('identity.specialtyPerks', i)}
-        </tr>`).join('')}
-        ${perks.length ? '' : '<tr><td colspan="2" class="empty">No perks yet.</td></tr>'}
-        </tbody>
-      </table></div>
-      <div style="margin-top:8px">${addButton('identity.specialtyPerks', 'Add perk', '')}</div>
+      <div class="perkfields">
+        ${Array.from({ length: slots }, (_, i) => `<label class="fld">
+          <span>Perk ${i + 1}</span>
+          ${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, perks[i] ?? '', 1, 'grow')}
+        </label>`).join('')}
+      </div>
       <p class="hint">The specialty feat is also listed under <strong>Granted feats</strong>
         on Feats &amp; Mythic; the three specialty skills are chosen on the Skills tab.</p>
     </section>`;
@@ -1096,7 +1128,8 @@ function languagesPanel(model) {
       .map((s) => String(s).trim()).filter(Boolean);
     const head = `<h3>Languages
         <span class="badge${spare < 0 ? ' err' : ''}" title="Known, against the slots Int, Linguistics and Extra grant">${slots.known} / ${slots.total}</span>
-        <button class="disclose" data-collapse="languages" aria-expanded="${!shut}"
+        <button class="disclose" data-collapse="languages" data-collapse-to="${!shut}"
+          aria-expanded="${!shut}"
           title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
       </h3>`;
     if (shut) {
@@ -1317,6 +1350,7 @@ function attackPanel(model) {
           const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
           const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
           const caret = altOf ? `<button class="disclose" data-collapse="atk:${k}"
+            data-collapse-to="${!shut}"
             aria-expanded="${!shut}" title="${esc(shut
     ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
@@ -1458,7 +1492,8 @@ function proficienciesPanel(model) {
            column is a dozen rows. -->
       <div class="profrow profwide">
         <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
-          <button class="disclose" data-collapse="${wkey}" aria-expanded="${!wshut}"
+          <button class="disclose" data-collapse="${wkey}" data-collapse-to="${!wshut}"
+            aria-expanded="${!wshut}"
             title="${wshut ? 'Expand' : 'Collapse'}">${wshut ? '▸' : '▾'}</button>
           Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
         </span>
@@ -1699,7 +1734,8 @@ function hpBuild(model) {
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
         = <strong>${base}</strong>${over == null ? '' : `, overridden to <strong>${over}</strong>`}
-        <button class="disclose" data-collapse="hp:build" aria-expanded="${!shut}"
+        <button class="disclose" data-collapse="hp:build" data-collapse-to="${!shut}"
+          aria-expanded="${!shut}"
           title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
       ${shut ? '' : `<div class="fieldgrid two">
         ${field('2nd HP ability', abilitySelect('hp.ability2', c.hp.ability2))}
@@ -1860,11 +1896,11 @@ function traitsPanel(model, ctx) {
       const wants = locked ? `Take ${TRAIT_SLOTS.find((s) => s.key === def.requires)?.label} first`
         : owed ? 'Pick a trait' : '';
       return `<tr class="${locked ? 'lockedslot' : ''}${owed ? ' needsfill' : ''}"${owed ? ' title="A standard trait pick, still to be chosen"' : ''}>
-        <td>${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
-        <td>${isDrawback ? '<span class="hint">—</span>'
+        <td data-stack="head">${esc(def.label)}${def.requires ? `<div class="hint">needs ${esc(TRAIT_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}</td>
+        <td data-label="Category">${isDrawback ? '<span class="hint">—</span>'
           : select(`traitSlots.${def.key}.category`, v.category, categories)}</td>
-        <td>${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
-        <td>${prose(model, `data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
+        <td data-stack="name">${text(`traitSlots.${def.key}.name`, v.name, wants || (isDrawback ? 'Drawback' : 'Trait'))}</td>
+        <td data-label="Trait / effect">${prose(model, `data-set="traitSlots.${def.key}.text"`, v.text, 1, 'grow')}</td>
       </tr>`;
     };
 
@@ -1876,16 +1912,16 @@ function traitsPanel(model, ctx) {
           <h4 class="subhead">Character traits
             <span class="badge${picked < standard.length ? ' err' : ' ok'}">${picked} of ${standard.length} picked</span>
           </h4>
-          <div class="tablewrap"><table class="traits">
+          <div class="tablewrap"><table class="traits stacked">
             <colgroup><col class="slot"><col class="cat"><col class="tname"><col class="effect"></colgroup>
             <thead><tr><th>Slot</th><th>Category</th><th>Name</th><th>Trait / effect</th></tr></thead>
             <tbody>
               ${TRAIT_SLOTS.filter((s) => s.kind !== 'feat').map(row).join('')}
               ${(slots.additional || []).map((x, i) => `<tr>
-                <td>Additional</td>
-                <td>${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
-                <td>${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
-                <td><span class="pair" style="width:100%">
+                <td data-stack="head">Additional</td>
+                <td data-label="Category">${itemSelect('traitSlots.additional', i, 'category', x.category, categories)}</td>
+                <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
+                <td data-label="Trait / effect"><span class="pair" style="width:100%">
                   ${prose(model, `data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
                   <button class="danger" data-remove="traitSlots.additional|${i}" aria-label="Remove">×</button>
                 </span></td>

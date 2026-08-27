@@ -58,7 +58,13 @@ export function abilitySelect(path, value) {
   return select(path, value, ABILITY_LABELS_LIST.map((label) => [label, label]));
 }
 
-/** A label and its control, side by side -- the shape most of the sheet is. */
-export function field(label, control) {
-  return `<label class="fld"><span>${esc(label)}</span>${control}</label>`;
+/**
+ * A label and its control, side by side -- the shape most of the sheet is.
+ *
+ * `extra` is for the field that does not fit the grid it is in: a URL is not
+ * the same shape of thing as a hero-point count, and sharing a 140px track
+ * with one left it showing a sixth of what it held.
+ */
+export function field(label, control, extra = '') {
+  return `<label class="fld${extra ? ` ${extra}` : ''}"><span>${esc(label)}</span>${control}</label>`;
 }

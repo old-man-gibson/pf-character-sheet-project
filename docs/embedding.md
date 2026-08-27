@@ -24,16 +24,18 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. The `<char
 | `theme` | `dark` (default) or `light` |
 | `storage-key` | localStorage key for edits; omit for the per-character default |
 | `snapshot-every` | changes between automatic snapshots (default 20) |
-| `hotkeys` | `off` stops the sheet claiming <kbd>Ctrl</kbd>+<kbd>K</kbd> from the host page (see below) |
+| `hotkeys` | `off` stops the sheet claiming <kbd>Ctrl</kbd>+<kbd>K</kbd> and <kbd>Ctrl</kbd>+<kbd>S</kbd> from the host page (see below) |
 
-**The one key it listens for on your page.** <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the
+**The two keys it listens for on your page.** <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the
 sheet's [search palette](using-the-sheet.md#finding-things-the-search-palette), and it is
 worth having when focus is anywhere on the page rather than only inside the sheet — so
 that one listener sits on the document. It stands down for a host that wants the key:
 if you handle the event first and call `preventDefault()` it is yours, if the person is
 typing into one of your own fields nothing happens, and `hotkeys="off"` turns it off
-outright. Everything else the sheet listens to is inside its own shadow root, `/`
-included.
+outright. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, and is claimed on a much shorter leash: only
+when focus is already inside the sheet and only when there is something to save, so a host
+page's own editor keeps the key it expects. Everything else the sheet listens to is inside
+its own shadow root, `/` included.
 
 **Properties / methods:** `.character` (get or set a document directly, no fetch),
 `.model`, `.toJSON()`, `.audit()`, `.resetToSource()`, `.whenReady()` (resolves once
@@ -64,6 +66,30 @@ The six ability hues are properties too — `--ab-str`, `--ab-dex`, `--ab-con`,
 `--ab-int`, `--ab-wis`, `--ab-cha` — with `--ab-wash`, `--ab-edge` and `--ab-ink`
 saying how much of a hue the background, the border and the word each take. See
 *[Ability colours](using-the-sheet.md#ability-colours)*.
+
+Two more are geometry rather than colour, and a host page that scrolls is likely to
+want both:
+
+`--cs-sticky-top` is where the tab rail — the tab bar, and in the session view the
+strip of hit points, AC and saves — comes to rest when the sheet is scrolled. It
+defaults to `0px`, against the top of the window. A host with a fixed header of its
+own should set this to that header's height, or the rail pins behind it:
+
+```css
+character-sheet { --cs-sticky-top: 56px; }
+```
+
+`--cs-table-max` is how tall a table may get before it scrolls inside its own box
+instead of running the page down; that inner scroll is also what holds its column
+headings in place. It defaults to `calc(100svh - var(--cs-sticky-top) - 10rem)`,
+which reads the *window* — so a sheet embedded in a short container of the host's
+wants its own value, and `none` turns the behaviour off entirely.
+
+`--cs-tablebg` is what a scroll box paints its edges against. A table that can scroll
+sideways carries a shadow at whichever end has something past it, and the trick that
+draws it needs to know the colour behind the box; it defaults to `--cs-panel`, which is
+what every table on the sheet sits on. Set it on any wrapper you put a table into that
+is a different colour, or the shadow leaves a band.
 
 There is no build step and no runtime dependency — plain ES modules.
 

@@ -456,9 +456,44 @@ offers 235 rather than the 369 veils that shape in Hands, or the 1,496 that exis
 is still a text field: a veil nobody has published is typed in as it always was, and
 one the catalogue does not recognise simply has no pack half to read.
 
+**A tradition counts as a class list.** The [Veilweaving
+sphere](http://spheresofpower.wikidot.com/veilweaving) reaches veils two ways: without a
+tradition you know a handful picked one at a time, and with one you know a whole class's
+list — *“You gain knowledge of every veil on the daevic veil list”* — with no level in
+that class. Three are printed, **Daevic's**, **Guru's** and **Vizier's**, and taking one
+on the Magic Spheres tab widens the slot's offer exactly as a level in that class would:
+Narockro's Hands slot goes from 19 to 235 with Daevic's, 187 with Vizier's.
+
+What is read is the **`(tradition)` tag** — the one the sphere puts on those three the
+way it puts `(essence)` and `(bind)` on its others — either written in the cell or
+carried by the talent in an imported Spheres pack, so a pack adding a fourth tradition
+works with nothing changed here. The three printed ones are recognised by name as well,
+since a pack you have not imported cannot tag anything. Which list a tradition opens
+comes from its name (*Daevic's Tradition*, either apostrophe) or, for one named something
+else, from its own rules sentence. The cell is your own text, so what it was taken for can
+sit after it — *Daevic's Tradition (tradition) (Wrath)* reads — while a talent that merely
+mentions one does not: *Shape Additional Veil (see Daevic's Tradition)* is a note about a
+tradition, not one.
+
+> What is **not** modelled yet is the other half of that sphere: without a tradition your
+> known veils are the specific ones your talents name, and the sheet has no list of them
+> — so it offers the whole catalogue for the chakra rather than your handful. The
+> sphere's own essence capacity table, its veilweaving level (casting levels plus
+> veilweaving class levels) and the chakras its *Bind X Chakra* talents open are not read
+> either. See [To do](todo.md).
+
 The card has two faces, the way a maneuver's does. It **reads** by default — the pack's
 text, with `{…}` formulas resolving against the essence invested — and the **pen** turns
-it over to a box holding what *you* wrote, which is all that is ever saved. The box
+it over to a box holding what *you* wrote, which is all that is ever saved.
+
+**A long one opens.** A pack's text is as long as its publisher wrote it, and some of
+them are very long indeed — the largest veil in the akashic scrape runs to 34,000
+characters, ten printed pages. Shut, the reading face is a paragraph's worth, which is
+the whole of most of them; **Read all** opens it to most of a screen with its own
+scroll, so a long one can be read without its card becoming twelve screens tall. The
+button appears only where there is more to show. A maneuver's text does the same and for
+the same reason: it had no ceiling at all before, so one long one ran its card off the
+bottom of the window. The box
 starts empty even where the pack has plenty to say, because filling it in for you would
 bank a copy of the catalogue on the sheet and quietly undo the whole arrangement.
 Emptying it again hands the veil back to the pack. Under the name sits what the pack

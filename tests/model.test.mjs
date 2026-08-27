@@ -27,6 +27,7 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
@@ -7819,6 +7820,193 @@ console.log('spheres of guile -- the associated skills the book prints');
   check('and Vocation, which has neither', guileSkillHint('Vocation'), '');
   check('leverage pools by Hit Dice',
     [1, 2, 3, 6, 9, 20].map(leveragePool), [1, 1, 2, 3, 4, 7]);
+}
+
+console.log('undo -- one step back from a row that should not have gone');
+{
+  const c = new Character(load(IDS[0]));
+  const weapons = () => c.list('equipment.weapons');
+
+  check('nothing to undo on a document nobody has touched', c.undoLabel, null);
+  check('and undoing it changes nothing', c.undo(), null);
+
+  c.listAdd('equipment.weapons', { name: 'Test Halberd', dice: '1d10' });
+  c.listAdd('equipment.weapons', { name: 'Test Sling', dice: '1d4' });
+  const before = weapons().length;
+  const ac = c.data.defenses.ac;
+
+  c.listRemove('equipment.weapons', before - 2);
+  check('the row is gone', weapons().length, before - 1);
+  check('and the offer names it', c.undoLabel, 'Removed Test Halberd');
+  check('undo says what it put back', c.undo(), 'Removed Test Halberd');
+  check('the row is back', weapons().length, before);
+  check('in its own place', weapons()[before - 2].name, 'Test Halberd');
+  check('the stack is spent', c.undoLabel, null);
+  check('and the rest of the sheet is where it was', c.data.defenses.ac, ac);
+
+  // Restored *into* the same object: panels and the element hold `model.data`
+  // across a render, and swapping it would leave them on the old document.
+  const data = c.data;
+  c.listRemove('equipment.weapons', before - 1);
+  c.undo();
+  check('model.data keeps its identity', c.data === data, true);
+
+  // Several steps, taken back newest first.
+  c.listRemove('equipment.weapons', before - 1);
+  c.listRemove('equipment.weapons', before - 2);
+  check('two deep', weapons().length, before - 2);
+  check('newest first', c.undo(), 'Removed Test Halberd');
+  check('then the one before it', c.undo(), 'Removed Test Sling');
+  check('both back', weapons().length, before);
+
+  // Bounded: the oldest falls off rather than the stack growing without end.
+  for (let i = 0; i < UNDO_DEPTH + 5; i += 1) {
+    c.listAdd('equipment.weapons', { name: `Filler ${i}` });
+    c.listRemove('equipment.weapons', weapons().length - 1);
+  }
+  check('never deeper than its limit', c.undoStack.length, UNDO_DEPTH);
+
+  // A removal that cannot happen must not leave a step behind it, or Ctrl+Z
+  // would appear to work and put the document back unchanged.
+  c.clearUndo();
+  c.listRemove('equipment.weapons', 999);
+  check('an out-of-range remove marks nothing', c.undoLabel, null);
+  check('a protected tracker refuses', c.removeTracker('mythic_power'), false);
+  check('and marks nothing either', c.undoLabel, null);
+
+  // A tracker lives outside `equipment`, and the entry is the whole document,
+  // so where a thing lives is not something this has to know.
+  c.addTracker({ name: 'Test Pool', max: 3 });
+  const n = c.trackers.length;
+  c.removeTracker(c.trackers[n - 1].id);
+  check('the tracker is gone', c.trackers.length, n - 1);
+  check('named on the way out', c.undoLabel, 'Removed Test Pool');
+  c.undo();
+  check('and comes back', c.trackers.length, n);
+}
+
+console.log('veilweaving sphere -- a tradition opens a class list without the class');
+{
+  const c = new Character(load(IDS[0]));
+  const talents = () => {
+    c.data.training = c.data.training || {};
+    c.data.training.magic = c.data.training.magic || {};
+    c.data.training.magic.bonusTalents = c.data.training.magic.bonusTalents || [];
+    return c.data.training.magic.bonusTalents;
+  };
+  const say = (talent) => {
+    const list = talents();
+    list.push({ sphere: 'Veilweaving', talent });
+    c.recompute();
+    const got = c.data.akashic?.calc?.traditions ?? [];
+    list.pop();
+    c.recompute();
+    return got;
+  };
+
+  check('the three the book prints', VEIL_TRADITIONS, ['Daevic', 'Guru', 'Vizier']);
+  check('a sphere veilweaver with no tradition has none', say('Shape Additional Veil'), []);
+  check("Daevic's Tradition opens the daevic list", say("Daevic's Tradition"), ['Daevic']);
+  check("Guru's", say("Guru's Tradition"), ['Guru']);
+  check("Vizier's", say("Vizier's Tradition"), ['Vizier']);
+
+  // The cell is the player's own text and carries two kinds of bracket: the
+  // talent's own `(tradition)` tag, and what they took it for.
+  check('the tag written out', say("Guru's Tradition (tradition)"), ['Guru']);
+  check('the tag and what it was taken for',
+    say("Vizier's Tradition (tradition) (Wrath)"), ['Vizier']);
+  check('what it was taken for alone', say("Daevic's Tradition (Wrath)"), ['Daevic']);
+  check('the curly apostrophe a phone types', say('Vizier’s Tradition'), ['Vizier']);
+  check('however it was capitalised', say("vizier's TRADITION"), ['Vizier']);
+
+  // Anchored to the whole name, so a talent that mentions a tradition is not
+  // one. The first of these is what a substring match gets wrong.
+  check('a note pointing at one is not one',
+    say("Shape Additional Veil (see Daevic's Tradition)"), []);
+  check('and neither is a veil named after a class',
+    say('Shape Additional Veil (Vizier of the Ninth Gate)'), []);
+
+  // A talent of the same name under another sphere is a different talent.
+  {
+    const list = talents();
+    list.push({ sphere: 'Mind', talent: "Guru's Tradition" });
+    c.recompute();
+    check('and only the Veilweaving sphere grants one', c.data.akashic.calc.traditions, []);
+    list.pop();
+    c.recompute();
+  }
+
+  // Derived, so it must not reach a saved document -- see AKASHIC_DERIVED.
+  talents().push({ sphere: 'Veilweaving', talent: "Guru's Tradition" });
+  c.recompute();
+  check('it narrows while it is live', c.data.akashic.calc.traditions, ['Guru']);
+  check('and is stripped on the way out', 'calc' in (c.toJSON().akashic || {}), false);
+  talents().pop();
+  c.recompute();
+}
+
+console.log('veilweaving sphere -- the tag, so a pack can add a fourth tradition');
+{
+  // The three are printed, but the sphere tags them the way it tags its
+  // `(essence)` and `(bind)` talents -- so what is read is the tag, and a pack
+  // carrying a tradition the book never printed needs no code to work.
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Veilweaving',
+      kind: 'magic',
+      talents: [
+        {
+          name: 'Akashic Heritage',
+          tags: ['tradition'],
+          text: 'You gain knowledge of every veil on the nexus veil list.',
+        },
+        {
+          name: "Zodiac's Tradition",
+          tags: ['tradition'],
+          text: 'You gain knowledge of every veil on the zodiac veil list.',
+        },
+        { name: 'Shape Additional Veil', tags: [], text: 'You may shape an additional veil.' },
+      ],
+    }],
+  });
+  const c = new Character(load(IDS[0]));
+  const talents = () => {
+    c.data.training = c.data.training || {};
+    c.data.training.magic = c.data.training.magic || {};
+    c.data.training.magic.bonusTalents = c.data.training.magic.bonusTalents || [];
+    return c.data.training.magic.bonusTalents;
+  };
+  const say = (talent) => {
+    const list = talents();
+    list.push({ sphere: 'Veilweaving', talent });
+    c.recompute();
+    const got = c.data.akashic?.calc?.traditions ?? [];
+    list.pop();
+    c.recompute();
+    return got;
+  };
+
+  check('a pack tradition named for its class', say("Zodiac's Tradition"), ['Zodiac']);
+  // Named something else entirely: the tag says it is one, and its own rules
+  // text -- the sentence the book uses -- says which list it opens.
+  check('and one that is not', say('Akashic Heritage'), ['Nexus']);
+  check('an untagged talent from the same pack is still not one',
+    say('Shape Additional Veil'), []);
+
+  setSphereCatalogue({ spheres: [] });
+}
+
+console.log('row labels -- what a toast calls the thing that just went');
+{
+  check('a name', rowLabel({ name: 'Cloak of Resistance' }), 'Cloak of Resistance');
+  check('a label, where there is no name', rowLabel({ label: 'Second wind' }), 'Second wind');
+  check('the first field with anything in it',
+    rowLabel({ name: '', title: 'Untitled', text: 'body' }), 'Untitled');
+  check('whitespace is not a name', rowLabel({ name: '   ' }, 'row'), 'row');
+  check('a bare string is its own label', rowLabel('Wild Talent'), 'Wild Talent');
+  check('nothing at all falls back', rowLabel({}, 'weapon'), 'weapon');
+  check('and so does nothing', rowLabel(null, 'weapon'), 'weapon');
+  check('a long one is cut to fit a sentence', rowLabel({ name: 'x'.repeat(80) }).length, 40);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

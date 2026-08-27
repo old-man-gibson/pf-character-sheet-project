@@ -131,7 +131,7 @@ import {
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
-  trackBand,
+  trackBand, readableOn,
 } from './tracker-style.js';
 import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
@@ -404,6 +404,72 @@ function isTypingIn(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+/* ---------------- the help disclosures ----------------
+ *
+ * Below 620px an explanation longer than a paragraph is folded behind a line
+ * saying what it is about. Both of the things that line needs -- a name and a
+ * stable identity -- are read off the hint itself, because there are over a
+ * hundred of them across the panels and none was written with this in mind.
+ */
+
+/**
+ * A name for one stacked row that survives a render.
+ *
+ * Every one of these rows writes somewhere, and where it writes is what it is:
+ * `featGroups.0.entries|3|name` and `traitSlots.drawback.name` both name a row
+ * once the field on the end is taken off. Read off the first control in the
+ * row rather than written into the markup, so a table opts in by marking its
+ * name cell and nothing else has to change.
+ */
+function stackRowKey(row) {
+  const el = row.querySelector('[data-item], [data-set]');
+  if (!el) return '';
+  const item = el.dataset.item;
+  if (item) return item.split('|').slice(0, 2).join('|');
+  const set = el.dataset.set || '';
+  return set.split('.').slice(0, -1).join('.');
+}
+
+/** Longer than this and a hint is a paragraph rather than a caption. */
+const HELP_LENGTH = 180;
+
+/**
+ * What the help is about.
+ *
+ * The multi-paragraph hints already announce their own subject in bold --
+ * "**Rule groups.** Under each feature column's name…" -- and where one does
+ * not, the panel it sits in has a heading that names the same thing. Neither
+ * is a label anybody had to go and write.
+ */
+function helpLabel(hint) {
+  // Only a *leading* bold is a subject. One in the middle of a sentence is
+  // emphasis -- "…choices on the **Stats** tab" -- and taking it labelled a
+  // paragraph about class tracks "Help — Stats".
+  const first = [...hint.childNodes].find((n) => n.nodeType !== 3 || n.textContent.trim());
+  const lead = first?.nodeType === 1 && /^(STRONG|B)$/.test(first.tagName) ? first.textContent : '';
+  const panel = hint.closest('section.panel, .supergroup')
+    ?.querySelector('h3, .supergroup-title')?.childNodes[0]?.textContent ?? '';
+  return (lead || panel || 'this panel')
+    .replace(/\s+/g, ' ').replace(/[.:—-]\s*$/, '').trim()
+    .slice(0, 40);
+}
+
+/**
+ * A name for one hint that survives a render.
+ *
+ * Its own words, which is the only thing about it that does not move: a hint
+ * has no id, its position shifts as panels fold, and the same panel can hold
+ * three of them. djb2 over the first sentence-and-a-bit, which is plenty to
+ * tell a hundred paragraphs apart and short enough to be cheap on every
+ * render.
+ */
+function helpKey(hint) {
+  const text = hint.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+  let h = 5381;
+  for (let i = 0; i < text.length; i += 1) h = (((h << 5) + h) ^ text.charCodeAt(i)) >>> 0;
+  return `h${h.toString(36)}`;
+}
+
 export class CharacterSheetElement extends HTMLElement {
   static observedAttributes = ['src', 'role', 'theme'];
 
@@ -437,6 +503,9 @@ export class CharacterSheetElement extends HTMLElement {
   #snapshotTimer = null;
   #adopting = null;
   #tab = 'overview';
+  /* What was last written to the view store, so a render that changed nothing
+     does not write. */
+  #tabWritten = null;
   #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '' };
   #menuLists = new Map();   // option menus a render's feature cells offer, name -> {id, menu}
   #editTracker = null;   // id of the custom tracker being edited in place
@@ -464,6 +533,8 @@ export class CharacterSheetElement extends HTMLElement {
   #openBuff = null;
   /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
   #confirmReset = false;
+  /** Whether the rail's `⋯` menu is open. */
+  #chromeMenu = false;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
   /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
@@ -476,6 +547,13 @@ export class CharacterSheetElement extends HTMLElement {
    * pack says. Not saved with the character: it is a way of reading the tab.
    */
   #veilEdit = null;
+  /* Which long pack texts have been opened out to read. View state, not a
+     preference: it is where you are looking, not how you like the sheet. */
+  #openText = new Set();
+  /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
+  #openHelp = new Set();
+  /* Which stacked rows are folded to their name; see `#stackRows`. */
+  #shutRows = new Set();
   /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
@@ -500,6 +578,11 @@ export class CharacterSheetElement extends HTMLElement {
   /** The last roll copied, shown back so the player can see what they got. */
   #rollToast = null;    // { kind, ref, what, text, failed }
   #rollToastTimer = null;
+  /* What the last structural change was, offered back. One slot, shared with
+     the roll toast: both report the last thing that happened, and there is
+     only ever one last thing. */
+  #undoToast = null;    // { label }
+  #undoToastTimer = null;
   /**
    * Roll template or bare /roll. A preference of the person playing rather than
    * of the character -- their Roll20 game is what decides it -- so it lives in
@@ -518,6 +601,11 @@ export class CharacterSheetElement extends HTMLElement {
    * where the selection sits.
    */
   #palette = null;
+  /* The live region, and the headline values it is watching. Both outlive
+     every render; see `#announceChanges`. */
+  #live = null;
+  #watched = null;
+  #liveTimer = null;
   #paletteIndex = null;
   #paletteRows = [];
   #paletteAt = 0;
@@ -569,11 +657,44 @@ export class CharacterSheetElement extends HTMLElement {
   #onDocumentKey = (e) => {
     if (e.defaultPrevented || !this.#model) return;
     if (this.getAttribute('hotkeys') === 'off') return;
-    if (e.key?.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const key = e.key?.toLowerCase();
+    if (key !== 'k' && key !== 's' && key !== 'z') return;
     // The path, not `contains`: an event from inside the shadow root is
     // retargeted at the host, and `contains` cannot see across the boundary.
     const path = e.composedPath?.() || [];
     const inside = path.includes(this);
+    /*
+     * Ctrl+S saves, which is the one verb on the sheet that had no key at all
+     * -- and the one the browser's own Ctrl+S is most likely to be mistaken
+     * for, since "save this page" is never what anyone meant here. Only when
+     * the sheet is what is being used, though: a host page's own field keeps
+     * the key, and so does a page with no sheet in focus, because taking
+     * Ctrl+S away from a document someone is editing elsewhere is worse than
+     * not having it.
+     */
+    if (key === 's') {
+      if (!inside || this.isPublished || !this.#changes) return;
+      e.preventDefault();
+      this.#action('save');
+      return;
+    }
+    /*
+     * Ctrl+Z takes back the last row that was removed -- and only ever that.
+     * A field has an undo of its own that works per character rather than per
+     * commit, and it is better at typing than anything here would be, so the
+     * key is left alone wherever a caret is standing. Shift is left alone too:
+     * there is no redo, and taking the key for nothing would be worse than not
+     * taking it.
+     */
+    if (key === 'z') {
+      if (!inside || e.shiftKey || this.isPublished) return;
+      if (isTypingIn(path[0] ?? e.target)) return;
+      if (!this.#model?.undoLabel) return;
+      e.preventDefault();
+      this.#undo();
+      return;
+    }
     // Typing somewhere else on the page: leave the key to whoever is typing.
     if (!inside && isTypingIn(path[0] ?? e.target)) return;
     e.preventDefault();
@@ -698,6 +819,10 @@ export class CharacterSheetElement extends HTMLElement {
     }
 
     this.#adoptDocument(open);
+    // The model is what names the store, so the tab can only be read back once
+    // there is one -- and it has to be read before the first render, or the
+    // sheet opens on Overview and then jumps.
+    this.#restoreTab();
     /*
      * The working slot is only rewritten when it had drifted, and then only to
      * settle it against what is now on screen -- otherwise the next reload would
@@ -740,7 +865,11 @@ export class CharacterSheetElement extends HTMLElement {
     // count would sit at zero forever.
     if (!this.#savedDoc) this.#openedDoc = structuredClone(normalized);
     this.#changes = this.#baseline ? countChanges(this.#baseline, normalized) : 0;
-    this.#model.subscribe(() => {
+    this.#model.subscribe((_model, detail) => {
+      // Something destructive is about to happen and has already saved the
+      // way back; offer it. Before the change rather than after, which is
+      // fine: the render that follows draws the toast from the same field.
+      if (detail?.type === 'undo-mark') this.#showUndoToast(detail.label);
       this.#persist();
       this.dispatchEvent(new CustomEvent('character-change', {
         detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
@@ -1175,40 +1304,125 @@ export class CharacterSheetElement extends HTMLElement {
     const allIds = [...bar.map((e) => e.id), 'systabs'];
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
 
+    // Read once for the whole bar rather than per coloured tab: it is a
+    // computed-style lookup, and the answer cannot change inside one render.
+    const surface = this.#surface();
+
     this.shadowRoot.innerHTML = `
       ${SHEET_LINK}
       <div class="wrap">
         ${this.#header()}
+        <div class="tabrail">
+        <div class="railtop">${this.#sessionStrip()}${this.#railActions()}</div>
         <nav class="tabs" role="tablist" aria-label="Character sheet sections">
           ${bar.map((e) => {
     // A colour is a normalised `#rrggbb` or nothing, so it is safe in the
     // style attribute; the class list is built rather than written inline
     // because a tab can be both a guest and coloured.
     const color = this.#model.tabColor(e.key);
+    // Two properties, not one: `--tab-color` draws the edge and the wash and is
+    // the hue as picked; `--tab-ink` is what the label is set in, and is that
+    // hue taken far enough to be read on this theme. See `#applyCharacterColor`.
+    const tint = color ? `--tab-color:${color};--tab-ink:${readableOn(color, surface)}` : '';
     const cls = [e.kind === 'visiting' ? 'visiting' : '', color ? 'tinted' : ''].filter(Boolean).join(' ');
     return `
             <button role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
-              ${cls ? `class="${cls}"` : ''}${color ? ` style="--tab-color:${color}"` : ''}
+              ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
               ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"' : ''}
-              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true" title="Drag to rearrange, right-click to colour"'}>${esc(e.label)}</button>`;
+              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true"'}>${esc(e.label)}</button>`;
   }).join('')}
           <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
-            title="Show, hide and rearrange tabs">⚙</button>
+            aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
+        <div class="rollslot">${this.#slotHtml()}</div>
+        </div>
         ${this.#tabColorMenuHtml()}
-        <div class="rollslot">${this.#rollToastHtml()}</div>
+        ${this.#notices()}
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
       </div>`;
+    this.#rememberTab();
     this.#applyCharacterColor();
     this.#bind();
+    this.#showActiveTab();
+    this.#fillJumpTo();
+    this.#markLongText();
+    this.#stackRows();
+    this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
     if (this.#palette) this.shadowRoot.append(this.#palette);
+    // Same trick, and for a stronger reason: a live region that is replaced is
+    // a live region a reader has stopped watching.
+    this.shadowRoot.append(this.#liveRegion());
+    this.#announceChanges();
+  }
+
+  /**
+   * The one thing the sheet is for, said out loud.
+   *
+   * Everything here recalculates: change Dex and AC moves, and Reflex, and
+   * initiative, and twelve skills. On screen that is the whole point and it is
+   * plain to see. To a screen reader it was silent -- the sheet had exactly one
+   * `aria-live` region in it, the palette's result count -- so the effect of an
+   * edit was something you had to go and look for, field by field, to find out
+   * whether the thing you came to do had worked.
+   *
+   * Six values rather than every derived one: hit points, AC, the three saves
+   * and initiative are what a player is watching when they change anything, and
+   * a region that reads out forty numbers is a region nobody leaves on. Capped
+   * at three, because past that the sentence stops being a sentence.
+   *
+   * `polite`, and on a timer: an edit can land several renders in a row (a
+   * recompute, then the change count, then a snapshot) and a region that
+   * re-announces the same move three times is worse than one that is quiet.
+   */
+  #liveRegion() {
+    if (!this.#live) {
+      this.#live = document.createElement('p');
+      this.#live.className = 'srlive';
+      this.#live.setAttribute('aria-live', 'polite');
+      this.#live.setAttribute('aria-atomic', 'true');
+    }
+    return this.#live;
+  }
+
+  /** The handful a player is watching when they change something. */
+  #headlineValues() {
+    const c = this.#model?.data;
+    if (!c) return null;
+    return {
+      'Hit points': this.#model.hpState?.max,
+      AC: c.defenses?.ac,
+      Fortitude: c.saves?.fortitude?.total,
+      Reflex: c.saves?.reflex?.total,
+      Will: c.saves?.will?.total,
+      Initiative: c.hp?.initiative,
+    };
+  }
+
+  #announceChanges() {
+    const now = this.#headlineValues();
+    if (!now) return;
+    const before = this.#watched;
+    this.#watched = now;
+    // Nothing to compare against on the first render of a character: opening a
+    // sheet is not a change to it.
+    if (!before) return;
+    const moved = Object.keys(now)
+      .filter((k) => before[k] !== undefined && now[k] !== undefined && before[k] !== now[k])
+      .map((k) => `${k} ${before[k]} to ${now[k]}`);
+    if (!moved.length) return;
+    const said = moved.slice(0, 3).join(', ')
+      + (moved.length > 3 ? `, and ${moved.length - 3} more` : '');
+    clearTimeout(this.#liveTimer);
+    this.#liveTimer = setTimeout(() => {
+      if (this.#live && this.isConnected) this.#live.textContent = said;
+    }, 400);
   }
 
   /**
@@ -1275,6 +1489,15 @@ export class CharacterSheetElement extends HTMLElement {
     root.addEventListener('scroll', (e) => draw(e.target), true);
   }
 
+  /**
+   * Who this is: the portrait, the name, and the two lines under it.
+   *
+   * No controls. They used to live here -- ten buttons at one weight, in one
+   * row, wrapping to four rows and 104px on a phone -- and they went to the
+   * rail, which is the part of the sheet that stays on screen. What is left is
+   * the part you read once, which is also the part that can afford to scroll
+   * away. See `#railActions`.
+   */
   #header() {
     const c = this.#model.data;
     const i = c.identity;
@@ -1295,32 +1518,83 @@ export class CharacterSheetElement extends HTMLElement {
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
             ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
           </div>
-          ${this.#sessionStrip()}
         </div>
-        <div class="head-actions">
-          ${this.#searchButton()}
-          ${this.#viewModeButton()}
-          ${this.#formulaButton()}
-          <button data-action="theme">${this.getAttribute('theme') === 'light' ? 'Dark' : 'Light'}</button>
-          ${this.isPublished ? '' : `
-          <button data-action="save" class="${this.#changes ? 'primary' : ''}"
-            ${this.#changes ? '' : 'disabled'}
-            title="${this.#changes
-              ? 'Make this the version the sheet opens on'
-              : 'Nothing has changed since the last save'}">
-            Save${this.#changes ? ` (${this.#changes})` : ''}
-          </button>
-          <button data-action="history" aria-pressed="${this.#showHistory}"
-            title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
-          <button data-action="export">Export JSON</button>
-          ${this.isPublished ? '' : `
-          <button data-action="preview-published"
-            title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
-          <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import</button>
-          <input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>
-          <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
-            title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
-        </div>
+      </header>`;
+  }
+
+  /**
+   * The two controls worth a permanent place, and a menu for the other eight.
+   *
+   * Ten buttons at equal weight is a list, not a toolbar: everything is
+   * findable and nothing is obvious, and the two that are pressed every few
+   * minutes -- Search and Save -- sat fifth and first among things pressed
+   * twice a month. So those two ride the rail, where they are always to hand,
+   * and the rest are one press away behind `⋯`.
+   *
+   * Search keeps its shortcut on its face, because that is how the second
+   * press of it stops needing the button. Save wears the change count and
+   * goes quiet when there is nothing to save.
+   */
+  #railActions() {
+    return `<div class="railactions">
+        ${/* Filled from the panel headings after each render; see `#fillJumpTo`. */''}
+        <select class="jumpto" aria-label="Jump to a section on this tab" hidden>
+          <option value="">Jump to…</option>
+        </select>
+        ${this.#searchButton()}
+        ${this.isPublished ? '' : `
+        <button data-action="save" class="${this.#changes ? 'primary' : ''}"
+          ${this.#changes ? '' : 'disabled'}
+          title="${this.#changes
+            ? 'Make this the version the sheet opens on (Ctrl+S)'
+            : 'Nothing has changed since the last save'}">
+          Save${this.#changes ? ` (${this.#changes})` : ''}
+        </button>`}
+        <button class="railmore" data-action="chrome-menu" aria-haspopup="menu"
+          aria-expanded="${this.#chromeMenu}" aria-label="More"
+          title="Views, formulas, history, export">⋯</button>
+        ${this.#chromeMenu ? this.#chromeMenuHtml() : ''}
+        ${/* Out here rather than in the menu: choosing Import takes the menu
+             away with it, and the input the action reaches for has to outlive
+             that click. */''}
+        ${this.isPublished ? '' : '<input type="file" accept="application/json,.json,.xlsx,.xlsm" data-importfile hidden>'}
+      </div>`;
+  }
+
+  /** Everything the rail does not keep on its face. */
+  #chromeMenuHtml() {
+    const light = this.getAttribute('theme') === 'light';
+    return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
+        ${this.#viewModeButton()}
+        ${this.#formulaButton()}
+        <button data-action="theme">${light ? 'Dark theme' : 'Light theme'}</button>
+        ${this.isPublished ? '' : `
+        <button data-action="history" aria-pressed="${this.#showHistory}"
+          title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
+        <button data-action="export">Export JSON</button>
+        ${this.isPublished ? '' : `
+        <button data-action="preview-published"
+          title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
+        <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
+        <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
+          title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
+        <p class="menukeys"><kbd>Ctrl</kbd><kbd>K</kbd> search
+          &middot; <kbd>Ctrl</kbd><kbd>S</kbd> save
+          &middot; <kbd>←</kbd><kbd>→</kbd> tabs</p>
+      </div>`;
+  }
+
+  /**
+   * What the sheet has to say to you, under the rail rather than up in the
+   * header.
+   *
+   * Every one of these is opened or raised by something on the rail, and the
+   * rail is pinned -- so a History panel that rendered where the buttons used
+   * to be would open three screens above wherever you were standing. Directly
+   * under the thing that opened them is the only place they can be.
+   */
+  #notices() {
+    return `<div class="notices">
         ${this.#resumeBanner()}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
@@ -1344,7 +1618,7 @@ export class CharacterSheetElement extends HTMLElement {
           will not survive closing the tab.
           <button data-action="export" class="primary">Export JSON</button>
         </div>
-      </header>`;
+      </div>`;
   }
 
   /**
@@ -1381,17 +1655,21 @@ export class CharacterSheetElement extends HTMLElement {
       title="Search this character — skills, feats, gear, spells, anything (Ctrl+K)">
       <svg class="cmdk-glass" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>
-      </svg>Search<kbd>Ctrl K</kbd></button>`;
+      </svg><span class="searchlabel">Search</span><kbd>Ctrl K</kbd></button>`;
   }
 
   /** The Session/Build switch: which view of the sheet is showing. */
   #viewModeButton() {
     const session = this.#model.viewMode() === 'session';
-    return `<button data-action="view-mode" aria-pressed="${session}"
+    // Named for where it goes, not for where you are. It reads the other way
+    // round as a toggle -- a pressed button says which state it is in -- but
+    // this is a row in a menu now, and a menu item is a thing you are about to
+    // do. The `⚙` panel's own switch has said it this way all along.
+    return `<button data-action="view-mode"
       title="${session
-    ? 'Session view: the tabs that come up at the table. Switch back to see everything.'
-    : 'Switch to the session view: only the tabs that come up at the table'}">
-      ${session ? 'Session' : 'Build'} view</button>`;
+    ? 'Everything the sheet can show, including the build machinery'
+    : 'Only the tabs that come up at the table, and the Overview as a dashboard'}">
+      Switch to ${session ? 'build' : 'session'} view</button>`;
   }
 
   /**
@@ -1703,23 +1981,23 @@ export class CharacterSheetElement extends HTMLElement {
     const majorName = String(major.name || major.category || major.text || '').trim();
 
     const fixed = (key, label, hint) => `<tr>
-      <td><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
-      <td>${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
-      <td>${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
+      <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
+      <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
+      <td data-label="Notes">${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="granted stacked">
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
           ${(g.others || []).map((f, i) => `<tr>
-            <td>${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
-            <td>${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
-            <td>${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
+            <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
+            <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
+            <td data-label="Notes">${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
             ${this.#rowTools('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
@@ -1764,14 +2042,14 @@ export class CharacterSheetElement extends HTMLElement {
    * grants a pool can define it where the feat is written down.
    */
   #featGroupTable(group, g) {
-    return `<div class="tablewrap"><table class="feats">
+    return `<div class="tablewrap"><table class="feats stacked">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
           <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
-          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
-          <td>${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-          <td class="fnote">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
+          <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
+          <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
           ${this.#rowRemove(`featGroups.${g}.entries`, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
@@ -1943,16 +2221,16 @@ export class CharacterSheetElement extends HTMLElement {
           <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
           <span>Flowing Power</span></label>
       </h3>
-      <div class="tablewrap"><table class="tradition">
+      <div class="tablewrap"><table class="tradition stacked">
         <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>
         <tbody>${MYTHIC_TRADITION_SLOTS.map((def) => {
           const locked = def.requires && !filled(def.requires);
           return `<tr class="${locked ? 'lockedslot' : ''}">
-            <td>${esc(def.label)}${def.mandatory ? ' <span class="badge err">required</span>' : ''}
+            <td data-stack="head">${esc(def.label)}${def.mandatory ? ' <span class="badge err">required</span>' : ''}
               ${def.requires ? `<div class="hint">needs ${esc(MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}
               ${def.kind === 'quality' ? '<div class="hint">bonus + drawback</div>' : ''}</td>
-            <td>${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
-            <td>${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
+            <td data-stack="name">${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
+            <td data-label="Notes">${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -2001,6 +2279,7 @@ export class CharacterSheetElement extends HTMLElement {
       openManeuver: this.#openManeuver,
       maneuverEdit: this.#maneuverEdit,
       veilEdit: this.#veilEdit,
+      openText: this.#openText,
       peek: this.#peek,
     };
   }
@@ -2390,11 +2669,37 @@ export class CharacterSheetElement extends HTMLElement {
    * theme's accent for everything inside the shadow root. Removing it hands
    * the theme back its own.
    */
+  /**
+   * The surface a player-chosen colour has to be legible on.
+   *
+   * `--cs-panel-2` rather than `--cs-panel`: it is the ground under buttons,
+   * inputs and the swatches, and it is the tighter of the two on both themes --
+   * paler than the panel on the light one, lighter than it on the dark. Read
+   * off the element rather than written down, so a host that themed the sheet
+   * is measured against its own colours; the built-in pair is the fallback for
+   * a host that set something `normalizeHex` cannot read, and for the moment
+   * before the stylesheet is adopted.
+   */
+  #surface() {
+    const declared = normalizeHex(getComputedStyle(this).getPropertyValue('--cs-panel-2'));
+    return declared || (this.getAttribute('theme') === 'light' ? '#eef0f5' : '#232733');
+  }
+
+  /**
+   * The character's own colour, wherever the sheet wears it.
+   *
+   * The accent is read as text far more often than it is seen as an edge -- it
+   * is every panel heading, every derived value, every big attack bonus -- so
+   * it takes the legible version of the hue. The three washes under it keep the
+   * raw one: they are backgrounds and borders, they have no ratio to meet, and
+   * they are most of what makes the sheet still look like the colour that was
+   * picked. See `readableOn`.
+   */
   #applyCharacterColor() {
     const hex = normalizeHex(this.#model?.data?.identity?.color);
     const vars = ['--cs-accent', '--cs-accent-soft', '--cs-formula', '--cs-formula-strong'];
     if (!hex) { vars.forEach((v) => this.style.removeProperty(v)); return; }
-    this.style.setProperty('--cs-accent', hex);
+    this.style.setProperty('--cs-accent', readableOn(hex, this.#surface()));
     this.style.setProperty('--cs-accent-soft', rgba(hex, 0.14));
     this.style.setProperty('--cs-formula', rgba(hex, 0.40));
     this.style.setProperty('--cs-formula-strong', rgba(hex, 0.85));
@@ -2795,14 +3100,61 @@ export class CharacterSheetElement extends HTMLElement {
     </div>`;
   }
 
+  /**
+   * What the slot under the rail is showing.
+   *
+   * A copied roll and an offer to undo are both "the last thing that
+   * happened", and there is only ever one of those, so they share the slot
+   * rather than stacking. Whichever was set last is the one that is up --
+   * setting either clears the other.
+   */
+  #slotHtml() {
+    if (this.#rollToast) return this.#rollToastHtml();
+    if (this.#undoToast) return this.#undoToastHtml();
+    return '';
+  }
+
+  /**
+   * "Removed Cloak of Resistance -- Undo".
+   *
+   * It leaves on its own after twelve seconds, which is longer than the roll
+   * toast gets because that one is confirming something you meant and this one
+   * is offering to reverse something you may not have. The stack outlives the
+   * toast either way: Ctrl+Z still works after it has gone.
+   */
+  #undoToastHtml() {
+    const t = this.#undoToast;
+    if (!t) return '';
+    // The button only while there is something behind it. After the last step
+    // has been taken back the toast is a receipt, and a receipt with a dead
+    // control on it reads as a control that stopped working.
+    const more = this.#model?.undoLabel;
+    return `<div class="rolltoast undotoast" role="status">
+      <div class="rollhead">
+        <strong>${esc(t.label)}</strong>
+        ${more ? '<button class="primary" data-undo>Undo <kbd>Ctrl</kbd><kbd>Z</kbd></button>' : ''}
+        <button class="rollclose" data-undoclose aria-label="Dismiss">×</button>
+      </div>
+    </div>`;
+  }
+
+  /** Offer the last structural change back. */
+  #showUndoToast(label) {
+    clearTimeout(this.#rollToastTimer);
+    this.#rollToast = null;
+    this.#undoToast = { label };
+    this.#renderRollToast();
+  }
+
   /** Redraw the toast alone -- copying a roll must not disturb the sheet. */
   #renderRollToast({ select = false } = {}) {
     const slot = this.shadowRoot.querySelector('.rollslot');
     if (!slot) return;
-    slot.innerHTML = this.#rollToastHtml();
+    slot.innerHTML = this.#slotHtml();
     this.#bindRollToast(slot);
     if (select) slot.querySelector('.rolltext')?.select();
     clearTimeout(this.#rollToastTimer);
+    clearTimeout(this.#undoToastTimer);
     // A failed copy is still needed -- it is the only copy of the text there
     // is -- so only a successful one clears itself.
     if (this.#rollToast && !this.#rollToast.failed) {
@@ -2810,6 +3162,12 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rollToast = null;
         if (this.isConnected) this.#renderRollToast();
       }, 6000);
+    }
+    if (this.#undoToast) {
+      this.#undoToastTimer = setTimeout(() => {
+        this.#undoToast = null;
+        if (this.isConnected) this.#renderRollToast();
+      }, 12000);
     }
   }
 
@@ -2830,6 +3188,7 @@ export class CharacterSheetElement extends HTMLElement {
     } catch {
       failed = true;
     }
+    this.#undoToast = null;
     this.#rollToast = {
       kind, ref, what: what || spec.name, text, failed,
     };
@@ -2852,6 +3211,32 @@ export class CharacterSheetElement extends HTMLElement {
         this.#renderRollToast();
       });
     });
+    scope.querySelectorAll('[data-undo]').forEach((b) => {
+      b.addEventListener('click', () => this.#undo());
+    });
+    scope.querySelectorAll('[data-undoclose]').forEach((b) => {
+      b.addEventListener('click', () => {
+        clearTimeout(this.#undoToastTimer);
+        this.#undoToast = null;
+        this.#renderRollToast();
+      });
+    });
+  }
+
+  /**
+   * Take back the last structural change, and say what came back.
+   *
+   * The toast that follows names the thing that was restored rather than
+   * going quiet: an undo that leaves no trace is indistinguishable from a
+   * keypress that did nothing, and this one can be pressed several times.
+   */
+  #undo() {
+    if (!this.#model) return;
+    const label = this.#model.undo();
+    if (!label) { this.#showUndoToast('Nothing left to undo'); return; }
+    this.#undoToast = null;
+    this.#render();
+    this.#showUndoToast(`${label} — put back`);
   }
 
   /* ---------------- the search palette ---------------- */
@@ -3156,7 +3541,32 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #bindActions(scope) {
     scope.querySelectorAll('[data-action]').forEach((b) => {
-      b.addEventListener('click', () => this.#action(b.dataset.action, b));
+      b.addEventListener('click', () => {
+        /*
+         * Choosing something from the `⋯` menu is also the gesture that shuts
+         * it. Taken out by hand rather than by a redraw: several of these
+         * actions render something and then put the caret in it -- the armed
+         * Reset does exactly that -- and a redraw chasing the action would
+         * take that field away again.
+         */
+        const menu = b.dataset.action === 'chrome-menu' ? null : b.closest('.chromemenu');
+        if (menu) {
+          this.#chromeMenu = false;
+          menu.remove();
+          this.shadowRoot.querySelector('[data-action="chrome-menu"]')?.setAttribute('aria-expanded', 'false');
+        }
+        this.#action(b.dataset.action, b);
+      });
+    });
+
+    scope.querySelectorAll('select.jumpto').forEach((box) => {
+      box.addEventListener('change', () => {
+        const to = box.value;
+        // Back to the placeholder: the box is a verb, not a state, and leaving
+        // it reading "Wealth" would say you are there long after you have gone.
+        box.value = '';
+        if (to !== '') this.#jumpToSection(to);
+      });
     });
 
     scope.querySelectorAll('[data-importfile]').forEach((input) => {
@@ -3232,7 +3642,15 @@ export class CharacterSheetElement extends HTMLElement {
       this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
     });
     wrap.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || !this.#openCell) return;
+      if (e.key !== 'Escape') return;
+      // The `⋯` menu first: it is the thing most recently opened if both are,
+      // and Escape should shut one layer, not two.
+      if (this.#chromeMenu) {
+        e.stopPropagation();
+        this.#action('chrome-menu');
+        return;
+      }
+      if (!this.#openCell) return;
       this.#shutFoldedCell();
       this.#render();
     });
@@ -3263,11 +3681,16 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #renderHeader({ gentle = false } = {}) {
     const root = this.shadowRoot;
-    const old = root.querySelector('header.head');
-    if (!old || !this.#model) { this.#render(); return; }
+    // Two subtrees now rather than one: the buttons live on the rail and what
+    // they raise -- the History panel, the notices -- sits under it. Neither is
+    // inside `header.head` any more, and the header itself holds nothing this
+    // ever changes.
+    const parts = [['.railactions', () => this.#railActions()], ['.notices', () => this.#notices()]];
+    const found = parts.map(([sel]) => root.querySelector(sel));
+    if (found.some((n) => !n) || !this.#model) { this.#render(); return; }
 
-    if (gentle && old.contains(root.activeElement)) {
-      const save = old.querySelector('[data-action="save"]');
+    if (gentle && found.some((n) => n.contains(root.activeElement))) {
+      const save = root.querySelector('[data-action="save"]');
       if (save) {
         save.textContent = `Save${this.#changes ? ` (${this.#changes})` : ''}`;
         save.disabled = !this.#changes;
@@ -3276,11 +3699,13 @@ export class CharacterSheetElement extends HTMLElement {
       return;
     }
 
-    const holder = document.createElement('div');
-    holder.innerHTML = this.#header();
-    const fresh = holder.firstElementChild;
-    old.replaceWith(fresh);
-    this.#bindActions(fresh);
+    parts.forEach(([sel, html], i) => {
+      const holder = document.createElement('div');
+      holder.innerHTML = html();
+      const fresh = holder.firstElementChild;
+      found[i].replaceWith(fresh);
+      this.#bindActions(fresh);
+    });
   }
 
   /**
@@ -3428,8 +3853,13 @@ export class CharacterSheetElement extends HTMLElement {
       const tab = root.querySelector(`nav.tabs ${sel}`);
       if (tab) {
         tab.classList.toggle('tinted', !!hex);
-        if (hex) tab.style.setProperty('--tab-color', hex);
-        else tab.style.removeProperty('--tab-color');
+        if (hex) {
+          tab.style.setProperty('--tab-color', hex);
+          tab.style.setProperty('--tab-ink', readableOn(hex, this.#surface()));
+        } else {
+          tab.style.removeProperty('--tab-color');
+          tab.style.removeProperty('--tab-ink');
+        }
       }
       const rowSwatch = root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
       if (rowSwatch) {
@@ -3485,8 +3915,17 @@ export class CharacterSheetElement extends HTMLElement {
    * once and survive every re-render.
    */
   #onPointerDownAway = (e) => {
-    if (!this.#tabColorFor) return;
     const path = e.composedPath?.() || [];
+    // The `⋯` menu shuts on a press outside it the same way, and on the same
+    // listener -- one for the element's life rather than one per render.
+    // Its own toggle is excluded, or the press that opens it would also be the
+    // press that closes it.
+    if (this.#chromeMenu && !path.some((n) => n?.classList?.contains?.('chromemenu')
+      || n?.dataset?.action === 'chrome-menu')) {
+      this.#chromeMenu = false;
+      this.#renderHeader();
+    }
+    if (!this.#tabColorFor) return;
     // Inside the panel, or on a control whose own handler opens it: not away.
     if (path.some((n) => n?.classList?.contains?.('tabmenu')
       || n?.dataset?.tabcolorOpen !== undefined)) return;
@@ -3557,8 +3996,226 @@ export class CharacterSheetElement extends HTMLElement {
       if (id === this.#tab) return;
       this.#tab = id;
       this.#render();
-      this.shadowRoot.getElementById(`tab-${id}`)?.focus();
+      this.shadowRoot.getElementById(`tab-${id}`)?.focus({ preventScroll: true });
+      this.#showPanelTop();
     });
+  }
+
+  /**
+   * The tab you were on, per character.
+   *
+   * Reopening a sheet on Overview when you left it halfway down Magic Spheres
+   * is a small thing to have to undo and it happens on every reload. Kept in
+   * `localStorage` beside the working copy rather than in `uiPrefs`: which tab
+   * you were reading is not a fact about the character, and writing it there
+   * would make opening a tab an unsaved change.
+   *
+   * Written from `#render` rather than from the several places that set the
+   * tab, guarded by what was written last -- so it costs one comparison per
+   * render and a write only when the answer actually moved.
+   */
+  #viewKey() {
+    const custom = this.getAttribute('storage-key');
+    const id = this.#model?.data?.id ?? 'character';
+    return custom ? `${custom}:tab` : `character-sheet:tab:${id}`;
+  }
+
+  #rememberTab() {
+    if (this.isPublished || this.#tab === this.#tabWritten) return;
+    this.#tabWritten = this.#tab;
+    try { localStorage.setItem(this.#viewKey(), this.#tab); } catch { /* private window */ }
+  }
+
+  /** The tab to open on, if the one remembered is still on this character's bar. */
+  #restoreTab() {
+    if (this.isPublished) return;
+    let saved = null;
+    try { saved = localStorage.getItem(this.#viewKey()); } catch { /* private window */ }
+    // `#render` drops a tab this character does not have, so an id that has
+    // since gone simply falls back to the first on the bar.
+    if (saved) this.#tab = saved;
+    this.#tabWritten = saved;
+  }
+
+  /**
+   * Where a tab switch leaves you.
+   *
+   * The panel that just opened starts at its top, so that is where the reader
+   * should be standing. Without this you keep whatever offset the last tab had
+   * -- clamped to the new panel's height, which is an arbitrary place inside
+   * it -- and the commonest way to open a tab is also the commonest way to
+   * arrive somewhere you did not ask for.
+   *
+   * Only ever upwards. Clicking a tab while the header is still on screen must
+   * not scroll the header away to satisfy a rule about panel tops.
+   *
+   * `scrollIntoView` rather than `window.scrollTo` because an embedded sheet
+   * may sit inside a scroll container belonging to the host, and the margin is
+   * measured rather than written in the stylesheet because the rail stands one
+   * row taller in the session view.
+   */
+  #showPanelTop() {
+    const body = this.shadowRoot.querySelector('.body');
+    if (!body) return;
+    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
+    body.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
+    if (body.getBoundingClientRect().top < (rail?.bottom ?? 0) - 1) {
+      body.scrollIntoView({ block: 'start' });
+    }
+  }
+
+  /**
+   * A way about inside one tab.
+   *
+   * Half the tabs run past three screens and the only way through one was the
+   * scrollbar. Ctrl+K jumps to a *row*, which is a different question -- it
+   * answers "where is my Disguise modifier", not "take me to Wealth".
+   *
+   * Read off the headings rather than declared anywhere: every panel already
+   * announces itself with an `<h3>`, and a supergroup with its own title, so
+   * the list of sections is a fact about the rendered tab and cannot fall out
+   * of step with it. The cost is one query per render, which is the same walk
+   * `#clampHints` is doing beside it.
+   *
+   * Hidden below three sections, where a tab is short enough to see the whole
+   * of and the control would be one more thing to read past.
+   */
+  #fillJumpTo() {
+    const box = this.shadowRoot.querySelector('select.jumpto');
+    const body = this.shadowRoot.querySelector('.body');
+    if (!box || !body) return;
+    const heads = [...body.querySelectorAll('section.panel > h3, .supergroup > .supergroup-title')];
+    box.hidden = heads.length < 3;
+    if (box.hidden) { box.innerHTML = '<option value="">Jump to…</option>'; return; }
+    box.innerHTML = ['<option value="">Jump to…</option>', ...heads.map((h, i) => {
+      // The heading's own words, without the badges and fold buttons that sit
+      // in it: "Wealth", not "Wealth Mana 4,213 ▾".
+      const own = [...h.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ');
+      const label = (own.trim() || h.textContent).replace(/\s+/g, ' ').trim().slice(0, 34);
+      h.dataset.section = String(i);
+      return `<option value="${i}">${esc(label)}</option>`;
+    })].join('');
+  }
+
+  /** Take the reader to a section, landing it clear of the pinned rail. */
+  #jumpToSection(index) {
+    const head = this.shadowRoot.querySelector(`.body [data-section="${CSS.escape(index)}"]`);
+    if (!head) return;
+    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
+    const target = head.closest('section.panel, .supergroup') ?? head;
+    target.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
+    target.scrollIntoView({ block: 'start' });
+  }
+
+  /**
+   * The fold on a stacked row.
+   *
+   * Only below 620px, where a table has stopped being a table -- see
+   * `table.stacked` in the stylesheet. The caret goes into the name cell
+   * rather than a column of its own, because a column is the thing being got
+   * rid of.
+   *
+   * Rows start open. Folding is for a list you are looking through, and a list
+   * that hid itself before you asked would be a list you have to open to read.
+   */
+  #stackRows() {
+    if (this.clientWidth > 620) return;
+    for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
+      const head = row.querySelector('td[data-stack="name"]');
+      const key = head && stackRowKey(row);
+      if (!key) continue;
+      const shut = this.#shutRows.has(key);
+      row.classList.toggle('shut', shut);
+      const button = this.ownerDocument.createElement('button');
+      button.className = 'rowfold';
+      button.dataset.rowfold = key;
+      button.setAttribute('aria-expanded', String(!shut));
+      button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
+      button.textContent = shut ? '\u25b8' : '\u25be';
+      head.insertBefore(button, head.firstChild);
+    }
+  }
+
+  /**
+   * Which pack texts are longer than the box they are in.
+   *
+   * Measured rather than guessed at, unlike the hints below: there are a
+   * handful of these on a tab where there are dozens of hints, and the answer
+   * decides whether a control is offered at all -- a `Read all` on something
+   * already wholly visible is a button that does nothing.
+   */
+  #markLongText() {
+    for (const wrap of this.shadowRoot.querySelectorAll('.packwrap')) {
+      const text = wrap.querySelector('.packtext');
+      if (!text) continue;
+      wrap.classList.toggle('is-long', text.scrollHeight > text.clientHeight + 2);
+    }
+  }
+
+  /**
+   * Fold the long guides down on a narrow screen.
+   *
+   * The hints are the sheet teaching itself, and on a desktop the space they
+   * take is space there was. On a phone the Progression tab spent 434px of
+   * 3824 on three blocks of prose that a player has read -- between them a
+   * screenful, sitting above the grid they describe, every time that tab is
+   * opened. Clamped to three lines with a `more` on the end they are still
+   * there, still first, and cost a line and a half.
+   *
+   * By length rather than by measurement: asking each hint whether it would
+   * overflow means clamping it, forcing layout, and reading it back, on every
+   * render. 180 characters is about four lines at this size, and being a
+   * little wrong about a borderline one costs nothing.
+   *
+   * A clamp was the first answer and was the wrong shape twice over. Three
+   * lines of a paragraph is neither the paragraph nor out of the way, and it
+   * only opened -- there was no folding one back, so a tab read once stayed
+   * read at full height for the rest of the session. This is a disclosure
+   * instead: one line saying what the help is about, and the help itself when
+   * it is asked for. Which are open is element state, so it survives a render
+   * and not a reload, which is the right lifetime for something you opened to
+   * read once.
+   */
+  #clampHints() {
+    const wrap = this.shadowRoot.querySelector('.wrap');
+    if (!wrap || this.clientWidth > 620) return;
+    for (const hint of this.shadowRoot.querySelectorAll('.body .hint')) {
+      if (hint.textContent.trim().length <= HELP_LENGTH) continue;
+      const key = helpKey(hint);
+      const open = this.#openHelp.has(key);
+      hint.classList.add('longhint');
+      hint.classList.toggle('is-open', open);
+      const button = this.ownerDocument.createElement('button');
+      button.className = 'helpopen';
+      button.dataset.help = key;
+      button.dataset.helpLabel = helpLabel(hint);
+      button.setAttribute('aria-expanded', String(open));
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
+      hint.parentNode.insertBefore(button, hint);
+    }
+  }
+
+  /**
+   * Keep the open tab in sight on a bar that scrolls sideways.
+   *
+   * Below 700px the bar is one scrolling row rather than five wrapped ones, so
+   * that pinning it costs a strip and not half the screen -- and a row that
+   * scrolls starts every render back at its left edge. Centring the open tab
+   * is what stops "which tab am I on" from being a horizontal search.
+   */
+  #showActiveTab() {
+    const bar = this.shadowRoot.querySelector('nav.tabs');
+    const tab = bar?.querySelector('[role="tab"][aria-selected="true"]');
+    if (!tab) return;
+    // Whether the bar is a single row, which is what lets the open tab join
+    // the panel below it -- see `.tabs.oneline`.
+    const rows = new Set([...bar.children].map((c) => c.offsetTop)).size;
+    bar.classList.toggle('oneline', rows <= 1);
+    if (bar.scrollWidth <= bar.clientWidth) return;
+    const t = tab.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    if (t.left >= b.left && t.right <= b.right) return;
+    bar.scrollLeft += (t.left - b.left) - (b.width - t.width) / 2;
   }
 
   /**
@@ -3627,7 +4284,16 @@ export class CharacterSheetElement extends HTMLElement {
     const root = this.shadowRoot;
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
-      b.addEventListener('click', () => { this.#tab = b.dataset.tab; this.#render(); });
+      b.addEventListener('click', () => {
+        this.#tab = b.dataset.tab;
+        this.#render();
+        // The button that was clicked no longer exists -- `#render` replaced
+        // the whole root -- so focus has to be put back on the one that took
+        // its place, or a keyboard is dropped on the document mid-bar. The
+        // arrow keys have always done this; the click path had not.
+        this.shadowRoot.getElementById(`tab-${this.#tab}`)?.focus({ preventScroll: true });
+        this.#showPanelTop();
+      });
     });
     this.#bindTabKeys(root);
     this.#bindTabColor(root);
@@ -4242,14 +4908,89 @@ export class CharacterSheetElement extends HTMLElement {
       this.#openPalette();
     });
 
+    /*
+     * A focused number input takes the wheel as an increment.
+     *
+     * That is the browser's own behaviour and it is fine on a short form. Here
+     * the Magic Spheres tab carries 213 number fields and runs past three
+     * screens, so "click a cell, keep scrolling" -- which is how you read a
+     * tab -- silently edits the cell you just clicked, and the sheet has no
+     * undo to notice it with.
+     *
+     * Blurring drops the increment without touching the scroll: the value
+     * change is the *default action* of the wheel event, and an input with no
+     * focus has none. Nothing is preventDefault-ed, so the page moves exactly
+     * as far as it was going to, and a value genuinely typed is committed by
+     * the blur rather than lost by it.
+     *
+     * On `.wrap`, like the handler above and for the same reason: every render
+     * replaces it, so these cannot pile up.
+     */
+    /*
+     * A help disclosure, opened and shut. Toggled in place rather than through
+     * a render: it moves one class and one line of text, and a redraw of the
+     * whole tab to read a paragraph would lose the scroll position that put
+     * the paragraph in front of you.
+     */
+    // Folding a stacked row, in place for the same reason as the help above.
+    root.querySelector('.wrap')?.addEventListener('click', (e) => {
+      const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-rowfold]');
+      if (!button) return;
+      const key = button.dataset.rowfold;
+      const shut = !this.#shutRows.has(key);
+      if (shut) this.#shutRows.add(key);
+      else this.#shutRows.delete(key);
+      button.closest('tr')?.classList.toggle('shut', shut);
+      button.setAttribute('aria-expanded', String(!shut));
+      button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
+      button.textContent = shut ? '\u25b8' : '\u25be';
+    });
+
+    root.querySelector('.wrap')?.addEventListener('click', (e) => {
+      const button = (e.composedPath?.()[0] ?? e.target)?.closest?.('[data-help]');
+      if (!button) return;
+      const key = button.dataset.help;
+      const open = !this.#openHelp.has(key);
+      if (open) this.#openHelp.add(key);
+      else this.#openHelp.delete(key);
+      button.nextElementSibling?.classList.toggle('is-open', open);
+      button.setAttribute('aria-expanded', String(open));
+      button.textContent = `${open ? '\u25be' : '\u25b8'} Help \u2014 ${button.dataset.helpLabel}`;
+    });
+
+    root.querySelector('.wrap')?.addEventListener('wheel', (e) => {
+      const el = e.composedPath?.()[0] ?? e.target;
+      // `shadowRoot.activeElement` rather than `:focus`, which needs the window
+      // itself to be focused and so would answer no to a question that is only
+      // about which field the wheel is about to land on.
+      if (el === root.activeElement && el?.matches?.('input[type="number"]')) el.blur();
+    });
+
+    /*
+     * Folding something away, or opening it back up.
+     *
+     * The button says what to store rather than the handler working it out.
+     * It used to read `aria-expanded` off the button and store that, which is
+     * a rule with two things hidden in it: that the attribute is the *negation*
+     * of the stored value, and that the key means "collapsed". Eight of the ten
+     * places that emit one of these obeyed both. Two did not -- the session
+     * dashboard's Expand, whose key means *open*, and the veil slots' "Show
+     * empty", whose key means *shown* and which carries `aria-pressed` rather
+     * than `aria-expanded` -- and both were dead controls: they wrote back the
+     * state they were already in, so nothing ever moved. There is no way to
+     * look at one of those buttons and see that, which is why the rule is now
+     * written down in the markup instead of inferred here.
+     *
+     * (What the old rule was reaching for is still true and still matters: the
+     * value has to come from what is *on screen*, not from storage, because a
+     * block that starts folded by default and has never been clicked has
+     * nothing stored -- and toggling `undefined` would fold something that
+     * already looked folded. `data-collapse-to` is computed by the renderer,
+     * which is the one place that knows both.)
+     */
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {
-        const key = b.dataset.collapse;
-        // Against what is on screen, not what is in storage. The two agree
-        // everywhere except a block that starts folded by default and has
-        // never been clicked -- where reading storage would toggle `undefined`
-        // to `true` and fold something that already looked folded.
-        this.#model.data.uiPrefs.collapsed[key] = b.getAttribute('aria-expanded') === 'true';
+        this.#model.data.uiPrefs.collapsed[b.dataset.collapse] = b.dataset.collapseTo === 'true';
         this.#model.recompute();
         this.#render();
       });
@@ -4329,6 +5070,26 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
       });
     });
+    /*
+     * Opening a block's rules text out to read it.
+     *
+     * A pack's text is as long as its publisher wrote it, and the two places
+     * the sheet shows one failed in opposite directions: a veil's was penned
+     * into 11em with a scrollbar inside it -- 1.1% of a 34,000-character veil
+     * visible at once, which is a peephole rather than a panel -- and a
+     * maneuver's had no ceiling at all, so one long one ran the card off the
+     * screen. Both are the same box now, and this is the way out of it.
+     */
+    root.querySelectorAll('[data-textopen]').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const key = b.dataset.textopen;
+        if (this.#openText.has(key)) this.#openText.delete(key);
+        else this.#openText.add(key);
+        this.#render();
+      });
+    });
+
     root.querySelectorAll('[data-mclose]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
@@ -5238,6 +5999,14 @@ export class CharacterSheetElement extends HTMLElement {
       case 'preview-published':
         this.#previewPublished();
         break;
+      case 'chrome-menu':
+        this.#chromeMenu = !this.#chromeMenu;
+        this.#renderHeader();
+        // Focus lands on the first item so the menu can be walked from the
+        // keyboard; the toggle it came from is gone, replaced by the redraw.
+        if (this.#chromeMenu) this.shadowRoot.querySelector('.chromemenu button')?.focus();
+        else this.shadowRoot.querySelector('[data-action="chrome-menu"]')?.focus();
+        break;
       case 'import':
         this.shadowRoot.querySelector('[data-importfile]')?.click();
         break;
@@ -5781,8 +6550,10 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.removeClassFeatureColumn(button?.dataset.class, Number(button?.dataset.col));
         this.#render();
         break;
-      // Deleting a whole feature group takes a second click: it is a column of
-      // the player's own writing per level, and there is no undo but History.
+      // Deleting a whole feature group takes a second click even now that
+      // Ctrl+Z can put it back: it is a column of the player's own writing per
+      // level, and twenty levels of it is more than a toast should be the only
+      // thing standing between you and losing.
       case 'remove-cf-group':
         this.#confirmGroup = button?.dataset.class ?? null;
         this.#render();
@@ -5831,8 +6602,9 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       // Widen or narrow a gear table. Dropping a column that has something
-      // written in it asks twice, because it takes that writing off every row
-      // at once and there is no row-level undo to reach for.
+      // written in it still asks twice, because it takes that writing off
+      // every row at once -- a scale where being asked is worth more than
+      // being able to take it back afterwards.
       case 'gear-col': {
         const list = button?.dataset.list;
         const kind = button?.dataset.kind;
@@ -5863,6 +6635,14 @@ export class CharacterSheetElement extends HTMLElement {
       case 'reset-cancel':
         this.#confirmReset = false;
         this.#render();
+        // Back where it came from. Opening the confirm moves focus into it, so
+        // closing it owes the reader the other half: without this the render
+        // that takes the panel away takes the caret to the document with it,
+        // and a keyboard is left at the top of the sheet having pressed a
+        // button on the rail. Reset lives in the `⋯` menu, which closed on the
+        // way in, so the fallback is the control that menu hangs off.
+        (this.shadowRoot.querySelector('[data-action="reset"]')
+          ?? this.shadowRoot.querySelector('[data-action="chrome-menu"]'))?.focus();
         break;
       case 'reset-confirm': {
         // The button only exists armed, but check the word anyway -- the DOM

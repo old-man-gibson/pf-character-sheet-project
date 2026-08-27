@@ -502,15 +502,15 @@ function bonusTalentPanel(model, sideKey, side) {
     return `<section class="panel span2">
       <h3>Bonus ${isMagic ? 'magic' : 'combat'} talents
         ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      <div class="tablewrap"><table class="talents bonus">
+      <div class="tablewrap"><table class="talents bonus stacked">
         <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
         <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr>
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere', notes: 'notes' })}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
-          <td>${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
-          <td>${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
+          <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
+          <td data-label="Notes">${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
           ${rowTools(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>

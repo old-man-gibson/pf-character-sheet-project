@@ -59,6 +59,23 @@ and anything downstream recalculates immediately.
   dropped, and the raw grid is retired.
 - *Lore* — every background section.
 
+**On a phone.** The sheet nests four deep — the wrap, a supergroup band, a panel, a
+cell — and every level pays twice, so below 620px the furniture is drawn thinner: the
+same bands, panels and rules with less air around them. Three more things give way at
+that width. A table sized in percentages stops dividing whatever width it is given and
+takes the width its columns need, scrolling inside its box rather than crushing a feat
+name to six characters. **Defenses** and **Offenses** fold to their labels, like any
+panel, and stay folded. And an explanation longer than a paragraph folds away behind a
+line saying what it is about — **Help — Rule groups** — which opens it and shuts it
+again.
+
+**The lists become cards.** Feats, granted feats, sphere talents, traits and the mythic
+tradition slots stop being tables below 620px: each row is a card with the **name first**,
+whichever column it sat in, and the rest under it with the heading it lost written above
+it. A card **folds to its name**, which is what makes a list of forty feats something you
+can look through — the one with three paragraphs of notes in it goes from 310px to 86.
+They start open, and folding is remembered for as long as the sheet is.
+
 **Ability-stat selectors.** AC, each save, and each attack mode let you pick which
 ability drives them, because these characters do not use the defaults — Angou's AC keys
 off Strength and his alt CMB off Wisdom. Change the selector and the total moves.
@@ -68,11 +85,18 @@ this as prose. Add a weapon and its attack bonus and iteratives follow your BAB,
 scores and size automatically.
 
 Rows can be reordered with ↑ / ↓ and removed with × — except a feat, which is dragged
-by its grip instead. Every change is saved as you make
-it, and **Save** marks the version the sheet opens on — see
-[Saving, and going back](importing-and-saving.md#saving-and-going-back). **Reset** returns the character to the
-converted sheet, **Export JSON** downloads the current state and **Import JSON** brings
-one back (see [Getting characters in](importing-and-saving.md#getting-characters-in)).
+by its grip instead. **A × can be taken back**: removing anything says what went, with
+an **Undo** beside it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> does the same from anywhere on
+the sheet — twenty steps deep, and still there after the message has gone. It covers
+structural changes rather than typing, because a field's own <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+is better at typing than this would be, so the key is left alone wherever a caret is
+standing. Every change is saved as you make
+it, and **Save** — on the tab rail, or <kbd>Ctrl</kbd>+<kbd>S</kbd> — marks the version
+the sheet opens on; see
+[Saving, and going back](importing-and-saving.md#saving-and-going-back). Under the rail's
+**⋯**: **Reset** returns the character to the converted sheet, **Export JSON** downloads
+the current state and **Import** brings one back (see
+[Getting characters in](importing-and-saving.md#getting-characters-in)).
 
 > Editing a value that nothing else depends on — a note, a planner cell, a sphere talent
 > — updates the model without re-rendering the panel. The largest grids run to several
@@ -157,7 +181,7 @@ kept per browser rather than in the document, and it applies to every character 
 <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd> on a Mac) opens one box over the
 sheet that searches the whole character. Type three letters, press <kbd>↵</kbd>, and you
 are standing on the thing you were looking for. **/** opens it too when you are not
-typing into a field, and the **🔍 Search** button in the header is there for the first
+typing into a field, and the **🔍 Search** button on the tab rail is there for the first
 time, before the shortcut is muscle memory.
 
 It exists because the tab bar stops scaling somewhere around the twentieth tab. Knowing
@@ -182,7 +206,7 @@ chakras · maneuvers and disciplines · spells, powers, cards and techniques · 
 resources, buffs and the conditions that are on · every progression cell and class
 feature · templates · notes, background and approvals · the companions with their
 attacks, feats, evolutions and tricks · the cells the converter kept under *From the
-source tab* · the tabs themselves · and the header's own buttons as commands.
+source tab* · the tabs themselves · and the sheet's own commands.
 
 | Key | What it does |
 |---|---|
@@ -236,6 +260,22 @@ back to the bar an import would have made. **A tab you hide stays hidden** — t
 touch the bar, the arrangement is yours and is what loads next time. The bar is saved with
 the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an export.
 
+**The bar stays on screen.** It sits on a rail that pins itself to the top of the window
+once the header above it has scrolled away — a tab runs several screens deep, and the way
+through them should not be one of the things that leaves first. **Search** and **Save**
+ride the rail with it, and everything else the sheet can do is under **⋯**: switching
+view, ƒx Formulas, the theme, History, Export JSON, Preview published, Import and Reset.
+<kbd>Ctrl</kbd>+<kbd>S</kbd> saves without going near the button. Clicking a tab lands you
+at the top of it rather than at whatever offset the last tab had, and leaves the keyboard
+on the tab you pressed. Below 700px the bar is one row that scrolls sideways instead of
+five that wrap, and it keeps the open tab in view. A host page embedding the sheet under
+a fixed header of its own sets `--cs-sticky-top` to that header's height; see
+*[Embedding](embedding.md)*.
+
+A table longer than the window scrolls inside its own box rather than running the page
+down, which is what keeps its column headings in place while you read the rows. The
+threshold is `--cs-table-max`.
+
 ### Colouring a tab
 
 **Right-click a tab** to colour it, or use the swatch on its row in the **⚙** manager —
@@ -247,7 +287,9 @@ character in `uiPrefs.tabColors`.
 It is deliberately quiet — a coloured tab is tinted, not filled, so it still reads as one
 tab among many and the *selected* tab is still obviously the selected one. The point is
 finding *Maneuvers* at a glance in a bar of fifteen, not decorating the sheet. Colouring a
-tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown.
+tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown. The
+label is corrected for the theme it is being read on the same way the character colour is
+(see *[Character colour](#character-colour)*); the tab's edge keeps the hue as picked.
 
 ### Keyboard
 
@@ -256,10 +298,36 @@ move along it (wrapping at both ends), **Home** and **End** jump to the first an
 The tab you move to opens as you reach it, which is what a click does too. From the bar,
 one more **Tab** press is into the panel itself.
 
+Getting *to* the sheet is one stop as well. The picker is two tab stops per character
+and grows with the roster, so the first thing on the page is a **Skip to the sheet**
+link — invisible until it is the thing being used, and from it one more **Tab** is into
+the rail.
+
+**A recalculation says so.** Everything here recomputes as you type, which is plain to
+see and was entirely silent to a screen reader. Hit points, AC, the three saves and
+initiative are watched: when an edit moves any of them the sheet reads out what moved
+— *“AC 50 to 48, Reflex +21 to +19”* — politely, capped at three, and quiet when the
+edit moved nothing.
+
+### Getting about inside a tab
+
+The tab rail carries a **Jump to…** box listing the sections of the tab you are on, read
+off their own headings. It is for the question Ctrl+K does not answer: the palette takes
+you to a *row* — *where is my Disguise modifier* — and this takes you to a *section*.
+Gone on a tab with fewer than three.
+
+### Where it opens
+
+**On the character and the tab you left.** Which character was open, and which tab on
+each of them, are kept per browser rather than in any document: neither is a fact about
+a character, and writing them into one would make reading a tab an unsaved change. A
+character that has since been removed, or a tab this character does not have, falls back
+rather than complaining.
+
 ### Printing a tab
 
 **Ctrl/⌘-P prints the tab you are looking at**, on white, without the tab bar, the
-header buttons or any of the controls — fields print as the values in them, and a
+rail's buttons or any of the controls — fields print as the values in them, and a
 proficiency chip prints only if it is one the character has. That is the whole rule:
 the section on screen is the section that comes out, so a sheet for the table is a
 few prints rather than one very long one. Long tables repeat their headings on each
@@ -271,11 +339,13 @@ The header's **Build view / Session view** button switches between two arrangeme
 of the same sheet. The *build* view is everything above. The *session* view is what
 comes up at the table: its bar starts from **Overview, Skills, Feats & Mythic,
 Primordia, Trackers, Equipment, Lore** plus every sub-system that is *in use* or
-*marked* on a class (below), and a standing strip under the character's name shows
-the numbers a table asks for mid-fight — **HP, AC (touch/FF), the three saves and
-how far you move**, with a ticked condition's adjusted values in place of the base
-ones. The movement shown is the fastest rate the character actually has; the rest
-are on its tooltip, since a strip with four of them in it is a table.
+*marked* on a class (below), and a standing strip above the tab bar shows the numbers
+a table asks for mid-fight — **HP, AC (touch/FF), the three saves and how far you
+move**, with a ticked condition's adjusted values in place of the base ones. The
+movement shown is the fastest rate the character actually has; the rest are on its
+tooltip, since a strip with four of them in it is a table. The strip rides on the
+pinned rail with the tab bar (below), so it stays on screen wherever you are on
+whichever tab.
 
 In the session view the **Overview is a dashboard** rather than the full page:
 
@@ -417,8 +487,8 @@ Two tabs are not part of that arrangement and sit after it: **ƒx Formulas** —
 formula guide, scratchpad and value index, on every character, described in
 [Formulas & trackers](formulas-and-trackers.md#ƒx-formulas-tab) — and **Formula
 Audit**, which only appears under `role="admin"`. Neither can be hidden or dragged,
-because help you cannot find is not help; the header's **ƒx** button opens the
-Formulas tab from wherever you are, and wears a count when something on the character
+because help you cannot find is not help; **ƒx Formulas** in the rail's **⋯** menu
+opens the tab from wherever you are, and wears a count when something on the character
 is not working.
 
 The manager lists what is off the bar **alphabetically**, in three groups:
@@ -484,7 +554,9 @@ unconscious) can be added from a picker and removed again with **×**.
 > the converter and the model both clear it; anything else ticked is the player's.
 
 **Specialty** — the background, its feat (the same field as the Specialty row under
-Granted feats) and its perks, as a list you can add to. **Languages** — native
+Granted feats) and its two perks. A specialty grants the pair, so they are two labelled
+fields rather than a list: there is no order to them, neither is optional, and nothing
+offers a third. **Languages** — native
 languages are free; slots are one per point of Int bonus plus one per Linguistics
 rank, plus **Extra** for whatever a race or trait adds, as a number or a formula
 (`floor(level / 2)`). The known list is chips you add and remove, counted against
@@ -981,6 +1053,16 @@ sheet's accent, which is the one colour everything unstyled already reads: panel
 headings, tracker pips, the underline on a computed value, the edge that marks a field
 as accepting formulas. So one choice colours the character throughout, and a tracker
 with no colour of its own is drawn in it.
+
+**Where it is read, it is made readable.** A colour is picked for what it looks like,
+not for what it measures, and the sheet then sets body text in it — so a pale yellow on
+the light theme would be a preference that costs you the sheet. The hue is kept and its
+lightness is spent: taken towards ink on a pale background or towards paper on a dark
+one, in small steps, stopping at the first that clears 4.5:1. Most picks are already
+past that and come back untouched, the correction flips direction when you switch
+themes, and it applies only where the colour is *read* — swatches, borders, tracker
+fills and the wash behind a computed value all keep the hue exactly as chosen. The same
+goes for a tab's colour: the label is corrected, the edge is not.
 
 It is stored as `identity.color` and travels with the character's JSON. Embedders can
 still override it per instance with `--cs-accent`, since the character's own colour is

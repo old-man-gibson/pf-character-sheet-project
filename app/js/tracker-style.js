@@ -175,6 +175,59 @@ export function mixHex(a, b, t) {
   return `#${ch(0)}${ch(1)}${ch(2)}`;
 }
 
+/** Relative luminance, per WCAG 2.x. `rgb` is the triple `hexToRgb` returns. */
+function luminance(rgb) {
+  const channel = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+}
+
+/** Contrast between two hex colours, 1 (identical) to 21 (black on white). */
+export function contrastRatio(a, b) {
+  const x = hexToRgb(a);
+  const y = hexToRgb(b);
+  if (!x || !y) return 1;
+  const [hi, lo] = luminance(x) > luminance(y) ? [luminance(x), luminance(y)] : [luminance(y), luminance(x)];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * The nearest version of a colour that can be read on a given background.
+ *
+ * A player picks the colour their character wears -- and picks it for what it
+ * looks like, not for what it measures. That is the right way round: nobody
+ * should have to think about contrast ratios to name a favourite orange. But
+ * the sheet then uses that hue as *text* -- headings, totals, the tab's own
+ * label -- and a bright orange on white is 2.4:1, which is not a colour
+ * preference, it is an unreadable sheet.
+ *
+ * So the hue is kept and its lightness is spent: taken towards ink on a pale
+ * background, towards paper on a dark one, in small steps, stopping at the
+ * first that clears. Two consequences worth knowing. A colour that already
+ * clears is returned untouched, so most picks are unchanged. And the result is
+ * only ever used where the colour is *read* -- swatches, borders and washes
+ * keep the raw hue, so the character still looks like the colour they chose.
+ *
+ * The step is 4%: fine enough that the shift is not visible against the
+ * neighbouring pick, coarse enough to settle in a couple of dozen tries.
+ */
+export function readableOn(hex, background, ratio = 4.5) {
+  const from = normalizeHex(hex);
+  const on = normalizeHex(background);
+  if (!from || !on) return from;
+  if (contrastRatio(from, on) >= ratio) return from;
+  // 0.179 is where black and white are equally readable on a background; above
+  // it the background is pale and wants ink, below it the reverse.
+  const towards = luminance(hexToRgb(on)) > 0.179 ? '#000000' : '#ffffff';
+  for (let t = 0.04; t < 1; t += 0.04) {
+    const step = mixHex(from, towards, t);
+    if (contrastRatio(step, on) >= ratio) return step;
+  }
+  return towards;
+}
+
 /**
  * Coerce whatever was saved (or typed) into a well-formed style. Never throws;
  * bad colours become null, unknown shapes/fills fall back to the defaults.
