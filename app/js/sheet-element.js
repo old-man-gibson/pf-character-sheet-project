@@ -2063,7 +2063,20 @@ export class CharacterSheetElement extends HTMLElement {
           <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
           <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
           <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
-          ${this.#rowRemove(`featGroups.${g}.entries`, i)}
+          ${/* The grip in column one is the only way this table reorders, and a
+               card hides it -- a drag between groups is not a gesture a phone
+               has. So the two buttons every other list already carries are
+               written here too and shown only where the grip is not; see
+               `button.cardmove` in the stylesheet. Within the group only:
+               moving a feat to another group stays a drag, on a desktop. */''}
+          <td class="tools">
+            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|-1"
+              title="Move up" aria-label="Move up">&#8593;</button>
+            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|1"
+              title="Move down" aria-label="Move down">&#8595;</button>
+            <button class="danger" data-remove="featGroups.${g}.entries|${i}"
+              title="Remove" aria-label="Remove">&times;</button>
+          </td>
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
           <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>

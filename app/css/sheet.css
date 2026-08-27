@@ -367,6 +367,11 @@ button[aria-pressed="true"], button[aria-selected="true"], button.primary {
   background: var(--cs-accent-soft); border-color: var(--cs-accent); color: var(--cs-accent);
 }
 button.danger:hover { border-color: var(--cs-bad); color: var(--cs-bad); }
+/* Reordering for a list whose only handle is a drag grip. Off wherever the
+   grip is there to be used, and turned on with it in the card layout below --
+   a feats group had no way at all to be reordered on a phone, because the one
+   control it has is hidden there. */
+button.cardmove { display: none; }
 /* Save with nothing to save, and Keep checkpoint with nothing typed. */
 button:disabled { opacity: 0.45; cursor: default; }
 button:disabled:hover { border-color: var(--cs-line); }
