@@ -249,8 +249,17 @@
 .dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
 .dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
 @media (max-width: 700px) {
-  .dashtracker { grid-template-columns: 1fr auto; }
-  .dashtracker .dashmeter { grid-column: 1 / -1; }
+  /* Placed rather than flowed. Left to auto-placement the meter takes the
+     whole of row two, which pushes the controls down to a row of their own and
+     leaves the second column empty -- and a `1 / -1` span across an empty
+     track still claims the gap beside it, so the meter came out 8px wider than
+     the card that held it and the pips ran off the right edge. Name and
+     controls share the first row; the meter has the second. */
+  .dashtracker { grid-template-columns: minmax(0, 1fr) auto; }
+  .dashtracker .tname { grid-area: 1 / 1; max-width: none; }
+  .dashtracker .tracker-controls { grid-area: 1 / 2; }
+  .dashtracker .dashmeter { grid-area: 2 / 1 / 3 / -1; min-width: 0; }
+  .dashtracker .pips { min-width: 0; }
 }
 /* Why an offered file was refused -- stays up until dismissed, because the
    fix (re-run the converter, pick a different file) happens elsewhere. */
@@ -1029,6 +1038,35 @@ option[data-ab]:not([data-ab=""]) {
    stuck to a box that was itself moving up the page, which is to say they
    never stuck to anything. Capping it gives them one. */
 .tablewrap { overflow: auto; max-height: var(--cs-table-max); scrollbar-width: thin; }
+
+/* ---------- a floor under a table's columns ----------
+ *
+ * `table-layout: fixed` and `width: 100%` between them will divide any width
+ * at all among the columns, so on a phone these tables did not overflow their
+ * scroll box -- they crushed. A feat name got 68px and read "Pumm", a note
+ * column got 10px and set one letter per line. A field you cannot read what
+ * you typed into is worse than one you have to scroll to.
+ *
+ * So each of them names the width below which its own columns stop working,
+ * and under that the wrap does what it was put there to do. Only the tables
+ * that size their columns by percentage need this: the ones with `<col>`
+ * widths in rem already overflow of their own accord. On any screen wide
+ * enough for `width: 100%` to be the larger of the two, nothing changes.
+ *
+ * `> table` on purpose -- a table that is not in a wrap has nothing to scroll
+ * inside, and forcing a floor on it would push the page out instead.
+ */
+.tablewrap > table.feats { min-width: 30rem; }
+.tablewrap > table.granted { min-width: 28rem; }
+.tablewrap > table.talents { min-width: 32rem; }
+.sidepanels .tablewrap > table.talents { min-width: 24rem; }
+.tablewrap > table.primordia { min-width: 32rem; }
+.tablewrap > table.build { min-width: 26rem; }
+.tablewrap > table.tradition { min-width: 28rem; }
+.tablewrap > table.attackmodes { min-width: 30rem; }
+.tablewrap > table.racetraits { min-width: 26rem; }
+.tablewrap > table.craftlist { min-width: 30rem; }
+.tablewrap > table.perks { min-width: 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
 th {
@@ -2189,6 +2227,39 @@ input[type="color"] {
 /* The extension shelf on the manager: one heading per pack above its blocks. */
 .rowlist h4.ext-pack { margin: 8px 0 0; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted); }
 
+/* ---------- what the furniture costs on a phone ----------
+ *
+ * Every level of nesting pays twice, once on each side, and the sheet nests
+ * four deep: the wrap, a supergroup band, the panel inside it, and the cell.
+ * At 375px that came to 104px -- 28% of the screen spent on margins before
+ * any of the character got a look in, which is what makes an inner field
+ * measure 58px and a table crush.
+ *
+ * So the furniture gets thinner as the screen does. Nothing is removed: the
+ * bands, the panels and the rules are all still there, drawn tighter. */
+@container (max-width: 620px) {
+  /* A guide folded to its first three lines, with somewhere to press for the
+     rest. `#clampHints` decides which ones by length; the `more` is drawn
+     inside the clipped box rather than under it, so it lands on the last line
+     instead of adding a fourth. */
+  .body .hint.longhint {
+    max-height: 3.9em; overflow: hidden; position: relative; cursor: pointer;
+  }
+  .body .hint.longhint::after {
+    content: 'more'; position: absolute; right: 0; bottom: 0;
+    padding-left: 10px; color: var(--cs-accent); font-weight: 600;
+    background: linear-gradient(to right, transparent, var(--cs-panel) 40%);
+  }
+  .wrap { padding: 8px; }
+  .panel { padding: 9px 8px; }
+  .supergroup { padding: 8px 8px 9px; }
+  .supergroup-body { gap: 8px; }
+  .grid { gap: 8px; }
+  th, td { padding: 4px 5px; }
+  .fieldgrid { gap: 6px; }
+  .mcard .text, .mcard .bar { padding-left: 8px; padding-right: 8px; }
+}
+
 @container (max-width: 560px) {
   /* Narrower than a single crafting column: one panel per row, tables scroll.
      `minmax(0, …)` and not a bare `1fr`, or the track takes its floor from the
@@ -2213,6 +2284,25 @@ input[type="color"] {
   border: 1px solid var(--cs-line); border-radius: var(--cs-radius);
   padding: 10px 12px 12px; background: var(--cs-panel-2);
   position: relative;
+}
+/* Folded, the band is its own label and nothing else -- the same trick every
+   panel's <h3> plays, a level up. */
+.supergroup.collapsed { padding-bottom: 9px; }
+.supergroup.collapsed .supergroup-title { margin-bottom: 0; }
+.supergroup-title button {
+  padding: 0 5px; font-size: 0.7rem; line-height: 1.4; vertical-align: middle;
+  margin-left: 4px;
+}
+/* The weapon's own description, folded under the numbers that roll it. Quiet:
+   it is a shelf, not a second heading competing with the weapon's name. */
+.weaponwhat { margin-top: 4px; }
+.weaponwhat > h4.subhead { margin: 0 0 4px; font-size: 0.68rem; color: var(--cs-muted); }
+.weaponwhat.collapsed > h4.subhead { margin-bottom: 0; }
+
+/* Two perks, side by side where there is room and stacked where there is not. */
+.perkfields {
+  display: grid; gap: 8px; margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 }
 .supergroup-title {
   font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em;
@@ -2272,6 +2362,13 @@ table.classes col.bab { width: 4.6rem; }
 table.classes col.save { width: 3rem; }
 table.classes col.ranks { width: 4.2rem; }
 table.classes col.tools { width: 6.2rem; }
+/* The two that had no width of their own. Every other column here is measured
+   in rem, so between them they took the whole table and left these the
+   remainder -- which on a phone is 16px, and 16px of an archetype name is
+   nothing. Given widths, they push the table out and the wrap scrolls, which
+   is the behaviour the rest of the row already had. */
+table.classes col.arch { width: 11rem; }
+table.classes col.sys { width: 7rem; }
 table.classes td select { width: 100%; min-width: 0; padding: 3px 4px; }
 table.classes td input[type="text"] { width: 100%; min-width: 0; }
 table.classes td.num input[type="number"] { width: 100%; text-align: right; }
@@ -2473,6 +2570,8 @@ table.traits { table-layout: fixed; }
 table.traits col.slot { width: 7.4rem; }
 table.traits col.cat { width: 8.6rem; }
 table.traits col.tname { width: 12.5rem; }
+/* Same as the classes grid: the effect column was the one left over. */
+table.traits col.effect { width: 16rem; }
 table.traits select, table.traits input[type="text"] { width: 100%; min-width: 0; }
 table.traits td { vertical-align: top; }
 table.racetraits td:first-child { width: 11rem; }

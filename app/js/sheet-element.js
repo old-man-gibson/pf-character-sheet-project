@@ -1262,6 +1262,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#applyCharacterColor();
     this.#bind();
     this.#showActiveTab();
+    this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
@@ -1828,7 +1829,7 @@ export class CharacterSheetElement extends HTMLElement {
     return `<h4 class="subhead">Granted feats
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
-      <div class="tablewrap"><table>
+      <div class="tablewrap"><table class="granted">
         <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
@@ -3857,6 +3858,32 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Fold the long guides down on a narrow screen.
+   *
+   * The hints are the sheet teaching itself, and on a desktop the space they
+   * take is space there was. On a phone the Progression tab spent 434px of
+   * 3824 on three blocks of prose that a player has read -- between them a
+   * screenful, sitting above the grid they describe, every time that tab is
+   * opened. Clamped to three lines with a `more` on the end they are still
+   * there, still first, and cost a line and a half.
+   *
+   * By length rather than by measurement: asking each hint whether it would
+   * overflow means clamping it, forcing layout, and reading it back, on every
+   * render. 180 characters is about four lines at this size, and being a
+   * little wrong about a borderline one costs nothing -- it is a paragraph,
+   * clamped or not, and one tap either way.
+   *
+   * Opened by a click, which `#bindHints` handles, and the class is not
+   * stored: a guide is read once, and the next render is a fresh page.
+   */
+  #clampHints() {
+    if (this.clientWidth > 620) return;
+    for (const hint of this.shadowRoot.querySelectorAll('.body .hint')) {
+      if (hint.textContent.trim().length > 180) hint.classList.add('longhint');
+    }
+  }
+
+  /**
    * Keep the open tab in sight on a bar that scrolls sideways.
    *
    * Below 700px the bar is one scrolling row rather than five wrapped ones, so
@@ -4582,6 +4609,13 @@ export class CharacterSheetElement extends HTMLElement {
      * On `.wrap`, like the handler above and for the same reason: every render
      * replaces it, so these cannot pile up.
      */
+    // A clamped guide opens where it is. On `.wrap` with the rest, so it goes
+    // when the render that made it does.
+    root.querySelector('.wrap')?.addEventListener('click', (e) => {
+      const hint = (e.composedPath?.()[0] ?? e.target)?.closest?.('.hint.longhint');
+      if (hint) hint.classList.remove('longhint');
+    });
+
     root.querySelector('.wrap')?.addEventListener('wheel', (e) => {
       const el = e.composedPath?.()[0] ?? e.target;
       // `shadowRoot.activeElement` rather than `:focus`, which needs the window

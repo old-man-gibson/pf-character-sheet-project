@@ -15,7 +15,7 @@
  */
 import { esc } from '../html.js';
 import { field } from '../fields.js';
-import { collapsible } from '../rows.js';
+import { collapsible, foldButton, isCollapsed } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -158,23 +158,15 @@ export function renderOverviewPanel(model, ctx) {
 
       ${classesPanel(model, ctx, model, ctx)}
 
-      <div class="supergroup span2" aria-label="Defenses">
-        <div class="supergroup-title">Defenses</div>
-        <div class="supergroup-body">
+      ${supergroup(model, 'defenses', 'Defenses', '', `
           ${hitPointsPanel(ctx, model, model)}
           ${acPanel(model)}
-          ${savesPanel(model)}
-        </div>
-      </div>
+          ${savesPanel(model)}`)}
 
-      <div class="supergroup span2" aria-label="Offenses">
-        <div class="supergroup-title">Offenses</div>
-        <div class="supergroup-body offenses">
+      ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
           ${attackPanel(model)}
           ${speedPanel(model)}
-          ${proficienciesPanel(model)}
-        </div>
-      </div>
+          ${proficienciesPanel(model)}`)}
 
       <div class="pairrow span2 wide-first">
         ${conditionsPanel(model)}
@@ -1043,29 +1035,48 @@ function characterColorRow(value) {
   }
 
   /**
+   * A labelled band of panels, foldable down to its label.
+   *
+   * Defenses and Offenses are the two tallest things on the Overview and the
+   * two a player is least often here to edit -- on a phone they are most of
+   * the scrolling between the top of the tab and everything under them. The
+   * fold uses the same key store and the same button as every panel's own, so
+   * a band left shut stays shut and travels with the character.
+   */
+function supergroup(model, key, title, bodyClass, body) {
+    const shut = isCollapsed(model, `sg-${key}`);
+    return `<div class="supergroup span2${shut ? ' collapsed' : ''}" aria-label="${esc(title)}">
+        <div class="supergroup-title">${esc(title)} ${foldButton(model, `sg-${key}`)}</div>
+        ${shut ? '' : `<div class="supergroup-body ${bodyClass}">${body}</div>`}
+      </div>`;
+  }
+
+  /**
    * The specialty: what the character did before, the feat it grants and its
    * perks. The feat is the same field as the Granted feats row on Feats &
    * Mythic -- one home, seen from two places.
+   *
+   * Two perks, always. A specialty grants the pair; there is no order to them
+   * and neither is optional, so the row carries no arrows and no cross -- and
+   * nothing offers to add a third. A document that arrived with more shows
+   * them all rather than hiding what it holds.
    */
 function specialtyPanel(model) {
     const c = model.data;
     const perks = c.identity.specialtyPerks || [];
+    const slots = Math.max(2, perks.length);
     return `<section class="panel">
       <h3>Specialty</h3>
       <div class="fieldgrid two">
         ${field('Specialty', text('identity.specialty', c.identity.specialty, 'Chef, Gambling Villain…'))}
         ${field('Specialty feat', text('grantedFeats.specialty.name', c.grantedFeats?.specialty?.name, 'Which feat?'))}
       </div>
-      <div class="tablewrap" style="margin-top:8px"><table class="perks">
-        <thead><tr><th>Perk</th><th></th></tr></thead>
-        <tbody>${perks.map((p, i) => `<tr>
-          <td>${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, p, 1, 'grow')}</td>
-          ${rowTools('identity.specialtyPerks', i)}
-        </tr>`).join('')}
-        ${perks.length ? '' : '<tr><td colspan="2" class="empty">No perks yet.</td></tr>'}
-        </tbody>
-      </table></div>
-      <div style="margin-top:8px">${addButton('identity.specialtyPerks', 'Add perk', '')}</div>
+      <div class="perkfields">
+        ${Array.from({ length: slots }, (_, i) => `<label class="fld">
+          <span>Perk ${i + 1}</span>
+          ${prose(model, `data-item="identity.specialtyPerks|${i}|self"`, perks[i] ?? '', 1, 'grow')}
+        </label>`).join('')}
+      </div>
       <p class="hint">The specialty feat is also listed under <strong>Granted feats</strong>
         on Feats &amp; Mythic; the three specialty skills are chosen on the Skills tab.</p>
     </section>`;

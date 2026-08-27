@@ -59,6 +59,15 @@ and anything downstream recalculates immediately.
   dropped, and the raw grid is retired.
 - *Lore* — every background section.
 
+**On a phone.** The sheet nests four deep — the wrap, a supergroup band, a panel, a
+cell — and every level pays twice, so below 620px the furniture is drawn thinner: the
+same bands, panels and rules with less air around them. Three more things give way at
+that width. A table sized in percentages stops dividing whatever width it is given and
+takes the width its columns need, scrolling inside its box rather than crushing a feat
+name to six characters. **Defenses** and **Offenses** fold to their labels, like any
+panel, and stay folded. And a guide longer than a paragraph folds to three lines with a
+**more** on the end — tap it for the rest.
+
 **Ability-stat selectors.** AC, each save, and each attack mode let you pick which
 ability drives them, because these characters do not use the defaults — Angou's AC keys
 off Strength and his alt CMB off Wisdom. Change the selector and the total moves.
@@ -511,7 +520,9 @@ unconscious) can be added from a picker and removed again with **×**.
 > the converter and the model both clear it; anything else ticked is the player's.
 
 **Specialty** — the background, its feat (the same field as the Specialty row under
-Granted feats) and its perks, as a list you can add to. **Languages** — native
+Granted feats) and its two perks. A specialty grants the pair, so they are two labelled
+fields rather than a list: there is no order to them, neither is optional, and nothing
+offers a third. **Languages** — native
 languages are free; slots are one per point of Int bonus plus one per Linguistics
 rank, plus **Extra** for whatever a race or trait adds, as a number or a formula
 (`floor(level / 2)`). The known list is chips you add and remove, counted against
