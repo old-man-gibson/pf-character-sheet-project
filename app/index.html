@@ -99,24 +99,33 @@
   .welcome button:hover, .welcome button.primary { border-color: var(--accent); color: var(--accent); }
   .note { color: var(--muted); font-size: 0.8rem; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
   .note code { background: var(--panel); padding: 1px 5px; border-radius: 3px; }
-  dialog#newDialog {
+  dialog#newDialog, dialog#importDialog {
     background: var(--panel); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 18px 20px; min-width: min(22rem, 90vw);
   }
-  dialog#newDialog::backdrop { background: rgba(0,0,0,0.55); }
-  dialog#newDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
-  dialog#newDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
-  dialog#newDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
-  dialog#newDialog label input {
+  dialog#newDialog::backdrop, dialog#importDialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog#newDialog h2, dialog#importDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
+  dialog#newDialog .hint, dialog#importDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
+  dialog#newDialog label, dialog#importDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
+  dialog#newDialog label input, dialog#importDialog label input {
     flex: 1; font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
   }
-  dialog#newDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  dialog#newDialog button {
+  dialog#newDialog .actions, dialog#importDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  dialog#newDialog button, dialog#importDialog button {
     font: inherit; font-size: 0.85rem; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
   }
-  dialog#newDialog button.primary { border-color: var(--accent); color: var(--accent); }
+  dialog#newDialog button.primary, dialog#importDialog button.primary { border-color: var(--accent); color: var(--accent); }
+  /* A choice, not a field: the radio keeps its own size and the sentence
+     beside it takes the room, where a text input would have taken it all. */
+  dialog#importDialog label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
+  dialog#importDialog label.radio input { flex: 0 0 auto; width: auto; padding: 0; }
+  dialog#importDialog select {
+    font: inherit; font-size: 0.85rem; width: 100%; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin: 2px 0 10px;
+  }
+  dialog#importDialog select:disabled { opacity: 0.5; }
   dialog#extDialog {
     background: var(--panel); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 18px 20px;
@@ -174,6 +183,29 @@
 <input type="file" id="importFile" accept="application/json,.json,.xlsx,.xlsm" hidden>
 
 <dialog id="extDialog"></dialog>
+
+<dialog id="importDialog">
+  <!-- Not method="dialog": that closes with the submitter's value, which is
+       empty whenever the form is submitted without one, and an import that
+       quietly read as "cancel" is the worst possible failure here. The submit
+       handler closes it, so a click and the Enter key mean the same thing. -->
+  <form id="importForm">
+    <h2>Import <span id="importName">this character</span></h2>
+    <p class="hint" id="importWhat"></p>
+    <label class="radio"><input type="radio" name="how" value="new" checked>
+      <span>Add it as a new character, alongside the ones already here.</span></label>
+    <label class="radio"><input type="radio" name="how" value="replace">
+      <span>Replace one that is already here:</span></label>
+    <select name="target" id="importTarget" aria-label="Which character to replace"></select>
+    <p class="hint">Replacing keeps that character’s slot and its history. Its current
+      version is filed as a checkpoint named “before import” first, so nothing is lost —
+      open <strong>History</strong> on the sheet to go back to it.</p>
+    <div class="actions">
+      <button type="button" id="importCancel">Cancel</button>
+      <button type="submit" class="primary">Import</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="newDialog">
   <form id="newForm" method="dialog">
@@ -234,8 +266,17 @@
   const importFile = document.getElementById('importFile');
   const newDialog = document.getElementById('newDialog');
   const newForm = document.getElementById('newForm');
+  const importDialog = document.getElementById('importDialog');
   const welcome = document.getElementById('welcome');
   document.getElementById('newCancel').addEventListener('click', () => newDialog.close());
+  // Cancel closes with no returnValue, which askWhereToPut reads as "not now";
+  // Import closes with 'go'. A dialog dismissed with Escape lands on the same
+  // empty value, so the two ways of backing out behave alike.
+  document.getElementById('importCancel').addEventListener('click', () => importDialog.close(''));
+  document.getElementById('importForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    importDialog.close('go');
+  });
   document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
   document.getElementById('welcomeImport').addEventListener('click', () => importFile.click());
 
@@ -495,11 +536,110 @@
     return `${wanted}-${n}`;
   }
 
+  /*
+   * Where an imported character should land: beside the ones already here, or
+   * over one of them.
+   *
+   * A workbook is exported again every time it changes, so most imports after
+   * the first are the *same* character coming back with another level on it --
+   * and the old behaviour, silently making "angou-2", left a roster of
+   * near-duplicates with no way to say which was current. Asking is one click
+   * and it is the click that decides which of two things is happening.
+   *
+   * Resolves to an id to replace, or null for a new character. Skipped
+   * entirely when there is nothing to replace.
+   */
+  function askWhereToPut(summary) {
+    const mine = library;
+    if (!mine.length) return Promise.resolve(null);
+    const form = document.getElementById('importForm');
+    const target = document.getElementById('importTarget');
+    document.getElementById('importName').textContent = summary.name;
+    document.getElementById('importWhat').textContent =
+      `Level ${summary.level}${summary.classes?.length ? ` ${summary.classes.join(' / ')}` : ''}`
+      + `${summary.race ? `, ${summary.race}` : ''}.`;
+    // The likeliest answer first: a character already here under the id this
+    // one would take is almost certainly the same character, re-exported.
+    const match = mine.find((c) => c.id === summary.id)
+      || mine.find((c) => c.name?.toLowerCase() === summary.name?.toLowerCase());
+    target.innerHTML = mine.map((c) => `<option value="${c.id}">${c.name} — level ${c.level}</option>`).join('');
+    form.reset();
+    if (match) target.value = match.id;
+    const sync = () => { target.disabled = form.how.value !== 'replace'; };
+    form.addEventListener('change', sync);
+    sync();
+    importDialog.showModal();
+    return new Promise((resolve) => {
+      const done = () => {
+        form.removeEventListener('change', sync);
+        importDialog.removeEventListener('close', done);
+        resolve(importDialog.returnValue === 'go' && form.how.value === 'replace'
+          ? target.value : (importDialog.returnValue === 'go' ? null : undefined));
+      };
+      importDialog.addEventListener('close', done);
+    });
+  }
+
+  /**
+   * Put an imported document over a character already in the picker.
+   *
+   * The slot, the id and the history stay; what was there is filed as a named
+   * checkpoint first, so "replace" is never a way to lose a character. The
+   * working edits go, and the import becomes the saved version — otherwise the
+   * sheet would open on half-finished edits to a document that no longer
+   * exists and quietly write the old character back.
+   */
+  async function replaceWith(id, doc, warnings) {
+    const entry = all().find((c) => c.id === id);
+    const verdict = inspectDocument(doc);
+    const store = historyFor(id, { storageKey: editsKey(id) });
+    const before = entry ? await currentDocument(entry) : null;
+    const stored = { ...doc, id };
+    try {
+      localStorage.setItem(docKey(id), JSON.stringify(stored));
+    } catch (err) {
+      say('err', `Could not store ${verdict.summary.name} — ${err.name === 'QuotaExceededError'
+        ? 'this browser is out of space. Remove an imported character and try again.'
+        : err.message}`);
+      return null;
+    }
+    let kept = false;
+    try {
+      if (before) { await store.checkpoint(before, 'before import'); kept = true; }
+      store.clearWorking();
+      await store.save(stored);
+    } catch { /* no database: the document is in, the history simply is not */ }
+    // A bundled character replaced becomes one of this browser's own.
+    library = library.some((c) => c.id === id)
+      ? library.map((c) => (c.id === id ? { ...verdict.summary, id, origin: 'import', local: true } : c))
+      : [...library, { ...verdict.summary, id, origin: 'import', local: true }];
+    writeLibrary(library);
+    current = id;
+    draw();
+    select();
+    say(warnings.length ? 'info' : 'ok',
+      `Replaced ${entry?.name || id} with ${verdict.summary.name} (level ${verdict.summary.level}).`
+      + (kept ? ' The old version is in History as “before import”.' : '')
+      + (warnings.length ? ` Note — ${warnings.join('; ')}.` : ''));
+    return id;
+  }
+
   /** `origin` is 'import' for a file, 'blank' for a character started here. */
   function add(doc, warnings = [], origin = 'import') {
     const verdict = inspectDocument(doc);
     if (!verdict.ok) { say('err', verdict.error); return null; }
+    if (origin === 'import' && library.length) {
+      askWhereToPut(verdict.summary).then((into) => {
+        if (into === undefined) { say('info', `${verdict.summary.name} was not imported.`); return; }
+        if (into) replaceWith(into, doc, warnings);
+        else addNew(doc, warnings, origin, verdict);
+      });
+      return null;
+    }
+    return addNew(doc, warnings, origin, verdict);
+  }
 
+  function addNew(doc, warnings, origin, verdict) {
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
     try {
