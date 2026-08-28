@@ -1202,13 +1202,26 @@ export const SAVE_BONUS_TYPES = [
  * what the sheet's own "AC No Nat" row leaves out -- and `flatFooted: false`
  * marks dodge, which you lose when caught unaware.
  */
+/*
+ * `cmd: false` marks a column whose *bonus* does not reach Combat Maneuver
+ * Defence. The rule names the ones that do, and it is a closed list:
+ * "A creature can also add any circumstance, deflection, dodge, insight, luck,
+ * morale, profane, and sacred bonuses to AC to its CMD." Armour, shields,
+ * natural armour and enhancement are not on it, and neither is an untyped
+ * bonus -- which is why the flag is on those columns rather than a filter
+ * written out somewhere else.
+ *
+ * A *penalty* is a different sentence and reaches CMD whatever column it is
+ * in: "Any penalties to a creature's AC also apply to its CMD." So the flag
+ * only ever turns off the positive half; see cmdBonusTotal.
+ */
 export const AC_BONUS_TYPES = [
   ['abpDeflection', 'ABP Deflect'],
   ['deflection', 'Deflect.'],
-  ['abpNatural', 'ABP Nat', { touch: false }],
-  ['enhancedNatural', 'E. Nat', { touch: false }],
-  ['natural', 'Natural', { touch: false }],
-  ['enhancement', 'Enhan.', { touch: false }],
+  ['abpNatural', 'ABP Nat', { touch: false, cmd: false }],
+  ['enhancedNatural', 'E. Nat', { touch: false, cmd: false }],
+  ['natural', 'Natural', { touch: false, cmd: false }],
+  ['enhancement', 'Enhan.', { touch: false, cmd: false }],
   ['dodge', 'Dodge', { flatFooted: false }],
   ['circumstance', 'Circ.'],
   ['insight', 'Insight'],
@@ -1216,10 +1229,13 @@ export const AC_BONUS_TYPES = [
   ['morale', 'Morale'],
   ['sacred', 'Sacred'],
   ['profane', 'Profane'],
-  ['untyped', 'Untyped'],
-  ['size', 'Size'],
-  ['template', 'Template'],
-  ['sheet', 'Sheet'],
+  ['untyped', 'Untyped', { cmd: false }],
+  // Not the modifier for being Large -- that is already in the formula, the
+  // other way round, as the special size modifier. This column is a
+  // size-typed bonus, and no such type is on the list above.
+  ['size', 'Size', { cmd: false }],
+  ['template', 'Template', { cmd: false }],
+  ['sheet', 'Sheet', { cmd: false }],
 ];
 
 /**
@@ -1290,6 +1306,32 @@ export function bonusTotal(resolved, types, filter = null) {
     if (typed) return t + abpGroupTotal(resolved?.[key], resolved?.[typed]);
     return t + (Number(resolved?.[key]) || 0);
   }, 0);
+}
+
+/**
+ * What the AC bonus block contributes to Combat Maneuver Defence.
+ *
+ * Two rules, and the sheet was following neither: CMD takes the eight listed
+ * bonus types (deflection, dodge, circumstance, insight, luck, morale, sacred,
+ * profane -- and ABP's deflection, which is one of them), and it takes *every*
+ * penalty, whatever column it was typed in, because "any penalties to a
+ * creature's AC also apply to its CMD".
+ *
+ * So a column marked `cmd: false` still hands over its negative half. That is
+ * the half that matters most in play: a −4 the sheet showed on AC and quietly
+ * left off CMD is a maneuver that lands or does not.
+ *
+ * `miscAC` is added by the caller on the same terms -- it is armour-side, so
+ * only a penalty in it carries -- because it is a field of its own rather
+ * than a column of this block.
+ */
+export function cmdBonusTotal(resolved, types = AC_BONUS_TYPES) {
+  let total = bonusTotal(resolved, types, 'cmd');
+  for (const [key, , flags] of types) {
+    if (flags?.cmd !== false) continue;
+    total += Math.min(0, Number(resolved?.[key]) || 0);
+  }
+  return total;
 }
 
 /* ----- gestalt class progressions ----- */
@@ -2718,11 +2760,22 @@ export function conditionTotals(active) {
   let speed = 1;
   let acVsMelee = 0;
   let acVsRanged = 0;
+  // What the AC penalties among these come to, kept apart from the net `ac`.
+  // "Any penalties to a creature's AC also apply to its CMD" -- so blinded's
+  // −2 is −2 CMD as well, and a buff that happens to be raising AC at the
+  // same time must not cancel it out. Only entries that say nothing about
+  // CMD themselves: one that does has already said what it does, and adding
+  // its AC penalty on top would be counting the same rule twice (the size
+  // rows are the case that matters, where the AC change *is* the size
+  // modifier and CMD carries it the other way round).
+  let acPenalty = 0;
 
   for (const { info, count } of counted) {
     const n = Math.max(1, count);
+    const statesCmd = info.mods?.cmd !== undefined;
     for (const [key, value] of Object.entries(info.mods || {})) {
       mods[key] = (mods[key] || 0) + value * n;
+      if (key === 'ac' && value < 0 && !statesCmd) acPenalty += value * n;
     }
     for (const [key, value] of Object.entries(info.ability || {})) {
       ability[key] = (ability[key] || 0) + value * n;
@@ -2737,7 +2790,8 @@ export function conditionTotals(active) {
   }
 
   return {
-    mods, ability, abilitySet, losesDex, speed, acVsMelee, acVsRanged, counted, superseded,
+    mods, ability, abilitySet, losesDex, speed, acVsMelee, acVsRanged, acPenalty,
+    counted, superseded,
   };
 }
 
@@ -2824,8 +2878,14 @@ export const DERIVED = [
     label: 'CMD',
     deps: ['str.mod', 'dex.mod', 'attack.bab'],
     reconcile: true,
+    // 10 + BAB + Str + Dex + the special size modifier (the AC one, the other
+    // way round), plus the AC bonuses CMD is allowed and every AC penalty
+    // there is -- see cmdBonusTotal. Misc AC is armour-side, so only a
+    // penalty typed there carries over.
     compute: (c) => 10 + c.attack.bab + c.abilities.str.totalMod + c.abilities.dex.totalMod
-      - sizeMod(c) + c.defenses.miscCMD,
+      - sizeMod(c) + c.defenses.miscCMD
+      + cmdBonusTotal(c.defenses.acBonusesResolved)
+      + Math.min(0, Number(c.defenses.miscAC) || 0),
   },
   {
     key: 'attack.totalMelee',
@@ -2894,6 +2954,52 @@ export const FORWARD_STATS = [
   ['int.score', 'Intelligence', null],
   ['wis.score', 'Wisdom', null],
   ['cha.score', 'Charisma', null],
+  // The working score, which is what a bonus that lasts a fight moves: the
+  // Stats tab keeps a column for each, and everything derived is built from
+  // the temporary one. `{str.score += 2 as temp.size}` has always said this,
+  // and still does; `{str.temp += 2 as size}` is the same thing said the way
+  // the value is named -- which is the way anyone reading `str.temp` off the
+  // sheet would go looking to write it.
+  ['str.temp', 'Strength (working score)', null],
+  ['dex.temp', 'Dexterity (working score)', null],
+  ['con.temp', 'Constitution (working score)', null],
+  ['int.temp', 'Intelligence (working score)', null],
+  ['wis.temp', 'Wisdom (working score)', null],
+  ['cha.temp', 'Charisma (working score)', null],
+];
+
+/**
+ * Destinations that settle *after* the prose has been read, and so are not a
+ * reason to recompute twice.
+ *
+ * Everything in FORWARD_STATS above is totalled before any prose is looked
+ * at, which is why a bonus landing on one costs a second pass. These land on
+ * boxes the sheet resolves once the bonuses are already in hand -- the
+ * defence lists, the death threshold, the temporary hit points -- so a
+ * character whose only forwarded bonus is `{dr.magic += 2}` computes exactly
+ * once, as it always did.
+ *
+ * The five defence boxes are the parts they are written in as well: `dr`,
+ * `resistance`, `weakness` and `immune` each take a name after the dot
+ * (`{resistance.fire += 5}`), matched rather than listed, because the list is
+ * whatever the campaign's energies and material weaknesses turn out to be.
+ * See `forwardTargets` for the matching.
+ */
+export const FORWARD_LATE = [
+  ['defenses.sr', 'Spell resistance'],
+  ['defenses.dr', 'Damage reduction, every kind'],
+  ['defenses.resistance', 'Energy resistance, every kind'],
+  ['defenses.weakness', 'Vulnerability, every kind'],
+  ['hp.temp', 'Temporary hit points'],
+  ['hp.deathBonus', 'Death threshold'],
+];
+
+/** The defence lists whose parts take a name after the dot. */
+export const DEFENCE_PART_FAMILIES = [
+  ['dr', 'Damage reduction'],
+  ['resistance', 'Energy resistance'],
+  ['weakness', 'Vulnerability'],
+  ['immune', 'Immunity'],
 ];
 
 /**

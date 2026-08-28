@@ -41,6 +41,7 @@ import {
   applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities, setBuild,
   setMythicPick, setPick,
 } from './abilities.js';
+import { breakdown } from './breakdown.js';
 import { normalise, toDocument } from './document.js';
 import {
   addSystemTab, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
@@ -85,9 +86,10 @@ import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
 } from './stats/attacks.js';
 import {
-  applyDamage, applyHealing, availableConditions, conditionState, healDamage, hpMax, hpState,
-  meterSpec, meterStyle, mythicHp, resolveAcBonuses, resolveDefenceBonuses, restRefresh,
-  restoreAll, setMeterStyle, sizeNow, takeDamage,
+  applyDamage, applyHealing, applyNonlethal, availableConditions, conditionState, grantTempHp,
+  healDamage, hpMax, hpState, meterSpec, meterStyle, mythicHp, resolveAcBonuses,
+  resolveDefenceBonuses, resolveDefenceText, restRefresh, restoreAll, setMeterStyle, sizeNow,
+  takeDamage,
 } from './stats/defenses.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
@@ -162,10 +164,22 @@ export class Character {
       // written -- and swallowing it would mean the rule never showed up at
       // all. Where the workbook *did* add something the two are genuinely
       // indistinguishable, and the second reading stands.
+      //
+      // Only where the stat's own sum did not move, though. A bonus forwarded
+      // *at* a stat leaves its parts alone, so the first reading is a fair
+      // measurement of what the workbook hid; one that lands on an ability
+      // score and cascades in changes the parts themselves, so the first
+      // reading was taken from stale inputs and balancing there is a
+      // coincidence of magnitudes rather than evidence of anything. That
+      // coincidence is easy to hit -- a −2 offset against a +2 cascade -- and
+      // it cost the character the bonus on every reopen.
       const balanced = new Set(Object.entries(this.offsets)
         .filter(([, v]) => !v).map(([k]) => k));
+      const bareBefore = { ...this.bare };
       this.#reconcile();
-      for (const key of balanced) this.offsets[key] = 0;
+      for (const key of balanced) {
+        if (this.bare[key] === bareBefore[key]) this.offsets[key] = 0;
+      }
       this.recompute();
     }
   }
@@ -240,6 +254,11 @@ export class Character {
     // is intended: skills may read names, names may not read skills, so no
     // cycle can form between the two.
     this.#resolveInlineNames();
+    // The defence boxes are both a source of forwarded bonuses and a
+    // destination for them, so they settle here: after the prose has been
+    // read, and before the skills, which may read `dr.fire` or `immune.sleep`
+    // the way they read anything else.
+    this.#resolveDefenceText();
     const miscScope = this.scope();
 
     c.skills.forEach((s, i) => {
@@ -352,6 +371,9 @@ export class Character {
   // events.js
   subscribe(...a) { return subscribe(this, ...a); }
   #emit(...a) { return emit(this, ...a); }
+
+  // breakdown.js
+  breakdown(...a) { return breakdown(this, ...a); }
 
   // reconcile.js
   #reconcile(...a) { return reconcile(this, ...a); }
@@ -527,6 +549,7 @@ export class Character {
 
   // stats/defenses.js
   #resolveDefenceBonuses(...a) { return resolveDefenceBonuses(this, ...a); }
+  #resolveDefenceText(...a) { return resolveDefenceText(this, ...a); }
   #resolveAcBonuses(...a) { return resolveAcBonuses(this, ...a); }
   sizeNow(...a) { return sizeNow(this, ...a); }
   get conditionState() { return conditionState(this); }
@@ -538,6 +561,8 @@ export class Character {
   heal(...a) { return healDamage(this, ...a); }
   restoreAll(...a) { return restoreAll(this, ...a); }
   applyDamage(...a) { return applyDamage(this, ...a); }
+  applyNonlethal(...a) { return applyNonlethal(this, ...a); }
+  grantTempHp(...a) { return grantTempHp(this, ...a); }
   applyHealing(...a) { return applyHealing(this, ...a); }
   restRefresh(...a) { return restRefresh(this, ...a); }
   meterStyle(...a) { return meterStyle(this, ...a); }

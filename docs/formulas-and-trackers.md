@@ -38,6 +38,14 @@ other tabs. Every name it reads is listed underneath as a chip with its current 
 click one to drop it into the box. **Enter** tidies the spacing of what you have typed
 (and never while you are typing, which would move the caret out from under you).
 
+**Your own formulas** — a prose field on the tab itself, on the same footing as any
+description on the sheet. Everywhere else a formula is written *beside the thing it is
+about*, which is right and is the whole design; but some rules are about nothing in
+particular — a house rule, a number the table agreed on, a value three other formulas
+share — and those were going wherever there happened to be a box. `{qi.max = wis.mod +
+level}` here names a value the rest of the character can read, `{saves.will += 2}` sends
+a bonus where it belongs, and both appear in the list below with everything else.
+
 **Formulas on this character** — every formula already written on the sheet, wherever it
 lives: inline names, tracker maxima and minima, zone bounds, skill-rank and misc
 formulas, weapon tokens, crafting numbers, speeds. Each is shown coloured, with what it
@@ -359,7 +367,37 @@ recompute have anywhere to *put* an arriving bonus:
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
+| `hp.temp` | temporary hit points — a pool of its own beside the box, spent after it |
+| `hp.deathBonus` | how far below zero death is, on top of Constitution |
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
+| `str.temp`, `dex.temp`, … | the same, said the other way round: the *working* score, which is what a bonus lasting a fight moves. `{str.temp += 2 as size}` and `{str.score += 2 as temp.size}` are the same bonus |
+| `defenses.sr` | spell resistance |
+| `defenses.dr`, `dr.magic`, `dr.cold_iron`, … | damage reduction, all of it or one bypass — see below |
+| `defenses.resistance`, `resistance.fire`, … | energy resistance, all of it or one energy |
+| `defenses.weakness`, `weakness.fire`, … | vulnerability, the same way |
+| `immune.sleep`, `immune.fire`, … | an immunity, which is a switch rather than an amount: any positive number grants it, and `-=` suppresses one that was typed in |
+| `familiar.*`, `animalCompanion.*`, `eidolon.*` | a companion's own numbers — see below |
+
+**The defence boxes.** Spell resistance, DR, energy resistance, vulnerability and the
+immunities are free text, because that is how a stat block writes them — and each is
+parsed into the parts it is already made of, so `5/magic` is `dr.magic` and `fire 10,
+cold 5` is `resistance.fire` and `resistance.cold`. Every part is both a name a formula
+reads and a destination a bonus is sent to, under the one spelling. The boxes read
+`{…}` like any prose, so `DR {= 5 + floor(level/2)}/magic` stops going stale.
+
+A bonus aimed at a part the box has *not* got **grants** it rather than failing: "energy
+resistance (fire) 10" on a character with no resistances is the rule creating one. Which
+is the one mistake this cannot catch for you — `{resistance.frost += 10}` grants
+resistance to frost, and says so in the box, where it is easy to spot.
+
+**A companion's numbers.** Every stat a familiar, animal companion or eidolon rolls or is
+asked for is a destination under its own name — `animalCompanion.str.score`,
+`eidolon.ac.total`, `familiar.skill.perception`, `animalCompanion.attack.bite`,
+`eidolon.cmb`, with `saves`, `ac` and `skill` standing for all of theirs at once. That is
+what makes a companion's *equipment* work: each row on its Items panel has an Effect,
+Effect is prose, and prose forwards. A belt of giant strength is written where the belt
+is, once, and the attack, the damage, the CMB, Climb and Swim all move because the
+*score* did. Untick **Worn** and the row keeps saying what it would do without doing it.
 
 Anything else is refused and **said so**, in *Needs attention* and beside the formula,
 with the two mistakes told apart because the fixes differ: `skill.bluf` *is not something

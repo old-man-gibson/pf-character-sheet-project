@@ -151,7 +151,7 @@ export function renderStatsPanel(model, ctx) {
               <tr>
                 <th></th>
                 ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
-                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.score += 2 as temp.size} somewhere else on the sheet">Fwd</th>
+                <th class="num" title="Bonuses forwarded here as temporary ones — written {str.temp += 2 as size}, or {str.score += 2 as temp.size}, somewhere else on the sheet">Fwd</th>
                 <th class="num" title="Everything the temporary columns add up to">Temp</th>
                 <th class="num" title="Temporary score, used by every derived stat">Score</th>
                 <th class="num">Mod</th>
@@ -164,9 +164,10 @@ export function renderStatsPanel(model, ctx) {
               return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                  <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'temporary') || '—'}</td>
-                  <td class="num">${r.temporary || a.forwarded?.temporary
-                  ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0)) : '—'}</td>
+                  <td class="num">${`${forwardedBadge(model, `${ab}.score`, '', 'temporary')}${
+                    forwardedBadge(model, `${ab}.temp`)}` || '—'}</td>
+                  <td class="num">${r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
+                  ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0) + (a.forwardedTemp?.total || 0)) : '—'}</td>
                   <td class="num total">${a.tempScore ?? r.tempTotal ?? 0}</td>
                   <td class="num total">${fmt(a.totalMod)}</td>
                 </tr>`;
@@ -178,7 +179,8 @@ export function renderStatsPanel(model, ctx) {
           Temporary bonuses feed the Temp Score used by every derived stat;
           the permanent Total is left untouched. <strong>Fwd</strong> is what a rule
           written elsewhere on the sheet sends here — <code>{str.score += 2 as size}</code>
-          for a permanent one, <code>as temp.size</code> for a temporary one — and points
+          for a permanent one, and either <code>{str.temp += 2 as size}</code> or
+          <code>{str.score += 2 as temp.size}</code> for a temporary one — and points
           back at the sentence that sent it.
         </p>
       </section>

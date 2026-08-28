@@ -60,6 +60,15 @@ export function shadowReason(name, builtin) {
   return null;
 }
 
+/** The Defences panel's own boxes, as they are labelled on screen. */
+const DEFENCE_BOX_LABELS = {
+  spellResistance: 'spell resistance',
+  dr: 'damage reduction',
+  resistance: 'energy resistance',
+  weakness: 'vulnerability',
+  immunities: 'immunities',
+};
+
 /**
  * A prose source path (`note:1`, `feature:Monk:5:Special`) as something a
  * player can go and look at. The paths are internal, stable and meaningless
@@ -73,6 +82,8 @@ export function describeSource(path) {
     case 'feature': return `${a} class feature, level ${b}`;
     case 'template': return 'a template feature';
     case 'note': return `note ${nth(a)} on Lore`;
+    case 'approvalNotes': return 'the approvals notes';
+    case 'formulas': return 'the Formulas tab';
     case 'background': return `background section ${nth(a)}`;
     case 'trait': return a === 'additional' ? `additional trait ${nth(b)}` : `${a} trait`;
     case 'raceTrait': return `race trait ${nth(a)}`;
@@ -88,6 +99,7 @@ export function describeSource(path) {
     case 'primordiaNote': return `Primordia notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
+    case 'defenses': return `the ${DEFENCE_BOX_LABELS[a] || a} box`;
     case 'gear':
     case 'other': return `gear ${nth(a)}`;
     case 'gearNote':
@@ -102,9 +114,15 @@ export function describeSource(path) {
     case 'sideboard': return `sideboard card ${nth(a)}`;
     case 'deckManipulation': return 'a deck manipulation';
     case 'cardcasting': return 'Cardcasting notes';
-    case 'familiar': return 'the familiar';
-    case 'animalCompanion': return 'the animal companion';
-    case 'eidolon': return 'the eidolon';
+    case 'familiar':
+    case 'animalCompanion':
+    case 'eidolon': {
+      const who = head === 'familiar' ? 'the familiar'
+        : head === 'eidolon' ? 'the eidolon' : 'the animal companion';
+      if (a === 'item') return `${who}, the ${parts.slice(2).join(':')} slot`;
+      if (a === 'slotless') return `${who}, item ${nth(b)}`;
+      return who;
+    }
     // A maneuver's own entry. The name is last in both because it may hold a
     // colon ("Lesson I: Balance"), so it is rejoined rather than indexed.
     case 'maneuverNote': return `${parts.slice(2).join(':')}, its description`;
@@ -125,9 +143,16 @@ export function reconcile(model) {
   // Before the offsets are measured, or every typed bonus would be counted
   // once in the offset and again in the compute.
   resolveDefenceBonuses(model);
+  // What each stat came to from its visible parts, kept for the caller. The
+  // constructor reconciles twice and has to tell two things apart: a stat that
+  // moved because a bonus was forwarded *at* it, and one that moved because a
+  // bonus landed on something it is built from (an ability score, a class
+  // level) and cascaded in. See the `balanced` set in Character's constructor.
+  model.bare = model.bare || {};
   for (const d of DERIVED) {
     if (!d.reconcile) continue;
     const bare = safe(() => d.compute(model.data), 0);
+    model.bare[d.key] = bare;
     // Always the figure the document arrived with, never the one on `data`:
     // this runs a second time once forwarded bonuses are known, and by then
     // `data` holds what the first pass worked out rather than what was saved.
@@ -139,6 +164,17 @@ export function reconcile(model) {
     model.offsets[d.key] = target - bare - forwarded(model, FORWARD_BY_DERIVED[d.key]);
   }
 }
+
+/**
+ * Which stats carry an offset: every reconciled DERIVED stat, and hit points.
+ *
+ * Hit points are not a DERIVED entry -- the sheet's total is a figure the
+ * class table arrives at rather than one expression over the character -- but
+ * they are reconciled in exactly the same way and for exactly the same reason
+ * (see applyHitPoints), so the same field edits them.
+ */
+export const offsetKey = (key) => key === 'hp.total'
+  || DERIVED.some((d) => d.key === key && d.reconcile);
 
 /**
  * The reconciliation offset of one derived stat -- everything the source
@@ -158,7 +194,7 @@ export function offsetOf(model, key) {
  * through localStorage and Export JSON exactly as an imported one does.
  */
 export function setOffset(model, key, value) {
-  if (!DERIVED.some((d) => d.key === key && d.reconcile)) return model;
+  if (!offsetKey(key)) return model;
   model.offsets[key] = Number(value) || 0;
   model.recompute();
   emit(model, { type: 'set', path: `offset:${key}`, value });
@@ -372,6 +408,34 @@ export function audit(model) {
     };
   })()] : [];
 
+  // The hit-point fields that take a rule rather than a number: the three
+  // typed parts of the maximum, and the death threshold.
+  const hp = model.data.hp || {};
+  const hpFormulas = [
+    ['fcb', 'Favoured class hit points'],
+    ['toughness', 'Toughness per level'],
+    ['misc', 'Misc hit points'],
+    ['deathBonus', 'Death threshold'],
+  ].filter(([key]) => typeof hp[key] === 'string' && hp[key].trim()).map(([key, name]) => {
+    const info = analyse(hp[key]);
+    const unknown = info.variables.filter((v) => !known.has(v));
+    const error = hp[`${key}Error`] || info.error
+      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+    return {
+      id: `hp-${key}`,
+      name,
+      source: 'player',
+      formula: hp[key],
+      reads: info.variables,
+      functions: info.functions,
+      unknownReferences: unknown,
+      value: error ? null : hp[`${key}Resolved`] ?? null,
+      error,
+      status: error ? 'error' : 'ok',
+      createdAt: null,
+    };
+  });
+
   // Crafting: any speed increase, cost reduction, item value or DC the
   // player typed as a formula rather than a number.
   const cr = model.data.crafting || {};
@@ -499,7 +563,8 @@ export function audit(model) {
 
   return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas)
     .concat(weaponMiscFormulas).concat(weaponFormulas)
-    .concat(speedFormulas).concat(languageFormulas).concat(craftingFormulas).concat(deckFormulas)
+    .concat(speedFormulas).concat(languageFormulas).concat(hpFormulas)
+    .concat(craftingFormulas).concat(deckFormulas)
     .concat(trackerFormulas);
 }
 

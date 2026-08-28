@@ -9,18 +9,22 @@
  */
 
 import {
-  ABILITIES, AC_BONUS_TYPES, FORWARD_FAMILIES, FORWARD_STATS, MANEUVER_FIELDS,
-  SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, skillLabel, statMod,
+  ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
+  FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, skillLabel, statMod,
 } from '../rules.js';
-import { COMPANION_KINDS, companionScope } from '../companions.js';
 import {
-  collectContributions, collectDefinitions, collectUses, hasTokens, renderTokens,
+  COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
+  companionInUse, companionScope, companionSkillKey,
+} from '../companions.js';
+import {
+  collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
 import { NameIndex, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
+import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { trackerFacts } from './trackers.js';
@@ -57,6 +61,23 @@ function bonusColumns(resolved, types) {
 }
 
 /**
+ * One defence list as names: `dr.magic`, `resistance.fire`, and a `total`
+ * that is the best of them.
+ *
+ * `total` is what makes `dr` go on being a number as well as a branch, the
+ * same trick the saves use (see carriesTotal in formula.js) -- so
+ * `{= dr}` answers "10" and `{= dr.magic}` answers what magic gets through.
+ */
+function partScope(parts, family, best) {
+  const out = { total: best };
+  for (const p of parts || []) {
+    const key = String(p.key || '').slice(family.length + 1);
+    if (key && out[key] === undefined) out[key] = Number(p.amount) || 0;
+  }
+  return out;
+}
+
+/**
  * One saving throw: its total, and what the total is made of.
  *
  * The named keys go on after the columns so a bonus type can never take a
@@ -80,13 +101,27 @@ export function characterScope(model) {
   // ability bonus after the armour has capped it -- the three parts of AC
   // that are not typed bonuses and are not the flat 10.
   const worn = armorParts(c);
+  // The defence boxes as `resolveDefenceText` left them: the parts each one
+  // was written in, every forwarded bonus already on. Read here rather than
+  // recomputed, so the number a formula sees is the number the box shows.
+  const dc = c.defenses?.calc || {};
+  const deathBonus = (Number(c.hp.deathBonusResolved ?? c.hp.deathBonus) || 0)
+    + forwarded(model, 'hp.deathBonus');
   const s = {
     level: Number(c.identity.level) || 0,
     bab: Number(c.attack.bab) || 0,
     hp: {
       total: model.hpMax,
       current: Number(c.hp.current ?? c.hp.total) || 0,
-      temp: Number(c.hp.temp) || 0,
+      // What the character has, not what was typed in the box: a rule that
+      // grants temporary hit points is as much a source of them as the box
+      // is, and a formula asking how many there are wants the answer.
+      temp: (Number(c.hp.temp) || 0) + tempHpGrant(model).left,
+      nonlethal: Number(c.hp.nonlethal) || 0,
+      // The threshold and where it sits, so "within 5 of death" can be
+      // written down rather than worked out by hand at every level.
+      deathBonus,
+      death: -((Number(c.abilities.con?.tempScore) || 10) + deathBonus),
     },
     mythic: { tier: Number(c.identity.mythicTier) || 0 },
     // The size as it stands, true-size buffs included -- {size} follows an
@@ -125,6 +160,31 @@ export function characterScope(model) {
       cmd: c.defenses.cmd,
       total: c.defenses.ac,
     },
+    // The defence boxes that hold a list, as the numbers they are made of.
+    //
+    // Each part answers to what it is written under -- `dr.magic`,
+    // `resistance.fire`, `immune.sleep` -- because that is the only name a
+    // rule about it would ever use, and because a name a bonus can be
+    // forwarded to must be one a formula can read back. The family name
+    // (`dr`, `resistance`) is the best of them, which is the answer to "what
+    // is your DR" when nobody has said against what.
+    //
+    // An immunity is a switch rather than a number: 1 where the character
+    // has it and nothing at all where it does not, so `if(immune.fire, …)`
+    // reads the way it is spoken.
+    defenses: {
+      sr: Number(dc.sr?.total) || 0,
+      dr: Number(dc.drBest) || 0,
+      resistance: Number(dc.resistanceBest) || 0,
+      weakness: Number(dc.weaknessBest) || 0,
+      immunities: (dc.immunities || []).filter((p) => !p.off).length,
+    },
+    dr: partScope(dc.dr, 'dr', Number(dc.drBest) || 0),
+    resistance: partScope(dc.resistance, 'resistance', Number(dc.resistanceBest) || 0),
+    weakness: partScope(dc.weakness, 'weakness', Number(dc.weaknessBest) || 0),
+    immune: Object.fromEntries((dc.immunities || [])
+      .filter((p) => !p.off)
+      .map((p) => [p.key.slice('immune.'.length), 1])),
     attack: {
       melee: c.attack.totalMelee,
       ranged: c.attack.totalRanged,
@@ -381,6 +441,19 @@ export function forwardTargets(model) {
     skills.push(name);
   }
   for (const [name, label] of FORWARD_STATS) add(name, label);
+  for (const [name, label] of FORWARD_LATE) add(name, label);
+
+  // The parts each defence box is written in, as it stands today, so they
+  // autocomplete and read back. A part that is *not* on this list is still a
+  // destination -- see `defencePartTarget` -- because forwarding one is how a
+  // rule grants a resistance the character has not got.
+  const dc = model.data.defenses?.calc || {};
+  for (const [family, label] of DEFENCE_PART_FAMILIES) {
+    for (const p of dc[family === 'immune' ? 'immunities' : family] || []) {
+      if (!p.key || expand.has(p.key)) continue;
+      add(p.key, `${label}: ${p.bypass || p.energy || p.name || '—'}`);
+    }
+  }
 
   // A class's effective level. The destination is the same name the scope
   // publishes it under, so `{= class.legendary_kineticist.level}` and
@@ -420,6 +493,51 @@ export function forwardTargets(model) {
   if (anySpeed) {
     expand.set('speed', moves);
     list.push({ name: 'speed', label: 'Every speed you have', family: moves });
+  }
+
+  /*
+   * The companions, every number of theirs that is rolled or asked for in a
+   * fight or a conversation: the six ability scores, the armour classes, CMD
+   * and CMB, attack and damage, the saves, initiative, hit points and each
+   * skill by name -- `animalCompanion.skill.perception`, `eidolon.attack.bite`.
+   *
+   * Which is what makes a companion's equipment work at all. A saddle, a
+   * barding, an amulet of mighty fists: each is a row on the companion's own
+   * Items panel whose effect is prose, and prose forwards. Nothing about the
+   * mechanism is new -- it is the same `{… += …}` the character's own gear
+   * uses -- it is only that a companion's stats had no names to aim at.
+   *
+   * Offered for a companion that is *in use*, so a bonus aimed at an eidolon
+   * nobody has summoned says so rather than landing in a block that is never
+   * read. Naming one is enough to bring the list into being; so is giving it
+   * something to wear.
+   */
+  for (const kind of COMPANION_KINDS) {
+    const comp = model.data[kind];
+    if (!comp || !companionInUse(kind, comp)) continue;
+    const label = COMPANION_LABELS[kind] || kind;
+    const under = (name) => `${kind}.${name}`;
+    for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
+    for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
+      const into = members.map(under);
+      expand.set(under(name), into);
+      list.push({ name: under(name), label: `${label}: all ${name === 'ac' ? 'armour classes' : name}`, family: into });
+    }
+    const compSkills = [];
+    for (const sk of comp.skills || []) {
+      const key = companionSkillKey(sk);
+      if (!key || key === 'x' || expand.has(under(`skill.${key}`))) continue;
+      add(under(`skill.${key}`), `${label}: ${skillLabel(sk.name, sk.spec)}`);
+      compSkills.push(under(`skill.${key}`));
+    }
+    expand.set(under('skill'), compSkills);
+    list.push({ name: under('skill'), label: `${label}: every skill`, family: compSkills });
+    for (const a of comp.attacks || []) {
+      const key = companionAttackKey(a);
+      if (!key || key === 'x' || expand.has(under(`attack.${key}`))) continue;
+      add(under(`attack.${key}`), `${label}: ${a.type} attack`);
+      add(under(`damage.${key}`), `${label}: ${a.type} damage`);
+    }
   }
 
   expand.set('skill', skills);
@@ -484,10 +602,34 @@ export function forwardTargets(model) {
   }
   const canonical = (name) => folded.get(String(name).toLowerCase());
 
+  /*
+   * A part of a defence box, matched rather than listed.
+   *
+   * `{resistance.fire += 10}` on a character with no resistances at all is
+   * Energy Resistance doing what it says: the rule creates the resistance, it
+   * does not fail to find one. The same goes for `{dr.silver += 5}` and
+   * `{immune.sleep += 1}` -- an immunity is a switch, so any positive amount
+   * turns it on and a negative one suppresses an immunity that was typed in.
+   *
+   * Which means the misspelling this cannot catch is the energy's own name:
+   * `{resistance.frost += 10}` grants resistance to frost, and says so in the
+   * box, where it is the sort of mistake a reader spots at once. That is the
+   * trade for being able to grant one at all.
+   */
+  const defencePartTarget = (name) => {
+    const dot = String(name).indexOf('.');
+    if (dot < 0) return null;
+    const family = name.slice(0, dot);
+    const part = slug(name.slice(dot + 1));
+    if (!DEFENCE_PART_FAMILIES.some(([f]) => f === family) || part === 'x') return null;
+    return [`${family}.${part}`];
+  };
+
   let names = null;
   return {
     list,
-    expand: (name) => expand.get(name) || expand.get(canonical(name)) || weaponTarget(name),
+    expand: (name) => expand.get(name) || expand.get(canonical(name))
+      || defencePartTarget(name) || weaponTarget(name),
     known: (name) => (names ??= new NameIndex(model.scopeNames())).has(name),
   };
 }
@@ -654,7 +796,19 @@ export function proseSources(model) {
     entry(`template:${ti}:${fi}`, f);
     (f.children || []).forEach((c, ci) => entry(`template:${ti}:${fi}:${ci}`, c));
   }));
+  // The defence boxes. Each is a sentence a player writes -- "5/magic",
+  // "fire 10, cold 5" -- and each of those numbers is a rule: DR that follows
+  // half your level, resistance that follows the essence invested in a veil.
+  // Written as `{= …}` they stay right, and the box is parsed from what they
+  // come to (see stats/defence-lists.js).
+  for (const key of ['spellResistance', 'dr', 'resistance', 'weakness', 'immunities']) {
+    push(`defenses:${key}`, d.defenses?.[key]);
+  }
   (d.notes || []).forEach((n, i) => push(`note:${i}`, n.body));
+  // The Formulas tab's own writing space: the place for a rule that is about
+  // nothing in particular. Read exactly like any other prose on the sheet.
+  push('formulas', d.formulaNotes);
+  push('approvalNotes', d.extras?.approvalNotes);
   (d.backgroundSections || []).forEach((s, i) => push(`background:${i}`, s.text));
   for (const [k, slot] of Object.entries(d.traitSlots || {})) {
     if (k === 'additional') (slot || []).forEach((t, i) => push(`trait:additional:${i}`, t.text));
@@ -722,13 +876,21 @@ export function proseSources(model) {
     push(`crafting:${i}:notes`, p.notes);
   });
   (d.equipment?.weapons || []).forEach((w, i) => push(`weapon:${i}`, w.special));
-  // A buff's note reads {…} like any prose, so a buff can carry its rule as
-  // a definition -- "{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * …}" --
-  // that weapons and trackers then read by name. The definition stands
-  // whether the buff is ticked or not (a reference must not break when the
-  // buff is off); a value that should switch with something says so itself,
-  // with if(…), exactly as the dials do.
-  (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note));
+  /*
+   * A buff's note reads {…} like any prose, so a buff can carry its rule as
+   * a definition -- "{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * …}" --
+   * that weapons and trackers then read by name. The definition stands
+   * whether the buff is ticked or not: a reference must not break when the
+   * buff is off, and a value that should switch with something says so
+   * itself, with if(…), exactly as the dials do.
+   *
+   * A *bonus* in that note is the other way round. Every dial on a buff waits
+   * for the tick, and a `{skill.stealth += 4}` written beside them is the
+   * same rule in another spelling -- it has no business applying while the
+   * buff is off. `future` is exactly that state, and already means "reads and
+   * displays, does not apply"; the panel greys the tokens to match.
+   */
+  (d.buffs || []).forEach((b, i) => push(`buff:${i}`, b.note, null, b?.on ? null : { future: true }));
   // Every cell of a maneuver's own entry is prose -- its range as often as
   // its description, since "Close (25 ft. + 5 ft./2 levels)" is a formula
   // written out longhand. The description keeps the source name it has always
@@ -817,6 +979,19 @@ export function proseSources(model) {
     (b.attacks || []).forEach((a, i) => push(`${kind}:attack:${i}`, a.qualities));
     (b.feats || []).forEach((f, i) => push(`${kind}:feat:${i}`, f.notes));
     (b.tricks || []).forEach((t, i) => push(`${kind}:trick:${i}`, t.notes));
+    // What a companion is wearing. The effect is prose like any other, so it
+    // reads {…} and forwards a bonus at the companion's own stats -- which is
+    // the whole of what "equipment that changes its numbers" needs to be.
+    //
+    // Taken off, the row is still written down and still shows what it would
+    // do, but stops doing it: `future` is exactly the state a talent taken at
+    // 16 is in at 15, and it already means "reads and displays, does not
+    // apply". One rule, two places it is wanted.
+    const off = (it) => (it?.worn === false ? { future: true } : null);
+    for (const [slot, it] of Object.entries(b.items || {})) {
+      push(`${kind}:item:${slot}`, it?.effect, null, off(it));
+    }
+    (b.slotless || []).forEach((it, i) => push(`${kind}:slotless:${i}`, it?.effect, null, off(it)));
   }
   for (const [key, block] of [['akashic', d.akashic], ['maneuvers', d.maneuvers],
     ['vancian', d.vancian], ['psionics', d.psionics], ['cardcasting', d.cardcasting],
@@ -849,6 +1024,25 @@ export function proseSources(model) {
  */
 export function renderProse(model, text, local = null) {
   return renderTokens(text, model.inlineNames || {}, model.scope(), local);
+}
+
+/**
+ * The same text as plain characters, every {…} token replaced by what it
+ * comes to -- what the *model* reads when a field is both prose and a value.
+ *
+ * The defence boxes are the case that wanted it: "DR {= 5 + floor(level/2)}/magic"
+ * has to display as a sentence and parse as a reduction, and doing that twice
+ * (once for the eye, once for the parser) is how the two come to disagree.
+ *
+ * A token that failed keeps its source, so a broken formula shows up in the
+ * box as the thing that is broken rather than vanishing into a 0. A forwarded
+ * bonus contributes nothing: it is a number about somewhere else, and it has
+ * no business in the value of the field it was written in.
+ */
+export function proseText(model, text, local = null) {
+  const src = String(text ?? '');
+  if (!hasTokens(src)) return src;
+  return plainTokens(renderProse(model, src, local));
 }
 
 /**

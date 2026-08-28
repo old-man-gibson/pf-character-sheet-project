@@ -470,6 +470,17 @@ function importExtras(tab) {
   return { notes, approvals, sourceExtras: g.extras() };
 }
 
+/** What `resolveDefenceText` writes onto the defences block each recompute. */
+const DEFENCES_DERIVED = ['calc'];
+
+/**
+ * The hit-point fields that may be written as a formula, and what resolving
+ * one leaves behind. The source stays; the answer is worked out again on
+ * every load, so saving it would be a second place for it to be wrong.
+ */
+const HP_DERIVED = ['fcbResolved', 'fcbError', 'toughnessResolved', 'toughnessError',
+  'miscResolved', 'miscError', 'deathBonusResolved', 'deathBonusError'];
+
 /** Copy a block without the values `recompute` will write back into it. */
 function stripDerived(block, rules) {
   if (!block) return block;
@@ -996,10 +1007,13 @@ export function normalise(model) {
 
   /*
    * Hit points. `total` used to be the whole of it -- a number the workbook
-   * worked out and this sheet kept -- and is now what `applyHitPoints`
-   * arrives at from the class table, with `totalOverride` holding a figure
-   * pinned over it. The parts the workbook summed were always imported;
-   * `misc` is the last of them and older saves have no field for it.
+   * worked out and this sheet kept -- and is now what `applyHitPoints` arrives
+   * at from the class table plus an offset for whatever the parts cannot
+   * reach, measured off that same saved `total` on load. (It was a pinned
+   * `totalOverride` for a while, which froze every part below it; the field is
+   * dropped where a document still carries one, and the saved total reads back
+   * as the offset it always was.) The parts the workbook summed were always
+   * imported; `misc` is the last of them and older saves have no field for it.
    */
   if (!d.hp || typeof d.hp !== 'object') d.hp = {};
   for (const k of ['fcb', 'toughness', 'misc']) {
@@ -1537,6 +1551,11 @@ export function toDocument(model) {
       ...model.data.training,
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
+    // The defence boxes go on holding exactly what was typed; `calc` is the
+    // parts they were read into and every bonus forwarded at them, worked out
+    // again on every load.
+    defenses: stripDerived(model.data.defenses, DEFENCES_DERIVED),
+    hp: stripDerived(model.data.hp, HP_DERIVED),
     akashic: stripDerived(model.data.akashic, AKASHIC_DERIVED),
     maneuvers: stripDerived(model.data.maneuvers, MANEUVER_DERIVED),
     vancian: stripDerived(model.data.vancian, VANCIAN_DERIVED),

@@ -450,18 +450,28 @@ export function renderExtrasPanel(model, ctx) {
 
       <section class="panel span2">
         <h3>Approvals <span class="badge">${(x.approvals || []).length}</span></h3>
-        ${(x.approvals || []).length ? `<div class="tablewrap"><table>
-          <thead><tr><th>App</th><th>Approved by</th><th>Link</th><th></th></tr></thead>
+        ${(x.approvals || []).length ? `<div class="tablewrap"><table class="approvals stacked">
+          <thead><tr>
+            <th style="width:14rem">App</th>
+            <th style="width:9rem">Approved by</th>
+            <th>Link</th><th style="width:2.4rem"></th>
+          </tr></thead>
           <tbody>${x.approvals.map((a, i) => `<tr>
-            <td>${itemText(list, i, 'name', a.name, 'What was applied for')}</td>
-            <td>${itemText(list, i, 'approvedBy', a.approvedBy, 'Who approved it')}</td>
-            <td><span class="pair">${itemText(list, i, 'link', a.link, 'https://…')}
+            <td data-stack="name">${itemText(list, i, 'name', a.name, 'What was applied for', true)}</td>
+            <td data-label="Approved by">${itemText(list, i, 'approvedBy', a.approvedBy, 'Who', true)}</td>
+            <td data-label="Link"><span class="pair link">${itemText(list, i, 'link', a.link, 'https://…', true)}
               ${isUrl(a.link) ? `<a href="${esc(a.link)}" target="_blank" rel="noopener" title="Open">↗</a>` : ''}</span></td>
             ${rowTools(list, i)}
           </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty">No approvals recorded.</p>'}
         <div style="margin-top:8px">${addButton(list, 'Add approval', { name: '', approvedBy: '', link: '' })}</div>
-        <p class="hint">Custom archetypes, feats and items that needed a sign-off, and where the approval lives.</p>
+        <label class="fld tall" style="margin-top:10px"><span>Notes</span>
+          ${prose(model, 'data-set="extras.approvalNotes"', x.approvalNotes, 3, 'grow')}</label>
+        <p class="hint">Custom archetypes, feats and items that needed a sign-off, and where the
+          approval lives. The two short columns carry the whole of what was typed on their
+          tooltips, so a long name is cut on screen and never lost; the Link column takes the
+          rest of the row, since a URL is the one thing here that cannot be abbreviated.
+          The notes box reads {…} like the rest of the sheet.</p>
       </section>
       ${systemExtrasPanel(x, 'extras', 'ExtrasNotes')}
     </div>`;

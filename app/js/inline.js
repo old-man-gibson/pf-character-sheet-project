@@ -537,6 +537,29 @@ export function renderTokens(text, names, baseScope, local = null) {
 }
 
 /** Format a computed token value for display. */
+/**
+ * Rendered segments as plain characters -- what a field that is both prose
+ * and a value reads as.
+ *
+ * The defence boxes are the case that wanted it: "DR {= 5 + floor(level/2)}/magic"
+ * has to show as a sentence and parse as a reduction, and working that out
+ * twice is how the two come to disagree. The one function serves both the
+ * model, which parses the result, and the view, which puts it on a tooltip.
+ *
+ * A token that failed keeps its source, so a broken formula shows up as the
+ * thing that is broken rather than vanishing into a 0. A forwarded bonus
+ * contributes nothing: it is a number about somewhere else, and it has no
+ * business in the value of the field it was written in.
+ */
+export function plainTokens(segments) {
+  return (segments || []).map((seg) => {
+    if (seg.kind === 'text') return seg.text;
+    if (seg.kind === 'push') return '';
+    if (seg.error) return seg.raw;
+    return formatValue(seg.value);
+  }).join('');
+}
+
 export function formatValue(v) {
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
   if (typeof v === 'boolean') return v ? 'yes' : 'no';

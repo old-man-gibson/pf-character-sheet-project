@@ -6,19 +6,22 @@
  */
 
 import {
-  COMPANION_KINDS, computeCompanion, defaultCompanion, seedSkills,
+  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionSkillKey, computeCompanion,
+  defaultCompanion, seedSkills,
 } from '../../companions.js';
 import { ABILITIES } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classLevelCount } from '../progression.js';
+import { forwarded } from '../scope.js';
+import { setPath } from '../util.js';
 
 // A companion: the level, HD, hit points, attack, saves, AC and every skill
 // and attack total come from the tables and the master, so only what was
 // typed -- scores, ranks, the attacks' names and damage -- is saved.
 export const COMPANION_DERIVED = [
   'calc',
-  { path: 'skills', keys: ['masterRanks', 'effectiveRanks', 'abilityMod', 'total'] },
-  { path: 'attacks', keys: ['damageType', 'primaryResolved', 'toHit'] },
+  { path: 'skills', keys: ['masterRanks', 'effectiveRanks', 'abilityMod', 'forwarded', 'total'] },
+  { path: 'attacks', keys: ['damageType', 'primaryResolved', 'toHit', 'damageBonus'] },
 ];
 
 const abilityKey = (label) => {
@@ -285,12 +288,40 @@ export function companionMaster(model) {
   };
 }
 
+/**
+ * What has been forwarded at one companion, in the shape `computeCompanion`
+ * takes it: `{eidolon.str.score += 2}` arriving as `scores.str`.
+ *
+ * The fixed stats come off COMPANION_TARGETS, which is the same list the
+ * scope publishes them under, so a name can never be readable and unaimable.
+ * The skills and the natural attacks are this companion's own rows, and are
+ * gathered by the key each row answers to -- two rows with the same name
+ * collapse to one destination and both take the bonus, which is what "+2 to
+ * Craft" means when a creature keeps two Craft rows.
+ */
+export function companionBonuses(model, kind, b) {
+  const at = (name) => forwarded(model, `${kind}.${name}`);
+  const out = { saves: {}, scores: {}, skill: {}, attackBy: {}, damageBy: {} };
+  for (const [name, , path] of COMPANION_TARGETS) setPath(out, path, at(name));
+  for (const s of b.skills || []) {
+    const key = companionSkillKey(s);
+    if (key && key !== 'x' && out.skill[key] === undefined) out.skill[key] = at(`skill.${key}`);
+  }
+  for (const a of b.attacks || []) {
+    const key = companionAttackKey(a);
+    if (!key || key === 'x' || out.attackBy[key] !== undefined) continue;
+    out.attackBy[key] = at(`attack.${key}`);
+    out.damageBy[key] = at(`damage.${key}`);
+  }
+  return out;
+}
+
 export function recomputeCompanions(model) {
   const master = companionMaster(model);
   for (const kind of COMPANION_KINDS) {
     const b = model.data[kind];
     if (!b) continue;
-    const { calc, skills, attacks } = computeCompanion(kind, b, master);
+    const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b));
     b.calc = calc;
     b.skills = skills;
     b.attacks = attacks;

@@ -102,7 +102,7 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { abilitySelect, area, check, num, roField, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, lineHtml, movedInline, rowTools,
+  itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
 } from '../rows.js';
 import {
   TRAIT_CATEGORIES,
@@ -127,14 +127,20 @@ export function renderOverviewPanel(model, ctx) {
           ${cs.active.length ? `<span class="badge err">${cs.active.length} condition${cs.active.length === 1 ? '' : 's'} on</span>` : ''}
         </h3>
         <div class="bigstats">
-          ${bigStat('HP', { html: movedInline(cs, 'hp', c.hp.total, String) }, c.hp.ability ? `${c.hp.ability} based` : '')}
-          ${bigStat('AC', { html: movedInline(cs, 'ac', d.ac, String) }, { html: `touch ${d.touch} &middot; FF ${d.flatFooted}` })}
-          ${bigStat('CMD', { html: movedInline(cs, 'cmd', d.cmd, String) }, `FF ${d.ffCmd}`)}
-          ${bigStat('Init', { html: movedInline(cs, 'initiative', c.hp.initiative) }, c.hp.initAbility || '', '',
+          ${bigStat('HP', { html: movedInline(cs, 'hp', model.hpMax, String, model) }, c.hp.ability ? `${c.hp.ability} based` : '')}
+          ${/* Touch, flat-footed and flat-footed CMD move with a condition or a
+                buff exactly as the headline above them does, and used to be
+                printed raw -- so a −2 to AC showed on the big number and the
+                two beneath it went on reporting the character undebuffed. */''}
+          ${bigStat('AC', { html: movedInline(cs, 'ac', d.ac, String, model) },
+    { html: `touch ${movedSub(cs, 'touch', d.touch, String)} &middot; FF ${movedSub(cs, 'flatFooted', d.flatFooted, String)}` })}
+          ${bigStat('CMD', { html: movedInline(cs, 'cmd', d.cmd, String, model) },
+    { html: `FF ${movedSub(cs, 'ffCmd', d.ffCmd, String)}` })}
+          ${bigStat('Init', { html: movedInline(cs, 'initiative', c.hp.initiative, fmt, model) }, c.hp.initAbility || '', '',
     rollButton(model, 'initiative', 'self', 'initiative', cs))}
-          ${bigStat('Fort', { html: movedInline(cs, 'fortitude', s.fortitude.total) }, s.fortitude.stat1 || '')}
-          ${bigStat('Ref', { html: movedInline(cs, 'reflex', s.reflex.total) }, s.reflex.stat1 || '')}
-          ${bigStat('Will', { html: movedInline(cs, 'will', s.will.total) }, s.will.stat1 || '')}
+          ${bigStat('Fort', { html: movedInline(cs, 'fortitude', s.fortitude.total, fmt, model) }, s.fortitude.stat1 || '')}
+          ${bigStat('Ref', { html: movedInline(cs, 'reflex', s.reflex.total, fmt, model) }, s.reflex.stat1 || '')}
+          ${bigStat('Will', { html: movedInline(cs, 'will', s.will.total, fmt, model) }, s.will.stat1 || '')}
           ${bigStat('BAB', fmt(c.attack.bab), c.attack.iterative || '')}
           ${(() => {
     // The wallet, beside the numbers a table asks for: what is on hand, and
@@ -496,11 +502,17 @@ function buffsPanel(model, ctx) {
           dice alike run off the capped steps. Riders like sneak keep their dice, and
           reach stays yours. Values take formulas, like the dials.</p>
         <label class="fld" style="margin-top:6px"><span>Note</span>
-          ${prose(model, `data-item="${list}|${i}|note"`, b.note, 2, 'grow')}</label>
+          ${prose(model, `data-item="${list}|${i}|note"`, b.note, 2, 'grow', null, {
+    inactive: !b.on,
+    inactiveTitle: 'This buff is off, so the bonus is not applying. Tick the buff to switch it on.',
+  })}</label>
         <p class="hint">The note reads {…} like prose: a definition written here — say
           <code>{deathgrip.dmg.max = 2 * (1 + essence.shoulder) * if(hp.current / hp.total &lt; 0.5, 2, 1)}</code>
           — is a name the whole sheet can then read: a weapon's dice, a tracker, another buff.
-          It stands whether the buff is ticked or not; a value that should switch says so itself, with if(…).</p>
+          A <em>definition</em> stands whether the buff is ticked or not, so a reference to it never
+          breaks; a value that should switch says so itself, with if(…). A <em>bonus</em>
+          (<code>{skill.stealth += 4}</code>) waits for the tick like every dial above, and shows
+          ${b.on ? 'in gold while the buff is on' : '<span class="tok push off">greyed</span> while it is off'}.</p>
       </div>`;
     })();
     return `<section class="panel span2">
@@ -641,16 +653,16 @@ function dashDefenseCard(model, openNow) {
     const d = model.data.defenses;
     const s = model.data.saves;
     const cs = model.conditionState;
-    const shown = (key, base, format = String) => (cs.changed && cs.delta[key]
-      ? `<strong class="adj ${cs.delta[key] > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</strong>`
-      : `<strong>${format(base)}</strong>`);
+    // The same working the build Overview shows, on the card a table reads
+    // mid-fight: "why is my AC 50" is asked oftener here than anywhere.
+    const shown = (key, base, format = String) => `<strong>${movedInline(cs, key, base, format, model)}</strong>`;
     const save = (key, label) => lineHtml(label,
       `${shown(key, s[key].total, fmt)}${rollButton(model, 'save', key, `a ${label} save`, cs)}`, true);
-    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
+    const moved = (key, base) => movedSub(cs, key, base, String);
     return `<section class="panel">
       <h3>Defense ${dashExpand('defense', openNow)}</h3>
       ${lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
-      ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${d.ffCmd}</span>`, true)}
+      ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${moved('ffCmd', d.ffCmd)}</span>`, true)}
       ${save('fortitude', 'Fortitude')}
       ${save('reflex', 'Reflex')}
       ${save('will', 'Will')}
@@ -739,27 +751,60 @@ function dashEffectsCard(model) {
   }
 
   /** Damage, healing and the night's rest, one field and three buttons. */
+/**
+ * Quick actions: the four buttons a table presses every round, and the one
+ * reading they are all about.
+ *
+ * Hit points were a sentence at the bottom of this card -- the same numbers
+ * the strip carries, in words, under the buttons that move them. So the meter
+ * is here, the same one the build Overview draws, with the four figures that
+ * matter beside it: what is left, what the maximum is right now (negative
+ * levels take both), the temporary points on top, and how far below zero
+ * death is. And temporary hit points can be *granted* here, which is the one
+ * thing that happens in a fight and could only be done from the build view.
+ */
 function dashQuickCard(model, ctx) {
     const hp = model.hpState;
+    const cs = model.conditionState;
+    const maxNow = cs.changed && cs.delta.hp ? cs.adjusted.hp : hp.max;
+    const curNow = Math.min(hp.current, maxNow);
+    const signed = (n) => String(n).replace('-', '−');
+    const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
+    const fig = (label, value, title, cls = '') => `<span class="dashhpfig${cls ? ` ${cls}` : ''}"
+      title="${esc(title)}"><span class="k">${esc(label)}</span><span class="v">${value}</span></span>`;
     return `<section class="panel span2">
-      <h3>Quick actions</h3>
+      <h3>Quick actions
+        ${status ? `<span class="badge err">${status}</span>` : ''}
+        ${hp.temp ? `<span class="badge">+${hp.temp} temp</span>` : ''}
+        ${hp.nonlethal ? `<span class="badge${hp.nonlethal >= hp.effective ? ' err' : ''}">${hp.nonlethal} nonlethal</span>` : ''}
+      </h3>
+      ${meterVisual(model.meterSpec('hp'))}
+      <div class="dashhp">
+        ${fig('HP', `<strong class="${curNow < maxNow ? 'bad' : ''}">${curNow}</strong>/${maxNow}`,
+    maxNow === hp.max ? 'Current over maximum' : `Base ${hp.current}/${hp.max} — negative levels reduce current and total alike`)}
+        ${fig('Temp', hp.temp || '—', hp.tempGranted
+    ? `${hp.typedTemp} of your own, ${hp.tempGrantLeft} left of ${hp.tempGranted} a rule grants. Damage spends these first.`
+    : 'Temporary hit points. Damage spends these first, and they do not stack — the best one applies.')}
+        ${fig('Nonlethal', hp.nonlethal || '—', 'You fall unconscious when nonlethal damage catches up with what is left.')}
+        ${fig('Dead at', signed(hp.deathAt), `−(Con ${hp.conScore}${hp.deathBonus ? ` + ${hp.deathBonus}` : ''}). You fall unconscious at 0.`,
+    hp.dying ? 'bad' : '')}
+      </div>
       <div class="pair" style="flex-wrap:wrap">
         <input type="number" min="0" data-draft="quickHp" value="${esc(ctx.draft.quickHp ?? '')}"
           placeholder="Amount" style="width:5.5rem" aria-label="Hit points to apply">
         <button data-action="quick-damage"
           title="Temporary hit points absorb first; the rest comes off current">Damage</button>
+        <button data-action="quick-nonlethal"
+          title="Piles up against what is left rather than coming off it; temporary hit points do not absorb it">Nonlethal</button>
         <button data-action="quick-heal"
           title="Current climbs to the maximum, and the same points erase nonlethal">Heal</button>
+        <button data-action="quick-temp"
+          title="Grant temporary hit points. They do not stack — the better of what you have and what you are given is what you keep.">+ Temp</button>
         <span class="dashsep" aria-hidden="true"></span>
         <button data-action="quick-rest"
           title="Every tracker with a daily refresh goes back to unspent. Slots and pools with other rhythms are yours to move.">Rest</button>
       </div>
-      <p class="hint">HP ${(() => {
-    const cs = model.conditionState;
-    const maxNow = cs.changed && cs.delta.hp ? cs.adjusted.hp : hp.max;
-    return `${Math.min(hp.current, maxNow)}/${maxNow}`;
-  })()}${hp.temp ? ` (+${hp.temp} temp)` : ''}${hp.nonlethal
-    ? ` · ${hp.nonlethal} nonlethal` : ''} — the strip above follows along.</p>
+      <p class="hint">Type an amount, then press what happened to it. The strip above follows along.</p>
     </section>`;
   }
 
@@ -1214,17 +1259,21 @@ function abilityScoresPanel(model) {
         ${ABILITIES.map((k) => {
           const a = c.abilities[k];
           const moved = cs.changed && cs.deltas[k];
+          // Both scores carry their whole working: the permanent one is ten
+          // columns on a tab most players never open, and the temporary one
+          // is that plus five more.
+          const tip = (key, extra = '') => esc(workingTitle(model.breakdown(key), extra));
           return `<div class="ability">
             <span class="ab abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
             ${built
-              ? `<span class="mod">${a.score}</span>`
-              : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score">`}
+              ? `<span class="mod working" title="${tip(k)}">${a.score}</span>`
+              : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned" title="${a.tempScore} before conditions">${cs.scores[k]}</span>`
+              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.tempScore} before conditions`)}">${cs.scores[k]}</span>`
               : built
-                ? `<span class="mod temp-score">${a.tempScore}</span>`
-                : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score">`}
+                ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}">${a.tempScore}</span>`
+                : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
             <span class="mod temp temp-mod${moved ? ' conditioned' : ''}"
               ${moved ? `title="${fmt(a.totalMod)} before conditions"` : ''}>${
               moved ? fmt(a.totalMod + cs.deltas[k]) : fmt(a.totalMod)}</span>
@@ -1247,7 +1296,7 @@ function abilityScoresPanel(model) {
 function acPanel(model) {
     const d = model.data.defenses;
     const cs = model.conditionState;
-    const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String)}</td>`;
+    const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
     return `<section class="panel">
       <h3>Armor class</h3>
       <div class="tablewrap"><table class="defense">
@@ -1264,7 +1313,7 @@ function acPanel(model) {
           <tr><td>Flat-footed</td>${cell('flatFooted', d.flatFooted)}
             <td class="num">${roField(d.miscAC || 0, 'The Misc AC above — armour-side, so flat-footed keeps it', 'style="width:3.6rem"')}</td>
             ${sheetBonusCell(model, 'defenses.flatFooted')}</tr>
-          <tr><td>CMD</td>${cell('cmd', d.cmd)}
+          <tr><td title="10 + BAB + Str + Dex + the special size modifier, plus the AC bonuses CMD is allowed — circumstance, deflection, dodge, insight, luck, morale, sacred, profane — and every AC penalty there is, whatever type it was typed under.">CMD</td>${cell('cmd', d.cmd)}
             <td class="num">${num('defenses.miscCMD', d.miscCMD, 'style="width:3.6rem"')}</td>
             ${sheetBonusCell(model, 'defenses.cmd')}</tr>
         </tbody>
@@ -1274,20 +1323,78 @@ function acPanel(model) {
           cs.acVsRanged ? `${fmt(cs.acVsRanged)} AC against ranged` : ''} from conditions, on top of the numbers above.
       </p>` : ''}
       <div class="statline"><span class="label">AC ability</span>
-        <span class="value pair">${abilitySelect('defenses.acStat1', d.acStat1)}
+        <span class="value pair slots">${abilitySelect('defenses.acStat1', d.acStat1)}
           <span class="hint">+</span>${abilitySelect('defenses.acStat2', d.acStat2)}</span></div>
       <div class="statline"><span class="label">Uncanny dodge</span>
         <span class="value">${check('defenses.uncannyDodge', d.uncannyDodge)}</span></div>
-      <div class="statline"><span class="label">Spell resistance</span>
-        <span class="value">${text('defenses.spellResistance', d.spellResistance)}</span></div>
-      <div class="statline"><span class="label">DR</span>
-        <span class="value">${text('defenses.dr', d.dr)}</span></div>
-      <div class="statline"><span class="label">Immunities</span>
-        <span class="value">${text('defenses.immunities', d.immunities)}</span></div>
-      <div class="statline"><span class="label">Resistance</span>
-        <span class="value">${text('defenses.resistance', d.resistance)}</span></div>
+      ${defenceBox(model, 'spellResistance', 'Spell resistance', 'Yes (17), or {= 11 + level}')}
+      ${defenceBox(model, 'dr', 'DR', '5/magic')}
+      ${defenceBox(model, 'resistance', 'Resistance', 'fire 10, cold 5')}
+      ${defenceBox(model, 'weakness', 'Vulnerability', 'sonic 5')}
+      ${defenceBox(model, 'immunities', 'Immunities', 'sleep, paralysis')}
+      <p class="hint">These five read <code>{…}</code> like prose, and each part of
+        them can be aimed at: <code>{dr.magic += 2}</code>, <code>{resistance.fire += 5}</code>,
+        <code>{immune.sleep += 1}</code>, <code>{defenses.sr += 2}</code>. A part the box has
+        not got is granted rather than refused — which is what “energy resistance (fire) 10”
+        does — so the energy’s own spelling is the one mistake this cannot catch for you.</p>
       ${sheetBonusHint('Deflection, natural armor, insight and the rest')}
     </section>`;
+  }
+
+  /**
+   * The name each defence box is parsed under, and the destination that
+   * reaches every part of it at once. Immunities have no family total:
+   * an immunity is a switch, not an amount, so there is nothing to add to.
+   */
+  const DEFENCE_BOXES = {
+    spellResistance: { family: null, dest: 'defenses.sr', parts: 'sr' },
+    dr: { family: 'dr', dest: 'defenses.dr', parts: 'dr' },
+    resistance: { family: 'resistance', dest: 'defenses.resistance', parts: 'resistance' },
+    weakness: { family: 'weakness', dest: 'defenses.weakness', parts: 'weakness' },
+    immunities: { family: 'immune', dest: null, parts: 'immunities' },
+  };
+
+/**
+ * One of the five defence boxes: what was typed, and what it comes to.
+ *
+ * The box itself is prose, so a DR that follows half your level is written
+ * as the rule it is. Underneath, whenever a bonus has reached it from
+ * somewhere else on the sheet, is the line as it now stands -- because the
+ * box has to go on saying what was written in it (the same reason a skill's
+ * Misc column is never folded into), and because "18/magic" appearing in a
+ * box holding "5/magic" would be the sheet lying about what the player typed.
+ *
+ * The tooltip on that line names every rule that moved it, part by part, so
+ * the number is followed back rather than guessed at.
+ */
+function defenceBox(model, key, label, example) {
+    const d = model.data.defenses;
+    const spec = DEFENCE_BOXES[key];
+    const calc = d.calc || {};
+    const parts = key === 'spellResistance' ? [] : (calc[spec.parts] || []);
+    const moved = key === 'spellResistance'
+      ? !!calc.sr?.bonus
+      : parts.some((p) => p.bonus || p.granted);
+    const now = key === 'spellResistance' ? calc.sr?.text
+      : key === 'dr' ? calc.drText
+        : key === 'resistance' ? calc.resistanceText
+          : key === 'weakness' ? calc.weaknessText : calc.immunitiesText;
+    // Where each part's bonus came from, gathered across the family
+    // destination and every named part -- one line per rule.
+    const froms = [];
+    for (const name of [spec.dest, ...parts.map((p) => p.key)]) {
+      const f = name ? model.forwardedInto(name) : null;
+      if (!f) continue;
+      for (const x of f.from) {
+        froms.push(`${fmt(x.value)} to ${name} from ${x.where}`
+          + `${x.counts ? '' : `  (does not stack with the other ${x.type})`}`);
+      }
+    }
+    return `<div class="statline">
+      <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
+      <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
+        ${moved ? `<span class="fwd" title="${esc(`With every bonus forwarded here:\n${
+      froms.join('\n')}`)}">${esc(now || '—')}</span>` : ''}</span></div>`;
   }
 
 
@@ -1304,7 +1411,7 @@ function savesPanel(model) {
         <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => `
           <tr>
             <td data-stack="name">${label}</td>
-            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, k, s[k].total)}${
+            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, k, s[k].total, fmt, model)}${
   rollButton(model, 'save', k, `a ${label} save`, cs)}</span></td>
             <td class="num" data-label="Base" title="From the Classes table">${s[k].base}</td>
             <td data-label="Ability">${abilitySelect(`saves.${k}.stat1`, s[k].stat1)}</td>
@@ -1323,11 +1430,11 @@ function attackPanel(model) {
     const cs = model.conditionState;
     return `<section class="panel">
       <h3>Attack</h3>
-      ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee)}${
+      ${lineHtml('Melee', `${movedInline(cs, 'melee', c.attack.totalMelee, fmt, model)}${
         rollButton(model, 'mode', 'melee', 'a melee attack', cs)}`, true)}
-      ${lineHtml('Ranged', `${movedInline(cs, 'ranged', c.attack.totalRanged)}${
+      ${lineHtml('Ranged', `${movedInline(cs, 'ranged', c.attack.totalRanged, fmt, model)}${
         rollButton(model, 'mode', 'ranged', 'a ranged attack', cs)}`, true)}
-      ${lineHtml('CMB', `${movedInline(cs, 'cmb', c.attack.totalCmb)}${
+      ${lineHtml('CMB', `${movedInline(cs, 'cmb', c.attack.totalCmb, fmt, model)}${
         rollButton(model, 'mode', 'cmb', 'a combat maneuver', cs)}`, true)}
       ${line('Iteratives', c.attack.iterative)}
       ${(() => {
@@ -1381,7 +1488,10 @@ function attackPanel(model) {
                 alternate -- a second caret beside that one reads as a bug. It
                 keeps its 188px of scroll. */''}
           <tr class="${alt ? 'altrow' : ''}"><td>${caret}${ATTACK_MODE_LABELS[k]}</td>
-            <td class="num total"><span class="rollpair">${movedInline(cs, k, total)}${
+            ${/* Only a real mode has a working of its own: an alternate is the
+                  same attack with another ability in the slot, and shares its
+                  BAB, misc, size and reconciliation. */''}
+            <td class="num total"><span class="rollpair">${movedInline(cs, k, total, fmt, alt ? null : model)}${
   rollButton(model, 'mode', k, `${ATTACK_MODE_LABELS[k].toLowerCase()} attacks`, cs)}</span></td>
             ${other}
             <td>${abilitySelect(`attack.modes.${k}.stat1`, c.attack.modes[k]?.stat1)}</td>
@@ -1719,12 +1829,27 @@ function classesPanel(model, ctx) {
  * arrangement as the base attack bonus and a class's Levels: type a number to
  * pin it, clear the box to hand it back to the class table.
  */
+/**
+ * One of the three typed parts of the hit-point total, which takes a formula
+ * as readily as a number: a favoured-class bonus is "one per level you took
+ * it", and written out it stops going stale at the next level-up.
+ */
+function hpPart(c, key, title, width = '5.4rem') {
+  const raw = c.hp[key];
+  return exprField(`data-set="hp.${key}"`, raw ?? 0, {
+    width,
+    value: typeof raw === 'string' && raw.trim() ? c.hp[`${key}Resolved`] : null,
+    error: c.hp[`${key}Error`],
+    title,
+  });
+}
+
 function hpBuild(model) {
   const c = model.data;
   const g = c.gestalt?.hp || {};
   const level = Number(c.identity?.level) || 0;
   const base = Number(c.hp.base) || 0;
-  const over = c.hp.totalOverride == null ? null : Number(c.hp.totalOverride);
+  const other = model.offsetOf('hp.total');
   const abilityMod = Number(g.abilityMod) || 0;
   const shut = !!c.uiPrefs?.collapsed?.['hp:build'];
 
@@ -1733,43 +1858,74 @@ function hpBuild(model) {
   // takes hit points away is parenthesised rather than signed, because the
   // pluses between the terms are already doing that job.
   const term = (n) => (n < 0 ? `(${String(n).replace('-', '−')})` : String(n));
+  const fcb = Number(c.hp.fcbResolved ?? c.hp.fcb) || 0;
+  const tough = Number(c.hp.toughnessResolved ?? c.hp.toughness) || 0;
+  const misc = Number(c.hp.miscResolved ?? c.hp.misc) || 0;
   const parts = [
     [term(c.gestalt?.hdTotal ?? 0), `hit dice over ${level} level${level === 1 ? '' : 's'}`],
     abilityMod ? [term(abilityMod * level), `${c.hp.ability || 'ability'}${
       c.hp.ability2 ? ` + ${c.hp.ability2}` : ''} ${fmt(abilityMod)} × ${level}`] : null,
-    Number(c.hp.fcb) ? [term(Number(c.hp.fcb)), 'favoured class'] : null,
-    Number(c.hp.toughness) ? [term(Number(c.hp.toughness) * level),
-      `Toughness ${fmt(Number(c.hp.toughness))} × ${level}`] : null,
+    // The three typed parts as they resolved, since any of them may have been
+    // written as a rule rather than a number.
+    fcb ? [term(fcb), 'favoured class'] : null,
+    tough ? [term(tough * level), `Toughness ${fmt(tough)} × ${level}`] : null,
     model.mythicHp ? [term(model.mythicHp),
       `${c.mythic?.path || 'mythic'} tier ${c.identity?.mythicTier || 0}`] : null,
-    Number(c.hp.misc) ? [term(Number(c.hp.misc)), 'misc'] : null,
+    misc ? [term(misc), 'misc'] : null,
+    other ? [term(other), 'other — what the source sheet added and this one cannot see'] : null,
   ].filter(Boolean);
 
-  const why = over == null
-    ? 'From the Classes table: the best hit die on each level, plus the parts below. Type a number to override it.'
-    : `Pinned at ${over}. The class table comes to ${base}; clear the box to go back to that.`;
+  const why = 'The best hit die on each level from the Classes table, plus every part below —'
+    + ' including Other, which is where a total the parts cannot reach keeps the difference.';
+
+  /*
+   * The two ability slots are one field, the way the saves table and the AC row
+   * already say it: "the ability, and a second one that adds its modifier". As
+   * two full-width fields they were two rows of a narrow panel spent on three
+   * letters each, and the second one read as a thing of its own rather than as
+   * the other half of the first.
+   */
+  const abilityPair = field('HP ability',
+    `<span class="pair slots">${abilitySelect('hp.ability', c.hp.ability)}
+      <span class="hint">+</span>${abilitySelect('hp.ability2', c.hp.ability2)}</span>`);
 
   return `<div class="fieldgrid two">
-        ${field('Base maximum', `<input type="number" class="autonum${over == null ? ' auto' : ''}"
-          value="${over ?? ''}" placeholder="${base}" data-set="hp.totalOverride"
-          data-kind="number-or-null" style="width:4.6rem" title="${esc(why)}"
-          aria-label="Base maximum hit points">`)}
-        ${field('HP ability', abilitySelect('hp.ability', c.hp.ability))}
+        ${/* A read-out, not a box. It used to take a number that was *pinned*
+              over the total, which froze every part below it -- and since an
+              imported sheet whose classes cannot reach its own total is pinned
+              from the moment it lands, that was most characters: raising
+              Toughness moved nothing and the panel did not say why. The
+              difference lives in Other now, and everything stays live. */''}
+        ${field('Maximum', `<span class="value working" title="${esc(workingTitle(model.breakdown('hp'), why))}"
+          >${model.hpMax}</span>`)}
+        ${abilityPair}
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
-        = <strong>${base}</strong>${over == null ? '' : `, overridden to <strong>${over}</strong>`}
+        = <strong>${base + other}</strong>
         <button class="disclose" data-collapse="hp:build" data-collapse-to="${!shut}"
           aria-expanded="${!shut}"
           title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
-      ${shut ? '' : `<div class="fieldgrid two">
-        ${field('2nd HP ability', abilitySelect('hp.ability2', c.hp.ability2))}
-        ${field('Favoured class HP', num('hp.fcb', c.hp.fcb))}
-        ${field('Toughness / level', num('hp.toughness', c.hp.toughness))}
-        ${field('Misc', num('hp.misc', c.hp.misc))}
+      ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
+            own: the first two hold a number or a small rule, while Misc is
+            where everything the table gave you lands and is the one most
+            likely to be written out longhand. A 5.4rem box is no place for
+            `if(level >= 10, con.mod * 2, con.mod)`. */''}
+      <div class="fieldgrid tight">
+        ${field('Favoured class HP', hpPart(c, 'fcb', 'A number, or a formula — e.g. class.fighter.level'))}
+        ${field('Toughness / level', hpPart(c, 'toughness', 'A number, or a formula — e.g. if(level >= 10, 2, 1)'))}
         ${field('Mythic bonus', `<span class="value" title="${esc(`${
     c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
     (c.identity?.mythicTier || 0) === 1 ? '' : 's'} — set the per-tier figure on the Features tab`)}"
           >${fmt(model.mythicHp)}</span>`)}
+        ${field('Other', `<input type="number" value="${other}" data-offset="hp.total"
+          style="width:5.4rem" aria-label="Other hit points"
+          title="${esc('What the sheet’s own total holds that the parts here cannot reach — rolled '
+            + 'dice rather than maximums, a bonus a formula added that the export could not carry, a '
+            + 'number the GM handed over. It is what makes an import match, and the place to add your '
+            + 'own; every part above goes on counting either way.')}">`)}
+      </div>
+      <div class="fieldgrid" style="margin-top:8px">
+        ${field('Misc', hpPart(c, 'misc', 'A number, or a formula — e.g. con.mod * 2', '100%'), 'wide')}
       </div>`}`;
 }
 
@@ -1795,11 +1951,21 @@ function hitPointsPanel(ctx, model) {
         ? `<div class="fieldgrid two">${field('Forwarded',
           `<span class="value">${forwardedBadge(model, 'hp.total')}</span>`)}</div>` : ''}
       <div class="fieldgrid two">
-        ${field('Temporary', num('hp.temp', hp.temp))}
+        ${field('Temporary', `${num('hp.temp', hp.typedTemp)}${
+          hp.tempGranted ? `<span class="fwd" title="${esc(`${hp.tempGranted} temporary hit point${
+            hp.tempGranted === 1 ? '' : 's'} forwarded here${hp.tempGranted === hp.tempGrantLeft ? ''
+            : `, ${hp.tempGranted - hp.tempGrantLeft} of them already spent`}. Damage spends the box first, then these.`)}"
+            >+${hp.tempGrantLeft}</span>` : ''}`)}
         ${field('Nonlethal', num('hp.nonlethal', hp.nonlethal))}
       </div>
       <div class="fieldgrid two">
-        ${field('Death threshold +', num('hp.deathBonus', hp.deathBonus))}
+        ${field('Death threshold +', `${exprField('data-set="hp.deathBonus"', model.data.hp.deathBonus ?? 0, {
+          width: '5.4rem',
+          value: typeof model.data.hp.deathBonus === 'string' && model.data.hp.deathBonus.trim()
+            ? model.data.hp.deathBonusResolved : null,
+          error: model.data.hp.deathBonusError,
+          title: 'A number, or a formula — e.g. con.mod or floor(level / 2)',
+        })}${forwardedBadge(model, 'hp.deathBonus')}`)}
         ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${signed(hp.deathAt)}</span>`)}
       </div>
       ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${signed(hp.deathAt)}.`

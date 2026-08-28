@@ -196,6 +196,44 @@ export const numOrNull = (v) => (v === null || v === undefined || v === '' ? nul
  * that goes stale. A cell that throws contributes nothing and leaves its
  * message in `errors`, so one bad formula cannot take the sheet down with it.
  */
+/**
+ * One number a player may have written as a formula instead.
+ *
+ * The half-dozen fields that work this way -- a skill's Misc, the extra
+ * language slots, the death threshold, the hit-point parts -- all wanted the
+ * same six lines, and each copy was a place for the rounding or the empty
+ * case to drift. Truncated towards zero rather than floored, as every other
+ * resolved bonus on the sheet is, so a penalty of 2.5 is −2 and not −3.
+ *
+ * Returns `{ value, error }`: a formula that throws contributes nothing and
+ * leaves its message to be shown beside the field and in the Formula Audit.
+ */
+export function resolveNumberField(scope, raw) {
+  if (typeof raw !== 'string' || raw.trim() === '') return { value: Number(raw) || 0, error: null };
+  try {
+    return { value: Math.trunc(Number(evaluateFormula(raw, scope)) || 0), error: null };
+  } catch (err) {
+    return { value: 0, error: err.message };
+  }
+}
+
+/**
+ * Resolve several of them onto a block, each under `<field>Resolved` and
+ * `<field>Error`. Returns the resolved values by field name.
+ */
+export function resolveNumberFields(scope, block, fields) {
+  const out = {};
+  for (const key of fields) {
+    const { value, error } = resolveNumberField(scope, block?.[key]);
+    out[key] = value;
+    if (block) {
+      block[`${key}Resolved`] = value;
+      block[`${key}Error`] = error;
+    }
+  }
+  return out;
+}
+
 export function resolveBonusBlock(scope, block, types, errors) {
   const out = {};
   for (const [key] of types) {

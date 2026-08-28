@@ -121,6 +121,11 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
+   },
+   "forwardedTemp": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
    }
   },
   "dex": {
@@ -131,6 +136,11 @@
    "checkMod": 6,
    "sources": {},
    "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   },
+   "forwardedTemp": {
     "permanent": 0,
     "temporary": 0,
     "total": 0
@@ -147,6 +157,11 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
+   },
+   "forwardedTemp": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
    }
   },
   "int": {
@@ -157,6 +172,11 @@
    "checkMod": 8,
    "sources": {},
    "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   },
+   "forwardedTemp": {
     "permanent": 0,
     "temporary": 0,
     "total": 0
@@ -173,6 +193,11 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
+   },
+   "forwardedTemp": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
    }
   },
   "cha": {
@@ -183,6 +208,11 @@
    "checkMod": 1,
    "sources": {},
    "forwarded": {
+    "permanent": 0,
+    "temporary": 0,
+    "total": 0
+   },
+   "forwardedTemp": {
     "permanent": 0,
     "temporary": 0,
     "total": 0
@@ -453,7 +483,6 @@
   "initiative": 6,
   "initAbility": "Dex",
   "initAbility2": null,
-  "totalOverride": 78,
   "base": 120,
   "current": 78
  },
@@ -3630,6 +3659,7 @@
    "ff": 0
   },
   "cmdOther": 0,
+  "cmbOther": 0,
   "initBonus": 0,
   "saves": {
    "fort": {
@@ -3995,6 +4025,8 @@
   ],
   "attacks": [],
   "feats": [],
+  "items": {},
+  "slotless": [],
   "specialQualities": "",
   "notes": "",
   "creature": "",
@@ -4052,6 +4084,7 @@
    "ff": 0
   },
   "cmdOther": 0,
+  "cmbOther": 0,
   "initBonus": 0,
   "saves": {
    "fort": {
@@ -4156,6 +4189,8 @@
   ],
   "attacks": [],
   "feats": [],
+  "items": {},
+  "slotless": [],
   "specialQualities": "",
   "notes": "",
   "levelSource": "class",
@@ -4220,9 +4255,7 @@
     "ability": ""
    }
   ],
-  "tricks": [],
-  "items": {},
-  "slotless": []
+  "tricks": []
  },
  "eidolon": {
   "name": "",
@@ -4241,6 +4274,7 @@
    "ff": 0
   },
   "cmdOther": 0,
+  "cmbOther": 0,
   "initBonus": 0,
   "saves": {
    "fort": {
@@ -4606,6 +4640,8 @@
   ],
   "attacks": [],
   "feats": [],
+  "items": {},
+  "slotless": [],
   "specialQualities": "",
   "notes": "",
   "masterClass": "",
