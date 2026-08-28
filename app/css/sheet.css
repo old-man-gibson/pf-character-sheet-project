@@ -91,6 +91,19 @@
   border-radius: var(--cs-radius);
   container-type: inline-size;
   line-height: 1.45;
+  /* Scroll anchoring off, for the sheet and everything in it.
+     A render rewrites the whole shadow root, so the node the browser had
+     picked to hold the reader's place is thrown away every time and it has to
+     choose a fresh one out of markup it has never seen. Its adjustment then
+     comes out a pixel wrong, the same way every render, and a tracker's + or a
+     pip pressed twenty times walks the page twenty pixels down the screen --
+     which reads as the sheet sliding away from the pointer rather than as
+     anything having been clicked. Nothing is given up by refusing it:
+     anchoring is for content above the fold that grows after paint, and the
+     one thing here that arrives late is the portrait, which is 84px square
+     whether it has arrived or not. `none` excludes the descendants too, which
+     is why this is the only place it is said. */
+  overflow-anchor: none;
   /* A <select>'s open list is drawn by the browser, not by this stylesheet, so
      it takes its colours from color-scheme. Without this the dark theme gets a
      white popup with washed-out text. */
