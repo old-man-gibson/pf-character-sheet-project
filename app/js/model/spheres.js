@@ -347,7 +347,12 @@ export function applyBudget(model) {
     bonus = Math.floor(Number(raw) || 0);
   }
   b.bonusResolved = bonus;
-  const perLevel = (c.gestalt?.ranksPerLevel || 0) + b.intPerLevel + bonus;
+  // A rule elsewhere on the sheet can grant a point per level -- see
+  // `skill.pointsPerLevel` in FORWARD_LATE. Kept beside what the player typed
+  // rather than folded into it, the same bargain every other forwarded bonus
+  // on the sheet is on: the box has to go on saying what was written in it.
+  b.forwarded = forwarded(model, 'skill.pointsPerLevel');
+  const perLevel = (c.gestalt?.ranksPerLevel || 0) + b.intPerLevel + bonus + b.forwarded;
   const available = perLevel * level;
   const assigned = (c.skills || []).reduce(
     (t, s) => t + (Number(s.boughtResolved) || 0), 0,

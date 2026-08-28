@@ -116,7 +116,12 @@ export function renderSkillsPanel(model, ctx) {
       error: b.bonusError,
       title: 'Number or formula, e.g. 1 or (level >= 5 ? 2 : 1)',
     }))}
-          ${field('Total / level', `<span class="value">${b.perLevel ?? 0}</span>`)}
+          ${/* Beside the total rather than inside it: a point granted by a rule
+                somewhere else is the reason the figure is what it is, and a
+                reader who cannot see it will type it into Bonus points again
+                by hand. */''}
+          ${field('Total / level', `<span class="value">${b.perLevel ?? 0}</span>${
+  forwardedBadge(model, 'skill.pointsPerLevel')}`)}
         </div>
         ${b.status === 'error' ? `<p class="hint warn"><strong>Too many ranks assigned:</strong>
             ${b.assigned} bought, only ${b.available} available (${-b.remaining} over).</p>`
@@ -127,7 +132,9 @@ export function renderSkillsPanel(model, ctx) {
           Only <strong>Bought</strong> ranks count against the budget — specialty, gear,
           Other and sphere ranks are free. Int bonus/level follows the Intelligence
           modifier and is a flat metric: raising Int does not refund ranks for the levels
-          below it, unless your table rules otherwise. Bonus points takes a formula.
+          below it, unless your table rules otherwise. Bonus points takes a formula, and a
+          rule written anywhere on the sheet can grant one:
+          <code>{skill.pointsPerLevel += 1}</code>.
         </p>
       </section>
 

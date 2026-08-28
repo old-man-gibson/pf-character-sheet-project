@@ -3024,6 +3024,21 @@ export const FORWARD_LATE = [
   ['defenses.weakness', 'Vulnerability, every kind'],
   ['hp.temp', 'Temporary hit points'],
   ['hp.deathBonus', 'Death threshold'],
+  /*
+   * A skill point per level, which is what a favoured-class bonus, a human's
+   * extra point or a trait grants -- and until now the only way to record one
+   * was to type it into the box and let it go stale.
+   *
+   * Late rather than early: `applyBudget` runs long after the prose has been
+   * read, so a bonus landing here is in hand on the same pass and costs no
+   * second one.
+   *
+   * camelCase on purpose. A skill's own destination is `skill.` plus `slug()`,
+   * which lowercases everything it touches, so a capital letter is a thing no
+   * skill name can ever produce -- and this cannot be shadowed by a homebrew
+   * skill somebody calls "Points Per Level".
+   */
+  ['skill.pointsPerLevel', 'Skill points per level'],
 ];
 
 /** The defence lists whose parts take a name after the dot. */

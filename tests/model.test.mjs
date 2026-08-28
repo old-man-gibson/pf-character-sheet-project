@@ -27,10 +27,11 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
-  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
+  FORWARD_LATE, FORWARD_STATS,
   arraySourceLevel, arrayFollowers,
   parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels, trackCount, isBasePick,
   trackSpheres, normalizeTalentTracks, TRACK_SPHERE_SIDES, COMBAT_SPHERES, MAGIC_SPHERES,
@@ -1366,6 +1367,46 @@ console.log('the skill budget: Int follows the score, bonus points take a formul
   check('a formula survives the round trip',
     new Character((() => { c.set('skillBudget.bonusPerLevel', 'level / 4'); return c.toJSON(); })())
       .data.skillBudget.bonusPerLevel, 'level / 4');
+}
+
+console.log('...and a rule elsewhere can grant a skill point per level');
+{
+  const c = new Character(load('angou'));
+  const per0 = c.data.skillBudget.perLevel;
+  const level = c.data.identity.level;
+  check('it is a destination a formula can name',
+    c.forwardTargets().list.some((t) => t.name === 'skill.pointsPerLevel'), true);
+  check('and it is called something a reader would recognise',
+    c.forwardTargets().list.find((t) => t.name === 'skill.pointsPerLevel')?.label,
+    'Skill points per level');
+
+  c.data.notes = [{ title: 'Favoured class', body: 'A point a level: {skill.pointsPerLevel += 1}' }];
+  c.recompute();
+  check('the bonus lands', c.data.skillBudget.forwarded, 1);
+  check('and raises the budget', c.data.skillBudget.perLevel, per0 + 1);
+  check('every level of it', c.data.skillBudget.available, (per0 + 1) * level);
+  // Beside what was typed, never folded into it -- the box has to go on saying
+  // what is written in it.
+  check('without touching the box the player types in', c.data.skillBudget.bonusPerLevel, 0);
+
+  c.data.notes = [];
+  c.recompute();
+  check('and it goes when the rule does', c.data.skillBudget.perLevel, per0);
+
+  /*
+   * Late, not early. `applyBudget` runs long after the prose is read, so this
+   * lands on the same pass -- putting it in FORWARD_STATS would buy a second
+   * recompute for every character carrying one, and buy nothing with it.
+   */
+  check('it is a late destination', FORWARD_LATE.some(([n]) => n === 'skill.pointsPerLevel'), true);
+  check('and not an early one', FORWARD_STATS.some(([n]) => n === 'skill.pointsPerLevel'), false);
+
+  // camelCase is load-bearing: `slug()` lowercases, so no skill name -- not
+  // even one somebody calls "Points Per Level" -- can shadow this.
+  for (const name of ['Points Per Level', 'pointsPerLevel', 'POINTS PER LEVEL', 'Points']) {
+    check(`a skill called "${name}" cannot shadow it`,
+      skillForwardKey({ name }) === 'skill.pointsPerLevel', false);
+  }
 }
 
 console.log('the optional array is four columns, and only the last is a new choice');

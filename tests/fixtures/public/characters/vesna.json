@@ -2314,6 +2314,7 @@
   "intPerLevel": 8,
   "bonusError": null,
   "bonusResolved": 0,
+  "forwarded": 0,
   "perLevel": 10,
   "available": 120,
   "assigned": 64,
