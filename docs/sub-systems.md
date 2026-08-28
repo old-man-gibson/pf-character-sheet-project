@@ -901,16 +901,53 @@ What the sheet computed, the tabs compute — from the tables its formulas read 
 | **Natural armour** | the familiar table's adjustment | the table's | the table's |
 | **Skills** | own ranks or the master's, whichever is higher | ranks from the table | HD × (6 + Int mod), the sheet's own cell |
 | **Feats / tricks** | — | feats and bonus tricks from the table | feats from the table |
-| **Extras** | protector flag, familiar abilities | body type → item slots and *can grasp*, slotless items | evolution pool (less the master-level penalty, plus bonus points), attack cap, DR / resistances / immunities |
+| **Extras** | protector flag, familiar abilities | body type → item slots and *can grasp* | evolution pool (less the master-level penalty, plus bonus points), attack cap, DR / resistances / immunities |
 
 Every tab also has a **master-level penalty**, a **level override** to pin the level,
 AC bonuses split three ways (**all**, **touch only**, **flat-footed only**), CMD and
-initiative extras, misc per save, speeds, natural attacks (type from the catalogue
-gives the damage type and whether it is primary; secondaries take −5, or −2 with a
-feat named Multiattack), and Damage / Heal / Rest buttons over a hit-point line that
-spends temporary points first. Prose fields take inline formulas, and each companion
+CMB extras, initiative extras, misc per save, speeds, natural attacks (type from the
+catalogue gives the damage type and whether it is primary; secondaries take −5, or −2
+with a feat named Multiattack), and Damage / Heal / Rest buttons over a hit-point line
+that spends temporary points first. Prose fields take inline formulas, and each companion
 reads from a formula as `familiar.hp`, `familiar.attack`, `eidolon.hd`,
 `eidolon.evoLeft`, `animalCompanion.str.mod`, and so on.
+
+**Combat maneuvers.** CMB is BAB + Str + the special size modifier — the AC one the other
+way round, exactly as CMD already carried it. The worksheet never worked it out at all, so
+a companion that trips or grapples had nothing to read; it now has a line, a **CMB other**
+field and a d20 button of its own.
+
+### Equipment, and what it does
+
+Every companion has an **Items** panel: the slots its body type allows (the animal
+companion's, keyed by slot name) and everything with no slot — a familiar's ioun stone, a
+bag tied to the saddle. Each row is four fields, and the fourth is the point of it:
+
+| Field | |
+|---|---|
+| **Worn** | a tick. Untick it and the row still says what it would do, and stops doing it |
+| **Item** | what it is |
+| **Cost** | what it cost |
+| **Effect** | prose — so it reads `{…}`, and so it **forwards** |
+
+Which works because every number a companion rolls or is asked for is now a destination
+under its own name: the six ability scores, the three armour classes, CMD and CMB, attack
+and damage (all attacks or one, by the attack's own name), the three saves, initiative,
+hit points, and each skill —
+
+```
+Belt of giant strength   {animalCompanion.str.score += 4 as enhancement}
+Barding                  {animalCompanion.ac.total += 2 as armor} {animalCompanion.ac.flatFooted += 2 as armor}
+Amulet of mighty fists   {animalCompanion.attack += 1} {animalCompanion.damage += 1}
+Collar of alertness      {animalCompanion.skill.perception += 5} {animalCompanion.init += 2}
+```
+
+The belt is written where the belt is, once, and the attack, the damage, the CMB, Climb
+and Swim all move because the *score* did. Bonuses arrive typed and stack by type like
+any other, they show in gold beside the column they land in, and they point back at the
+row that sent them. Damage stays the free text it has always been — `1d6 plus grab` is as
+common on these rows as `1d6+7` — so what a rule adds to it is a number kept beside the
+column and added to the roll's flat part.
 
 A companion acts on its own initiative, so it rolls on its own sheet: **d20** buttons
 sit on the Init tile, on each save total, on each ability's Mod, on every skill and on

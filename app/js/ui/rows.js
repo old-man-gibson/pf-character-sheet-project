@@ -13,7 +13,7 @@
  * fields: it is what lets the rest of this file be plain functions.
  */
 import { esc, val, EXPR_HINT, abKeyAttr, abAttr, picksAbility } from './html.js';
-import { hasTokens, formatValue } from '../inline.js';
+import { hasTokens, plainTokens } from '../inline.js';
 import { fmt } from '../rules.js';
 
 /**
@@ -137,8 +137,7 @@ export function rowRemoveArmed(list, i, what = 'row', armedKey = null) {
 /** Prose rendered to plain text -- for a title, where markup cannot go. */
 export function proseText(model, text) {
   if (!hasTokens(text)) return String(text ?? '');
-  return model.renderProse(text).map((seg) => (seg.kind === 'text' ? seg.text
-    : seg.error ? `{${seg.error}}` : formatValue(seg.value))).join('');
+  return plainTokens(model.renderProse(text));
 }
 
 /**
@@ -146,10 +145,54 @@ export function proseText(model, text) {
  * red down, green up, with the base and what moved it in the tooltip.
  * The plain base when nothing moved it; the same read on every view.
  */
-export function movedInline(cs, key, base, format = fmt) {
+/**
+ * A breakdown as the sentence a totalled number wears on its tooltip.
+ *
+ * The parts in the order the sum takes them, each with the note that explains
+ * it where there is one, and the total underneath. A part that came to
+ * nothing is already gone; a part this sheet has not accounted for shows up
+ * as a last line saying so, because a working that does not add up is worse
+ * than no working at all.
+ */
+export function workingTitle(b, extra = '') {
+  if (!b) return extra;
+  const lines = b.parts.map((p) => `  ${fmt(p.value)}  ${p.label}${p.note ? ` — ${p.note}` : ''}`);
+  if (b.sum !== b.total) lines.push(`  ${fmt(b.total - b.sum)}  unaccounted for`);
+  return `${b.label} ${b.total}\n${lines.join('\n')}${extra ? `\n\n${extra}` : ''}`;
+}
+
+/**
+ * @param model  when given, the tooltip carries the whole working -- every
+ *               part the number is made of, in the order they are added. The
+ *               figure is printed in a dozen places and the parts in one, so
+ *               the answer to "why is my AC 50" belongs on the 50.
+ */
+export function movedInline(cs, key, base, format = fmt, model = null) {
+  const d = cs.changed ? (cs.delta[key] || 0) : 0;
+  const moved = d ? `Base ${format(base)} — with ${cs.sources} applied` : '';
+  const title = model ? workingTitle(model.breakdown(key), moved) : moved;
+  if (!d) {
+    return title
+      ? `<span class="working" title="${esc(title)}">${format(base)}</span>`
+      : `${format(base)}`;
+  }
+  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}">${format(cs.adjusted[key])}</strong>`;
+}
+
+/**
+ * The same reading, for a line that is already small print.
+ *
+ * `movedInline` puts the moved number in bold, which is right where it is the
+ * figure being rolled and wrong under one -- a `touch 43 · FF 34` sub-line in
+ * bold reads louder than the AC above it. Same colour, same tooltip, no
+ * weight. It exists because the sub-lines were not being adjusted at all: the
+ * headline followed a buff and the two numbers beneath it did not, so one card
+ * disagreed with itself.
+ */
+export function movedSub(cs, key, base, format = fmt) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
   if (!d) return `${format(base)}`;
-  return `<strong class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</strong>`;
+  return `<span class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</span>`;
 }
 
 export function addButton(list, label, template) {

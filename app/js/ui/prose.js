@@ -20,8 +20,8 @@ import { workingLine } from '../formula-format.js';
 const PROSE_HINT = 'Formulas work here: {= 2 + con.mod} shows a value, '
   + '{qi.max = wis.mod} names one, {qi.max} reuses it.';
 
-export function itemArea(model, list, i, field, value, rows = 3, local = null) {
-  return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local);
+export function itemArea(model, list, i, field, value, rows = 3, local = null, opts = {}) {
+  return prose(model, `data-item="${list}|${i}|${field}"`, value, rows, '', local, opts);
 }
 
 /**
@@ -31,9 +31,10 @@ export function itemArea(model, list, i, field, value, rows = 3, local = null) {
  * while focused; a rendered overlay shows computed values while not. Both
  * receive the same events, so this stays a plain data-item/data-set control.
  */
-export function prose(model, bindingAttr, value, rows = 3, extraClass = '', local = null) {
+export function prose(model, bindingAttr, value, rows = 3, extraClass = '', local = null,
+  { inactive = false, inactiveTitle = '' } = {}) {
   const text = value ?? '';
-  const rendered = hasTokens(text) ? renderedProse(model, text, local) : null;
+  const rendered = hasTokens(text) ? renderedProse(model, text, local, { inactive, inactiveTitle }) : null;
   // The gold edge these fields carry says "formulas work here"; the tooltip
   // is what says how. Set on the wrapper so it covers both layers, and the
   // rendered view's own title still wins while it is showing.
@@ -131,7 +132,14 @@ export function tokenScope(model, local) {
   };
 }
 
-export function renderedProse(model, text, local = null) {
+/**
+ * @param inactive  the text is written down but not applying -- a buff that
+ *                  is not ticked, a level not yet reached. Its forwarded
+ *                  bonuses are painted as the dormant things they are and say
+ *                  so on the tooltip; the values around them still resolve,
+ *                  because reading is not applying.
+ */
+export function renderedProse(model, text, local = null, { inactive = false, inactiveTitle = '' } = {}) {
   // Built once for the whole field rather than per token: scope() walks
   // every tracker, skill and companion, and a field may hold dozens of them.
   // The memoiser is *not* called tokenScope: as a method it called
@@ -151,6 +159,9 @@ export function renderedProse(model, text, local = null) {
     // else, and a bare "2" in the middle of a sentence does not say whether
     // the sentence is helping or hurting.
     const shown = seg.kind === 'push' ? fmt(seg.value) : formatValue(seg.value);
-    return `<span class="tok ${seg.kind}" title="${esc(tokenTitle(model, seg, scopeOnce()))}">${esc(shown)}</span>`;
+    const dormant = inactive && seg.kind === 'push';
+    const title = tokenTitle(model, seg, scopeOnce())
+      + (dormant ? `\n\n${inactiveTitle || 'Not applying: this is written down but switched off.'}` : '');
+    return `<span class="tok ${seg.kind}${dormant ? ' off' : ''}" title="${esc(title)}">${esc(shown)}</span>`;
   }).join('');
 }

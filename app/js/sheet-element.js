@@ -362,7 +362,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
@@ -1719,10 +1719,11 @@ export class CharacterSheetElement extends HTMLElement {
     const d = c.defenses;
     const s = c.saves;
     const cs = this.#model.conditionState;
-    const shown = (key, base, format = fmt) => (cs.changed && cs.delta[key]
-      ? `<strong class="adj ${cs.delta[key] > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</strong>`
-      : `<strong>${format(base)}</strong>`);
-    const moved = (key, base) => (cs.changed && cs.delta[key] ? cs.adjusted[key] : base);
+    // Every figure on the strip carries its own working, the same one the
+    // Overview shows -- this is the line a table reads mid-fight, so it is
+    // where "why is my AC 50" is asked oftenest.
+    const shown = (key, base, format = fmt) => `<strong>${rows.movedInline(cs, key, base, format, this.#model)}</strong>`;
+    const moved = (key, base) => rows.movedSub(cs, key, base, String);
     const maxNow = moved('hp', hp.max);
     // Negative levels take current and total alike, so the shown current never
     // stands above the drained maximum; the stored value is untouched and
@@ -6509,6 +6510,31 @@ export class CharacterSheetElement extends HTMLElement {
         if (n > 0) {
           const r = this.#model.applyDamage(n);
           this.#historyNote = `Took ${r.taken} damage${r.fromTemp ? ` (${r.fromTemp} to temporary hit points)` : ''}.`;
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-nonlethal': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.applyNonlethal(n);
+          this.#historyNote = `Took ${r.taken} nonlethal damage.`;
+        }
+        this.#draft.quickHp = '';
+        this.#render();
+        break;
+      }
+      case 'quick-temp': {
+        const n = Number(this.#draft.quickHp) || 0;
+        if (n > 0) {
+          const r = this.#model.grantTempHp(n);
+          // Temporary hit points do not stack, so a grant that lost to the
+          // ones already there has to say so -- otherwise the button looks
+          // broken every time a second casting does nothing.
+          this.#historyNote = r.granted
+            ? `${r.granted} temporary hit points.`
+            : `Kept the ${r.kept} temporary hit points already there — they do not stack.`;
         }
         this.#draft.quickHp = '';
         this.#render();

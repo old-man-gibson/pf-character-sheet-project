@@ -235,6 +235,11 @@
 /* A number a condition or buff has moved, shown in place of the base. */
 .adj { color: var(--cs-bad); }
 .adj.up { color: var(--cs-good); }
+/* A total that can say what it is made of. The cursor is the whole of the
+   affordance: the number is already the loudest thing on the panel, and
+   underlining or colouring it would say "this one is special" about the
+   fifteen numbers a player looks at most. */
+.working { cursor: help; }
 /* What the ticked conditions add up to, and the rules they carry -- read at
    the table, so no smaller than the sheet's own text. */
 .condnums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -247,6 +252,21 @@
 .dashstat .now { display: inline; margin: 0; }
 .dashdmg { font-weight: 620; font-variant-numeric: tabular-nums; }
 .dashsep { width: 1px; align-self: stretch; background: var(--cs-line); margin: 0 6px; }
+/* Hit points under the meter on the session dashboard: four readings on one
+   line, each a label over its figure, wrapping to two on a phone rather than
+   scrolling. This is the card the whole view exists for, and it used to be a
+   sentence of prose under the buttons. */
+.dashhp {
+  display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline;
+  margin: 6px 0 8px;
+}
+.dashhpfig { display: flex; flex-direction: column; gap: 1px; cursor: help; }
+.dashhpfig .k {
+  font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--cs-muted);
+}
+.dashhpfig .v { font-size: 1.05rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.dashhpfig .v strong { font-weight: 700; }
+.dashhpfig.bad .v, .dashhpfig .v strong.bad { color: var(--cs-bad); }
 .dashboard .dim { color: var(--cs-muted); font-size: 0.78rem; }
 @media (max-width: 700px) {
   /* Placed rather than flowed. Left to auto-placement the meter takes the
@@ -1508,6 +1528,10 @@ table.build tr.costrow td, table.build tr.costrow th {
 /* ---------- editable fields ---------- */
 .fieldgrid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .fieldgrid.two { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+/* A row of short figures -- a bonus per level, a table's own contribution --
+   where the label is the widest thing in the track and the field holds three
+   characters. Packs three across a narrow panel instead of one. */
+.fieldgrid.tight { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
 /* A field whose value is longer than a track: a URL beside a hero-point count
    got a sixth of what it held, and there was no reading it or checking it. */
 .fieldgrid label.fld.wide { grid-column: 1 / -1; }
@@ -1533,6 +1557,18 @@ label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
    on a narrow screen one long pair carries the page sideways with it. */
 .pair { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
 .pair input { width: 3.4rem; }
+/* A pair whose field is a URL: the input takes whatever the row has left,
+   with the ↗ beside it. `.pair input`'s 3.4rem is meant for a number in a
+   cluster of them and is nowhere near enough for a link. */
+.pair.link { flex-wrap: nowrap; }
+.pair.link input { flex: 1 1 auto; width: auto; min-width: 0; }
+/* Two ability slots side by side -- the hit-point ability and its second, the
+   armour class's pair, the same shape the saves table uses. Every control on
+   the sheet is `width: 100%`, so two of them in a wrapping pair take a line
+   each: three letters given the whole row, twice over. Sized to their contents
+   instead. The ceiling is for the odd value the option list does not know,
+   which `select()` keeps rather than blanking. */
+.pair.slots select { width: auto; min-width: 4.4rem; max-width: 11rem; }
 label.chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 label.chk input { width: auto; }
 td.mid { text-align: center; }
@@ -2050,6 +2086,14 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
    so at a glance: dotted shows a value, solid names one, double sends one. */
 .tok.push { border-bottom-style: double; border-bottom-width: 3px; }
 .tok.err { color: var(--cs-bad); border-bottom-color: var(--cs-bad); font-weight: 500; }
+/* A bonus that is written down and not applying: a buff nobody has ticked, a
+   level not yet reached. It keeps its double rule -- it is still a forwarded
+   bonus, and will be one again -- but drops the gold, because gold on this
+   sheet means "this number is live". */
+.tok.off {
+  color: var(--cs-muted); border-bottom-color: var(--cs-muted);
+  font-weight: 500; opacity: 0.75;
+}
 
 /* The operator beside a forwarded bonus's destination on the Formulas tab.
    Shown always, penalty or not, because it is the syntax being taught. */
@@ -2843,7 +2887,6 @@ label.fld .xf { width: 100%; }
    these give them a real width and let the tables scroll rather than crush. */
 table.saves select, table.defense select { min-width: 4.6rem; padding: 3px 5px; }
 table.saves td, table.defense td { white-space: nowrap; }
-.statline .value.pair select { min-width: 4.6rem; }
 .statline .value.pair .hint { margin: 0 2px; }
 
 /* Speed: base is a real field, bonus a formula field, and Final is the model's.

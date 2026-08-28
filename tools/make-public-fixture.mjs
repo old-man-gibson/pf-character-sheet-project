@@ -123,15 +123,6 @@ function playerValues(c) {
     'identity.deity': 'None',
     'identity.specialty': 'Scholar',
     'identity.color': '#6ea8fe',
-    /*
-     * Hit points as the player rolled and recorded them -- which is why they
-     * are pinned rather than left to the class table. Twelve levels of d6
-     * taken at maximum would be 120 with her Constitution, and she rolled 78;
-     * a character who cannot reach her own total from her hit dice is the
-     * case worth having in the fixture, because it is the one every imported
-     * sheet is in until its player decides otherwise.
-     */
-    'hp.totalOverride': 78,
     'hp.current': 78,
     // The ability the total counts, which the class table needs in order to
     // work out what the alternative would have been.
@@ -231,6 +222,22 @@ function playerValues(c) {
     name: 'Psion', stat: 'Int', stat2: '', curveTotal: null,
     manifesterLevelOverride: null, powers: [],
   });
+
+  /*
+   * Hit points as the player rolled and recorded them. Twelve levels of d6
+   * taken at maximum would be 120 with her Constitution, and she rolled 78; a
+   * character who cannot reach her own total from her hit dice is the case
+   * worth having in the fixture, because it is the one every imported sheet is
+   * in until its player decides otherwise.
+   *
+   * The shortfall goes in the hit-point offset rather than over the top of the
+   * total: the total is what the parts and the offset come to (see
+   * applyHitPoints), so writing to it directly would be writing to a derived
+   * field. Last of everything, because the base it is measured against is what
+   * the classes, the Constitution and the mythic tiers have settled on by now.
+   */
+  c.setOffset('hp.total', 78 - (Number(c.data.hp.base) || 0));
+  c.set('hp.current', 78);
   return c;
 }
 

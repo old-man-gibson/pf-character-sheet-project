@@ -336,16 +336,23 @@ function companionAttackSpec(named, a) {
   const { range, mult } = parseCrit(a.crit);
   const rolls = [{ label: 'Attack', formula: d20(a.toHit, { critRange: range }) }];
   const notes = [];
+  // What a rule or an item adds to this attack's damage. The column stays the
+  // free text it is; the bonus goes on the flat part of the roll, and is
+  // multiplied on a critical exactly as any other flat damage is.
+  const bonus = Math.trunc(Number(a.damageBonus) || 0);
   if (rollableDice(a.damage)) {
     const dmg = parseDiceExpr(a.damage, null);
-    rolls.push({ label: 'Damage', formula: damageFormula(dmg.dice, dmg.flat) });
+    const flat = dmg.flat + bonus;
+    rolls.push({ label: 'Damage', formula: damageFormula(dmg.dice, flat) });
     rolls.push({ label: 'Crit confirm', formula: d20(a.toHit, { critRange: range }) });
     rolls.push({
       label: `Crit damage (x${mult})`,
-      formula: damageFormula(scaleDice(dmg.dice, mult), dmg.flat * mult),
+      formula: damageFormula(scaleDice(dmg.dice, mult), flat * mult),
     });
   } else if (String(a.damage ?? '').trim()) {
-    notes.push({ label: 'Damage', text: a.damage });
+    notes.push({ label: 'Damage', text: `${a.damage}${bonus ? `, ${fmt(bonus)}` : ''}` });
+  } else if (bonus) {
+    notes.push({ label: 'Damage', text: fmt(bonus) });
   }
   if (range < 20 || mult !== 2) {
     notes.push({ label: 'Threat', text: `${range < 20 ? `${range}-20` : '20'}/x${mult}` });
@@ -378,6 +385,13 @@ export function companionRollSpec(c, kind, ref) {
         name: named('Initiative'),
         rolls: [{ label: 'Initiative', formula: d20(k.initiative) }],
         notes: [],
+      };
+    // A companion that trips or grapples rolls the same d20 its master does.
+    case 'cmb':
+      return {
+        name: named('Combat maneuver'),
+        rolls: [{ label: 'Combat maneuver', formula: d20(k.cmb ?? 0) }],
+        notes: [{ label: 'CMD', text: String(k.cmd ?? 10) }],
       };
     case 'save': {
       const label = COMPANION_SAVE_LABELS[arg];

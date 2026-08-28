@@ -177,12 +177,28 @@ wrote, so a build moves between browsers and machines and a backup restores. Eit
 the button in the sheet header, the **+ Import** chip in the picker, or drop a `.json`
 file anywhere on the page.
 
+**Where it lands is asked, not assumed.** A workbook is exported again every time it
+changes, so most imports after the first are the *same* character coming back with
+another level on it. When there is anything already in the picker, importing offers two
+answers:
+
+- **Add it as a new character**, alongside the ones already there. The default, and what
+  the app always used to do silently. A document whose id collides takes the next free
+  one — `saburo-2` — so nothing is overwritten.
+- **Replace one that is already here**, chosen from a list of them. The slot, the id and
+  the history stay; what was there is filed as a checkpoint named *before import* first,
+  so replacing is never a way to lose a character — **History** on the sheet goes back to
+  it. The in-progress edits go and the import becomes the saved version, or the sheet
+  would open on half-finished edits to a document that no longer exists.
+
+The character already in the picker under the id the import would take (or under the same
+name) is the one preselected, because that is almost always the one meant.
+
 The page cannot write to `data/characters/`, so an imported character lives in
 `localStorage` and joins the picker marked *imported*, with an × to remove it (which
 takes its edits, its saved version and its whole history with it, and leaves the
-converted sheets alone). A document whose id collides keeps its data and takes the next
-free id — `saburo-2` — so nothing is ever overwritten. Each is ~260 KB against a typical
-5–10 MB budget, and a full store reports that rather than failing silently.
+converted sheets alone). Each is ~260 KB against a typical 5–10 MB budget, and a full
+store reports that rather than failing silently.
 
 ### Every character at once — Export all
 

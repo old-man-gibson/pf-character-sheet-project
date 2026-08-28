@@ -10,7 +10,7 @@
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc } from '../html.js';
-import { targetLabels, tokenScope } from '../prose.js';
+import { prose, targetLabels, tokenScope } from '../prose.js';
 import { describeSource } from '../../model.js';
 import { highlightFlagging, workingLine } from '../../formula-format.js';
 import { formulaPanelHtml } from '../../formula-guide.js';
@@ -35,6 +35,10 @@ export function renderFormulaPanel(model, ctx) {
       forwarded: forwardedRows(model),
       targets: model.forwardTargetList || [],
       draft: ctx.formulaDraft,
+      // The tab's own writing space. Rendered here rather than in the guide,
+      // which is a pure function of plain data and has no model to resolve
+      // tokens against.
+      own: prose(model, 'data-set="formulaNotes"', model.data.formulaNotes, 6, 'grow'),
       query: ctx.formulaQuery,
       refOpen: ctx.formulaRefOpen,
     });

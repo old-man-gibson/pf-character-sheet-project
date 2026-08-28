@@ -266,12 +266,18 @@ function vitals(model, add) {
       keys: 'weight load encumbrance',
     });
   }
-  for (const [field, label] of [
-    ['spellResistance', 'Spell resistance'], ['dr', 'Damage reduction'],
-    ['resistance', 'Resistances'], ['immunities', 'Immunities'], ['weakness', 'Weaknesses'],
+  // The five defence boxes, as they currently stand rather than as they were
+  // typed: they read {…} and take forwarded bonuses, so the raw text may be a
+  // formula and is not what a reader searching for "DR" wants back.
+  const dk = d?.calc || {};
+  for (const [field, label, resolved] of [
+    ['spellResistance', 'Spell resistance', dk.sr?.text], ['dr', 'Damage reduction', dk.drText],
+    ['resistance', 'Resistances', dk.resistanceText], ['immunities', 'Immunities', dk.immunitiesText],
+    ['weakness', 'Weaknesses', dk.weaknessText],
   ]) {
-    if (!text(d?.[field])) continue;
-    add({ kind: 'stat', title: label, tab: 'overview', value: clip(d[field], 40), keys: 'defense' });
+    const shown = text(resolved) || text(d?.[field]);
+    if (!shown) continue;
+    add({ kind: 'stat', title: label, tab: 'overview', value: clip(shown, 40), keys: 'defense' });
   }
   const hero = c.identity?.heroPoints;
   if (hero && (Number(hero.max) || Number(hero.current))) {

@@ -61,9 +61,14 @@ export function refreshAbilities(model) {
         // Permanent and temporary part ways here, exactly as the build's own
         // two tables do: a permanent bonus moves the score, a temporary one
         // moves only the working score.
+        //
+        // A bonus aimed at `<ability>.temp` is the same thing said the other
+        // way round -- it names the working score, so it lands there and
+        // nowhere else, whatever type it carries.
         a.forwarded = forwardedSplit(model, `${key}.score`);
+        a.forwardedTemp = forwardedSplit(model, `${key}.temp`);
         a.score = r.total + a.forwarded.permanent;
-        a.tempScore = r.tempTotal + a.forwarded.total;
+        a.tempScore = r.tempTotal + a.forwarded.total + a.forwardedTemp.total;
         applied.add(key);
       }
     }
@@ -76,8 +81,11 @@ export function refreshAbilities(model) {
     // forwarded bonus rides the working score instead of being written into
     // it -- adding it to a stored number twice is exactly the drift the
     // two-pass recompute exists to avoid.
-    if (!applied.has(key)) a.forwarded = forwardedSplit(model, `${key}.score`);
-    const loose = applied.has(key) ? 0 : a.forwarded.total;
+    if (!applied.has(key)) {
+      a.forwarded = forwardedSplit(model, `${key}.score`);
+      a.forwardedTemp = forwardedSplit(model, `${key}.temp`);
+    }
+    const loose = applied.has(key) ? 0 : a.forwarded.total + a.forwardedTemp.total;
     a.mod = abilityMod(a.score);
     // A blank temp score means "same as base".
     if (!a.tempScore) a.tempScore = a.score;

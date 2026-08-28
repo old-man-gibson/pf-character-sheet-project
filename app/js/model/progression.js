@@ -16,7 +16,7 @@ import { orphans } from './reconcile.js';
 import { forwarded } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, normalizeName, slug } from './util.js';
+import { closestName, normalizeName, resolveNumberFields, slug } from './util.js';
 
 /**
  * The key a rule group's text is stored under within a feature cell.
@@ -1034,21 +1034,30 @@ export function mythicHpPerTier(c) {
 }
 
 /**
- * Hit points, worked out from the class table the way the saves and the base
- * attack bonus are.
+ * Hit points, worked out from the class table the way the saves and the
+ * armour class are -- an **offset**, not an override.
  *
- * The parts live in `rules.hitPointBase`; what happens here is the same
- * arrangement the BAB field already uses, and for the same reason. `hp.base`
- * is what the classes come to and `hp.totalOverride` is a number the player
- * pinned over it, with the total following whichever is in force.
+ * The parts live in `rules.hitPointBase`. `hp.base` is what they come to, and
+ * the offset is everything else: what a sheet's own total holds that the
+ * parts cannot account for. Rolled dice rather than maximums, a bonus the
+ * workbook applied through a formula the export could not carry, a number the
+ * GM simply handed over.
  *
- * The first pass is where a sheet that cannot explain its own hit points
- * keeps them: an imported total that the class table does not reproduce --
- * rolled dice rather than maximums, a bonus the workbook applied through some
- * formula that did not survive the export -- is pinned as an override then
- * and there, so importing never costs a character hit points. Where the two
- * agree, and they do on every workbook this was written against, the field
- * stays automatic and the total follows the classes from then on.
+ *     total = the parts + the offset
+ *
+ * This used to be a *pinned* total instead, and pinning is the wrong shape for
+ * a number with five editable parts under it: the moment one was in force --
+ * which is every rolled-HP character, from the moment it is imported -- the
+ * fields below it did nothing at all. Raising Toughness moved nothing, and
+ * nothing on the panel said why. An offset keeps the imported figure exactly,
+ * which is what it was for, and leaves every part live: a character who rolled
+ * 12 under still gains a die's worth at the next level.
+ *
+ * Nothing extra is stored, exactly as the other offsets are not: the total is
+ * saved, and the offset is recovered on load as `savedTotal - base`. So a
+ * document written before this -- which carries a pinned total in `hp.total`
+ * and the same number again in `hp.totalOverride` -- reads back with the very
+ * same maximum, its parts working again, and the dead field is dropped.
  */
 export function applyHitPoints(model, summary, hdPerLevel = []) {
   const c = model.data;
@@ -1057,23 +1066,43 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
 
   const abilityMod = statMod(c, c.hp.ability, c.hp.ability2);
   const perTier = mythicHpPerTier(c);
+  // The three typed parts take a formula as readily as a number, because each
+  // of them is a rule more often than it is a figure: a favoured-class bonus
+  // is "one per level you took it", Toughness is "1, or 2 past 10th", and
+  // Misc is where everything else the table gave you lands. Written out they
+  // stop going stale at the next level-up.
+  //
+  // They resolve against the scope as the gestalt pass finds it -- abilities,
+  // level and class levels are settled; skills and trackers are not -- which
+  // is the same footing the AC bonus cells stand on, and the same advice
+  // applies: write them in terms of abilities and levels.
+  const parts = resolveNumberFields(model.scope(), c.hp, ['fcb', 'toughness', 'misc']);
   const base = hitPointBase({
     perLevel: hdPerLevel,
     level,
     abilityMod,
-    fcb: c.hp.fcb,
-    toughness: c.hp.toughness,
-    misc: c.hp.misc,
+    fcb: parts.fcb,
+    toughness: parts.toughness,
+    misc: parts.misc,
     mythicTier: c.identity?.mythicTier,
     mythicHpPerTier: perTier,
   });
 
-  if (c.hp.totalOverride === undefined) {
+  // Measured once, off the figure the document arrived with, and kept on the
+  // model rather than in the document -- the same footing every other offset
+  // is on. `applyHitPoints` runs again within the same load (reconcile, then
+  // recompute), by which time `hp.total` is this pass's answer rather than the
+  // saved one, so the guard is what makes the measurement the saved one.
+  if (model.offsets['hp.total'] === undefined) {
     const imported = Number(c.hp.total);
-    c.hp.totalOverride = Number.isFinite(imported) && imported !== base ? imported : null;
+    model.offsets['hp.total'] = Number.isFinite(imported) ? imported - base : 0;
   }
+  // A pinned total from before hit points had an offset. The saved `hp.total`
+  // already equals it, so the measurement above has read it correctly and the
+  // field has nothing left to say.
+  delete c.hp.totalOverride;
   c.hp.base = base;
-  c.hp.total = c.hp.totalOverride == null ? base : Number(c.hp.totalOverride) || 0;
+  c.hp.total = base + (Number(model.offsets['hp.total']) || 0);
 
   /*
    * The two figures the readout needs that are nowhere else: what the ability

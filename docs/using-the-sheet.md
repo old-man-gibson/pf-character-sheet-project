@@ -52,11 +52,14 @@ and anything downstream recalculates immediately.
   with the Discord posts generated from them.
 - *Progression* — the level-by-level planner.
 - *Extras & Notes* — free-form notes to jot on (add, retitle, delete), the workbook's
-  **Approvals** table (what was applied for, who approved it, the link), and whatever
-  else the ExtrasNotes worksheet held, as an editable grid. On import each of the
-  sheet's *Range* columns becomes one note and its Approvals rows become rows; the
-  template's own hint lines ("This sheet is not referenced anywhere.", "Go ham.") are
-  dropped, and the raw grid is retired.
+  **Approvals** table (what was applied for, who approved it, the link) with a notes
+  box under it, and whatever else the ExtrasNotes worksheet held, as an editable grid.
+  The two short columns are held narrow and carry the whole of what was typed on their
+  tooltips, so a long application name is cut on screen and never lost; the **Link**
+  column takes the rest of the row, since a URL is the one thing there that cannot be
+  abbreviated. On import each of the sheet's *Range* columns becomes one note and its
+  Approvals rows become rows; the template's own hint lines ("This sheet is not
+  referenced anywhere.", "Go ham.") are dropped, and the raw grid is retired.
 - *Lore* — every background section.
 
 **On a phone.** The sheet nests four deep — the wrap, a supergroup band, a panel, a
@@ -368,7 +371,7 @@ In the session view the **Overview is a dashboard** rather than the full page:
   Full attack line that names which weapon's damage rides along — pick one from its
   dropdown when the character carries several. **Expand** brings the full Attack
   and Weapons panels up in place.
-- **Defense** — AC (touch/FF) and CMD, then **Fortitude, Reflex and Will with their
+- **Defense** — AC (touch/FF) and CMD (with flat-footed CMD), then **Fortitude, Reflex and Will with their
   roll buttons**, all buff- and condition-adjusted; Expand brings the armour and
   save breakdowns up.
 - **Movement** — every rate the character has, with the two multiples anyone reaches
@@ -380,9 +383,14 @@ In the session view the **Overview is a dashboard** rather than the full page:
   trained skill.
 - **Active effects** — a reminder list (name, note, on/off) for what is running.
   Reminders move no numbers — a bonus with numbers behind it is a **buff**.
-- **Quick actions** — an amount plus **Damage** (temporary HP absorb first),
-  **Heal** (raises current to the max and erases nonlethal alike) and **Rest**
-  (every tracker whose refresh reads as daily goes back to unspent).
+- **Quick actions** — the hit-point meter and the four readings beside it (what is
+  left over the maximum as it stands, temporary points, nonlethal, and how far below
+  zero death is), then an amount plus **Damage** (temporary points absorb first),
+  **Nonlethal** (piles up against what is left rather than coming off it),
+  **Heal** (raises current to the max and erases nonlethal alike), **+ Temp** (grants
+  temporary hit points — they do not stack, so the better of what you have and what
+  you are given is what you keep) and **Rest** (every tracker whose refresh reads as
+  daily goes back to unspent).
 
 Expand states persist with the character; the full Overview is one Build-view click
 away.
@@ -542,7 +550,11 @@ reading, **now +N**, under the base: attacks, AC, touch, flat-footed, CMD, the t
 saves, initiative, hit points, speed, and the temporary ability scores and modifiers. Ability penalties are
 applied to the score and the modifier taken again (entangled's −4 Dex is −2 to the
 modifier; paralysis sets Dex to 0, which is −5 whatever it was), and *loses Dex to AC*
-drops the ability bonus from AC and CMD, though a negative modifier stays. The two
+drops the ability bonus from AC and CMD, though a negative modifier stays. An **AC
+penalty reaches CMD** as well, because the rule says so — "any penalties to a creature's
+AC also apply to its CMD" — so blinded is its own −2 *and* the lost Dexterity on both.
+A size change is the exception, and only because it already says what it does to CMD:
+growing a size is −1 AC and +1 CMD, not −1 twice. The two
 ladders do not stack — shaken → frightened → panicked and fatigued → exhausted — the
 worse one counts and the lesser is struck through. Anything a number cannot say
 (*must flee*, *no attacks of opportunity*) is listed under **In effect**. Conditions
@@ -691,6 +703,27 @@ session mana starts over — with the payment on the ledger.
 
 ## Hit points
 
+```
+maximum = hit dice + ability × level + favoured class + Toughness × level
+        + mythic + misc + Other
+```
+
+**The maximum is a read-out, and every part under it is live.** It used to be a box that
+took a number *pinned over* the total, and pinning is the wrong shape for a figure with
+five editable parts beneath it: an imported sheet whose classes cannot reach its own
+total was pinned from the moment it landed, which is every rolled-HP character — and
+from then on raising Toughness moved nothing, and nothing on the panel said why.
+
+What the parts cannot reach lives in **Other** instead, the same field the armour class
+and the saves have carried all along: rolled dice rather than maximums, a bonus a formula
+added that the export could not carry, a number the GM handed over. It keeps the imported
+figure exactly — which is what the pin was for — and leaves everything else working: a
+character who rolled 42 under still gains a die's worth at the next level, and still
+gains 12 from a point of Toughness at 12th. Nothing extra is stored; the offset is
+recovered on load as `savedTotal − base`, exactly as the others are, and a document
+written while the total was pinned reads back at the same maximum with its parts alive
+again.
+
 The hit point meter carries three things on one track, because at the table they are
 one question — *how much is left?*
 
@@ -715,6 +748,61 @@ some characters buy past it — Death's Door, a mythic tier, a GM's ruling. It i
 rather than an absolute, so the threshold still moves when Con does, including a
 temporary Con from a rage or a potion. The panel states where death is, and how many
 points away it is while dying.
+
+The field takes a **formula** as readily as a number (`con.mod`, `floor(level / 2)`), and
+is a **destination**, so the feature that grants the room can say so where the feature is
+written: `{hp.deathBonus += 4}`. So are `hp.temp` and `hp.total`, and the three typed
+parts of the maximum — **favoured class HP**, **Toughness / level** and **Misc** — take
+formulas too, because each of them is a rule oftener than it is a figure.
+
+**Temporary hit points a rule grants** are a pool of their own beside the box. The box
+goes on saying what was typed in it — the same reason a skill's Misc column is never
+folded into — and the `+N` next to it is what a `{hp.temp += …}` is currently worth.
+Damage spends the box first and then the granted pool, so a character with nothing
+forwarded behaves exactly as before; a rest refills both. They do not stack, so the
+**+ Temp** button on the session dashboard keeps the better of what you have and what
+you are given, and says which it took.
+
+### Combat Maneuver Defense
+
+```
+CMD = 10 + BAB + Str + Dex + the special size modifier
+    + the AC bonuses CMD is allowed + every AC penalty there is + Misc CMD
+```
+
+The rule names the bonus types that reach CMD and it is a closed list — circumstance,
+deflection, dodge, insight, luck, morale, profane and sacred — so armour, shields,
+natural armour and enhancement do not, and neither does an untyped bonus. A **penalty**
+is a different sentence: *"any penalties to a creature's AC also apply to its CMD"*, so
+one reaches CMD whatever column it was typed in, Misc AC included. The special size
+modifier is the AC one the other way round: Large is −1 to AC and +1 to CMD.
+
+### Damage reduction, resistances and immunities
+
+The five boxes under the armour class — **spell resistance**, **DR**, **resistance**,
+**vulnerability** and **immunities** — are free text, because that is how a stat block
+writes them, and each is parsed into the parts it is already made of. `5/magic` is
+`dr.magic`; `fire 10, cold 5` is `resistance.fire` and `resistance.cold`; `sleep,
+paralysis` is `immune.sleep` and `immune.paralysis`. Every part is both a name a formula
+can read and a destination a bonus can be sent to.
+
+They read `{…}` like any prose, so `DR {= 5 + floor(level/2)}/magic` is a rule rather
+than a number that goes stale, and whenever something has been forwarded at one the line
+as it now stands shows in gold underneath, with every rule that moved it on the tooltip.
+A bonus aimed at a part the box has not got **grants** it — which is what "energy
+resistance (fire) 10" does — and `{immune.fire += 1}` grants an immunity by name, while
+`-=` suppresses one that was typed in and leaves it on the line, struck through, because
+it is still written on the character.
+
+### Where a number came from
+
+Every totalled figure — the armour classes, CMD, the three saves, the attacks,
+initiative, hit points and both ability scores — carries its whole **working** on its
+tooltip: each part in the order the sum takes them, what it is, and the total underneath.
+So *"why is my AC 50"* is answered on the 50 rather than by going to find the panel each
+part was typed in, and a Dexterity bonus the armour has capped says so where it is
+capped. The parts are checked against the number they explain, so a working that does not
+add up says what is unaccounted for rather than quietly disagreeing.
 
 ---
 

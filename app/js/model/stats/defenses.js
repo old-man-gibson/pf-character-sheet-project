@@ -17,7 +17,11 @@ import {
   METERS, dyingFraction, isDefaultMeterStyle, meterDefaultStyle, normalizeStyle, resolveZones,
 } from '../../tracker-style.js';
 import { emit } from '../events.js';
-import { forwarded } from '../scope.js';
+import { forwarded, proseText } from '../scope.js';
+import {
+  applyForwarded, applyImmunities, formatDr, formatEnergy, formatImmunities,
+  formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
+} from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock } from '../util.js';
@@ -58,6 +62,86 @@ export function resolveAcBonuses(model, scope, abp) {
   d.acBonusesResolved = resolveBonusBlock(
     scope, d.acBonuses, AC_BONUS_TYPES, d.acBonusErrors,
   );
+}
+
+/**
+ * The defence boxes that hold a sentence: spell resistance, damage reduction,
+ * energy resistance, vulnerability, the immunities -- and the death
+ * threshold, which is a number written the same way.
+ *
+ * Two things happen to each. Its {…} tokens are resolved, so "DR {= 5 +
+ * floor(level/2)}/magic" is a rule rather than a number that goes stale; and
+ * what it comes to is parsed into the parts it is made of, so a bonus
+ * forwarded at `dr.magic` or `resistance.fire` has somewhere to land. See
+ * stats/defence-lists.js for the parsing itself.
+ *
+ * Runs *after* the prose has been read, which is what tells it apart from
+ * `resolveDefenceBonuses` above: these boxes are both a source of forwarded
+ * bonuses and a destination for them, and a destination has to be worked out
+ * once the bonuses are known.
+ */
+export function resolveDefenceText(model) {
+  const c = model.data;
+  const d = c.defenses;
+
+  // The death threshold takes a formula, like the skills' Misc does: "Death's
+  // Door" is a rule about Constitution, not a 3 typed in once and forgotten.
+  const hp = c.hp;
+  if (hp) {
+    const raw = hp.deathBonus;
+    hp.deathBonusError = null;
+    if (typeof raw === 'string' && raw.trim() !== '') {
+      try {
+        hp.deathBonusResolved = Math.trunc(Number(evaluateFormula(raw, model.scope())) || 0);
+      } catch (err) {
+        hp.deathBonusResolved = 0;
+        hp.deathBonusError = err.message;
+      }
+    } else hp.deathBonusResolved = Number(raw) || 0;
+  }
+
+  if (!d) return;
+  const totals = model.contributions?.totals || {};
+  const at = (key) => Number(totals[key]) || 0;
+  // Every part anything was aimed at, whether the box holds it or not -- the
+  // list a granted resistance comes off.
+  const aimedAt = (family) => Object.keys(totals)
+    .filter((k) => k.startsWith(`${family}.`) && Number(totals[k]));
+  const plain = (text) => proseText(model, text);
+
+  const sr = parseSpellResistance(plain(d.spellResistance));
+  const srBonus = at('defenses.sr');
+  const drParts = applyForwarded(parseDr(plain(d.dr)), 'dr',
+    at('defenses.dr'), at, aimedAt('dr'), (n) => (n === 'none' ? '—' : unslug(n)));
+  const resParts = applyForwarded(parseEnergy(plain(d.resistance), 'resistance'), 'resistance',
+    at('defenses.resistance'), at, aimedAt('resistance'), unslug);
+  const weakParts = applyForwarded(parseEnergy(plain(d.weakness), 'weakness'), 'weakness',
+    at('defenses.weakness'), at, aimedAt('weakness'), unslug);
+  const immune = applyImmunities(parseImmunities(plain(d.immunities)), at, aimedAt('immune'));
+
+  // The best of each, for the one-word answer a formula asking `dr` wants.
+  const best = (parts) => parts.reduce((n, p) => Math.max(n, Number(p.amount) || 0), 0);
+
+  d.calc = {
+    sr: {
+      base: sr.amount,
+      bonus: srBonus,
+      total: sr.amount + srBonus,
+      has: sr.has || srBonus > 0,
+      text: formatSpellResistance(sr, sr.amount + srBonus),
+    },
+    dr: drParts,
+    resistance: resParts,
+    weakness: weakParts,
+    immunities: immune,
+    drText: formatDr(drParts),
+    resistanceText: formatEnergy(resParts),
+    weaknessText: formatEnergy(weakParts),
+    immunitiesText: formatImmunities(immune.filter((p) => !p.off)),
+    drBest: best(drParts),
+    resistanceBest: best(resParts),
+    weaknessBest: best(weakParts),
+  };
 }
 
 /**
@@ -226,7 +310,14 @@ export function conditionState(model) {
     ac: mods.ac + acAbilityDelta,
     touch: mods.ac + acAbilityDelta,
     flatFooted: mods.ac + (c.defenses.uncannyDodge ? acAbilityDelta : 0),
-    cmd: cmdDexDelta + mods.cmd,
+    // Every AC penalty among the ticked conditions and buffs reaches CMD too
+    // (see conditionTotals' acPenalty), on top of whatever they say about CMD
+    // outright -- so blinded is −2 to both, and a flat-footed character's
+    // lost Dexterity comes off both.
+    cmd: cmdDexDelta + mods.cmd + totals.acPenalty,
+    // Flat-footed CMD has no Dexterity in it to lose, so it takes everything
+    // else: what a condition says about CMD outright, and every AC penalty.
+    ffCmd: mods.cmd + totals.acPenalty,
     fortitude: sv('fortitude'),
     reflex: sv('reflex'),
     will: sv('will'),
@@ -252,6 +343,7 @@ export function conditionState(model) {
     touch: c.defenses.touch,
     flatFooted: c.defenses.flatFooted,
     cmd: c.defenses.cmd,
+    ffCmd: c.defenses.ffCmd,
     fortitude: c.saves.fortitude.total,
     reflex: c.saves.reflex.total,
     will: c.saves.will.total,
@@ -334,6 +426,21 @@ export function hpMax(model) {
   return (Number(model.data.hp?.total) || 0) + forwarded(model, 'hp.total');
 }
 
+/**
+ * Temporary hit points a rule grants, and how much of that pool is gone.
+ *
+ * Kept apart from the box the player types in, for the reason every forwarded
+ * bonus is kept apart from the column beside it: the box has to go on saying
+ * what was written in it. A grant that shrinks takes its spending with it, so
+ * a buff switched off cannot leave a debt behind.
+ */
+export function tempHpGrant(model) {
+  const hp = model.data.hp || {};
+  const granted = Math.max(0, forwarded(model, 'hp.temp'));
+  const spent = Math.max(0, Math.min(granted, Number(hp.tempSpent) || 0));
+  return { granted, spent, left: granted - spent };
+}
+
 export function hpState(model) {
   const hp = model.data.hp;
   const max = model.hpMax;
@@ -341,19 +448,27 @@ export function hpState(model) {
   if (hp.temp === undefined || hp.temp === null) hp.temp = 0;
   if (hp.nonlethal === undefined || hp.nonlethal === null) hp.nonlethal = 0;
   const current = Number(hp.current) || 0;
-  const temp = Number(hp.temp) || 0;
+  const typedTemp = Number(hp.temp) || 0;
+  const grant = tempHpGrant(model);
+  const temp = typedTemp + grant.left;
   const nonlethal = Number(hp.nonlethal) || 0;
   // Pathfinder: you fall unconscious at 0 and die at negative Con. Anything
   // that buys more room before that -- Death's Door, a mythic tier, a GM's
   // ruling -- is a bonus on the threshold rather than a different rule, so
-  // it stays tied to Con and moves when Con does.
+  // it stays tied to Con and moves when Con does. The threshold takes a
+  // formula and a forwarded bonus alike, so the rule that moves it can be
+  // written where the rule is.
   const conScore = model.data.abilities.con?.tempScore ?? 10;
-  const deathBonus = Number(hp.deathBonus) || 0;
+  const deathBonus = (Number(hp.deathBonusResolved ?? hp.deathBonus) || 0)
+    + forwarded(model, 'hp.deathBonus');
   const deathAt = -(conScore + deathBonus);
   return {
     max,
     current,
     temp,
+    typedTemp,
+    tempGranted: grant.granted,
+    tempGrantLeft: grant.left,
     nonlethal,
     effective: current + temp,
     conScore,
@@ -366,6 +481,23 @@ export function hpState(model) {
   };
 }
 
+/**
+ * Spend temporary hit points: the box the player typed first, then whatever
+ * a rule granted. The typed box goes first because it is the one on screen,
+ * and a character with nothing forwarded spends exactly as it always did.
+ * Returns how many were actually there to spend.
+ */
+function spendTemp(model, want) {
+  const hp = model.data.hp;
+  const state = model.hpState;
+  const n = Math.max(0, want);
+  const fromTyped = Math.min(Math.max(0, state.typedTemp), n);
+  hp.temp = state.typedTemp - fromTyped;
+  const fromGrant = Math.min(state.tempGrantLeft, n - fromTyped);
+  if (fromGrant > 0) hp.tempSpent = (Number(hp.tempSpent) || 0) + fromGrant;
+  return fromTyped + fromGrant;
+}
+
 /** Apply damage, spending temporary hit points first. */
 export function takeDamage(model, amount, { nonlethal = false } = {}) {
   const hp = model.data.hp;
@@ -374,9 +506,7 @@ export function takeDamage(model, amount, { nonlethal = false } = {}) {
   if (nonlethal) {
     hp.nonlethal = state.nonlethal + left;
   } else {
-    const fromTemp = Math.min(state.temp, left);
-    hp.temp = state.temp - fromTemp;
-    left -= fromTemp;
+    left -= spendTemp(model, left);
     hp.current = state.current - left;
   }
   model.recompute();
@@ -398,6 +528,9 @@ export function restoreAll(model) {
   const hp = model.data.hp;
   hp.current = model.hpMax;
   hp.temp = 0;
+  // The granted pool comes back full too: what was spent of it is play state
+  // and rests with everything else.
+  hp.tempSpent = 0;
   hp.nonlethal = 0;
   // Back to the resting point: nothing spent, or the neutral 0 of a two-sided
   // meter -- but never outside the tracker's own range.
@@ -418,13 +551,60 @@ export function applyDamage(model, amount) {
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   if (!n) return { taken: 0, fromTemp: 0 };
   const hp = model.data.hp;
-  const temp = Math.max(0, Number(hp.temp) || 0);
-  const fromTemp = Math.min(temp, n);
-  hp.temp = temp - fromTemp;
+  const fromTemp = spendTemp(model, n);
   hp.current = (Number(hp.current) || 0) - (n - fromTemp);
   model.recompute();
   emit(model, { type: 'quick-action', action: 'damage', amount: n });
   return { taken: n, fromTemp };
+}
+
+/**
+ * Nonlethal damage: it does not touch current hit points at all, it piles up
+ * against them, and a character is out when it catches up.
+ *
+ * A separate action from `applyDamage` rather than a flag on it, because at
+ * the table they are two different buttons pressed for two different reasons
+ * -- and because temporary hit points absorb one and not the other.
+ */
+export function applyNonlethal(model, amount) {
+  const n = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!n) return { taken: 0 };
+  const hp = model.data.hp;
+  hp.nonlethal = Math.max(0, (Number(hp.nonlethal) || 0) + n);
+  model.recompute();
+  emit(model, { type: 'quick-action', action: 'nonlethal', amount: n });
+  return { taken: n };
+}
+
+/**
+ * Grant temporary hit points, as the rules grant them.
+ *
+ * They do not stack: "when temporary hit points come from two sources, only
+ * the highest applies" -- so a second casting of false life over a first is
+ * not eleven points, it is whichever of the two was better. That is the whole
+ * reason this is a button rather than a box you add to by hand, and it is
+ * measured against what the character actually has, rules-granted pool
+ * included, rather than against the box alone.
+ *
+ * Returns what happened, so the toast can say "kept the 8 you had" rather
+ * than reporting a grant that did nothing.
+ */
+export function grantTempHp(model, amount) {
+  const n = Math.max(0, Math.floor(Number(amount) || 0));
+  const state = model.hpState;
+  if (n <= state.temp) {
+    emit(model, { type: 'quick-action', action: 'temp', amount: 0 });
+    return { granted: 0, kept: state.temp, now: state.temp };
+  }
+  // The box holds the player's own, and the difference between the two is
+  // what a rule is already granting; setting the box to the shortfall would
+  // be arithmetic nobody asked for. The box takes the whole figure, and the
+  // granted pool goes on being counted beside it -- which is the same answer,
+  // because the two do not stack either way.
+  model.data.hp.temp = n - Math.max(0, state.tempGrantLeft);
+  model.recompute();
+  emit(model, { type: 'quick-action', action: 'temp', amount: n });
+  return { granted: n, kept: 0, now: n };
 }
 
 /**

@@ -59,13 +59,14 @@ import {
 } from '../../rules.js';
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
+  companionAttackKey, companionSkillKey,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, itemCheck, itemNum, itemSelect, itemText, line,
-  miniStat, rowRemove, rowRemoveArmed, rowTools,
+  lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -1371,14 +1372,14 @@ export function companionPanel(model, kind) {
       ${companionHeadPanel(model, kind, b, k, label)}
       ${companionHpPanel(kind, b, k)}
       ${companionScoresPanel(model, kind, b, k)}
-      ${companionDefensePanel(kind, b, k)}
+      ${companionDefensePanel(model, kind, b, k)}
       ${companionSavesPanel(model, kind, b, k)}
       ${companionAttacksPanel(model, kind, b, k)}
       ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, b, k) : ''}
       ${kind === 'animalCompanion' ? companionTricksPanel(model, b, k) : ''}
       ${kind === 'familiar' ? '' : companionFeatsPanel(model, kind, b, k)}
       ${companionSkillsPanel(model, kind, b, k)}
-      ${kind === 'animalCompanion' ? companionItemsPanel(b, k) : ''}
+      ${companionItemsPanel(model, kind, b, k, label)}
       ${companionGainsPanel(model, kind, b, k, label)}
       ${companionNotesPanel(model, kind, b)}
     </div>`;
@@ -1503,7 +1504,8 @@ function companionScoresPanel(model, kind, b, k) {
           <td>${base}</td>
           ${evo ? `<td>${num(`${kind}.scores.${a}.evo`, b.scores?.[a]?.evo)}</td>` : ''}
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
-          <td>${num(`${kind}.scores.${a}.misc`, b.scores?.[a]?.misc)}</td>
+          <td>${num(`${kind}.scores.${a}.misc`, b.scores?.[a]?.misc)}${
+      forwardedBadge(model, `${kind}.${a}.score`)}</td>
           <td class="num total">${s.total ?? 10}</td>
           <td class="num"><span class="rollpair">${fmt(s.mod ?? 0)}${
       rollButton(model, kind, `ability:${a}`, `a ${ABILITY_LABELS[a]} check`)}</span></td>
@@ -1520,25 +1522,33 @@ function companionScoresPanel(model, kind, b, k) {
   }
 
 
-function companionDefensePanel(kind, b, k) {
+function companionDefensePanel(model, kind, b, k) {
     const ac = b.ac || {};
+    // Every one of these is a destination now, so each says beside itself
+    // what has been forwarded to it and from where.
+    const fwd = (name) => forwardedBadge(model, `${kind}.${name}`);
     return `<section class="panel">
       <h3>Defences <span class="badge">AC ${k.ac ?? 10}</span></h3>
-      ${line('Armor class', k.ac ?? 10, true)}
-      ${line('Touch', k.touch ?? 10)}
-      ${line('Flat-footed', k.flatFooted ?? 10)}
-      ${line('CMD', `${k.cmd ?? 10} (flat ${k.ffCmd ?? 10})`)}
-      ${line('Initiative', fmt(k.initiative ?? 0))}
+      ${lineHtml('Armor class', `${k.ac ?? 10}${fwd('ac.total')}`, true)}
+      ${lineHtml('Touch', `${k.touch ?? 10}${fwd('ac.touch')}`)}
+      ${lineHtml('Flat-footed', `${k.flatFooted ?? 10}${fwd('ac.flatFooted')}`)}
+      ${lineHtml('CMD', `${k.cmd ?? 10} (flat ${k.ffCmd ?? 10})${fwd('cmd')}`)}
+      ${lineHtml('CMB', `<span class="rollpair">${fmt(k.cmb ?? 0)}${
+        rollButton(model, kind, 'cmb', 'a combat maneuver')}</span>${fwd('cmb')}`)}
+      ${lineHtml('Initiative', `<span class="rollpair">${fmt(k.initiative ?? 0)}${
+        rollButton(model, kind, 'init', 'initiative')}</span>${fwd('init')}`)}
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Bonus AC (all)', num(`${kind}.ac.all`, ac.all))}
         ${field('Touch only', num(`${kind}.ac.touch`, ac.touch))}
         ${field('Flat-footed only', num(`${kind}.ac.ff`, ac.ff))}
         ${field('CMD other', num(`${kind}.cmdOther`, b.cmdOther))}
+        ${field('CMB other', num(`${kind}.cmbOther`, b.cmbOther))}
         ${field('Initiative bonus', num(`${kind}.initBonus`, b.initBonus))}
       </div>
       <p class="hint">10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
         + the bonuses: <em>all</em> counts everywhere, <em>touch only</em> for dodge and deflection,
-        <em>flat-footed only</em> for armour and extra natural armour.</p>
+        <em>flat-footed only</em> for armour and extra natural armour. CMB is BAB + Str + the
+        special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries.</p>
       ${kind === 'eidolon' ? `<div class="fieldgrid" style="margin-top:8px">
         ${field('DR', text(`${kind}.dr`, b.dr))}
         ${field('Resistances', text(`${kind}.resistances`, b.resistances))}
@@ -1563,7 +1573,8 @@ function companionSavesPanel(model, kind, b, k) {
           ${kind === 'familiar' ? '' : `<td>${check(`${kind}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
-          <td>${num(`${kind}.saves.${key}.misc`, b.saves?.[key]?.misc)}</td>
+          <td>${num(`${kind}.saves.${key}.misc`, b.saves?.[key]?.misc)}${
+            forwardedBadge(model, `${kind}.${key}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(saves[key]?.total ?? 0)}${
             rollButton(model, kind, `save:${key}`, `a ${name} save`)}</span></td>
         </tr>`).join('')}
@@ -1595,16 +1606,22 @@ function companionAttacksPanel(model, kind, b, k) {
         </span>
       </h3>
       ${rows.length ? `<table><thead><tr>
-        <th>Type</th><th>Damage</th><th>Crit</th><th>Role</th><th>Bonus</th>
+        <th>Type</th><th>Damage</th><th title="A flat bonus to this attack’s damage">Dmg +</th>
+        <th>Crit</th><th>Role</th><th title="A flat bonus to this attack’s to-hit">Bonus</th>
         <th class="num">To hit</th><th>Damage type</th><th>Qualities</th><th></th>
       </tr></thead><tbody>
         ${rows.map((a, i) => `<tr>
           <td>${itemSelect(list, i, 'type', a.type, types)}</td>
           <td>${itemText(list, i, 'damage', a.damage, '1d6')}</td>
+          <td class="num">${itemNum(list, i, 'dmgBonus', a.dmgBonus)}${
+            (a.damageBonus ?? 0) !== (Number(a.dmgBonus) || 0)
+              ? `<span class="fwd" title="${esc(`${fmt(a.damageBonus)} damage in total once every bonus `
+                + 'forwarded here is counted. The roll adds it to the flat part.')}">${fmt(a.damageBonus)}</span>` : ''}</td>
           <td>${itemText(list, i, 'crit', a.crit, '20/×2')}</td>
           <td>${itemSelect(list, i, 'primary', a.primary === null || a.primary === undefined ? '' : (a.primary ? 'primary' : 'secondary'),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>
-          <td>${itemNum(list, i, 'bonus', a.bonus)}</td>
+          <td>${itemNum(list, i, 'bonus', a.bonus)}${
+            forwardedBadge(model, `${kind}.attack.${companionAttackKey(a)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
             rollButton(model, kind, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
           <td>${esc(a.damageType || '')}</td>
@@ -1612,9 +1629,11 @@ function companionAttacksPanel(model, kind, b, k) {
           ${rowRemove(list, i)}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No attacks yet.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add attack', { type: 'Bite', damage: '', crit: '20/×2', primary: null, bonus: 0, qualities: '' })}</div>
+      <div style="margin-top:6px">${addButton(list, 'Add attack', { type: 'Bite', damage: '', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' })}</div>
       <p class="hint">Secondary attacks take −5${k.multiattack ? ' — −2 here, for Multiattack' : ' (−2 with Multiattack)'}.
-        Role on auto follows the natural-attack table.</p>
+        Role on auto follows the natural-attack table. Damage stays what you write —
+        “1d6 plus grab” as readily as “1d6+7” — so a bonus to it is kept beside the column and
+        added to the roll’s flat part.</p>
     </section>`;
   }
 
@@ -1708,7 +1727,8 @@ function companionSkillsPanel(model, kind, b, k) {
           <td>${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
-          <td>${itemNum(list, i, 'misc', s.misc)}</td>
+          <td>${itemNum(list, i, 'misc', s.misc)}${
+            forwardedBadge(model, `${kind}.skill.${companionSkillKey(s)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
             rollButton(model, kind, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
@@ -1724,31 +1744,77 @@ function companionSkillsPanel(model, kind, b, k) {
   }
 
 
-function companionItemsPanel(b, k) {
+/**
+ * What a companion is carrying, and what it does for it.
+ *
+ * Two lists: the slots its body type allows (the animal companion's, keyed by
+ * slot name), and everything with no slot -- a familiar's ioun stone, a bag
+ * tied to the saddle. Both rows are the same four fields, and the fourth is
+ * the point of the panel: Effect is prose, so it forwards, and a companion's
+ * every rolled number is a destination it can be forwarded to. A belt of
+ * giant strength is written down where the belt is, once, as
+ * `{animalCompanion.str.score += 4 as enhancement}` -- and the attack, the
+ * damage, the CMB, Climb and Swim all move because the *score* did.
+ *
+ * Taking a thing off is a tick, not a deletion: the row stays, still shows
+ * what it would do, and stops doing it.
+ */
+function companionItemsPanel(model, kind, b, k, label) {
     const slots = k.slots || [];
-    const list = 'animalCompanion.slotless';
+    const list = `${kind}.slotless`;
     const rows = b.slotless || [];
+    const worn = (path, on) => `<label class="chk" title="${
+      on === false ? 'Not worn — the effect beside it is written down but not applying' : 'Worn: the effect beside it is applying'}">
+      <input type="checkbox" ${on === false ? '' : 'checked'} data-set="${path}" data-kind="bool"></label>`;
+    // Taken off, a row still shows what it would do and stops doing it -- and
+    // says so in the colour of its tokens, the same way an unticked buff does.
+    const off = (it) => (it?.worn === false
+      ? { inactive: true, inactiveTitle: 'Not worn, so the bonus is not applying. Tick the row to put it on.' }
+      : {});
+    const wornItem = (i, on) => `<label class="chk" title="${
+      on === false ? 'Not worn — the effect below is written down but not applying' : 'Worn: the effect below is applying'}">
+      <input type="checkbox" ${on === false ? '' : 'checked'} data-item="${list}|${i}|worn" data-kind="bool"></label>`;
+    const head = `<tr><th style="width:1.6rem" title="Worn">✓</th><th>Item</th>
+      <th style="width:6rem">Cost</th><th>Effect</th>`;
     return `<section class="panel span2">
       <h3>Items
         ${b.bodyType ? `<span class="badge">${esc(b.bodyType)}</span>` : ''}
         ${k.canGrasp === null || k.canGrasp === undefined ? '' : `<span class="badge">${k.canGrasp ? 'can grasp' : 'cannot grasp'}</span>`}
       </h3>
-      ${slots.length ? `<table><thead><tr><th>Slot</th><th>Item</th><th style="width:6rem">Cost</th></tr></thead><tbody>
-        ${slots.map((slot) => `<tr>
-          <th scope="row">${esc(slot)}</th>
-          <td>${text(`animalCompanion.items.${slot}.name`, b.items?.[slot]?.name, '')}</td>
-          <td>${num(`animalCompanion.items.${slot}.cost`, b.items?.[slot]?.cost)}</td>
-        </tr>`).join('')}
-      </tbody></table>` : '<p class="empty">Pick a body type above to see the item slots it can use.</p>'}
-      <h4 style="margin:10px 0 4px">Slotless items</h4>
-      ${rows.length ? `<table><thead><tr><th>Item</th><th style="width:6rem">Cost</th><th></th></tr></thead><tbody>
+      ${slots.length ? `<div class="tablewrap"><table class="stacked" data-fold="shut"><thead>
+        ${head}<th>Slot</th></tr></thead><tbody>
+        ${slots.map((slot) => {
+    const it = b.items?.[slot] || {};
+    return `<tr>
+          <td class="mid" data-label="Worn">${worn(`${kind}.items.${slot}.worn`, it.worn)}</td>
+          <td data-stack="name">${text(`${kind}.items.${slot}.name`, it.name, '')}</td>
+          <td data-label="Cost">${num(`${kind}.items.${slot}.cost`, it.cost)}</td>
+          <td data-label="Effect">${prose(model, `data-set="${kind}.items.${slot}.effect"`, it.effect, 1, 'grow', null, off(it))}</td>
+          <th scope="row" data-label="Slot">${esc(slot)}</th>
+        </tr>`;
+  }).join('')}
+      </tbody></table></div>` : `<p class="empty">${kind === 'animalCompanion'
+    ? 'Pick a body type above to see the item slots it can use.'
+    : 'No body-type slots here — everything goes in the list below.'}</p>`}
+      <h4 style="margin:10px 0 4px">${slots.length ? 'Slotless items' : 'Items'}</h4>
+      ${rows.length ? `<div class="tablewrap"><table class="stacked" data-fold="shut"><thead>
+        ${head}<th></th></tr></thead><tbody>
         ${rows.map((it, i) => `<tr>
-          <td>${itemText(list, i, 'name', it.name, 'Item')}</td>
-          <td>${itemNum(list, i, 'cost', it.cost)}</td>
+          <td class="mid" data-label="Worn">${wornItem(i, it.worn)}</td>
+          <td data-stack="name">${itemText(list, i, 'name', it.name, 'Item')}</td>
+          <td data-label="Cost">${itemNum(list, i, 'cost', it.cost)}</td>
+          <td data-label="Effect">${itemArea(model, list, i, 'effect', it.effect, 1, null, off(it))}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}
-      </tbody></table>` : ''}
-      <div style="margin-top:6px">${addButton(list, 'Add slotless item', { name: '', cost: 0 })}</div>
+      </tbody></table></div>` : ''}
+      <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
+      <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose on the sheet, and
+        every number ${esc(label.toLowerCase())} rolls is something a bonus can be aimed at:
+        <code>{${kind}.str.score += 4 as enhancement}</code>, <code>{${kind}.ac.total += 2 as armor}</code>,
+        <code>{${kind}.skill.perception += 5}</code>, <code>{${kind}.attack += 1}</code>,
+        <code>{${kind}.damage += 1}</code>, <code>{${kind}.saves += 2 as resistance}</code>,
+        <code>{${kind}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
+        would do without doing it.</p>
     </section>`;
   }
 

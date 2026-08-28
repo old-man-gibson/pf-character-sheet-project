@@ -20,6 +20,7 @@
  */
 
 import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, abilityMod, skillTotal } from './rules.js';
+import { slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon'];
 
@@ -257,15 +258,27 @@ const common = (kind) => ({
   hp: { damage: 0, temp: 0, bonus: 0 },
   ac: { all: 0, touch: 0, ff: 0 },
   cmdOther: 0,
+  cmbOther: 0,
   initBonus: 0,
   saves: { fort: { misc: 0 }, ref: { misc: 0 }, will: { misc: 0 } },
   speed: { base: '', fly: '', burrow: '', swim: '', climb: '' },
   skills: seedSkills(kind),
   attacks: [],
   feats: [],
+  // Equipment. Every kind carries both, because every kind can be given
+  // something: the animal companion's body type says which slots it has (the
+  // map), and anything with no slot -- a familiar's ioun stone, a bag tied to
+  // a saddle -- goes in the list. Each row is a name, a price, whether it is
+  // being worn, and what it does, which is prose and so may forward a bonus
+  // at any of the companion's own numbers. See COMPANION_TARGETS.
+  items: {},
+  slotless: [],
   specialQualities: '',
   notes: '',
 });
+
+/** An equipment row as it starts: worn, doing nothing, costing nothing. */
+export const emptyCompanionItem = () => ({ name: '', cost: 0, worn: true, effect: '' });
 
 export function defaultFamiliar() {
   return {
@@ -293,8 +306,6 @@ export function defaultAnimalCompanion() {
     scores: scores(10),
     abilityIncreases: ABILITY_INCREASE_LEVELS.animalCompanion.map((level) => ({ level, ability: '' })),
     tricks: [],
-    items: {},
-    slotless: [],
   };
 }
 
@@ -343,7 +354,15 @@ export function normalizeCompanion(kind, block) {
   for (const key of ['skills', 'attacks', 'feats', 'tricks', 'evolutions', 'slotless', 'abilityIncreases']) {
     if (Array.isArray(base[key]) && !Array.isArray(out[key])) out[key] = base[key];
   }
-  if (base.items && (!out.items || typeof out.items !== 'object')) out.items = {};
+  if (!out.items || typeof out.items !== 'object') out.items = {};
+  // A document saved before equipment could do anything holds a name and a
+  // cost; the two new fields default the way a player would expect -- a thing
+  // written down is a thing being worn, and it does nothing until it is told
+  // to. The slot map is keyed by slot name and is not a list, so both shapes
+  // are filled in the same way.
+  const item = (it) => ({ ...emptyCompanionItem(), ...(it && typeof it === 'object' ? it : {}) });
+  out.items = Object.fromEntries(Object.entries(out.items).map(([slot, it]) => [slot, item(it)]));
+  out.slotless = out.slotless.map(item);
   return out;
 }
 
@@ -356,6 +375,11 @@ export function companionInUse(kind, block) {
   if (String(block.name || '').trim()) return true;
   if ((block.attacks || []).length || (block.feats || []).length) return true;
   if ((block.evolutions || []).length || (block.tricks || []).length) return true;
+  // Something it has been given counts too: a companion nobody has named yet
+  // but has already been handed a saddle is a companion, and its stats have
+  // to be aimable at or the saddle has nowhere to send its bonus.
+  if ((block.slotless || []).some((it) => String(it?.name || '').trim() || String(it?.effect || '').trim())) return true;
+  if (Object.values(block.items || {}).some((it) => String(it?.name || '').trim() || String(it?.effect || '').trim())) return true;
   if (kind === 'animalCompanion' && (block.masterClass || block.levelOverride !== null)) return true;
   if (kind === 'eidolon' && (block.masterClass || block.levelOverride !== null)) return true;
   return false;
@@ -390,15 +414,62 @@ function rawLevel(kind, b, master) {
 }
 
 /**
+ * The name a companion's skill row answers to, so `{= eidolon.skill.stealth}`
+ * and `{eidolon.skill.stealth += 2}` can never mean two different rows --
+ * the same rule the character's own skills follow, one level down.
+ */
+export const companionSkillKey = (s) => slug(s?.spec ? `${s.name} ${s.spec}` : s?.name);
+
+/** The name a natural attack answers to: `eidolon.attack.bite`. */
+export const companionAttackKey = (a) => slug(a?.type);
+
+/**
+ * A bonus block filled out, whatever was handed in.
+ *
+ * `computeCompanion` is pure and is called with three arguments as often as
+ * four, so the fourth has to survive being absent, half present, or holding a
+ * string where a number was meant.
+ */
+function bonusesFor(x) {
+  const n = (v) => Math.trunc(Number(v) || 0);
+  const map = (v) => (v && typeof v === 'object' ? v : {});
+  const b = map(x);
+  return {
+    hp: n(b.hp),
+    attack: n(b.attack),
+    damage: n(b.damage),
+    init: n(b.init),
+    cmd: n(b.cmd),
+    cmb: n(b.cmb),
+    ac: n(b.ac),
+    touch: n(b.touch),
+    ff: n(b.ff),
+    saves: map(b.saves),
+    scores: map(b.scores),
+    skill: map(b.skill),
+    attackBy: map(b.attackBy),
+    damageBy: map(b.damageBy),
+  };
+}
+
+/**
  * Everything the sheet worked out for one companion.
  *
  * `master` is `{ level, bab, hp, baseSaves: {fort, ref, will}, skillRanks(name, spec),
  * classLevelCount(name) }`. Returns `{ calc, skills, attacks }`: the block-level
  * numbers (ability totals included, under `calc.scores`) and the two row lists
  * with each row's derived fields added, ready to be written back.
+ *
+ * `bonuses` is what has been forwarded at this companion from elsewhere on
+ * the character -- something it is wearing, a feature of its master's, a buff
+ * -- under the same names the scope publishes each stat by. Each one is kept
+ * *beside* what was typed rather than folded into it, for the reason the
+ * character's own skills keep theirs beside Misc: the column has to go on
+ * saying what was written in it, and the row has to go on adding up.
  */
-export function computeCompanion(kind, block, master) {
+export function computeCompanion(kind, block, master, bonuses = null) {
   const b = block;
+  const fwd = bonusesFor(bonuses);
   const penalty = Math.abs(Math.floor(Number(b.masterLevelPenalty) || 0));
   const raw = rawLevel(kind, b, master);
   const level = clampLevel(raw - penalty);
@@ -426,17 +497,21 @@ export function computeCompanion(kind, block, master) {
     if (!Number.isFinite(base)) base = 10;
     const lvlUp = (k === 'str' || k === 'dex' ? strDex : 0) + (increases[k] || 0);
     const evo = kind === 'eidolon' ? (Number(s.evo) || 0) : 0;
-    const total = base + evo + lvlUp + (Number(s.misc) || 0);
-    scores[k] = { base, evo, lvlUp, total, mod: abilityMod(total) };
+    // The score itself, so everything built on it moves with it: a belt of
+    // giant strength reaches the attack, the damage, the CMB, Climb and Swim
+    // without any of them having to be named.
+    const gear = Math.trunc(Number(fwd.scores[k]) || 0);
+    const total = base + evo + lvlUp + (Number(s.misc) || 0) + gear;
+    scores[k] = { base, evo, lvlUp, gear, total, mod: abilityMod(total) };
   }
   const mod = (k) => scores[k]?.mod || 0;
 
   // Hit points: half the master's for a familiar (doubled for a Protector at
   // 11th), 8 a die plus Con for the others -- the sheet's own numbers.
   const conKey = abilityKey(b.hpAbility) || 'con';
-  const hpMax = kind === 'familiar'
+  const hpMax = (kind === 'familiar'
     ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) + (Number(b.hp?.bonus) || 0)
-    : hd * 8 + mod(conKey) * hd + (Number(b.hp?.bonus) || 0);
+    : hd * 8 + mod(conKey) * hd + (Number(b.hp?.bonus) || 0)) + fwd.hp;
   const damage = Math.max(0, Number(b.hp?.damage) || 0);
   const temp = Math.max(0, Number(b.hp?.temp) || 0);
 
@@ -446,7 +521,7 @@ export function computeCompanion(kind, block, master) {
   const atkKey = abilityKey(b.attackAbility)
     || (kind === 'familiar' ? (scores.str.total >= scores.dex.total ? 'str' : 'dex') : 'str');
   const attackMod = mod(atkKey) + sizeAC;
-  const totalAttack = bab + attackMod + (Number(b.attackBonus) || 0);
+  const totalAttack = bab + attackMod + (Number(b.attackBonus) || 0) + fwd.attack;
   const multiattack = (b.feats || []).some((f) => /multiattack/i.test(String(f?.name || f || '')));
 
   // Saves: a familiar uses its master's base saves (never below +2 on this
@@ -457,7 +532,8 @@ export function computeCompanion(kind, block, master) {
       ? Math.max(2, Number(master.baseSaves?.[k]) || 0)
       : (level >= 1 ? (b.goodSaves?.[k] ? row.goodSave : row.poorSave) : 0);
     const misc = Number(b.saves?.[k]?.misc) || 0;
-    saves[k] = { base, mod: mod(ab), misc, total: base + mod(ab) + misc };
+    const gear = Math.trunc(Number(fwd.saves[k]) || 0);
+    saves[k] = { base, mod: mod(ab), misc, gear, total: base + mod(ab) + misc + gear };
   }
 
   // Armour class. The table's natural armour counts (the sheet left it to be
@@ -469,13 +545,20 @@ export function computeCompanion(kind, block, master) {
   const all = Number(b.ac?.all) || 0;
   const touchOnly = Number(b.ac?.touch) || 0;
   const ffOnly = Number(b.ac?.ff) || 0;
-  const ac = 10 + mod('dex') + sizeAC + all + touchOnly + ffOnly + tableNatural;
-  const touch = 10 + mod('dex') + sizeAC + all + touchOnly;
-  const flatFooted = 10 + sizeAC + all + ffOnly + tableNatural;
+  const ac = 10 + mod('dex') + sizeAC + all + touchOnly + ffOnly + tableNatural + fwd.ac;
+  const touch = 10 + mod('dex') + sizeAC + all + touchOnly + fwd.touch;
+  const flatFooted = 10 + sizeAC + all + ffOnly + tableNatural + fwd.ff;
   const cmdOther = Number(b.cmdOther) || 0;
-  const cmd = 10 + bab + mod('str') + mod('dex') - sizeAC + cmdOther;
-  const ffCmd = 10 + bab + mod('str') - sizeAC + cmdOther;
-  const initiative = mod('dex') + (Number(b.initBonus) || 0);
+  const cmd = 10 + bab + mod('str') + mod('dex') - sizeAC + cmdOther + fwd.cmd;
+  const ffCmd = 10 + bab + mod('str') - sizeAC + cmdOther + fwd.cmd;
+  // Combat maneuvers, which the worksheet never worked out at all: BAB plus
+  // Strength plus the *special* size modifier, which is the size modifier to
+  // AC and attack the other way round -- exactly as CMD above already has it.
+  // A companion that trips, grapples or bull rushes had nowhere to read this
+  // and no way to be given a bonus to it.
+  const cmbOther = Number(b.cmbOther) || 0;
+  const cmb = bab + mod('str') - sizeAC + cmbOther + fwd.cmb;
+  const initiative = mod('dex') + (Number(b.initBonus) || 0) + fwd.init;
 
   // Skills. A familiar's ranks are its own or its master's, whichever is
   // higher; the class-skill +3 applies once there is a rank to apply it to.
@@ -484,8 +567,10 @@ export function computeCompanion(kind, block, master) {
     const masterRanks = kind === 'familiar' ? Math.max(0, Number(master.skillRanks(s.name, s.spec)) || 0) : 0;
     const ranks = Math.max(own, masterRanks);
     const am = mod(abilityKey(s.ability) || 'int');
-    const total = skillTotal({ ranks, classSkill: !!s.classSkill, abilityMod: am, misc: Number(s.misc) || 0 });
-    return { ...s, masterRanks, effectiveRanks: ranks, abilityMod: am, total };
+    const forwarded = Math.trunc(Number(fwd.skill[companionSkillKey(s)]) || 0);
+    const total = forwarded
+      + skillTotal({ ranks, classSkill: !!s.classSkill, abilityMod: am, misc: Number(s.misc) || 0 });
+    return { ...s, masterRanks, effectiveRanks: ranks, abilityMod: am, forwarded, total };
   });
   const ranksSpent = skills.reduce((n, s) => n + Math.max(0, Number(s.ranks) || 0), 0);
   // The eidolon's budget is the sheet's cell (HD × (6 + Int)); the animal
@@ -502,8 +587,18 @@ export function computeCompanion(kind, block, master) {
     const chosen = a.primary === true ? 'primary' : a.primary === false ? 'secondary' : String(a.primary || '');
     const primary = chosen === 'primary' ? true : chosen === 'secondary' ? false : (known ? known.primary : true);
     const secondaryPenalty = primary ? 0 : (multiattack ? -2 : -5);
-    const toHit = totalAttack + secondaryPenalty + (Number(a.bonus) || 0);
-    return { ...a, damageType: known?.damageType || '', primaryResolved: primary, toHit };
+    const key = companionAttackKey(a);
+    const toHit = totalAttack + secondaryPenalty + (Number(a.bonus) || 0)
+      + Math.trunc(Number(fwd.attackBy[key]) || 0);
+    // Damage stays the free text it has always been -- "1d6 plus grab" is as
+    // common on these rows as "1d6+7" -- so what a rule adds to it is a
+    // number kept beside it rather than written into it. The roll adds it to
+    // the flat part; the panel shows it next to the column.
+    const damageBonus = (Number(a.dmgBonus) || 0) + fwd.damage
+      + Math.trunc(Number(fwd.damageBy[key]) || 0);
+    return {
+      ...a, damageType: known?.damageType || '', primaryResolved: primary, toHit, damageBonus,
+    };
   });
 
   // What the table grants along the way, up to this level.
@@ -522,6 +617,7 @@ export function computeCompanion(kind, block, master) {
     attackAbility: ABILITY_LABELS[atkKey],
     attackMod,
     totalAttack,
+    damageBonus: fwd.damage,
     multiattack,
     hpMax,
     hpCurrent: hpMax - damage,
@@ -533,6 +629,7 @@ export function computeCompanion(kind, block, master) {
     flatFooted,
     cmd,
     ffCmd,
+    cmb,
     initiative,
     ranksSpent,
     ranksAllowed,
@@ -565,16 +662,51 @@ export function computeCompanion(kind, block, master) {
   return { calc, skills, attacks };
 }
 
-/** The names a formula can read: `familiar.hp`, `eidolon.str.mod`, ... */
+/**
+ * The names a formula can read: `familiar.hp`, `eidolon.str.mod`, ...
+ *
+ * Every number a companion rolls or is asked for in a fight is here, and
+ * every one of them is spelled the way it is forwarded to -- see
+ * COMPANION_TARGETS, which is generated from the same shape.
+ *
+ * `ac` and `attack` are a number *and* a branch: `{= eidolon.ac}` is the
+ * armour class it always was, while `eidolon.ac.touch` and
+ * `eidolon.attack.bite` reach the parts underneath (the `total` trick the
+ * saves use -- see carriesTotal in formula.js). The older flat spellings
+ * `touch`, `ff`, `cmd` stay exactly where they were: nothing written before
+ * this had to change.
+ */
 export function companionScope(block) {
   const k = block?.calc;
   if (!k) return null;
   const s = {
-    level: k.level, hd: k.hd, bab: k.bab, attack: k.totalAttack,
+    level: k.level, hd: k.hd, bab: k.bab,
     hp: k.hpMax, hpCurrent: k.hpCurrent,
-    ac: k.ac, touch: k.touch, ff: k.flatFooted, cmd: k.cmd, ffCmd: k.ffCmd,
+    touch: k.touch, ff: k.flatFooted, cmd: k.cmd, ffCmd: k.ffCmd, cmb: k.cmb ?? 0,
     init: k.initiative,
     fort: k.saves.fort.total, ref: k.saves.ref.total, will: k.saves.will.total,
+    ac: {
+      touch: k.touch, flatFooted: k.flatFooted, cmd: k.cmd, total: k.ac,
+    },
+    // One entry per natural attack, under the attack's own name, so a rule
+    // about the bite can say so. `total` is the to-hit every attack shares
+    // before its primary/secondary penalty.
+    attack: { ...Object.fromEntries((block.attacks || [])
+      .map((a) => [companionAttackKey(a), Number(a.toHit) || 0])
+      .filter(([key]) => key && key !== 'x')), total: k.totalAttack },
+    damage: { ...Object.fromEntries((block.attacks || [])
+      .map((a) => [companionAttackKey(a), Number(a.damageBonus) || 0])
+      .filter(([key]) => key && key !== 'x')), total: k.damageBonus ?? 0 },
+    saves: {
+      fortitude: k.saves.fort.total,
+      reflex: k.saves.ref.total,
+      will: k.saves.will.total,
+    },
+    // Each skill by its slugged name, the way the character's own are:
+    // `animalCompanion.skill.perception`.
+    skill: Object.fromEntries((block.skills || [])
+      .map((sk) => [companionSkillKey(sk), Number(sk.total) || 0])
+      .filter(([key]) => key && key !== 'x')),
   };
   for (const a of ABILITIES) {
     const sc = k.scores?.[a];
@@ -583,3 +715,37 @@ export function companionScope(block) {
   if (k.evoPool !== undefined) { s.evoPool = k.evoPool; s.evoLeft = k.evoLeft; }
   return s;
 }
+
+/**
+ * Every stat of a companion's a bonus may be forwarded to, under the name it
+ * is read by, and what to call it.
+ *
+ * The list is here rather than in the scope's forwarding half because it is
+ * the *same* list the scope above publishes -- one shape, so a name can never
+ * be readable and unaimable, or the other way round. The skills and the
+ * natural attacks are per companion and are added by the caller from the
+ * block's own rows.
+ *
+ * [name, label, where it lands in the bonus block]
+ */
+export const COMPANION_TARGETS = [
+  ['hp', 'Hit points', 'hp'],
+  ['ac.total', 'Armour class', 'ac'],
+  ['ac.touch', 'Touch AC', 'touch'],
+  ['ac.flatFooted', 'Flat-footed AC', 'ff'],
+  ['cmd', 'CMD', 'cmd'],
+  ['cmb', 'CMB', 'cmb'],
+  ['attack', 'Attack, every natural attack', 'attack'],
+  ['damage', 'Damage, every natural attack', 'damage'],
+  ['init', 'Initiative', 'init'],
+  ['fort', 'Fortitude', 'saves.fort'],
+  ['ref', 'Reflex', 'saves.ref'],
+  ['will', 'Will', 'saves.will'],
+  ...ABILITIES.map((a) => [`${a}.score`, ABILITY_LABELS[a], `scores.${a}`]),
+];
+
+/** Destinations that stand for several of a companion's at once. */
+export const COMPANION_FAMILIES = {
+  ac: ['ac.total', 'ac.touch', 'ac.flatFooted'],
+  saves: ['fort', 'ref', 'will'],
+};

@@ -45,7 +45,11 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
 const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon']);
-const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves']);
+// The defence lists join the armour classes and the saves: `dr.magic`,
+// `resistance.fire`, `immune.sleep` and the `defenses.*` totals over them are
+// all answers to "what does it take to hurt this character".
+const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves', 'defenses', 'dr', 'resistance',
+  'weakness', 'immune']);
 const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed',
   'operative', 'sphere']);
 const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed']);
@@ -77,7 +81,7 @@ export const VALUE_SECTIONS = [
 export const TARGET_SECTIONS = [
   { key: 'weapon', label: 'Weapons and damage', blurb: 'Attack and damage on the weapon rows — all of them, one kind of them, or one weapon.' },
   { key: 'attack', label: 'Attack', blurb: 'The three attack numbers on the Overview.' },
-  { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes and the three saves.' },
+  { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes, the three saves, and the defence boxes — damage reduction, energy resistance, immunities.' },
   { key: 'ability', label: 'Ability scores', blurb: 'The score itself — so everything built on it moves with it.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
   { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, and levels in a class.' },
@@ -221,6 +225,37 @@ export function scratchpadHtml(draft, scope, knownNames) {
     ? `<div class="fx-working">${workingHtml(src, scope, knownNames)}</div>`
     : `<div class="fx-starters">${STARTERS.map((s) => `<button type="button" class="fx-starter"
         data-fx-insert="${esc(s)}" data-fx-replace="1">${formulaHtml(s)}</button>`).join('')}</div>`}
+  </section>`;
+}
+
+/**
+ * The tab's own writing space.
+ *
+ * Everywhere else on the sheet a formula is written *beside the thing it is
+ * about* -- a feature's text, a veil's description, an item's effect -- which
+ * is right, and is the whole design. But some rules are about nothing in
+ * particular: a house rule, a number the table agreed on, a value three other
+ * formulas want to share. Those had no home, and were being put wherever
+ * there happened to be a box, which is how a definition ends up inside a feat
+ * nobody would think to look in.
+ *
+ * So the tab where formulas are read has a place to write them, on the same
+ * footing as every other prose field: `{qi.max = wis.mod + level}` names a
+ * value the whole sheet can then read, `{saves.will += 2}` sends a bonus,
+ * `{= …}` just shows what something comes to. It is rendered by the caller,
+ * because the control needs the model and this file is deliberately pure.
+ */
+export function ownFormulasHtml(html) {
+  if (!html) return '';
+  return `<section class="panel span2" data-fx-section="own">
+    <h3>Your own formulas</h3>
+    <p class="hint">A place for the formulas that are not about any one field: a house rule, a
+      number your table agreed on, a value several other formulas share. This box counts —
+      unlike the one above — and reads exactly like any description on the sheet:
+      <code>{qi.max = wis.mod + level}</code> names a value for the rest of the character to
+      read, <code>{saves.will += 2}</code> sends a bonus where it belongs, <code>{= 2 + con.mod}</code>
+      shows what something comes to. What you write here appears below with everything else.</p>
+    ${html}
   </section>`;
 }
 
@@ -664,12 +699,13 @@ export function referenceHtml(scope, open) {
  * @param {object[]} o.audit        model.audit() rows
  * @param {object[]} o.targets      model.forwardTargetList -- every {… += …} destination
  * @param {string}   o.draft        what is in the try-it box
+ * @param {string}   o.own          the tab's own prose field, already rendered
  * @param {string}   o.query        what is in the search box
  * @param {boolean}  o.refOpen      whether the reference is unfolded
  */
 export function formulaPanelHtml({
   names, scope, inlineNames = {}, audit = [], problems = [], forwarded = [],
-  targets = [], draft = '', query = '', refOpen = false,
+  targets = [], draft = '', own = '', query = '', refOpen = false,
 }) {
   const known = new Set(names);
   const groups = valueGroups(names, scope, inlineNames, query);
@@ -687,6 +723,7 @@ export function formulaPanelHtml({
     </section>
     ${problemsHtml(problems)}
     ${scratchpadHtml(draft, scope, known)}
+    ${ownFormulasHtml(own)}
     ${myFormulasHtml(audit, query)}
     ${forwardedHtml(forwarded, query)}
     ${browserHtml(groups, total, query)}

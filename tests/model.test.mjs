@@ -55,6 +55,7 @@ import { rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
+import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 
 let pass = 0;
 let fail = 0;
@@ -296,8 +297,11 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
     b.skills.map((s) => `${s.name} ${s.ranks}${s.classSkill ? 'c' : '-'}${s.misc}`),
     ['Acrobatics 9c2', 'Climb 0c0', 'Escape Artist 0-0', 'Fly 0c0', 'Intimidate 0-0',
       'Perception 3c1', 'Stealth 0c0', 'Survival 0-0', 'Swim 0c0']);
+  // Worn and doing nothing until told to: the two fields equipment grew when
+  // a companion's stats became things a bonus could be aimed at.
   check('the item in its slot, and the slotless one', [b.items['Belt (saddle)'], b.slotless],
-    [{ name: 'Belt of giant strength', cost: 4000 }, [{ name: 'Cracked pale green ioun stone', cost: 4000 }]]);
+    [{ name: 'Belt of giant strength', cost: 4000, worn: true, effect: '' },
+      [{ name: 'Cracked pale green ioun stone', cost: 4000, worn: true, effect: '' }]]);
 
   // The sheet's own cells said 9 HD, BAB +6, 4 bonus tricks and 8 ranks --
   // it looked the level-keyed table up by hit dice. Read again by level, at
@@ -511,6 +515,268 @@ console.log('\na race trait forwards a bonus, like the trait slots beside it');
     old.forwardedInto('skill.stealth')?.total, 3);
 }
 
+console.log('the defence boxes -- formulas in them, and bonuses aimed at their parts');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  c.data.defenses.dr = 'DR {= 5 + floor(level / 4)}/magic, 2/—';
+  c.data.defenses.resistance = 'fire 10, cold 5';
+  c.data.defenses.weakness = 'sonic 5';
+  c.data.defenses.immunities = 'sleep, paralysis';
+  c.data.defenses.spellResistance = 'Yes (17)';
+  c.recompute();
+  const k = () => c.data.defenses.calc;
+  const lvl = Number(c.data.identity.level) || 0;
+  check(`${id} the box's own formula resolves`, k().drBest, 5 + Math.floor(lvl / 4));
+  check(`${id} a dash bypass is its own part`, k().dr.map((p) => p.key), ['dr.magic', 'dr.none']);
+  check(`${id} energies are parsed by name`, k().resistance.map((p) => `${p.energy} ${p.amount}`),
+    ['fire 10', 'cold 5']);
+  check(`${id} immunities are a list of names`, k().immunitiesText, 'sleep, paralysis');
+  check(`${id} spell resistance keeps its sentence`, k().sr.text, 'Yes (17)');
+
+  // Now aim things at them from a note, which is prose like any other.
+  c.data.notes = [{
+    title: 'Aegis',
+    body: '{dr.magic += 3} {defenses.dr += 1} {resistance.fire += 5} {resistance.acid += 10}'
+      + ' {immune.fire += 1} {immune.sleep -= 1} {defenses.sr += 2} {defenses.weakness -= 5}',
+  }];
+  c.recompute();
+  check(`${id} a part takes its own bonus and the family's`, k().dr[0].amount,
+    5 + Math.floor(lvl / 4) + 3 + 1);
+  check(`${id} the family reaches every part`, k().dr[1].amount, 3);
+  check(`${id} one energy moves, the others do not`,
+    k().resistance.filter((p) => !p.granted).map((p) => p.amount), [15, 5]);
+  check(`${id} a resistance the box has not got is granted, not refused`,
+    k().resistance.find((p) => p.energy === 'acid')?.amount, 10);
+  check(`${id} and says it was granted`,
+    !!k().resistance.find((p) => p.energy === 'acid')?.granted, true);
+  check(`${id} an immunity can be granted by name`,
+    k().immunities.find((p) => p.name === 'fire')?.granted, true);
+  check(`${id} and one can be suppressed`, k().immunities.find((p) => p.name === 'sleep')?.off, true);
+  check(`${id} a suppressed immunity leaves the line`, k().immunitiesText, 'paralysis, fire');
+  check(`${id} spell resistance takes its bonus in place`, k().sr.text, 'Yes (19)');
+  check(`${id} a penalty is a penalty`, k().weakness[0].amount, 0);
+
+  // Every part is a name a formula reads back, under the same spelling.
+  const s = c.scope();
+  check(`${id} the parts read back`,
+    [s.dr.magic, s.resistance.fire, s.resistance.acid, s.immune.fire, s.immune.sleep, s.defenses.sr],
+    [5 + Math.floor(lvl / 4) + 4, 15, 10, 1, undefined, 19]);
+  check(`${id} the family name is the best of them`, s.dr.total, s.dr.magic);
+  check(`${id} nothing went nowhere`, c.contributions.errors, []);
+}
+
+console.log('temporary hit points and the death threshold -- rules can move both');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const con = Number(c.data.abilities.con.tempScore) || 10;
+  // `con.mod` is the permanent modifier -- the working one is `con.tempMod`.
+  const conMod = Number(c.scope().con.mod) || 0;
+  check(`${id} death is at negative Con`, c.hpState.deathAt, -con);
+  c.set('hp.deathBonus', 'con.mod');
+  check(`${id} the threshold takes a formula`, c.data.hp.deathBonusResolved, conMod);
+  check(`${id} and it moves the threshold`, c.hpState.deathAt, -(con + conMod));
+  c.data.notes = [{ body: "Death's Door {hp.deathBonus += 4} and Ferocity {hp.temp += 12}" }];
+  c.recompute();
+  check(`${id} a rule moves it too`, c.hpState.deathAt, -(con + conMod + 4));
+  check(`${id} temporary hit points can be forwarded`, c.hpState.temp, 12);
+  check(`${id} the box itself is untouched`, c.data.hp.temp, 0);
+
+  // Damage spends the box first, then the granted pool.
+  c.set('hp.temp', 5);
+  check(`${id} both pools count`, c.hpState.temp, 17);
+  c.applyDamage(8);
+  check(`${id} the typed box goes first`, [c.data.hp.temp, c.hpState.tempGrantLeft], [0, 9]);
+  const full = c.hpMax;
+  c.applyDamage(20);
+  check(`${id} then off current`, [c.hpState.temp, c.hpState.current], [0, full - 11]);
+  c.restoreAll();
+  check(`${id} a rest refills the granted pool`, c.hpState.temp, 12);
+
+  // They do not stack: the better of the two is what you keep.
+  check(`${id} a smaller grant is refused`, c.grantTempHp(4).granted, 0);
+  check(`${id} a bigger one lands`, c.grantTempHp(30).granted, 30);
+  check(`${id} and is what the character has`, c.hpState.temp, 30);
+  check(`${id} nonlethal does not touch current or temp`,
+    [c.applyNonlethal(6).taken, c.hpState.nonlethal, c.hpState.temp], [6, 6, 30]);
+}
+
+console.log('the hit-point parts take formulas');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const level = Number(c.data.identity.level) || 0;
+  c.setOffset('hp.total', 0);
+  const base = Number(c.data.hp.base) || 0;
+  const conMod = Number(c.scope().con.mod) || 0;
+  c.set('hp.misc', 'con.mod * 2');
+  check(`${id} misc resolves`, c.data.hp.miscResolved, conMod * 2);
+  check(`${id} and the maximum follows`, c.data.hp.base, base + conMod * 2);
+  c.set('hp.toughness', 'if(level >= 10, 2, 1)');
+  check(`${id} toughness resolves per level`, c.data.hp.toughnessResolved, level >= 10 ? 2 : 1);
+  c.set('hp.misc', 'nonsense.value');
+  check(`${id} a broken one contributes nothing and says why`,
+    [c.data.hp.miscResolved, !!c.data.hp.miscError], [0, true]);
+  check(`${id} and turns up in the audit`,
+    c.audit().find((r) => r.id === 'hp-misc')?.status, 'error');
+  check(`${id} the source is what is saved, never the answer`,
+    [c.toJSON().hp.misc, 'miscResolved' in c.toJSON().hp], ['nonsense.value', false]);
+}
+
+console.log('CMD -- the AC bonuses it is allowed, and every AC penalty there is');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const cmd = () => c.data.defenses.cmd;
+  const luck = Number(c.data.defenses.acBonuses.luck) || 0;
+  const natural = Number(c.data.defenses.acBonuses.natural) || 0;
+  const misc = Number(c.data.defenses.miscAC) || 0;
+  const before = cmd();
+  // Luck is on the rules' list; natural armour is not. (Deflection is on it
+  // too, but it pairs with ABP's own and caps with it, so it is the wrong
+  // column to measure a plain +2 in.)
+  c.set('defenses.acBonuses.luck', luck + 2);
+  const withLuck = cmd();
+  check(`${id} a luck bonus reaches CMD`, withLuck, before + 2);
+  c.set('defenses.acBonuses.natural', natural + 4);
+  check(`${id} natural armour does not`, cmd(), withLuck);
+  c.set('defenses.acBonuses.natural', natural - 3);
+  check(`${id} but a penalty in that same column does`, cmd(), withLuck - 3);
+  c.set('defenses.acBonuses.natural', natural);
+  c.set('defenses.acBonuses.luck', luck);
+  check(`${id} back where it started`, cmd(), before);
+  c.set('defenses.miscAC', -4);
+  check(`${id} and so does a penalty typed into Misc AC`, cmd(), before - 4 - Math.min(0, misc));
+  c.set('defenses.miscAC', Math.abs(misc) + 3);
+  check(`${id} while a bonus there is armour-side and stays off it`,
+    cmd(), before - Math.min(0, misc));
+  c.set('defenses.miscAC', misc);
+
+  // Conditions and buffs: "any penalties to a creature's AC also apply to its CMD".
+  const dex = Math.max(0, Number(c.data.abilities.dex.totalMod) || 0);
+  c.set('conditions.Blinded', 1);
+  check(`${id} blinded is its −2 and the lost Dexterity`, c.conditionState.delta.cmd, -2 - dex);
+  check(`${id} flat-footed CMD has no Dexterity to lose`, c.conditionState.delta.ffCmd, -2);
+  c.set('conditions.Blinded', 0);
+  // A size row says what it does to CMD itself, so its AC change -- which
+  // *is* the size modifier -- must not be counted a second time.
+  c.data.buffs = [{ name: 'Enlarge', on: true, bonuses: [{ target: 'size', value: 1, valueNum: 1 }] }];
+  c.recompute();
+  check(`${id} growing is −1 AC and +1 CMD, not −1 twice`,
+    [c.conditionState.delta.ac, c.conditionState.delta.cmd], [-1, 1]);
+}
+
+console.log('the working -- how every totalled number was arrived at');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const off = [];
+  for (const key of BREAKDOWNS.keys()) {
+    const b = c.breakdown(key);
+    if (b.sum !== b.total) off.push(`${key}: parts ${b.sum}, total ${b.total}`);
+  }
+  check(`${id} every breakdown adds up to the number it explains`, off, []);
+  const ac = c.breakdown('ac');
+  check(`${id} AC starts at 10`, ac.parts[0], { label: 'base', value: 10, note: '' });
+  check(`${id} and is the number the sheet shows`, ac.total, c.data.defenses.ac);
+  check(`${id} a zero part is not shown`, ac.parts.every((p) => p.value !== 0), true);
+  check(`${id} an unknown key has no working`, c.breakdown('nonsense'), null);
+  // The working survives a bonus arriving from elsewhere, and names it.
+  c.data.notes = [{ body: '{saves.will += 3}' }];
+  c.recompute();
+  const will = c.breakdown('will');
+  check(`${id} a forwarded bonus is one of the parts`,
+    will.parts.find((p) => p.label === 'forwarded')?.value, 3);
+  check(`${id} and the parts still add up`, will.sum, will.total);
+}
+
+console.log('a buff switches its note off with itself');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const willBase = c.data.saves.will.total;
+  c.data.buffs = [{
+    name: 'Heroism',
+    on: true,
+    bonuses: [],
+    note: 'Morale: {saves += 2 as morale} — and the pool it sizes, {my.heroism = 2}',
+  }];
+  c.recompute();
+  check(`${id} a ticked buff's note forwards`, c.data.saves.will.total, willBase + 2);
+  check(`${id} and defines`, c.inlineNames['my.heroism'], 2);
+  c.data.buffs[0].on = false;
+  c.recompute();
+  check(`${id} unticked, the bonus stops`, c.data.saves.will.total, willBase);
+  check(`${id} but the name it defines still reads`, c.inlineNames['my.heroism'], 2);
+}
+
+console.log('the working score is a destination of its own');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const a = () => c.data.abilities.str;
+  const score = a().score;
+  const temp = a().tempScore;
+  c.data.raceTraits = [{ name: 'Size shift', text: '{str.temp += 3 as size}' }];
+  c.recompute();
+  check(`${id} the permanent score is untouched`, a().score, score);
+  check(`${id} the working score moves`, a().tempScore, temp + 3);
+  check(`${id} and it lands, rather than going nowhere`, c.contributions.errors, []);
+  check(`${id} the scope reads it back`, c.scope().str.temp, temp + 3);
+  // Two size bonuses are one size bonus, here as anywhere.
+  c.data.raceTraits.push({ name: 'Again', text: '{str.temp += 1 as size}' });
+  c.recompute();
+  check(`${id} and stacks by its type`, a().tempScore, temp + 3);
+}
+
+console.log('companions -- equipment that moves the numbers it is worn for');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const b = c.data.animalCompanion;
+  b.name = 'Rustle';
+  b.levelOverride = 10;
+  b.size = 'Medium';
+  b.attacks = [{ type: 'Bite', damage: '1d8', crit: '20/×2', primary: true, bonus: 0, dmgBonus: 0, qualities: '' }];
+  c.recompute();
+  const k = () => b.calc;
+  const skill = (name) => b.skills.find((s) => s.name === name);
+  const was = {
+    str: k().scores.str.total,
+    ac: k().ac,
+    ff: k().flatFooted,
+    cmb: k().cmb,
+    init: k().initiative,
+    hp: k().hpMax,
+    toHit: b.attacks[0].toHit,
+  };
+  check(`${id} CMB is BAB + Str + the special size modifier`,
+    k().cmb, k().bab + k().scores.str.mod - k().sizeAC);
+  b.slotless = [
+    { name: 'Belt of giant strength', cost: 4000, worn: true, effect: '{animalCompanion.str.score += 4 as enhancement}' },
+    { name: 'Barding', cost: 1000, worn: true, effect: '{animalCompanion.ac.total += 2 as armor} {animalCompanion.ac.flatFooted += 2 as armor}' },
+    { name: 'Amulet of mighty fists', cost: 6000, worn: true, effect: '{animalCompanion.attack += 1} {animalCompanion.damage += 1}' },
+    { name: 'Collar', cost: 500, worn: true, effect: '{animalCompanion.skill.perception += 5} {animalCompanion.init += 2} {animalCompanion.cmb += 2} {animalCompanion.hp += 7} {animalCompanion.saves += 1 as resistance}' },
+    { name: 'Cloak in the saddlebag', cost: 100, worn: false, effect: '{animalCompanion.saves += 5}' },
+  ];
+  c.recompute();
+  check(`${id} an ability score cascades`, k().scores.str.total, was.str + 4);
+  check(`${id} and the CMB built on it moves with it`, k().cmb, was.cmb + 2 + 2);
+  check(`${id} armour reaches the armour classes it names`,
+    [k().ac - was.ac, k().flatFooted - was.ff], [2, 2]);
+  check(`${id} attack and damage are separate channels`,
+    [b.attacks[0].toHit - was.toHit, b.attacks[0].damageBonus], [3, 1]);
+  check(`${id} a skill takes its bonus beside Misc`, skill('Perception').forwarded, 5);
+  check(`${id} hit points and initiative are destinations`,
+    [k().hpMax - was.hp, k().initiative - was.init], [7, 2]);
+  check(`${id} the saves family reaches all three`,
+    [k().saves.fort.gear, k().saves.ref.gear, k().saves.will.gear], [1, 1, 1]);
+  check(`${id} what is not worn does not apply`, k().saves.will.gear, 1);
+  check(`${id} nothing went nowhere`, c.contributions.errors, []);
+  check(`${id} every stat reads back under the name it is aimed at`,
+    [c.scope().animalCompanion.cmb, c.scope().animalCompanion.skill.perception,
+      c.scope().animalCompanion.ac.flatFooted],
+    [k().cmb, skill('Perception').total, k().flatFooted]);
+  // Taking it off leaves the row where it is and stops it working.
+  b.slotless[0].worn = false;
+  c.recompute();
+  check(`${id} unworn, the belt stops`, k().scores.str.total, was.str);
+  check(`${id} and the row is still there`, b.slotless[0].name, 'Belt of giant strength');
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
@@ -620,8 +886,8 @@ console.log('hit points -- the class table, the same way');
    */
   for (const [id, hp] of [['angou', 550], ['bryva', 430], ['narockro', 160], ['nico', 230], ['saburo', 111]]) {
     const c = new Character(load(id));
-    check(`${id}: computed, not pinned`, [c.data.hp.base, c.data.hp.totalOverride, c.hpMax],
-      [hp, null, hp]);
+    check(`${id}: computed, with nothing left over`,
+      [c.data.hp.base, c.offsetOf('hp.total'), c.hpMax], [hp, 0, hp]);
   }
 
   // Fifteen levels of d8 at maximum, Con +6 on each of them, and a
@@ -648,19 +914,34 @@ console.log('hit points -- the class table, the same way');
   n.set('hp.fcb', 0);
   n.set('hp.misc', 0);
 
-  // Pinned and unpinned, the same arrangement as the base attack bonus.
-  n.set('hp.totalOverride', 300);
-  check('a pinned total wins', [n.data.hp.total, n.data.hp.base, n.hpMax], [300, 230, 300]);
+  // Everything the parts cannot reach is an offset, the way it is on AC and
+  // the saves -- never a pin over them, which would leave the parts inert.
+  n.setOffset('hp.total', 70);
+  check('an offset is added to the parts', [n.data.hp.total, n.data.hp.base, n.hpMax], [300, 230, 300]);
   const saved = new Character(JSON.parse(JSON.stringify(n.toJSON())));
   check('and survives a save', saved.hpMax, 300);
-  n.set('hp.totalOverride', null);
+  check('recovered rather than stored', 'offset' in saved.toJSON().hp, false);
+  n.setOffset('hp.total', 0);
   check('cleared, the class table takes it back', n.hpMax, 230);
 
   // A sheet whose classes cannot explain its hit points keeps them, which is
-  // what every rolled-HP character depends on.
+  // what every rolled-HP character depends on -- and its parts go on working,
+  // which a pinned total took away from every one of them.
   const rolled = new Character({ ...load('nico'), hp: { ...load('nico').hp, total: 187 } });
-  check('an unexplained total is pinned as an override',
-    [rolled.data.hp.base, rolled.data.hp.totalOverride, rolled.hpMax], [230, 187, 187]);
+  check('an unexplained total is kept, as the difference it is',
+    [rolled.data.hp.base, rolled.offsetOf('hp.total'), rolled.hpMax], [230, -43, 187]);
+  rolled.set('hp.toughness', 1);
+  check('and every part below it still moves the maximum', rolled.hpMax, 187 + 15);
+  rolled.set('hp.toughness', 0);
+
+  // A document written while the total was pinned reads back at the same
+  // maximum, with the dead field dropped.
+  const pinned = new Character({
+    ...load('nico'), hp: { ...load('nico').hp, total: 187, totalOverride: 187 },
+  });
+  check('an old pinned total survives as an offset',
+    [pinned.hpMax, pinned.offsetOf('hp.total'), 'totalOverride' in pinned.toJSON().hp],
+    [187, -43, false]);
 
   // Energy Drain is not in the base: the condition already takes five off the
   // maximum for each negative level, and twice would be twice.
@@ -6624,7 +6905,10 @@ console.log('conditions -- what is ticked moves the numbers beside the base, nev
   check('blinded is −2 AC and loses the ability bonus to AC', s.delta.ac, -2 - Math.max(0, acDex));
   check('touch the same', s.delta.touch, -2 - Math.max(0, acDex));
   check('flat-footed had no ability bonus to lose', s.delta.flatFooted, c.data.defenses.uncannyDodge ? -2 - Math.max(0, acDex) : -2);
-  check('CMD loses Dex', s.delta.cmd, -Math.max(0, c.data.abilities.dex.totalMod));
+  // "Any penalties to a creature's AC also apply to its CMD" -- so blinded is
+  // the lost Dexterity *and* its own -2, where it used to be only the Dex.
+  check('CMD loses Dex and takes the AC penalty too',
+    s.delta.cmd, -2 - Math.max(0, c.data.abilities.dex.totalMod));
 
   check('a condition added by name from the catalogue is available', c.availableConditions().some((x) => x.key === 'nauseated'), true);
   check('one the sheet has is not', c.availableConditions().some((x) => x.key === 'blinded'), false);
