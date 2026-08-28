@@ -14,6 +14,7 @@ import {
   statMod, tempEssenceCost, trackCount, trackSpheres,
 } from '../rules.js';
 import { emit } from './events.js';
+import { evaluateFormula } from '../formula.js';
 import { plannerHasClass } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
@@ -310,13 +311,48 @@ const isBlankTalentRow = (row) => !String(row?.talent ?? '').trim()
 /**
  * Skill-rank budget: ranks/level (best class, gestalt) + Int bonus/level +
  * bonus points/level, times character level, against the ranks bought.
+ *
+ * Two of those three are worked out here rather than typed.
+ *
+ * **Int per level** is the character's Intelligence modifier and nothing else,
+ * so it cannot drift from the score above it -- it was a typed number, and a
+ * typed number that is supposed to equal another number on the same sheet is a
+ * number that will one day not. All five source sheets already store exactly
+ * the modifier, so reading it instead of trusting it changes nothing and
+ * closes the gap. Still a flat metric: it follows the *current* modifier, and
+ * raising Int at 12th does not refund ranks for the eleven levels before it,
+ * which is the rule as written.
+ *
+ * **Bonus points per level** may be written as a formula, like every other
+ * field on the sheet that takes a number a rule decides -- `level >= 5 ? 2 : 1`
+ * for a benefit that arrives partway up. The raw text stays in
+ * `bonusPerLevel`; what it comes to is `bonusResolved`, and a formula that
+ * will not parse says so in `bonusError` rather than quietly counting as zero.
  */
 export function applyBudget(model) {
   const c = model.data;
   const level = Number(c.identity.level) || 0;
   const b = c.skillBudget || (c.skillBudget = { bonusPerLevel: 0, intPerLevel: 0 });
-  const perLevel = (c.gestalt?.ranksPerLevel || 0)
-    + (Number(b.intPerLevel) || 0) + (Number(b.bonusPerLevel) || 0);
+  b.intPerLevel = Number(c.abilities?.int?.mod) || 0;
+  b.bonusError = null;
+  let bonus = 0;
+  const raw = b.bonusPerLevel;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      bonus = Math.floor(Number(evaluateFormula(raw, { level })) || 0);
+    } catch (err) {
+      b.bonusError = err.message;
+    }
+  } else {
+    bonus = Math.floor(Number(raw) || 0);
+  }
+  b.bonusResolved = bonus;
+  // A rule elsewhere on the sheet can grant a point per level -- see
+  // `skill.pointsPerLevel` in FORWARD_LATE. Kept beside what the player typed
+  // rather than folded into it, the same bargain every other forwarded bonus
+  // on the sheet is on: the box has to go on saying what was written in it.
+  b.forwarded = forwarded(model, 'skill.pointsPerLevel');
+  const perLevel = (c.gestalt?.ranksPerLevel || 0) + b.intPerLevel + bonus + b.forwarded;
   const available = perLevel * level;
   const assigned = (c.skills || []).reduce(
     (t, s) => t + (Number(s.boughtResolved) || 0), 0,

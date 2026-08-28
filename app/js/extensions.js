@@ -1319,6 +1319,32 @@ export function optionCataloguesFrom(blocks) {
   return out.filter((c) => c.name && c.options.length);
 }
 
+/**
+ * Named rules text the active packs carry, for the model's ability registry.
+ *
+ * A companion's table hands out abilities by name and nothing else -- "Evasion"
+ * at 3rd, "Devotion" at 6th -- and what they *do* is somebody else's prose, so
+ * the engine has none of it. A pack supplies it, and this is how: any `feature`
+ * or `note` block whose name matches is that ability's rules text. Those are
+ * the two kinds that are a name and a paragraph and nothing else.
+ *
+ * Looked up by name, never copied onto a character -- the same bargain the
+ * option menus above are on, and for the same reason: a character that had
+ * swallowed a pack's text would carry it to whoever it was sent to.
+ */
+export function namedTextFrom(blocks) {
+  const out = [];
+  for (const b of arr(blocks)) {
+    const kind = lower(b?.kind);
+    if (kind !== 'feature' && kind !== 'note') continue;
+    const name = str(b.name).trim();
+    const text = str(b.text);
+    if (!name || !text.trim()) continue;
+    out.push({ name, text, source: str(b.source).trim(), pack: str(b.extName).trim() });
+  }
+  return out;
+}
+
 /** A race trait fills an empty slot before it appends, since a blank sheet ships three. */
 function addRaceTrait(model, { name, text, replaced = null }) {
   const traits = model.list('raceTraits');

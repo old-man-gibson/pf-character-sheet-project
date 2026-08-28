@@ -1263,16 +1263,20 @@ function abilityScoresPanel(model) {
           // columns on a tab most players never open, and the temporary one
           // is that plus five more.
           const tip = (key, extra = '') => esc(workingTitle(model.breakdown(key), extra));
+          // And the key the hover panel opens from -- on the read-outs only.
+          // A panel standing under a field you are typing in covers the next
+          // field, and a score typed in by hand has no working worth opening.
+          const bd = (key, extra = '') => ` data-bd="${esc(key)}"${extra ? ` data-bdx="${esc(extra)}"` : ''}`;
           return `<div class="ability">
             <span class="ab abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
             ${built
-              ? `<span class="mod working" title="${tip(k)}">${a.score}</span>`
+              ? `<span class="mod working" title="${tip(k)}"${bd(k)}>${a.score}</span>`
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.tempScore} before conditions`)}">${cs.scores[k]}</span>`
+              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
               : built
-                ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}">${a.tempScore}</span>`
+                ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
             <span class="mod temp temp-mod${moved ? ' conditioned' : ''}"
               ${moved ? `title="${fmt(a.totalMod)} before conditions"` : ''}>${
@@ -1897,7 +1901,7 @@ function hpBuild(model) {
               Toughness moved nothing and the panel did not say why. The
               difference lives in Other now, and everything stays live. */''}
         ${field('Maximum', `<span class="value working" title="${esc(workingTitle(model.breakdown('hp'), why))}"
-          >${model.hpMax}</span>`)}
+          data-bd="hp" data-bdx="${esc(why)}">${model.hpMax}</span>`)}
         ${abilityPair}
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}

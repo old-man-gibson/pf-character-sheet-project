@@ -90,6 +90,38 @@ export const ARRAY_SLOTS = { 8: [0, 1, 2, 3], 12: [0, 1, 3], 16: [0, 2, 3] };
 export const ARRAY_LEVELS = Object.keys(ARRAY_SLOTS).map(Number).sort((a, b) => a - b);
 export const ARRAY_MAX_SLOTS = Math.max(...Object.values(ARRAY_SLOTS).map((s) => s.length));
 
+/**
+ * Only the last column is a fresh choice each time.
+ *
+ * The array is four columns, and three of them are one decision made at 8th
+ * and raised again later: the first column is raised at 12 and again at 16,
+ * the second at 12, the third at 16. The fourth is chosen anew all three
+ * times. Every later gain is still its own +2 -- it just cannot be pointed at
+ * a different ability than the one that column started on.
+ *
+ * The same shape as `ABP_LINKED_LEVELS` and read the same way: keyed by the
+ * column, then by the follower level, valued by the level it copies. All five
+ * source sheets store exactly this -- the same ability repeated down a column
+ * -- so this is the rule the data was already following, written down.
+ */
+export const ARRAY_LINKED_LEVELS = {
+  0: { 12: 8, 16: 8 },
+  1: { 12: 8 },
+  2: { 16: 8 },
+};
+
+/** The level an array column is actually chosen at. */
+export function arraySourceLevel(slot, level) {
+  return ARRAY_LINKED_LEVELS[slot]?.[level] ?? level;
+}
+
+/** Levels that copy `level`'s choice in this column. */
+export function arrayFollowers(slot, level) {
+  return Object.entries(ARRAY_LINKED_LEVELS[slot] || {})
+    .filter(([, src]) => src === level)
+    .map(([follower]) => Number(follower));
+}
+
 export const LEVEL4_LEVELS = [4, 8, 12, 16, 20];
 
 /**
@@ -2992,6 +3024,21 @@ export const FORWARD_LATE = [
   ['defenses.weakness', 'Vulnerability, every kind'],
   ['hp.temp', 'Temporary hit points'],
   ['hp.deathBonus', 'Death threshold'],
+  /*
+   * A skill point per level, which is what a favoured-class bonus, a human's
+   * extra point or a trait grants -- and until now the only way to record one
+   * was to type it into the box and let it go stale.
+   *
+   * Late rather than early: `applyBudget` runs long after the prose has been
+   * read, so a bonus landing here is in hand on the same pass and costs no
+   * second one.
+   *
+   * camelCase on purpose. A skill's own destination is `skill.` plus `slug()`,
+   * which lowercases everything it touches, so a capital letter is a thing no
+   * skill name can ever produce -- and this cannot be shadowed by a homebrew
+   * skill somebody calls "Points Per Level".
+   */
+  ['skill.pointsPerLevel', 'Skill points per level'],
 ];
 
 /** The defence lists whose parts take a name after the dot. */

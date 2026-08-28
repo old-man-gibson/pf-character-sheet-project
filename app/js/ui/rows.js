@@ -170,13 +170,29 @@ export function workingTitle(b, extra = '') {
 export function movedInline(cs, key, base, format = fmt, model = null) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
   const moved = d ? `Base ${format(base)} — with ${cs.sources} applied` : '';
-  const title = model ? workingTitle(model.breakdown(key), moved) : moved;
+  const b = model ? model.breakdown(key) : null;
+  const title = workingTitle(b, moved);
+  /*
+   * The key, not the sentence. The panel that opens on hover asks the model
+   * for the breakdown again when it opens, so what it shows can never be a
+   * render old; `data-bdx` carries the one line it could not work out for
+   * itself. See ui/breakdown-popover.js.
+   *
+   * The `title` stays exactly as it was. It is what a browser with no popover
+   * API keeps, what prints, and what the accessibility tree reads -- the panel
+   * borrows it while it is up and hands it straight back.
+   *
+   * Only where there is something to open. `key` is the name a condition delta
+   * goes by, and most but not all of those are in BREAKDOWNS; the ones that
+   * are not keep the tooltip they have always had and gain nothing.
+   */
+  const bd = b ? ` data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
   if (!d) {
     return title
-      ? `<span class="working" title="${esc(title)}">${format(base)}</span>`
+      ? `<span class="working" title="${esc(title)}"${bd}>${format(base)}</span>`
       : `${format(base)}`;
   }
-  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}">${format(cs.adjusted[key])}</strong>`;
+  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}"${bd}>${format(cs.adjusted[key])}</strong>`;
 }
 
 /**

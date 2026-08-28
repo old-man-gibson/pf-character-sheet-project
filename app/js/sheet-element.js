@@ -68,6 +68,7 @@ import {
 import * as fields from './ui/fields.js';
 import * as rows from './ui/rows.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
+import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -211,6 +212,16 @@ const TABS = [
  * and so is always on the end of the bar where it can be found.
  */
 const FIXED_TABS = new Set(['audit', 'formulas']);
+
+/**
+ * How long the breakdown panel waits before closing, in milliseconds.
+ *
+ * It stands 8px clear of the number it explains, and the pointer crossing that
+ * gap is over the table for a frame or two. Without a pause that crossing is
+ * what closes it, so the panel can be looked at but never reached -- and a
+ * long breakdown has a scrollbar that has to be reachable.
+ */
+const BREAKDOWN_GRACE = 140;
 
 /** The modelled sub-systems: tabs whose visibility the ⚙ manager controls by key. */
 const MODELLED_TAB_IDS = new Set([
@@ -641,6 +652,13 @@ export class CharacterSheetElement extends HTMLElement {
   #live = null;
   #watched = null;
   #liveTimer = null;
+  /* The breakdown panel, the number it is currently explaining, and that
+     number's own `title` while it is put aside. One panel for the element's
+     life; see `#bindBreakdowns`. */
+  #bdPop = null;
+  #bdAnchor = null;
+  #bdTitle = null;
+  #bdTimer = null;
   #paletteIndex = null;
   #paletteRows = [];
   #paletteAt = 0;
@@ -736,13 +754,33 @@ export class CharacterSheetElement extends HTMLElement {
     this.#togglePalette();
   };
 
+  /**
+   * The page moved under the breakdown panel, so the panel is wrong.
+   *
+   * It is placed in viewport coordinates against the number it explains, and
+   * chasing that number through a scroll is both more work and less steady
+   * than taking the panel away and letting the next hover put it back. Bound
+   * for the element's life and free when nothing is open, like the press-away
+   * handler above.
+   */
+  #onViewportChange = () => {
+    if (this.#bdAnchor) this.#closeBreakdown();
+  };
+
   connectedCallback() {
     if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
     this.#bindBracketMatching();
+    this.#bindBreakdowns();
     this.#renderShell();
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.addEventListener('pointerdown', this.#onPointerDownAway, true);
+    // The page scrolling and the window resizing both move the sheet out from
+    // under an open breakdown panel. A scroll *inside* the sheet does not
+    // reach here -- scroll events are not composed, so they never cross the
+    // shadow boundary -- and is caught on the root in `#bindBreakdowns`.
+    this.ownerDocument.addEventListener('scroll', this.#onViewportChange, true);
+    window.addEventListener('resize', this.#onViewportChange);
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
   }
@@ -751,6 +789,9 @@ export class CharacterSheetElement extends HTMLElement {
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
+    this.ownerDocument.removeEventListener('scroll', this.#onViewportChange, true);
+    window.removeEventListener('resize', this.#onViewportChange);
+    this.#closeBreakdown();
     this.#closePalette();
   }
 
@@ -1522,6 +1563,178 @@ export class CharacterSheetElement extends HTMLElement {
       root.addEventListener(kind, (e) => draw(e.target));
     }
     root.addEventListener('scroll', (e) => draw(e.target), true);
+  }
+
+  /**
+   * The panel a `.working` number opens.
+   *
+   * Bound to the shadow root once and never again, exactly like bracket
+   * matching above and for the same reason: the root outlives every render and
+   * the markup does not. The panel itself is kept on the instance and put back
+   * whenever a render has thrown it away -- see `#breakdownPanel`.
+   *
+   * Hover is mouse-only, deliberately. A touch fires `pointerover` on the tap
+   * that would open the panel and then never fires the leave that would close
+   * it, so touch gets a press of its own instead: press a number to open it,
+   * press it again or press anywhere else to put it away.
+   *
+   * None of this is a new way in. These numbers were never focusable, and the
+   * `title` they carried was never reachable from the keyboard either. This
+   * replaces what the mouse could already do; it does not pretend to have
+   * added the keyboard route that is still missing.
+   */
+  #bindBreakdowns() {
+    const root = this.shadowRoot;
+    // Hovering the panel counts as hovering the number it belongs to, or
+    // reaching for its scrollbar would be the thing that closed it.
+    const at = (e) => {
+      const t = e.target;
+      if (t && this.#bdPop && (t === this.#bdPop || this.#bdPop.contains(t))) return this.#bdAnchor;
+      return t?.closest?.('[data-bd]') ?? null;
+    };
+    root.addEventListener('pointerover', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const el = at(e);
+      if (el) this.#openBreakdown(el);
+      else this.#closeBreakdown(BREAKDOWN_GRACE);
+    });
+    root.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      const el = at(e);
+      if (el && el !== this.#bdAnchor) this.#openBreakdown(el);
+      else this.#closeBreakdown();
+    });
+    root.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.#closeBreakdown(); });
+    // A table scrolling under an open panel. The document-level listener in
+    // `connectedCallback` cannot see this one: scroll events are not composed,
+    // so they never cross the shadow boundary. The panel's own scrollbar is
+    // not the sheet moving, and is left alone.
+    root.addEventListener('scroll', (e) => {
+      if (this.#bdPop?.contains(e.target)) return;
+      this.#closeBreakdown();
+    }, true);
+    // Leaving the sheet altogether. `pointerover` only fires on arrival, so
+    // without this the last panel would be left standing over the host page.
+    this.addEventListener('pointerleave', () => this.#closeBreakdown());
+  }
+
+  /**
+   * The one panel, made once and put back whenever a render has removed it.
+   *
+   * Same bargain as the palette and the live region: `innerHTML` takes
+   * everything in the shadow root with it, and the reference here is what
+   * survives. Unlike those two it is re-appended lazily rather than at the end
+   * of every render, because nothing needs it to exist until something is
+   * hovered -- and a sheet nobody hovers should not be paying for it.
+   *
+   * `manual` rather than `auto`: an auto popover light-dismisses on the first
+   * press anywhere, which on a phone is the same press that opened it.
+   */
+  #breakdownPanel() {
+    if (!this.#bdPop) {
+      const pop = document.createElement('div');
+      pop.className = 'bdpop';
+      pop.setAttribute('role', 'tooltip');
+      pop.popover = 'manual';
+      this.#bdPop = pop;
+    }
+    if (!this.#bdPop.isConnected) this.shadowRoot.append(this.#bdPop);
+    return this.#bdPop;
+  }
+
+  /**
+   * Open the panel on one number.
+   *
+   * The breakdown is asked for here rather than carried in the markup, so what
+   * the panel shows is the model as it stands and never a render old. The key
+   * is all the markup holds; `data-bdx` is the one sentence the panel could
+   * not work out for itself ("Base 43 -- with 2 conditions applied").
+   *
+   * A browser with no popover API falls out at the `showPopover` check with
+   * the number's `title` still on it, which is the whole of the fallback: the
+   * plain working, drawn by the operating system, exactly as before.
+   */
+  #openBreakdown(el) {
+    clearTimeout(this.#bdTimer);
+    if (el === this.#bdAnchor) return;
+    const b = this.#model?.breakdown?.(el.dataset.bd);
+    if (!b) { this.#closeBreakdown(); return; }
+    const pop = this.#breakdownPanel();
+    if (typeof pop.showPopover !== 'function') return;
+    this.#closeBreakdown();
+    pop.innerHTML = breakdownHtml(b, el.dataset.bdx || '');
+    try {
+      if (!pop.matches(':popover-open')) pop.showPopover();
+    } catch { return; }
+    /*
+     * The native tooltip is still armed on this number and would arrive on top
+     * of the panel a second later, so it is put aside while the panel is up and
+     * given back the moment it goes. Aside rather than dropped: the markup that
+     * a reader, a printer, or a browser without any of this sees is the markup
+     * the panels wrote.
+     */
+    this.#bdTitle = el.getAttribute('title');
+    if (this.#bdTitle !== null) el.removeAttribute('title');
+    this.#bdAnchor = el;
+    this.#placeBreakdown();
+  }
+
+  /**
+   * Put it away -- after `delay` ms, so that crossing the gap between the
+   * number and the panel is not the thing that closes it. Any open call in the
+   * meantime cancels the wait.
+   */
+  #closeBreakdown(delay = 0) {
+    clearTimeout(this.#bdTimer);
+    if (delay) {
+      this.#bdTimer = setTimeout(() => this.#closeBreakdown(), delay);
+      return;
+    }
+    const el = this.#bdAnchor;
+    // A render may have replaced the node this was standing on. Handing its
+    // title back is then pointless rather than harmful, and the node it goes
+    // to is on its way to the garbage collector either way.
+    if (el && this.#bdTitle !== null) el.setAttribute('title', this.#bdTitle);
+    this.#bdTitle = null;
+    this.#bdAnchor = null;
+    try {
+      if (this.#bdPop?.matches(':popover-open')) this.#bdPop.hidePopover();
+    } catch { /* already gone, with the render that removed it */ }
+  }
+
+  /**
+   * Stand the panel beside the number, in viewport coordinates.
+   *
+   * The arithmetic is `placeAt` in ui/breakdown-popover.js, which is pure and
+   * tested; this is the half that has to touch the DOM to measure.
+   */
+  #placeBreakdown() {
+    const pop = this.#bdPop;
+    const el = this.#bdAnchor;
+    if (!pop || !el) return;
+    /*
+     * The stylesheet owns the phone breakpoint and says so through
+     * `--bd-sheet`. Below it the panel is a strip along the bottom of the
+     * window with nothing to be placed against, and the only job here is to
+     * clear the coordinates a wider window left inline -- an inline style
+     * would otherwise outrank the rule that puts it there.
+     */
+    if (getComputedStyle(pop).getPropertyValue('--bd-sheet').trim()) {
+      pop.style.left = '';
+      pop.style.top = '';
+      pop.classList.remove('above');
+      pop.classList.add('below');
+      return;
+    }
+    const spot = placeAt(
+      el.getBoundingClientRect(),
+      pop.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    pop.style.left = `${spot.left}px`;
+    pop.style.top = `${spot.top}px`;
+    pop.classList.toggle('below', spot.below);
+    pop.classList.toggle('above', !spot.below);
   }
 
   /**

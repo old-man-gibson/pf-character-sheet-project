@@ -59,13 +59,15 @@ import {
 } from '../../rules.js';
 import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
-  companionAttackKey, companionSkillKey,
+  abilityTextKey, companionAbilityText,
+  companionAttackKey, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, itemCheck, itemNum, itemSelect, itemText, line,
+  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
+  itemSelect, itemText, line,
   lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools,
 } from '../rows.js';
 
@@ -1380,8 +1382,16 @@ export function companionPanel(model, kind) {
       ${kind === 'familiar' ? '' : companionFeatsPanel(model, kind, b, k)}
       ${companionSkillsPanel(model, kind, b, k)}
       ${companionItemsPanel(model, kind, b, k, label)}
-      ${companionGainsPanel(model, kind, b, k, label)}
-      ${companionNotesPanel(model, kind, b)}
+      ${/* Paired rather than left to the grid. Both are ordinary panels, so on
+            a wide screen they landed in two 310px tracks at the end of a row
+            of four and took a quarter of the window between them, with the
+            rest of the row empty behind them. The abilities are a list that
+            opens out and want the room; the notes are a box to write in and
+            read fine at their measure. Below 900px `.pairrow` stacks them. */''}
+      <div class="pairrow span2">
+        ${companionGainsPanel(model, kind, b, k, label)}
+        ${companionNotesPanel(model, kind, b)}
+      </div>
     </div>`;
   }
 
@@ -1649,8 +1659,14 @@ function eidolonEvolutionsPanel(model, b, k) {
           <label class="fld"><span>Bonus points</span>${num('eidolon.bonusEvoPoints', b.bonusEvoPoints, 'style="width:3.6rem"')}</label>
         </span>
       </h3>
+      ${/* The same split the items table had: with only the name and the notes
+            left free the table halved the row between them, so the name got
+            room for fifty characters it never uses while the type was penned
+            into 8rem -- not enough for "4-point evolution" -- and the notes
+            took what was left. Capped to what each actually holds. */''}
       ${rows.length ? `<table><thead><tr>
-        <th>Evolution</th><th style="width:4rem">Cost</th><th style="width:8rem">Type</th><th>Notes</th><th></th>
+        <th style="width:13rem">Evolution</th><th style="width:4rem">Cost</th>
+        <th style="width:10rem">Type</th><th>Notes</th><th></th>
       </tr></thead><tbody>
         ${rows.map((e, i) => `<tr>
           <td>${itemText(list, i, 'name', e.name, 'Evolution')}</td>
@@ -1672,37 +1688,71 @@ function eidolonEvolutionsPanel(model, b, k) {
   }
 
 
-function companionTricksPanel(model, b, k) {
-    const list = 'animalCompanion.tricks';
-    const rows = b.tricks || [];
-    return `<section class="panel">
-      <h3>Tricks <span class="badge">${k.tricksTaken ?? 0} taken · ${k.bonusTricks ?? 0} bonus</span></h3>
-      ${rows.length ? `<div class="rowlist">${rows.map((t, i) => `<div class="item statline">
-        <span class="label pair" style="flex:1">${itemText(list, i, 'name', t.name, 'Trick')}</span>
-        <span class="value pair">${itemArea(model, list, i, 'notes', t.notes, 1)}
-          <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button></span>
-      </div>`).join('')}</div>` : '<p class="empty">No tricks yet.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add trick', { name: '', notes: '' })}</div>
-      <p class="hint">Bonus tricks come from the table; the rest are taught with Handle Animal.</p>
+/*
+ * Tricks and feats are the same three columns and are built the same way, so
+ * they are one function called twice rather than two that drift.
+ *
+ * They used to be `.rowlist .item.statline` -- a label and a value pushed to
+ * opposite ends, which is a shape for a word and a number and not for three
+ * controls. Every part of it went wrong at once: `.pair input` is 3.4rem wide
+ * because a pair is normally a cluster of small numbers, so the name got six
+ * characters ("Unfett", "Athleti"); `.pair` wraps, and the note is full width,
+ * so the × was pushed onto a line of its own underneath it; and the whole row
+ * was squeezed into a 310px grid column with nowhere for any of it to go.
+ *
+ * A table, `span2` and stacked, is what every other list of this shape on the
+ * sheet already is -- the eidolon's evolutions, the companion's own skills,
+ * and the granted feats on the Feats tab, which is this table exactly. Below
+ * 620px they become cards like the rest; see "a list of things, on a phone".
+ */
+function companionListPanel(model, {
+  list, rows, heading, badge, what, sourcePlaceholder, hint,
+}) {
+    return `<section class="panel span2">
+      <h3>${heading} ${badge}</h3>
+      ${rows.length ? `<div class="tablewrap"><table class="build stacked"><thead><tr>
+        <th style="width:9rem">Source</th><th style="width:14rem">${esc(what)}</th><th>Notes</th><th></th>
+      </tr></thead><tbody>
+        ${rows.map((r, i) => `<tr>
+          <td data-stack="head">${itemText(list, i, 'source', r.source, sourcePlaceholder)}</td>
+          <td data-stack="name">${itemText(list, i, 'name', r.name, what)}</td>
+          <td data-label="Notes">${itemArea(model, list, i, 'notes', r.notes, 1)}</td>
+          ${rowRemove(list, i)}
+        </tr>`).join('')}
+      </tbody></table></div>` : `<p class="empty">No ${what.toLowerCase()}s yet.</p>`}
+      <div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, emptyCompanionFeat())}</div>
+      <p class="hint">${hint}</p>
     </section>`;
   }
 
 
+function companionTricksPanel(model, b, k) {
+    return companionListPanel(model, {
+      list: 'animalCompanion.tricks',
+      rows: b.tricks || [],
+      heading: 'Tricks',
+      badge: `<span class="badge">${k.tricksTaken ?? 0} taken · ${k.bonusTricks ?? 0} bonus</span>`,
+      what: 'Trick',
+      sourcePlaceholder: 'Bonus, Handle Animal…',
+      hint: 'Bonus tricks come from the table; the rest are taught with Handle Animal.',
+    });
+  }
+
+
 function companionFeatsPanel(model, kind, b, k) {
-    const list = `${kind}.feats`;
-    const rows = b.feats || [];
     const allowed = k.featsAllowed ?? 0;
     const over = (k.featsTaken ?? 0) > allowed;
-    return `<section class="panel">
-      <h3>Feats <span class="badge${over ? ' err' : ''}">${k.featsTaken ?? 0} of ${allowed}</span></h3>
-      ${rows.length ? `<div class="rowlist">${rows.map((f, i) => `<div class="item statline">
-        <span class="label pair" style="flex:1">${itemText(list, i, 'name', f.name, 'Feat')}</span>
-        <span class="value pair">${itemArea(model, list, i, 'notes', f.notes, 1)}
-          <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button></span>
-      </div>`).join('')}</div>` : '<p class="empty">No feats yet.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add feat', { name: '', notes: '' })}</div>
-      <p class="hint">The table allows ${allowed} at this level. A feat named Multiattack softens secondary attacks to −2.</p>
-    </section>`;
+    return companionListPanel(model, {
+      list: `${kind}.feats`,
+      rows: b.feats || [],
+      heading: 'Feats',
+      badge: `<span class="badge${over ? ' err' : ''}">${k.featsTaken ?? 0} of ${allowed}</span>`,
+      what: 'Feat',
+      // What the importer reads off the table beside each feat, and what a
+      // player adding one by hand is being asked for.
+      sourcePlaceholder: 'Level 5',
+      hint: `The table allows ${allowed} at this level. A feat named Multiattack softens secondary attacks to −2.`,
+    });
   }
 
 
@@ -1774,7 +1824,18 @@ function companionItemsPanel(model, kind, b, k, label) {
     const wornItem = (i, on) => `<label class="chk" title="${
       on === false ? 'Not worn — the effect below is written down but not applying' : 'Worn: the effect below is applying'}">
       <input type="checkbox" ${on === false ? '' : 'checked'} data-item="${list}|${i}|worn" data-kind="bool"></label>`;
-    const head = `<tr><th style="width:1.6rem" title="Worn">✓</th><th>Item</th>
+    /*
+     * The name is capped and Effect takes what is left.
+     *
+     * Left to itself the table split the two evenly: the name got 394px of a
+     * 970px row -- fifty-odd characters -- and the effect beside it got less.
+     * That is the wrong way round. A name here is "Cloak of Resistance +2";
+     * an effect is prose carrying the {…} that actually does something, and
+     * it is the column with something to say. 14rem clears the longest name
+     * anything wears ("Belt of Physical Perfection +2") and the rest goes
+     * where it is read.
+     */
+    const head = `<tr><th style="width:1.6rem" title="Worn">✓</th><th style="width:14rem">Item</th>
       <th style="width:6rem">Cost</th><th>Effect</th>`;
     return `<section class="panel span2">
       <h3>Items
@@ -1782,7 +1843,10 @@ function companionItemsPanel(model, kind, b, k, label) {
         ${k.canGrasp === null || k.canGrasp === undefined ? '' : `<span class="badge">${k.canGrasp ? 'can grasp' : 'cannot grasp'}</span>`}
       </h3>
       ${slots.length ? `<div class="tablewrap"><table class="stacked" data-fold="shut"><thead>
-        ${head}<th>Slot</th></tr></thead><tbody>
+        ${/* Capped for the same reason the name is: the slot is one of ten
+              fixed words the body type hands out, the longest of them "Feet
+              (horseshoes)", and it was holding 235px against the effect. */''}
+        ${head}<th style="width:9rem">Slot</th></tr></thead><tbody>
         ${slots.map((slot) => {
     const it = b.items?.[slot] || {};
     return `<tr>
@@ -1819,12 +1883,49 @@ function companionItemsPanel(model, kind, b, k, label) {
   }
 
 
+/**
+ * One ability the table granted, opened out.
+ *
+ * Shut it is the line it always was. Open it is what the ability does, and
+ * that comes from one of two places on the same terms veils are on: a pack's
+ * text where a pack describes it, the player's own where they have written
+ * one, and theirs wins -- a pack is reference, and this is their character.
+ *
+ * The box is always there, so an ability no pack has reached is still one you
+ * can write down. What is conditional is the pack's paragraph above it, which
+ * drops away the moment there is something of their own to show instead.
+ */
+function companionAbilityRow(model, kind, b, name) {
+    const key = abilityTextKey(name);
+    const mine = String(b.abilityNotes?.[key] ?? '');
+    const shared = companionAbilityText(name);
+    const foldKey = `${kind}-ability-${key}`;
+    // Shut unless it has been opened: five of these are a list of what the
+    // companion has, and a list you have to scroll past is not a list.
+    const shut = isCollapsed(model, foldKey, true);
+    return `<div class="gainrow">
+      <div class="item statline">
+        <span class="value">${esc(name)}</span>
+        ${foldButton(model, foldKey, shut)}
+      </div>
+      ${shut ? '' : `<div class="gainbody">
+        ${shared && !mine.trim() ? `<div class="hint packsays">
+          ${esc(shared.text)}
+          ${shared.source || shared.pack ? `<span class="packfrom">${esc(shared.source || shared.pack)}</span>` : ''}
+        </div>` : ''}
+        ${prose(model, `data-set="${kind}.abilityNotes.${esc(key)}"`, mine, 2)}
+      </div>`}
+    </div>`;
+  }
+
+
 function companionGainsPanel(model, kind, b, k, label) {
     const gains = k.gains || [];
     return `<section class="panel">
       <h3>${esc(label)} abilities <span class="badge">${gains.length} from the table</span></h3>
-      ${gains.length ? `<div class="rowlist">${gains.map((g) => `<div class="item statline">
-        <span class="label">Level ${g.level}</span><span class="value">${esc(g.text)}</span>
+      ${gains.length ? `<div class="rowlist">${gains.map((g) => `<div class="item gainlevel">
+        <span class="label">Level ${g.level}</span>
+        <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, kind, b, n)).join('')}</div>
       </div>`).join('')}</div>` : '<p class="empty">Nothing yet at this level.</p>'}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>

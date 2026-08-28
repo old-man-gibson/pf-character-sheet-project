@@ -27,10 +27,12 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
-  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey,
 } from '../app/js/model.js';
 import {
-  MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS,
+  MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
+  FORWARD_LATE, FORWARD_STATS,
+  arraySourceLevel, arrayFollowers,
   parseLevelRule, levelRuleLevels, levelRuleGrants, summariseLevels, trackCount, isBasePick,
   trackSpheres, normalizeTalentTracks, TRACK_SPHERE_SIDES, COMBAT_SPHERES, MAGIC_SPHERES,
   cleanSkillVariant, skillVariantKind, skillLabel, PERFORM_CATEGORIES, performCategory,
@@ -45,7 +47,11 @@ import {
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
-import { defaultCompanion } from '../app/js/companions.js';
+import {
+  defaultCompanion, normalizeCompanion, splitAbilities,
+  setCompanionAbilityText, companionAbilityText, abilityTextKey,
+} from '../app/js/companions.js';
+import { namedTextFrom } from '../app/js/extensions.js';
 import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
@@ -56,6 +62,8 @@ import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
+import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
+import { movedInline } from '../app/js/ui/rows.js';
 
 let pass = 0;
 let fail = 0;
@@ -289,8 +297,13 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('the speeds', [b.speed.base, b.speed.fly, b.speed.swim], ['50', '', '20']);
   check('special qualities, both merged lines', b.specialQualities, 'Scent, low-light vision\nTrip on a bite');
   check('the tricks', b.tricks.map((t) => t.name), ['Attack', 'Come', 'Heel']);
-  check('the feats, with the level each was taken at', b.feats.map((f) => `${f.name} @ ${f.notes}`),
+  // The level is where the feat came from, so it lands in Source and leaves
+  // the note empty for whatever the player wants to say about it.
+  check('the feats, with the level each was taken at', b.feats.map((f) => `${f.name} @ ${f.source}`),
     ['Weapon Focus (bite) @ Level 1', 'Multiattack @ Level 2', 'Toughness @ Level 5']);
+  check('and nothing left in their notes', b.feats.map((f) => f.notes), ['', '', '']);
+  check('a trick has the same three fields, its source for the player to fill in',
+    b.tricks.map((t) => `${t.source}|${t.name}|${t.notes}`), ['|Attack|', '|Come|', '|Heel|']);
   check('the attacks, three rows each', b.attacks.map((a) => [a.type, a.damage, a.crit, a.primary, a.qualities]),
     [['Bite', '1d8', '20/×2', true, 'Trip'], ['Claw', '1d4', '19-20/×2', false, '']]);
   check('the skills: ranks, the class tick and the racial and misc columns, never the total',
@@ -684,6 +697,80 @@ for (const id of IDS) {
   check(`${id} a forwarded bonus is one of the parts`,
     will.parts.find((p) => p.label === 'forwarded')?.value, 3);
   check(`${id} and the parts still add up`, will.sum, will.total);
+}
+
+console.log('the working, as the panel draws it');
+{
+  // Built by hand rather than taken off a character: this is the renderer, and
+  // it has to be shown the cases a real sheet only sometimes has -- a part
+  // with a note, a total the parts do not reach, a label somebody typed.
+  const b = {
+    key: 'ac',
+    label: 'Armor Class',
+    total: 43,
+    sum: 41,
+    parts: [
+      { label: 'base', value: 10, note: '' },
+      { label: 'Dex', value: 6, note: 'capped by armour' },
+      { label: '+3 Mithral <b>Breastplate</b>', value: 25, note: '' },
+    ],
+  };
+  const html = breakdownHtml(b, 'Base 41 — with 2 conditions applied');
+  check('the heading is the name and the total', /<span class="bdname">Armor Class<\/span><span class="bdtotal">43<\/span>/.test(html), true);
+  check('a total is a number, not a bonus', html.includes('>+43<'), false);
+  check('a part is a bonus, and signed', html.includes('<span class="v">+10</span>'), true);
+  check('a note goes under the label it belongs to', html.includes('<span class="bdnote">capped by armour</span>'), true);
+  check('a part with no note gets no empty line', html.includes('<span class="bdnote"></span>'), false);
+  // The labels come off a spreadsheet cell, and a published sheet is opened by
+  // people who did not type it. See ui/html.js.
+  check('a label somebody typed cannot carry markup', html.includes('<b>Breastplate</b>'), false);
+  check('it is escaped instead', html.includes('&lt;b&gt;Breastplate&lt;/b&gt;'), true);
+  check('the extra line is the subheading', html.includes('<div class="bdsub">Base 41 — with 2 conditions applied</div>'), true);
+  // The one thing the panel must never do is show working that does not work.
+  check('parts short of the total say so', html.includes('unaccounted for'), true);
+  check('and say it in the row that is marked wrong', html.includes('<div class="bdrow odd">'), true);
+  check('an honest sum has no such row',
+    breakdownHtml({ ...b, sum: 43 }).includes('unaccounted for'), false);
+  check('no extra, no subheading', breakdownHtml({ ...b, sum: 43 }).includes('bdsub'), false);
+  check('nothing adding up is said out loud',
+    breakdownHtml({ label: 'Will', total: 0, sum: 0, parts: [] }).includes('Nothing is adding to it'), true);
+  check('and no breakdown at all draws nothing', breakdownHtml(null), '');
+}
+
+console.log('...and where the panel stands');
+{
+  const view = { width: 1200, height: 800 };
+  const box = { width: 260, height: 160 };
+  const at = (left, top, width = 40) => ({ left, top, right: left + width, bottom: top + 20, width });
+  const roomy = placeAt(at(500, 300), box, view);
+  check('room below: it goes below, 8px clear', [roomy.below, roomy.top], [true, 328]);
+  check('and centred on the number', roomy.left, 500 + 20 - 130);
+  check('no room below: it goes above', placeAt(at(500, 700), box, view).below, false);
+  check('and clears the number by the same 8px', placeAt(at(500, 700), box, view).top, 700 - 8 - 160);
+  // A stat in the last column: centring alone would put half the panel off the
+  // screen, which is the failure the clamp exists for.
+  check('at the right edge it is pushed back inside',
+    placeAt(at(1170, 300, 25), box, view).left, 1200 - 260 - 8);
+  check('at the left edge, likewise', placeAt(at(2, 300, 25), box, view).left, 8);
+  // Taller than the window either way: below is the one that at least starts
+  // where the number is, rather than starting off the top of the screen.
+  check('fitting nowhere, it still goes below',
+    placeAt(at(500, 400), { width: 260, height: 900 }, view).below, true);
+}
+
+console.log('a number that can be opened says which working it opens');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const cs = c.conditionState;
+  const ac = movedInline(cs, 'ac', c.data.defenses.ac, undefined, c);
+  check(`${id} a totalled number carries its key`, ac.includes('data-bd="ac"'), true);
+  check(`${id} and keeps the plain working as well`, ac.includes('title="Armor Class'), true);
+  // `movedInline` is called with whatever a condition delta is keyed by, and
+  // not all of those have a breakdown behind them.
+  check(`${id} a key with no working carries none`,
+    movedInline(cs, 'nonsense', 1, undefined, c).includes('data-bd'), false);
+  check(`${id} and neither does a caller with no model`,
+    movedInline(cs, 'ac', 1).includes('data-bd'), false);
 }
 
 console.log('a buff switches its note off with itself');
@@ -1235,6 +1322,140 @@ console.log('ABP levels 11 and 12 follow the level 6 and 7 picks');
   check('Dex picks up both', c.data.statsBuild.dex.abp, 8);
   c.setPick('abp', 7, 'physical', 'Con');
   check('restored', c.data.abilities.con.score, con0);
+}
+
+console.log('the skill budget: Int follows the score, bonus points take a formula');
+{
+  // Int per level was typed beside the score it was supposed to equal. Every
+  // source sheet stores exactly the modifier, so reading it changes no
+  // character's budget -- it only stops the two ever parting.
+  for (const id of IDS) {
+    const c = new Character(load(id));
+    check(`${id} Int per level is the Intelligence modifier`,
+      c.data.skillBudget.intPerLevel, c.data.abilities.int.mod);
+  }
+
+  const c = new Character(load('angou'));
+  const per0 = c.data.skillBudget.perLevel;
+  const int0 = c.data.abilities.int.mod;
+  c.setBuild('int', 'untyped', 4);
+  check('raising Int raises the budget with it',
+    [c.data.abilities.int.mod, c.data.skillBudget.intPerLevel, c.data.skillBudget.perLevel],
+    [int0 + 2, int0 + 2, per0 + 2]);
+  check('and the ranks available follow',
+    c.data.skillBudget.available, c.data.skillBudget.perLevel * c.data.identity.level);
+  c.setBuild('int', 'untyped', 0);
+  check('lowering it puts the budget back', c.data.skillBudget.perLevel, per0);
+
+  // Bonus points may be a formula, like every other number a rule decides.
+  c.set('skillBudget.bonusPerLevel', 'level >= 5 ? 2 : 1');
+  check('a formula resolves', c.data.skillBudget.bonusResolved, 2);
+  check('and lands in the budget', c.data.skillBudget.perLevel, per0 + 2);
+  check('with nothing to report', c.data.skillBudget.bonusError, null);
+
+  c.set('skillBudget.bonusPerLevel', 'level +');
+  check('a formula that will not parse counts as nothing',
+    c.data.skillBudget.bonusResolved, 0);
+  check('and says so rather than going quiet',
+    typeof c.data.skillBudget.bonusError === 'string' && c.data.skillBudget.bonusError.length > 0, true);
+  check('so the budget is the one without it', c.data.skillBudget.perLevel, per0);
+
+  c.set('skillBudget.bonusPerLevel', 3);
+  check('a plain number still works', c.data.skillBudget.bonusResolved, 3);
+  check('and the raw value is what was typed', c.data.skillBudget.bonusPerLevel, 3);
+  // The raw text is the character's; what it comes to is not.
+  check('a formula survives the round trip',
+    new Character((() => { c.set('skillBudget.bonusPerLevel', 'level / 4'); return c.toJSON(); })())
+      .data.skillBudget.bonusPerLevel, 'level / 4');
+}
+
+console.log('...and a rule elsewhere can grant a skill point per level');
+{
+  const c = new Character(load('angou'));
+  const per0 = c.data.skillBudget.perLevel;
+  const level = c.data.identity.level;
+  check('it is a destination a formula can name',
+    c.forwardTargets().list.some((t) => t.name === 'skill.pointsPerLevel'), true);
+  check('and it is called something a reader would recognise',
+    c.forwardTargets().list.find((t) => t.name === 'skill.pointsPerLevel')?.label,
+    'Skill points per level');
+
+  c.data.notes = [{ title: 'Favoured class', body: 'A point a level: {skill.pointsPerLevel += 1}' }];
+  c.recompute();
+  check('the bonus lands', c.data.skillBudget.forwarded, 1);
+  check('and raises the budget', c.data.skillBudget.perLevel, per0 + 1);
+  check('every level of it', c.data.skillBudget.available, (per0 + 1) * level);
+  // Beside what was typed, never folded into it -- the box has to go on saying
+  // what is written in it.
+  check('without touching the box the player types in', c.data.skillBudget.bonusPerLevel, 0);
+
+  c.data.notes = [];
+  c.recompute();
+  check('and it goes when the rule does', c.data.skillBudget.perLevel, per0);
+
+  /*
+   * Late, not early. `applyBudget` runs long after the prose is read, so this
+   * lands on the same pass -- putting it in FORWARD_STATS would buy a second
+   * recompute for every character carrying one, and buy nothing with it.
+   */
+  check('it is a late destination', FORWARD_LATE.some(([n]) => n === 'skill.pointsPerLevel'), true);
+  check('and not an early one', FORWARD_STATS.some(([n]) => n === 'skill.pointsPerLevel'), false);
+
+  // camelCase is load-bearing: `slug()` lowercases, so no skill name -- not
+  // even one somebody calls "Points Per Level" -- can shadow this.
+  for (const name of ['Points Per Level', 'pointsPerLevel', 'POINTS PER LEVEL', 'Points']) {
+    check(`a skill called "${name}" cannot shadow it`,
+      skillForwardKey({ name }) === 'skill.pointsPerLevel', false);
+  }
+}
+
+console.log('the optional array is four columns, and only the last is a new choice');
+{
+  // Three of the four columns are one decision raised again later. The shape
+  // is in ARRAY_LINKED_LEVELS; this is that rule behaving.
+  check('column 1 is chosen at 8 and raised at 12 and 16',
+    [arraySourceLevel(0, 8), arraySourceLevel(0, 12), arraySourceLevel(0, 16)], [8, 8, 8]);
+  check('column 2 is raised at 12 only', arraySourceLevel(1, 12), 8);
+  check('column 3 is raised at 16 only', arraySourceLevel(2, 16), 8);
+  check('column 4 is chosen where it sits, every time',
+    [arraySourceLevel(3, 8), arraySourceLevel(3, 12), arraySourceLevel(3, 16)], [8, 12, 16]);
+  check('so column 1 has two followers', arrayFollowers(0, 8), [12, 16]);
+  check('and column 4 none at all', arrayFollowers(3, 8), []);
+
+  // Every source sheet already stores exactly this -- the same ability
+  // repeated down a column -- so the rule describes the data rather than
+  // changing it. If this ever fails, the rule and the sheets have parted ways.
+  for (const id of IDS) {
+    const rows = load(id).progressionPicks.array;
+    const at = (l) => rows.find((r) => r.level === l)?.slots || [];
+    const drift = [];
+    for (const l of ARRAY_LEVELS) {
+      for (const slot of ARRAY_SLOTS[l] || []) {
+        const src = arraySourceLevel(slot, l);
+        if (src !== l && at(l)[slot] !== at(src)[slot]) drift.push(`L${l} col${slot + 1}`);
+      }
+    }
+    check(`${id} the sheet's own array already follows its columns`, drift, []);
+  }
+
+  const c = new Character(load('angou'));
+  const con0 = c.data.statsBuild.con.array;
+  check('Con is picked in column 1, so it lands three times', con0, 6);
+
+  c.setPick('array', 8, 0, 'Cha');
+  const col1 = ARRAY_LEVELS.map((l) => c.data.progressionPicks.array.find((r) => r.level === l).slots[0]);
+  check('one edit at 8 carries the whole column', col1, ['Cha', 'Cha', 'Cha']);
+  check('and Con loses all three', c.data.statsBuild.con.array, 0);
+  c.setPick('array', 8, 0, 'Con');
+  check('reverting puts them back', c.data.statsBuild.con.array, con0);
+
+  // The fourth column must not follow anything, or three separate picks would
+  // collapse into one the moment any of them was touched.
+  const before = ARRAY_LEVELS.map((l) => c.data.progressionPicks.array.find((r) => r.level === l).slots[3]);
+  c.setPick('array', 8, 3, 'Str');
+  const after = ARRAY_LEVELS.map((l) => c.data.progressionPicks.array.find((r) => r.level === l).slots[3]);
+  check('editing column 4 at 8 leaves 12 and 16 alone', after.slice(1), before.slice(1));
+  check('and changes only the level it was made at', after[0], 'Str');
 }
 
 console.log('list editing');
@@ -7674,6 +7895,95 @@ console.log('companions -- a familiar is its master, halved');
   check('the master-level penalty lowers the level and the table row', [c.data.familiar.calc.level, c.data.familiar.calc.scores.int.total], [17, 14]);
   c.set('familiar.scores.int.base', 20);
   check('a typed Intelligence pins it', c.data.familiar.calc.scores.int.total, 20);
+}
+
+console.log('companions -- a feat that kept its level in the note gets it back');
+{
+  // Every document saved before the Source column holds the importer's own
+  // shape: the level, alone, in the note. It has to end up in the right box on
+  // reopening, and a note anybody actually wrote has to survive untouched.
+  const b = normalizeCompanion('animalCompanion', {
+    feats: [
+      { name: 'Weapon Focus (bite)', notes: 'Level 1' },
+      { name: 'Toughness', notes: 'Level 5' },
+      { name: 'Multiattack', notes: 'Bought with the 7th-level slot, see the log' },
+      { name: 'Improved Natural Armor', source: 'Level 9', notes: 'Level 3' },
+      { name: 'Endurance' },
+    ],
+    tricks: [{ name: 'Attack' }],
+  });
+  check('the level moves to Source', b.feats.map((f) => f.source),
+    ['Level 1', 'Level 5', '', 'Level 9', '']);
+  check('and is out of the note', b.feats.map((f) => f.notes),
+    ['', '', 'Bought with the 7th-level slot, see the log', 'Level 3', '']);
+  check('a row that already has a source keeps both', b.feats[3], {
+    source: 'Level 9', name: 'Improved Natural Armor', notes: 'Level 3',
+  });
+  check('a trick gets the field too', b.tricks[0], { source: '', name: 'Attack', notes: '' });
+  check('running it twice changes nothing more',
+    normalizeCompanion('animalCompanion', b).feats, b.feats);
+  // A familiar has feats and no tricks, and must not grow one.
+  const fam = normalizeCompanion('familiar', { feats: [{ name: 'Alertness', notes: 'Level 1' }] });
+  check('a familiar feat is migrated the same way', fam.feats[0].source, 'Level 1');
+  check('and it has no tricks list to speak of', fam.tricks, undefined);
+}
+
+console.log('companions -- what the table grants, and where its rules text comes from');
+{
+  // The Special column is a list, and each entry is a rule with its own text.
+  check('a cell naming two abilities is two of them',
+    splitAbilities('Ability score increase, Multiattack'), ['Ability score increase', 'Multiattack']);
+  check('one is one', splitAbilities('Evasion'), ['Evasion']);
+  check('and an empty cell is none', splitAbilities('  '), []);
+  check('a gain carries the names it is made of',
+    new Character(load('angou')).data.animalCompanion?.calc?.gains?.every?.((g) => Array.isArray(g.abilities)) ?? true, true);
+
+  /*
+   * The engine ships no rules text -- that prose is a publisher's. A pack
+   * supplies it as a `feature` or a `note` block, which are the two kinds that
+   * are a name and a paragraph, and nothing is ever copied onto a character.
+   */
+  const blocks = [
+    { kind: 'note', name: 'Evasion', text: 'Takes no damage instead of half.', source: 'Test p.14', extName: 'Test Pack' },
+    { kind: 'feature', name: 'Devotion', text: '+4 morale on Will saves against enchantment.', extName: 'Test Pack' },
+    { kind: 'options', name: 'A menu', text: 'a menu is not rules text', options: [] },
+    { kind: 'note', name: 'Blank', text: '   ' },
+    { kind: 'note', name: '', text: 'nameless' },
+  ];
+  const named = namedTextFrom(blocks);
+  check('only the kinds that are a name and a paragraph', named.map((n) => n.name), ['Evasion', 'Devotion']);
+  check('with the pack that supplied it', named[0].pack, 'Test Pack');
+
+  setCompanionAbilityText(named);
+  check('an ability is found however the table capitalised it',
+    companionAbilityText('EVASION')?.text, 'Takes no damage instead of half.');
+  check('one no pack describes has none', companionAbilityText('Link'), null);
+  check('and neither has nothing at all', companionAbilityText(''), null);
+  // The key an ability's own note is filed under, which the panel writes into
+  // `abilityNotes` -- so the two halves have to agree on it.
+  check('the key is the name, folded', abilityTextKey('  Ability Score Increase '), 'ability score increase');
+
+  // First pack in wins, which is bundled-then-local: somebody's own overrides.
+  setCompanionAbilityText([
+    { name: 'Evasion', text: 'mine' }, { name: 'Evasion', text: 'theirs' },
+  ]);
+  check('the first pack to describe one keeps it', companionAbilityText('Evasion').text, 'mine');
+  setCompanionAbilityText([]);
+  check('and no packs at all is simply no text', companionAbilityText('Evasion'), null);
+}
+
+console.log('companions -- a note the player writes about an ability is theirs and is kept');
+{
+  const b = normalizeCompanion('animalCompanion', {});
+  check('a fresh block has the map', b.abilityNotes, {});
+  const kept = normalizeCompanion('animalCompanion', { abilityNotes: { evasion: 'mine' } });
+  check('and one already written survives normalising', kept.abilityNotes.evasion, 'mine');
+  check('a broken one is replaced rather than trusted',
+    normalizeCompanion('animalCompanion', { abilityNotes: 'not an object' }).abilityNotes, {});
+  const c = new Character(load('angou'));
+  c.set('familiar.abilityNotes.evasion', 'what it means at my table');
+  check('it is set and read back like any other field',
+    c.data.familiar.abilityNotes.evasion, 'what it means at my table');
 }
 
 console.log('companions -- the animal companion follows its table by effective level');

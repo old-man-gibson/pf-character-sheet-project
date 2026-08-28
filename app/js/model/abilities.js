@@ -8,7 +8,8 @@
 
 import {
   ABILITIES, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, BUILD_DERIVED_KEYS, MYTHIC_STAT_BONUS,
-  POINT_BUY_COST, abilityMod, abpFollowers, foldPicks, pointBuyCost, resolveAbility,
+  POINT_BUY_COST, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
+  resolveAbility,
   tierAtLevel,
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
@@ -162,6 +163,14 @@ export function setPick(model, kind, level, slot, ability) {
   } else if (kind === 'array') {
     if (!row) { row = { level, slots: [null, null, null, null] }; list.push(row); }
     row.slots[slot] = value;
+    // Three of the four columns are one choice raised again later, so the
+    // levels that follow this one take it too -- the same write-through the
+    // prowess tracks do above, and the reason a column reads as a column.
+    for (const follower of arrayFollowers(slot, level)) {
+      let f = list.find((r) => r.level === follower);
+      if (!f) { f = { level: follower, slots: [null, null, null, null] }; list.push(f); }
+      f.slots[slot] = value;
+    }
   } else {
     if (!row) { row = { level, ability: null }; list.push(row); }
     row.ability = value;
