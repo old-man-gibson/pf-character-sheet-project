@@ -111,6 +111,22 @@ export function rowTools(list, i) {
     </td>`;
 }
 
+/**
+ * Tools for a list that is reordered by dragging a grip.
+ *
+ * The grip is the only way such a list moves, and a card hides it -- a drag
+ * from one row to another is not a gesture a phone has. So the two arrows
+ * every other list carries are written here as well, and shown only where the
+ * grip is not; see `button.cardmove` in the stylesheet.
+ */
+export function rowToolsDragged(list, i) {
+  return `<td class="tools">
+      <button class="cardmove" data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
+      <button class="cardmove" data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
+      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+    </td>`;
+}
+
 /** Tools for a list whose rows are summed, so their order means nothing. */
 export function rowRemove(list, i) {
   return `<td class="tools">

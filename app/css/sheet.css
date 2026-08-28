@@ -91,6 +91,19 @@
   border-radius: var(--cs-radius);
   container-type: inline-size;
   line-height: 1.45;
+  /* Scroll anchoring off, for the sheet and everything in it.
+     A render rewrites the whole shadow root, so the node the browser had
+     picked to hold the reader's place is thrown away every time and it has to
+     choose a fresh one out of markup it has never seen. Its adjustment then
+     comes out a pixel wrong, the same way every render, and a tracker's + or a
+     pip pressed twenty times walks the page twenty pixels down the screen --
+     which reads as the sheet sliding away from the pointer rather than as
+     anything having been clicked. Nothing is given up by refusing it:
+     anchoring is for content above the fold that grows after paint, and the
+     one thing here that arrives late is the portrait, which is 84px square
+     whether it has arrived or not. `none` excludes the descendants too, which
+     is why this is the only place it is said. */
+  overflow-anchor: none;
   /* A <select>'s open list is drawn by the browser, not by this stylesheet, so
      it takes its colours from color-scheme. Without this the dark theme gets a
      white popup with washed-out text. */
@@ -1969,10 +1982,10 @@ td.bought .xf input { font-size: 0.78rem; }
    on the repeating levels, and it is being read once. The note is the column
    that keeps growing, so it takes whatever is left. */
 table.primordia { table-layout: fixed; }
-table.primordia th:first-child, table.primordia td:first-child { width: 3rem; }
-table.primordia th.grants, table.primordia td.grants { width: 30%; }
+table.primordia th:first-child, table.primordia td:first-child { width: 2rem; }
+table.primordia th.grants, table.primordia td.grants { width: 25%; }
 table.primordia td.grants { font-size: 0.8rem; line-height: 1.4; }
-table.primordia th.pickname { width: 22%; }
+table.primordia th.pickname { width: 20%; }
 table.primordia td.grants .grant { display: block; }
 table.primordia td.grants .grant + .grant { margin-top: 3px; }
 table.primordia td.grants .grant a { color: var(--cs-accent); text-decoration: none; }
@@ -3204,25 +3217,35 @@ h4.subhead button.danger { margin-left: auto; padding: 1px 6px; font-size: 0.7re
 }
 .addgroup .hint { flex: 1; min-width: 16rem; margin: 0; }
 
-/* The grip column is as narrow as the handle in it; the row's own tools lost
-   their arrows to the drag, so one cross is all that is left on the right. */
-table.feats th.grip, table.feats td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
-/* A feat's name and where it came from are both a few words; what it does is
-   the paragraph. So those two are held to their measure and the note takes
+/* The two feat tables are the same five columns in a different order -- a
+   grip, a name, where it came from, what it does, and a cross -- and they
+   stack in one panel and are read as one list. So they are ruled together
+   here, and the note comes out the same width in both.
+
+   The grip column is as narrow as the handle in it; the tools column lost its
+   arrows to the drag, so one cross is all that is left on the right of a
+   desktop. A feat's name and its source are a few words each and what it does
+   is the paragraph, so those two are held to their measure and the note takes
    whatever is left, which is the only column that can use it. A fixed layout
    shares the remainder equally between the columns with no width, so the grip
-   and the cross are given one too -- or the cross ends up as wide as the
-   feat, and the note gets nothing. */
-table.feats { table-layout: fixed; }
-table.feats th.fname { width: 24%; }
-table.feats th.src { width: 20%; }
-table.feats th:last-child, table.feats td.tools { width: 2.6rem; }
-table.feats td input[type="text"] { width: 100%; min-width: 0; }
-table.feats tr.dragging { opacity: 0.4; }
+   and the cross are given one too -- or the cross ends up as wide as the feat,
+   and the note gets nothing. */
+table.feats, table.granted { table-layout: fixed; }
+table.feats th.grip, table.feats td.grip,
+table.granted th.grip, table.granted td.grip { width: 1%; padding-left: 4px; padding-right: 0; }
+table.feats th.fname, table.granted th.fname { width: 24%; }
+table.feats th.src, table.granted th.src { width: 20%; }
+table.feats th:last-child, table.feats td.tools,
+table.granted th:last-child, table.granted td.tools { width: 2.6rem; }
+table.feats td input[type="text"],
+table.granted td input[type="text"] { width: 100%; min-width: 0; }
+table.feats tr.dragging, table.granted tr.dragging { opacity: 0.4; }
 /* Border-collapse eats a shadow on the row itself, so the line that says where
    the drop lands is drawn inside the cells. */
-table.feats tr.drop-before > td { box-shadow: inset 0 3px 0 -1px var(--cs-accent); }
-table.feats tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent); }
+table.feats tr.drop-before > td,
+table.granted tr.drop-before > td { box-shadow: inset 0 3px 0 -1px var(--cs-accent); }
+table.feats tr.drop-after > td,
+table.granted tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent); }
 table.feats tr.featempty td { cursor: default; }
 
 /* ---------- the mythic ladder ----------
@@ -3247,7 +3270,11 @@ table.mythic col.mpath { width: 8rem; }
    the middle while the Effect beside it ran to 400px of empty. */
 table.mythic col.mname { width: 12rem; }
 table.mythic col.grants { width: 6.5rem; }
-table.mythic col.mstat { width: 6.5rem; }
+/* Six three-letter labels and a dash: the widest thing this column ever holds
+   is "Dex" and the arrow beside it. It was set to the same 6.5rem as Grants,
+   which is a column of words, and spent 30px a row on white space that the
+   Effect column next to it -- the only prose on the row -- had a use for. */
+table.mythic col.mstat { width: 4.6rem; }
 table.mythic td { vertical-align: top; }
 table.mythic input[type="text"], table.mythic select { width: 100%; min-width: 0; }
 
