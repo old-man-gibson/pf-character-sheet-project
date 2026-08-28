@@ -21,8 +21,11 @@ import {
 } from './model.js';
 import {
   extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
-  optionCataloguesFrom, isPackKey, packsWorthMoving,
+  optionCataloguesFrom, namedTextFrom, isPackKey, packsWorthMoving,
 } from './extensions.js';
+// Straight from the module rather than through model.js, which does not
+// re-export this one -- companions.js is beside the model, not inside it.
+import { setCompanionAbilityText } from './companions.js';
 import { packMedium } from './pack-storage.js';
 
 const REGISTRARS = {
@@ -77,7 +80,10 @@ class ExtensionRuntime extends EventTarget {
     registerTables(mergeTables(active), REGISTRARS);
     // The option menus a pack carries as blocks, so a feature column pointing
     // at one by name finds it as soon as its pack is switched on.
-    setOptionCatalogues(optionCataloguesFrom(activeBlocks(active)));
+    const blocks = activeBlocks(active);
+    setOptionCatalogues(optionCataloguesFrom(blocks));
+    // And the rules text behind a companion ability the table grants by name.
+    setCompanionAbilityText(namedTextFrom(blocks));
     if (!silent) this.dispatchEvent(new CustomEvent('change', { detail: { active: this.active() } }));
   }
 }

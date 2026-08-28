@@ -16,7 +16,8 @@ import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import {
   fmt, ABILITIES, ABILITY_LABELS, ABP_DEFENCE_CAP, ABP_DEFENCE_GROUPS, ABP_LEVELS,
-  AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_SLOTS, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
+  AC_BONUS_TYPES, ARRAY_LEVELS, ARRAY_MAX_SLOTS, ARRAY_SLOTS, arraySourceLevel,
+  ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
   ENHANCEMENT_CAP, LEVEL4_LEVELS, MENTAL_PROWESS_LEVELS, MYTHIC_STAT_TIERS,
   PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel,
@@ -187,9 +188,15 @@ export function renderStatsPanel(model, ctx) {
       </div>
 
       ${defenceBonusPanel(model)}
-      ${abpPicksPanel(model)}
-      ${milestonePicksPanel(model)}
-      ${arrayPicksPanel(model)}
+      ${/* The three ladders in a row of their own. Left to the outer grid they
+            each took one 310px track, which is not enough for the array's four
+            columns and more than the other two need -- so they are given the
+            widths they actually want. See `.pickrow`. */''}
+      <div class="pickrow span2">
+        ${abpPicksPanel(model)}
+        ${milestonePicksPanel(model)}
+        ${arrayPicksPanel(model)}
+      </div>
     </div>`;
 }
 
@@ -311,7 +318,7 @@ function milestonePicksPanel(model) {
   const rows = Math.max(LEVEL4_LEVELS.length, MYTHIC_STAT_TIERS.length);
   return `<section class="panel">
       <h3>Level/4 &amp; mythic increases</h3>
-      <div class="tablewrap"><table class="build">
+      <div class="tablewrap"><table class="build picks">
         <thead>
           <tr class="groups">
             <th class="num grouphead" colspan="2">Level/4 <span class="capnote">+1</span></th>
@@ -355,6 +362,21 @@ export function mythicPickAt(model, tier) {
     .find((p) => Number(p.tier) === tier)?.ability;
 }
 
+/**
+ * A choice made at an earlier level, showing here because this level raises it.
+ *
+ * The same control as the choice itself, locked. It used to be bare text with
+ * a badge after it, which made a row that grants a +2 look like a row that
+ * grants nothing -- the eye reads a column of selects and skips the line of
+ * prose in the middle of it. It is the same decision and the same +2, so it
+ * gets the same box; what says it is not yours to change here is that it is
+ * disabled, and the badge saying where it was made.
+ */
+export function inheritedPick(kind, level, slot, value, allowed, from, { badge = true } = {}) {
+  return `${pickSelect(kind, level, slot, value, allowed, true)}${
+    badge ? `<span class="badge from">from ${from}</span>` : ''}`;
+}
+
 /** A select of allowed abilities for one progression pick. */
 export function pickSelect(kind, level, slot, value, allowed, disabled) {
   const ab = picksAbility(allowed);
@@ -378,7 +400,7 @@ function abpPicksPanel(model) {
   const at = (l) => picks.find((p) => p.level === l) || {};
   return `<section class="panel">
       <h3>ABP — Mental &amp; Physical Prowess</h3>
-      <div class="tablewrap"><table class="build">
+      <div class="tablewrap"><table class="build picks">
         <thead><tr><th class="num">Lvl</th><th>Mental</th><th>Physical</th></tr></thead>
         <tbody>${ABP_LEVELS.map((l) => {
         const row = at(l);
@@ -392,7 +414,7 @@ function abpPicksPanel(model) {
           const src = abpSourceLevel(track, l);
           if (src !== l) {
             return `<td class="linked" title="Raises the level ${src} choice">
-                ${val(at(src)[track])} <span class="badge">from ${src}</span></td>`;
+                ${inheritedPick('abp', l, track, at(src)[track], allowed, src)}</td>`;
           }
           return `<td>${pickSelect('abp', l, track, row[track], allowed, false)}</td>`;
         };
@@ -413,29 +435,54 @@ function abpPicksPanel(model) {
 }
 
 
+/**
+ * The optional array: four columns, and only the last is a new choice each time.
+ *
+ * A table rather than the wrapping rows it used to be, because the four picks
+ * *are* four columns and laying them out as three loose groups hid it -- the
+ * Con at 12 and the Con at 16 were the same decision as the Con at 8 and there
+ * was nothing on screen to say so. Down a column now, chosen once at the top
+ * and locked underneath, which is the shape the rule actually has. See
+ * `ARRAY_LINKED_LEVELS`; a level with no gain in a column gets no cell at all
+ * rather than a dead control.
+ */
 function arrayPicksPanel(model) {
   const c = model.data;
   const level = Number(c.identity.level) || 0;
   const picks = c.progressionPicks?.array || [];
   const at = (l) => picks.find((p) => p.level === l) || { slots: [] };
-  // Laid out as wrapping groups rather than a table: four picks side by side
-  // needs more width than this column has, and a table would just overflow.
+  const columns = Array.from({ length: ARRAY_MAX_SLOTS }, (_, i) => i);
   return `<section class="panel">
       <h3>Optional array</h3>
       <p class="hint warn" style="margin-top:0">
         Bought separately, with Primordia shards — these do not come with the level.
       </p>
-      ${ARRAY_LEVELS.map((l) => {
-      const row = at(l);
-      const slots = ARRAY_SLOTS[l] || [];
-      return `<div class="pickgroup ${l > level ? 'future' : ''}">
-          <span class="picklvl">Level ${l}</span>
-          <div class="picks">
-            ${slots.map((slot) => pickSelect('array', l, slot, row.slots?.[slot], ABILITY_LABELS_LIST, false)).join('')}
-          </div>
-        </div>`;
-    }).join('')}
-      <p class="hint">+2 each — four picks at 8, three at 12 and 16.${c.progressionPicks?.arrayNote
+      <div class="tablewrap"><table class="build picks">
+        <thead><tr><th class="num">Lvl</th>${
+  columns.map((i) => `<th>${i + 1}</th>`).join('')}</tr></thead>
+        <tbody>${ARRAY_LEVELS.map((l) => {
+    const slots = ARRAY_SLOTS[l] || [];
+    return `<tr class="${l > level ? 'future' : ''}">
+            <td class="num">${l}</td>
+            ${columns.map((slot) => {
+    if (!slots.includes(slot)) return '<td class="noslot"></td>';
+    const src = arraySourceLevel(slot, l);
+    if (src !== l) {
+      // No badge here, unlike ABP: this is a column with the same answer
+      // repeated down it and the only editable box at the top, which says
+      // "chosen once" better than any label on the cell could. The tooltip
+      // still names the level for anyone who wants it spelled out.
+      return `<td class="linked" title="Raises the level ${src} choice">
+                  ${inheritedPick('array', l, slot, at(src).slots?.[slot], ABILITY_LABELS_LIST, src, { badge: false })}</td>`;
+    }
+    return `<td>${pickSelect('array', l, slot, at(l).slots?.[slot], ABILITY_LABELS_LIST, false)}</td>`;
+  }).join('')}
+          </tr>`;
+  }).join('')}</tbody>
+      </table></div>
+      <p class="hint">+2 each — four picks at 8, three at 12 and 16. The first three
+        columns are one choice raised again later; only the fourth is chosen anew each
+        time.${c.progressionPicks?.arrayNote
       ? ` Sheet note: ${esc(String(c.progressionPicks.arrayNote).replace(/^Array \(Optional\)\s*/, '').replace(/\s+/g, ' '))}` : ''}</p>
     </section>`;
 }

@@ -11,7 +11,7 @@
  * unused-skill filter has been switched off. Everything else it imports.
  */
 import { esc } from '../html.js';
-import { field, num, select } from '../fields.js';
+import { field, select } from '../fields.js';
 import { addButton, exprField, itemCheck, itemSelect, itemText } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -93,15 +93,29 @@ export function renderSkillsPanel(model, ctx) {
     const budgetClass = b.status === 'error' ? 'err' : b.status === 'warning' ? 'warn' : 'ok';
 
     return `<div class="grid">
-      <section class="panel span2">
+      ${/* The two budgets are half a dozen short fields each and were a full
+            width apiece, one under the other -- so the tab opened on two bands
+            of mostly empty panel before the table anybody came for. Side by
+            side above 900px, stacked below. */''}
+      <div class="pairrow even span2">
+      <section class="panel">
         <h3>Skill points
           <span class="badge ${budgetClass === 'err' ? 'err' : budgetClass === 'ok' ? 'ok' : ''}">
             ${b.assigned ?? 0} / ${b.available ?? 0} assigned</span>
         </h3>
         <div class="fieldgrid">
           ${field('Class ranks / level (gestalt)', `<span class="value">${model.data.gestalt?.ranksPerLevel ?? 0}</span>`)}
-          ${field('Int bonus / level', num('skillBudget.intPerLevel', b.intPerLevel))}
-          ${field('Bonus points / level', num('skillBudget.bonusPerLevel', b.bonusPerLevel))}
+          ${/* Read off the Intelligence score rather than typed beside it, so
+                the two cannot disagree. See `applyBudget`. */''}
+          ${field('Int bonus / level', `<span class="value" title="The Intelligence modifier — raise the score and this follows">${
+  fmt(b.intPerLevel ?? 0)}</span>`)}
+          ${field('Bonus points / level', exprField('data-set="skillBudget.bonusPerLevel"',
+    b.bonusPerLevel ?? 0, {
+      width: '5.4rem',
+      value: b.bonusResolved,
+      error: b.bonusError,
+      title: 'Number or formula, e.g. 1 or (level >= 5 ? 2 : 1)',
+    }))}
           ${field('Total / level', `<span class="value">${b.perLevel ?? 0}</span>`)}
         </div>
         ${b.status === 'error' ? `<p class="hint warn"><strong>Too many ranks assigned:</strong>
@@ -111,12 +125,13 @@ export function renderSkillsPanel(model, ctx) {
       : '<p class="hint" style="color:var(--cs-good)">Every skill point is spent.</p>'}
         <p class="hint">
           Only <strong>Bought</strong> ranks count against the budget — specialty, gear,
-          Other and sphere ranks are free. Int bonus/level is a flat metric (retroactive
-          Int increases don't refund ranks unless your table rules otherwise).
+          Other and sphere ranks are free. Int bonus/level follows the Intelligence
+          modifier and is a flat metric: raising Int does not refund ranks for the levels
+          below it, unless your table rules otherwise. Bonus points takes a formula.
         </p>
       </section>
 
-      <section class="panel span2">
+      <section class="panel">
         <h3>Specialty skills</h3>
         <div class="fieldgrid">
           ${field('Knowledge / Lore skill', select('specialtySkills.knowledge', spec.knowledge, pickOptions(isKn)))}
@@ -128,6 +143,7 @@ export function renderSkillsPanel(model, ctx) {
           column. Marked with ★ in the table below.
         </p>
       </section>
+      </div>
 
       <section class="panel span2">
         <h3>Skills

@@ -179,6 +179,49 @@ export const BODY_TYPES = [
 
 export const bodyType = (name) => BODY_TYPES.find((b) => b.name === name) || null;
 
+/* ------------------------------------------------------------------ *
+ * What the table's abilities actually do -- which the engine does not know.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Rules text for a named ability, supplied by whatever packs are switched on.
+ *
+ * The companion tables grant abilities by name and stop there, because the
+ * prose behind "Evasion" is a publisher's and this engine ships none of it.
+ * `extension-runtime` fills this from the active packs on every refresh, the
+ * same way it fills the option catalogues; empty is the normal state for
+ * somebody running no packs, and reads as "no text for this one".
+ */
+let ABILITY_TEXT = new Map();
+
+/** The key an ability is found by: its name, however it was capitalised. */
+export const abilityTextKey = (name) => String(name ?? '').trim().toLowerCase();
+
+export function setCompanionAbilityText(list) {
+  ABILITY_TEXT = new Map();
+  for (const entry of Array.isArray(list) ? list : []) {
+    const key = abilityTextKey(entry?.name);
+    // First pack in wins, which is the order `activeExtensions` puts them in:
+    // bundled, then local, so somebody's own pack overrides a bundled one.
+    if (key && !ABILITY_TEXT.has(key)) ABILITY_TEXT.set(key, entry);
+  }
+}
+
+/** One ability's pack text, or null where no pack describes it. */
+export function companionAbilityText(name) {
+  return ABILITY_TEXT.get(abilityTextKey(name)) || null;
+}
+
+/**
+ * The abilities one row of the table's Special column names.
+ *
+ * The cell is a list -- "Link, share spells", "Ability score increase,
+ * Multiattack" -- and each of those is a separate rule with separate text, so
+ * the row is split before anything goes looking for any of it.
+ */
+export const splitAbilities = (text) => String(text ?? '')
+  .split(',').map((x) => x.trim()).filter(Boolean);
+
 /** How the animal companion's level is found: a class, or a skill's ranks. */
 export const COMPANION_LEVEL_SOURCES = [
   ['class', 'Levels in a class'],
@@ -274,11 +317,29 @@ const common = (kind) => ({
   items: {},
   slotless: [],
   specialQualities: '',
+  // What the player has written about one of the table's abilities, keyed by
+  // `abilityTextKey`. Theirs rather than a pack's, and theirs wins: a pack is
+  // reference and this is the character. Keyed by name and not by level so
+  // that an ability granted twice -- "Ability score increase" at 4th and 9th
+  // -- is one rule with one description, said once.
+  abilityNotes: {},
   notes: '',
 });
 
 /** An equipment row as it starts: worn, doing nothing, costing nothing. */
 export const emptyCompanionItem = () => ({ name: '', cost: 0, worn: true, effect: '' });
+
+/**
+ * A feat or a trick as it starts.
+ *
+ * Three fields, because a feat is three things: where it came from, what it
+ * is, and what it does. `source` is the level that granted it for a feat --
+ * which is what the animal companion table hands out, one at a time -- and for
+ * a trick is whether it was a bonus off that same table or taught with Handle
+ * Animal. It used to have nowhere to go and ended up in the note; see
+ * `normalizeCompanion`.
+ */
+export const emptyCompanionFeat = () => ({ source: '', name: '', notes: '' });
 
 export function defaultFamiliar() {
   return {
@@ -355,6 +416,7 @@ export function normalizeCompanion(kind, block) {
     if (Array.isArray(base[key]) && !Array.isArray(out[key])) out[key] = base[key];
   }
   if (!out.items || typeof out.items !== 'object') out.items = {};
+  if (!out.abilityNotes || typeof out.abilityNotes !== 'object') out.abilityNotes = {};
   // A document saved before equipment could do anything holds a name and a
   // cost; the two new fields default the way a player would expect -- a thing
   // written down is a thing being worn, and it does nothing until it is told
@@ -363,6 +425,24 @@ export function normalizeCompanion(kind, block) {
   const item = (it) => ({ ...emptyCompanionItem(), ...(it && typeof it === 'object' ? it : {}) });
   out.items = Object.fromEntries(Object.entries(out.items).map(([slot, it]) => [slot, item(it)]));
   out.slotless = out.slotless.map(item);
+  /*
+   * Feats and tricks gained their Source column after the fact. Before it the
+   * importer had nowhere to put the level a feat arrives at, so it wrote the
+   * level into the note -- "Level 5", the whole of the note, and the only
+   * shape it ever wrote. That exact shape moves across to where it belongs;
+   * anything a player typed does not match it and stays where they put it.
+   */
+  const sourced = (r) => {
+    const row = { ...emptyCompanionFeat(), ...(r && typeof r === 'object' ? r : {}) };
+    const note = String(row.notes ?? '').trim();
+    if (!String(row.source ?? '').trim() && /^Level \d+$/.test(note)) {
+      row.source = note;
+      row.notes = '';
+    }
+    return row;
+  };
+  out.feats = out.feats.map(sourced);
+  if (Array.isArray(out.tricks)) out.tricks = out.tricks.map(sourced);
   return out;
 }
 
@@ -604,7 +684,11 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // What the table grants along the way, up to this level.
   const gains = [];
   for (let i = 0; i < Math.min(level, table.length); i++) {
-    if (table[i].special) gains.push({ level: i + 1, text: table[i].special });
+    // `abilities` is the cell split into the rules it names, so the panel can
+    // open each one on its own text rather than on the whole line.
+    if (table[i].special) {
+      gains.push({ level: i + 1, text: table[i].special, abilities: splitAbilities(table[i].special) });
+    }
   }
 
   const calc = {

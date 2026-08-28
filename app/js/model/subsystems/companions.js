@@ -171,7 +171,9 @@ export function importAnimalCompanion(tab) {
     const end = slotless && slotless[1] === tricks[1] ? slotless[0] : rows.length;
     for (let ri = tricks[0] + 1; ri < end; ri++) {
       const name = t(ri, tricks[1]);
-      if (name) b.tricks.push({ name, notes: '' });
+      // Which side of the table it came from is not written down anywhere the
+      // workbook can be read from, so it stays for the player to fill in.
+      if (name) b.tricks.push({ source: '', name, notes: '' });
     }
   }
   if (slotless) {
@@ -200,7 +202,9 @@ export function importAnimalCompanion(tab) {
       const level = at(ri, feat[1] - 1);
       if (text(level) === '' || !Number.isFinite(Number(level))) break;
       const name = t(ri, feat[1]);
-      if (name) b.feats.push({ name, notes: `Level ${Number(level)}` });
+      // The level is where the feat came from, not a note about it -- so it
+      // goes in the Source column and the note stays the player's own.
+      if (name) b.feats.push({ source: `Level ${Number(level)}`, name, notes: '' });
     }
   }
 

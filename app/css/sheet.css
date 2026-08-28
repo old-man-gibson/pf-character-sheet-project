@@ -240,6 +240,106 @@
    underlining or colouring it would say "this one is special" about the
    fifteen numbers a player looks at most. */
 .working { cursor: help; }
+/* ---------- the working, opened out ----------
+ *
+ * The panel `.working` promises. See ui/breakdown-popover.js for what goes in
+ * it; this is where it is drawn.
+ *
+ * Two things here are load-bearing rather than decorative.
+ *
+ * It is a popover, so it is drawn in the top layer. `.tablewrap` is a scroll
+ * box with a max-height on it -- deliberately, it is what makes the sticky
+ * headings resolve -- and anything positioned inside a table cell is cropped
+ * at that box's edge. The top layer is the only place a fifteen-line AC
+ * breakdown over a scrolling table gets to finish.
+ *
+ * And the first block is undoing the UA stylesheet, which gives every popover
+ * `inset: 0`, `margin: auto`, a solid border and Canvas colours. Left in
+ * place, those centre the panel in the window in system colours; the sheet
+ * wants it beside the number, in the sheet's own.
+ */
+.bdpop {
+  /* Off the UA's centring: placeAt writes left/top, in viewport coordinates. */
+  inset: auto; margin: 0; overflow: visible;
+  position: fixed;
+  min-width: 13rem; max-width: min(21rem, calc(100vw - 16px));
+  padding: 9px 12px 8px;
+  background: var(--cs-panel-2);
+  border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius);
+  color: var(--cs-text);
+  font: 0.78rem/1.45 var(--cs-font);
+  /* Deep enough to read as "in front of", which is the whole claim a panel
+     over a table is making. The theme's own line colour would be too faint. */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+  /* It keeps the pointer, because a long breakdown scrolls and a panel you
+     cannot reach is a scrollbar you cannot use. What stops it flickering is
+     the 140ms the script waits before closing: long enough to cross the 8px
+     of table between the number and the panel, short enough not to linger. */
+}
+:host([theme="light"]) .bdpop {
+  box-shadow: 0 10px 30px rgba(26, 29, 38, 0.22), 0 1px 3px rgba(26, 29, 38, 0.18);
+}
+/* Long ones scroll rather than growing past the window: AC on a built
+   character is comfortably fifteen parts, and the panel still has to fit
+   above or below the number on a laptop in a browser with three toolbars. */
+.bdpop .bdparts { max-height: min(15rem, 45svh); overflow-y: auto; scrollbar-width: thin; }
+.bdpop .bdhead {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding-bottom: 5px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--cs-line);
+}
+.bdpop .bdname { font-weight: 650; color: var(--cs-accent); }
+.bdpop .bdtotal { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.bdpop .bdsub { color: var(--cs-muted); font-size: 0.72rem; margin-bottom: 5px; }
+.bdpop .bdrow {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--cs-line) 70%, transparent);
+}
+.bdpop .bdrow:last-child { border-bottom: 0; }
+.bdpop .bdrow .k { color: var(--cs-muted); }
+.bdpop .bdrow .v { font-weight: 620; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The note belongs to the label and goes under it, not beside: "capped by
+   armour" on the same line pushes the figure off the right edge. */
+.bdpop .bdnote { display: block; font-size: 0.7rem; opacity: 0.8; }
+/* The sheet's total and the parts shown disagree. Said in the colour the sheet
+   uses for a number that is wrong, because that is what this is. */
+.bdpop .bdrow.odd .k, .bdpop .bdrow.odd .v { color: var(--cs-bad); }
+/* It arrives from the side it is standing on, which is the one cue that says
+   which number it belongs to when two sit close together. */
+.bdpop.below { animation: bdIn 0.13s ease-out; }
+.bdpop.above { animation: bdInUp 0.13s ease-out; }
+@keyframes bdIn { from { opacity: 0; transform: translateY(-5px); } }
+@keyframes bdInUp { from { opacity: 0; transform: translateY(5px); } }
+
+/* On a phone it stops chasing the number and becomes a strip along the bottom.
+ *
+ * A viewport query rather than a container one, and that is an exception made
+ * on purpose: this is the one thing on the sheet positioned against the window
+ * instead of against the sheet, so the window is what it has to ask about. A
+ * sheet embedded in a narrow column on a wide screen has room for a panel
+ * beside the number and should get one.
+ *
+ * `--bd-sheet` is how the script finds out. It reads the property before
+ * placing anything and leaves left/top alone when it is set, which keeps this
+ * breakpoint written down once, here, rather than once here and once in JS.
+ */
+@media (max-width: 700px) {
+  .bdpop {
+    --bd-sheet: 1;
+    left: 8px; right: 8px; top: auto; bottom: 8px;
+    min-width: 0; max-width: none;
+    border-radius: 12px; padding: 11px 14px;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+  }
+  .bdpop.below, .bdpop.above { animation: bdInSheet 0.15s ease-out; }
+  @keyframes bdInSheet { from { opacity: 0; transform: translateY(14px); } }
+  .bdpop .bdparts { max-height: 40svh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bdpop.below, .bdpop.above { animation: none; }
+}
 /* What the ticked conditions add up to, and the rules they carry -- read at
    the table, so no smaller than the sheet's own text. */
 .condnums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -1091,6 +1191,17 @@ button.packmore {
   background: color-mix(in srgb, var(--ab) var(--ab-wash), var(--cs-panel-2));
   color: color-mix(in srgb, var(--ab), var(--cs-text) var(--ab-ink));
 }
+/* Every one of these holds three letters and a caret, so it is sized for three
+   letters and a caret rather than for whatever width its column happens to
+   have. In the skills table that column is 55px: seven pixels of padding at
+   each end left 25px of content for 24px of "Dex" and a 16px arrow, and the
+   browser resolves that by drawing the arrow over the last letter -- "De▾".
+   Nothing reports it as clipped, because nothing overflowed; the text and the
+   caret were simply given the same pixels.
+   The floor is what fixes it; the tighter padding is what keeps the floor from
+   costing the column more width than it has to. Both together come to about
+   13px per ability column. */
+select[data-ab] { min-width: 3.4rem; padding-inline: 5px 2px; }
 /* A dropdown that picks an ability wears what it picked, so which stat a slot
    runs on is answered before its label is read. */
 select[data-ab]:not([data-ab=""]) {
@@ -1505,15 +1616,42 @@ table.build td.groupend { font-weight: 660; }
 table.build td.groupend.over { color: var(--cs-bad); }
 /* A level where a track grants nothing: no control, just quiet space. */
 table.build td.noslot { background: transparent; }
-/* Array picks wrap instead of forcing a wide table. */
-.pickgroup { margin-bottom: 9px; }
-.pickgroup.future { opacity: 0.45; }
-.picklvl {
-  display: block; font-size: 0.66rem; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--cs-muted); margin-bottom: 3px;
+/* ---------- the progression pick tables ----------
+ *
+ * Three panels of them sit side by side in one row of the grid -- ABP, the
+ * Level/4 and mythic ladder, and the optional array -- and every cell in all
+ * three holds the same thing: an ability, in three letters.
+ *
+ * They were being drawn as `table.build`, which stretches a select to the full
+ * width of its column and puts a 26rem floor under the table. Three letters in
+ * a 160px box, three times over, in a 310px panel: the columns were squeezed
+ * against a scrollbar while the boxes inside them had room to spare. Sized to
+ * what they hold instead, and the floor lifted -- these tables are four narrow
+ * columns and have no business being 26rem wide.
+ */
+.tablewrap > table.build.picks { min-width: 0; }
+/* The three ladders share a row and do not want equal thirds of it: ABP and
+   the Level/4 ladder are three narrow columns each, the array is five. Below
+   900px they stack, like every other pairing on the sheet. */
+.pickrow {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: minmax(0, 1fr);
 }
-.picks { display: flex; flex-wrap: wrap; gap: 5px; }
-.picks select { flex: 1 1 4.2rem; min-width: 4.2rem; max-width: 7rem; padding: 3px 4px; }
+@container (min-width: 900px) {
+  .pickrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); }
+}
+.pickrow > .panel.span2, .pickrow > .panel { grid-column: auto; }
+table.build.picks select { width: auto; min-width: 4.4rem; max-width: 100%; padding: 3px 4px; }
+table.build.picks th, table.build.picks td { padding: 3px 5px; }
+/* The level a locked choice was made at, as a caption under its box rather
+   than beside it. Beside it, one linked row set the width of a whole column --
+   the level 11 cell is the only one on the mental track that carries a badge,
+   and it made all eight rows 123px wide and pushed the table into a scrollbar
+   it did not otherwise need. Under it, the cell is as wide as the box. */
+table.build.picks .badge.from {
+  display: block; width: fit-content; margin: 2px 0 0;
+  font-size: 0.6rem; padding: 0 4px;
+}
 table.build td.derived {
   color: var(--cs-accent); font-weight: 620; background: var(--cs-accent-soft);
   border-radius: 4px;
@@ -2380,9 +2518,30 @@ table.featgrid .ffield.slot-on .prose-view .tok {
 }
 .col-resizer:hover, .col-resizer.dragging { border-right-color: var(--cs-edit); }
 
-/* ---------- linked picks ---------- */
-table.build td.linked {
-  color: var(--cs-muted); font-size: 0.8rem; white-space: nowrap;
+/* ---------- linked picks ----------
+ *
+ * A level that raises an earlier choice rather than offering a new one. It
+ * holds the same control as the choice itself, disabled, so what marks it is
+ * the muted ground and the badge -- not a smaller font, which is what it used
+ * to be when the cell was bare text. See `inheritedPick`.
+ */
+table.build td.linked { white-space: nowrap; }
+/* Dashed, and nothing else. An ability wears its hue wherever the sheet names
+   one -- see "a dropdown that picks an ability" above -- and a locked pick is
+   still that ability, so recolouring it to say "not editable" would be saying
+   it in the one language this sheet reserves for saying which stat it is. The
+   border carries that on its own. */
+table.build td.linked select:disabled {
+  opacity: 1; cursor: default; border-style: dashed;
+  /* And no arrow. A caret says "there are other answers in here", and on a
+     cell that only ever shows the choice made further up the column there are
+     not. The padding it was holding open comes back as text, so the value
+     sits where a value sits rather than shunted left of a gap. */
+  -webkit-appearance: none; appearance: none;
+  /* Left, on the same padding a live select uses, so the two line up down the
+     column: an automatic cell that centres its value reads as a different kind
+     of cell rather than as the same one, locked. */
+  text-align: left; padding-inline: 4px;
 }
 
 /* ---------- trackers ---------- */
@@ -2606,6 +2765,30 @@ input[type="color"] {
 .rowlist .item:last-child { border-bottom: 0; }
 .rowlist .item .t { font-size: 0.85rem; font-weight: 600; }
 .rowlist .item .d { font-size: 0.78rem; color: var(--cs-muted); }
+/* ---------- what a companion's table grants, opened out ----------
+ *
+ * The level is a heading and the abilities it granted sit under it, each
+ * opening on what it does. The text is a pack's or the player's own, never
+ * this engine's -- see `companionAbilityText`.
+ *
+ * Deliberately stacked rather than the label-and-value line this used to be.
+ * A level can grant two rules ("Ability score increase, Multiattack"), and two
+ * of them opened side by side against a level number is not a row any more.
+ */
+.gains { display: grid; gap: 2px; }
+/* The name, and the fold hard against the edge so a column of them lines up
+   whatever the names beside them are doing. */
+.gainrow > .statline { border-bottom: 0; padding: 0; gap: 6px; }
+.gainrow > .statline > button { flex: none; margin-left: auto; }
+.gainbody { padding: 2px 0 6px; display: grid; gap: 5px; }
+/* A pack's paragraph: reference rather than the character's own, so it is set
+   as the sheet sets everything it did not write, and credited. */
+.gainbody .packsays {
+  margin: 0; white-space: pre-wrap; border-left: 2px solid var(--cs-line); padding-left: 8px;
+}
+.gainbody .packfrom {
+  display: block; margin-top: 3px; font-size: 0.7rem; font-style: italic; opacity: 0.75;
+}
 /* Archetype pills on a class row: the name, and a cross that removes it and restores the class's own features. */
 .pills { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-right: 6px; vertical-align: middle; }
 .pill { display: inline-flex; align-items: center; gap: 2px; font-size: 0.74rem; padding: 1px 4px 1px 8px; border-radius: 12px;
@@ -3827,6 +4010,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .resume,
   .resetconfirm,
   .tabmenu,
+  .bdpop,
   dialog { display: none !important; }
 
   /* The rail loses its tabs above but keeps the session strip, which is a row
