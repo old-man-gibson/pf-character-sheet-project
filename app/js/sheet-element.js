@@ -2230,6 +2230,10 @@ export class CharacterSheetElement extends HTMLElement {
     const majorName = String(major.name || major.category || major.text || '').trim();
 
     const fixed = (key, label, hint) => `<tr>
+      ${/* No grip: these two are not in the list and cannot be moved out of
+           order. The cell is here so their columns line up with the rows
+           below, which can. */''}
+      <td class="grip"></td>
       <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
       <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
       <td data-label="Notes">${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
@@ -2239,15 +2243,17 @@ export class CharacterSheetElement extends HTMLElement {
         <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
       </h4>
       <div class="tablewrap"><table class="granted stacked">
-        <thead><tr><th>Source</th><th>Feat</th><th>Notes</th><th></th></tr></thead>
+        <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
+          <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
-          ${(g.others || []).map((f, i) => `<tr>
+          ${(g.others || []).map((f, i) => `<tr data-granteddrop="${i}">
+            <td class="grip"><span class="grip" data-grantedgrip title="Drag to reorder">&#10495;</span></td>
             <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
             <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
-            <td data-label="Notes">${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
-            ${this.#rowTools('grantedFeats.others', i)}
+            <td class="fnote" data-label="Notes">${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
+            ${this.#rowToolsDragged('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
       </table></div>
@@ -2299,20 +2305,10 @@ export class CharacterSheetElement extends HTMLElement {
           <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
           <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
           <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
-          ${/* The grip in column one is the only way this table reorders, and a
-               card hides it -- a drag between groups is not a gesture a phone
-               has. So the two buttons every other list already carries are
-               written here too and shown only where the grip is not; see
-               `button.cardmove` in the stylesheet. Within the group only:
-               moving a feat to another group stays a drag, on a desktop. */''}
-          <td class="tools">
-            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|-1"
-              title="Move up" aria-label="Move up">&#8593;</button>
-            <button class="cardmove" data-move="featGroups.${g}.entries|${i}|1"
-              title="Move down" aria-label="Move down">&#8595;</button>
-            <button class="danger" data-remove="featGroups.${g}.entries|${i}"
-              title="Remove" aria-label="Remove">&times;</button>
-          </td>
+          ${/* The arrows move a feat within its group only: taking one to
+               another group stays a drag, on a desktop. The granted feats
+               above are the same bargain and write the same cell. */''}
+          ${this.#rowToolsDragged(`featGroups.${g}.entries`, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
           <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
@@ -3365,7 +3361,9 @@ export class CharacterSheetElement extends HTMLElement {
     return rows.itemSelect(list, i, field, value, options, blank, abOf);
   }
 
-  #rowTools(list, i) { return rows.rowTools(list, i); }
+  /* `rows.rowTools` is the plain three-button cell, which every panel that
+     wants one imports for itself; the element only writes the dragged kind. */
+  #rowToolsDragged(list, i) { return rows.rowToolsDragged(list, i); }
 
   #rowRemove(list, i) { return rows.rowRemove(list, i); }
 
@@ -5209,6 +5207,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindTemplateDrag(root);
     this.#bindLanguageDrag(root);
     this.#bindFeatDrag(root);
+    this.#bindGrantedDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -6157,6 +6156,74 @@ export class CharacterSheetElement extends HTMLElement {
         const to = at + (after(e, chip) ? 1 : 0);
         clear();
         this.#model.listMoveTo('identity.languages', from, to);
+        from = null;
+        this.#render();
+      });
+    });
+  }
+
+  /**
+   * Dragging a granted feat past its neighbours.
+   *
+   * Only the ones a player added. The Drawback and the Specialty are not in
+   * the list at all -- they are two named slots the sheet writes above it --
+   * so they carry no grip and no drop key, and a drag that wanders over them
+   * finds nothing to land on. That is the whole of keeping them put: there is
+   * no order for them to be knocked out of.
+   *
+   * Its own binding rather than a share of `#bindFeatDrag`, because that one
+   * is built to carry a feat from one group's table into another's and these
+   * rows have nowhere else to go. A granted feat names what handed it over; a
+   * group's feat names the level it was taken at. They are not the same row
+   * and a drop that turned one into the other would lose a field.
+   *
+   * As everywhere else on the sheet, the grip is the only part that starts a
+   * drag -- the rest of the row is fields, and a field you cannot select with
+   * the mouse is worse than a list you cannot reorder.
+   */
+  #bindGrantedDrag(root) {
+    const rows = [...root.querySelectorAll('[data-granteddrop]')];
+    if (rows.length < 2) return;
+    const at = (el) => Number(el.dataset.granteddrop);
+    const clear = () => rows.forEach((r) => r.classList.remove('drop-before', 'drop-after'));
+    let from = null;
+    const after = (e, el) => {
+      const box = el.getBoundingClientRect();
+      return e.clientY > box.top + box.height / 2;
+    };
+
+    rows.forEach((row) => {
+      const grip = row.querySelector('[data-grantedgrip]');
+      if (grip) {
+        grip.addEventListener('pointerdown', () => { row.draggable = true; });
+        grip.addEventListener('pointerup', () => { row.draggable = false; });
+      }
+      row.addEventListener('dragstart', (e) => {
+        from = at(row);
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag with nothing on the transfer.
+        e.dataTransfer.setData('text/plain', row.dataset.granteddrop);
+      });
+      row.addEventListener('dragend', () => {
+        row.draggable = false;
+        row.classList.remove('dragging');
+        from = null;
+        clear();
+      });
+      row.addEventListener('dragover', (e) => {
+        if (from === null || at(row) === from) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clear();
+        row.classList.add(after(e, row) ? 'drop-after' : 'drop-before');
+      });
+      row.addEventListener('drop', (e) => {
+        if (from === null || at(row) === from) return;
+        e.preventDefault();
+        const to = at(row) + (after(e, row) ? 1 : 0);
+        clear();
+        this.#model.listMoveTo('grantedFeats.others', from, to);
         from = null;
         this.#render();
       });
