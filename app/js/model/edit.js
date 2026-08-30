@@ -9,7 +9,7 @@
  */
 
 import { GAME_SYSTEMS, cleanSkillVariant } from '../rules.js';
-import { COMPANION_KINDS, companionInUse } from '../companions.js';
+import { COMPANION_KINDS, companionsInUse } from '../companions.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
 import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
@@ -307,7 +307,7 @@ export function systemTabsInUse(model) {
     cooking: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)),
     template: !!(d.templates || []).length,
   };
-  for (const kind of COMPANION_KINDS) out[kind] = companionInUse(kind, d[kind]);
+  for (const kind of COMPANION_KINDS) out[kind] = companionsInUse(kind, d[kind]);
   return out;
 }
 

@@ -118,11 +118,23 @@ export function describeSource(path) {
     case 'animalCompanion':
     case 'eidolon':
     case 'conjured': {
-      const who = head === 'familiar' ? 'the familiar'
+      let who = head === 'familiar' ? 'the familiar'
         : head === 'eidolon' ? 'the eidolon'
           : head === 'conjured' ? 'the conjured companion' : 'the animal companion';
-      if (a === 'item') return `${who}, the ${parts.slice(2).join(':')} slot`;
-      if (a === 'slotless') return `${who}, item ${nth(b)}`;
+      // A later companion of the kind tags its keys with its id right after
+      // the kind (`eidolon:brutus:item:Neck`); the first keeps the old shape.
+      const SUBHEADS = new Set(['abilities', 'specialAbility', 'specialQualities', 'baseEvolutions',
+        'dr', 'resistances', 'immunities', 'notes', 'evolution', 'attack', 'feat', 'trick',
+        'talent', 'item', 'slotless']);
+      let [sub, at] = [a, b];
+      let rest = 2;
+      if (a && !SUBHEADS.has(a)) {
+        who = `${who} “${a}”`;
+        [sub, at] = [b, parts[3]];
+        rest = 3;
+      }
+      if (sub === 'item') return `${who}, the ${parts.slice(rest).join(':')} slot`;
+      if (sub === 'slotless') return `${who}, item ${nth(at)}`;
       return who;
     }
     // A maneuver's own entry. The name is last in both because it may hold a

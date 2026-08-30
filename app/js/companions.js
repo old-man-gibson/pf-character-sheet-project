@@ -423,6 +423,13 @@ export function seedSkills(kind) {
 const scores = (base = 10) => Object.fromEntries(ABILITIES.map((k) => [k, { base, evo: 0, misc: 0 }]));
 
 const common = (kind) => ({
+  // The name a formula reads this companion by: `companion.<id>.hp`. Assigned
+  // when the block is created and never changed by a rename, exactly as a
+  // tracker's id is -- a formula pointing at a companion cannot be broken by
+  // calling it something else. The first block of each kind also answers to
+  // the bare kind name (`eidolon.hp`), which is every name that existed
+  // before a character could keep more than one.
+  id: '',
   name: '',
   size: kind === 'familiar' ? 'Tiny' : 'Medium',
   masterLevelPenalty: 0,
@@ -608,6 +615,27 @@ export function normalizeCompanion(kind, block) {
   return out;
 }
 
+/**
+ * A kind's stored value brought up to the current shape: a list of blocks.
+ *
+ * Every document saved before a character could keep more than one companion
+ * holds a single block object where the list now goes; it becomes a list of
+ * one. Whatever arrives, every block is normalised and every block has an id
+ * -- the first takes the kind's own name (which is what makes
+ * `companion.eidolon.*` and `eidolon.*` the same creature), and a block that
+ * somehow lost its id is named after its place rather than left unreadable.
+ */
+export function normalizeCompanionList(kind, value) {
+  const list = Array.isArray(value) ? value
+    : value && typeof value === 'object' ? [value] : [];
+  if (!list.length) list.push(defaultCompanion(kind));
+  return list.map((b, i) => {
+    const out = normalizeCompanion(kind, b);
+    if (!String(out.id || '').trim()) out.id = i === 0 ? kind : `${kind}${i + 1}`;
+    return out;
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Whether a block holds anything the player put there.
  * ------------------------------------------------------------------ */
@@ -634,6 +662,18 @@ export function companionInUse(kind, block) {
   }
   return false;
 }
+
+/** Whether any of a kind's companions is in use -- what lights the tab. */
+export const companionsInUse = (kind, list) => (Array.isArray(list) ? list : [list])
+  .some((b) => companionInUse(kind, b));
+
+/**
+ * The scope prefix one block's numbers live under: the bare kind name for the
+ * first of its kind (every spelling that predates keeping more than one), and
+ * `companion.<id>` for the rest. What the panel prints beside a field is what
+ * a formula reads and what a bonus is aimed at, so all three come from here.
+ */
+export const companionScopeName = (kind, block, index) => (index === 0 ? kind : `companion.${block.id}`);
 
 /* ------------------------------------------------------------------ *
  * The sums.

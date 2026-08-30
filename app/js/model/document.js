@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, companionInUse, defaultCompanion, normalizeCompanion,
+  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -645,9 +645,17 @@ export function normalise(model) {
   for (const kind of COMPANION_KINDS) {
     const index = d.sheetTabs.findIndex((t) => t.name === COMPANION_TABS[kind]);
     const tab = index < 0 ? null : d.sheetTabs[index];
-    const stranded = tab && d[kind] && !companionInUse(kind, d[kind]);
-    if (kind === 'animalCompanion' && (!d[kind] || stranded)) d[kind] = importAnimalCompanion(tab);
-    d[kind] = normalizeCompanion(kind, d[kind] || defaultCompanion(kind));
+    // A document from before a character could keep several holds one block
+    // where the list now goes; normalizeCompanionList folds it in. The
+    // worksheet import and the stranded-import recovery only ever concern the
+    // first of a kind -- no workbook could hold a second.
+    const first = Array.isArray(d[kind]) ? d[kind][0] : d[kind];
+    const stranded = tab && first && !companionInUse(kind, first);
+    if (kind === 'animalCompanion' && (!first || stranded)) {
+      const imported = importAnimalCompanion(tab);
+      d[kind] = Array.isArray(d[kind]) ? [imported, ...d[kind].slice(1)] : imported;
+    }
+    d[kind] = normalizeCompanionList(kind, d[kind]);
     if (index < 0) continue;
     const g = sheetReader(tab);
     const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
@@ -1562,9 +1570,9 @@ export function toDocument(model) {
     psionics: stripDerived(model.data.psionics, PSIONIC_DERIVED),
     primordia: stripDerived(model.data.primordia, PRIMORDIA_DERIVED),
     cardcasting: stripDerived(model.data.cardcasting, CARDCASTING_DERIVED),
-    familiar: stripDerived(model.data.familiar, COMPANION_DERIVED),
-    animalCompanion: stripDerived(model.data.animalCompanion, COMPANION_DERIVED),
-    eidolon: stripDerived(model.data.eidolon, COMPANION_DERIVED),
-    conjured: stripDerived(model.data.conjured, COMPANION_DERIVED),
+    familiar: (model.data.familiar || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
+    animalCompanion: (model.data.animalCompanion || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
+    eidolon: (model.data.eidolon || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
+    conjured: (model.data.conjured || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
   };
 }

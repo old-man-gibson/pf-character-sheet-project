@@ -385,7 +385,7 @@ console.log('a condition that damages an ability reaches the skills that use it'
 console.log('a companion rolls on its own sheet');
 {
   const c = built();
-  const f = c.data.familiar;
+  const f = c.data.familiar[0];
   f.name = 'Hoot';
   f.scores.dex = { base: 16 };
   f.scores.str = { base: 12 };
@@ -419,8 +419,8 @@ console.log('a companion rolls on its own sheet');
   const bite = spec('attack:0');
   check('an attack rolls to hit and for damage',
     bite.rolls.map((r) => [r.label, r.formula]),
-    [['Attack', `1d20+${d.familiar.attacks[0].toHit}`], ['Damage', '1d4+2'],
-      ['Crit confirm', `1d20+${d.familiar.attacks[0].toHit}`], ['Crit damage (x2)', '2d4+4']]);
+    [['Attack', `1d20+${d.familiar[0].attacks[0].toHit}`], ['Damage', '1d4+2'],
+      ['Crit confirm', `1d20+${d.familiar[0].attacks[0].toHit}`], ['Crit damage (x2)', '2d4+4']]);
 
   // The damage column is free text on this tab. Prose is carried, not guessed at.
   const claw = spec('attack:1');
@@ -430,7 +430,7 @@ console.log('a companion rolls on its own sheet');
     claw.notes.find((n) => n.label === 'Damage')?.text, '1d3 plus grab');
   check('a crit column is read for range and multiplier',
     [claw.rolls[0].formula, claw.notes.find((n) => n.label === 'Threat')?.text],
-    ['1d20cs>19+' + d.familiar.attacks[1].toHit, '19-20/x3']);
+    ['1d20cs>19+' + d.familiar[0].attacks[1].toHit, '19-20/x3']);
   check('a secondary attack says the penalty is already counted',
     claw.notes.some((n) => n.label === 'Secondary'), true);
   check('and what it does on a hit',

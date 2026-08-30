@@ -3645,1542 +3645,1554 @@
   "sourceExtras": []
  },
  "notes": [],
- "familiar": {
-  "name": "",
-  "size": "Tiny",
-  "masterLevelPenalty": 0,
-  "attackAbility": "",
-  "attackBonus": 0,
-  "hp": {
-   "damage": 0,
-   "temp": 0,
-   "bonus": 0
-  },
-  "ac": {
-   "all": 0,
-   "touch": 0,
-   "ff": 0
-  },
-  "cmdOther": 0,
-  "cmbOther": 0,
-  "initBonus": 0,
-  "saves": {
-   "fort": {
-    "misc": 0
+ "familiar": [
+  {
+   "id": "familiar",
+   "name": "",
+   "size": "Tiny",
+   "masterLevelPenalty": 0,
+   "attackAbility": "",
+   "attackBonus": 0,
+   "hp": {
+    "damage": 0,
+    "temp": 0,
+    "bonus": 0
    },
-   "ref": {
-    "misc": 0
+   "ac": {
+    "all": 0,
+    "touch": 0,
+    "ff": 0
    },
-   "will": {
-    "misc": 0
-   }
-  },
-  "speed": {
-   "base": "",
-   "fly": "",
-   "burrow": "",
-   "swim": "",
-   "climb": ""
-  },
-  "skills": [
-   {
-    "name": "Acrobatics",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
+   "cmdOther": 0,
+   "cmbOther": 0,
+   "initBonus": 0,
+   "saves": {
+    "fort": {
+     "misc": 0
+    },
+    "ref": {
+     "misc": 0
+    },
+    "will": {
+     "misc": 0
+    }
    },
-   {
-    "name": "Appraise",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
+   "speed": {
+    "base": "",
+    "fly": "",
+    "burrow": "",
+    "swim": "",
+    "climb": ""
    },
-   {
-    "name": "Autohypnosis",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Bluff",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Climb",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Craft",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Diplomacy",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disable Device",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disguise",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Escape Artist",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Fly",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Handle Animal",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Heal",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Intimidate",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (arcana)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (dungeoneering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (engineering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (geography)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (history)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (local)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (martial)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nature)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nobility)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (planes)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (psionics)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (religion)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Linguistics",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perception",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perform",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Profession",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Ride",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sense Motive",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sleight of Hand",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Spellcraft",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Stealth",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Survival",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Swim",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Use Magic Device",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   }
-  ],
-  "attacks": [],
-  "feats": [],
-  "items": {},
-  "slotless": [],
-  "specialQualities": "",
-  "abilityNotes": {},
-  "notes": "",
-  "creature": "",
-  "archetypes": "",
-  "specialAbility": "",
-  "abilities": "",
-  "protector": false,
-  "scores": {
-   "str": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "dex": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "con": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "int": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "wis": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "cha": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
+   "skills": [
+    {
+     "name": "Acrobatics",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Appraise",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Autohypnosis",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Bluff",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Climb",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Craft",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Diplomacy",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disable Device",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disguise",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Escape Artist",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Fly",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Handle Animal",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Heal",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Intimidate",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (arcana)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (dungeoneering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (engineering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (geography)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (history)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (local)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (martial)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nature)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nobility)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (planes)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (psionics)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (religion)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Linguistics",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perception",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perform",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Profession",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Ride",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sense Motive",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sleight of Hand",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Spellcraft",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Stealth",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Survival",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Swim",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Use Magic Device",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    }
+   ],
+   "attacks": [],
+   "feats": [],
+   "items": {},
+   "slotless": [],
+   "specialQualities": "",
+   "abilityNotes": {},
+   "notes": "",
+   "creature": "",
+   "archetypes": "",
+   "specialAbility": "",
+   "abilities": "",
+   "protector": false,
+   "scores": {
+    "str": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "dex": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "con": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "int": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "wis": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "cha": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    }
    }
   }
- },
- "animalCompanion": {
-  "name": "",
-  "size": "Medium",
-  "masterLevelPenalty": 0,
-  "attackAbility": "Str",
-  "attackBonus": 0,
-  "hp": {
-   "damage": 0,
-   "temp": 0,
-   "bonus": 0
-  },
-  "ac": {
-   "all": 0,
-   "touch": 0,
-   "ff": 0
-  },
-  "cmdOther": 0,
-  "cmbOther": 0,
-  "initBonus": 0,
-  "saves": {
-   "fort": {
-    "misc": 0
-   },
-   "ref": {
-    "misc": 0
-   },
-   "will": {
-    "misc": 0
-   }
-  },
-  "speed": {
-   "base": "",
-   "fly": "",
-   "burrow": "",
-   "swim": "",
-   "climb": ""
-  },
-  "skills": [
-   {
-    "name": "Acrobatics",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Climb",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Escape Artist",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Fly",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Intimidate",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perception",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Stealth",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Survival",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Swim",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   }
-  ],
-  "attacks": [],
-  "feats": [],
-  "items": {},
-  "slotless": [],
-  "specialQualities": "",
-  "abilityNotes": {},
-  "notes": "",
-  "levelSource": "class",
-  "masterClass": "",
-  "levelOverride": null,
-  "creature": "",
-  "archetype": "",
-  "bodyType": "",
-  "hpAbility": "Con",
-  "goodSaves": {
-   "fort": true,
-   "ref": true,
-   "will": false
-  },
-  "scores": {
-   "str": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "dex": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "con": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "int": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "wis": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "cha": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   }
-  },
-  "abilityIncreases": [
-   {
-    "level": 4,
-    "ability": ""
-   },
-   {
-    "level": 9,
-    "ability": ""
-   },
-   {
-    "level": 14,
-    "ability": ""
-   },
-   {
-    "level": 20,
-    "ability": ""
-   }
-  ],
-  "tricks": []
- },
- "eidolon": {
-  "name": "",
-  "size": "Medium",
-  "masterLevelPenalty": 0,
-  "attackAbility": "Str",
-  "attackBonus": 0,
-  "hp": {
-   "damage": 0,
-   "temp": 0,
-   "bonus": 0
-  },
-  "ac": {
-   "all": 0,
-   "touch": 0,
-   "ff": 0
-  },
-  "cmdOther": 0,
-  "cmbOther": 0,
-  "initBonus": 0,
-  "saves": {
-   "fort": {
-    "misc": 0
-   },
-   "ref": {
-    "misc": 0
-   },
-   "will": {
-    "misc": 0
-   }
-  },
-  "speed": {
-   "base": "",
-   "fly": "",
-   "burrow": "",
-   "swim": "",
-   "climb": ""
-  },
-  "skills": [
-   {
-    "name": "Acrobatics",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Appraise",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Autohypnosis",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Bluff",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Climb",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Craft",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Diplomacy",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disable Device",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disguise",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Escape Artist",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Fly",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Handle Animal",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Heal",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Intimidate",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (arcana)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (dungeoneering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (engineering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (geography)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (history)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (local)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (martial)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nature)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nobility)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (planes)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (psionics)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (religion)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Linguistics",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perception",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perform",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Profession",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Ride",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sense Motive",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sleight of Hand",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Spellcraft",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Stealth",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Survival",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Swim",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Use Magic Device",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   }
-  ],
-  "attacks": [],
-  "feats": [],
-  "items": {},
-  "slotless": [],
-  "specialQualities": "",
-  "abilityNotes": {},
-  "notes": "",
-  "masterClass": "",
-  "levelOverride": null,
-  "alignment": "",
-  "baseForm": "",
-  "subtype": "",
-  "hpAbility": "Con",
-  "goodSaves": {
-   "fort": true,
-   "ref": true,
-   "will": false
-  },
-  "scores": {
-   "str": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "dex": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "con": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "int": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "wis": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   },
-   "cha": {
-    "base": 10,
-    "evo": 0,
-    "misc": 0
-   }
-  },
-  "abilityIncreases": [
-   {
-    "level": 5,
-    "ability": ""
-   },
-   {
-    "level": 10,
-    "ability": ""
-   },
-   {
-    "level": 15,
-    "ability": ""
-   }
-  ],
-  "bonusEvoPoints": 0,
-  "evolutions": [],
-  "baseEvolutions": "",
-  "dr": "",
-  "resistances": "",
-  "immunities": ""
- },
- "conjured": {
-  "name": "",
-  "size": "Medium",
-  "masterLevelPenalty": 0,
-  "attackAbility": "Str",
-  "attackBonus": 0,
-  "hp": {
-   "damage": 0,
-   "temp": 0,
-   "bonus": 0
-  },
-  "ac": {
-   "all": 0,
-   "touch": 0,
-   "ff": 0
-  },
-  "cmdOther": 0,
-  "cmbOther": 0,
-  "initBonus": 0,
-  "saves": {
-   "fort": {
-    "misc": 0
-   },
-   "ref": {
-    "misc": 0
-   },
-   "will": {
-    "misc": 0
-   }
-  },
-  "speed": {
-   "base": "",
-   "fly": "",
-   "burrow": "",
-   "swim": "",
-   "climb": ""
-  },
-  "skills": [
-   {
-    "name": "Acrobatics",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Appraise",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Autohypnosis",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Bluff",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Climb",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Craft",
-    "spec": "",
-    "ability": "Int",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Diplomacy",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disable Device",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Disguise",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Escape Artist",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Fly",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Handle Animal",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Heal",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Intimidate",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (arcana)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (dungeoneering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (engineering)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (geography)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (history)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (local)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (martial)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nature)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (nobility)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (planes)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (psionics)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Kn. (religion)",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Linguistics",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perception",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Perform",
-    "spec": "",
-    "ability": "Cha",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Profession",
-    "spec": "",
-    "ability": "Wis",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Ride",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sense Motive",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Sleight of Hand",
-    "spec": "",
-    "ability": "Dex",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Spellcraft",
-    "spec": "",
-    "ability": "Int",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Stealth",
-    "spec": "",
-    "ability": "Dex",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Survival",
-    "spec": "",
-    "ability": "Wis",
-    "trained": false,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Swim",
-    "spec": "",
-    "ability": "Str",
-    "trained": false,
-    "classSkill": true,
-    "ranks": 0,
-    "misc": 0
-   },
-   {
-    "name": "Use Magic Device",
-    "spec": "",
-    "ability": "Cha",
-    "trained": true,
-    "classSkill": false,
-    "ranks": 0,
-    "misc": 0
-   }
-  ],
-  "attacks": [],
-  "feats": [],
-  "items": {},
-  "slotless": [],
-  "specialQualities": "",
-  "abilityNotes": {},
-  "notes": "",
-  "levelSource": "casterLevel",
-  "masterClass": "",
-  "levelOverride": null,
-  "baseForm": "",
-  "alignment": "",
-  "archetypes": {},
-  "hpAbility": "Con",
-  "goodSaves": {
-   "fort": true,
-   "ref": true,
-   "will": false
-  },
-  "scores": {
-   "str": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "dex": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "con": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "int": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "wis": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   },
-   "cha": {
-    "base": null,
-    "evo": 0,
-    "misc": 0
-   }
-  },
-  "abilityIncreases": [
-   {
-    "level": 4,
-    "ability": ""
-   },
-   {
-    "level": 8,
-    "ability": ""
-   },
-   {
-    "level": 12,
-    "ability": ""
-   },
-   {
-    "level": 16,
-    "ability": ""
-   },
-   {
-    "level": 20,
-    "ability": ""
-   },
-   {
-    "level": 24,
-    "ability": ""
-   },
-   {
-    "level": 28,
-    "ability": ""
-   }
-  ],
-  "talents": [],
-  "dr": "",
-  "resistances": "",
-  "immunities": ""
- },
+ ],
+ "animalCompanion": [
+  {
+   "id": "animalCompanion",
+   "name": "",
+   "size": "Medium",
+   "masterLevelPenalty": 0,
+   "attackAbility": "Str",
+   "attackBonus": 0,
+   "hp": {
+    "damage": 0,
+    "temp": 0,
+    "bonus": 0
+   },
+   "ac": {
+    "all": 0,
+    "touch": 0,
+    "ff": 0
+   },
+   "cmdOther": 0,
+   "cmbOther": 0,
+   "initBonus": 0,
+   "saves": {
+    "fort": {
+     "misc": 0
+    },
+    "ref": {
+     "misc": 0
+    },
+    "will": {
+     "misc": 0
+    }
+   },
+   "speed": {
+    "base": "",
+    "fly": "",
+    "burrow": "",
+    "swim": "",
+    "climb": ""
+   },
+   "skills": [
+    {
+     "name": "Acrobatics",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Climb",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Escape Artist",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Fly",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Intimidate",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perception",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Stealth",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Survival",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Swim",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    }
+   ],
+   "attacks": [],
+   "feats": [],
+   "items": {},
+   "slotless": [],
+   "specialQualities": "",
+   "abilityNotes": {},
+   "notes": "",
+   "levelSource": "class",
+   "masterClass": "",
+   "levelOverride": null,
+   "creature": "",
+   "archetype": "",
+   "bodyType": "",
+   "hpAbility": "Con",
+   "goodSaves": {
+    "fort": true,
+    "ref": true,
+    "will": false
+   },
+   "scores": {
+    "str": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "dex": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "con": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "int": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "wis": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "cha": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    }
+   },
+   "abilityIncreases": [
+    {
+     "level": 4,
+     "ability": ""
+    },
+    {
+     "level": 9,
+     "ability": ""
+    },
+    {
+     "level": 14,
+     "ability": ""
+    },
+    {
+     "level": 20,
+     "ability": ""
+    }
+   ],
+   "tricks": []
+  }
+ ],
+ "eidolon": [
+  {
+   "id": "eidolon",
+   "name": "",
+   "size": "Medium",
+   "masterLevelPenalty": 0,
+   "attackAbility": "Str",
+   "attackBonus": 0,
+   "hp": {
+    "damage": 0,
+    "temp": 0,
+    "bonus": 0
+   },
+   "ac": {
+    "all": 0,
+    "touch": 0,
+    "ff": 0
+   },
+   "cmdOther": 0,
+   "cmbOther": 0,
+   "initBonus": 0,
+   "saves": {
+    "fort": {
+     "misc": 0
+    },
+    "ref": {
+     "misc": 0
+    },
+    "will": {
+     "misc": 0
+    }
+   },
+   "speed": {
+    "base": "",
+    "fly": "",
+    "burrow": "",
+    "swim": "",
+    "climb": ""
+   },
+   "skills": [
+    {
+     "name": "Acrobatics",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Appraise",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Autohypnosis",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Bluff",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Climb",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Craft",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Diplomacy",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disable Device",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disguise",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Escape Artist",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Fly",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Handle Animal",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Heal",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Intimidate",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (arcana)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (dungeoneering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (engineering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (geography)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (history)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (local)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (martial)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nature)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nobility)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (planes)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (psionics)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (religion)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Linguistics",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perception",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perform",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Profession",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Ride",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sense Motive",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sleight of Hand",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Spellcraft",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Stealth",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Survival",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Swim",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Use Magic Device",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    }
+   ],
+   "attacks": [],
+   "feats": [],
+   "items": {},
+   "slotless": [],
+   "specialQualities": "",
+   "abilityNotes": {},
+   "notes": "",
+   "masterClass": "",
+   "levelOverride": null,
+   "alignment": "",
+   "baseForm": "",
+   "subtype": "",
+   "hpAbility": "Con",
+   "goodSaves": {
+    "fort": true,
+    "ref": true,
+    "will": false
+   },
+   "scores": {
+    "str": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "dex": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "con": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "int": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "wis": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    },
+    "cha": {
+     "base": 10,
+     "evo": 0,
+     "misc": 0
+    }
+   },
+   "abilityIncreases": [
+    {
+     "level": 5,
+     "ability": ""
+    },
+    {
+     "level": 10,
+     "ability": ""
+    },
+    {
+     "level": 15,
+     "ability": ""
+    }
+   ],
+   "bonusEvoPoints": 0,
+   "evolutions": [],
+   "baseEvolutions": "",
+   "dr": "",
+   "resistances": "",
+   "immunities": ""
+  }
+ ],
+ "conjured": [
+  {
+   "id": "conjured",
+   "name": "",
+   "size": "Medium",
+   "masterLevelPenalty": 0,
+   "attackAbility": "Str",
+   "attackBonus": 0,
+   "hp": {
+    "damage": 0,
+    "temp": 0,
+    "bonus": 0
+   },
+   "ac": {
+    "all": 0,
+    "touch": 0,
+    "ff": 0
+   },
+   "cmdOther": 0,
+   "cmbOther": 0,
+   "initBonus": 0,
+   "saves": {
+    "fort": {
+     "misc": 0
+    },
+    "ref": {
+     "misc": 0
+    },
+    "will": {
+     "misc": 0
+    }
+   },
+   "speed": {
+    "base": "",
+    "fly": "",
+    "burrow": "",
+    "swim": "",
+    "climb": ""
+   },
+   "skills": [
+    {
+     "name": "Acrobatics",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Appraise",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Autohypnosis",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Bluff",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Climb",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Craft",
+     "spec": "",
+     "ability": "Int",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Diplomacy",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disable Device",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Disguise",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Escape Artist",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Fly",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Handle Animal",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Heal",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Intimidate",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (arcana)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (dungeoneering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (engineering)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (geography)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (history)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (local)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (martial)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nature)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (nobility)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (planes)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (psionics)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Kn. (religion)",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Linguistics",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perception",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Perform",
+     "spec": "",
+     "ability": "Cha",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Profession",
+     "spec": "",
+     "ability": "Wis",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Ride",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sense Motive",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Sleight of Hand",
+     "spec": "",
+     "ability": "Dex",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Spellcraft",
+     "spec": "",
+     "ability": "Int",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Stealth",
+     "spec": "",
+     "ability": "Dex",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Survival",
+     "spec": "",
+     "ability": "Wis",
+     "trained": false,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Swim",
+     "spec": "",
+     "ability": "Str",
+     "trained": false,
+     "classSkill": true,
+     "ranks": 0,
+     "misc": 0
+    },
+    {
+     "name": "Use Magic Device",
+     "spec": "",
+     "ability": "Cha",
+     "trained": true,
+     "classSkill": false,
+     "ranks": 0,
+     "misc": 0
+    }
+   ],
+   "attacks": [],
+   "feats": [],
+   "items": {},
+   "slotless": [],
+   "specialQualities": "",
+   "abilityNotes": {},
+   "notes": "",
+   "levelSource": "casterLevel",
+   "masterClass": "",
+   "levelOverride": null,
+   "baseForm": "",
+   "alignment": "",
+   "archetypes": {},
+   "hpAbility": "Con",
+   "goodSaves": {
+    "fort": true,
+    "ref": true,
+    "will": false
+   },
+   "scores": {
+    "str": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "dex": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "con": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "int": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "wis": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    },
+    "cha": {
+     "base": null,
+     "evo": 0,
+     "misc": 0
+    }
+   },
+   "abilityIncreases": [
+    {
+     "level": 4,
+     "ability": ""
+    },
+    {
+     "level": 8,
+     "ability": ""
+    },
+    {
+     "level": 12,
+     "ability": ""
+    },
+    {
+     "level": 16,
+     "ability": ""
+    },
+    {
+     "level": 20,
+     "ability": ""
+    },
+    {
+     "level": 24,
+     "ability": ""
+    },
+    {
+     "level": 28,
+     "ability": ""
+    }
+   ],
+   "talents": [],
+   "dr": "",
+   "resistances": "",
+   "immunities": ""
+  }
+ ],
  "vancian": {
   "classes": [
    {

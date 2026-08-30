@@ -899,51 +899,54 @@ function progression(model, add) {
   }
 }
 
-/** The companions, each on its own tab. */
+/** The companions, each kind on its own tab -- and a kind may keep several. */
 function companions(model, add) {
   for (const [kind, label] of [['familiar', 'Familiar'], ['animalCompanion', 'Animal companion'],
     ['eidolon', 'Eidolon'], ['conjured', 'Conjured companion']]) {
-    const co = model.data[kind];
-    if (!co) continue;
-    const name = text(co.name) || text(co.species) || text(co.kind);
-    if (!name && !(co.attacks || []).length) continue;
-    if (name) {
-      add({
-        kind: 'companion', title: name, tab: kind,
-        value: co.hp?.max ? `${co.hp.max} hp` : '',
-        sub: bits(label, text(co.species), text(co.archetype)),
-        roll: { kind, ref: 'init', what: `${label.toLowerCase()} initiative` }, keys: 'companion pet',
-      });
-    }
-    (co.attacks || []).forEach((a, i) => {
-      if (!text(a.type) && !text(a.name)) return;
-      add({
-        kind: 'companion', title: text(a.name) || text(a.type), tab: kind,
-        value: bits(fmt(a.attack ?? 0), text(a.damage)),
-        sub: bits(`${label} attack`), roll: { kind, ref: `attack:${i}`, what: `${label} attack` },
-        keys: 'attack natural',
-      });
-    });
-    for (const f of co.feats || []) {
-      const title = nameOf(f);
-      if (!title) continue;
-      add({ kind: 'feat', title, tab: kind, sub: `${label} feat`, keys: 'companion feat' });
-    }
-    for (const [list, what] of [['evolutions', 'Evolution'], ['tricks', 'Trick'], ['talents', 'Talent']]) {
-      for (const x of co[list] || []) {
-        const title = nameOf(x);
-        if (!title) continue;
-        add({ kind: 'companion', title, tab: kind, sub: bits(label, what), keys: what.toLowerCase() });
+    (model.data[kind] || []).forEach((co, ci) => {
+      // The roll dispatcher's spelling for which of the kind: bare for the
+      // first, `eidolon:1` after -- the same string the tab's buttons carry.
+      const rollKind = ci === 0 ? kind : `${kind}:${ci}`;
+      const name = text(co.name) || text(co.species) || text(co.kind);
+      if (!name && !(co.attacks || []).length) return;
+      if (name) {
+        add({
+          kind: 'companion', title: name, tab: kind,
+          value: co.hp?.max ? `${co.hp.max} hp` : '',
+          sub: bits(label, text(co.species), text(co.archetype)),
+          roll: { kind: rollKind, ref: 'init', what: `${label.toLowerCase()} initiative` }, keys: 'companion pet',
+        });
       }
-    }
-    (co.skills || []).forEach((s, i) => {
-      if (!Number(s.ranks)) return;
-      const title = skillTitle(s);
-      if (!title) return;
-      add({
-        kind: 'skill', title, tab: kind, value: `${s.ranks} rank${s.ranks === 1 ? '' : 's'}`,
-        sub: bits(`${label} skill`, text(s.ability)),
-        roll: { kind, ref: `skill:${i}`, what: `a ${label} ${title} check` }, keys: 'companion skill',
+      (co.attacks || []).forEach((a, i) => {
+        if (!text(a.type) && !text(a.name)) return;
+        add({
+          kind: 'companion', title: text(a.name) || text(a.type), tab: kind,
+          value: bits(fmt(a.attack ?? 0), text(a.damage)),
+          sub: bits(name || label, `${label} attack`), roll: { kind: rollKind, ref: `attack:${i}`, what: `${label} attack` },
+          keys: 'attack natural',
+        });
+      });
+      for (const f of co.feats || []) {
+        const title = nameOf(f);
+        if (!title) continue;
+        add({ kind: 'feat', title, tab: kind, sub: `${label} feat`, keys: 'companion feat' });
+      }
+      for (const [list, what] of [['evolutions', 'Evolution'], ['tricks', 'Trick'], ['talents', 'Talent']]) {
+        for (const x of co[list] || []) {
+          const title = nameOf(x);
+          if (!title) continue;
+          add({ kind: 'companion', title, tab: kind, sub: bits(name || label, what), keys: what.toLowerCase() });
+        }
+      }
+      (co.skills || []).forEach((s, i) => {
+        if (!Number(s.ranks)) return;
+        const title = skillTitle(s);
+        if (!title) return;
+        add({
+          kind: 'skill', title, tab: kind, value: `${s.ranks} rank${s.ranks === 1 ? '' : 's'}`,
+          sub: bits(`${label} skill`, text(s.ability)),
+          roll: { kind: rollKind, ref: `skill:${i}`, what: `a ${label} ${title} check` }, keys: 'companion skill',
+        });
       });
     });
   }

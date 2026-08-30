@@ -105,7 +105,8 @@ import {
   tableShuffleDiscard, tableSpend, tableStart, tableTap, tableTrigger,
 } from './subsystems/cardcasting.js';
 import {
-  companionDamage, companionHeal, companionMaster, companionRest, recomputeCompanions,
+  addCompanion, companionDamage, companionHeal, companionMaster, companionRest,
+  recomputeCompanions,
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
@@ -667,6 +668,7 @@ export class Character {
   // subsystems/companions.js
   #companionMaster(...a) { return companionMaster(this, ...a); }
   #recomputeCompanions(...a) { return recomputeCompanions(this, ...a); }
+  addCompanion(...a) { return addCompanion(this, ...a); }
   companionDamage(...a) { return companionDamage(this, ...a); }
   companionHeal(...a) { return companionHeal(this, ...a); }
   companionRest(...a) { return companionRest(this, ...a); }

@@ -6622,14 +6622,16 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'companion-hp': {
-        // Damage, heal or rest one companion; the amount box sits beside the buttons.
+        // Damage, heal or rest one companion; the amount box sits beside the
+        // buttons, and both carry which of the kind's companions they mean.
         const kind = button?.dataset.kind;
+        const index = Number(button?.dataset.index) || 0;
         const op = button?.dataset.op;
-        const box = this.shadowRoot.querySelector(`[data-companion-amount="${CSS.escape(kind || '')}"]`);
+        const box = this.shadowRoot.querySelector(`[data-companion-amount="${CSS.escape(`${kind}:${index}`)}"]`);
         const amount = Number(box?.value) || 0;
-        if (op === 'damage') this.#model.companionDamage(kind, amount);
-        else if (op === 'heal') this.#model.companionHeal(kind, amount);
-        else if (op === 'rest') this.#model.companionRest(kind);
+        if (op === 'damage') this.#model.companionDamage(kind, index, amount);
+        else if (op === 'heal') this.#model.companionHeal(kind, index, amount);
+        else if (op === 'rest') this.#model.companionRest(kind, index);
         this.#render();
         break;
       }
@@ -6641,6 +6643,28 @@ export class CharacterSheetElement extends HTMLElement {
         if (list.has(sphere)) list.delete(sphere);
         else list.add(sphere);
         this.#model.set('cardcasting.attunedSpheres', [...list]);
+        this.#render();
+        break;
+      }
+      case 'companion-add': {
+        // Another companion of this kind; the tab switches to the newcomer.
+        const kind = button?.dataset.kind;
+        if (!kind) break;
+        this.#model.addCompanion(kind);
+        const prefs = this.#model.data.uiPrefs || (this.#model.data.uiPrefs = {});
+        if (!prefs.activeCompanion) prefs.activeCompanion = {};
+        prefs.activeCompanion[kind] = (this.#model.data[kind] || []).length - 1;
+        this.#render();
+        break;
+      }
+      case 'companion-select': {
+        // Which of a kind's companions the tab is showing -- a view
+        // preference, kept in uiPrefs the way the folds are.
+        const kind = button?.dataset.kind;
+        if (!kind) break;
+        const prefs = this.#model.data.uiPrefs || (this.#model.data.uiPrefs = {});
+        if (!prefs.activeCompanion) prefs.activeCompanion = {};
+        prefs.activeCompanion[kind] = Number(button?.dataset.index) || 0;
         this.#render();
         break;
       }

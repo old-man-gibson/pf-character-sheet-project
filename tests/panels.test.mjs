@@ -226,6 +226,31 @@ const sweep = (who, model) => {
 console.log('a blank sheet draws every panel');
 sweep('a blank sheet', new Character(blankDocument('panels-test')));
 
+console.log('a minionmancer\'s tab draws its chips and the companion selected');
+{
+  // Two of a kind: the sweep above only ever sees one, and the chip strip,
+  // the id badge and the uiPrefs-selected second block are all branches of
+  // their own.
+  const m = new Character(blankDocument('minion-panels-test'));
+  m.addCompanion('eidolon');
+  m.set('eidolon.0.name', 'Alpha');
+  m.set('eidolon.1.name', 'Brutus');
+  m.set('eidolon.1.levelOverride', 5);
+  const first = renders('a minionmancer', 'Eidolon (first selected)',
+    (x) => subsystems.companionPanel(x, 'eidolon'), m);
+  if (first && !(first.includes('Alpha') && first.includes('Brutus') && first.includes('companion-select'))) {
+    fail++;
+    console.log('  FAIL a minionmancer — the chip strip is missing a companion');
+  }
+  m.data.uiPrefs.activeCompanion = { eidolon: 1 };
+  const second = renders('a minionmancer', 'Eidolon (second selected)',
+    (x) => subsystems.companionPanel(x, 'eidolon'), m);
+  if (second && !(second.includes('companion.eidolon2') && second.includes('eidolon.1.name'))) {
+    fail++;
+    console.log('  FAIL a minionmancer — the second companion does not draw under its own names');
+  }
+}
+
 /**
  * A formula in every shape of prose field there is.
  *

@@ -203,7 +203,7 @@ console.log('a blank character is the thinnest converted document there is');
   check('the same for toughening and enhanced natural armour', [c.data.defenses.ac, c.data.defenses.touch], [10 + 5 + 5, 10 + 5]);
   c.set('defenses.acBonuses.enhancedNatural', 0);
   c.set('identity.level', 3);
-  check('the companions are there and empty', [!!c.data.familiar?.calc, !!c.data.eidolon?.calc, c.data.familiar.calc.level], [true, true, 3]);
+  check('the companions are there and empty', [!!c.data.familiar?.[0]?.calc, !!c.data.eidolon?.[0]?.calc, c.data.familiar[0].calc.level], [true, true, 3]);
   // And it plays: a point of Dex moves AC, Reflex and initiative; a class on
   // the tracks moves the skill budget; a rank moves a skill.
   c.setBuild('dex', 'pointBuy', 14);
