@@ -58,7 +58,8 @@ import {
   skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
-  BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
+  BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
+  CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
   companionAttackKey, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
@@ -1355,15 +1356,18 @@ function manifestingClassPanel(c, i) {
   /* ---------------- companions ---------------- */
 
   /**
-   * One companion's tab: the familiar, the animal companion or the eidolon.
+   * One companion's tab: the familiar, the animal companion, the eidolon or
+   * the Conjuration sphere's conjured companion.
    *
    * Top: who it is and where its level comes from, with the numbers that
    * matter in play in a strip. Then hit points, ability scores, defences and
    * saves, attacks, skills -- and the panels only one kind has: the eidolon's
-   * evolutions, the animal companion's tricks and item slots. Everything not
+   * evolutions, the animal companion's tricks and item slots, the conjured
+   * companion's contract (base form, archetypes) and talents. Everything not
    * typed is worked out in `companions.js` from the tables the workbook's
-   * `dataSheet` carried, and reads back from a formula as `familiar.hp`,
-   * `eidolon.evoLeft`, `animalCompanion.str.mod`.
+   * `dataSheet` carried (the wiki's, for the conjured companion), and reads
+   * back from a formula as `familiar.hp`, `eidolon.evoLeft`,
+   * `animalCompanion.str.mod`, `conjured.summonCost`.
    */
 export function companionPanel(model, kind) {
     const b = model.data[kind];
@@ -1376,9 +1380,11 @@ export function companionPanel(model, kind) {
       ${companionScoresPanel(model, kind, b, k)}
       ${companionDefensePanel(model, kind, b, k)}
       ${companionSavesPanel(model, kind, b, k)}
+      ${kind === 'conjured' ? conjuredContractPanel(model, b, k) : ''}
       ${companionAttacksPanel(model, kind, b, k)}
       ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, b, k) : ''}
       ${kind === 'animalCompanion' ? companionTricksPanel(model, b, k) : ''}
+      ${kind === 'conjured' ? conjuredTalentsPanel(model, b, k) : ''}
       ${kind === 'familiar' ? '' : companionFeatsPanel(model, kind, b, k)}
       ${companionSkillsPanel(model, kind, b, k)}
       ${companionItemsPanel(model, kind, b, k, label)}
@@ -1404,14 +1410,20 @@ function companionLevelControls(model, kind, b, k) {
     const classes = model.progressionClasses();
     const source = kind === 'animalCompanion'
       ? field('Level from', select(`${kind}.levelSource`, b.levelSource || 'class', COMPANION_LEVEL_SOURCES, null))
-      : '';
-    const showClass = kind === 'eidolon' || (b.levelSource || 'class') === 'class';
+      : kind === 'conjured'
+        ? field('Level from', select(`${kind}.levelSource`, b.levelSource || 'casterLevel', CONJURED_LEVEL_SOURCES, null))
+        : '';
+    const showClass = kind === 'eidolon'
+      || (b.levelSource || (kind === 'conjured' ? 'casterLevel' : 'class')) === 'class';
+    const autoFrom = kind === 'animalCompanion' && b.levelSource === 'handleAnimal' ? 'Handle Animal ranks'
+      : kind === 'animalCompanion' && b.levelSource === 'ride' ? 'Ride ranks'
+        : kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel'
+          ? 'the magic training’s caster level' : 'the class’s levels in the Planner';
     return `${source}
       ${showClass ? field('Master class', select(`${kind}.masterClass`, b.masterClass, classes)) : ''}
       ${field('Level override', `<input type="number" value="${b.levelOverride ?? ''}"
-        placeholder="${k.rawLevel ?? 0}" data-set="${kind}.levelOverride" data-kind="number-or-null" min="0" max="20"
-        title="Auto: ${k.rawLevel ?? 0} from ${kind === 'animalCompanion' && b.levelSource === 'handleAnimal' ? 'Handle Animal ranks'
-    : kind === 'animalCompanion' && b.levelSource === 'ride' ? 'Ride ranks' : 'the class’s levels in the Planner'}. Enter a number to pin it.">`)}
+        placeholder="${k.rawLevel ?? 0}" data-set="${kind}.levelOverride" data-kind="number-or-null" min="0" max="${kind === 'conjured' ? 40 : 20}"
+        title="Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to pin it.">`)}
       ${field('Master level penalty', num(`${kind}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}`;
   }
 
@@ -1427,14 +1439,20 @@ function companionHeadPanel(model, kind, b, k, label) {
         ${field('Creature', text(`${kind}.creature`, b.creature, 'Wolf, roc, big cat…'))}
         ${field('Archetype', text(`${kind}.archetype`, b.archetype))}
         ${field('Body type', select(`${kind}.bodyType`, b.bodyType, BODY_TYPES.map((t) => t.name)))}`
-      : `
+      : kind === 'conjured' ? `
+        ${field('Base form', select(`${kind}.baseForm`, b.baseForm, CONJURED_BASE_FORMS.map((f) => f.name)))}
+        ${field('Alignment', text(`${kind}.alignment`, b.alignment))}`
+        : `
         ${field('Base form', text(`${kind}.baseForm`, b.baseForm, 'Biped, quadruped, serpentine…'))}
         ${field('Subtype', text(`${kind}.subtype`, b.subtype))}
         ${field('Alignment', text(`${kind}.alignment`, b.alignment))}`;
     return `<section class="panel span2">
       <h3>${esc(label)}
         <span class="badge">level ${k.level ?? 0}</span>
-        <span class="badge">${k.hd ?? 0} HD</span>
+        <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
+        ${kind === 'conjured' && k.summonCost !== undefined
+    ? `<span class="badge" title="A standard action; one more spell point lets it stay a minute per caster level without concentration">${k.summonCost} sp to summon</span>` : ''}
+        ${(k.archetypes || []).map((a) => `<span class="badge">${esc(a.toLowerCase())}</span>`).join('')}
         ${k.penalty ? `<span class="badge">−${k.penalty} master level</span>` : ''}
         ${!k.level ? '<span class="badge">no level yet</span>' : ''}
       </h3>
@@ -1460,7 +1478,9 @@ function companionHeadPanel(model, kind, b, k, label) {
     ? 'A familiar is its master’s level, uses the master’s BAB and base saves, has half the master’s hit points, and takes its Intelligence and natural armour from the familiar table.'
     : kind === 'animalCompanion'
       ? 'The level is the master’s levels in the class named (or ranks in Handle Animal / Ride for a Spheres companion), less any penalty; HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks all follow the animal companion table.'
-      : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
+      : kind === 'conjured'
+        ? 'The level is the caster level (or a class’s levels), less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
+        : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
         Readable from a formula as <code>${kind}.hp</code>, <code>${kind}.ac</code>, <code>${kind}.str.mod</code>…</p>
     </section>`;
   }
@@ -1486,7 +1506,7 @@ function companionHpPanel(kind, b, k) {
       </div>
       <p class="hint">${kind === 'familiar'
     ? `Half the master’s maximum${k.protectorDoubles ? ', doubled for a Protector' : ''}, plus the bonus.`
-    : `8 a hit die plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
+    : `${k.hitDie === 6 ? '4 a hit die (the mage archetype’s d6)' : '8 a hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
     </section>`;
   }
 
@@ -1508,7 +1528,10 @@ function companionScoresPanel(model, kind, b, k) {
     const base = kind === 'familiar' && a === 'int'
       ? `<input type="number" value="${b.scores?.int?.base ?? ''}" placeholder="${k.tableInt ?? ''}"
             data-set="${kind}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
-      : num(`${kind}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
+      : kind === 'conjured'
+        ? `<input type="number" value="${b.scores?.[a]?.base ?? ''}" placeholder="${s.base ?? 10}"
+            data-set="${kind}.scores.${a}.base" data-kind="number-or-null" title="Auto: ${s.base ?? 10} from ${b.baseForm ? `the ${b.baseForm} base form` : 'the default line'}${b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.">`
+        : num(`${kind}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
           <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>
           <td>${base}</td>
@@ -1559,7 +1582,7 @@ function companionDefensePanel(model, kind, b, k) {
         + the bonuses: <em>all</em> counts everywhere, <em>touch only</em> for dodge and deflection,
         <em>flat-footed only</em> for armour and extra natural armour. CMB is BAB + Str + the
         special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries.</p>
-      ${kind === 'eidolon' ? `<div class="fieldgrid" style="margin-top:8px">
+      ${kind === 'eidolon' || kind === 'conjured' ? `<div class="fieldgrid" style="margin-top:8px">
         ${field('DR', text(`${kind}.dr`, b.dr))}
         ${field('Resistances', text(`${kind}.resistances`, b.resistances))}
         ${field('Immunities', text(`${kind}.immunities`, b.immunities))}
@@ -1591,7 +1614,10 @@ function companionSavesPanel(model, kind, b, k) {
       </tbody></table>
       <p class="hint">${kind === 'familiar'
     ? 'Base saves are the master’s, never below +2.'
-    : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
+    : kind === 'conjured' && k.formSaves
+      ? `Tick the good saves — the ${esc(b.baseForm)} form’s are ${['fort', 'ref', 'will']
+        .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'} — and the table gives the good and poor base at this HD.`
+      : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Speed', text(`${kind}.speed.base`, b.speed?.base, '30 ft.'))}
         ${field('Fly', text(`${kind}.speed.fly`, b.speed?.fly))}
@@ -1739,6 +1765,53 @@ function companionTricksPanel(model, b, k) {
   }
 
 
+/**
+ * The conjured companion's contract: the base form as the sphere prints it,
+ * and the archetypes it was called under.
+ *
+ * Most archetypes are rules prose the player applies through rows they
+ * already own -- the warrior empties its own attacks list, the aquatic trades
+ * its own speeds -- so most ticks here are a reminder wearing its rule as a
+ * tooltip. The ones the sums act on (the half-HD familiar, the d6 mage, the
+ * mindless and unwilling extra dice, the cheaper summon) are marked, and the
+ * head's badges show the result.
+ */
+function conjuredContractPanel(model, b, k) {
+    return `<section class="panel">
+      <h3>Contract <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
+      ${k.formLine ? `<p class="hint"><strong>${esc(b.baseForm)}:</strong> ${esc(k.formLine)}.
+        Speeds and attacks are written into their own rows; the form’s scores and natural armour are already counted.</p>`
+    : '<p class="hint">Pick a base form above for its printed stat line, saves and starting scores.</p>'}
+      <div class="rowlist">
+        ${CONJURED_ARCHETYPES.map((a) => `<div class="item statline">
+          ${check(`conjured.archetypes.${a.id}`, !!b.archetypes?.[a.id], a.label, a.note)}
+          ${a.sums ? `<span class="badge" title="${esc(a.note)}">changes the sums</span>` : ''}
+        </div>`).join('')}
+      </div>
+      <p class="hint">Hover an archetype for its rule. Once selected, an archetype cannot be
+        removed from that companion in play; a companion may hold several so long as they
+        do not replace the same features.</p>
+    </section>`;
+  }
+
+
+/** The (form) and (type) talents shaping this companion, one list per companion. */
+function conjuredTalentsPanel(model, b, k) {
+    return companionListPanel(model, {
+      list: 'conjured.talents',
+      rows: b.talents || [],
+      heading: 'Conjuration talents',
+      badge: `<span class="badge">${k.talentsTaken ?? 0} shaping this companion</span>`,
+      what: 'Talent',
+      sourcePlaceholder: '(form), (type)…',
+      hint: 'The (form) and (type) talents applied to this companion — one free when it is '
+        + 'gained, and no more than one (type). They are spent from the master’s own magic '
+        + 'talents, so nothing is budgeted here; what a talent changes goes into the rows it '
+        + 'changes, and its note can forward a bonus the way any prose does.',
+    });
+  }
+
+
 function companionFeatsPanel(model, kind, b, k) {
     const allowed = k.featsAllowed ?? 0;
     const over = (k.featsTaken ?? 0) > allowed;
@@ -1789,7 +1862,9 @@ function companionSkillsPanel(model, kind, b, k) {
     ? 'A familiar uses its own ranks or its master’s, whichever is higher; the +3 class-skill bonus applies once there is a rank.'
     : kind === 'eidolon'
       ? 'Ranks per the sheet: HD × (6 + Int modifier). The +3 class-skill bonus applies once there is a rank.'
-      : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
+      : kind === 'conjured'
+        ? '2 ranks a hit die at Intelligence 10 or better, 1 under it (the printed column, at the forms’ Int 7); none for a mindless companion. The +3 class-skill bonus applies once there is a rank.'
+        : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
     </section>`;
   }
 

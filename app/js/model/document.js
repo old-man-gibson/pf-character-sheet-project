@@ -1565,5 +1565,6 @@ export function toDocument(model) {
     familiar: stripDerived(model.data.familiar, COMPANION_DERIVED),
     animalCompanion: stripDerived(model.data.animalCompanion, COMPANION_DERIVED),
     eidolon: stripDerived(model.data.eidolon, COMPANION_DERIVED),
+    conjured: stripDerived(model.data.conjured, COMPANION_DERIVED),
   };
 }

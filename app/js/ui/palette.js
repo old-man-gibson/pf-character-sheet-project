@@ -902,7 +902,7 @@ function progression(model, add) {
 /** The companions, each on its own tab. */
 function companions(model, add) {
   for (const [kind, label] of [['familiar', 'Familiar'], ['animalCompanion', 'Animal companion'],
-    ['eidolon', 'Eidolon']]) {
+    ['eidolon', 'Eidolon'], ['conjured', 'Conjured companion']]) {
     const co = model.data[kind];
     if (!co) continue;
     const name = text(co.name) || text(co.species) || text(co.kind);
@@ -929,7 +929,7 @@ function companions(model, add) {
       if (!title) continue;
       add({ kind: 'feat', title, tab: kind, sub: `${label} feat`, keys: 'companion feat' });
     }
-    for (const [list, what] of [['evolutions', 'Evolution'], ['tricks', 'Trick']]) {
+    for (const [list, what] of [['evolutions', 'Evolution'], ['tricks', 'Trick'], ['talents', 'Talent']]) {
       for (const x of co[list] || []) {
         const title = nameOf(x);
         if (!title) continue;

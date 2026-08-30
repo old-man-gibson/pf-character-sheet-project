@@ -153,6 +153,7 @@ const panelsWith = (CTX) => [
   ['Familiar', (m) => subsystems.companionPanel(m, 'familiar')],
   ['Animal Companion', (m) => subsystems.companionPanel(m, 'animalCompanion')],
   ['Eidolon', (m) => subsystems.companionPanel(m, 'eidolon')],
+  ['Conjured Companion', (m) => subsystems.companionPanel(m, 'conjured')],
   ['Progression', (m) => lore.renderProgressionPanel(m, CTX.lore)],
   ['Lore', (m) => lore.renderLorePanel(m, CTX.lore)],
   ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX.lore)],

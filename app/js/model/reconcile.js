@@ -116,9 +116,11 @@ export function describeSource(path) {
     case 'cardcasting': return 'Cardcasting notes';
     case 'familiar':
     case 'animalCompanion':
-    case 'eidolon': {
+    case 'eidolon':
+    case 'conjured': {
       const who = head === 'familiar' ? 'the familiar'
-        : head === 'eidolon' ? 'the eidolon' : 'the animal companion';
+        : head === 'eidolon' ? 'the eidolon'
+          : head === 'conjured' ? 'the conjured companion' : 'the animal companion';
       if (a === 'item') return `${who}, the ${parts.slice(2).join(':')} slot`;
       if (a === 'slotless') return `${who}, item ${nth(b)}`;
       return who;

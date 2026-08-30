@@ -569,6 +569,7 @@ export function rollSpec(c, kind, ref, cs = null) {
     case 'familiar':
     case 'animalCompanion':
     case 'eidolon':
+    case 'conjured':
       return companionRollSpec(c, kind, ref);
     default: return null;
   }

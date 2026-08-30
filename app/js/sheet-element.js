@@ -198,6 +198,7 @@ const TABS = [
   ['familiar', 'Familiar'],
   ['animalCompanion', 'Animal Companion'],
   ['eidolon', 'Eidolon'],
+  ['conjured', 'Conjured Companion'],
   ['trackers', 'Trackers'],
   ['progression', 'Progression'],
   ['extras', 'Extras & Notes'],
@@ -227,7 +228,7 @@ const BREAKDOWN_GRACE = 140;
 const MODELLED_TAB_IDS = new Set([
   'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
   'techniques', 'autoTechnique', 'cooking',
-  'familiar', 'animalCompanion', 'eidolon',
+  'familiar', 'animalCompanion', 'eidolon', 'conjured',
 ]);
 
 /**
@@ -373,7 +374,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
@@ -2132,6 +2133,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'familiar': return this.#companionPanel('familiar');
       case 'animalCompanion': return this.#companionPanel('animalCompanion');
       case 'eidolon': return this.#companionPanel('eidolon');
+      case 'conjured': return this.#companionPanel('conjured');
       case 'trackers': return this.#trackersPanel();
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();

@@ -48,7 +48,7 @@ import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import {
-  defaultCompanion, normalizeCompanion, splitAbilities,
+  CONJURED_TABLE, defaultCompanion, normalizeCompanion, splitAbilities,
   setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
@@ -862,6 +862,124 @@ for (const id of IDS) {
   c.recompute();
   check(`${id} unworn, the belt stops`, k().scores.str.total, was.str);
   check(`${id} and the row is still there`, b.slotless[0].name, 'Belt of giant strength');
+}
+
+/*
+ * The conjured companion never had a worksheet, so its checks need no fixture:
+ * a blank sheet carries the block, and every number is the wiki table's. This
+ * runs before the private-roster gate on purpose -- it is new rules logic, and
+ * a fresh clone should be checking it.
+ */
+console.log('companions -- the conjured companion follows the Conjuration sphere table');
+{
+  // The generated table against the wiki's printed rows:
+  // caster level -> HD, BAB, skill points, feats, natural armour, good, bad.
+  const wiki = {
+    1: [1, 1, 1, 1, 0, 2, 0],
+    2: [2, 2, 2, 1, 1, 3, 0],
+    5: [4, 4, 4, 2, 2, 4, 1],
+    9: [7, 7, 7, 4, 3, 5, 2],
+    14: [11, 11, 11, 6, 5, 7, 3],
+    20: [15, 15, 15, 8, 7, 9, 5],
+    26: [20, 20, 20, 10, 10, 12, 6],
+    40: [30, 30, 30, 15, 15, 17, 10],
+  };
+  for (const [cl, want] of Object.entries(wiki)) {
+    const r = CONJURED_TABLE[cl - 1];
+    check(`the printed row at caster level ${cl}`,
+      [r.hd, r.bab, r.skills, r.feats, r.naturalArmor, r.goodSave, r.poorSave], want);
+  }
+  check('the specials land where the wiki prints them',
+    [CONJURED_TABLE[1].special, CONJURED_TABLE[4].special, CONJURED_TABLE[5].special,
+      CONJURED_TABLE[8].special, CONJURED_TABLE[13].special, CONJURED_TABLE[36].special],
+    ['Evasion', 'Ability score increase', 'Devotion', 'Multiattack', 'Improved evasion',
+      'Ability score increase']);
+
+  const c = new Character(blankDocument('conjured-test'));
+  check('a blank sheet has the block, not yet in use',
+    [!!c.data.conjured?.calc, c.systemTabsInUse().conjured], [true, false]);
+  check('and no level with nothing to read one from', c.data.conjured.calc.level, 0);
+
+  c.set('conjured.levelOverride', 9);
+  c.set('conjured.baseForm', 'Quadruped');
+  check('shaping it lights the tab', c.systemTabsInUse().conjured, true);
+  let k = c.data.conjured.calc;
+  check('9th: HD, BAB, feats, ranks (1 a die at the form\'s Int 7)',
+    [k.hd, k.bab, k.featsAllowed, k.ranksAllowed], [7, 7, 4, 7]);
+  check('natural armour is the table\'s +3 over the form\'s own +2', k.tableNatural, 5);
+  check('the form fills the auto scores',
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((a) => k.scores[a].total), [14, 14, 13, 7, 10, 11]);
+  check('good Fort and Ref off the table at 7 HD',
+    [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [5, 5, 2]);
+  check('hit points are 8 a d10 plus Con, by HD', k.hpMax, 7 * 8 + 1 * 7);
+  check('a spell point to summon', k.summonCost, 1);
+
+  c.set('conjured.scores.int.base', 10);
+  check('2 ranks a die once Intelligence reaches 10', c.data.conjured.calc.ranksAllowed, 14);
+  c.set('conjured.scores.int.base', null);
+
+  // Chosen Small at creation: +2 Dex, -2 Str -- on the auto line only.
+  c.set('conjured.size', 'Small');
+  k = c.data.conjured.calc;
+  check('Small adjusts the auto Str and Dex', [k.scores.str.base, k.scores.dex.base], [12, 16]);
+  c.set('conjured.scores.str.base', 14);
+  check('a typed base is the player\'s own', c.data.conjured.calc.scores.str.base, 14);
+  c.set('conjured.scores.str.base', null);
+  c.set('conjured.size', 'Medium');
+
+  // The increases arrive by Hit Dice, one every 4 possessed.
+  c.setItem('conjured.abilityIncreases', 0, 'ability', 'Con');
+  c.setItem('conjured.abilityIncreases', 1, 'ability', 'Con');
+  check('the 4-HD increase is in at 7 HD, the 8-HD one waits',
+    c.data.conjured.calc.scores.con.total, 14);
+
+  // The archetypes the sums act on.
+  c.set('conjured.archetypes.familiar', true);
+  k = c.data.conjured.calc;
+  check('the familiar archetype grows off half the caster level, 2 points cheaper',
+    [k.hd, k.summonCost], [3, 0]);
+  check('and its gains follow the halved level', k.gains.map((g) => g.level), [2]);
+  c.set('conjured.levelOverride', 1);
+  k = c.data.conjured.calc;
+  check('at 1st it keeps 1 HD on half hit points', [k.hd, k.hpMax], [1, Math.floor((8 + 1) / 2)]);
+  c.set('conjured.levelOverride', 9);
+  c.set('conjured.archetypes.familiar', false);
+
+  c.set('conjured.archetypes.mage', true);
+  k = c.data.conjured.calc;
+  // Con is 14 by now -- the 4-HD increase above landed on it -- so +2 a die.
+  check('the mage archetype is a d6 with poor BAB', [k.hitDie, k.bab, k.hpMax], [6, 3, 7 * 4 + 2 * 7]);
+  c.set('conjured.archetypes.mage', false);
+
+  c.set('conjured.archetypes.mindless', true);
+  k = c.data.conjured.calc;
+  check('mindless: a die every 4 caster levels, no feats or skills',
+    [k.hd, k.featsAllowed, k.ranksAllowed], [9, 0, 0]);
+  check('and every column follows the dice', [k.bab, k.tableNatural], [9, 6]);
+  c.set('conjured.archetypes.mindless', false);
+
+  c.set('conjured.archetypes.puppet', true);
+  check('a puppet is a point cheaper to summon', c.data.conjured.calc.summonCost, 0);
+  c.set('conjured.archetypes.puppet', false);
+
+  // Readable, rollable, forwardable -- and only what was typed is saved.
+  c.listAdd('conjured.attacks', { type: 'Bite', damage: '1d6', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' });
+  check('readable from a formula', [c.scope().conjured.hd, c.scope().conjured.summonCost], [7, 1]);
+  check('the roller answers for it',
+    (rollSpec(c.data, 'conjured', 'attack:0')?.rolls || []).length > 0, true);
+  const ffBefore = c.data.conjured.calc.flatFooted;
+  c.listAdd('conjured.talents', {
+    source: '(form)', name: 'Armored Companion', notes: '{conjured.ac.flatFooted += 2 as armor}',
+  });
+  check('a talent\'s note forwards at the companion', c.data.conjured.calc.flatFooted, ffBefore + 2);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('no derived numbers are saved', saved.conjured.calc, undefined);
+  const back = new Character(saved);
+  check('and they come back on load, talent and all',
+    [back.data.conjured.calc.hd, back.data.conjured.talents.length,
+      back.data.conjured.calc.flatFooted], [7, 1, ffBefore + 2]);
+  const old = new Character({ ...saved, conjured: undefined });
+  check('a document saved before the block existed grows one', !!old.data.conjured?.calc, true);
 }
 
 const missing = missingCharacters(REAL);
@@ -7863,9 +7981,11 @@ for (const id of IDS) {
     check(`${id} keeps no raw ${tab} grid`, names.includes(tab), false);
     check(`${id} has a ${key} block`, !!c.data[key]?.calc, true);
   }
+  // The conjured companion never had a worksheet; the block is simply there.
+  check(`${id} has a conjured block too`, !!c.data.conjured?.calc, true);
   // Nothing on any workbook's companion tabs was ever filled in, so none of
   // them counts as in use -- and the tabs stay off until asked for.
-  check(`${id} starts with no companion in use`, [c.data.familiar.name, c.data.animalCompanion.masterClass, c.data.eidolon.masterClass], ['', '', '']);
+  check(`${id} starts with no companion in use`, [c.data.familiar.name, c.data.animalCompanion.masterClass, c.data.eidolon.masterClass, c.data.conjured.baseForm], ['', '', '', '']);
 }
 
 console.log('companions -- a familiar is its master, halved');

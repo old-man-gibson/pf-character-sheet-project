@@ -979,6 +979,10 @@ export function proseSources(model) {
     (b.attacks || []).forEach((a, i) => push(`${kind}:attack:${i}`, a.qualities));
     (b.feats || []).forEach((f, i) => push(`${kind}:feat:${i}`, f.notes));
     (b.tricks || []).forEach((t, i) => push(`${kind}:trick:${i}`, t.notes));
+    // The conjured companion's (form) talents: what one changes is prose in
+    // its note, and prose forwards -- Armored Companion is
+    // `{conjured.ac.flatFooted += 2 as armor}` written where the talent is.
+    (b.talents || []).forEach((t, i) => push(`${kind}:talent:${i}`, t.notes));
     // What a companion is wearing. The effect is prose like any other, so it
     // reads {…} and forwards a bonus at the companion's own stats -- which is
     // the whole of what "equipment that changes its numbers" needs to be.

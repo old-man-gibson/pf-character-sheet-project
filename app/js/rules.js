@@ -277,6 +277,7 @@ export const GAME_SYSTEMS = [
   { id: 'animal-companion', label: 'Animal companion', tabs: ['animalCompanion'] },
   { id: 'familiar', label: 'Familiar', tabs: ['familiar'] },
   { id: 'eidolon', label: 'Eidolon', tabs: ['eidolon'] },
+  { id: 'conjured-companion', label: 'Conjured companion', tabs: ['conjured'] },
   { id: 'techniques', label: 'Techniques', tabs: ['techniques', 'autoTechnique'] },
   { id: 'cooking', label: 'Cooking', tabs: ['cooking'] },
   { id: 'crafting', label: 'Item crafting', tabs: ['crafting'] },
