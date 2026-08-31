@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session Screen</title>
+  <link rel="stylesheet" href="board.css">
+</head>
+<body>
+  <header id="topbar">
+    <span id="map-name">—</span>
+    <div id="initiative"></div>
+    <span id="round">—</span>
+    <button id="toggle-auras" type="button" class="on">Auras</button>
+    <button id="next-turn" type="button">Next turn ▸</button>
+  </header>
+  <main id="board-wrap">
+    <div id="board">
+      <canvas id="fog"></canvas>
+    </div>
+  </main>
+  <script src="board.js"></script>
+</body>
+</html>

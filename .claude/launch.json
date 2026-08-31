@@ -29,6 +29,15 @@
       "port": 8779
     },
     {
+      "name": "gm-screen",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "gm-module/screen/server.mjs",
+        "8765"
+      ],
+      "port": 8765
+    },
+    {
       "name": "sheets-any",
       "runtimeExecutable": "node",
       "runtimeArgs": [
