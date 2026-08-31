@@ -284,6 +284,7 @@ function extractIdentity(bk) {
     mythicTier: num(bk.cell(CI, 19, 14)),
     focusStat: bk.cell(CI, 20, 14),
     guild: bk.cell(CI, 15, 17),
+    // The workbook's own spelling; normalise folds it into altTraining.technique.
     primordiaTechnique: bk.cell(CI, 16, 14),
   };
 }

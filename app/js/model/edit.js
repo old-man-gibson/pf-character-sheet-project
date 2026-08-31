@@ -9,7 +9,7 @@
  */
 
 import { GAME_SYSTEMS, cleanSkillVariant } from '../rules.js';
-import { COMPANION_KINDS, companionInUse } from '../companions.js';
+import { COMPANION_KINDS, companionsInUse } from '../companions.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
 import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
@@ -223,10 +223,12 @@ export function renameSystemTab(model, index, name) {
       prefs[listKey] = prefs[listKey].map((k) => (k === `sys:${tab.name}` ? `sys:${next}` : k));
     }
   }
-  // And so does its colour, for the same reason.
-  if (prefs?.tabColors && `sys:${tab.name}` in prefs.tabColors) {
-    prefs.tabColors[`sys:${next}`] = prefs.tabColors[`sys:${tab.name}`];
-    delete prefs.tabColors[`sys:${tab.name}`];
+  // And so do its colour and the player's own name for it, for the same reason.
+  for (const mapKey of ['tabColors', 'tabNames']) {
+    if (prefs?.[mapKey] && `sys:${tab.name}` in prefs[mapKey]) {
+      prefs[mapKey][`sys:${next}`] = prefs[mapKey][`sys:${tab.name}`];
+      delete prefs[mapKey][`sys:${tab.name}`];
+    }
   }
   tab.name = next;
   model.recompute();
@@ -245,8 +247,10 @@ export function removeSystemTab(model, index) {
       model.data.uiPrefs[listKey] = model.data.uiPrefs[listKey].filter((k) => k !== `sys:${tab.name}`);
     }
   }
-  // A colour left behind would be inherited by the next tab to take the name.
+  // A colour or a player's name left behind would be inherited by the next
+  // tab to take the name.
   if (model.data.uiPrefs?.tabColors) delete model.data.uiPrefs.tabColors[`sys:${tab.name}`];
+  if (model.data.uiPrefs?.tabNames) delete model.data.uiPrefs.tabNames[`sys:${tab.name}`];
   model.recompute();
   return model;
 }
@@ -307,7 +311,7 @@ export function systemTabsInUse(model) {
     cooking: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)),
     template: !!(d.templates || []).length,
   };
-  for (const kind of COMPANION_KINDS) out[kind] = companionInUse(kind, d[kind]);
+  for (const kind of COMPANION_KINDS) out[kind] = companionsInUse(kind, d[kind]);
   return out;
 }
 
@@ -365,7 +369,7 @@ export function sessionDefaultTabs(model) {
   const inUse = model.systemTabsInUse();
   const tagged = model.taggedSystemTabs();
   const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
-  return ['overview', 'skills', ...systems, 'features', 'primordia', 'trackers', 'gear', 'lore'];
+  return ['overview', 'skills', ...systems, 'features', 'altTraining', 'trackers', 'gear', 'lore'];
 }
 
 /** The keys on the active view's tab bar, in order (a copy). */
@@ -410,6 +414,32 @@ export function setTabColor(model, key, hex) {
   const clean = normalizeHex(hex);
   if (clean) prefs.tabColors[key] = clean;
   else delete prefs.tabColors[key];
+  model.recompute();
+  return model;
+}
+
+/**
+ * What the player calls one tab, or null where it keeps its own name.
+ *
+ * A rename is the player's label, not the tab's identity: everything else --
+ * the order lists, the colours, the panel switch, the formula scope -- keys
+ * on the id, so calling Trackers "Ki & Grudges" breaks nothing. The GM's
+ * inspector view reads the sheet by the original names on purpose, which is
+ * why both spellings are always kept.
+ */
+export function tabName(model, key) {
+  const v = model.data.uiPrefs?.tabNames?.[key];
+  const s = String(v ?? '').trim();
+  return s || null;
+}
+
+/** Rename one tab for the player's own view; blank gives its name back. */
+export function setTabName(model, key, name) {
+  const prefs = model.data.uiPrefs || (model.data.uiPrefs = {});
+  if (!prefs.tabNames || typeof prefs.tabNames !== 'object') prefs.tabNames = {};
+  const clean = String(name ?? '').trim();
+  if (clean) prefs.tabNames[key] = clean;
+  else delete prefs.tabNames[key];
   model.recompute();
   return model;
 }

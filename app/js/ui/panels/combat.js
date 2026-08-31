@@ -728,7 +728,7 @@ function sphereSkillPanel(model) {
             <div class="req${r.state === 'unknown' ? ' unsure' : ''}"
               title="${esc(r.state === 'met'
     ? `${r.requirement} — found on this character.`
-    : `${r.requirement} — the sphere is here, but it still holds talents nobody has named. Write them in on the Primordia tab and this row answers itself; until then the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
+    : `${r.requirement} — the sphere is here, but it still holds talents nobody has named. Write them in on the Alternate Training tab and this row answers itself; until then the tick beside it decides.`)}">${esc(r.requirement)}</div></td>
           <td class="num">${r.talents || ''}</td>
           <td class="num total">${r.current || ''}</td>
         </tr>`).join('')}</tbody>
@@ -740,7 +740,7 @@ function sphereSkillPanel(model) {
         package or talent otherwise — is on the character.
         ${anyUnsure ? 'A <span class="req unsure">dotted</span> requirement is one the sheet cannot yet confirm: '
     + 'the sphere is there and still holds talents nobody has written down — a technique\'s picks from 7th '
-    + 'level, usually. Name them on the <strong>Primordia</strong> tab and the row answers itself; '
+    + 'level, usually. Name them on the <strong>Alternate Training</strong> tab and the row answers itself; '
     + 'until then the tick is yours to make.' : ''}
       </p>
     </section>`;

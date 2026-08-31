@@ -46,19 +46,21 @@ import {
   CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
   deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
   maneuverOwn,
+  altTrainingLink, altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques,
   psionicCurveTotals, psionicTables,
   veilsAvailable, veilDetails, veilOwn, slug,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
 import { round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, MANEUVER_FIELDS,
-  PREP_STYLES, PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS,
+  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
+  PREP_STYLES, SIZE_MODIFIERS,
   SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
   skillLabel, wikiUrl,
 } from '../../rules.js';
 import {
-  BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, NATURAL_ATTACKS,
+  BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
+  CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
   companionAttackKey, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
@@ -1059,7 +1061,7 @@ function vancianPreparedPanel(model, v) {
     </section>`;
   }
 
-  /* ---------------- primordia techniques ---------------- */
+  /* ---------------- alternate training techniques ---------------- */
 
   /**
    * The technique, and the ladder it advances on.
@@ -1070,10 +1072,14 @@ function vancianPreparedPanel(model, v) {
    * copies of the same rows, none beside the choice they belong to. Here the
    * choice picks the ladder, the ladder states what each level hands over,
    * and the column beside it is what you took for it.
+   *
+   * The techniques themselves come from whatever pack supplies them (see
+   * setAltTrainingTables): the panel draws the catalogue it is given, and an
+   * empty one is a sentence saying so, never an error.
    */
-export function primordiaPanel(model) {
+export function altTrainingPanel(model) {
     const c = model.data;
-    const p = c.primordia || {};
+    const p = c.altTraining || {};
     const k = p.calc || {};
     const level = Number(c.identity.level) || 0;
     const n = k.counts || {};
@@ -1085,23 +1091,23 @@ export function primordiaPanel(model) {
   prereq.state === 'met' ? 'prerequisite met'
     : prereq.state === 'unmet' ? 'prerequisite not met' : 'prerequisite unchecked'}</span>`;
 
-    // Only the kinds this technique actually deals in: a Light Body ladder has
-    // no business showing a spell count of zero.
+    // Only the kinds this technique actually deals in: a ladder that grants
+    // no spells has no business showing a spell count of zero.
     const totals = [
       ['Talents', n.talent, k.talents ? `${k.talents.count} ${k.talents.sphere} talents, counted into ${k.talents.side === 'magic' ? 'magic' : 'combat'} training` : ''],
       ['Feats', n.feat, 'Bonus feats granted so far'],
-      ['Spells known', n.spell, 'Divination spells added so far'],
-      ['Powers known', n.power, 'Clairsentience powers added so far'],
+      ['Spells known', n.spell, 'Spells added so far'],
+      ['Powers known', n.power, 'Powers added so far'],
     ].filter(([, v]) => v);
 
     return `<div class="grid">
       <section class="panel span2">
-        <h3>Primordia Technique ${prereqBadge}
+        <h3>Alternate Training Technique ${prereqBadge}
           ${n.due ? `<span class="badge due" title="Levels reached with nothing written against them">${n.due} to pick</span>` : ''}
         </h3>
         <div class="statbar">
           <label class="minifield">Technique
-            ${select('identity.primordiaTechnique', c.identity.primordiaTechnique, PRIMORDIA_NAMES, '— none —')}</label>
+            ${select('altTraining.technique', p.technique, altTrainingNames(), '— none —')}</label>
           ${totals.map(([label, v, title]) => miniStat(label, v, title)).join('')}
           <span class="statbar-fill"></span>
           ${miniStat('Level', level, 'Grants above this level are planned, not counted')}
@@ -1112,12 +1118,12 @@ export function primordiaPanel(model) {
         </p>` : ''}
         ${k.note ? `<p class="hint">${esc(k.note)}</p>` : ''}
         ${k.unknown ? `<p class="hint warn">The sheet says
-          <strong>${esc(c.identity.primordiaTechnique)}</strong>, which is not one of the five —
-          the ladder below is empty until it names one of them. Whatever is written against a
-          level is kept either way.</p>` : ''}
+          <strong>${esc(p.technique)}</strong>, which is not in the catalogue the active
+          packs supply — the ladder below is empty until it names one of them. Whatever is
+          written against a level is kept either way.</p>` : ''}
         <p class="hint">
           One technique, taken at 1st level or whenever its prerequisite is first met, granting
-          at 1st, 3rd, 5th, then ${PRIMORDIA_REPEAT_FROM}th and every two levels after.
+          at 1st, 3rd, 5th, then ${k.repeatFrom ?? altTrainingRepeatFrom()}th and every two levels after.
           <strong>Grants</strong> is what the rules hand over; the column beside it is what you
           took for it, already filled in on the levels the rules name themselves; the last is
           yours, and takes formulas. A technique feat can be swapped under the Associated Feat
@@ -1125,27 +1131,36 @@ export function primordiaPanel(model) {
         </p>
       </section>
 
-      ${k.technique ? primordiaLadder(model, k) : primordiaChooser()}
+      ${k.technique ? altTrainingLadder(model, k) : altTrainingChooser()}
 
       <section class="panel span2">
         <h3>Notes</h3>
-        ${prose(model, 'data-set="primordia.notes"', p.notes, 3, 'grow')}
+        ${prose(model, 'data-set="altTraining.notes"', p.notes, 3, 'grow')}
         <p class="hint">Resolves <code>{name = expr}</code> like any other prose field on the sheet.</p>
       </section>
     </div>`;
   }
 
+  /** A grant's cite tag, linked where the pack supplied a URL for it. */
+function citeTag(cite) {
+    if (!cite) return '';
+    const url = altTrainingLink(cite);
+    return url
+      ? ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(cite)}">[${esc(cite)}]</a>`
+      : ` <span class="hint">[${esc(cite)}]</span>`;
+  }
+
   /**
-   * The ten granting levels, what each hands over, what was taken for it, and
+   * The granting levels, what each hands over, what was taken for it, and
    * a note beside that.
    *
    * The name and the note were one box until the levels the rules already
-   * name -- Detect Spellcaster, Fast Divinations -- had nowhere to put their
-   * own name and nothing to type but a note. They are two columns now: the
-   * name column carries what the rules named where they named it, and the
-   * note takes formulas the way every other note on the sheet does.
+   * name had nowhere to put their own name and nothing to type but a note.
+   * They are two columns now: the name column carries what the rules named
+   * where they named it, and the note takes formulas the way every other
+   * note on the sheet does.
    */
-function primordiaLadder(model, k) {
+function altTrainingLadder(model, k) {
     // Whatever this technique calls the thing it hands over -- a talent, a
     // spell, a power, a feat. The repeating grant is the one that says it
     // seven times, so it is the one that names the column.
@@ -1162,25 +1177,23 @@ function primordiaLadder(model, k) {
     const pick = row.pick;
     const state = !pick ? '' : row.due ? ' due' : row.filled ? '' : ' planned';
     return `<tr class="${row.reached ? '' : 'future'}">
-          <td class="num" data-stack="head" data-headlabel="Level" title="${row.repeating ? 'Every two levels from the 7th' : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
+          <td class="num" data-stack="head" data-headlabel="Level" title="${row.repeating ? `Every two levels from the ${k.repeatFrom}th` : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
           <td class="grants" data-label="Grants">${row.grants.map((g) => `
             <span class="grant"${row.repeating && g.short ? ` title="${esc(g.text)}"` : ''}>${
-  esc(row.repeating && g.short ? g.short : g.text)}${g.cite === 'EitR' && !row.repeating
-    ? ` <a href="${esc(EITR_URL)}" target="_blank" rel="noopener noreferrer" title="Elephant in the Room">[EitR]</a>` : ''}</span>
+  esc(row.repeating && g.short ? g.short : g.text)}${!row.repeating ? citeTag(g.cite) : ''}</span>
             ${g.base?.alt ? `<label class="chk alt"><input type="checkbox" ${g.alt ? 'checked' : ''}
-              data-set="primordia.alt.${row.level}" data-kind="bool"
+              data-set="altTraining.alt.${row.level}" data-kind="bool"
               title="${esc(g.base.text)} — tick if you already had it, so this level grants the spell instead">
               <span>already had the feat, so this level grants ${esc(g.base.alt.text
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
-          <td class="choice${state}" data-stack="name">${primordiaPick(model, row)}</td>
-          <td class="picknote" data-label="Notes">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
+          <td class="choice${state}" data-stack="name">${altTrainingPick(model, row)}</td>
+          <td class="picknote" data-label="Notes">${prose(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
       ${k.repeat ? `<p class="hint repeatrule">
-        <strong>From ${PRIMORDIA_REPEAT_FROM}th, every two levels:</strong> ${esc(k.repeat.text)}
-        ${k.repeat.cite === 'EitR' ? `<a href="${esc(EITR_URL)}" target="_blank" rel="noopener noreferrer">[EitR]</a>` : ''}
+        <strong>From ${k.repeatFrom}th, every two levels:</strong> ${esc(k.repeat.text)}${citeTag(k.repeat.cite)}
       </p>` : ''}
       <p class="hint">
         A level you have reached with a choice still to make is outlined and counted above;
@@ -1200,8 +1213,8 @@ function primordiaLadder(model, k) {
    * and BAB boxes on the Overview make. Typing over it wins, which is what an
    * archetype that swaps the grant needs.
    */
-function primordiaPick(model, row) {
-    const path = `primordia.picks.${row.level}`;
+function altTrainingPick(model, row) {
+    const path = `altTraining.picks.${row.level}`;
     const options = row.pick?.options;
     if (options) return select(path, row.text, options);
     const placeholder = row.pick?.placeholder || row.auto || '—';
@@ -1215,17 +1228,26 @@ function primordiaPick(model, row) {
   ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`;
   }
 
-  /** With no technique taken, the five on offer and what each asks for. */
-function primordiaChooser() {
+  /** With no technique taken, the catalogue on offer and what each asks for. */
+function altTrainingChooser() {
+    const techniques = altTrainingTechniques();
+    if (!techniques.length) {
+      return `<section class="panel span2">
+        <h3>No techniques on offer</h3>
+        <p class="empty">No active content pack supplies Alternate Training techniques.
+          The tab still keeps whatever is written on it; switch on a pack that carries a
+          catalogue (Extensions, top right) and the ladder appears.</p>
+      </section>`;
+    }
     return `<section class="panel span2">
-      <h3>The five techniques</h3>
+      <h3>The ${techniques.length === 5 ? 'five' : techniques.length} techniques</h3>
       <div class="tablewrap"><table>
-        <thead><tr><th>Technique</th><th>Prerequisite</th><th>1st level</th><th>Then, every other level from 7th</th></tr></thead>
-        <tbody>${PRIMORDIA_TECHNIQUES.map((t) => `<tr>
+        <thead><tr><th>Technique</th><th>Prerequisite</th><th>1st level</th><th>Then, every other level from ${altTrainingRepeatFrom()}th</th></tr></thead>
+        <tbody>${techniques.map((t) => `<tr>
           <td><button data-action="take-technique" data-name="${esc(t.name)}"
             title="Take ${esc(t.name)}">${esc(t.name)}</button></td>
-          <td>${esc(t.prereq.text)}</td>
-          <td>${(t.grants[1] || []).map((g) => esc(g.text)).join('; ')}</td>
+          <td>${esc(t.prereq?.text || '')}</td>
+          <td>${(t.grants?.[1] || []).map((g) => esc(g.text)).join('; ')}</td>
           <td>${esc(t.repeat?.text || '')}</td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -1355,33 +1377,57 @@ function manifestingClassPanel(c, i) {
   /* ---------------- companions ---------------- */
 
   /**
-   * One companion's tab: the familiar, the animal companion or the eidolon.
+   * One companion's tab: the familiar, the animal companion, the eidolon or
+   * the Conjuration sphere's conjured companion -- and a character may keep
+   * more than one of each, so the tab opens with a strip of them and shows
+   * one at a time, the way the tab bar itself shows one tab.
    *
    * Top: who it is and where its level comes from, with the numbers that
    * matter in play in a strip. Then hit points, ability scores, defences and
    * saves, attacks, skills -- and the panels only one kind has: the eidolon's
-   * evolutions, the animal companion's tricks and item slots. Everything not
+   * evolutions, the animal companion's tricks and item slots, the conjured
+   * companion's contract (base form, archetypes) and talents. Everything not
    * typed is worked out in `companions.js` from the tables the workbook's
-   * `dataSheet` carried, and reads back from a formula as `familiar.hp`,
-   * `eidolon.evoLeft`, `animalCompanion.str.mod`.
+   * `dataSheet` carried (the wiki's, for the conjured companion), and reads
+   * back from a formula as `familiar.hp`, `eidolon.evoLeft`,
+   * `animalCompanion.str.mod`, `conjured.summonCost`.
+   *
+   * The context `cc` carries what every sub-panel needs to know about *which*
+   * companion it is drawing: `p` is the data path its fields write to
+   * (`eidolon.1`), `sn` the scope name its numbers read back and take bonuses
+   * under (`eidolon` for the first of a kind, `companion.<id>` after), and
+   * `roll` the kind a d20 button reports (`eidolon:1`). One companion, three
+   * spellings, all decided in one place.
    */
 export function companionPanel(model, kind) {
-    const b = model.data[kind];
-    if (!b) return '<div class="grid"><p class="empty">No companion data.</p></div>';
+    const list = model.data[kind] || [];
+    if (!list.length) return '<div class="grid"><p class="empty">No companion data.</p></div>';
+    const stored = Number(model.data.uiPrefs?.activeCompanion?.[kind]);
+    const i = Number.isInteger(stored) && stored >= 0 && stored < list.length ? stored : 0;
+    const b = list[i];
     const k = b.calc || {};
     const label = COMPANION_LABELS[kind];
+    const cc = {
+      kind, i, b, k, label,
+      p: `${kind}.${i}`,
+      sn: i === 0 ? kind : `companion.${b.id}`,
+      roll: i === 0 ? kind : `${kind}:${i}`,
+    };
     return `<div class="grid">
-      ${companionHeadPanel(model, kind, b, k, label)}
-      ${companionHpPanel(kind, b, k)}
-      ${companionScoresPanel(model, kind, b, k)}
-      ${companionDefensePanel(model, kind, b, k)}
-      ${companionSavesPanel(model, kind, b, k)}
-      ${companionAttacksPanel(model, kind, b, k)}
-      ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, b, k) : ''}
-      ${kind === 'animalCompanion' ? companionTricksPanel(model, b, k) : ''}
-      ${kind === 'familiar' ? '' : companionFeatsPanel(model, kind, b, k)}
-      ${companionSkillsPanel(model, kind, b, k)}
-      ${companionItemsPanel(model, kind, b, k, label)}
+      ${companionSwitchPanel(model, kind, list, i, label)}
+      ${companionHeadPanel(model, cc)}
+      ${companionHpPanel(cc)}
+      ${companionScoresPanel(model, cc)}
+      ${companionDefensePanel(model, cc)}
+      ${companionSavesPanel(model, cc)}
+      ${kind === 'conjured' ? conjuredContractPanel(model, cc) : ''}
+      ${companionAttacksPanel(model, cc)}
+      ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, cc) : ''}
+      ${kind === 'animalCompanion' ? companionTricksPanel(model, cc) : ''}
+      ${kind === 'conjured' ? conjuredTalentsPanel(model, cc) : ''}
+      ${kind === 'familiar' ? '' : companionFeatsPanel(model, cc)}
+      ${companionSkillsPanel(model, cc)}
+      ${companionItemsPanel(model, cc)}
       ${/* Paired rather than left to the grid. Both are ordinary panels, so on
             a wide screen they landed in two 310px tracks at the end of a row
             of four and took a quarter of the window between them, with the
@@ -1389,66 +1435,111 @@ export function companionPanel(model, kind) {
             opens out and want the room; the notes are a box to write in and
             read fine at their measure. Below 900px `.pairrow` stacks them. */''}
       <div class="pairrow span2">
-        ${companionGainsPanel(model, kind, b, k, label)}
-        ${companionNotesPanel(model, kind, b)}
+        ${companionGainsPanel(model, cc)}
+        ${companionNotesPanel(model, cc)}
       </div>
     </div>`;
   }
 
 
-function companionLevelControls(model, kind, b, k) {
-    if (kind === 'familiar') {
-      return `${field('Master level penalty', num(`${kind}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}
-        ${field('Protector archetype', check(`${kind}.protector`, b.protector, 'doubles hit points from 11th'))}`;
-    }
-    const classes = model.progressionClasses();
-    const source = kind === 'animalCompanion'
-      ? field('Level from', select(`${kind}.levelSource`, b.levelSource || 'class', COMPANION_LEVEL_SOURCES, null))
-      : '';
-    const showClass = kind === 'eidolon' || (b.levelSource || 'class') === 'class';
-    return `${source}
-      ${showClass ? field('Master class', select(`${kind}.masterClass`, b.masterClass, classes)) : ''}
-      ${field('Level override', `<input type="number" value="${b.levelOverride ?? ''}"
-        placeholder="${k.rawLevel ?? 0}" data-set="${kind}.levelOverride" data-kind="number-or-null" min="0" max="20"
-        title="Auto: ${k.rawLevel ?? 0} from ${kind === 'animalCompanion' && b.levelSource === 'handleAnimal' ? 'Handle Animal ranks'
-    : kind === 'animalCompanion' && b.levelSource === 'ride' ? 'Ride ranks' : 'the class’s levels in the Planner'}. Enter a number to pin it.">`)}
-      ${field('Master level penalty', num(`${kind}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}`;
+/**
+ * The strip of a kind's companions: one chip each, the one being shown
+ * pressed, an Add for the minionmancer and a Remove for the one on screen.
+ *
+ * Shown once there is more than one to switch between (or the strip would be
+ * a single chip restating the tab), but the Add is always there -- it is how
+ * the second one comes to exist. Every companion past the first wears the id
+ * a formula reads it by, the way a tracker's row wears its own.
+ */
+function companionSwitchPanel(model, kind, list, active, label) {
+    const many = list.length > 1;
+    return `<section class="panel span2 companionswitch">
+      <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        ${many ? list.map((c, i) => `<button data-action="companion-select" data-kind="${kind}" data-index="${i}"
+          aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
+          title="${i === 0 ? `Reads in formulas as ${kind}.* (and companion.${esc(c.id)}.*)` : `Reads in formulas as companion.${esc(c.id)}.*`}">
+          ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
+          <span class="hint">${c.calc?.level ? `L${c.calc.level}` : ''}${i > 0 ? ` #${esc(c.id)}` : ''}</span>
+        </button>`).join('') : ''}
+        <button data-action="companion-add" data-kind="${kind}"
+          title="Another ${label.toLowerCase()} — its numbers get their own names (companion.<id>.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
+        ${many ? `<button class="danger" data-remove="${kind}|${active}" style="margin-left:auto"
+          title="Remove the ${esc(label.toLowerCase())} being shown. Undo brings it back.">Remove this one</button>` : ''}
+      </div>
+      ${many ? `<p class="hint">One of ${list.length} — the first answers to <code>${kind}.hp</code> and friends;
+        every one of them also reads and takes bonuses as <code>companion.&lt;id&gt;.…</code>, id shown on its chip.</p>` : ''}
+    </section>`;
   }
 
 
-function companionHeadPanel(model, kind, b, k, label) {
+function companionLevelControls(model, cc) {
+    const { kind, p, b, k } = cc;
+    if (kind === 'familiar') {
+      return `${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}
+        ${field('Protector archetype', check(`${p}.protector`, b.protector, 'doubles hit points from 11th'))}`;
+    }
+    const classes = model.progressionClasses();
+    const source = kind === 'animalCompanion'
+      ? field('Level from', select(`${p}.levelSource`, b.levelSource || 'class', COMPANION_LEVEL_SOURCES, null))
+      : kind === 'conjured'
+        ? field('Level from', select(`${p}.levelSource`, b.levelSource || 'casterLevel', CONJURED_LEVEL_SOURCES, null))
+        : '';
+    const showClass = kind === 'eidolon'
+      || (b.levelSource || (kind === 'conjured' ? 'casterLevel' : 'class')) === 'class';
+    const autoFrom = kind === 'animalCompanion' && b.levelSource === 'handleAnimal' ? 'Handle Animal ranks'
+      : kind === 'animalCompanion' && b.levelSource === 'ride' ? 'Ride ranks'
+        : kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel'
+          ? 'the magic training’s caster level' : 'the class’s levels in the Planner';
+    return `${source}
+      ${showClass ? field('Master class', select(`${p}.masterClass`, b.masterClass, classes)) : ''}
+      ${field('Level override', `<input type="number" value="${b.levelOverride ?? ''}"
+        placeholder="${k.rawLevel ?? 0}" data-set="${p}.levelOverride" data-kind="number-or-null" min="0" max="${kind === 'conjured' ? 40 : 20}"
+        title="Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to pin it.">`)}
+      ${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}`;
+  }
+
+
+function companionHeadPanel(model, cc) {
+    const { kind, p, sn, roll, b, k, label } = cc;
     const saves = k.saves || {};
     const sv = (x) => fmt(saves[x]?.total ?? 0);
     const identity = kind === 'familiar' ? `
-        ${field('Creature', text(`${kind}.creature`, b.creature, 'Owl, cat, thrush…'))}
-        ${field('Archetypes', text(`${kind}.archetypes`, b.archetypes))}
-        ${field('Special ability', text(`${kind}.specialAbility`, b.specialAbility, 'What this familiar grants its master'))}`
+        ${field('Creature', text(`${p}.creature`, b.creature, 'Owl, cat, thrush…'))}
+        ${field('Archetypes', text(`${p}.archetypes`, b.archetypes))}
+        ${field('Special ability', text(`${p}.specialAbility`, b.specialAbility, 'What this familiar grants its master'))}`
       : kind === 'animalCompanion' ? `
-        ${field('Creature', text(`${kind}.creature`, b.creature, 'Wolf, roc, big cat…'))}
-        ${field('Archetype', text(`${kind}.archetype`, b.archetype))}
-        ${field('Body type', select(`${kind}.bodyType`, b.bodyType, BODY_TYPES.map((t) => t.name)))}`
-      : `
-        ${field('Base form', text(`${kind}.baseForm`, b.baseForm, 'Biped, quadruped, serpentine…'))}
-        ${field('Subtype', text(`${kind}.subtype`, b.subtype))}
-        ${field('Alignment', text(`${kind}.alignment`, b.alignment))}`;
+        ${field('Creature', text(`${p}.creature`, b.creature, 'Wolf, roc, big cat…'))}
+        ${field('Archetype', text(`${p}.archetype`, b.archetype))}
+        ${field('Body type', select(`${p}.bodyType`, b.bodyType, BODY_TYPES.map((t) => t.name)))}`
+      : kind === 'conjured' ? `
+        ${field('Base form', select(`${p}.baseForm`, b.baseForm, CONJURED_BASE_FORMS.map((f) => f.name)))}
+        ${field('Alignment', text(`${p}.alignment`, b.alignment))}`
+        : `
+        ${field('Base form', text(`${p}.baseForm`, b.baseForm, 'Biped, quadruped, serpentine…'))}
+        ${field('Subtype', text(`${p}.subtype`, b.subtype))}
+        ${field('Alignment', text(`${p}.alignment`, b.alignment))}`;
     return `<section class="panel span2">
-      <h3>${esc(label)}
+      <h3>${esc(String(b.name || '').trim() || label)}
+        ${cc.i > 0 ? `<span class="badge" title="The name this companion’s numbers read by in a formula">companion.${esc(b.id)}</span>` : ''}
         <span class="badge">level ${k.level ?? 0}</span>
-        <span class="badge">${k.hd ?? 0} HD</span>
+        <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
+        ${kind === 'conjured' && k.summonCost !== undefined
+    ? `<span class="badge" title="A standard action; one more spell point lets it stay a minute per caster level without concentration">${k.summonCost} sp to summon</span>` : ''}
+        ${(k.archetypes || []).map((a) => `<span class="badge">${esc(a.toLowerCase())}</span>`).join('')}
         ${k.penalty ? `<span class="badge">−${k.penalty} master level</span>` : ''}
         ${!k.level ? '<span class="badge">no level yet</span>' : ''}
       </h3>
       <div class="fieldgrid">
-        ${field('Name', text(`${kind}.name`, b.name, `${label} name`))}
+        ${field('Name', text(`${p}.name`, b.name, `${label} name`))}
         ${identity}
-        ${field('Size', select(`${kind}.size`, b.size, Object.keys(SIZE_MODIFIERS), null))}
-        ${companionLevelControls(model, kind, b, k)}
+        ${field('Size', select(`${p}.size`, b.size, Object.keys(SIZE_MODIFIERS), null))}
+        ${companionLevelControls(model, cc)}
       </div>
       <div class="bigstats" style="margin-top:10px">
         ${bigStat('HP', `${k.hpCurrent ?? 0} / ${k.hpMax ?? 0}`, k.hpTemp ? `+${k.hpTemp} temp` : '')}
         ${bigStat('AC', k.ac ?? 10, `touch ${k.touch ?? 10} · flat ${k.flatFooted ?? 10}`)}
         ${bigStat('Init', fmt(k.initiative ?? 0), 'Dex + bonus', '',
-    rollButton(model, kind, 'init', `${label.toLowerCase()} initiative`))}
+    rollButton(model, roll, 'init', `${label.toLowerCase()} initiative`))}
         ${bigStat('BAB', fmt(k.bab ?? 0), kind === 'familiar' ? 'master’s' : 'from the table')}
         ${bigStat('Attack', fmt(k.totalAttack ?? 0), `${k.attackAbility || 'Str'} + size`)}
         ${bigStat('CMD', k.cmd ?? 10, `flat ${k.ffCmd ?? 10}`)}
@@ -1460,13 +1551,16 @@ function companionHeadPanel(model, kind, b, k, label) {
     ? 'A familiar is its master’s level, uses the master’s BAB and base saves, has half the master’s hit points, and takes its Intelligence and natural armour from the familiar table.'
     : kind === 'animalCompanion'
       ? 'The level is the master’s levels in the class named (or ranks in Handle Animal / Ride for a Spheres companion), less any penalty; HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks all follow the animal companion table.'
-      : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
-        Readable from a formula as <code>${kind}.hp</code>, <code>${kind}.ac</code>, <code>${kind}.str.mod</code>…</p>
+      : kind === 'conjured'
+        ? 'The level is the caster level (or a class’s levels), less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
+        : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
+        Readable from a formula as <code>${sn}.hp</code>, <code>${sn}.ac</code>, <code>${sn}.str.mod</code>…</p>
     </section>`;
   }
 
 
-function companionHpPanel(kind, b, k) {
+function companionHpPanel(cc) {
+    const { kind, p, b, k, i } = cc;
     const hp = b.hp || {};
     const cur = k.hpCurrent ?? 0;
     return `<section class="panel">
@@ -1474,28 +1568,29 @@ function companionHpPanel(kind, b, k) {
       ${line('Maximum', k.hpMax ?? 0)}
       ${line('Damage taken', hp.damage || 0)}
       <div class="fieldgrid two" style="margin-top:6px">
-        ${field('Temporary', num(`${kind}.hp.temp`, hp.temp, 'min="0"'))}
-        ${field('Bonus max HP', num(`${kind}.hp.bonus`, hp.bonus))}
-        ${kind === 'familiar' ? '' : field('HP ability', abilitySelect(`${kind}.hpAbility`, b.hpAbility))}
+        ${field('Temporary', num(`${p}.hp.temp`, hp.temp, 'min="0"'))}
+        ${field('Bonus max HP', num(`${p}.hp.bonus`, hp.bonus))}
+        ${kind === 'familiar' ? '' : field('HP ability', abilitySelect(`${p}.hpAbility`, b.hpAbility))}
       </div>
       <div class="hpactions">
-        <input type="number" value="0" data-companion-amount="${kind}" aria-label="Amount" min="0">
-        <button data-action="companion-hp" data-kind="${kind}" data-op="damage" class="danger">Damage</button>
-        <button data-action="companion-hp" data-kind="${kind}" data-op="heal">Heal</button>
-        <button data-action="companion-hp" data-kind="${kind}" data-op="rest" class="primary">Rest</button>
+        <input type="number" value="0" data-companion-amount="${kind}:${i}" aria-label="Amount" min="0">
+        <button data-action="companion-hp" data-kind="${kind}" data-index="${i}" data-op="damage" class="danger">Damage</button>
+        <button data-action="companion-hp" data-kind="${kind}" data-index="${i}" data-op="heal">Heal</button>
+        <button data-action="companion-hp" data-kind="${kind}" data-index="${i}" data-op="rest" class="primary">Rest</button>
       </div>
       <p class="hint">${kind === 'familiar'
     ? `Half the master’s maximum${k.protectorDoubles ? ', doubled for a Protector' : ''}, plus the bonus.`
-    : `8 a hit die plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
+    : `${k.hitDie === 6 ? '4 a hit die (the mage archetype’s d6)' : '8 a hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
     </section>`;
   }
 
 
-function companionScoresPanel(model, kind, b, k) {
+function companionScoresPanel(model, cc) {
+    const { kind, p, sn, roll, b, k } = cc;
     const sc = k.scores || {};
     const evo = kind === 'eidolon';
     const incs = b.abilityIncreases || [];
-    const list = `${kind}.abilityIncreases`;
+    const list = `${p}.abilityIncreases`;
     return `<section class="panel">
       <h3>Ability scores</h3>
       <table class="build"><thead><tr>
@@ -1507,23 +1602,27 @@ function companionScoresPanel(model, kind, b, k) {
     const s = sc[a] || {};
     const base = kind === 'familiar' && a === 'int'
       ? `<input type="number" value="${b.scores?.int?.base ?? ''}" placeholder="${k.tableInt ?? ''}"
-            data-set="${kind}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
-      : num(`${kind}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
+            data-set="${p}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
+      : kind === 'conjured'
+        ? `<input type="number" value="${b.scores?.[a]?.base ?? ''}" placeholder="${s.base ?? 10}"
+            data-set="${p}.scores.${a}.base" data-kind="number-or-null" title="Auto: ${s.base ?? 10} from ${b.baseForm ? `the ${b.baseForm} base form` : 'the default line'}${b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.">`
+        : num(`${p}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
           <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>
           <td>${base}</td>
-          ${evo ? `<td>${num(`${kind}.scores.${a}.evo`, b.scores?.[a]?.evo)}</td>` : ''}
+          ${evo ? `<td>${num(`${p}.scores.${a}.evo`, b.scores?.[a]?.evo)}</td>` : ''}
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
-          <td>${num(`${kind}.scores.${a}.misc`, b.scores?.[a]?.misc)}${
-      forwardedBadge(model, `${kind}.${a}.score`)}</td>
+          <td>${num(`${p}.scores.${a}.misc`, b.scores?.[a]?.misc)}${
+      forwardedBadge(model, `${sn}.${a}.score`)}</td>
           <td class="num total">${s.total ?? 10}</td>
           <td class="num"><span class="rollpair">${fmt(s.mod ?? 0)}${
-      rollButton(model, kind, `ability:${a}`, `a ${ABILITY_LABELS[a]} check`)}</span></td>
+      rollButton(model, roll, `ability:${a}`, `a ${ABILITY_LABELS[a]} check`)}</span></td>
         </tr>`;
   }).join('')}
       </tbody></table>
       ${incs.length ? `<div class="fieldgrid" style="margin-top:8px">
-        ${incs.map((inc, i) => field(`+1 at level ${inc.level}${(k.level ?? 0) >= inc.level ? '' : ' (not yet)'}`,
+        ${incs.map((inc, i) => field(`+1 at ${kind === 'conjured' ? `${inc.level} HD` : `level ${inc.level}`}${
+    (kind === 'conjured' ? (k.hd ?? 0) : (k.level ?? 0)) >= inc.level ? '' : ' (not yet)'}`,
     itemSelect(list, i, 'ability', inc.ability, ABILITY_LABELS_LIST)))}
       </div>` : ''}
       ${evo ? `<p class="hint">Evo is the Ability Increase evolution, at most +${k.maxBonusPerStat ?? 2} to any one score at this level.
@@ -1532,11 +1631,12 @@ function companionScoresPanel(model, kind, b, k) {
   }
 
 
-function companionDefensePanel(model, kind, b, k) {
+function companionDefensePanel(model, cc) {
+    const { kind, p, sn, roll, b, k } = cc;
     const ac = b.ac || {};
     // Every one of these is a destination now, so each says beside itself
     // what has been forwarded to it and from where.
-    const fwd = (name) => forwardedBadge(model, `${kind}.${name}`);
+    const fwd = (name) => forwardedBadge(model, `${sn}.${name}`);
     return `<section class="panel">
       <h3>Defences <span class="badge">AC ${k.ac ?? 10}</span></h3>
       ${lineHtml('Armor class', `${k.ac ?? 10}${fwd('ac.total')}`, true)}
@@ -1544,31 +1644,32 @@ function companionDefensePanel(model, kind, b, k) {
       ${lineHtml('Flat-footed', `${k.flatFooted ?? 10}${fwd('ac.flatFooted')}`)}
       ${lineHtml('CMD', `${k.cmd ?? 10} (flat ${k.ffCmd ?? 10})${fwd('cmd')}`)}
       ${lineHtml('CMB', `<span class="rollpair">${fmt(k.cmb ?? 0)}${
-        rollButton(model, kind, 'cmb', 'a combat maneuver')}</span>${fwd('cmb')}`)}
+        rollButton(model, roll, 'cmb', 'a combat maneuver')}</span>${fwd('cmb')}`)}
       ${lineHtml('Initiative', `<span class="rollpair">${fmt(k.initiative ?? 0)}${
-        rollButton(model, kind, 'init', 'initiative')}</span>${fwd('init')}`)}
+        rollButton(model, roll, 'init', 'initiative')}</span>${fwd('init')}`)}
       <div class="fieldgrid" style="margin-top:8px">
-        ${field('Bonus AC (all)', num(`${kind}.ac.all`, ac.all))}
-        ${field('Touch only', num(`${kind}.ac.touch`, ac.touch))}
-        ${field('Flat-footed only', num(`${kind}.ac.ff`, ac.ff))}
-        ${field('CMD other', num(`${kind}.cmdOther`, b.cmdOther))}
-        ${field('CMB other', num(`${kind}.cmbOther`, b.cmbOther))}
-        ${field('Initiative bonus', num(`${kind}.initBonus`, b.initBonus))}
+        ${field('Bonus AC (all)', num(`${p}.ac.all`, ac.all))}
+        ${field('Touch only', num(`${p}.ac.touch`, ac.touch))}
+        ${field('Flat-footed only', num(`${p}.ac.ff`, ac.ff))}
+        ${field('CMD other', num(`${p}.cmdOther`, b.cmdOther))}
+        ${field('CMB other', num(`${p}.cmbOther`, b.cmbOther))}
+        ${field('Initiative bonus', num(`${p}.initBonus`, b.initBonus))}
       </div>
       <p class="hint">10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
         + the bonuses: <em>all</em> counts everywhere, <em>touch only</em> for dodge and deflection,
         <em>flat-footed only</em> for armour and extra natural armour. CMB is BAB + Str + the
         special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries.</p>
-      ${kind === 'eidolon' ? `<div class="fieldgrid" style="margin-top:8px">
-        ${field('DR', text(`${kind}.dr`, b.dr))}
-        ${field('Resistances', text(`${kind}.resistances`, b.resistances))}
-        ${field('Immunities', text(`${kind}.immunities`, b.immunities))}
+      ${kind === 'eidolon' || kind === 'conjured' ? `<div class="fieldgrid" style="margin-top:8px">
+        ${field('DR', text(`${p}.dr`, b.dr))}
+        ${field('Resistances', text(`${p}.resistances`, b.resistances))}
+        ${field('Immunities', text(`${p}.immunities`, b.immunities))}
       </div>` : ''}
     </section>`;
   }
 
 
-function companionSavesPanel(model, kind, b, k) {
+function companionSavesPanel(model, cc) {
+    const { kind, p, sn, roll, b, k } = cc;
     const saves = k.saves || {};
     const rows = [['fort', 'Fortitude', 'Con'], ['ref', 'Reflex', 'Dex'], ['will', 'Will', 'Wis']];
     return `<section class="panel">
@@ -1580,39 +1681,43 @@ function companionSavesPanel(model, kind, b, k) {
       </tr></thead><tbody>
         ${rows.map(([key, name, ab]) => `<tr>
           <th scope="row">${name}<span class="hint" style="margin-left:4px">${ab}</span></th>
-          ${kind === 'familiar' ? '' : `<td>${check(`${kind}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
+          ${kind === 'familiar' ? '' : `<td>${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
-          <td>${num(`${kind}.saves.${key}.misc`, b.saves?.[key]?.misc)}${
-            forwardedBadge(model, `${kind}.${key}`)}</td>
+          <td>${num(`${p}.saves.${key}.misc`, b.saves?.[key]?.misc)}${
+            forwardedBadge(model, `${sn}.${key}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(saves[key]?.total ?? 0)}${
-            rollButton(model, kind, `save:${key}`, `a ${name} save`)}</span></td>
+            rollButton(model, roll, `save:${key}`, `a ${name} save`)}</span></td>
         </tr>`).join('')}
       </tbody></table>
       <p class="hint">${kind === 'familiar'
     ? 'Base saves are the master’s, never below +2.'
-    : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
+    : kind === 'conjured' && k.formSaves
+      ? `Tick the good saves — the ${esc(b.baseForm)} form’s are ${['fort', 'ref', 'will']
+        .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'} — and the table gives the good and poor base at this HD.`
+      : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
       <div class="fieldgrid" style="margin-top:8px">
-        ${field('Speed', text(`${kind}.speed.base`, b.speed?.base, '30 ft.'))}
-        ${field('Fly', text(`${kind}.speed.fly`, b.speed?.fly))}
-        ${field('Swim', text(`${kind}.speed.swim`, b.speed?.swim))}
-        ${field('Climb', text(`${kind}.speed.climb`, b.speed?.climb))}
-        ${field('Burrow', text(`${kind}.speed.burrow`, b.speed?.burrow))}
+        ${field('Speed', text(`${p}.speed.base`, b.speed?.base, '30 ft.'))}
+        ${field('Fly', text(`${p}.speed.fly`, b.speed?.fly))}
+        ${field('Swim', text(`${p}.speed.swim`, b.speed?.swim))}
+        ${field('Climb', text(`${p}.speed.climb`, b.speed?.climb))}
+        ${field('Burrow', text(`${p}.speed.burrow`, b.speed?.burrow))}
       </div>
     </section>`;
   }
 
 
-function companionAttacksPanel(model, kind, b, k) {
-    const list = `${kind}.attacks`;
+function companionAttacksPanel(model, cc) {
+    const { kind, p, sn, roll, b, k } = cc;
+    const list = `${p}.attacks`;
     const rows = b.attacks || [];
     const types = NATURAL_ATTACKS.map((a) => a.name);
     const cap = kind === 'eidolon' && k.maxAttacks ? ` <span class="badge${rows.length > k.maxAttacks ? ' err' : ''}">${rows.length} of ${k.maxAttacks} attacks</span>` : '';
     return `<section class="panel span2">
       <h3>Attacks <span class="badge">${fmt(k.totalAttack ?? 0)} to hit</span>${cap}
         <span class="pair" style="margin-left:auto">
-          <label class="fld"><span>Ability</span>${select(`${kind}.attackAbility`, b.attackAbility, ABILITY_LABELS_LIST, kind === 'familiar' ? 'auto (better of Str / Dex)' : '—')}</label>
-          <label class="fld"><span>Misc</span>${num(`${kind}.attackBonus`, b.attackBonus, 'style="width:3.6rem"')}</label>
+          <label class="fld"><span>Ability</span>${select(`${p}.attackAbility`, b.attackAbility, ABILITY_LABELS_LIST, kind === 'familiar' ? 'auto (better of Str / Dex)' : '—')}</label>
+          <label class="fld"><span>Misc</span>${num(`${p}.attackBonus`, b.attackBonus, 'style="width:3.6rem"')}</label>
         </span>
       </h3>
       ${rows.length ? `<table><thead><tr>
@@ -1631,9 +1736,9 @@ function companionAttacksPanel(model, kind, b, k) {
           <td>${itemSelect(list, i, 'primary', a.primary === null || a.primary === undefined ? '' : (a.primary ? 'primary' : 'secondary'),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>
           <td>${itemNum(list, i, 'bonus', a.bonus)}${
-            forwardedBadge(model, `${kind}.attack.${companionAttackKey(a)}`)}</td>
+            forwardedBadge(model, `${sn}.attack.${companionAttackKey(a)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(a.toHit ?? 0)}${
-            rollButton(model, kind, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
+            rollButton(model, roll, `attack:${i}`, `${a.type || 'this attack'} — attack and damage`)}</span></td>
           <td>${esc(a.damageType || '')}</td>
           <td>${itemArea(model, list, i, 'qualities', a.qualities, 1)}</td>
           ${rowRemove(list, i)}
@@ -1648,15 +1753,16 @@ function companionAttacksPanel(model, kind, b, k) {
   }
 
 
-function eidolonEvolutionsPanel(model, b, k) {
-    const list = 'eidolon.evolutions';
+function eidolonEvolutionsPanel(model, cc) {
+    const { p, sn, b, k } = cc;
+    const list = `${p}.evolutions`;
     const rows = b.evolutions || [];
     const over = (k.evoLeft ?? 0) < 0;
     return `<section class="panel span2">
       <h3>Evolutions
         <span class="badge${over ? ' err' : ''}">${k.evoSpent ?? 0} of ${k.evoPool ?? 0} points</span>
         <span class="pair" style="margin-left:auto">
-          <label class="fld"><span>Bonus points</span>${num('eidolon.bonusEvoPoints', b.bonusEvoPoints, 'style="width:3.6rem"')}</label>
+          <label class="fld"><span>Bonus points</span>${num(`${p}.bonusEvoPoints`, b.bonusEvoPoints, 'style="width:3.6rem"')}</label>
         </span>
       </h3>
       ${/* The same split the items table had: with only the name and the notes
@@ -1680,10 +1786,10 @@ function eidolonEvolutionsPanel(model, b, k) {
       ${over ? `<p class="hint warn">${-(k.evoLeft ?? 0)} point${k.evoLeft === -1 ? '' : 's'} over the pool.</p>` : ''}
       <div class="fieldgrid" style="margin-top:8px">
         <label class="fld" style="grid-column:1/-1"><span>Base form evolutions (free, by level)</span>
-          ${prose(model, 'data-set="eidolon.baseEvolutions"', b.baseEvolutions, 2)}</label>
+          ${prose(model, `data-set="${p}.baseEvolutions"`, b.baseEvolutions, 2)}</label>
       </div>
       <p class="hint">The pool is the table’s at this level, less the master-level penalty, plus the bonus points.
-        Readable as <code>eidolon.evoPool</code> and <code>eidolon.evoLeft</code>.</p>
+        Readable as <code>${sn}.evoPool</code> and <code>${sn}.evoLeft</code>.</p>
     </section>`;
   }
 
@@ -1726,9 +1832,10 @@ function companionListPanel(model, {
   }
 
 
-function companionTricksPanel(model, b, k) {
+function companionTricksPanel(model, cc) {
+    const { p, b, k } = cc;
     return companionListPanel(model, {
-      list: 'animalCompanion.tricks',
+      list: `${p}.tricks`,
       rows: b.tricks || [],
       heading: 'Tricks',
       badge: `<span class="badge">${k.tricksTaken ?? 0} taken · ${k.bonusTricks ?? 0} bonus</span>`,
@@ -1739,11 +1846,61 @@ function companionTricksPanel(model, b, k) {
   }
 
 
-function companionFeatsPanel(model, kind, b, k) {
+/**
+ * The conjured companion's contract: the base form as the sphere prints it,
+ * and the archetypes it was called under.
+ *
+ * Most archetypes are rules prose the player applies through rows they
+ * already own -- the warrior empties its own attacks list, the aquatic trades
+ * its own speeds -- so most ticks here are a reminder wearing its rule as a
+ * tooltip. The ones the sums act on (the half-HD familiar, the d6 mage, the
+ * mindless and unwilling extra dice, the cheaper summon) are marked, and the
+ * head's badges show the result.
+ */
+function conjuredContractPanel(model, cc) {
+    const { p, b, k } = cc;
+    return `<section class="panel">
+      <h3>Contract <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
+      ${k.formLine ? `<p class="hint"><strong>${esc(b.baseForm)}:</strong> ${esc(k.formLine)}.
+        Speeds and attacks are written into their own rows; the form’s scores and natural armour are already counted.</p>`
+    : '<p class="hint">Pick a base form above for its printed stat line, saves and starting scores.</p>'}
+      <div class="rowlist">
+        ${CONJURED_ARCHETYPES.map((a) => `<div class="item statline">
+          ${check(`${p}.archetypes.${a.id}`, !!b.archetypes?.[a.id], a.label, a.note)}
+          ${a.sums ? `<span class="badge" title="${esc(a.note)}">changes the sums</span>` : ''}
+        </div>`).join('')}
+      </div>
+      <p class="hint">Hover an archetype for its rule. Once selected, an archetype cannot be
+        removed from that companion in play; a companion may hold several so long as they
+        do not replace the same features.</p>
+    </section>`;
+  }
+
+
+/** The (form) and (type) talents shaping this companion, one list per companion. */
+function conjuredTalentsPanel(model, cc) {
+    const { p, b, k } = cc;
+    return companionListPanel(model, {
+      list: `${p}.talents`,
+      rows: b.talents || [],
+      heading: 'Conjuration talents',
+      badge: `<span class="badge">${k.talentsTaken ?? 0} shaping this companion</span>`,
+      what: 'Talent',
+      sourcePlaceholder: '(form), (type)…',
+      hint: 'The (form) and (type) talents applied to this companion — one free when it is '
+        + 'gained, and no more than one (type). They are spent from the master’s own magic '
+        + 'talents, so nothing is budgeted here; what a talent changes goes into the rows it '
+        + 'changes, and its note can forward a bonus the way any prose does.',
+    });
+  }
+
+
+function companionFeatsPanel(model, cc) {
+    const { p, b, k } = cc;
     const allowed = k.featsAllowed ?? 0;
     const over = (k.featsTaken ?? 0) > allowed;
     return companionListPanel(model, {
-      list: `${kind}.feats`,
+      list: `${p}.feats`,
       rows: b.feats || [],
       heading: 'Feats',
       badge: `<span class="badge${over ? ' err' : ''}">${k.featsTaken ?? 0} of ${allowed}</span>`,
@@ -1756,8 +1913,9 @@ function companionFeatsPanel(model, kind, b, k) {
   }
 
 
-function companionSkillsPanel(model, kind, b, k) {
-    const list = `${kind}.skills`;
+function companionSkillsPanel(model, cc) {
+    const { kind, p, sn, roll, b, k } = cc;
+    const list = `${p}.skills`;
     const rows = b.skills || [];
     const fam = kind === 'familiar';
     const budget = k.ranksAllowed === null || k.ranksAllowed === undefined ? ''
@@ -1778,9 +1936,9 @@ function companionSkillsPanel(model, kind, b, k) {
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
           <td>${itemNum(list, i, 'misc', s.misc)}${
-            forwardedBadge(model, `${kind}.skill.${companionSkillKey(s)}`)}</td>
+            forwardedBadge(model, `${sn}.skill.${companionSkillKey(s)}`)}</td>
           <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
-            rollButton(model, kind, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
+            rollButton(model, roll, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
         </tr>`).join('')}
       </tbody></table>
@@ -1789,7 +1947,9 @@ function companionSkillsPanel(model, kind, b, k) {
     ? 'A familiar uses its own ranks or its master’s, whichever is higher; the +3 class-skill bonus applies once there is a rank.'
     : kind === 'eidolon'
       ? 'Ranks per the sheet: HD × (6 + Int modifier). The +3 class-skill bonus applies once there is a rank.'
-      : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
+      : kind === 'conjured'
+        ? '2 ranks a hit die at Intelligence 10 or better, 1 under it (the printed column, at the forms’ Int 7); none for a mindless companion. The +3 class-skill bonus applies once there is a rank.'
+        : 'Ranks from the table at this level. The +3 class-skill bonus applies once there is a rank.'}</p>
     </section>`;
   }
 
@@ -1809,9 +1969,10 @@ function companionSkillsPanel(model, kind, b, k) {
  * Taking a thing off is a tick, not a deletion: the row stays, still shows
  * what it would do, and stops doing it.
  */
-function companionItemsPanel(model, kind, b, k, label) {
+function companionItemsPanel(model, cc) {
+    const { kind, p, sn, b, k, label } = cc;
     const slots = k.slots || [];
-    const list = `${kind}.slotless`;
+    const list = `${p}.slotless`;
     const rows = b.slotless || [];
     const worn = (path, on) => `<label class="chk" title="${
       on === false ? 'Not worn — the effect beside it is written down but not applying' : 'Worn: the effect beside it is applying'}">
@@ -1850,10 +2011,10 @@ function companionItemsPanel(model, kind, b, k, label) {
         ${slots.map((slot) => {
     const it = b.items?.[slot] || {};
     return `<tr>
-          <td class="mid" data-label="Worn">${worn(`${kind}.items.${slot}.worn`, it.worn)}</td>
-          <td data-stack="name">${text(`${kind}.items.${slot}.name`, it.name, '')}</td>
-          <td data-label="Cost">${num(`${kind}.items.${slot}.cost`, it.cost)}</td>
-          <td data-label="Effect">${prose(model, `data-set="${kind}.items.${slot}.effect"`, it.effect, 1, 'grow', null, off(it))}</td>
+          <td class="mid" data-label="Worn">${worn(`${p}.items.${slot}.worn`, it.worn)}</td>
+          <td data-stack="name">${text(`${p}.items.${slot}.name`, it.name, '')}</td>
+          <td data-label="Cost">${num(`${p}.items.${slot}.cost`, it.cost)}</td>
+          <td data-label="Effect">${prose(model, `data-set="${p}.items.${slot}.effect"`, it.effect, 1, 'grow', null, off(it))}</td>
           <th scope="row" data-label="Slot">${esc(slot)}</th>
         </tr>`;
   }).join('')}
@@ -1874,10 +2035,10 @@ function companionItemsPanel(model, kind, b, k, label) {
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
       <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose on the sheet, and
         every number ${esc(label.toLowerCase())} rolls is something a bonus can be aimed at:
-        <code>{${kind}.str.score += 4 as enhancement}</code>, <code>{${kind}.ac.total += 2 as armor}</code>,
-        <code>{${kind}.skill.perception += 5}</code>, <code>{${kind}.attack += 1}</code>,
-        <code>{${kind}.damage += 1}</code>, <code>{${kind}.saves += 2 as resistance}</code>,
-        <code>{${kind}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
+        <code>{${sn}.str.score += 4 as enhancement}</code>, <code>{${sn}.ac.total += 2 as armor}</code>,
+        <code>{${sn}.skill.perception += 5}</code>, <code>{${sn}.attack += 1}</code>,
+        <code>{${sn}.damage += 1}</code>, <code>{${sn}.saves += 2 as resistance}</code>,
+        <code>{${sn}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
         would do without doing it.</p>
     </section>`;
   }
@@ -1895,11 +2056,14 @@ function companionItemsPanel(model, kind, b, k, label) {
  * can write down. What is conditional is the pack's paragraph above it, which
  * drops away the moment there is something of their own to show instead.
  */
-function companionAbilityRow(model, kind, b, name) {
+function companionAbilityRow(model, cc, name) {
+    const { kind, p, b } = cc;
     const key = abilityTextKey(name);
     const mine = String(b.abilityNotes?.[key] ?? '');
     const shared = companionAbilityText(name);
-    const foldKey = `${kind}-ability-${key}`;
+    // Folded per companion by its stable id, so opening Evasion on one wolf
+    // does not open it on the other three.
+    const foldKey = `${kind}-${b.id || cc.i}-ability-${key}`;
     // Shut unless it has been opened: five of these are a list of what the
     // companion has, and a list you have to scroll past is not a list.
     const shut = isCollapsed(model, foldKey, true);
@@ -1913,35 +2077,37 @@ function companionAbilityRow(model, kind, b, name) {
           ${esc(shared.text)}
           ${shared.source || shared.pack ? `<span class="packfrom">${esc(shared.source || shared.pack)}</span>` : ''}
         </div>` : ''}
-        ${prose(model, `data-set="${kind}.abilityNotes.${esc(key)}"`, mine, 2)}
+        ${prose(model, `data-set="${p}.abilityNotes.${esc(key)}"`, mine, 2)}
       </div>`}
     </div>`;
   }
 
 
-function companionGainsPanel(model, kind, b, k, label) {
+function companionGainsPanel(model, cc) {
+    const { kind, p, b, k, label } = cc;
     const gains = k.gains || [];
     return `<section class="panel">
       <h3>${esc(label)} abilities <span class="badge">${gains.length} from the table</span></h3>
       ${gains.length ? `<div class="rowlist">${gains.map((g) => `<div class="item gainlevel">
         <span class="label">Level ${g.level}</span>
-        <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, kind, b, n)).join('')}</div>
+        <div class="gains">${(g.abilities || [g.text]).map((n) => companionAbilityRow(model, cc, n)).join('')}</div>
       </div>`).join('')}</div>` : '<p class="empty">Nothing yet at this level.</p>'}
       <div class="fieldgrid" style="margin-top:8px">
         ${kind === 'familiar' ? `<label class="fld" style="grid-column:1/-1"><span>Familiar abilities</span>
-          ${prose(model, 'data-set="familiar.abilities"', b.abilities, 3)}</label>` : ''}
+          ${prose(model, `data-set="${p}.abilities"`, b.abilities, 3)}</label>` : ''}
         <label class="fld" style="grid-column:1/-1"><span>Special qualities</span>
-          ${prose(model, `data-set="${kind}.specialQualities"`, b.specialQualities, 3)}</label>
+          ${prose(model, `data-set="${p}.specialQualities"`, b.specialQualities, 3)}</label>
       </div>
     </section>`;
   }
 
 
-function companionNotesPanel(model, kind, b) {
+function companionNotesPanel(model, cc) {
+    const { p, sn, b } = cc;
     return `<section class="panel">
       <h3>Notes</h3>
-      ${prose(model, `data-set="${kind}.notes"`, b.notes, 6)}
-      <p class="hint">Formulas work here: <code>{= ${kind}.hp}</code>, <code>{= ${kind}.hd * 2}</code>.</p>
+      ${prose(model, `data-set="${p}.notes"`, b.notes, 6)}
+      <p class="hint">Formulas work here: <code>{= ${sn}.hp}</code>, <code>{= ${sn}.hd * 2}</code>.</p>
     </section>`;
   }
 

@@ -7,8 +7,8 @@
  */
 
 import {
-  PRIMORDIA_LEVELS, grantCount, primordiaGrantsAt, primordiaTechnique,
-} from '../../rules.js';
+  altTrainingGrantsAt, altTrainingLevels, altTrainingTechnique, grantCount,
+} from './alt-training.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
 import { positionedRows } from '../templates.js';
@@ -472,7 +472,8 @@ export function removeTechnique(model, name) {
 }
 
 /**
- * What the Primordia technique has put in its own sphere, level by level.
+ * What the Alternate Training technique has put in its own sphere, level by
+ * level.
  *
  * The technique names most of what it grants -- Light Body's Wall Stunt at
  * 3rd and Air Stunt at 5th are in the rules, not in the player's hands -- so
@@ -483,16 +484,16 @@ export function removeTechnique(model, name) {
  * it is not.
  */
 export function techniqueTalents(model) {
-  const t = primordiaTechnique(model.data.identity?.primordiaTechnique);
+  const t = altTrainingTechnique(model.data.altTraining?.technique);
   const sphere = t?.talents?.sphere;
   if (!sphere) return null;
   const level = Number(model.data.identity.level) || 0;
-  const picks = model.data.primordia?.picks || {};
+  const picks = model.data.altTraining?.picks || {};
   const names = [];
   const choices = [];
-  for (const lvl of PRIMORDIA_LEVELS) {
+  for (const lvl of altTrainingLevels()) {
     if (lvl > level) break;
-    for (const g of primordiaGrantsAt(t, lvl)) {
+    for (const g of altTrainingGrantsAt(t, lvl)) {
       if (!grantCount(g, 'talent')) continue;
       const pick = String(picks[lvl] ?? '').trim();
       // A grant the player chooses is a choice even where the rules name the

@@ -46,8 +46,8 @@ import { normalise, toDocument } from './document.js';
 import {
   addSystemTab, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
   moveTab, removeSystemTab, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
-  setItem, setTabColor, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
-  tabColor, tabOrder,
+  setItem, setTabColor, setTabName, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
+  tabColor, tabName, tabOrder,
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
 } from './edit.js';
 import { emit, subscribe } from './events.js';
@@ -105,14 +105,15 @@ import {
   tableShuffleDiscard, tableSpend, tableStart, tableTap, tableTrigger,
 } from './subsystems/cardcasting.js';
 import {
-  companionDamage, companionHeal, companionMaster, companionRest, recomputeCompanions,
+  addCompanion, companionDamage, companionHeal, companionMaster, companionRest,
+  recomputeCompanions,
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
 import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
 import {
   recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
 } from './subsystems/maneuvers.js';
-import { primordiaPrereq, primordiaTalents, recomputePrimordia } from './subsystems/primordia.js';
+import { altTrainingPrereq, altTrainingTalents, recomputeAltTraining } from './subsystems/alt-training.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
 import {
   addDraftTechnique, draftFromTechnique, mergeTechniquesFrom, removeTechnique,
@@ -352,7 +353,7 @@ export class Character {
     this.#recomputeCardcasting();
     // Last of the systems: its prerequisite check reads the casting types the
     // training pass works out and the casting classes the Vancian one names.
-    this.#recomputePrimordia();
+    this.#recomputeAltTraining();
     this.#recomputeCompanions();
     this.#recomputeTrackers();
     // After the trackers and sub-systems, so a buff's formula can read them
@@ -426,6 +427,8 @@ export class Character {
   moveTab(...a) { return moveTab(this, ...a); }
   tabColor(...a) { return tabColor(this, ...a); }
   setTabColor(...a) { return setTabColor(this, ...a); }
+  tabName(...a) { return tabName(this, ...a); }
+  setTabName(...a) { return setTabName(this, ...a); }
 
   // abilities.js
   #applyMythic(...a) { return applyMythic(this, ...a); }
@@ -659,14 +662,15 @@ export class Character {
   removeTechnique(...a) { return removeTechnique(this, ...a); }
   #techniqueTalents(...a) { return techniqueTalents(this, ...a); }
 
-  // subsystems/primordia.js
-  #primordiaPrereq(...a) { return primordiaPrereq(this, ...a); }
-  #recomputePrimordia(...a) { return recomputePrimordia(this, ...a); }
-  #primordiaTalents(...a) { return primordiaTalents(this, ...a); }
+  // subsystems/alt-training.js
+  #altTrainingPrereq(...a) { return altTrainingPrereq(this, ...a); }
+  #recomputeAltTraining(...a) { return recomputeAltTraining(this, ...a); }
+  #altTrainingTalents(...a) { return altTrainingTalents(this, ...a); }
 
   // subsystems/companions.js
   #companionMaster(...a) { return companionMaster(this, ...a); }
   #recomputeCompanions(...a) { return recomputeCompanions(this, ...a); }
+  addCompanion(...a) { return addCompanion(this, ...a); }
   companionDamage(...a) { return companionDamage(this, ...a); }
   companionHeal(...a) { return companionHeal(this, ...a); }
   companionRest(...a) { return companionRest(this, ...a); }

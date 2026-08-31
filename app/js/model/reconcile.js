@@ -95,8 +95,8 @@ export function describeSource(path) {
     case 'mythicTraditionNote': return 'a mythic tradition note';
     case 'feat': return `a feat’s note, group ${nth(a)}`;
     case 'grantedFeat': return 'a granted feat’s note';
-    case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
-    case 'primordiaNote': return `Primordia notes, level ${a}`;
+    case 'altTraining': return a === 'notes' ? 'Alternate Training notes' : `Alternate Training, level ${a}`;
+    case 'altTrainingNote': return `Alternate Training notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'defenses': return `the ${DEFENCE_BOX_LABELS[a] || a} box`;
@@ -116,11 +116,25 @@ export function describeSource(path) {
     case 'cardcasting': return 'Cardcasting notes';
     case 'familiar':
     case 'animalCompanion':
-    case 'eidolon': {
-      const who = head === 'familiar' ? 'the familiar'
-        : head === 'eidolon' ? 'the eidolon' : 'the animal companion';
-      if (a === 'item') return `${who}, the ${parts.slice(2).join(':')} slot`;
-      if (a === 'slotless') return `${who}, item ${nth(b)}`;
+    case 'eidolon':
+    case 'conjured': {
+      let who = head === 'familiar' ? 'the familiar'
+        : head === 'eidolon' ? 'the eidolon'
+          : head === 'conjured' ? 'the conjured companion' : 'the animal companion';
+      // A later companion of the kind tags its keys with its id right after
+      // the kind (`eidolon:brutus:item:Neck`); the first keeps the old shape.
+      const SUBHEADS = new Set(['abilities', 'specialAbility', 'specialQualities', 'baseEvolutions',
+        'dr', 'resistances', 'immunities', 'notes', 'evolution', 'attack', 'feat', 'trick',
+        'talent', 'item', 'slotless']);
+      let [sub, at] = [a, b];
+      let rest = 2;
+      if (a && !SUBHEADS.has(a)) {
+        who = `${who} “${a}”`;
+        [sub, at] = [b, parts[3]];
+        rest = 3;
+      }
+      if (sub === 'item') return `${who}, the ${parts.slice(rest).join(':')} slot`;
+      if (sub === 'slotless') return `${who}, item ${nth(at)}`;
       return who;
     }
     // A maneuver's own entry. The name is last in both because it may hold a

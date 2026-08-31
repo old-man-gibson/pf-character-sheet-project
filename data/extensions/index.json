@@ -24,6 +24,11 @@
       "id": "iron-chef-ingredients",
       "name": "Iron Chef ingredients",
       "file": "iron-chef-ingredients.json"
+    },
+    {
+      "id": "alt-training-techniques",
+      "name": "Alternate Training techniques (Primordia)",
+      "file": "alt-training-techniques.json"
     }
   ]
 }

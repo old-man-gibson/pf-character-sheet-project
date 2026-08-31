@@ -330,10 +330,19 @@ export function characterScope(model) {
   }
 
   // The companions, so a tracker or an ability can read them: familiar.hp,
-  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft.
+  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Every companion is
+  // also `companion.<id>.*` under the id shown on its own tab -- stable
+  // through a rename, exactly as a tracker's -- and the first of each kind
+  // keeps the bare kind name, which is every spelling that existed before a
+  // character could keep more than one.
+  s.companion = {};
   for (const kind of COMPANION_KINDS) {
-    const cs = companionScope(c[kind]);
-    if (cs) s[kind] = cs;
+    (c[kind] || []).forEach((block, i) => {
+      const cs = companionScope(block);
+      if (!cs) return;
+      if (i === 0) s[kind] = cs;
+      if (block.id) s.companion[block.id] = cs;
+    });
   }
 
   // Every tracker publishes its numbers as tracker.<id>.* -- the id is the
@@ -513,31 +522,41 @@ export function forwardTargets(model) {
    * something to wear.
    */
   for (const kind of COMPANION_KINDS) {
-    const comp = model.data[kind];
-    if (!comp || !companionInUse(kind, comp)) continue;
-    const label = COMPANION_LABELS[kind] || kind;
-    const under = (name) => `${kind}.${name}`;
-    for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
-    for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
-      const into = members.map(under);
-      expand.set(under(name), into);
-      list.push({ name: under(name), label: `${label}: all ${name === 'ac' ? 'armour classes' : name}`, family: into });
-    }
-    const compSkills = [];
-    for (const sk of comp.skills || []) {
-      const key = companionSkillKey(sk);
-      if (!key || key === 'x' || expand.has(under(`skill.${key}`))) continue;
-      add(under(`skill.${key}`), `${label}: ${skillLabel(sk.name, sk.spec)}`);
-      compSkills.push(under(`skill.${key}`));
-    }
-    expand.set(under('skill'), compSkills);
-    list.push({ name: under('skill'), label: `${label}: every skill`, family: compSkills });
-    for (const a of comp.attacks || []) {
-      const key = companionAttackKey(a);
-      if (!key || key === 'x' || expand.has(under(`attack.${key}`))) continue;
-      add(under(`attack.${key}`), `${label}: ${a.type} attack`);
-      add(under(`damage.${key}`), `${label}: ${a.type} damage`);
-    }
+    (model.data[kind] || []).forEach((comp, index) => {
+      if (!companionInUse(kind, comp)) return;
+      // Each companion offers its stats under its own `companion.<id>.…`
+      // spelling; the first of its kind offers the bare names too, so
+      // everything written before a character could keep several still lands.
+      const kindLabel = COMPANION_LABELS[kind] || kind;
+      const own = String(comp.name || '').trim() || kindLabel;
+      const prefixes = index === 0
+        ? [[kind, kindLabel], [`companion.${comp.id}`, own]]
+        : [[`companion.${comp.id}`, own]];
+      for (const [prefix, label] of prefixes) {
+        const under = (name) => `${prefix}.${name}`;
+        for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
+        for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
+          const into = members.map(under);
+          expand.set(under(name), into);
+          list.push({ name: under(name), label: `${label}: all ${name === 'ac' ? 'armour classes' : name}`, family: into });
+        }
+        const compSkills = [];
+        for (const sk of comp.skills || []) {
+          const key = companionSkillKey(sk);
+          if (!key || key === 'x' || expand.has(under(`skill.${key}`))) continue;
+          add(under(`skill.${key}`), `${label}: ${skillLabel(sk.name, sk.spec)}`);
+          compSkills.push(under(`skill.${key}`));
+        }
+        expand.set(under('skill'), compSkills);
+        list.push({ name: under('skill'), label: `${label}: every skill`, family: compSkills });
+        for (const a of comp.attacks || []) {
+          const key = companionAttackKey(a);
+          if (!key || key === 'x' || expand.has(under(`attack.${key}`))) continue;
+          add(under(`attack.${key}`), `${label}: ${a.type} attack`);
+          add(under(`damage.${key}`), `${label}: ${a.type} damage`);
+        }
+      }
+    });
   }
 
   expand.set('skill', skills);
@@ -857,11 +876,11 @@ export function proseSources(model) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note));
-  for (const [lvl, text] of Object.entries(d.primordia?.picks || {})) push(`primordia:${lvl}`, text);
-  for (const [lvl, text] of Object.entries(d.primordia?.rowNotes || {})) {
-    push(`primordiaNote:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.altTraining?.rowNotes || {})) {
+    push(`altTrainingNote:${lvl}`, text);
   }
-  push('primordia:notes', d.primordia?.notes);
+  push('altTraining:notes', d.altTraining?.notes);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
   // is walked rather than pushed as though it were a name.
   for (const [k, v] of Object.entries(d.mythic?.tradition || {})) {
@@ -967,31 +986,39 @@ export function proseSources(model) {
   });
   (d.cardcasting?.manipulations || []).forEach((m, i) => push(`deckManipulation:${i}`, m.note));
   push('cardcasting:notes', d.cardcasting?.notes);
-  // The companions' prose: abilities, qualities, evolutions and notes.
+  // The companions' prose: abilities, qualities, evolutions and notes. The
+  // first of each kind keeps the keys it has always had -- a reconcile offset
+  // or an audit note filed under `eidolon:feat:2` must go on meaning the same
+  // row -- and the later companions tag theirs with the block's stable id.
   for (const kind of COMPANION_KINDS) {
-    const b = d[kind];
-    if (!b) continue;
-    for (const key of ['abilities', 'specialAbility', 'specialQualities', 'baseEvolutions',
-      'dr', 'resistances', 'immunities', 'notes']) {
-      push(`${kind}:${key}`, b[key]);
-    }
-    (b.evolutions || []).forEach((e, i) => push(`${kind}:evolution:${i}`, e.notes));
-    (b.attacks || []).forEach((a, i) => push(`${kind}:attack:${i}`, a.qualities));
-    (b.feats || []).forEach((f, i) => push(`${kind}:feat:${i}`, f.notes));
-    (b.tricks || []).forEach((t, i) => push(`${kind}:trick:${i}`, t.notes));
-    // What a companion is wearing. The effect is prose like any other, so it
-    // reads {…} and forwards a bonus at the companion's own stats -- which is
-    // the whole of what "equipment that changes its numbers" needs to be.
-    //
-    // Taken off, the row is still written down and still shows what it would
-    // do, but stops doing it: `future` is exactly the state a talent taken at
-    // 16 is in at 15, and it already means "reads and displays, does not
-    // apply". One rule, two places it is wanted.
-    const off = (it) => (it?.worn === false ? { future: true } : null);
-    for (const [slot, it] of Object.entries(b.items || {})) {
-      push(`${kind}:item:${slot}`, it?.effect, null, off(it));
-    }
-    (b.slotless || []).forEach((it, i) => push(`${kind}:slotless:${i}`, it?.effect, null, off(it)));
+    (d[kind] || []).forEach((b, index) => {
+      const tag = index === 0 ? kind : `${kind}:${b.id}`;
+      for (const key of ['abilities', 'specialAbility', 'specialQualities', 'baseEvolutions',
+        'dr', 'resistances', 'immunities', 'notes']) {
+        push(`${tag}:${key}`, b[key]);
+      }
+      (b.evolutions || []).forEach((e, i) => push(`${tag}:evolution:${i}`, e.notes));
+      (b.attacks || []).forEach((a, i) => push(`${tag}:attack:${i}`, a.qualities));
+      (b.feats || []).forEach((f, i) => push(`${tag}:feat:${i}`, f.notes));
+      (b.tricks || []).forEach((t, i) => push(`${tag}:trick:${i}`, t.notes));
+      // The conjured companion's (form) talents: what one changes is prose in
+      // its note, and prose forwards -- Armored Companion is
+      // `{conjured.ac.flatFooted += 2 as armor}` written where the talent is.
+      (b.talents || []).forEach((t, i) => push(`${tag}:talent:${i}`, t.notes));
+      // What a companion is wearing. The effect is prose like any other, so it
+      // reads {…} and forwards a bonus at the companion's own stats -- which is
+      // the whole of what "equipment that changes its numbers" needs to be.
+      //
+      // Taken off, the row is still written down and still shows what it would
+      // do, but stops doing it: `future` is exactly the state a talent taken at
+      // 16 is in at 15, and it already means "reads and displays, does not
+      // apply". One rule, two places it is wanted.
+      const off = (it) => (it?.worn === false ? { future: true } : null);
+      for (const [slot, it] of Object.entries(b.items || {})) {
+        push(`${tag}:item:${slot}`, it?.effect, null, off(it));
+      }
+      (b.slotless || []).forEach((it, i) => push(`${tag}:slotless:${i}`, it?.effect, null, off(it)));
+    });
   }
   for (const [key, block] of [['akashic', d.akashic], ['maneuvers', d.maneuvers],
     ['vancian', d.vancian], ['psionics', d.psionics], ['cardcasting', d.cardcasting],

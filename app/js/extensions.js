@@ -901,6 +901,7 @@ export function mergeTables(extensions) {
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
     cooking: { durationHours: null, entrees: [], flavors: [], sides: [], aroma: [], garnish: [] },
+    altTraining: { levels: null, repeatFrom: null, techniques: [], links: {} },
   };
   const upsert = (list, item, key = 'name') => {
     const k = lower(item?.[key]);
@@ -983,10 +984,19 @@ export function mergeTables(extensions) {
     for (const k of ['entrees', 'flavors', 'sides', 'aroma', 'garnish']) {
       for (const x of arr(p.cooking?.[k])) upsert(out.cooking[k], x);
     }
+    // Alternate Training: a technique replaces a technique of the same name
+    // outright (it arrives whole, like a sphere), the ladder shape is
+    // later-wins, and the cite links pool.
+    if (arr(p.altTraining?.levels).length) out.altTraining.levels = [...p.altTraining.levels];
+    if (Number.isFinite(Number(p.altTraining?.repeatFrom))) out.altTraining.repeatFrom = Number(p.altTraining.repeatFrom);
+    for (const t of arr(p.altTraining?.techniques)) upsert(out.altTraining.techniques, t);
+    Object.assign(out.altTraining.links, obj(p.altTraining?.links));
   }
   if (!out.vancian.spellLevels) delete out.vancian.spellLevels;
   if (!out.psionics.powerLevels) delete out.psionics.powerLevels;
   if (!out.cooking.durationHours) delete out.cooking.durationHours;
+  if (!out.altTraining.levels) delete out.altTraining.levels;
+  if (out.altTraining.repeatFrom === null) delete out.altTraining.repeatFrom;
   return out;
 }
 
@@ -1004,6 +1014,7 @@ export function registerTables(merged, registrars) {
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);
   r.setCookingTables?.(merged.cooking);
+  r.setAltTrainingTables?.(merged.altTraining);
 }
 
 /* ---------------- the active set ---------------- */

@@ -372,8 +372,9 @@ function companionAttackSpec(named, a) {
  * `attack:0`. The master's conditions are the master's, so nothing here takes a
  * condition state -- a shaken summoner does not make their eidolon shaken.
  */
-export function companionRollSpec(c, kind, ref) {
-  const b = c?.[kind];
+export function companionRollSpec(c, kind, ref, index = 0) {
+  const list = c?.[kind];
+  const b = Array.isArray(list) ? list[index] : list;
   if (!b) return null;
   const k = b.calc || {};
   const [what, arg] = String(ref ?? '').split(':');
@@ -558,7 +559,11 @@ export function weaponRollSpec(c, index, cs = null) {
  * parts after it -- `eidolon|attack:0`, `concentration|vancian:1`.
  */
 export function rollSpec(c, kind, ref, cs = null) {
-  switch (kind) {
+  // A companion button may name which of a kind: `eidolon:2|attack:0` is the
+  // third eidolon. A bare kind stays the first of them, which is every button
+  // that existed before a character could keep more than one.
+  const [head, which] = String(kind ?? '').split(':');
+  switch (head) {
     case 'ability': return abilityRollSpec(c, ref, cs);
     case 'save': return saveRollSpec(c, ref, cs);
     case 'mode': return attackRollSpec(c, ref, cs);
@@ -569,7 +574,8 @@ export function rollSpec(c, kind, ref, cs = null) {
     case 'familiar':
     case 'animalCompanion':
     case 'eidolon':
-      return companionRollSpec(c, kind, ref);
+    case 'conjured':
+      return companionRollSpec(c, head, ref, Number(which) || 0);
     default: return null;
   }
 }

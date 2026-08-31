@@ -44,7 +44,7 @@ export * from './model/subsystems/cooking.js';
 export * from './model/subsystems/crafting.js';
 export * from './model/subsystems/guile.js';
 export * from './model/subsystems/maneuvers.js';
-export * from './model/subsystems/primordia.js';
+export * from './model/subsystems/alt-training.js';
 export * from './model/subsystems/psionics.js';
 export * from './model/subsystems/techniques.js';
 export * from './model/subsystems/vancian.js';

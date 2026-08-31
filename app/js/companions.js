@@ -1,13 +1,17 @@
 /**
- * Companions: the familiar, the animal companion and the eidolon.
+ * Companions: the familiar, the animal companion, the eidolon and the
+ * Conjuration sphere's conjured companion.
  *
- * The workbook kept one worksheet for each, every number on it a formula
- * against a lookup block on `dataSheet` -- the familiar's Intelligence and
- * natural-armour ladder, the animal companion's and eidolon's HD / BAB / save
- * / skill / feat progressions by class level, the natural-attack catalogue and
- * the body-type item slots. Those tables live here, together with the sums
- * the sheet did on them, so the three tabs read the way the rest of the app
- * does: what the player typed is stored, and everything else is worked out.
+ * The workbook kept one worksheet for each of the first three, every number on
+ * it a formula against a lookup block on `dataSheet` -- the familiar's
+ * Intelligence and natural-armour ladder, the animal companion's and eidolon's
+ * HD / BAB / save / skill / feat progressions by class level, the
+ * natural-attack catalogue and the body-type item slots. Those tables live
+ * here, together with the sums the sheet did on them, so the tabs read the way
+ * the rest of the app does: what the player typed is stored, and everything
+ * else is worked out. The conjured companion never had a worksheet; its
+ * progression comes from the Spheres of Power wiki's Table: Companion instead,
+ * and is closed-form -- see the notes on it below.
  *
  * Every function here is pure. `computeCompanion(kind, block, master)` takes
  * the stored block and a small snapshot of the master (level, BAB, hit points,
@@ -22,19 +26,21 @@
 import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, abilityMod, skillTotal } from './rules.js';
 import { slug } from './model/util.js';
 
-export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon'];
+export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
 export const COMPANION_LABELS = {
   familiar: 'Familiar',
   animalCompanion: 'Animal Companion',
   eidolon: 'Eidolon',
+  conjured: 'Conjured Companion',
 };
 
-/** The worksheet each kind was imported from. */
+/** The worksheet each kind was imported from (none ever carried a conjured one). */
 export const COMPANION_TABS = {
   familiar: 'Familiar',
   animalCompanion: 'Animal Companion',
   eidolon: 'Eidolon',
+  conjured: 'Conjured Companion',
 };
 
 /* ------------------------------------------------------------------ *
@@ -130,11 +136,131 @@ export const EIDOLON_TABLE = [
   hd, bab, goodSave, poorSave, skills, feats, naturalArmor, strDex, evoPool, maxAttacks, special,
 }));
 
-/** The levels at which each kind gets a +1 to one ability score of its choice. */
+/**
+ * The Conjuration sphere companion (Spheres of Power), from the wiki's
+ * Table: Companion at `spheresofpower.wikidot.com/conjuration`.
+ *
+ * Unlike the three worksheet tables, every column is a closed form on the
+ * row's Hit Dice, so the progression is written as the forms rather than
+ * copied out forty rows long -- a d10 outsider with full BAB:
+ *
+ *   HD             ceil(3/4 × caster level)
+ *   BAB            HD
+ *   good save      2 + HD/2      bad save   HD/3
+ *   natural armour HD/2          feats      1 at 1 HD, +1 every odd HD
+ *   skill points   HD (see the budget note in `computeCompanion`)
+ *
+ * and the Special column is the features text's own thresholds: evasion at
+ * 2 HD, devotion at 5, multiattack at 7, improved evasion at 11, +1 to an
+ * ability every 4 HD. The tests pin sampled rows of the generated table
+ * against the wiki's printed one.
+ */
+export const conjuredHD = (cl) => (cl >= 1 ? Math.ceil((cl * 3) / 4) : 0);
+
+/** The HD-driven columns for a companion of `hd` dice, in the rows' shape. */
+export const conjuredStats = (hd) => ({
+  hd,
+  bab: hd,
+  goodSave: hd >= 1 ? 2 + Math.floor(hd / 2) : 0,
+  poorSave: Math.floor(hd / 3),
+  skills: hd,
+  feats: hd >= 1 ? Math.ceil(hd / 2) : 0,
+  naturalArmor: Math.floor(hd / 2),
+});
+
+/** The wiki table as printed, one row per caster level, 1st to 40th. */
+export const CONJURED_TABLE = Array.from({ length: 40 }, (_, i) => {
+  const cl = i + 1;
+  const hd = conjuredHD(cl);
+  const prev = conjuredHD(cl - 1);
+  const crossed = (n) => prev < n && hd >= n;
+  const gained = [];
+  if (crossed(2)) gained.push('Evasion');
+  for (let t = 4; t <= hd; t += 4) if (prev < t) gained.push('Ability score increase');
+  if (crossed(5)) gained.push('Devotion');
+  if (crossed(7)) gained.push('Multiattack');
+  if (crossed(11)) gained.push('Improved evasion');
+  return { ...conjuredStats(hd), special: gained.join(', ') };
+});
+
+/**
+ * The base forms a conjured companion is contracted in, as the sphere prints
+ * them: the form's own natural armour (on top of the table's bonus), which
+ * two saves are good, and the Medium stat line, speeds and starting attacks.
+ * The scores and saves are what the sheet reads when the player leaves them
+ * on auto; the speeds and attacks are prose for the player to copy, because
+ * both are their own typed rows here.
+ */
+export const CONJURED_BASE_FORMS = [
+  ['Avian', 2, { fort: true, ref: true, will: false },
+    { str: 12, dex: 16, con: 13, int: 7, wis: 10, cha: 11 },
+    'Speed 20 ft., fly 15 ft. (average, on its turn only); bite 1d4, 2 talons 1d4 (airborne)'],
+  ['Biped', 2, { fort: true, ref: false, will: true },
+    { str: 16, dex: 12, con: 13, int: 7, wis: 10, cha: 11 },
+    'Speed 30 ft.; 2 slams 1d4'],
+  // The wiki gives the ooze one good save, whatever the features text says
+  // about every form having two; the form is kept as printed.
+  ['Ooze', 4, { fort: true, ref: false, will: false },
+    { str: 16, dex: 8, con: 16, int: 7, wis: 12, cha: 11 },
+    'Speed 20 ft.; slam 1d6; cannot be tripped'],
+  ['Orb', 2, { fort: false, ref: true, will: true },
+    { str: 7, dex: 16, con: 13, int: 10, wis: 12, cha: 11 },
+    'Speed 5 ft., hover 30 ft.; bite or slam 1d6; cannot be tripped'],
+  ['Quadruped', 2, { fort: true, ref: true, will: false },
+    { str: 14, dex: 14, con: 13, int: 7, wis: 10, cha: 11 },
+    'Speed 40 ft.; bite 1d6'],
+  ['Serpentine', 4, { fort: false, ref: true, will: true },
+    { str: 12, dex: 16, con: 13, int: 7, wis: 10, cha: 11 },
+    'Speed 20 ft.; bite 1d6, tail slap 1d6'],
+  ['Vermin', 2, { fort: true, ref: true, will: false },
+    { str: 12, dex: 16, con: 13, int: 7, wis: 10, cha: 11 },
+    'Speed 20 ft., climb 20 ft.; bite 1d6; +6 CMD vs. trip'],
+].map(([name, natural, goodSaves, scores, line]) => ({ name, natural, goodSaves, scores, line }));
+
+export const conjuredBaseForm = (name) => CONJURED_BASE_FORMS
+  .find((f) => f.name.toLowerCase() === String(name || '').trim().toLowerCase()) || null;
+
+/**
+ * The companion archetypes, and which of them the sums act on.
+ *
+ * Most archetypes are rules prose the player applies through the rows they
+ * already own -- the warrior clears its own attacks list, the beast writes
+ * its own Intelligence -- so most entries here are a label and a reminder.
+ * The four that bend the progression itself (familiar, mage, mindless,
+ * unwilling) and the two that cheapen the summon (familiar, puppet) are
+ * worked out in `computeCompanion`; `sums` marks them so the panel can say
+ * which ticks change numbers and which are notes to self.
+ */
+export const CONJURED_ARCHETYPES = [
+  ['aquatic', 'Aquatic', 'Trades 20 ft. of one speed for a 20 ft. swim speed.', false],
+  ['beast', 'Beast', 'Animal intellect: Int drops to 2 (auto Int follows), Handle Animal to direct, one more free (form) talent.', true],
+  ['distinctKin', 'Distinct Kin', 'Counts as one chosen subtype (angel, demon…) and learns one of its languages.', false],
+  ['familiar', 'Familiar', 'Half Hit Dice; the summon costs 2 fewer spell points.', true],
+  ['guileful', 'Guileful Companion', 'Uses skill spheres; Trade Expertise free, may trade specials or attacks for more.', false],
+  ['mage', 'Mage', 'd6 Hit Dice and poor BAB; casts as a Mid-Caster via Magical Companion.', true],
+  ['martial', 'Martial Companion', 'Uses combat spheres as a Proficient practitioner; no evasion, devotion or multiattack.', false],
+  ['mindless', 'Mindless', 'No Intelligence, feats or skills; +1 Hit Die at 4th caster level and every 4 after.', true],
+  ['puppet', 'Puppet', 'Acts only on your spent actions; the summon costs 1 fewer spell point.', true],
+  ['unwilling', 'Unwilling', 'Will saves to control it; +1 Hit Die at 4th caster level and every 4 after.', true],
+  ['warrior', 'Warrior', 'Bipeds only: no natural attacks or multiattack, Battle Creature twice instead.', false],
+].map(([id, label, note, sums]) => ({ id, label, note, sums }));
+
+/** How a conjured companion's level is found: the caster level, or a class. */
+export const CONJURED_LEVEL_SOURCES = [
+  ['casterLevel', 'Caster level'],
+  ['class', 'Levels in a class'],
+];
+
+/**
+ * The levels at which each kind gets a +1 to one ability score of its choice.
+ * The conjured companion's are Hit Dice, not levels -- it gains one every
+ * 4 HD possessed, so an archetype that bends its HD moves them too.
+ */
 export const ABILITY_INCREASE_LEVELS = {
   familiar: [],
   animalCompanion: [4, 9, 14, 20],
   eidolon: [5, 10, 15],
+  conjured: [4, 8, 12, 16, 20, 24, 28],
 };
 
 /**
@@ -283,6 +409,10 @@ export function seedSkills(kind) {
   if (kind === 'eidolon') {
     return FULL_SKILLS(new Set(['Bluff', 'Craft', 'Kn. (planes)', 'Perception', 'Sense Motive', 'Stealth']));
   }
+  // The conjured companion's class skills, as the sphere lists them.
+  if (kind === 'conjured') {
+    return FULL_SKILLS(new Set(['Climb', 'Fly', 'Kn. (planes)', 'Stealth', 'Swim']));
+  }
   return FULL_SKILLS(new Set(['Acrobatics', 'Climb']));
 }
 
@@ -293,6 +423,13 @@ export function seedSkills(kind) {
 const scores = (base = 10) => Object.fromEntries(ABILITIES.map((k) => [k, { base, evo: 0, misc: 0 }]));
 
 const common = (kind) => ({
+  // The name a formula reads this companion by: `companion.<id>.hp`. Assigned
+  // when the block is created and never changed by a rename, exactly as a
+  // tracker's id is -- a formula pointing at a companion cannot be broken by
+  // calling it something else. The first block of each kind also answers to
+  // the bare kind name (`eidolon.hp`), which is every name that existed
+  // before a character could keep more than one.
+  id: '',
   name: '',
   size: kind === 'familiar' ? 'Tiny' : 'Medium',
   masterLevelPenalty: 0,
@@ -391,10 +528,39 @@ export function defaultEidolon() {
   };
 }
 
+export function defaultConjured() {
+  return {
+    ...common('conjured'),
+    levelSource: 'casterLevel',
+    masterClass: '',
+    levelOverride: null,
+    baseForm: '',
+    alignment: '',
+    // Which companion archetypes it was contracted with, by id off
+    // CONJURED_ARCHETYPES -- ticks, because a companion may hold several.
+    archetypes: {},
+    hpAbility: 'Con',
+    goodSaves: { fort: true, ref: true, will: false },
+    // Every base is auto: null reads as the chosen base form's score (with
+    // the Small adjustment where the companion was made Small), the way the
+    // familiar's Intelligence already reads its table. A number pins it.
+    scores: Object.fromEntries(ABILITIES.map((k) => [k, { base: null, evo: 0, misc: 0 }])),
+    abilityIncreases: ABILITY_INCREASE_LEVELS.conjured.map((level) => ({ level, ability: '' })),
+    // The (form) and (type) talents shaping this companion. They are spent
+    // from the master's magic talents, so nothing here budgets them; the list
+    // is what this companion is built of.
+    talents: [],
+    dr: '',
+    resistances: '',
+    immunities: '',
+  };
+}
+
 export const defaultCompanion = (kind) => ({
   familiar: defaultFamiliar,
   animalCompanion: defaultAnimalCompanion,
   eidolon: defaultEidolon,
+  conjured: defaultConjured,
 }[kind]());
 
 /**
@@ -412,10 +578,13 @@ export function normalizeCompanion(kind, block) {
   out.scores = Object.fromEntries(ABILITIES.map((k) => [
     k, { ...base.scores[k], ...(b.scores?.[k] && typeof b.scores[k] === 'object' ? b.scores[k] : {}) },
   ]));
-  for (const key of ['skills', 'attacks', 'feats', 'tricks', 'evolutions', 'slotless', 'abilityIncreases']) {
+  for (const key of ['skills', 'attacks', 'feats', 'tricks', 'evolutions', 'slotless', 'abilityIncreases', 'talents']) {
     if (Array.isArray(base[key]) && !Array.isArray(out[key])) out[key] = base[key];
   }
   if (!out.items || typeof out.items !== 'object') out.items = {};
+  // Guarded by kind: the familiar keeps `archetypes` as the prose field it
+  // has always been, and only the conjured companion's is the tick map.
+  if (kind === 'conjured' && (!out.archetypes || typeof out.archetypes !== 'object')) out.archetypes = {};
   if (!out.abilityNotes || typeof out.abilityNotes !== 'object') out.abilityNotes = {};
   // A document saved before equipment could do anything holds a name and a
   // cost; the two new fields default the way a player would expect -- a thing
@@ -446,6 +615,27 @@ export function normalizeCompanion(kind, block) {
   return out;
 }
 
+/**
+ * A kind's stored value brought up to the current shape: a list of blocks.
+ *
+ * Every document saved before a character could keep more than one companion
+ * holds a single block object where the list now goes; it becomes a list of
+ * one. Whatever arrives, every block is normalised and every block has an id
+ * -- the first takes the kind's own name (which is what makes
+ * `companion.eidolon.*` and `eidolon.*` the same creature), and a block that
+ * somehow lost its id is named after its place rather than left unreadable.
+ */
+export function normalizeCompanionList(kind, value) {
+  const list = Array.isArray(value) ? value
+    : value && typeof value === 'object' ? [value] : [];
+  if (!list.length) list.push(defaultCompanion(kind));
+  return list.map((b, i) => {
+    const out = normalizeCompanion(kind, b);
+    if (!String(out.id || '').trim()) out.id = i === 0 ? kind : `${kind}${i + 1}`;
+    return out;
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Whether a block holds anything the player put there.
  * ------------------------------------------------------------------ */
@@ -462,14 +652,36 @@ export function companionInUse(kind, block) {
   if (Object.values(block.items || {}).some((it) => String(it?.name || '').trim() || String(it?.effect || '').trim())) return true;
   if (kind === 'animalCompanion' && (block.masterClass || block.levelOverride !== null)) return true;
   if (kind === 'eidolon' && (block.masterClass || block.levelOverride !== null)) return true;
+  // A conjured companion is in use as soon as it has been shaped at all: a
+  // base form or an archetype chosen, a talent written down, a level pinned.
+  if (kind === 'conjured') {
+    if (block.masterClass || block.levelOverride !== null) return true;
+    if (String(block.baseForm || '').trim()) return true;
+    if ((block.talents || []).some((t) => String(t?.name || '').trim())) return true;
+    if (Object.values(block.archetypes || {}).some(Boolean)) return true;
+  }
   return false;
 }
+
+/** Whether any of a kind's companions is in use -- what lights the tab. */
+export const companionsInUse = (kind, list) => (Array.isArray(list) ? list : [list])
+  .some((b) => companionInUse(kind, b));
+
+/**
+ * The scope prefix one block's numbers live under: the bare kind name for the
+ * first of its kind (every spelling that predates keeping more than one), and
+ * `companion.<id>` for the rest. What the panel prints beside a field is what
+ * a formula reads and what a bonus is aimed at, so all three come from here.
+ */
+export const companionScopeName = (kind, block, index) => (index === 0 ? kind : `companion.${block.id}`);
 
 /* ------------------------------------------------------------------ *
  * The sums.
  * ------------------------------------------------------------------ */
 
-const clampLevel = (n) => Math.max(0, Math.min(20, Math.floor(Number(n) || 0)));
+// The worksheet progressions stop at 20; the wiki's conjured table runs to 40.
+const clampLevel = (n, max = 20) => Math.max(0, Math.min(max, Math.floor(Number(n) || 0)));
+const levelCap = (kind) => (kind === 'conjured' ? 40 : 20);
 const abilityKey = (label) => {
   const s = String(label || '').trim().toLowerCase().slice(0, 3);
   return ABILITIES.includes(s) ? s : null;
@@ -486,11 +698,16 @@ const abilityKey = (label) => {
 function rawLevel(kind, b, master) {
   if (kind === 'familiar') return Math.min(20, master.level);
   if (b.levelOverride !== null && b.levelOverride !== undefined && b.levelOverride !== '') {
-    return clampLevel(b.levelOverride);
+    return clampLevel(b.levelOverride, levelCap(kind));
   }
   if (kind === 'animalCompanion' && b.levelSource === 'handleAnimal') return clampLevel(master.skillRanks('Handle Animal'));
   if (kind === 'animalCompanion' && b.levelSource === 'ride') return clampLevel(master.skillRanks('Ride'));
-  return b.masterClass ? clampLevel(master.classLevelCount(b.masterClass)) : 0;
+  // The conjured companion grows with its caster's caster level -- the magic
+  // training's global CL -- unless pointed at a class's levels instead.
+  if (kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel') {
+    return clampLevel(master.casterLevel, 40);
+  }
+  return b.masterClass ? clampLevel(master.classLevelCount(b.masterClass), levelCap(kind)) : 0;
 }
 
 /**
@@ -550,22 +767,46 @@ function bonusesFor(x) {
 export function computeCompanion(kind, block, master, bonuses = null) {
   const b = block;
   const fwd = bonusesFor(bonuses);
+  const arch = (id) => kind === 'conjured' && !!b.archetypes?.[id];
   const penalty = Math.abs(Math.floor(Number(b.masterLevelPenalty) || 0));
   const raw = rawLevel(kind, b, master);
-  const level = clampLevel(raw - penalty);
+  const level = clampLevel(raw - penalty, levelCap(kind));
   const table = kind === 'familiar' ? FAMILIAR_TABLE
-    : kind === 'animalCompanion' ? ANIMAL_COMPANION_TABLE : EIDOLON_TABLE;
-  const row = table[Math.max(1, level) - 1] || table[0];
+    : kind === 'animalCompanion' ? ANIMAL_COMPANION_TABLE
+      : kind === 'conjured' ? CONJURED_TABLE : EIDOLON_TABLE;
+  /*
+   * The conjured companion's row is worked out rather than looked up, because
+   * its archetypes bend the Hit Dice and every column follows the dice: the
+   * familiar archetype grows off half the caster level (still 1 HD at 1st,
+   * on half hit points, as written), the mindless and unwilling add a die at
+   * 4th caster level and every 4 after, and BAB, saves, natural armour and
+   * feats all move with the total. The plain case reproduces CONJURED_TABLE
+   * -- which is the wiki's -- exactly.
+   */
+  let effLevel = level;
+  let halfHp = false;
+  if (arch('familiar')) {
+    effLevel = Math.floor(level / 2);
+    if (level >= 1 && effLevel < 1) { effLevel = 1; halfHp = true; }
+  }
+  const bonusHD = (arch('mindless') || arch('unwilling')) && level >= 1 ? Math.floor(level / 4) : 0;
+  const row = kind === 'conjured'
+    ? conjuredStats(conjuredHD(effLevel) + bonusHD)
+    : table[Math.max(1, level) - 1] || table[0];
   const hd = kind === 'familiar' ? level : (level >= 1 ? row.hd : 0);
+  const form = kind === 'conjured' ? conjuredBaseForm(b.baseForm) : null;
   const sizeAC = SIZE_MODIFIERS[b.size] ?? 0;
 
   // Ability scores. Str and Dex carry the table's bonus; the chosen abilities
   // carry the +1s at the increase levels; the eidolon's evolutions add on top.
-  const strDex = kind === 'familiar' || level < 1 ? 0 : row.strDex;
+  const strDex = kind === 'familiar' || kind === 'conjured' || level < 1 ? 0 : row.strDex;
   const increases = {};
   for (const inc of b.abilityIncreases || []) {
     const k = abilityKey(inc.ability);
-    if (k && level >= (Number(inc.level) || 99)) increases[k] = (increases[k] || 0) + 1;
+    // The conjured companion's increases arrive by Hit Dice, everyone else's
+    // by level -- so a conjured familiar-archetype's half HD delays them.
+    const reached = kind === 'conjured' ? hd : level;
+    if (k && reached >= (Number(inc.level) || 99)) increases[k] = (increases[k] || 0) + 1;
   }
   const scores = {};
   for (const k of ABILITIES) {
@@ -573,6 +814,14 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     let base = Number(s.base);
     if (kind === 'familiar' && k === 'int' && (s.base === null || s.base === undefined || s.base === '')) {
       base = row.int;
+    }
+    if (kind === 'conjured' && (s.base === null || s.base === undefined || s.base === '')) {
+      // Auto reads the chosen base form's line; the beast archetype's animal
+      // intellect pins the auto Intelligence at 2. Choosing Small at creation
+      // is +2 Dex, -2 Str on that line -- only the auto bases move with it,
+      // since a typed number is the player's own to adjust.
+      base = arch('beast') && k === 'int' ? 2 : (form ? form.scores[k] : 10);
+      if (b.size === 'Small') base += k === 'dex' ? 2 : k === 'str' ? -2 : 0;
     }
     if (!Number.isFinite(base)) base = 10;
     const lvlUp = (k === 'str' || k === 'dex' ? strDex : 0) + (increases[k] || 0);
@@ -587,17 +836,24 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const mod = (k) => scores[k]?.mod || 0;
 
   // Hit points: half the master's for a familiar (doubled for a Protector at
-  // 11th), 8 a die plus Con for the others -- the sheet's own numbers.
+  // 11th), 8 a die plus Con for the others -- the sheet's own numbers. The
+  // conjured mage archetype's d6 is 4 a die by the same two-under-the-die
+  // reading, and the conjured familiar archetype's 1 HD corner halves the
+  // dice-and-Con half, as written, before the typed bonus.
   const conKey = abilityKey(b.hpAbility) || 'con';
+  const ownDice = hd * (arch('mage') ? 4 : 8) + mod(conKey) * hd;
   const hpMax = (kind === 'familiar'
     ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) + (Number(b.hp?.bonus) || 0)
-    : hd * 8 + mod(conKey) * hd + (Number(b.hp?.bonus) || 0)) + fwd.hp;
+    : (halfHp ? Math.floor(ownDice / 2) : ownDice) + (Number(b.hp?.bonus) || 0)) + fwd.hp;
   const damage = Math.max(0, Number(b.hp?.damage) || 0);
   const temp = Math.max(0, Number(b.hp?.temp) || 0);
 
-  // Attack: the master's BAB for a familiar, the table's for the others; the
-  // ability is Str, or the better of Str and Dex for a familiar left on auto.
-  const bab = kind === 'familiar' ? master.bab : (level >= 1 ? row.bab : 0);
+  // Attack: the master's BAB for a familiar, the table's for the others (the
+  // conjured mage archetype's is poor); the ability is Str, or the better of
+  // Str and Dex for a familiar left on auto.
+  const bab = kind === 'familiar' ? master.bab
+    : arch('mage') ? Math.floor(hd / 2)
+      : (level >= 1 ? row.bab : 0);
   const atkKey = abilityKey(b.attackAbility)
     || (kind === 'familiar' ? (scores.str.total >= scores.dex.total ? 'str' : 'dex') : 'str');
   const attackMod = mod(atkKey) + sizeAC;
@@ -621,7 +877,9 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // everything, to touch only (dodge, deflection), to flat-footed only
   // (natural, armour). Touch does not carry natural armour, whatever the
   // Animal Companion tab's formula said.
-  const tableNatural = level >= 1 ? row.naturalArmor : 0;
+  // The conjured companion's base form has natural armour of its own (+2, or
+  // +4 for the ooze and serpentine) under the table's growing bonus.
+  const tableNatural = (level >= 1 ? row.naturalArmor : 0) + (form ? form.natural : 0);
   const all = Number(b.ac?.all) || 0;
   const touchOnly = Number(b.ac?.touch) || 0;
   const ffOnly = Number(b.ac?.ff) || 0;
@@ -654,10 +912,16 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   });
   const ranksSpent = skills.reduce((n, s) => n + Math.max(0, Number(s.ranks) || 0), 0);
   // The eidolon's budget is the sheet's cell (HD × (6 + Int)); the animal
-  // companion's is the table's column; a familiar has none of its own.
+  // companion's is the table's column; a familiar has none of its own. The
+  // conjured companion's is "2 skill points per level (reduced to 1 for low
+  // Intelligence)" -- read here as 2 a die at Intelligence 10 or better and
+  // 1 a die under it, which is what makes the wiki table's column (1 a die,
+  // every base form starting at Int 7) come out as printed. Mindless gets
+  // none at all.
   const ranksAllowed = kind === 'familiar' ? null
     : kind === 'eidolon' ? Math.max(0, hd * (6 + mod('int')))
-      : (level >= 1 ? row.skills : 0);
+      : kind === 'conjured' ? (arch('mindless') ? 0 : hd * (scores.int.total >= 10 ? 2 : 1))
+        : (level >= 1 ? row.skills : 0);
 
   // Natural attacks: primary at full bonus, secondary at -5 (-2 with
   // Multiattack), plus whatever the row adds.
@@ -681,9 +945,11 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     };
   });
 
-  // What the table grants along the way, up to this level.
+  // What the table grants along the way, up to this level. The conjured
+  // familiar archetype reads at its halved level, which is where its own
+  // gains actually sit; the extra mindless/unwilling dice bring no specials.
   const gains = [];
-  for (let i = 0; i < Math.min(level, table.length); i++) {
+  for (let i = 0; i < Math.min(kind === 'conjured' ? effLevel : level, table.length); i++) {
     // `abilities` is the cell split into the rules it names, so the panel can
     // open each one on its own text rather than on the whole line.
     if (table[i].special) {
@@ -717,7 +983,8 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     initiative,
     ranksSpent,
     ranksAllowed,
-    featsAllowed: kind === 'familiar' ? null : (level >= 1 ? row.feats : 0),
+    featsAllowed: kind === 'familiar' ? null
+      : arch('mindless') ? 0 : (level >= 1 ? row.feats : 0),
     featsTaken: (b.feats || []).filter((f) => String(f?.name || '').trim()).length,
     gains,
     saves,
@@ -742,6 +1009,17 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.maxAttacks = level >= 1 ? row.maxAttacks : 0;
     calc.maxBonusPerStat = 2 + Math.floor(level / 6) * 2;
     calc.evoBonusOver = ABILITIES.filter((k) => scores[k].evo > calc.maxBonusPerStat).map((k) => ABILITY_LABELS[k]);
+  }
+  if (kind === 'conjured') {
+    // What the summon costs: a spell point, less what the familiar and puppet
+    // archetypes shave off, never below free.
+    calc.summonCost = Math.max(0, 1 - (arch('familiar') ? 2 : 0) - (arch('puppet') ? 1 : 0));
+    calc.hitDie = arch('mage') ? 6 : 10;
+    calc.formLine = form ? form.line : '';
+    calc.formSaves = form ? form.goodSaves : null;
+    calc.formNatural = form ? form.natural : 0;
+    calc.talentsTaken = (b.talents || []).filter((t) => String(t?.name || '').trim()).length;
+    calc.archetypes = CONJURED_ARCHETYPES.filter((a) => arch(a.id)).map((a) => a.label);
   }
   return { calc, skills, attacks };
 }
@@ -797,6 +1075,8 @@ export function companionScope(block) {
     s[a] = { score: sc?.total ?? 10, mod: sc?.mod ?? 0 };
   }
   if (k.evoPool !== undefined) { s.evoPool = k.evoPool; s.evoLeft = k.evoLeft; }
+  // The conjured companion's summon cost, so a tracker can charge it.
+  if (k.summonCost !== undefined) s.summonCost = k.summonCost;
   return s;
 }
 

@@ -23,6 +23,7 @@ import {
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
   setCookingTables, cookingDish, emptyDish,
+  setAltTrainingTables,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
@@ -48,7 +49,7 @@ import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import {
-  defaultCompanion, normalizeCompanion, splitAbilities,
+  CONJURED_TABLE, defaultCompanion, normalizeCompanion, splitAbilities,
   setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
@@ -83,7 +84,10 @@ const check = (label, actual, expected) => {
 const packIndex = JSON.parse(readFileSync('data/extensions/index.json', 'utf8'));
 const packs = packIndex.extensions.map((e) => JSON.parse(readFileSync(`data/extensions/${e.file}`, 'utf8')));
 const merged = mergeTables(packs);
-registerTables(merged, { setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables });
+registerTables(merged, {
+  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
+  setAltTrainingTables,
+});
 const catalogue = merged.maneuvers;
 const castingTables = merged.vancian;
 const psionicTableDoc = merged.psionics;
@@ -279,7 +283,7 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   };
   const gridRows = JSON.parse(JSON.stringify(raw.extraTabs['Animal Companion'].rows));
   const c = new Character(raw);
-  const b = c.data.animalCompanion;
+  const b = c.data.animalCompanion[0];
   check('the grid retires once it has been read',
     (c.data.sheetTabs || []).some((t) => t.name === 'Animal Companion'), false);
   check('name, creature, archetype, body type',
@@ -319,12 +323,12 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   // The sheet's own cells said 9 HD, BAB +6, 4 bonus tricks and 8 ranks --
   // it looked the level-keyed table up by hit dice. Read again by level, at
   // 13 less the master-level penalty, the table says otherwise.
-  c.set('animalCompanion.levelOverride', 13);
-  const k = c.data.animalCompanion.calc;
+  c.set('animalCompanion.0.levelOverride', 13);
+  const k = c.data.animalCompanion[0].calc;
   check('and every number is worked out again rather than read off the grid',
     [k.level, k.hd, k.bab, k.tableNatural, k.bonusTricks, k.ranksAllowed], [12, 10, 7, 8, 5, 10]);
   check('a natural attack still knows its damage type and role',
-    c.data.animalCompanion.attacks.map((a) => `${a.damageType} ${a.toHit}`),
+    c.data.animalCompanion[0].attacks.map((a) => `${a.damageType} ${a.toHit}`),
     [`B, P, and S ${k.totalAttack}`, `B and S ${k.totalAttack - 2}`]);
 
   // Ticking Spheres takes the level from the skill named beside the box.
@@ -333,7 +337,7 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   spheres.extraTabs['Animal Companion'].rows[0].cells[8] = true;
   spheres.extraTabs['Animal Companion'].rows[0].cells[9] = 'Ride';
   check('the Spheres box switches where the level is counted',
-    new Character(spheres).data.animalCompanion.levelSource, 'ride');
+    new Character(spheres).data.animalCompanion[0].levelSource, 'ride');
 
   // What a document saved by the older import looks like: the grid kept as a
   // worksheet beside a block nothing was ever read into. Loading it now reads
@@ -344,11 +348,11 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   stranded.sheetTabs = [{ name: 'Animal Companion', hidden: false, rows: stranded.extraTabs['Animal Companion'].rows }];
   const rescued = new Character(stranded);
   check('a companion stranded on the grid by an older import is recovered',
-    [rescued.data.animalCompanion.name, (rescued.data.sheetTabs || []).length], ['Rustle', 0]);
+    [rescued.data.animalCompanion[0].name, (rescued.data.sheetTabs || []).length], ['Rustle', 0]);
   const typed = JSON.parse(JSON.stringify(stranded));
   typed.animalCompanion = { ...defaultCompanion('animalCompanion'), name: 'Someone else' };
   check('and one already typed in is left alone',
-    new Character(typed).data.animalCompanion.name, 'Someone else');
+    new Character(typed).data.animalCompanion[0].name, 'Someone else');
 
   // The grid reaches the importer with no row numbers on it: `normalise`
   // drops them when it builds `sheetTabs`, and a document saved by an older
@@ -813,7 +817,7 @@ for (const id of IDS) {
 console.log('companions -- equipment that moves the numbers it is worn for');
 for (const id of IDS) {
   const c = new Character(load(id));
-  const b = c.data.animalCompanion;
+  const b = c.data.animalCompanion[0];
   b.name = 'Rustle';
   b.levelOverride = 10;
   b.size = 'Medium';
@@ -862,6 +866,246 @@ for (const id of IDS) {
   c.recompute();
   check(`${id} unworn, the belt stops`, k().scores.str.total, was.str);
   check(`${id} and the row is still there`, b.slotless[0].name, 'Belt of giant strength');
+}
+
+/*
+ * The conjured companion never had a worksheet, so its checks need no fixture:
+ * a blank sheet carries the block, and every number is the wiki table's. This
+ * runs before the private-roster gate on purpose -- it is new rules logic, and
+ * a fresh clone should be checking it.
+ */
+console.log('companions -- the conjured companion follows the Conjuration sphere table');
+{
+  // The generated table against the wiki's printed rows:
+  // caster level -> HD, BAB, skill points, feats, natural armour, good, bad.
+  const wiki = {
+    1: [1, 1, 1, 1, 0, 2, 0],
+    2: [2, 2, 2, 1, 1, 3, 0],
+    5: [4, 4, 4, 2, 2, 4, 1],
+    9: [7, 7, 7, 4, 3, 5, 2],
+    14: [11, 11, 11, 6, 5, 7, 3],
+    20: [15, 15, 15, 8, 7, 9, 5],
+    26: [20, 20, 20, 10, 10, 12, 6],
+    40: [30, 30, 30, 15, 15, 17, 10],
+  };
+  for (const [cl, want] of Object.entries(wiki)) {
+    const r = CONJURED_TABLE[cl - 1];
+    check(`the printed row at caster level ${cl}`,
+      [r.hd, r.bab, r.skills, r.feats, r.naturalArmor, r.goodSave, r.poorSave], want);
+  }
+  check('the specials land where the wiki prints them',
+    [CONJURED_TABLE[1].special, CONJURED_TABLE[4].special, CONJURED_TABLE[5].special,
+      CONJURED_TABLE[8].special, CONJURED_TABLE[13].special, CONJURED_TABLE[36].special],
+    ['Evasion', 'Ability score increase', 'Devotion', 'Multiattack', 'Improved evasion',
+      'Ability score increase']);
+
+  const c = new Character(blankDocument('conjured-test'));
+  check('a blank sheet has the block, not yet in use',
+    [!!c.data.conjured?.[0]?.calc, c.systemTabsInUse().conjured], [true, false]);
+  check('and no level with nothing to read one from', c.data.conjured[0].calc.level, 0);
+
+  c.set('conjured.0.levelOverride', 9);
+  c.set('conjured.0.baseForm', 'Quadruped');
+  check('shaping it lights the tab', c.systemTabsInUse().conjured, true);
+  let k = c.data.conjured[0].calc;
+  check('9th: HD, BAB, feats, ranks (1 a die at the form\'s Int 7)',
+    [k.hd, k.bab, k.featsAllowed, k.ranksAllowed], [7, 7, 4, 7]);
+  check('natural armour is the table\'s +3 over the form\'s own +2', k.tableNatural, 5);
+  check('the form fills the auto scores',
+    ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((a) => k.scores[a].total), [14, 14, 13, 7, 10, 11]);
+  check('good Fort and Ref off the table at 7 HD',
+    [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [5, 5, 2]);
+  check('hit points are 8 a d10 plus Con, by HD', k.hpMax, 7 * 8 + 1 * 7);
+  check('a spell point to summon', k.summonCost, 1);
+
+  c.set('conjured.0.scores.int.base', 10);
+  check('2 ranks a die once Intelligence reaches 10', c.data.conjured[0].calc.ranksAllowed, 14);
+  c.set('conjured.0.scores.int.base', null);
+
+  // Chosen Small at creation: +2 Dex, -2 Str -- on the auto line only.
+  c.set('conjured.0.size', 'Small');
+  k = c.data.conjured[0].calc;
+  check('Small adjusts the auto Str and Dex', [k.scores.str.base, k.scores.dex.base], [12, 16]);
+  c.set('conjured.0.scores.str.base', 14);
+  check('a typed base is the player\'s own', c.data.conjured[0].calc.scores.str.base, 14);
+  c.set('conjured.0.scores.str.base', null);
+  c.set('conjured.0.size', 'Medium');
+
+  // The increases arrive by Hit Dice, one every 4 possessed.
+  c.setItem('conjured.0.abilityIncreases', 0, 'ability', 'Con');
+  c.setItem('conjured.0.abilityIncreases', 1, 'ability', 'Con');
+  check('the 4-HD increase is in at 7 HD, the 8-HD one waits',
+    c.data.conjured[0].calc.scores.con.total, 14);
+
+  // The archetypes the sums act on.
+  c.set('conjured.0.archetypes.familiar', true);
+  k = c.data.conjured[0].calc;
+  check('the familiar archetype grows off half the caster level, 2 points cheaper',
+    [k.hd, k.summonCost], [3, 0]);
+  check('and its gains follow the halved level', k.gains.map((g) => g.level), [2]);
+  c.set('conjured.0.levelOverride', 1);
+  k = c.data.conjured[0].calc;
+  check('at 1st it keeps 1 HD on half hit points', [k.hd, k.hpMax], [1, Math.floor((8 + 1) / 2)]);
+  c.set('conjured.0.levelOverride', 9);
+  c.set('conjured.0.archetypes.familiar', false);
+
+  c.set('conjured.0.archetypes.mage', true);
+  k = c.data.conjured[0].calc;
+  // Con is 14 by now -- the 4-HD increase above landed on it -- so +2 a die.
+  check('the mage archetype is a d6 with poor BAB', [k.hitDie, k.bab, k.hpMax], [6, 3, 7 * 4 + 2 * 7]);
+  c.set('conjured.0.archetypes.mage', false);
+
+  c.set('conjured.0.archetypes.mindless', true);
+  k = c.data.conjured[0].calc;
+  check('mindless: a die every 4 caster levels, no feats or skills',
+    [k.hd, k.featsAllowed, k.ranksAllowed], [9, 0, 0]);
+  check('and every column follows the dice', [k.bab, k.tableNatural], [9, 6]);
+  c.set('conjured.0.archetypes.mindless', false);
+
+  c.set('conjured.0.archetypes.puppet', true);
+  check('a puppet is a point cheaper to summon', c.data.conjured[0].calc.summonCost, 0);
+  c.set('conjured.0.archetypes.puppet', false);
+
+  // Readable, rollable, forwardable -- and only what was typed is saved.
+  c.listAdd('conjured.0.attacks', { type: 'Bite', damage: '1d6', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' });
+  check('readable from a formula', [c.scope().conjured.hd, c.scope().conjured.summonCost], [7, 1]);
+  check('the roller answers for it',
+    (rollSpec(c.data, 'conjured', 'attack:0')?.rolls || []).length > 0, true);
+  const ffBefore = c.data.conjured[0].calc.flatFooted;
+  c.listAdd('conjured.0.talents', {
+    source: '(form)', name: 'Armored Companion', notes: '{conjured.ac.flatFooted += 2 as armor}',
+  });
+  check('a talent\'s note forwards at the companion', c.data.conjured[0].calc.flatFooted, ffBefore + 2);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('no derived numbers are saved', saved.conjured[0].calc, undefined);
+  const back = new Character(saved);
+  check('and they come back on load, talent and all',
+    [back.data.conjured[0].calc.hd, back.data.conjured[0].talents.length,
+      back.data.conjured[0].calc.flatFooted], [7, 1, ffBefore + 2]);
+  const old = new Character({ ...saved, conjured: undefined });
+  check('a document saved before the block existed grows one', !!old.data.conjured?.[0]?.calc, true);
+}
+
+console.log('companions -- a minionmancer keeps more than one of a kind');
+{
+  const c = new Character(blankDocument('minion-test'));
+  c.set('eidolon.0.levelOverride', 12);
+  const second = c.addCompanion('eidolon');
+  check('the second block arrives with its own stable id', [c.data.eidolon.length, second.id], [2, 'eidolon2']);
+  c.set('eidolon.1.name', 'Brutus');
+  c.set('eidolon.1.levelOverride', 5);
+  check('each level is its own', [c.data.eidolon[0].calc.hd, c.data.eidolon[1].calc.hd], [9, 4]);
+
+  // Reading: the bare kind name is the first of the kind -- every formula
+  // written before a character could keep several -- and every companion
+  // also reads under companion.<id>.
+  const s = c.scope();
+  check('bare names are the first of the kind', s.eidolon.hd, 9);
+  check('every companion reads as companion.<id>', [s.companion.eidolon.hd, s.companion.eidolon2.hd], [9, 4]);
+  check('the id names validate', ['companion.eidolon2.hp', 'companion.eidolon2.str.mod']
+    .every((n) => c.scopeNames().includes(n)), true);
+
+  // Aiming: by id at the second, by the bare name at the first -- each lands
+  // on its own creature and nothing else.
+  const ac0 = c.data.eidolon[0].calc.ac;
+  const ac1 = c.data.eidolon[1].calc.ac;
+  c.listAdd('eidolon.1.slotless', { name: 'Amulet', cost: 0, worn: true, effect: '{companion.eidolon2.ac.total += 2 as natural}' });
+  check('a bonus aimed by id lands on that companion alone',
+    [c.data.eidolon[0].calc.ac, c.data.eidolon[1].calc.ac], [ac0, ac1 + 2]);
+  c.listAdd('eidolon.0.slotless', { name: 'Ring', cost: 0, worn: true, effect: '{eidolon.ac.total += 1 as dodge}' });
+  check('a bare-name bonus lands on the first alone',
+    [c.data.eidolon[0].calc.ac, c.data.eidolon[1].calc.ac], [ac0 + 1, ac1 + 2]);
+
+  // Damage, healing and the roller all say which of the kind they mean.
+  c.companionDamage('eidolon', 1, 7);
+  check('damage by index hits that companion alone',
+    [c.data.eidolon[0].hp.damage, c.data.eidolon[1].hp.damage], [0, 7]);
+  check('the roller answers for the second as eidolon:1',
+    rollSpec(c.data, 'eidolon:1', 'init')?.name?.includes('Brutus'), true);
+  check('and the bare kind still means the first',
+    rollSpec(c.data, 'eidolon', 'init')?.name?.includes('Brutus'), false);
+
+  // A second companion of any kind lights the kind's tab.
+  check('a named second familiar counts as in use', (() => {
+    c.addCompanion('familiar');
+    c.set('familiar.1.name', 'Wisp');
+    return c.systemTabsInUse().familiar;
+  })(), true);
+  check('ids stay unique across every kind', c.addCompanion('eidolon').id, 'eidolon3');
+
+  // Only what was typed is saved, for every block, and it all comes back.
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('each block saves without its derived half',
+    [saved.eidolon.length, saved.eidolon[0].calc, saved.eidolon[1].calc], [3, undefined, undefined]);
+  const back = new Character(saved);
+  check('and comes back whole', [back.data.eidolon[1].name, back.data.eidolon[1].id,
+    back.data.eidolon[1].calc.hd, back.data.eidolon[1].calc.ac], ['Brutus', 'eidolon2', 4, ac1 + 2]);
+
+  // Removing the first promotes the next: the bare names follow the list's
+  // order, while companion.<id> follows the creature -- so the amulet aimed
+  // at Brutus by id is still Brutus's after the promotion.
+  back.listRemove('eidolon', 0);
+  check('the survivor answers to the bare name and keeps its id',
+    [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon.hd], ['Brutus', 'eidolon2', 4]);
+  check('and a bonus aimed at its id still lands', back.data.eidolon[0].calc.ac, ac1 + 2);
+}
+
+console.log('alternate training -- the primordia spelling migrates and nothing is lost');
+{
+  // What every document saved before the rename looks like: the block under
+  // the old server's name, the choice off on the identity block, and a saved
+  // tab bar keyed by the old tab id.
+  const doc = blankDocument('alt-training-migration');
+  doc.identity.primordiaTechnique = 'Light Body';
+  doc.primordia = { picks: { 1: '(run)', 7: 'Swim package' }, alt: {}, notes: 'old note' };
+  doc.uiPrefs = {
+    tabOrder: ['overview', 'primordia'],
+    hiddenTabs: { primordia: true },
+    tabColors: { primordia: '#123456' },
+  };
+  const c = new Character(doc);
+  check('the block and the choice fold into altTraining',
+    [c.data.altTraining.technique, c.data.altTraining.picks[1], c.data.altTraining.notes],
+    ['Light Body', '(run)', 'old note']);
+  check('the old spellings are gone',
+    [c.data.primordia, c.data.identity.primordiaTechnique], [undefined, undefined]);
+  check('the saved tab bar follows the tab', c.data.uiPrefs.tabOrder, ['overview', 'altTraining']);
+  check('so do its hidden flag and colour',
+    [c.data.uiPrefs.hiddenTabs.altTraining, c.data.uiPrefs.tabColors.altTraining], [true, '#123456']);
+  check('and the ladder still computes off the pack', c.data.altTraining.calc.technique, 'Light Body');
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('a save writes only the new spelling',
+    ['primordia' in saved, saved.altTraining.technique], [false, 'Light Body']);
+
+  // The catalogue is a pack's now: with none registered the tab stands, the
+  // ladder shape holds its default, and nothing written is lost.
+  setAltTrainingTables({});
+  const bare = new Character(JSON.parse(JSON.stringify(saved)));
+  check('no pack: the technique is kept but unknown',
+    [bare.data.altTraining.technique, bare.data.altTraining.calc.technique, bare.data.altTraining.calc.unknown],
+    ['Light Body', null, true]);
+  check('and the ladder rows still stand on the default shape',
+    bare.data.altTraining.calc.rows.map((r) => r.level), [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
+  setAltTrainingTables(merged.altTraining);
+}
+
+console.log('tabs -- a player names a tab their own way; the original is kept');
+{
+  const c = new Character(blankDocument('tab-name-test'));
+  check('no name by default', c.tabName('trackers'), null);
+  c.setTabName('trackers', '  Ki & Grudges ');
+  check('stored trimmed', c.tabName('trackers'), 'Ki & Grudges');
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('survives a round trip', back.tabName('trackers'), 'Ki & Grudges');
+  c.setTabName('trackers', '   ');
+  check('blank gives the name back', c.tabName('trackers'), null);
+  // A worksheet's own rename carries the player's label with it, the same
+  // way its colour and its place on the bar already travel.
+  const t = c.addSystemTab('Ledger');
+  c.setTabName(`sys:${t.name}`, 'The Books');
+  c.renameSystemTab(c.data.sheetTabs.findIndex((x) => x.name === t.name), 'Ledger II');
+  check('the label follows a worksheet rename', c.tabName('sys:Ledger II'), 'The Books');
+  check('and leaves nothing behind', c.tabName('sys:Ledger'), null);
 }
 
 const missing = missingCharacters(REAL);
@@ -2010,21 +2254,21 @@ console.log('sphere skill ranks -- a technique names most of what it grants');
   const c = new Character(load('saburo'));
   const at = (k) => c.trainingSkillRanks.find((r) => r.skill === k);
   check('the technique is Light Body at level 9, five Athletics talents',
-    [c.data.identity.primordiaTechnique, at('Swim').talents], ['Light Body', 5]);
+    [c.data.altTraining.technique, at('Swim').talents], ['Light Body', 5]);
   check('Acrobatics takes either package, and 1st level grants one of them',
     at('Acrobatics').state, 'met');
   check('the others wait on the picks nobody has written down', at('Swim').state, 'unknown');
 
-  c.set('primordia.picks.7', 'Swim package');
+  c.set('altTraining.picks.7', 'Swim package');
   check('naming one settles its own row', at('Swim').state, 'met');
   check('and leaves the rest waiting', at('Climb').state, 'unknown');
 
-  c.set('primordia.picks.9', 'Freerunner');
+  c.set('altTraining.picks.9', 'Freerunner');
   check('with every Athletics talent named, an absent package is a plain no',
     [at('Climb').state, at('Fly').state], ['unmet', 'unmet']);
   check('and Acrobatics is still met, on the 1st-level grant alone', at('Acrobatics').state, 'met');
 
-  c.set('primordia.picks.1', '(run)');
+  c.set('altTraining.picks.1', '(run)');
   check('the choice made explicitly reads the same', at('Acrobatics').state, 'met');
 
   // Wall Stunt and Air Stunt are the rules', not the player's, so they count
@@ -3958,7 +4202,7 @@ console.log('the tab bar -- an ordered preference, saved with the character');
 {
   const c = new Character(load('angou'));
   check('the standard nine are the standard nine', DEFAULT_TAB_ORDER,
-    ['overview', 'stats', 'lore', 'skills', 'progression', 'features', 'primordia', 'trackers', 'gear']);
+    ['overview', 'stats', 'lore', 'skills', 'progression', 'features', 'altTraining', 'trackers', 'gear']);
   // The bar a character opens on is those nine *plus its own sub-systems*, so
   // a workbook carrying maneuvers or veils does not land with them hidden in
   // the manager for someone to go and find. See `buildDefaultTabs`.
@@ -6568,14 +6812,14 @@ console.log('vancian -- casting types is two cells, not one');
   check('a hybrid has a list', hybrid.spells[1].knownCount !== null, true);
 }
 
-console.log('primordia -- the ladder comes off the Planner column the import used to drop');
+console.log('alternate training -- the ladder comes off the Planner column the import used to drop');
 {
   // The template names that column "Armored Discipline Technique" whatever
   // technique the character took, and parks the technique's own name on the
   // level 2 row -- a level the ladder does not grant at, which is what tells
   // the two apart. Bryva is the only sheet that filled the rest in.
   const b = new Character(load('bryva'));
-  check('bryva keeps every level she wrote', b.data.primordia.picks, {
+  check('bryva keeps every level she wrote', b.data.altTraining.picks, {
     1: 'Endurance, Armor Adept',
     3: 'Armor Trick',
     5: 'Heavy Armor Focus',
@@ -6583,15 +6827,15 @@ console.log('primordia -- the ladder comes off the Planner column the import use
     9: 'Armored Casting',
     13: 'Dodge',
   });
-  check('and the level 2 label is not one of them', 2 in b.data.primordia.picks, false);
+  check('and the level 2 label is not one of them', 2 in b.data.altTraining.picks, false);
 
   for (const id of IDS) {
     const c = new Character(load(id));
-    const levels = c.data.primordia.calc.rows.map((r) => r.level);
+    const levels = c.data.altTraining.calc.rows.map((r) => r.level);
     check(`${id} grants at 1/3/5 then every other level`, levels,
       [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
     check(`${id} writes nothing outside those levels`,
-      Object.keys(c.data.primordia.picks).every((l) => levels.includes(Number(l))), true);
+      Object.keys(c.data.altTraining.picks).every((l) => levels.includes(Number(l))), true);
   }
 }
 
@@ -6713,58 +6957,58 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   }
 }
 
-console.log('primordia -- what a technique has granted so far, counted');
+console.log('alternate training -- what a technique has granted so far, counted');
 {
   // Light Body: the Athletics sphere at 1st, Wall Stunt at 3rd, Air Stunt at
   // 5th, then one Athletics talent every other level from 7th -- so ten at 20th
   // -- plus Unarmed Combatant.
   const a = new Character(load('angou'));
-  const k = () => a.data.primordia.calc.counts;
+  const k = () => a.data.altTraining.calc.counts;
   check('angou at 20 has ten Athletics talents', k().talent, 10);
   check('and the one bonus feat', k().feat, 1);
   check('they land in the combat tally', a.data.training.combat.tally.Athletics, 10);
 
   // Levels not yet reached are the plan, and are not counted.
   const s = new Character(load('saburo'));
-  check('saburo at 9 has five', s.data.primordia.calc.counts.talent, 5);
+  check('saburo at 9 has five', s.data.altTraining.calc.counts.talent, 5);
   s.set('identity.level', 11);
-  check('levelling to 11 grants the next one', s.data.primordia.calc.counts.talent, 6);
+  check('levelling to 11 grants the next one', s.data.altTraining.calc.counts.talent, 6);
 
   // The magic side gets its own: Keen Mind (Spheres) is Divination talents.
   const n = new Character(load('nico'));
-  check('nico at 15 has eight Divination talents', n.data.primordia.calc.counts.talent, 8);
+  check('nico at 15 has eight Divination talents', n.data.altTraining.calc.counts.talent, 8);
   check('on the magic side', n.data.training.magic.tally.Divination, 8);
   check('and none on the combat side', n.data.training.combat.tally.Divination, undefined);
 
   // Armored Discipline grants feats and no talents at all.
   const b = new Character(load('bryva'));
-  check('bryva at 16 has nine bonus feats', b.data.primordia.calc.counts.feat, 9);
-  check('and no sphere talents', b.data.primordia.calc.counts.talent, 0);
-  check('so nothing is added to either tally', b.data.primordia.calc.talents, null);
+  check('bryva at 16 has nine bonus feats', b.data.altTraining.calc.counts.feat, 9);
+  check('and no sphere talents', b.data.altTraining.calc.counts.talent, 0);
+  check('so nothing is added to either tally', b.data.altTraining.calc.talents, null);
 }
 
-console.log('primordia -- a level reached with nothing written against it is owed');
+console.log('alternate training -- a level reached with nothing written against it is owed');
 {
   const b = new Character(load('bryva'));
-  const due = () => b.data.primordia.calc.rows.filter((r) => r.due).map((r) => r.level);
+  const due = () => b.data.altTraining.calc.rows.filter((r) => r.due).map((r) => r.level);
   check('bryva owes the two she skipped', due(), [11, 15]);
-  check('counted on the panel', b.data.primordia.calc.counts.due, 2);
-  check('and 17 and 19 are planned, not owed', b.data.primordia.calc.counts.planned, 2);
+  check('counted on the panel', b.data.altTraining.calc.counts.due, 2);
+  check('and 17 and 19 are planned, not owed', b.data.altTraining.calc.counts.planned, 2);
 
-  b.set('primordia.picks.11', 'Armor Adept');
+  b.set('altTraining.picks.11', 'Armor Adept');
   check('filling one clears it', due(), [15]);
-  b.set('primordia.picks.15', '   ');
+  b.set('altTraining.picks.15', '   ');
   check('whitespace does not count as filled', due(), [15]);
 
   // A fixed grant is not a choice, so it is never owed -- but still takes a note.
-  const fixed = b.data.primordia.calc.rows.find((r) => r.level === 3);
+  const fixed = b.data.altTraining.calc.rows.find((r) => r.level === 3);
   check('a fixed level offers no pick', fixed.pick, null);
   check('yet keeps what the sheet wrote there', fixed.text, 'Armor Trick');
 }
 
-console.log('primordia -- the prerequisite is checked, and says so when it cannot be');
+console.log('alternate training -- the prerequisite is checked, and says so when it cannot be');
 {
-  const state = (id) => new Character(load(id)).data.primordia.calc.prereq.state;
+  const state = (id) => new Character(load(id)).data.altTraining.calc.prereq.state;
   check('angou has a full-BAB class, so Light Body is met', state('angou'), 'met');
   check("nico's Hedgewitch casts at Mid, so Keen Mind is met", state('nico'), 'met');
   // Bryva really does have Armored Discipline; her sheet just never imported an
@@ -6773,49 +7017,49 @@ console.log('primordia -- the prerequisite is checked, and says so when it canno
   check('bryva has nothing to check against', state('bryva'), 'unknown');
 
   const a = new Character(load('angou'));
-  a.set('identity.primordiaTechnique', 'Keen Mind (Vancian)');
+  a.set('altTraining.technique', 'Keen Mind (Vancian)');
   check('and vancian casting he does not have reads unmet',
-    a.data.primordia.calc.prereq.state, 'unmet');
-  a.set('identity.primordiaTechnique', 'Piercing Eye');
+    a.data.altTraining.calc.prereq.state, 'unmet');
+  a.set('altTraining.technique', 'Piercing Eye');
   check('psionics is not modelled, so it is unchecked rather than refused',
-    a.data.primordia.calc.prereq.state, 'unknown');
+    a.data.altTraining.calc.prereq.state, 'unknown');
 }
 
-console.log('primordia -- "if you already possess it" is a branch, not a footnote');
+console.log('alternate training -- "if you already possess it" is a branch, not a footnote');
 {
   const c = new Character(load('nico'));
-  c.set('identity.primordiaTechnique', 'Keen Mind (Vancian)');
-  const counts = () => c.data.primordia.calc.counts;
+  c.set('altTraining.technique', 'Keen Mind (Vancian)');
+  const counts = () => c.data.altTraining.calc.counts;
   // Two feats (1st, 3rd) and a spell at 5th, 7th, 9th, 11th, 13th and 15th.
   check('two feats and six spells by 15th', [counts().feat, counts().spell], [2, 6]);
 
-  c.set('primordia.alt.1', true);
+  c.set('altTraining.alt.1', true);
   check('already having Spell Focus swaps the feat for a spell rather than adding one',
     [counts().feat, counts().spell], [1, 7]);
   check('and the row says so',
-    c.data.primordia.calc.rows[0].grants[0].text,
+    c.data.altTraining.calc.rows[0].grants[0].text,
     'One Divination spell added to your spells known');
 }
 
-console.log('primordia -- the choice is one thing, the writing beside it another');
+console.log('alternate training -- the choice is one thing, the writing beside it another');
 {
   const b = new Character(load('bryva'));
-  b.set('identity.primordiaTechnique', 'Light Body');
+  b.set('altTraining.technique', 'Light Body');
   check('switching technique changes what the levels grant',
-    b.data.primordia.calc.counts.talent, 8);
-  check('but keeps every line already written', b.data.primordia.picks[9], 'Armored Casting');
+    b.data.altTraining.calc.counts.talent, 8);
+  check('but keeps every line already written', b.data.altTraining.picks[9], 'Armored Casting');
   check('and a technique off the list empties the ladder, not the writing', (() => {
-    b.set('identity.primordiaTechnique', 'Bear Style');
-    const k = b.data.primordia.calc;
-    return [k.technique, k.unknown, k.rows[0].grants.length, b.data.primordia.picks[9]];
+    b.set('altTraining.technique', 'Bear Style');
+    const k = b.data.altTraining.calc;
+    return [k.technique, k.unknown, k.rows[0].grants.length, b.data.altTraining.picks[9]];
   })(), [null, true, 0, 'Armored Casting']);
 
   const saved = new Character(load('bryva')).toJSON();
-  check('a save carries the writing', saved.primordia.picks[13], 'Dodge');
-  check('and none of the ladder', 'calc' in saved.primordia, false);
+  check('a save carries the writing', saved.altTraining.picks[13], 'Dodge');
+  check('and none of the ladder', 'calc' in saved.altTraining, false);
 }
 
-console.log('primordia -- the name the rules gave, and the note beside it');
+console.log('alternate training -- the name the rules gave, and the note beside it');
 {
   /*
    * The ladder is four columns: the level, what the rules hand over, what was
@@ -6824,8 +7068,8 @@ console.log('primordia -- the name the rules gave, and the note beside it');
    * the sentence beside it.
    */
   const c = new Character(load('nico'));
-  check('Keen Mind (Spheres) is the technique', c.data.identity.primordiaTechnique, 'Keen Mind (Spheres)');
-  const at = (lvl) => c.data.primordia.calc.rows.find((r) => r.level === lvl);
+  check('Keen Mind (Spheres) is the technique', c.data.altTraining.technique, 'Keen Mind (Spheres)');
+  const at = (lvl) => c.data.altTraining.calc.rows.find((r) => r.level === lvl);
   check('1st names both of the things it hands over',
     at(1).auto, 'Divination sphere + Practiced Seer');
   check('3rd and 5th name the talent', [at(3).auto, at(5).auto],
@@ -6833,7 +7077,7 @@ console.log('primordia -- the name the rules gave, and the note beside it');
   check('a level that only offers a choice names nothing', at(7).auto, '');
   check('and the name a row shows is the rules\' until something is typed',
     [at(3).name, at(7).name], ['Detect Spellcaster', '']);
-  c.set('primordia.picks.3', 'Sense Divination');
+  c.set('altTraining.picks.3', 'Sense Divination');
   check('typed over, the name is the player\'s', [at(3).name, at(3).auto],
     ['Sense Divination', 'Detect Spellcaster']);
 
@@ -6846,7 +7090,7 @@ console.log('primordia -- the name the rules gave, and the note beside it');
    * package satisfies, is met while the rest wait on the pick.
    */
   const s = new Character(load('saburo'));
-  const light = s.data.primordia.calc.rows.find((r) => r.level === 1);
+  const light = s.data.altTraining.calc.rows.find((r) => r.level === 1);
   check('Light Body\'s 1st names its feat and asks for its package',
     [light.auto, light.pick?.label], ['Unarmed Combatant', 'Package']);
   const acro = s.trainingSkillRanks.find((r) => r.skill === 'Acrobatics');
@@ -6855,11 +7099,11 @@ console.log('primordia -- the name the rules gave, and the note beside it');
     [acro.state, swim.state], ['met', 'unknown']);
 
   // The note is its own column and takes formulas, like every other note.
-  c.set('primordia.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
+  c.set('altTraining.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
   check('a row note defines a name', c.scope().seer.range, 150);
   check('and says where it came from',
-    c.audit().find((r) => r.name === '{seer.range}').where, 'Primordia notes, level 5');
-  check('the picks are untouched by it', c.data.primordia.picks[5], undefined);
+    c.audit().find((r) => r.name === '{seer.range}').where, 'Alternate Training notes, level 5');
+  check('the picks are untouched by it', c.data.altTraining.picks[5], undefined);
   const kept = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and it survives a save', kept.scope().seer.range, 150);
 }
@@ -7258,12 +7502,12 @@ console.log('proficiencies -- the workbook sentences become lists the sheet can 
   c.toggleProficiency('groups', 'Not A Group');
   check('an unknown value is refused', c.data.identity.proficiencies.groups, ['Axes']);
   check('the lists save as lists', JSON.parse(JSON.stringify(c.toJSON())).identity.proficiencies.groups, ['Axes']);
-  c.set('identity.primordiaTechnique', 'Armored Discipline');
-  check('and the primordia armor check reads the list', c.data.primordia.calc.prereq.state, 'met');
+  c.set('altTraining.technique', 'Armored Discipline');
+  check('and the alternate-training armor check reads the list', c.data.altTraining.calc.prereq.state, 'met');
   c.toggleProficiency('armor', 'Medium');
-  check('and turns unmet with only light armor', c.data.primordia.calc.prereq.state, 'unmet');
+  check('and turns unmet with only light armor', c.data.altTraining.calc.prereq.state, 'unmet');
   c.toggleProficiency('armor', 'Light');
-  check('and unknown with none recorded', c.data.primordia.calc.prereq.state, 'unknown');
+  check('and unknown with none recorded', c.data.altTraining.calc.prereq.state, 'unknown');
 }
 
 console.log('proficiencies -- a weapon on Gear is read against them');
@@ -7861,17 +8105,19 @@ for (const id of IDS) {
   const names = (c.data.sheetTabs || []).map((t) => t.name);
   for (const [tab, key] of [['Familiar', 'familiar'], ['Animal Companion', 'animalCompanion'], ['Eidolon', 'eidolon']]) {
     check(`${id} keeps no raw ${tab} grid`, names.includes(tab), false);
-    check(`${id} has a ${key} block`, !!c.data[key]?.calc, true);
+    check(`${id} has a ${key} block`, !!c.data[key]?.[0]?.calc, true);
   }
+  // The conjured companion never had a worksheet; the block is simply there.
+  check(`${id} has a conjured block too`, !!c.data.conjured?.[0]?.calc, true);
   // Nothing on any workbook's companion tabs was ever filled in, so none of
   // them counts as in use -- and the tabs stay off until asked for.
-  check(`${id} starts with no companion in use`, [c.data.familiar.name, c.data.animalCompanion.masterClass, c.data.eidolon.masterClass], ['', '', '']);
+  check(`${id} starts with no companion in use`, [c.data.familiar[0].name, c.data.animalCompanion[0].masterClass, c.data.eidolon[0].masterClass, c.data.conjured[0].baseForm], ['', '', '', '']);
 }
 
 console.log('companions -- a familiar is its master, halved');
 {
   const c = new Character(load('angou'));
-  const f = c.data.familiar;
+  const f = c.data.familiar[0];
   // The worksheet's own cached numbers for Angou: HP 275, HD 20, BAB 20, Int 15,
   // saves 12, Acrobatics 20 from the master's ranks.
   check('half the master\'s hit points', f.calc.hpMax, Math.floor(c.hpMax / 2));
@@ -7884,17 +8130,17 @@ console.log('companions -- a familiar is its master, halved');
   check('a skill uses the master\'s ranks when they are higher', acro.masterRanks, masterAcro.totalRanks);
   check('and the class-skill +3 once there is a rank', acro.total, masterAcro.totalRanks + 3 + f.calc.scores.dex.mod);
   // Tiny: +2 to AC and attack, -2 to CMD; attack ability is the better of Str and Dex.
-  c.set('familiar.scores.dex.base', 16);
-  check('a Tiny familiar with Dex 16 attacks with Dex', [c.data.familiar.calc.attackAbility, c.data.familiar.calc.totalAttack], ['Dex', c.data.attack.bab + 3 + 2]);
-  check('AC counts Dex, size and the table\'s natural armour', c.data.familiar.calc.ac, 10 + 3 + 2 + 10);
-  check('touch leaves the natural armour out', c.data.familiar.calc.touch, 10 + 3 + 2);
-  check('CMD takes the size the other way', c.data.familiar.calc.cmd, 10 + c.data.attack.bab + 0 + 3 - 2);
-  c.set('familiar.protector', true);
-  check('a Protector at 11th has double', c.data.familiar.calc.hpMax, Math.floor(c.hpMax / 2) * 2);
-  c.set('familiar.masterLevelPenalty', 3);
-  check('the master-level penalty lowers the level and the table row', [c.data.familiar.calc.level, c.data.familiar.calc.scores.int.total], [17, 14]);
-  c.set('familiar.scores.int.base', 20);
-  check('a typed Intelligence pins it', c.data.familiar.calc.scores.int.total, 20);
+  c.set('familiar.0.scores.dex.base', 16);
+  check('a Tiny familiar with Dex 16 attacks with Dex', [c.data.familiar[0].calc.attackAbility, c.data.familiar[0].calc.totalAttack], ['Dex', c.data.attack.bab + 3 + 2]);
+  check('AC counts Dex, size and the table\'s natural armour', c.data.familiar[0].calc.ac, 10 + 3 + 2 + 10);
+  check('touch leaves the natural armour out', c.data.familiar[0].calc.touch, 10 + 3 + 2);
+  check('CMD takes the size the other way', c.data.familiar[0].calc.cmd, 10 + c.data.attack.bab + 0 + 3 - 2);
+  c.set('familiar.0.protector', true);
+  check('a Protector at 11th has double', c.data.familiar[0].calc.hpMax, Math.floor(c.hpMax / 2) * 2);
+  c.set('familiar.0.masterLevelPenalty', 3);
+  check('the master-level penalty lowers the level and the table row', [c.data.familiar[0].calc.level, c.data.familiar[0].calc.scores.int.total], [17, 14]);
+  c.set('familiar.0.scores.int.base', 20);
+  check('a typed Intelligence pins it', c.data.familiar[0].calc.scores.int.total, 20);
 }
 
 console.log('companions -- a feat that kept its level in the note gets it back');
@@ -7936,7 +8182,7 @@ console.log('companions -- what the table grants, and where its rules text comes
   check('one is one', splitAbilities('Evasion'), ['Evasion']);
   check('and an empty cell is none', splitAbilities('  '), []);
   check('a gain carries the names it is made of',
-    new Character(load('angou')).data.animalCompanion?.calc?.gains?.every?.((g) => Array.isArray(g.abilities)) ?? true, true);
+    new Character(load('angou')).data.animalCompanion?.[0]?.calc?.gains?.every?.((g) => Array.isArray(g.abilities)) ?? true, true);
 
   /*
    * The engine ships no rules text -- that prose is a publisher's. A pack
@@ -7981,96 +8227,96 @@ console.log('companions -- a note the player writes about an ability is theirs a
   check('a broken one is replaced rather than trusted',
     normalizeCompanion('animalCompanion', { abilityNotes: 'not an object' }).abilityNotes, {});
   const c = new Character(load('angou'));
-  c.set('familiar.abilityNotes.evasion', 'what it means at my table');
+  c.set('familiar.0.abilityNotes.evasion', 'what it means at my table');
   check('it is set and read back like any other field',
-    c.data.familiar.abilityNotes.evasion, 'what it means at my table');
+    c.data.familiar[0].abilityNotes.evasion, 'what it means at my table');
 }
 
 console.log('companions -- the animal companion follows its table by effective level');
 {
   const c = new Character(load('angou'));
-  c.set('animalCompanion.masterClass', 'Legendary Monk');
-  const a = c.data.animalCompanion;
+  c.set('animalCompanion.0.masterClass', 'Legendary Monk');
+  const a = c.data.animalCompanion[0];
   check('level counts the class off the Planner', a.calc.level, c.classLevelCount('Legendary Monk'));
-  c.set('animalCompanion.levelOverride', 9);
-  const k = c.data.animalCompanion.calc;
+  c.set('animalCompanion.0.levelOverride', 9);
+  const k = c.data.animalCompanion[0].calc;
   // The table at 9th: 8 HD, BAB +6, good +6 / poor +2, 8 ranks, 4 feats, +6 natural, +3 Str/Dex, 4 tricks.
   check('9th: HD, BAB, natural armour, Str/Dex bonus', [k.hd, k.bab, k.tableNatural, k.scores.str.lvlUp, k.scores.dex.lvlUp], [8, 6, 6, 3, 3]);
   check('9th: ranks, feats, bonus tricks', [k.ranksAllowed, k.featsAllowed, k.bonusTricks], [8, 4, 4]);
   check('good Fort and Ref, poor Will', [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [6, 6, 2]);
   check('hit points are 8 a die plus Con', k.hpMax, 8 * 8 + 0);
-  c.set('animalCompanion.scores.con.base', 14);
-  check('Con moves them by HD', c.data.animalCompanion.calc.hpMax, 8 * 8 + 2 * 8);
-  c.setItem('animalCompanion.abilityIncreases', 0, 'ability', 'Con');
-  check('the 4th-level +1 lands on the ability chosen', c.data.animalCompanion.calc.scores.con.total, 15);
-  c.setItem('animalCompanion.abilityIncreases', 2, 'ability', 'Con');
-  check('the 14th-level one waits', c.data.animalCompanion.calc.scores.con.total, 15);
-  c.set('animalCompanion.levelOverride', 20);
-  check('20th: 16 HD, BAB +12, +12 natural, +6 Str/Dex, and every increase in', [c.data.animalCompanion.calc.hd, c.data.animalCompanion.calc.bab, c.data.animalCompanion.calc.tableNatural, c.data.animalCompanion.calc.scores.str.lvlUp, c.data.animalCompanion.calc.scores.con.total], [16, 12, 12, 6, 16]);
+  c.set('animalCompanion.0.scores.con.base', 14);
+  check('Con moves them by HD', c.data.animalCompanion[0].calc.hpMax, 8 * 8 + 2 * 8);
+  c.setItem('animalCompanion.0.abilityIncreases', 0, 'ability', 'Con');
+  check('the 4th-level +1 lands on the ability chosen', c.data.animalCompanion[0].calc.scores.con.total, 15);
+  c.setItem('animalCompanion.0.abilityIncreases', 2, 'ability', 'Con');
+  check('the 14th-level one waits', c.data.animalCompanion[0].calc.scores.con.total, 15);
+  c.set('animalCompanion.0.levelOverride', 20);
+  check('20th: 16 HD, BAB +12, +12 natural, +6 Str/Dex, and every increase in', [c.data.animalCompanion[0].calc.hd, c.data.animalCompanion[0].calc.bab, c.data.animalCompanion[0].calc.tableNatural, c.data.animalCompanion[0].calc.scores.str.lvlUp, c.data.animalCompanion[0].calc.scores.con.total], [16, 12, 12, 6, 16]);
   // Attacks: primary at full, secondary at -5, -2 with Multiattack.
-  c.set('animalCompanion.levelOverride', 9);
-  c.listAdd('animalCompanion.attacks', { type: 'Bite', damage: '1d8', crit: '20/×2', primary: null, bonus: 0, qualities: '' });
-  c.listAdd('animalCompanion.attacks', { type: 'Hoof', damage: '1d4', crit: '20/×2', primary: null, bonus: 0, qualities: '' });
-  const total = c.data.animalCompanion.calc.totalAttack;
-  check('bite is primary, hoof secondary', c.data.animalCompanion.attacks.map((x) => x.toHit), [total, total - 5]);
-  check('and the table names the damage type', c.data.animalCompanion.attacks.map((x) => x.damageType), ['B, P, and S', 'B']);
-  c.listAdd('animalCompanion.feats', { name: 'Multiattack', notes: '' });
-  check('Multiattack softens the secondary to -2', c.data.animalCompanion.attacks[1].toHit, total - 2);
-  c.setItem('animalCompanion.attacks', 1, 'primary', 'primary');
-  check('a role chosen by hand wins', c.data.animalCompanion.attacks[1].toHit, total);
+  c.set('animalCompanion.0.levelOverride', 9);
+  c.listAdd('animalCompanion.0.attacks', { type: 'Bite', damage: '1d8', crit: '20/×2', primary: null, bonus: 0, qualities: '' });
+  c.listAdd('animalCompanion.0.attacks', { type: 'Hoof', damage: '1d4', crit: '20/×2', primary: null, bonus: 0, qualities: '' });
+  const total = c.data.animalCompanion[0].calc.totalAttack;
+  check('bite is primary, hoof secondary', c.data.animalCompanion[0].attacks.map((x) => x.toHit), [total, total - 5]);
+  check('and the table names the damage type', c.data.animalCompanion[0].attacks.map((x) => x.damageType), ['B, P, and S', 'B']);
+  c.listAdd('animalCompanion.0.feats', { name: 'Multiattack', notes: '' });
+  check('Multiattack softens the secondary to -2', c.data.animalCompanion[0].attacks[1].toHit, total - 2);
+  c.setItem('animalCompanion.0.attacks', 1, 'primary', 'primary');
+  check('a role chosen by hand wins', c.data.animalCompanion[0].attacks[1].toHit, total);
   // Body type drives the item slots.
-  c.set('animalCompanion.bodyType', 'Avian');
-  check('an avian has ten slots and can grasp', [c.data.animalCompanion.calc.slots.length, c.data.animalCompanion.calc.canGrasp], [10, true]);
+  c.set('animalCompanion.0.bodyType', 'Avian');
+  check('an avian has ten slots and can grasp', [c.data.animalCompanion[0].calc.slots.length, c.data.animalCompanion[0].calc.canGrasp], [10, true]);
   // A Spheres companion levels by ranks instead.
-  c.set('animalCompanion.levelOverride', null);
-  c.set('animalCompanion.levelSource', 'handleAnimal');
+  c.set('animalCompanion.0.levelOverride', null);
+  c.set('animalCompanion.0.levelSource', 'handleAnimal');
   const ha = c.data.skills.find((s) => s.name === 'Handle Animal');
-  check('Handle Animal ranks as the level', c.data.animalCompanion.calc.level, Math.min(20, ha?.totalRanks || 0));
+  check('Handle Animal ranks as the level', c.data.animalCompanion[0].calc.level, Math.min(20, ha?.totalRanks || 0));
 }
 
 console.log('companions -- the eidolon spends an evolution pool');
 {
   const c = new Character(load('nico'));
-  c.set('eidolon.levelOverride', 12);
-  const k = c.data.eidolon.calc;
+  c.set('eidolon.0.levelOverride', 12);
+  const k = c.data.eidolon[0].calc;
   // The table at 12th: 9 HD, BAB +9, +10 natural, +5 Str/Dex, 9 evolution points, 5 attacks, 5 feats.
   check('12th: HD, BAB, natural, Str/Dex, pool, attacks, feats', [k.hd, k.bab, k.tableNatural, k.scores.str.lvlUp, k.evoPool, k.maxAttacks, k.featsAllowed], [9, 9, 10, 5, 9, 5, 5]);
   check('skill ranks are HD × (6 + Int), the sheet\'s cell', k.ranksAllowed, 9 * 6);
-  check('the increases at 5th and 10th are in, 15th is not', [c.data.eidolon.abilityIncreases.map((x) => x.level), k.level], [[5, 10, 15], 12]);
-  c.listAdd('eidolon.evolutions', { name: 'Claws', cost: 1, type: '', notes: '' });
-  c.listAdd('eidolon.evolutions', { name: 'Improved natural armor', cost: 2, type: '', notes: '' });
-  check('evolutions spend the pool', [c.data.eidolon.calc.evoSpent, c.data.eidolon.calc.evoLeft], [3, 6]);
-  c.set('eidolon.bonusEvoPoints', 2);
-  check('bonus points widen it', c.data.eidolon.calc.evoPool, 11);
-  c.set('eidolon.masterLevelPenalty', 1);
-  check('a master-level penalty costs a level and a point', [c.data.eidolon.calc.level, c.data.eidolon.calc.evoPool], [11, 9 - 1 + 2]);
-  c.set('eidolon.scores.str.evo', 8);
-  check('an evolution bonus over the cap (2 + 2 per six levels) is flagged', [c.data.eidolon.calc.maxBonusPerStat, c.data.eidolon.calc.evoBonusOver], [4, ['Str']]);
+  check('the increases at 5th and 10th are in, 15th is not', [c.data.eidolon[0].abilityIncreases.map((x) => x.level), k.level], [[5, 10, 15], 12]);
+  c.listAdd('eidolon.0.evolutions', { name: 'Claws', cost: 1, type: '', notes: '' });
+  c.listAdd('eidolon.0.evolutions', { name: 'Improved natural armor', cost: 2, type: '', notes: '' });
+  check('evolutions spend the pool', [c.data.eidolon[0].calc.evoSpent, c.data.eidolon[0].calc.evoLeft], [3, 6]);
+  c.set('eidolon.0.bonusEvoPoints', 2);
+  check('bonus points widen it', c.data.eidolon[0].calc.evoPool, 11);
+  c.set('eidolon.0.masterLevelPenalty', 1);
+  check('a master-level penalty costs a level and a point', [c.data.eidolon[0].calc.level, c.data.eidolon[0].calc.evoPool], [11, 9 - 1 + 2]);
+  c.set('eidolon.0.scores.str.evo', 8);
+  check('an evolution bonus over the cap (2 + 2 per six levels) is flagged', [c.data.eidolon[0].calc.maxBonusPerStat, c.data.eidolon[0].calc.evoBonusOver], [4, ['Str']]);
 }
 
 console.log('companions -- readable from a formula, and only what was typed is saved');
 {
   const c = new Character(load('angou'));
-  c.set('eidolon.levelOverride', 20);
+  c.set('eidolon.0.levelOverride', 20);
   const s = c.scope();
-  check('familiar.hp and eidolon.hd read', [s.familiar.hp, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar.calc.hpMax, 15, 15]);
+  check('familiar.hp and eidolon.hd read', [s.familiar.hp, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar[0].calc.hpMax, 15, 15]);
   check('the names validate', c.scopeNames().includes('animalCompanion.str.mod'), true);
-  c.set('familiar.notes', 'Bites for {= familiar.attack}');
-  check('prose on the tab resolves', c.renderProse(c.data.familiar.notes).some((seg) => seg.kind !== 'text' && seg.value === c.data.familiar.calc.totalAttack), true);
-  c.companionDamage('eidolon', 30);
-  check('damage comes off the current', c.data.eidolon.calc.hpCurrent, c.data.eidolon.calc.hpMax - 30);
-  c.set('eidolon.hp.temp', 5);
-  c.companionDamage('eidolon', 3);
-  check('temporary points go first', [c.data.eidolon.hp.temp, c.data.eidolon.calc.hpCurrent], [2, c.data.eidolon.calc.hpMax - 30]);
+  c.set('familiar.0.notes', 'Bites for {= familiar.attack}');
+  check('prose on the tab resolves', c.renderProse(c.data.familiar[0].notes).some((seg) => seg.kind !== 'text' && seg.value === c.data.familiar[0].calc.totalAttack), true);
+  c.companionDamage('eidolon', 0, 30);
+  check('damage comes off the current', c.data.eidolon[0].calc.hpCurrent, c.data.eidolon[0].calc.hpMax - 30);
+  c.set('eidolon.0.hp.temp', 5);
+  c.companionDamage('eidolon', 0, 3);
+  check('temporary points go first', [c.data.eidolon[0].hp.temp, c.data.eidolon[0].calc.hpCurrent], [2, c.data.eidolon[0].calc.hpMax - 30]);
   c.companionRest('eidolon');
-  check('a rest clears both', [c.data.eidolon.hp.damage, c.data.eidolon.hp.temp], [0, 0]);
+  check('a rest clears both', [c.data.eidolon[0].hp.damage, c.data.eidolon[0].hp.temp], [0, 0]);
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
-  check('no derived numbers are saved', [saved.familiar.calc, saved.eidolon.calc, saved.familiar.skills[0].total, saved.familiar.skills[0].masterRanks], [undefined, undefined, undefined, undefined]);
+  check('no derived numbers are saved', [saved.familiar[0].calc, saved.eidolon[0].calc, saved.familiar[0].skills[0].total, saved.familiar[0].skills[0].masterRanks], [undefined, undefined, undefined, undefined]);
   const back = new Character(saved);
-  check('and they come back on load', [back.data.eidolon.calc.hd, back.data.familiar.skills[0].total], [15, c.data.familiar.skills[0].total]);
+  check('and they come back on load', [back.data.eidolon[0].calc.hd, back.data.familiar[0].skills[0].total], [15, c.data.familiar[0].skills[0].total]);
   // A document saved before a field existed gets the default for it.
   const old = new Character({ ...saved, eidolon: { name: 'Old', levelOverride: 3 } });
-  check('an older eidolon block fills in', [old.data.eidolon.name, old.data.eidolon.calc.hd, old.data.eidolon.skills.length > 0, old.data.eidolon.goodSaves.fort], ['Old', 3, true, true]);
+  check('an older eidolon block fills in', [old.data.eidolon[0].name, old.data.eidolon[0].calc.hd, old.data.eidolon[0].skills.length > 0, old.data.eidolon[0].goodSaves.fort], ['Old', 3, true, true]);
 }
 
 console.log('a tracker can read itself: self.* in notes and zone bounds');

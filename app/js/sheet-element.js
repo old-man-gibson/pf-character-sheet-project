@@ -111,7 +111,6 @@ import {
   VEIL_SLOTS, ESSENCE_SOURCES, SP_PER_TEMP_ESSENCE,
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
-  PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
   mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
   conditionTotals, statModDelta, stepDiceMap, addDice,
 } from './rules.js';
@@ -183,7 +182,7 @@ const TABS = [
   ['magic', 'Magic Spheres'],
   ['guile', 'Guile Spheres'],
   ['features', 'Feats & Mythic'],
-  ['primordia', 'Primordia'],
+  ['altTraining', 'Alternate Training'],
   ['gear', 'Equipment'],
   ['crafting', 'Crafting'],
   ['akashic', 'Akashic'],
@@ -198,6 +197,7 @@ const TABS = [
   ['familiar', 'Familiar'],
   ['animalCompanion', 'Animal Companion'],
   ['eidolon', 'Eidolon'],
+  ['conjured', 'Conjured Companion'],
   ['trackers', 'Trackers'],
   ['progression', 'Progression'],
   ['extras', 'Extras & Notes'],
@@ -227,7 +227,7 @@ const BREAKDOWN_GRACE = 140;
 const MODELLED_TAB_IDS = new Set([
   'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
   'techniques', 'autoTechnique', 'cooking',
-  'familiar', 'animalCompanion', 'eidolon',
+  'familiar', 'animalCompanion', 'eidolon', 'conjured',
 ]);
 
 /**
@@ -373,7 +373,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
@@ -1356,7 +1356,23 @@ export class CharacterSheetElement extends HTMLElement {
         index, tab, inUse: tab.rows.length > 0, weird: isWeirdTab(tab.name),
       });
     });
-    return out;
+    /*
+     * What the player calls a tab, worn over what it is. The rename is a
+     * label and nothing else -- every key, id and behaviour above stays put
+     * -- and the GM's inspector view keeps the original on the bar so a
+     * sheet reads the same across the whole table, with the player's word
+     * for it in the tooltip instead. `base` is always the tab's own name;
+     * `renamed` is the player's, when there is one.
+     */
+    return out.map((e) => {
+      const renamed = this.#model.tabName(e.key);
+      if (!renamed) return { ...e, base: e.label };
+      return this.isAdmin
+        ? { ...e, base: e.label, renamed, title: `The player calls this “${renamed}”` }
+        : {
+          ...e, base: e.label, label: renamed, renamed, title: `Originally “${e.label}”`,
+        };
+    });
   }
 
   /** The tab bar: entries in `tabOrder`, skipping keys that no longer exist. */
@@ -1406,7 +1422,8 @@ export class CharacterSheetElement extends HTMLElement {
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
               ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
-              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"' : ''}
+              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"'
+    : e.title ? `title="${esc(e.title)}"` : ''}
               ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true"'}>${esc(e.label)}</button>`;
   }).join('')}
           <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
@@ -2118,7 +2135,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'template': return this.#templatePanel();
       case 'systabs': return this.#systemManagerPanel();
       case 'features': return this.#featuresPanel();
-      case 'primordia': return this.#primordiaPanel();
+      case 'altTraining': return this.#altTrainingPanel();
       case 'gear': return this.#gearPanel();
       case 'crafting': return this.#craftingPanel();
       case 'akashic': return this.#akashicPanel();
@@ -2132,6 +2149,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'familiar': return this.#companionPanel('familiar');
       case 'animalCompanion': return this.#companionPanel('animalCompanion');
       case 'eidolon': return this.#companionPanel('eidolon');
+      case 'conjured': return this.#companionPanel('conjured');
       case 'trackers': return this.#trackersPanel();
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();
@@ -2266,10 +2284,10 @@ export class CharacterSheetElement extends HTMLElement {
           : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
         The Specialty feat is mandatory, so it is always here. Oath and Attunement feats
         name their own source.
-        ${c.primordia?.calc?.counts?.feat
-    ? `Technique feats (${c.primordia.calc.counts.feat} from
-        <strong>${esc(c.primordia.calc.technique)}</strong>) live on the
-        <strong>Primordia</strong> tab, beside the levels that grant them — one home
+        ${c.altTraining?.calc?.counts?.feat
+    ? `Technique feats (${c.altTraining.calc.counts.feat} from
+        <strong>${esc(c.altTraining.calc.technique)}</strong>) live on the
+        <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
       </p>`;
   }
@@ -2548,7 +2566,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #rowRemoveButton(...a) { return subsystems.rowRemoveButton(...a); }
 
-  #primordiaPanel() { return subsystems.primordiaPanel(this.#model); }
+  #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
 
   #akashicPanel() { return subsystems.akashicPanel(this.#model, this.#systemCtx()); }
 
@@ -3028,7 +3046,9 @@ export class CharacterSheetElement extends HTMLElement {
     const weird = off.filter((e) => e.weird);
     const all = (this.#model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
 
-    const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
+    const badges = (e) => `${e.renamed ? `<span class="badge player" title="${esc(e.title || '')}">${
+      this.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
+      ${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
       ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
@@ -3079,11 +3099,12 @@ export class CharacterSheetElement extends HTMLElement {
       <p class="hint">
         The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
         to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact, and it stays hidden. The swatch on each row colours that tab
-        (right-clicking the tab itself opens the same picker); a colour is the tab's own
-        and shows on both bars. Each view keeps its own bar: the <em>build</em> view
+        its data intact, and it stays hidden. The swatch on each row colours and renames
+        that tab (right-clicking the tab itself opens the same panel); the colour and the
+        name are the tab's own and show on both bars. Each view keeps its own bar: the
+        <em>build</em> view
         starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
-        Primordia, Trackers and Equipment, <em>plus every sub-system this character
+        Alternate Training, Trackers and Equipment, <em>plus every sub-system this character
         uses</em>; the <em>session</em> view starts from what comes up at the table --
         those sub-systems again, minus the build machinery.
         <button data-action="tab-reset">Reset this view's bar</button>
@@ -4122,11 +4143,20 @@ export class CharacterSheetElement extends HTMLElement {
       data-hex="${hex}"${hex ? ` style="background:${hex}"` : ''}
       title="${esc(hex ? `${name} ${hex}` : 'Theme default')}" aria-label="${esc(hex ? name : 'Theme default')}"
       aria-pressed="${(cur || '') === hex}"></button>`;
-    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab colour">
+    // The head wears the tab's own name, whatever it is being called: the
+    // rename field below is where the calling happens, and a head that
+    // followed the keystrokes would be the field said twice.
+    const renamable = !FIXED_TABS.has(m.key);
+    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab name and colour">
       <div class="tabmenu-head">
-        <span class="tabmenu-name">${esc(m.label)}</span>
+        <span class="tabmenu-name">${esc(m.base || m.label)}</span>
         <button data-action="tabcolor-close" title="Close" aria-label="Close">×</button>
       </div>
+      ${renamable ? `<div class="pair" style="margin-bottom:6px">
+        <input class="tabname" data-tabrename value="${esc(this.#model.tabName(m.key) || '')}"
+          placeholder="${esc(m.base || m.label)}" maxlength="40" aria-label="Tab name"
+          title="What this tab is called on your sheet. Blank gives its own name back; the GM’s inspector view always shows the original.">
+      </div>` : ''}
       <div class="swatches" role="group" aria-label="Tab colour">
         ${swatch('', '')}
         ${TRACKER_PALETTE.map(([h, n]) => swatch(h, n)).join('')}
@@ -4151,7 +4181,12 @@ export class CharacterSheetElement extends HTMLElement {
     const box = this.getBoundingClientRect();
     const WIDTH = 232;
     const x = Math.max(6, Math.min(atX - box.left, box.width - WIDTH - 6));
-    this.#tabColorFor = { key, label, x, y: Math.max(6, atY - box.top) };
+    // The tab's own name rides along for the rename field's placeholder and
+    // the head -- the label clicked may already be the player's word for it.
+    const base = this.#tabEntries().find((e) => e.key === key)?.base || label;
+    this.#tabColorFor = {
+      key, label, base, x, y: Math.max(6, atY - box.top),
+    };
     this.#render();
   }
 
@@ -4215,6 +4250,22 @@ export class CharacterSheetElement extends HTMLElement {
         hexBox.classList.remove('bad');
       }
     };
+
+    /*
+     * The rename field, on the colour panel's own bargain: write on every
+     * keystroke, repaint in place, and let the close re-render settle the
+     * rest (the manager rows, the panel heading). The bar tab's text is the
+     * one thing that must follow the typing live -- except for an admin,
+     * whose bar keeps the tab's own name whatever the player calls it.
+     */
+    const nameBox = menu.querySelector('[data-tabrename]');
+    nameBox?.addEventListener('input', () => {
+      const m = this.#tabColorFor;
+      this.#model.setTabName(m.key, nameBox.value);
+      if (this.isAdmin) return;
+      const tab = root.querySelector(`nav.tabs [data-tabkey="${CSS.escape(m.key)}"]`);
+      if (tab) tab.textContent = nameBox.value.trim() || m.base;
+    });
 
     menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
       b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
@@ -6620,14 +6671,16 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'companion-hp': {
-        // Damage, heal or rest one companion; the amount box sits beside the buttons.
+        // Damage, heal or rest one companion; the amount box sits beside the
+        // buttons, and both carry which of the kind's companions they mean.
         const kind = button?.dataset.kind;
+        const index = Number(button?.dataset.index) || 0;
         const op = button?.dataset.op;
-        const box = this.shadowRoot.querySelector(`[data-companion-amount="${CSS.escape(kind || '')}"]`);
+        const box = this.shadowRoot.querySelector(`[data-companion-amount="${CSS.escape(`${kind}:${index}`)}"]`);
         const amount = Number(box?.value) || 0;
-        if (op === 'damage') this.#model.companionDamage(kind, amount);
-        else if (op === 'heal') this.#model.companionHeal(kind, amount);
-        else if (op === 'rest') this.#model.companionRest(kind);
+        if (op === 'damage') this.#model.companionDamage(kind, index, amount);
+        else if (op === 'heal') this.#model.companionHeal(kind, index, amount);
+        else if (op === 'rest') this.#model.companionRest(kind, index);
         this.#render();
         break;
       }
@@ -6639,6 +6692,28 @@ export class CharacterSheetElement extends HTMLElement {
         if (list.has(sphere)) list.delete(sphere);
         else list.add(sphere);
         this.#model.set('cardcasting.attunedSpheres', [...list]);
+        this.#render();
+        break;
+      }
+      case 'companion-add': {
+        // Another companion of this kind; the tab switches to the newcomer.
+        const kind = button?.dataset.kind;
+        if (!kind) break;
+        this.#model.addCompanion(kind);
+        const prefs = this.#model.data.uiPrefs || (this.#model.data.uiPrefs = {});
+        if (!prefs.activeCompanion) prefs.activeCompanion = {};
+        prefs.activeCompanion[kind] = (this.#model.data[kind] || []).length - 1;
+        this.#render();
+        break;
+      }
+      case 'companion-select': {
+        // Which of a kind's companions the tab is showing -- a view
+        // preference, kept in uiPrefs the way the folds are.
+        const kind = button?.dataset.kind;
+        if (!kind) break;
+        const prefs = this.#model.data.uiPrefs || (this.#model.data.uiPrefs = {});
+        if (!prefs.activeCompanion) prefs.activeCompanion = {};
+        prefs.activeCompanion[kind] = Number(button?.dataset.index) || 0;
         this.#render();
         break;
       }
@@ -7092,8 +7167,8 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'take-technique':
         // Same write the dropdown makes; the chooser is just a wider way to
-        // read the five before making it.
-        this.#model.set('identity.primordiaTechnique', button?.dataset.name || '');
+        // read the catalogue before making it.
+        this.#model.set('altTraining.technique', button?.dataset.name || '');
         this.#render();
         break;
       case 'reset':

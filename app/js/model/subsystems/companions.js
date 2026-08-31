@@ -6,8 +6,8 @@
  */
 
 import {
-  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionSkillKey, computeCompanion,
-  defaultCompanion, seedSkills,
+  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionSkillKey,
+  computeCompanion, defaultCompanion, seedSkills,
 } from '../../companions.js';
 import { ABILITIES } from '../../rules.js';
 import { sheetReader } from '../document.js';
@@ -280,6 +280,13 @@ export function companionMaster(model) {
   };
   return {
     level: Number(c.identity?.level) || 0,
+    // The conjured companion grows with this rather than a class's levels:
+    // the magic training's global caster level, or the character's own level
+    // for a caster with no sphere block behind it -- the same number the
+    // wallet charges material casting against. Temporary caster-level boosts
+    // never land in globalCL, which is exactly the sphere's own rule that a
+    // companion gains nothing from them.
+    casterLevel: Number(model.casterLevel) || 0,
     bab: Number(c.attack?.bab) || 0,
     hp: model.hpMax,
     baseSaves: {
@@ -302,9 +309,14 @@ export function companionMaster(model) {
  * gathered by the key each row answers to -- two rows with the same name
  * collapse to one destination and both take the bonus, which is what "+2 to
  * Craft" means when a creature keeps two Craft rows.
+ *
+ * Every companion is aimable as `companion.<id>.…`; the first of its kind is
+ * also every bare spelling that predates keeping more than one, and takes
+ * what lands on either name.
  */
-export function companionBonuses(model, kind, b) {
-  const at = (name) => forwarded(model, `${kind}.${name}`);
+export function companionBonuses(model, kind, b, index) {
+  const names = [`companion.${b.id}`, ...(index === 0 ? [kind] : [])];
+  const at = (name) => names.reduce((n, under) => n + forwarded(model, `${under}.${name}`), 0);
   const out = { saves: {}, scores: {}, skill: {}, attackBy: {}, damageBy: {} };
   for (const [name, , path] of COMPANION_TARGETS) setPath(out, path, at(name));
   for (const s of b.skills || []) {
@@ -323,18 +335,40 @@ export function companionBonuses(model, kind, b) {
 export function recomputeCompanions(model) {
   const master = companionMaster(model);
   for (const kind of COMPANION_KINDS) {
-    const b = model.data[kind];
-    if (!b) continue;
-    const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b));
-    b.calc = calc;
-    b.skills = skills;
-    b.attacks = attacks;
+    (model.data[kind] || []).forEach((b, i) => {
+      const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b, i));
+      b.calc = calc;
+      b.skills = skills;
+      b.attacks = attacks;
+    });
   }
 }
 
+/**
+ * Another companion of this kind -- what the minionmancer's Add button does.
+ *
+ * The block starts as the kind's default; the id it will answer to in a
+ * formula (`companion.<id>.*`) is coined here and never changes afterwards,
+ * the way a tracker's is. Taken from the next free number across every kind,
+ * because the ids share the one `companion.` namespace.
+ */
+export function addCompanion(model, kind) {
+  const list = model.data[kind] || (model.data[kind] = []);
+  const taken = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b.id))));
+  let n = list.length + 1;
+  while (taken.has(`${kind}${n}`)) n++;
+  const block = { ...defaultCompanion(kind), id: `${kind}${n}` };
+  list.push(block);
+  model.recompute();
+  return block;
+}
+
+/** One kind's block by its place in the list, however the caller counted. */
+const blockAt = (model, kind, index) => (model.data[kind] || [])[Math.max(0, Math.floor(Number(index) || 0))];
+
 /** The companion takes damage (temporary points first), heals, or rests. */
-export function companionDamage(model, kind, amount) {
-  const b = model.data[kind];
+export function companionDamage(model, kind, index, amount) {
+  const b = blockAt(model, kind, index);
   if (!b) return model;
   let n = Math.max(0, Math.floor(Number(amount) || 0));
   const hp = b.hp || (b.hp = { damage: 0, temp: 0, bonus: 0 });
@@ -346,8 +380,8 @@ export function companionDamage(model, kind, amount) {
   return model.recompute();
 }
 
-export function companionHeal(model, kind, amount) {
-  const b = model.data[kind];
+export function companionHeal(model, kind, index, amount) {
+  const b = blockAt(model, kind, index);
   if (!b) return model;
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   const hp = b.hp || (b.hp = { damage: 0, temp: 0, bonus: 0 });
@@ -355,8 +389,8 @@ export function companionHeal(model, kind, amount) {
   return model.recompute();
 }
 
-export function companionRest(model, kind) {
-  const b = model.data[kind];
+export function companionRest(model, kind, index) {
+  const b = blockAt(model, kind, index);
   if (!b) return model;
   b.hp = { ...(b.hp || {}), damage: 0, temp: 0 };
   return model.recompute();
