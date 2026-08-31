@@ -46,8 +46,8 @@ import { normalise, toDocument } from './document.js';
 import {
   addSystemTab, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
   moveTab, removeSystemTab, renameSkill, renameSystemTab, resetTabOrder, sessionDefaultTabs,
-  setItem, setTabColor, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
-  tabColor, tabOrder,
+  setItem, setTabColor, setTabName, setTabOrder, setValue, setViewMode, showTab, systemTabsInUse,
+  tabColor, tabName, tabOrder,
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
 } from './edit.js';
 import { emit, subscribe } from './events.js';
@@ -427,6 +427,8 @@ export class Character {
   moveTab(...a) { return moveTab(this, ...a); }
   tabColor(...a) { return tabColor(this, ...a); }
   setTabColor(...a) { return setTabColor(this, ...a); }
+  tabName(...a) { return tabName(this, ...a); }
+  setTabName(...a) { return setTabName(this, ...a); }
 
   // abilities.js
   #applyMythic(...a) { return applyMythic(this, ...a); }

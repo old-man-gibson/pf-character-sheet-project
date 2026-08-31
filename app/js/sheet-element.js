@@ -1356,7 +1356,23 @@ export class CharacterSheetElement extends HTMLElement {
         index, tab, inUse: tab.rows.length > 0, weird: isWeirdTab(tab.name),
       });
     });
-    return out;
+    /*
+     * What the player calls a tab, worn over what it is. The rename is a
+     * label and nothing else -- every key, id and behaviour above stays put
+     * -- and the GM's inspector view keeps the original on the bar so a
+     * sheet reads the same across the whole table, with the player's word
+     * for it in the tooltip instead. `base` is always the tab's own name;
+     * `renamed` is the player's, when there is one.
+     */
+    return out.map((e) => {
+      const renamed = this.#model.tabName(e.key);
+      if (!renamed) return { ...e, base: e.label };
+      return this.isAdmin
+        ? { ...e, base: e.label, renamed, title: `The player calls this “${renamed}”` }
+        : {
+          ...e, base: e.label, label: renamed, renamed, title: `Originally “${e.label}”`,
+        };
+    });
   }
 
   /** The tab bar: entries in `tabOrder`, skipping keys that no longer exist. */
@@ -1406,7 +1422,8 @@ export class CharacterSheetElement extends HTMLElement {
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
               ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
-              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"' : ''}
+              ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"'
+    : e.title ? `title="${esc(e.title)}"` : ''}
               ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true"'}>${esc(e.label)}</button>`;
   }).join('')}
           <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
@@ -3029,7 +3046,9 @@ export class CharacterSheetElement extends HTMLElement {
     const weird = off.filter((e) => e.weird);
     const all = (this.#model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
 
-    const badges = (e) => `${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
+    const badges = (e) => `${e.renamed ? `<span class="badge player" title="${esc(e.title || '')}">${
+      this.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
+      ${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
       ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
       ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
       ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
@@ -3080,9 +3099,10 @@ export class CharacterSheetElement extends HTMLElement {
       <p class="hint">
         The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
         to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact, and it stays hidden. The swatch on each row colours that tab
-        (right-clicking the tab itself opens the same picker); a colour is the tab's own
-        and shows on both bars. Each view keeps its own bar: the <em>build</em> view
+        its data intact, and it stays hidden. The swatch on each row colours and renames
+        that tab (right-clicking the tab itself opens the same panel); the colour and the
+        name are the tab's own and show on both bars. Each view keeps its own bar: the
+        <em>build</em> view
         starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
         Alternate Training, Trackers and Equipment, <em>plus every sub-system this character
         uses</em>; the <em>session</em> view starts from what comes up at the table --
@@ -4123,11 +4143,20 @@ export class CharacterSheetElement extends HTMLElement {
       data-hex="${hex}"${hex ? ` style="background:${hex}"` : ''}
       title="${esc(hex ? `${name} ${hex}` : 'Theme default')}" aria-label="${esc(hex ? name : 'Theme default')}"
       aria-pressed="${(cur || '') === hex}"></button>`;
-    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab colour">
+    // The head wears the tab's own name, whatever it is being called: the
+    // rename field below is where the calling happens, and a head that
+    // followed the keystrokes would be the field said twice.
+    const renamable = !FIXED_TABS.has(m.key);
+    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab name and colour">
       <div class="tabmenu-head">
-        <span class="tabmenu-name">${esc(m.label)}</span>
+        <span class="tabmenu-name">${esc(m.base || m.label)}</span>
         <button data-action="tabcolor-close" title="Close" aria-label="Close">×</button>
       </div>
+      ${renamable ? `<div class="pair" style="margin-bottom:6px">
+        <input class="tabname" data-tabrename value="${esc(this.#model.tabName(m.key) || '')}"
+          placeholder="${esc(m.base || m.label)}" maxlength="40" aria-label="Tab name"
+          title="What this tab is called on your sheet. Blank gives its own name back; the GM’s inspector view always shows the original.">
+      </div>` : ''}
       <div class="swatches" role="group" aria-label="Tab colour">
         ${swatch('', '')}
         ${TRACKER_PALETTE.map(([h, n]) => swatch(h, n)).join('')}
@@ -4152,7 +4181,12 @@ export class CharacterSheetElement extends HTMLElement {
     const box = this.getBoundingClientRect();
     const WIDTH = 232;
     const x = Math.max(6, Math.min(atX - box.left, box.width - WIDTH - 6));
-    this.#tabColorFor = { key, label, x, y: Math.max(6, atY - box.top) };
+    // The tab's own name rides along for the rename field's placeholder and
+    // the head -- the label clicked may already be the player's word for it.
+    const base = this.#tabEntries().find((e) => e.key === key)?.base || label;
+    this.#tabColorFor = {
+      key, label, base, x, y: Math.max(6, atY - box.top),
+    };
     this.#render();
   }
 
@@ -4216,6 +4250,22 @@ export class CharacterSheetElement extends HTMLElement {
         hexBox.classList.remove('bad');
       }
     };
+
+    /*
+     * The rename field, on the colour panel's own bargain: write on every
+     * keystroke, repaint in place, and let the close re-render settle the
+     * rest (the manager rows, the panel heading). The bar tab's text is the
+     * one thing that must follow the typing live -- except for an admin,
+     * whose bar keeps the tab's own name whatever the player calls it.
+     */
+    const nameBox = menu.querySelector('[data-tabrename]');
+    nameBox?.addEventListener('input', () => {
+      const m = this.#tabColorFor;
+      this.#model.setTabName(m.key, nameBox.value);
+      if (this.isAdmin) return;
+      const tab = root.querySelector(`nav.tabs [data-tabkey="${CSS.escape(m.key)}"]`);
+      if (tab) tab.textContent = nameBox.value.trim() || m.base;
+    });
 
     menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
       b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));

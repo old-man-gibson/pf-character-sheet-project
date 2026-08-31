@@ -1089,6 +1089,25 @@ console.log('alternate training -- the primordia spelling migrates and nothing i
   setAltTrainingTables(merged.altTraining);
 }
 
+console.log('tabs -- a player names a tab their own way; the original is kept');
+{
+  const c = new Character(blankDocument('tab-name-test'));
+  check('no name by default', c.tabName('trackers'), null);
+  c.setTabName('trackers', '  Ki & Grudges ');
+  check('stored trimmed', c.tabName('trackers'), 'Ki & Grudges');
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('survives a round trip', back.tabName('trackers'), 'Ki & Grudges');
+  c.setTabName('trackers', '   ');
+  check('blank gives the name back', c.tabName('trackers'), null);
+  // A worksheet's own rename carries the player's label with it, the same
+  // way its colour and its place on the bar already travel.
+  const t = c.addSystemTab('Ledger');
+  c.setTabName(`sys:${t.name}`, 'The Books');
+  c.renameSystemTab(c.data.sheetTabs.findIndex((x) => x.name === t.name), 'Ledger II');
+  check('the label follows a worksheet rename', c.tabName('sys:Ledger II'), 'The Books');
+  check('and leaves nothing behind', c.tabName('sys:Ledger'), null);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
