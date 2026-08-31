@@ -108,7 +108,7 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
 }
 
 /* ------------------------------------------------------------------ *
- * Primordia techniques: the Technique List and AutoTechnique tabs.
+ * custom techniques: the Technique List and AutoTechnique tabs.
  *
  * A technique is a recipe of spheres, talents and "other" features; its
  * complexity, DCs and SP cost fall out of how many of each it uses. The

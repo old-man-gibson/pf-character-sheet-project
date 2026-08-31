@@ -144,7 +144,7 @@ const panelsWith = (CTX) => [
   ['Crafting', (m) => gear.renderCraftingPanel(m, CTX.gear)],
   ['Wealth', (m) => gear.wealthPanel(m, CTX.gear)],
   ['Trackers', (m) => trackers.renderTrackersPanel(m, CTX.tracker)],
-  ['Alternate Training', (m) => subsystems.primordiaPanel(m)],
+  ['Alternate Training', (m) => subsystems.altTrainingPanel(m)],
   ['Akashic', (m) => subsystems.akashicPanel(m, CTX.system)],
   ['Maneuvers', (m) => subsystems.maneuversPanel(m, CTX.system)],
   ['Vancian', (m) => subsystems.vancianPanel(m)],

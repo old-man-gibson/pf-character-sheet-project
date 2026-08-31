@@ -10,7 +10,7 @@
 
 import {
   ABILITIES, AC_BONUS_TYPES, ARMOR_PROFICIENCIES, BACKGROUND_SKILLS, CONDITIONS,
-  MYTHIC_STAT_BONUS, MYTHIC_STAT_TIERS, MYTHIC_TIERS, PRIMORDIA_LEVELS, SAVE_BONUS_TYPES,
+  MYTHIC_STAT_BONUS, MYTHIC_STAT_TIERS, MYTHIC_TIERS, SAVE_BONUS_TYPES,
   SHEET_CONDITIONS, SHIELD_PROFICIENCIES, TRAIT_SLOTS, WEAPON_FAMILIARITY, WEAPON_GROUPS,
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
@@ -29,7 +29,7 @@ import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
 import { GUILE_DERIVED, normalizeGuileTraining } from './subsystems/guile.js';
 import { MANEUVER_DERIVED, importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
-import { PRIMORDIA_DERIVED } from './subsystems/primordia.js';
+import { ALT_TRAINING_DERIVED, altTrainingLevels } from './subsystems/alt-training.js';
 import { PSIONIC_DERIVED, importPsionics } from './subsystems/psionics.js';
 import { importTechniques, normalizeTechniques } from './subsystems/techniques.js';
 import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vancian.js';
@@ -54,7 +54,7 @@ export const SCHEMA_VERSION = 9;
  * workbook worksheet is `sys:<its name>`.
  */
 export const DEFAULT_TAB_ORDER = [
-  'overview', 'stats', 'lore', 'skills', 'progression', 'features', 'primordia', 'trackers', 'gear',
+  'overview', 'stats', 'lore', 'skills', 'progression', 'features', 'altTraining', 'trackers', 'gear',
 ];
 
 export const PROFICIENCY_LISTS = {
@@ -707,7 +707,7 @@ export function normalise(model) {
   }));
 
   /*
-   * Primordia techniques and the iron chef's dish read the same way as the
+   * Custom techniques and the iron chef's dish read the same way as the
    * rest: the workbook's grids -- techRef, Technique List, AutoTechnique;
    * Auto-Cooking -- are imported once into their blocks and retired.
    */
@@ -1002,6 +1002,20 @@ export function normalise(model) {
   // or a formula, and ride the condition totals so every "now" figure moves.
   if (!Array.isArray(d.buffs)) d.buffs = [];
   if (!d.uiPrefs.collapsed) d.uiPrefs.collapsed = {};
+  // The Alternate Training tab was `primordia`; a saved bar, hidden-tab entry
+  // or tab colour keyed by the old id follows the tab to its new name.
+  for (const listKey of ['tabOrder', 'sessionTabOrder']) {
+    if (Array.isArray(d.uiPrefs[listKey])) {
+      d.uiPrefs[listKey] = d.uiPrefs[listKey].map((k) => (k === 'primordia' ? 'altTraining' : k));
+    }
+  }
+  for (const mapKey of ['hiddenTabs', 'tabColors']) {
+    const map = d.uiPrefs[mapKey];
+    if (map && typeof map === 'object' && 'primordia' in map) {
+      if (!('altTraining' in map)) map.altTraining = map.primordia;
+      delete map.primordia;
+    }
+  }
   // The Auto-Cooking ingredient list is long and a reference, so it starts folded.
   if (d.uiPrefs.collapsed['cooking-ref'] === undefined) d.uiPrefs.collapsed['cooking-ref'] = true;
   // So do the alternate attacks: three of the six rows are the same attack
@@ -1157,7 +1171,7 @@ export function normalise(model) {
   }
 
   /*
-   * The Primordia Technique ladder, off the Planner's own column.
+   * The Alternate Training ladder, off the Planner's own column.
    *
    * The template calls that column "Armored Discipline Technique" on every
    * sheet whatever technique the character took -- it is the one technique
@@ -1168,21 +1182,32 @@ export function normalise(model) {
    *
    * The column is on the progression's SKIP list, so before this it went
    * nowhere: Bryva's seven filled-in rows were dropped with it.
+   *
+   * The block was `primordia` -- one server's name -- and the technique lived
+   * apart from it as `identity.primordiaTechnique`, exactly as the workbook
+   * kept them; the converter still emits both, so this is also where an old
+   * save or a fresh import folds into the one server-agnostic block.
    */
-  if (!d.primordia) {
+  if (!d.altTraining && d.primordia && typeof d.primordia === 'object') d.altTraining = d.primordia;
+  delete d.primordia;
+  if (!d.altTraining) {
     const picks = {};
     const key = (d.planner || []).flatMap(Object.keys).find((k) => /\bTechnique$/i.test(k));
     if (key) {
       for (const row of d.planner) {
         const lvl = Math.round(Number(row.Level));
         const text = String(row[key] ?? '').trim();
-        if (text && PRIMORDIA_LEVELS.includes(lvl)) picks[lvl] = text;
+        if (text && altTrainingLevels().includes(lvl)) picks[lvl] = text;
       }
     }
-    d.primordia = { picks, alt: {}, notes: '' };
+    d.altTraining = { picks, alt: {}, notes: '' };
   }
-  if (!d.primordia.picks || typeof d.primordia.picks !== 'object') d.primordia.picks = {};
-  if (!d.primordia.alt || typeof d.primordia.alt !== 'object') d.primordia.alt = {};
+  if (typeof d.altTraining.technique !== 'string') d.altTraining.technique = '';
+  const legacyTechnique = String(d.identity?.primordiaTechnique ?? '').trim();
+  if (legacyTechnique && !d.altTraining.technique.trim()) d.altTraining.technique = legacyTechnique;
+  if (d.identity) delete d.identity.primordiaTechnique;
+  if (!d.altTraining.picks || typeof d.altTraining.picks !== 'object') d.altTraining.picks = {};
+  if (!d.altTraining.alt || typeof d.altTraining.alt !== 'object') d.altTraining.alt = {};
   /*
    * The ladder's own notes, one per granting level, beside the name.
    *
@@ -1193,8 +1218,8 @@ export function normalise(model) {
    * technique's own talents out of the column that counts them, which is
    * where `trainingSkillRanks` goes looking for them.
    */
-  if (!d.primordia.rowNotes || typeof d.primordia.rowNotes !== 'object') {
-    d.primordia.rowNotes = {};
+  if (!d.altTraining.rowNotes || typeof d.altTraining.rowNotes !== 'object') {
+    d.altTraining.rowNotes = {};
   }
 
   delete d.planner;
@@ -1568,7 +1593,7 @@ export function toDocument(model) {
     maneuvers: stripDerived(model.data.maneuvers, MANEUVER_DERIVED),
     vancian: stripDerived(model.data.vancian, VANCIAN_DERIVED),
     psionics: stripDerived(model.data.psionics, PSIONIC_DERIVED),
-    primordia: stripDerived(model.data.primordia, PRIMORDIA_DERIVED),
+    altTraining: stripDerived(model.data.altTraining, ALT_TRAINING_DERIVED),
     cardcasting: stripDerived(model.data.cardcasting, CARDCASTING_DERIVED),
     familiar: (model.data.familiar || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
     animalCompanion: (model.data.animalCompanion || []).map((b) => stripDerived(b, COMPANION_DERIVED)),

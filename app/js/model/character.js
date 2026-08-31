@@ -113,7 +113,7 @@ import { craftSkills, recomputeCrafting } from './subsystems/crafting.js';
 import {
   recomputeManeuvers, setManeuverField, setManeuverNote, toggleManeuver,
 } from './subsystems/maneuvers.js';
-import { primordiaPrereq, primordiaTalents, recomputePrimordia } from './subsystems/primordia.js';
+import { altTrainingPrereq, altTrainingTalents, recomputeAltTraining } from './subsystems/alt-training.js';
 import { psionicsNewDay, recomputePsionics } from './subsystems/psionics.js';
 import {
   addDraftTechnique, draftFromTechnique, mergeTechniquesFrom, removeTechnique,
@@ -353,7 +353,7 @@ export class Character {
     this.#recomputeCardcasting();
     // Last of the systems: its prerequisite check reads the casting types the
     // training pass works out and the casting classes the Vancian one names.
-    this.#recomputePrimordia();
+    this.#recomputeAltTraining();
     this.#recomputeCompanions();
     this.#recomputeTrackers();
     // After the trackers and sub-systems, so a buff's formula can read them
@@ -660,10 +660,10 @@ export class Character {
   removeTechnique(...a) { return removeTechnique(this, ...a); }
   #techniqueTalents(...a) { return techniqueTalents(this, ...a); }
 
-  // subsystems/primordia.js
-  #primordiaPrereq(...a) { return primordiaPrereq(this, ...a); }
-  #recomputePrimordia(...a) { return recomputePrimordia(this, ...a); }
-  #primordiaTalents(...a) { return primordiaTalents(this, ...a); }
+  // subsystems/alt-training.js
+  #altTrainingPrereq(...a) { return altTrainingPrereq(this, ...a); }
+  #recomputeAltTraining(...a) { return recomputeAltTraining(this, ...a); }
+  #altTrainingTalents(...a) { return altTrainingTalents(this, ...a); }
 
   // subsystems/companions.js
   #companionMaster(...a) { return companionMaster(this, ...a); }

@@ -96,7 +96,6 @@
   "mythicTier": 0,
   "focusStat": null,
   "guild": null,
-  "primordiaTechnique": null,
   "languages": [],
   "languageExtra": 0,
   "languageSlots": {
@@ -5538,7 +5537,7 @@
    "skills",
    "progression",
    "features",
-   "primordia",
+   "altTraining",
    "trackers",
    "gear"
   ]
@@ -5773,10 +5772,11 @@
   ],
   "classFeatures": {}
  },
- "primordia": {
+ "altTraining": {
   "picks": {},
   "alt": {},
   "notes": "",
+  "technique": "",
   "rowNotes": {}
  },
  "gestalt": {

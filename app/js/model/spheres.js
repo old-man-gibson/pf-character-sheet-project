@@ -18,7 +18,7 @@ import { evaluateFormula } from '../formula.js';
 import { plannerHasClass } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
-import { primordiaTalents } from './subsystems/primordia.js';
+import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
 import { closestName, normalizeName, slug } from './util.js';
@@ -623,7 +623,7 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
       });
     }
   }
-  const technique = primordiaTalents(model);
+  const technique = altTrainingTalents(model);
   if (technique && technique.side === sideKey) bump(technique.sphere, technique.count);
   return tally;
 }
@@ -1025,7 +1025,9 @@ export function sphereRanksBySkill(model) {
   // grant skill retraining never grant it when gained via a customized
   // weapon".
   const tally = t.tallyOwn || t.tally || {};
-  const lightBody = model.data.identity.primordiaTechnique === 'Light Body';
+  // A technique may set some skill rows to full level outright -- its pack
+  // entry says so (`fullLevelRanks`), matching the rows marked the same way.
+  const fullLevel = !!altTrainingTechnique(model.data.altTraining?.technique)?.fullLevelRanks;
   const known = sphereTalentKnowledge(model, t, 'combat');
   const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
   const check = {
@@ -1042,7 +1044,7 @@ export function sphereRanksBySkill(model) {
     const talents = sphereSkillSpheres(def).reduce((n, s) => n + (tally[s] || 0), 0);
     const on = row.enabled && state !== 'unmet';
     const ranks = !on ? 0
-      : (def.lightBody && lightBody) ? level
+      : (def.fullLevelRanks && fullLevel) ? level
         : talents > 0
           ? Math.min(level, talents * RANKS_PER_TALENT * (Number(row.multiplier) || 1))
           : 0;

@@ -601,10 +601,10 @@ console.log('bundled -- the shipped packs load through the index and merge clean
   // Pinned to the repository's own folder: a checkout may also hold a
   // `private/extensions/`, and this block is about what is shipped.
   const packs = await loadBundledExtensions(base, { fetcher, folders: ['data/extensions/'] });
-  ok('five bundled packs', packs.length === 5);
-  check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'deck-manipulations', 'iron-chef-ingredients']);
+  ok('six bundled packs', packs.length === 6);
+  check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'deck-manipulations', 'iron-chef-ingredients', 'alt-training-techniques']);
   const m = mergeTables(packs);
-  check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length], [30, 34, 5, 33]);
+  check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations, 5 techniques', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length, m.altTraining.techniques.length], [30, 34, 5, 33, 5]);
   setManeuverCatalogue(m.maneuvers);
   ok('the catalogue answers by discipline name', disciplineEntries('Broken Blade').length > 0);
   // The bundled catalogue is names and types only: the rules text of 1,033

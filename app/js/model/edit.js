@@ -365,7 +365,7 @@ export function sessionDefaultTabs(model) {
   const inUse = model.systemTabsInUse();
   const tagged = model.taggedSystemTabs();
   const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
-  return ['overview', 'skills', ...systems, 'features', 'primordia', 'trackers', 'gear', 'lore'];
+  return ['overview', 'skills', ...systems, 'features', 'altTraining', 'trackers', 'gear', 'lore'];
 }
 
 /** The keys on the active view's tab bar, in order (a copy). */

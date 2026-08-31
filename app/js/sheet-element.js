@@ -111,7 +111,6 @@ import {
   VEIL_SLOTS, ESSENCE_SOURCES, SP_PER_TEMP_ESSENCE,
   MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
   PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
-  PRIMORDIA_NAMES, PRIMORDIA_TECHNIQUES, PRIMORDIA_REPEAT_FROM, EITR_URL,
   mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
   conditionTotals, statModDelta, stepDiceMap, addDice,
 } from './rules.js';
@@ -183,7 +182,7 @@ const TABS = [
   ['magic', 'Magic Spheres'],
   ['guile', 'Guile Spheres'],
   ['features', 'Feats & Mythic'],
-  ['primordia', 'Alternate Training'],
+  ['altTraining', 'Alternate Training'],
   ['gear', 'Equipment'],
   ['crafting', 'Crafting'],
   ['akashic', 'Akashic'],
@@ -374,7 +373,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|primordia|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
@@ -2119,7 +2118,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'template': return this.#templatePanel();
       case 'systabs': return this.#systemManagerPanel();
       case 'features': return this.#featuresPanel();
-      case 'primordia': return this.#primordiaPanel();
+      case 'altTraining': return this.#altTrainingPanel();
       case 'gear': return this.#gearPanel();
       case 'crafting': return this.#craftingPanel();
       case 'akashic': return this.#akashicPanel();
@@ -2268,9 +2267,9 @@ export class CharacterSheetElement extends HTMLElement {
           : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
         The Specialty feat is mandatory, so it is always here. Oath and Attunement feats
         name their own source.
-        ${c.primordia?.calc?.counts?.feat
-    ? `Technique feats (${c.primordia.calc.counts.feat} from
-        <strong>${esc(c.primordia.calc.technique)}</strong>) live on the
+        ${c.altTraining?.calc?.counts?.feat
+    ? `Technique feats (${c.altTraining.calc.counts.feat} from
+        <strong>${esc(c.altTraining.calc.technique)}</strong>) live on the
         <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
       </p>`;
@@ -2550,7 +2549,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #rowRemoveButton(...a) { return subsystems.rowRemoveButton(...a); }
 
-  #primordiaPanel() { return subsystems.primordiaPanel(this.#model); }
+  #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
 
   #akashicPanel() { return subsystems.akashicPanel(this.#model, this.#systemCtx()); }
 
@@ -7118,8 +7117,8 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'take-technique':
         // Same write the dropdown makes; the chooser is just a wider way to
-        // read the five before making it.
-        this.#model.set('identity.primordiaTechnique', button?.dataset.name || '');
+        // read the catalogue before making it.
+        this.#model.set('altTraining.technique', button?.dataset.name || '');
         this.#render();
         break;
       case 'reset':

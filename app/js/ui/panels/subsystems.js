@@ -46,14 +46,15 @@ import {
   CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
   deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
   maneuverOwn,
+  altTrainingLink, altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques,
   psionicCurveTotals, psionicTables,
   veilsAvailable, veilDetails, veilOwn, slug,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST } from '../html.js';
 import { round } from '../format.js';
 import {
-  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, EITR_URL, ESSENCE_SOURCES, MANEUVER_FIELDS,
-  PREP_STYLES, PRIMORDIA_NAMES, PRIMORDIA_REPEAT_FROM, PRIMORDIA_TECHNIQUES, SIZE_MODIFIERS,
+  ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
+  PREP_STYLES, SIZE_MODIFIERS,
   SPELL_LEVELS, SP_PER_TEMP_ESSENCE, VEIL_SLOTS, WIKI_BASE, castingNoun, fmt, prepStyle,
   skillLabel, wikiUrl,
 } from '../../rules.js';
@@ -1060,7 +1061,7 @@ function vancianPreparedPanel(model, v) {
     </section>`;
   }
 
-  /* ---------------- primordia techniques ---------------- */
+  /* ---------------- alternate training techniques ---------------- */
 
   /**
    * The technique, and the ladder it advances on.
@@ -1071,10 +1072,14 @@ function vancianPreparedPanel(model, v) {
    * copies of the same rows, none beside the choice they belong to. Here the
    * choice picks the ladder, the ladder states what each level hands over,
    * and the column beside it is what you took for it.
+   *
+   * The techniques themselves come from whatever pack supplies them (see
+   * setAltTrainingTables): the panel draws the catalogue it is given, and an
+   * empty one is a sentence saying so, never an error.
    */
-export function primordiaPanel(model) {
+export function altTrainingPanel(model) {
     const c = model.data;
-    const p = c.primordia || {};
+    const p = c.altTraining || {};
     const k = p.calc || {};
     const level = Number(c.identity.level) || 0;
     const n = k.counts || {};
@@ -1086,13 +1091,13 @@ export function primordiaPanel(model) {
   prereq.state === 'met' ? 'prerequisite met'
     : prereq.state === 'unmet' ? 'prerequisite not met' : 'prerequisite unchecked'}</span>`;
 
-    // Only the kinds this technique actually deals in: a Light Body ladder has
-    // no business showing a spell count of zero.
+    // Only the kinds this technique actually deals in: a ladder that grants
+    // no spells has no business showing a spell count of zero.
     const totals = [
       ['Talents', n.talent, k.talents ? `${k.talents.count} ${k.talents.sphere} talents, counted into ${k.talents.side === 'magic' ? 'magic' : 'combat'} training` : ''],
       ['Feats', n.feat, 'Bonus feats granted so far'],
-      ['Spells known', n.spell, 'Divination spells added so far'],
-      ['Powers known', n.power, 'Clairsentience powers added so far'],
+      ['Spells known', n.spell, 'Spells added so far'],
+      ['Powers known', n.power, 'Powers added so far'],
     ].filter(([, v]) => v);
 
     return `<div class="grid">
@@ -1102,7 +1107,7 @@ export function primordiaPanel(model) {
         </h3>
         <div class="statbar">
           <label class="minifield">Technique
-            ${select('identity.primordiaTechnique', c.identity.primordiaTechnique, PRIMORDIA_NAMES, '— none —')}</label>
+            ${select('altTraining.technique', p.technique, altTrainingNames(), '— none —')}</label>
           ${totals.map(([label, v, title]) => miniStat(label, v, title)).join('')}
           <span class="statbar-fill"></span>
           ${miniStat('Level', level, 'Grants above this level are planned, not counted')}
@@ -1113,12 +1118,12 @@ export function primordiaPanel(model) {
         </p>` : ''}
         ${k.note ? `<p class="hint">${esc(k.note)}</p>` : ''}
         ${k.unknown ? `<p class="hint warn">The sheet says
-          <strong>${esc(c.identity.primordiaTechnique)}</strong>, which is not one of the five —
-          the ladder below is empty until it names one of them. Whatever is written against a
-          level is kept either way.</p>` : ''}
+          <strong>${esc(p.technique)}</strong>, which is not in the catalogue the active
+          packs supply — the ladder below is empty until it names one of them. Whatever is
+          written against a level is kept either way.</p>` : ''}
         <p class="hint">
           One technique, taken at 1st level or whenever its prerequisite is first met, granting
-          at 1st, 3rd, 5th, then ${PRIMORDIA_REPEAT_FROM}th and every two levels after.
+          at 1st, 3rd, 5th, then ${k.repeatFrom ?? altTrainingRepeatFrom()}th and every two levels after.
           <strong>Grants</strong> is what the rules hand over; the column beside it is what you
           took for it, already filled in on the levels the rules name themselves; the last is
           yours, and takes formulas. A technique feat can be swapped under the Associated Feat
@@ -1126,27 +1131,36 @@ export function primordiaPanel(model) {
         </p>
       </section>
 
-      ${k.technique ? primordiaLadder(model, k) : primordiaChooser()}
+      ${k.technique ? altTrainingLadder(model, k) : altTrainingChooser()}
 
       <section class="panel span2">
         <h3>Notes</h3>
-        ${prose(model, 'data-set="primordia.notes"', p.notes, 3, 'grow')}
+        ${prose(model, 'data-set="altTraining.notes"', p.notes, 3, 'grow')}
         <p class="hint">Resolves <code>{name = expr}</code> like any other prose field on the sheet.</p>
       </section>
     </div>`;
   }
 
+  /** A grant's cite tag, linked where the pack supplied a URL for it. */
+function citeTag(cite) {
+    if (!cite) return '';
+    const url = altTrainingLink(cite);
+    return url
+      ? ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(cite)}">[${esc(cite)}]</a>`
+      : ` <span class="hint">[${esc(cite)}]</span>`;
+  }
+
   /**
-   * The ten granting levels, what each hands over, what was taken for it, and
+   * The granting levels, what each hands over, what was taken for it, and
    * a note beside that.
    *
    * The name and the note were one box until the levels the rules already
-   * name -- Detect Spellcaster, Fast Divinations -- had nowhere to put their
-   * own name and nothing to type but a note. They are two columns now: the
-   * name column carries what the rules named where they named it, and the
-   * note takes formulas the way every other note on the sheet does.
+   * name had nowhere to put their own name and nothing to type but a note.
+   * They are two columns now: the name column carries what the rules named
+   * where they named it, and the note takes formulas the way every other
+   * note on the sheet does.
    */
-function primordiaLadder(model, k) {
+function altTrainingLadder(model, k) {
     // Whatever this technique calls the thing it hands over -- a talent, a
     // spell, a power, a feat. The repeating grant is the one that says it
     // seven times, so it is the one that names the column.
@@ -1163,25 +1177,23 @@ function primordiaLadder(model, k) {
     const pick = row.pick;
     const state = !pick ? '' : row.due ? ' due' : row.filled ? '' : ' planned';
     return `<tr class="${row.reached ? '' : 'future'}">
-          <td class="num" data-stack="head" data-headlabel="Level" title="${row.repeating ? 'Every two levels from the 7th' : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
+          <td class="num" data-stack="head" data-headlabel="Level" title="${row.repeating ? `Every two levels from the ${k.repeatFrom}th` : `The technique's ${row.level}${row.level === 1 ? 'st' : row.level === 3 ? 'rd' : 'th'}-level grant`}">${row.level}</td>
           <td class="grants" data-label="Grants">${row.grants.map((g) => `
             <span class="grant"${row.repeating && g.short ? ` title="${esc(g.text)}"` : ''}>${
-  esc(row.repeating && g.short ? g.short : g.text)}${g.cite === 'EitR' && !row.repeating
-    ? ` <a href="${esc(EITR_URL)}" target="_blank" rel="noopener noreferrer" title="Elephant in the Room">[EitR]</a>` : ''}</span>
+  esc(row.repeating && g.short ? g.short : g.text)}${!row.repeating ? citeTag(g.cite) : ''}</span>
             ${g.base?.alt ? `<label class="chk alt"><input type="checkbox" ${g.alt ? 'checked' : ''}
-              data-set="primordia.alt.${row.level}" data-kind="bool"
+              data-set="altTraining.alt.${row.level}" data-kind="bool"
               title="${esc(g.base.text)} — tick if you already had it, so this level grants the spell instead">
               <span>already had the feat, so this level grants ${esc(g.base.alt.text
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
-          <td class="choice${state}" data-stack="name">${primordiaPick(model, row)}</td>
-          <td class="picknote" data-label="Notes">${prose(model, `data-set="primordia.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
+          <td class="choice${state}" data-stack="name">${altTrainingPick(model, row)}</td>
+          <td class="picknote" data-label="Notes">${prose(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
       ${k.repeat ? `<p class="hint repeatrule">
-        <strong>From ${PRIMORDIA_REPEAT_FROM}th, every two levels:</strong> ${esc(k.repeat.text)}
-        ${k.repeat.cite === 'EitR' ? `<a href="${esc(EITR_URL)}" target="_blank" rel="noopener noreferrer">[EitR]</a>` : ''}
+        <strong>From ${k.repeatFrom}th, every two levels:</strong> ${esc(k.repeat.text)}${citeTag(k.repeat.cite)}
       </p>` : ''}
       <p class="hint">
         A level you have reached with a choice still to make is outlined and counted above;
@@ -1201,8 +1213,8 @@ function primordiaLadder(model, k) {
    * and BAB boxes on the Overview make. Typing over it wins, which is what an
    * archetype that swaps the grant needs.
    */
-function primordiaPick(model, row) {
-    const path = `primordia.picks.${row.level}`;
+function altTrainingPick(model, row) {
+    const path = `altTraining.picks.${row.level}`;
     const options = row.pick?.options;
     if (options) return select(path, row.text, options);
     const placeholder = row.pick?.placeholder || row.auto || '—';
@@ -1216,17 +1228,26 @@ function primordiaPick(model, row) {
   ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`;
   }
 
-  /** With no technique taken, the five on offer and what each asks for. */
-function primordiaChooser() {
+  /** With no technique taken, the catalogue on offer and what each asks for. */
+function altTrainingChooser() {
+    const techniques = altTrainingTechniques();
+    if (!techniques.length) {
+      return `<section class="panel span2">
+        <h3>No techniques on offer</h3>
+        <p class="empty">No active content pack supplies Alternate Training techniques.
+          The tab still keeps whatever is written on it; switch on a pack that carries a
+          catalogue (Extensions, top right) and the ladder appears.</p>
+      </section>`;
+    }
     return `<section class="panel span2">
-      <h3>The five techniques</h3>
+      <h3>The ${techniques.length === 5 ? 'five' : techniques.length} techniques</h3>
       <div class="tablewrap"><table>
-        <thead><tr><th>Technique</th><th>Prerequisite</th><th>1st level</th><th>Then, every other level from 7th</th></tr></thead>
-        <tbody>${PRIMORDIA_TECHNIQUES.map((t) => `<tr>
+        <thead><tr><th>Technique</th><th>Prerequisite</th><th>1st level</th><th>Then, every other level from ${altTrainingRepeatFrom()}th</th></tr></thead>
+        <tbody>${techniques.map((t) => `<tr>
           <td><button data-action="take-technique" data-name="${esc(t.name)}"
             title="Take ${esc(t.name)}">${esc(t.name)}</button></td>
-          <td>${esc(t.prereq.text)}</td>
-          <td>${(t.grants[1] || []).map((g) => esc(g.text)).join('; ')}</td>
+          <td>${esc(t.prereq?.text || '')}</td>
+          <td>${(t.grants?.[1] || []).map((g) => esc(g.text)).join('; ')}</td>
           <td>${esc(t.repeat?.text || '')}</td>
         </tr>`).join('')}</tbody>
       </table></div>

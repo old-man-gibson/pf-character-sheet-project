@@ -505,8 +505,9 @@ export function guileRanges(ranks) {
 /**
  * Bonus skill ranks per sphere talent (the sheet's "Bonus Ranks (automatic)"
  * block): 5 ranks per talent in the associated sphere, capped at level.
- * `lightBody: true` rows are set to full level when the character's Primordia
- * Technique is Light Body, matching the sheet's special case.
+ * `fullLevelRanks: true` rows are set to full level when the character's
+ * Alternate Training technique says so (`fullLevelRanks` on the technique's
+ * own pack entry -- Light Body's special case, matching the sheet's).
  *
  * Each row names what has to be on the character for it to pay out. A source
  * with no `talent` is the sphere itself -- "Fencing (Base)", satisfied by
@@ -516,21 +517,21 @@ export function guileRanges(ranks) {
  * the Leap package or the Run one.
  *
  * The check is three-valued, because a talent this sheet cannot see is not the
- * same as one the character does not have -- the Primordia techniques grant
+ * same as one the character does not have -- the Alternate Training techniques grant
  * sphere talents by the handful without ever naming which -- so a sphere whose
  * talents are all unnamed leaves the row to the player's own switch. See
  * `sphereSkillRequirement`.
  */
 export const RANKS_PER_TALENT = 5;
 export const SPHERE_SKILL_RANKS = [
-  { key: 'Acrobatics', lightBody: true, match: { name: 'Acrobatics' },
+  { key: 'Acrobatics', fullLevelRanks: true, match: { name: 'Acrobatics' },
     from: [{ sphere: 'Athletics', talent: 'Leap', kind: 'package' },
       { sphere: 'Athletics', talent: 'Run', kind: 'package' }] },
-  { key: 'Climb', lightBody: true, match: { name: 'Climb' },
+  { key: 'Climb', fullLevelRanks: true, match: { name: 'Climb' },
     from: [{ sphere: 'Athletics', talent: 'Climb', kind: 'package' }] },
-  { key: 'Fly', lightBody: true, match: { name: 'Fly' },
+  { key: 'Fly', fullLevelRanks: true, match: { name: 'Fly' },
     from: [{ sphere: 'Athletics', talent: 'Fly', kind: 'package' }] },
-  { key: 'Swim', lightBody: true, match: { name: 'Swim' },
+  { key: 'Swim', fullLevelRanks: true, match: { name: 'Swim' },
     from: [{ sphere: 'Athletics', talent: 'Swim', kind: 'package' }] },
   { key: 'Bluff', match: { name: 'Bluff' }, from: [{ sphere: 'Fencing' }] },
   { key: 'Craft (any)', match: { name: 'Craft', spec: null },
@@ -655,235 +656,19 @@ export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Anima
   'Linguistics', 'Lore', 'Perform', 'Profession', 'Sleight of Hand'];
 
 /* ------------------------------------------------------------------ *
- * Alternate Training Techniques (formerly "Primordia Techniques" -- the
- * data keys and the `primordia` tab id keep the old spelling so nothing
- * saved breaks; only what the player reads was renamed)
+ * Alternate Training Techniques
  *
  * One choice, made at 1st level (or the moment its prerequisite is finally
  * met, if none was taken before), that then advances on its own ladder for
  * the rest of the character's career.
  *
- * The workbook scattered this across four tabs and modelled none of it: the
- * choice itself is a dropdown on Character Info, the ladder of levels is
- * printed on the Planner, on Vancian Magic and on Psionics -- three copies of
- * the same ten rows, all of them empty on every sheet but Bryva's, and none of
- * them next to the choice they belong to.
+ * The techniques themselves are a server's content, not the engine's: the
+ * catalogue, the ladder shape and the cite links live in an extension pack
+ * (provides.altTraining) and are registered through setAltTrainingTables in
+ * model/subsystems/alt-training.js, where everything that reads them now
+ * lives. This section was the five Primordia techniques, hard-coded; see the
+ * alt-training-techniques pack for them.
  * ------------------------------------------------------------------ */
-
-/** Elephant in the Room, the campaign's feat-tax rules. Two techniques cite it. */
-export const EITR_URL = 'https://drive.google.com/file/d/1IoDVH7JEZczhNniN3lcen1qknTv1hZha/view';
-
-/**
- * The levels a technique grants at: 1st, 3rd, 5th, then 7th and every two
- * levels after. Every technique shares the ladder; only what lands on it
- * differs, which is why the levels are a constant and not part of the table.
- */
-export const PRIMORDIA_LEVELS = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
-
-/** Where the fixed grants stop and the repeating one takes over. */
-export const PRIMORDIA_REPEAT_FROM = 7;
-
-/**
- * The five techniques, each as its prerequisite, what it hands over at 1st,
- * 3rd and 5th, and the one grant it repeats from 7th on.
- *
- * A grant is one thing gained. `pick` marks the ones the player chooses --
- * every level has at most one across all five techniques, which is what lets
- * a choice be stored against its level alone. `talent`/`feat`/`spell`/`power`
- * say what kind of thing it is, so the ladder can total them; `alt` is the
- * "if you already have it" branch a couple of the Vancian grants carry.
- *
- * The repeating grant also carries a `short`, because it lands on seven rows
- * and Armored Discipline's is a paragraph: the ladder prints the short form on
- * each row and the whole thing once underneath.
- *
- * `talents` names the sphere a technique's talents belong to, so they can be
- * counted into the training tally the same way a bonus talent is.
- */
-export const PRIMORDIA_TECHNIQUES = [
-  {
-    name: 'Light Body',
-    prereq: { key: 'bab', text: 'At least 3/4 BAB progression' },
-    talents: { side: 'combat', sphere: 'Athletics' },
-    grants: {
-      1: [
-        {
-          text: 'Athletics sphere as a bonus talent, taking the (leap) or (run) package',
-          talent: true,
-          pick: { label: 'Package', placeholder: '(leap) or (run)', options: ['(leap)', '(run)'] },
-        },
-        {
-          text: 'Unarmed Combatant as a bonus feat', feat: true, name: 'Unarmed Combatant', cite: 'EitR',
-        },
-      ],
-      3: [{ text: 'Wall Stunt as a bonus talent', talent: true, name: 'Wall Stunt' }],
-      5: [{ text: 'Air Stunt (legendary) as a bonus talent', talent: true, name: 'Air Stunt' }],
-    },
-    repeat: {
-      text: 'A bonus talent from the Athletics sphere',
-      short: 'An Athletics talent',
-      talent: true,
-      pick: { label: 'Talent', placeholder: 'Which Athletics talent?' },
-    },
-  },
-  {
-    name: 'Piercing Eye',
-    prereq: { key: 'psionics', text: 'Psionic manifesting' },
-    note: 'Powers gained this way may not be of a higher level than you can manifest '
-      + 'normally, but can otherwise come from any power list. Choosing from the Psion '
-      + 'Discipline list needs the matching class feature.',
-    grants: {
-      1: [
-        {
-          text: 'Psionic Talent as a bonus feat — its power points may only be spent on '
-            + 'Clairsentience powers',
-          feat: true,
-          name: 'Psionic Talent',
-        },
-        {
-          text: 'One Clairsentience power added to your powers known',
-          power: true,
-          pick: { label: 'Power', placeholder: 'Which Clairsentience power?' },
-        },
-      ],
-      3: [
-        {
-          text: 'Psionic Talent as a bonus feat again — again restricted to Clairsentience',
-          feat: true,
-          name: 'Psionic Talent',
-        },
-        {
-          text: 'One Clairsentience power added to your powers known',
-          power: true,
-          pick: { label: 'Power', placeholder: 'Which Clairsentience power?' },
-        },
-      ],
-      5: [{
-        text: 'One Clairsentience power added to your powers known',
-        power: true,
-        pick: { label: 'Power', placeholder: 'Which Clairsentience power?' },
-      }],
-    },
-    repeat: {
-      text: 'An additional Clairsentience power',
-      short: 'A Clairsentience power',
-      power: true,
-      pick: { label: 'Power', placeholder: 'Which Clairsentience power?' },
-    },
-  },
-  {
-    name: 'Keen Mind (Spheres)',
-    prereq: { key: 'spherecasting', text: 'Mid or high spherecasting' },
-    talents: { side: 'magic', sphere: 'Divination' },
-    grants: {
-      1: [
-        { text: 'Divination sphere as a bonus talent', talent: true, name: 'Divination sphere' },
-        { text: 'Practiced Seer as a bonus feat', feat: true, name: 'Practiced Seer' },
-      ],
-      3: [{ text: 'Detect Spellcaster as a bonus talent', talent: true, name: 'Detect Spellcaster' }],
-      5: [{ text: 'Fast Divinations as a bonus talent', talent: true, name: 'Fast Divinations' }],
-    },
-    repeat: {
-      text: 'A bonus talent from the Divination sphere',
-      short: 'A Divination talent',
-      talent: true,
-      pick: { label: 'Talent', placeholder: 'Which Divination talent?' },
-    },
-  },
-  {
-    name: 'Keen Mind (Vancian)',
-    prereq: { key: 'vancian', text: 'Vancian casting' },
-    note: 'Spells gained this way must be from your own spell list, and may not be of a '
-      + 'higher level than you can normally cast.',
-    grants: {
-      1: [{
-        text: 'Spell Focus (Divination) as a bonus feat',
-        feat: true,
-        alt: { text: 'One Divination spell added to your spells known', spell: true },
-        pick: { label: 'Taken', placeholder: 'Spell Focus (Divination), or the spell' },
-      }],
-      3: [{
-        text: "Diviner's Delving as a bonus feat",
-        feat: true,
-        alt: { text: 'One Divination spell added to your spells known', spell: true },
-        pick: { label: 'Taken', placeholder: "Diviner's Delving, or the spell" },
-      }],
-      5: [{
-        text: 'One Divination spell added to your spells known',
-        spell: true,
-        pick: { label: 'Spell', placeholder: 'Which Divination spell?' },
-      }],
-    },
-    repeat: {
-      text: 'An additional Divination spell',
-      short: 'A Divination spell',
-      spell: true,
-      pick: { label: 'Spell', placeholder: 'Which Divination spell?' },
-    },
-  },
-  {
-    name: 'Armored Discipline',
-    prereq: { key: 'armor', text: 'Medium or Heavy Armor Proficiency' },
-    grants: {
-      1: [{ text: 'Endurance and Armor Adept as bonus feats', feat: 2, name: 'Endurance, Armor Adept' }],
-      3: [{
-        text: 'Armor Trick as a bonus feat. Armor crafted for you to wear can also be '
-          + 'upgraded with two different armor modifications.',
-        feat: true,
-        name: 'Armor Trick',
-      }],
-      5: [{
-        text: 'Armor Focus (Medium) or Armor Focus (Heavy) as a bonus feat',
-        feat: true,
-        pick: {
-          label: 'Focus',
-          placeholder: 'Medium or Heavy',
-          options: ['Armor Focus (Medium)', 'Armor Focus (Heavy)'],
-        },
-      }],
-    },
-    repeat: {
-      text: 'One of: Armor Adept; Dodge (which grants Mobility with it, per the EitR '
-        + 'optional rules); any feat that is a prerequisite for a Medium or Heavy Armor '
-        + 'trick; or any feat with Medium Armor Proficiency, Heavy Armor Proficiency, '
-        + "Armor Focus or Dodge as a prerequisite. You must meet the feat's own "
-        + 'prerequisites.',
-      short: 'An armor-track feat',
-      feat: true,
-      cite: 'EitR',
-      pick: { label: 'Feat', placeholder: 'Which feat?' },
-    },
-  },
-];
-
-export const PRIMORDIA_NAMES = PRIMORDIA_TECHNIQUES.map((t) => t.name);
-
-/** The technique a stored name refers to, matched loosely, or null. */
-export function primordiaTechnique(name) {
-  const want = String(name ?? '').trim().toLowerCase();
-  if (!want) return null;
-  return PRIMORDIA_TECHNIQUES.find((t) => t.name.toLowerCase() === want) || null;
-}
-
-/**
- * What a technique grants at a level: the fixed list for 1st/3rd/5th, the
- * repeating grant from 7th on, and nothing at the levels in between.
- */
-export function primordiaGrantsAt(technique, level) {
-  const t = typeof technique === 'string' ? primordiaTechnique(technique) : technique;
-  if (!t || !PRIMORDIA_LEVELS.includes(level)) return [];
-  if (level >= PRIMORDIA_REPEAT_FROM) return t.repeat ? [t.repeat] : [];
-  return t.grants?.[level] || [];
-}
-
-/**
- * How many of one kind of thing a grant hands over. `feat: 2` is Armored
- * Discipline's first level, which is two feats in one sentence.
- */
-export const grantCount = (grant, kind) => {
-  const v = grant?.[kind];
-  return v === true ? 1 : Number(v) || 0;
-};
 
 /* ------------------------------------------------------------------ *
  * Skill variants

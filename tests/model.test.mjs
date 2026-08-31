@@ -23,6 +23,7 @@ import {
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
   setCookingTables, cookingDish, emptyDish,
+  setAltTrainingTables,
   techniqueStats, emptyTechnique, normalizeTechnique, TECHNIQUE_SLOTS,
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
@@ -83,7 +84,10 @@ const check = (label, actual, expected) => {
 const packIndex = JSON.parse(readFileSync('data/extensions/index.json', 'utf8'));
 const packs = packIndex.extensions.map((e) => JSON.parse(readFileSync(`data/extensions/${e.file}`, 'utf8')));
 const merged = mergeTables(packs);
-registerTables(merged, { setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables });
+registerTables(merged, {
+  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
+  setAltTrainingTables,
+});
 const catalogue = merged.maneuvers;
 const castingTables = merged.vancian;
 const psionicTableDoc = merged.psionics;
@@ -1044,6 +1048,45 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   check('the survivor answers to the bare name and keeps its id',
     [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon.hd], ['Brutus', 'eidolon2', 4]);
   check('and a bonus aimed at its id still lands', back.data.eidolon[0].calc.ac, ac1 + 2);
+}
+
+console.log('alternate training -- the primordia spelling migrates and nothing is lost');
+{
+  // What every document saved before the rename looks like: the block under
+  // the old server's name, the choice off on the identity block, and a saved
+  // tab bar keyed by the old tab id.
+  const doc = blankDocument('alt-training-migration');
+  doc.identity.primordiaTechnique = 'Light Body';
+  doc.primordia = { picks: { 1: '(run)', 7: 'Swim package' }, alt: {}, notes: 'old note' };
+  doc.uiPrefs = {
+    tabOrder: ['overview', 'primordia'],
+    hiddenTabs: { primordia: true },
+    tabColors: { primordia: '#123456' },
+  };
+  const c = new Character(doc);
+  check('the block and the choice fold into altTraining',
+    [c.data.altTraining.technique, c.data.altTraining.picks[1], c.data.altTraining.notes],
+    ['Light Body', '(run)', 'old note']);
+  check('the old spellings are gone',
+    [c.data.primordia, c.data.identity.primordiaTechnique], [undefined, undefined]);
+  check('the saved tab bar follows the tab', c.data.uiPrefs.tabOrder, ['overview', 'altTraining']);
+  check('so do its hidden flag and colour',
+    [c.data.uiPrefs.hiddenTabs.altTraining, c.data.uiPrefs.tabColors.altTraining], [true, '#123456']);
+  check('and the ladder still computes off the pack', c.data.altTraining.calc.technique, 'Light Body');
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('a save writes only the new spelling',
+    ['primordia' in saved, saved.altTraining.technique], [false, 'Light Body']);
+
+  // The catalogue is a pack's now: with none registered the tab stands, the
+  // ladder shape holds its default, and nothing written is lost.
+  setAltTrainingTables({});
+  const bare = new Character(JSON.parse(JSON.stringify(saved)));
+  check('no pack: the technique is kept but unknown',
+    [bare.data.altTraining.technique, bare.data.altTraining.calc.technique, bare.data.altTraining.calc.unknown],
+    ['Light Body', null, true]);
+  check('and the ladder rows still stand on the default shape',
+    bare.data.altTraining.calc.rows.map((r) => r.level), [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
+  setAltTrainingTables(merged.altTraining);
 }
 
 const missing = missingCharacters(REAL);
@@ -2192,21 +2235,21 @@ console.log('sphere skill ranks -- a technique names most of what it grants');
   const c = new Character(load('saburo'));
   const at = (k) => c.trainingSkillRanks.find((r) => r.skill === k);
   check('the technique is Light Body at level 9, five Athletics talents',
-    [c.data.identity.primordiaTechnique, at('Swim').talents], ['Light Body', 5]);
+    [c.data.altTraining.technique, at('Swim').talents], ['Light Body', 5]);
   check('Acrobatics takes either package, and 1st level grants one of them',
     at('Acrobatics').state, 'met');
   check('the others wait on the picks nobody has written down', at('Swim').state, 'unknown');
 
-  c.set('primordia.picks.7', 'Swim package');
+  c.set('altTraining.picks.7', 'Swim package');
   check('naming one settles its own row', at('Swim').state, 'met');
   check('and leaves the rest waiting', at('Climb').state, 'unknown');
 
-  c.set('primordia.picks.9', 'Freerunner');
+  c.set('altTraining.picks.9', 'Freerunner');
   check('with every Athletics talent named, an absent package is a plain no',
     [at('Climb').state, at('Fly').state], ['unmet', 'unmet']);
   check('and Acrobatics is still met, on the 1st-level grant alone', at('Acrobatics').state, 'met');
 
-  c.set('primordia.picks.1', '(run)');
+  c.set('altTraining.picks.1', '(run)');
   check('the choice made explicitly reads the same', at('Acrobatics').state, 'met');
 
   // Wall Stunt and Air Stunt are the rules', not the player's, so they count
@@ -4140,7 +4183,7 @@ console.log('the tab bar -- an ordered preference, saved with the character');
 {
   const c = new Character(load('angou'));
   check('the standard nine are the standard nine', DEFAULT_TAB_ORDER,
-    ['overview', 'stats', 'lore', 'skills', 'progression', 'features', 'primordia', 'trackers', 'gear']);
+    ['overview', 'stats', 'lore', 'skills', 'progression', 'features', 'altTraining', 'trackers', 'gear']);
   // The bar a character opens on is those nine *plus its own sub-systems*, so
   // a workbook carrying maneuvers or veils does not land with them hidden in
   // the manager for someone to go and find. See `buildDefaultTabs`.
@@ -6750,14 +6793,14 @@ console.log('vancian -- casting types is two cells, not one');
   check('a hybrid has a list', hybrid.spells[1].knownCount !== null, true);
 }
 
-console.log('primordia -- the ladder comes off the Planner column the import used to drop');
+console.log('alternate training -- the ladder comes off the Planner column the import used to drop');
 {
   // The template names that column "Armored Discipline Technique" whatever
   // technique the character took, and parks the technique's own name on the
   // level 2 row -- a level the ladder does not grant at, which is what tells
   // the two apart. Bryva is the only sheet that filled the rest in.
   const b = new Character(load('bryva'));
-  check('bryva keeps every level she wrote', b.data.primordia.picks, {
+  check('bryva keeps every level she wrote', b.data.altTraining.picks, {
     1: 'Endurance, Armor Adept',
     3: 'Armor Trick',
     5: 'Heavy Armor Focus',
@@ -6765,15 +6808,15 @@ console.log('primordia -- the ladder comes off the Planner column the import use
     9: 'Armored Casting',
     13: 'Dodge',
   });
-  check('and the level 2 label is not one of them', 2 in b.data.primordia.picks, false);
+  check('and the level 2 label is not one of them', 2 in b.data.altTraining.picks, false);
 
   for (const id of IDS) {
     const c = new Character(load(id));
-    const levels = c.data.primordia.calc.rows.map((r) => r.level);
+    const levels = c.data.altTraining.calc.rows.map((r) => r.level);
     check(`${id} grants at 1/3/5 then every other level`, levels,
       [1, 3, 5, 7, 9, 11, 13, 15, 17, 19]);
     check(`${id} writes nothing outside those levels`,
-      Object.keys(c.data.primordia.picks).every((l) => levels.includes(Number(l))), true);
+      Object.keys(c.data.altTraining.picks).every((l) => levels.includes(Number(l))), true);
   }
 }
 
@@ -6895,58 +6938,58 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   }
 }
 
-console.log('primordia -- what a technique has granted so far, counted');
+console.log('alternate training -- what a technique has granted so far, counted');
 {
   // Light Body: the Athletics sphere at 1st, Wall Stunt at 3rd, Air Stunt at
   // 5th, then one Athletics talent every other level from 7th -- so ten at 20th
   // -- plus Unarmed Combatant.
   const a = new Character(load('angou'));
-  const k = () => a.data.primordia.calc.counts;
+  const k = () => a.data.altTraining.calc.counts;
   check('angou at 20 has ten Athletics talents', k().talent, 10);
   check('and the one bonus feat', k().feat, 1);
   check('they land in the combat tally', a.data.training.combat.tally.Athletics, 10);
 
   // Levels not yet reached are the plan, and are not counted.
   const s = new Character(load('saburo'));
-  check('saburo at 9 has five', s.data.primordia.calc.counts.talent, 5);
+  check('saburo at 9 has five', s.data.altTraining.calc.counts.talent, 5);
   s.set('identity.level', 11);
-  check('levelling to 11 grants the next one', s.data.primordia.calc.counts.talent, 6);
+  check('levelling to 11 grants the next one', s.data.altTraining.calc.counts.talent, 6);
 
   // The magic side gets its own: Keen Mind (Spheres) is Divination talents.
   const n = new Character(load('nico'));
-  check('nico at 15 has eight Divination talents', n.data.primordia.calc.counts.talent, 8);
+  check('nico at 15 has eight Divination talents', n.data.altTraining.calc.counts.talent, 8);
   check('on the magic side', n.data.training.magic.tally.Divination, 8);
   check('and none on the combat side', n.data.training.combat.tally.Divination, undefined);
 
   // Armored Discipline grants feats and no talents at all.
   const b = new Character(load('bryva'));
-  check('bryva at 16 has nine bonus feats', b.data.primordia.calc.counts.feat, 9);
-  check('and no sphere talents', b.data.primordia.calc.counts.talent, 0);
-  check('so nothing is added to either tally', b.data.primordia.calc.talents, null);
+  check('bryva at 16 has nine bonus feats', b.data.altTraining.calc.counts.feat, 9);
+  check('and no sphere talents', b.data.altTraining.calc.counts.talent, 0);
+  check('so nothing is added to either tally', b.data.altTraining.calc.talents, null);
 }
 
-console.log('primordia -- a level reached with nothing written against it is owed');
+console.log('alternate training -- a level reached with nothing written against it is owed');
 {
   const b = new Character(load('bryva'));
-  const due = () => b.data.primordia.calc.rows.filter((r) => r.due).map((r) => r.level);
+  const due = () => b.data.altTraining.calc.rows.filter((r) => r.due).map((r) => r.level);
   check('bryva owes the two she skipped', due(), [11, 15]);
-  check('counted on the panel', b.data.primordia.calc.counts.due, 2);
-  check('and 17 and 19 are planned, not owed', b.data.primordia.calc.counts.planned, 2);
+  check('counted on the panel', b.data.altTraining.calc.counts.due, 2);
+  check('and 17 and 19 are planned, not owed', b.data.altTraining.calc.counts.planned, 2);
 
-  b.set('primordia.picks.11', 'Armor Adept');
+  b.set('altTraining.picks.11', 'Armor Adept');
   check('filling one clears it', due(), [15]);
-  b.set('primordia.picks.15', '   ');
+  b.set('altTraining.picks.15', '   ');
   check('whitespace does not count as filled', due(), [15]);
 
   // A fixed grant is not a choice, so it is never owed -- but still takes a note.
-  const fixed = b.data.primordia.calc.rows.find((r) => r.level === 3);
+  const fixed = b.data.altTraining.calc.rows.find((r) => r.level === 3);
   check('a fixed level offers no pick', fixed.pick, null);
   check('yet keeps what the sheet wrote there', fixed.text, 'Armor Trick');
 }
 
-console.log('primordia -- the prerequisite is checked, and says so when it cannot be');
+console.log('alternate training -- the prerequisite is checked, and says so when it cannot be');
 {
-  const state = (id) => new Character(load(id)).data.primordia.calc.prereq.state;
+  const state = (id) => new Character(load(id)).data.altTraining.calc.prereq.state;
   check('angou has a full-BAB class, so Light Body is met', state('angou'), 'met');
   check("nico's Hedgewitch casts at Mid, so Keen Mind is met", state('nico'), 'met');
   // Bryva really does have Armored Discipline; her sheet just never imported an
@@ -6955,49 +6998,49 @@ console.log('primordia -- the prerequisite is checked, and says so when it canno
   check('bryva has nothing to check against', state('bryva'), 'unknown');
 
   const a = new Character(load('angou'));
-  a.set('identity.primordiaTechnique', 'Keen Mind (Vancian)');
+  a.set('altTraining.technique', 'Keen Mind (Vancian)');
   check('and vancian casting he does not have reads unmet',
-    a.data.primordia.calc.prereq.state, 'unmet');
-  a.set('identity.primordiaTechnique', 'Piercing Eye');
+    a.data.altTraining.calc.prereq.state, 'unmet');
+  a.set('altTraining.technique', 'Piercing Eye');
   check('psionics is not modelled, so it is unchecked rather than refused',
-    a.data.primordia.calc.prereq.state, 'unknown');
+    a.data.altTraining.calc.prereq.state, 'unknown');
 }
 
-console.log('primordia -- "if you already possess it" is a branch, not a footnote');
+console.log('alternate training -- "if you already possess it" is a branch, not a footnote');
 {
   const c = new Character(load('nico'));
-  c.set('identity.primordiaTechnique', 'Keen Mind (Vancian)');
-  const counts = () => c.data.primordia.calc.counts;
+  c.set('altTraining.technique', 'Keen Mind (Vancian)');
+  const counts = () => c.data.altTraining.calc.counts;
   // Two feats (1st, 3rd) and a spell at 5th, 7th, 9th, 11th, 13th and 15th.
   check('two feats and six spells by 15th', [counts().feat, counts().spell], [2, 6]);
 
-  c.set('primordia.alt.1', true);
+  c.set('altTraining.alt.1', true);
   check('already having Spell Focus swaps the feat for a spell rather than adding one',
     [counts().feat, counts().spell], [1, 7]);
   check('and the row says so',
-    c.data.primordia.calc.rows[0].grants[0].text,
+    c.data.altTraining.calc.rows[0].grants[0].text,
     'One Divination spell added to your spells known');
 }
 
-console.log('primordia -- the choice is one thing, the writing beside it another');
+console.log('alternate training -- the choice is one thing, the writing beside it another');
 {
   const b = new Character(load('bryva'));
-  b.set('identity.primordiaTechnique', 'Light Body');
+  b.set('altTraining.technique', 'Light Body');
   check('switching technique changes what the levels grant',
-    b.data.primordia.calc.counts.talent, 8);
-  check('but keeps every line already written', b.data.primordia.picks[9], 'Armored Casting');
+    b.data.altTraining.calc.counts.talent, 8);
+  check('but keeps every line already written', b.data.altTraining.picks[9], 'Armored Casting');
   check('and a technique off the list empties the ladder, not the writing', (() => {
-    b.set('identity.primordiaTechnique', 'Bear Style');
-    const k = b.data.primordia.calc;
-    return [k.technique, k.unknown, k.rows[0].grants.length, b.data.primordia.picks[9]];
+    b.set('altTraining.technique', 'Bear Style');
+    const k = b.data.altTraining.calc;
+    return [k.technique, k.unknown, k.rows[0].grants.length, b.data.altTraining.picks[9]];
   })(), [null, true, 0, 'Armored Casting']);
 
   const saved = new Character(load('bryva')).toJSON();
-  check('a save carries the writing', saved.primordia.picks[13], 'Dodge');
-  check('and none of the ladder', 'calc' in saved.primordia, false);
+  check('a save carries the writing', saved.altTraining.picks[13], 'Dodge');
+  check('and none of the ladder', 'calc' in saved.altTraining, false);
 }
 
-console.log('primordia -- the name the rules gave, and the note beside it');
+console.log('alternate training -- the name the rules gave, and the note beside it');
 {
   /*
    * The ladder is four columns: the level, what the rules hand over, what was
@@ -7006,8 +7049,8 @@ console.log('primordia -- the name the rules gave, and the note beside it');
    * the sentence beside it.
    */
   const c = new Character(load('nico'));
-  check('Keen Mind (Spheres) is the technique', c.data.identity.primordiaTechnique, 'Keen Mind (Spheres)');
-  const at = (lvl) => c.data.primordia.calc.rows.find((r) => r.level === lvl);
+  check('Keen Mind (Spheres) is the technique', c.data.altTraining.technique, 'Keen Mind (Spheres)');
+  const at = (lvl) => c.data.altTraining.calc.rows.find((r) => r.level === lvl);
   check('1st names both of the things it hands over',
     at(1).auto, 'Divination sphere + Practiced Seer');
   check('3rd and 5th name the talent', [at(3).auto, at(5).auto],
@@ -7015,7 +7058,7 @@ console.log('primordia -- the name the rules gave, and the note beside it');
   check('a level that only offers a choice names nothing', at(7).auto, '');
   check('and the name a row shows is the rules\' until something is typed',
     [at(3).name, at(7).name], ['Detect Spellcaster', '']);
-  c.set('primordia.picks.3', 'Sense Divination');
+  c.set('altTraining.picks.3', 'Sense Divination');
   check('typed over, the name is the player\'s', [at(3).name, at(3).auto],
     ['Sense Divination', 'Detect Spellcaster']);
 
@@ -7028,7 +7071,7 @@ console.log('primordia -- the name the rules gave, and the note beside it');
    * package satisfies, is met while the rest wait on the pick.
    */
   const s = new Character(load('saburo'));
-  const light = s.data.primordia.calc.rows.find((r) => r.level === 1);
+  const light = s.data.altTraining.calc.rows.find((r) => r.level === 1);
   check('Light Body\'s 1st names its feat and asks for its package',
     [light.auto, light.pick?.label], ['Unarmed Combatant', 'Package']);
   const acro = s.trainingSkillRanks.find((r) => r.skill === 'Acrobatics');
@@ -7037,11 +7080,11 @@ console.log('primordia -- the name the rules gave, and the note beside it');
     [acro.state, swim.state], ['met', 'unknown']);
 
   // The note is its own column and takes formulas, like every other note.
-  c.set('primordia.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
+  c.set('altTraining.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
   check('a row note defines a name', c.scope().seer.range, 150);
   check('and says where it came from',
     c.audit().find((r) => r.name === '{seer.range}').where, 'Alternate Training notes, level 5');
-  check('the picks are untouched by it', c.data.primordia.picks[5], undefined);
+  check('the picks are untouched by it', c.data.altTraining.picks[5], undefined);
   const kept = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and it survives a save', kept.scope().seer.range, 150);
 }
@@ -7440,12 +7483,12 @@ console.log('proficiencies -- the workbook sentences become lists the sheet can 
   c.toggleProficiency('groups', 'Not A Group');
   check('an unknown value is refused', c.data.identity.proficiencies.groups, ['Axes']);
   check('the lists save as lists', JSON.parse(JSON.stringify(c.toJSON())).identity.proficiencies.groups, ['Axes']);
-  c.set('identity.primordiaTechnique', 'Armored Discipline');
-  check('and the primordia armor check reads the list', c.data.primordia.calc.prereq.state, 'met');
+  c.set('altTraining.technique', 'Armored Discipline');
+  check('and the alternate-training armor check reads the list', c.data.altTraining.calc.prereq.state, 'met');
   c.toggleProficiency('armor', 'Medium');
-  check('and turns unmet with only light armor', c.data.primordia.calc.prereq.state, 'unmet');
+  check('and turns unmet with only light armor', c.data.altTraining.calc.prereq.state, 'unmet');
   c.toggleProficiency('armor', 'Light');
-  check('and unknown with none recorded', c.data.primordia.calc.prereq.state, 'unknown');
+  check('and unknown with none recorded', c.data.altTraining.calc.prereq.state, 'unknown');
 }
 
 console.log('proficiencies -- a weapon on Gear is read against them');

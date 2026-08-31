@@ -876,11 +876,11 @@ export function proseSources(model) {
     push(`grantedFeat:${key}`, d.grantedFeats?.[key]?.note);
   }
   (d.grantedFeats?.others || []).forEach((f, i) => push(`grantedFeat:${i}`, f?.note));
-  for (const [lvl, text] of Object.entries(d.primordia?.picks || {})) push(`primordia:${lvl}`, text);
-  for (const [lvl, text] of Object.entries(d.primordia?.rowNotes || {})) {
-    push(`primordiaNote:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.altTraining?.picks || {})) push(`altTraining:${lvl}`, text);
+  for (const [lvl, text] of Object.entries(d.altTraining?.rowNotes || {})) {
+    push(`altTrainingNote:${lvl}`, text);
   }
-  push('primordia:notes', d.primordia?.notes);
+  push('altTraining:notes', d.altTraining?.notes);
   // `notes` is the sibling map of one note per slot, not an eighth slot, so it
   // is walked rather than pushed as though it were a name.
   for (const [k, v] of Object.entries(d.mythic?.tradition || {})) {
