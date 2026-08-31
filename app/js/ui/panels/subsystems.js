@@ -1097,7 +1097,7 @@ export function primordiaPanel(model) {
 
     return `<div class="grid">
       <section class="panel span2">
-        <h3>Primordia Technique ${prereqBadge}
+        <h3>Alternate Training Technique ${prereqBadge}
           ${n.due ? `<span class="badge due" title="Levels reached with nothing written against them">${n.due} to pick</span>` : ''}
         </h3>
         <div class="statbar">

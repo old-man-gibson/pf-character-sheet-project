@@ -7040,7 +7040,7 @@ console.log('primordia -- the name the rules gave, and the note beside it');
   c.set('primordia.rowNotes.5', 'Reads at {seer.range = 10 * level} ft.');
   check('a row note defines a name', c.scope().seer.range, 150);
   check('and says where it came from',
-    c.audit().find((r) => r.name === '{seer.range}').where, 'Primordia notes, level 5');
+    c.audit().find((r) => r.name === '{seer.range}').where, 'Alternate Training notes, level 5');
   check('the picks are untouched by it', c.data.primordia.picks[5], undefined);
   const kept = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and it survives a save', kept.scope().seer.range, 150);

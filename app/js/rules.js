@@ -655,7 +655,9 @@ export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Anima
   'Linguistics', 'Lore', 'Perform', 'Profession', 'Sleight of Hand'];
 
 /* ------------------------------------------------------------------ *
- * Primordia Techniques
+ * Alternate Training Techniques (formerly "Primordia Techniques" -- the
+ * data keys and the `primordia` tab id keep the old spelling so nothing
+ * saved breaks; only what the player reads was renamed)
  *
  * One choice, made at 1st level (or the moment its prerequisite is finally
  * met, if none was taken before), that then advances on its own ladder for

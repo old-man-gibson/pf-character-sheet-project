@@ -95,8 +95,8 @@ export function describeSource(path) {
     case 'mythicTraditionNote': return 'a mythic tradition note';
     case 'feat': return `a feat’s note, group ${nth(a)}`;
     case 'grantedFeat': return 'a granted feat’s note';
-    case 'primordia': return a === 'notes' ? 'Primordia notes' : `Primordia, level ${a}`;
-    case 'primordiaNote': return `Primordia notes, level ${a}`;
+    case 'primordia': return a === 'notes' ? 'Alternate Training notes' : `Alternate Training, level ${a}`;
+    case 'primordiaNote': return `Alternate Training notes, level ${a}`;
     case 'crafting': return `crafting project ${nth(a)}`;
     case 'weapon': return `weapon ${nth(a)}, special properties`;
     case 'defenses': return `the ${DEFENCE_BOX_LABELS[a] || a} box`;

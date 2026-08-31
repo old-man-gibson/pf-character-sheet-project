@@ -183,7 +183,7 @@ const TABS = [
   ['magic', 'Magic Spheres'],
   ['guile', 'Guile Spheres'],
   ['features', 'Feats & Mythic'],
-  ['primordia', 'Primordia'],
+  ['primordia', 'Alternate Training'],
   ['gear', 'Equipment'],
   ['crafting', 'Crafting'],
   ['akashic', 'Akashic'],
@@ -2271,7 +2271,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${c.primordia?.calc?.counts?.feat
     ? `Technique feats (${c.primordia.calc.counts.feat} from
         <strong>${esc(c.primordia.calc.technique)}</strong>) live on the
-        <strong>Primordia</strong> tab, beside the levels that grant them — one home
+        <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
       </p>`;
   }
@@ -3085,7 +3085,7 @@ export class CharacterSheetElement extends HTMLElement {
         (right-clicking the tab itself opens the same picker); a colour is the tab's own
         and shows on both bars. Each view keeps its own bar: the <em>build</em> view
         starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
-        Primordia, Trackers and Equipment, <em>plus every sub-system this character
+        Alternate Training, Trackers and Equipment, <em>plus every sub-system this character
         uses</em>; the <em>session</em> view starts from what comes up at the table --
         those sub-systems again, minus the build machinery.
         <button data-action="tab-reset">Reset this view's bar</button>
