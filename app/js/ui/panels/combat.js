@@ -31,7 +31,7 @@ const TEMPLATE_TYPE_HINTS = {
 const NEW_TEMPLATE_TABLE = () => ({
   caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
 });
-import { TEMPLATE_TYPES, classForwardKey, sphereNames } from '../../model.js';
+import { TEMPLATE_TYPES, classForwardKey, sphereForwardKey, sphereNames } from '../../model.js';
 import {
   ABILITIES, ABILITY_LABELS, BLENDED_SPHERES,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
@@ -102,7 +102,7 @@ export function renderMartialPanel(model) {
         <div class="sidepanels">
           ${wrap('combat-tradition', combatTraditionPanel(model, side))}
           ${wrap('sphere-skills', sphereSkillPanel(model))}
-          ${wrap('combat-spheres', sphereBonusPanel('combat', side))}
+          ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
         </div>` : ''}
     </div>`;
   }
@@ -121,7 +121,7 @@ export function renderMagicPanel(model) {
         <div class="sidepanels">
           ${wrap('magic-tradition', magicTraditionPanel(model, t.magic))}
           ${wrap('magic-globals', magicGlobalsPanel(model, t.magic))}
-          ${wrap('magic-spheres', sphereBonusPanel('magic', t.magic))}
+          ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', t.magic))}
         </div>` : ''}
     </div>`;
   }
@@ -655,27 +655,32 @@ function magicGlobalsPanel(model, m) {
   /* ----- sphere bonuses / skill ranks / unarmed ----- */
 
 
-function sphereBonusPanel(sideKey, side) {
+function sphereBonusPanel(model, sideKey, side) {
     const rows = side.sphereRows || [];
-    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus);
+    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus
+      || r.clForwarded || r.babForwarded || r.dcForwarded);
     const isMagic = sideKey === 'magic';
     const list = `training.${sideKey}.sphereBonuses`;
     // A number, or a rule: the model resolves it into `<field>Num` and flags
     // a bad one in `<field>Error`, so the cell shows the answer and the
-    // source on a click, like every other formula field.
-    const bonus = (r, i, field, example) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
+    // source on a click, like every other formula field. A bonus forwarded
+    // here from prose is the badge beside it, under the sphere's own name --
+    // sphere.dark.cl, sphere.athletics.bab -- never folded into the field.
+    const bonus = (r, i, field, example, into) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
       width: '4rem',
       value: r[`${field}Num`],
       error: r[`${field}Error`],
       title: `A number, or a formula — e.g. ${example}`,
-    });
+    }) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '');
     const render = (r) => {
       const i = (side.sphereBonuses || []).findIndex((x) => x.sphere === r.sphere);
       return `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
-        <td class="num">${bonus(r, i, isMagic ? 'clBonus' : 'rankBonus', 'floor(level / 4)')}</td>
-        <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}</td>
+        <td class="num">${isMagic
+    ? bonus(r, i, 'clBonus', 'floor(level / 4)', 'cl')
+    : bonus(r, i, 'rankBonus', 'floor(level / 4)', 'bab')}</td>
+        <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
       </tr>`;
     };

@@ -44,8 +44,9 @@ import {
   expertiseTalents, guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
+import { forwarded } from '../scope.js';
 import { sphereTalent } from '../spheres.js';
-import { amountOrText, evaluateAmount } from '../util.js';
+import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
 const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({
@@ -159,7 +160,7 @@ export const GUILE_DERIVED = [
   {
     path: 'spheres',
     keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'competence',
-      'rankBonusNum', 'rankBonusError'],
+      'rankBonusNum', 'rankBonusError', 'ranksForwarded'],
   },
 ];
 
@@ -403,13 +404,16 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
     const talents = Number(tally[row.sphere]) || 0;
     const i = skillIndexOf(model, row.skill);
     const rank = amount(row.rankBonus);
+    // A bonus forwarded here is kept beside the typed one, never folded in.
+    const key = sphereForwardKey(row.sphere);
     row.skillIndex = i;
     row.talents = talents;
     row.rankBonusNum = rank.value;
     row.rankBonusError = rank.error;
+    row.ranksForwarded = key ? forwarded(model, `${key}.ranks`) : 0;
     row.ranksGranted = i < 0 || !talents
       ? 0
-      : Math.min(level, talents * RANKS_PER_TALENT + rank.value);
+      : Math.min(level, talents * RANKS_PER_TALENT + rank.value + row.ranksForwarded);
     row.paysRanks = false;
     row.duplicate = false;
     row.competence = 0;
@@ -476,17 +480,20 @@ export function recomputeGuileSpheres(model) {
     const skill = row.skillIndex >= 0 ? skills[row.skillIndex] : null;
     const ranks = Number(skill?.totalRanks) || 0;
     const dcPlus = amount(row.dcBonus);
+    const key = sphereForwardKey(row.sphere);
+    const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
     return {
       ...row,
       ranks,
       dcBonusNum: dcPlus.value,
       dcBonusError: dcPlus.error,
+      dcForwarded,
       // No associated skill, no DC. Not zero ranks' worth of one: the whole
       // number is built on a skill this sphere has not been pointed at yet,
       // and a DC of 10 + the operative modifier is a number that would read
       // as real. Vocation never has one at all -- it has no base ability and
       // no skill of its own; its talents borrow whichever skill they name.
-      dc: skill ? 10 + Math.floor(ranks / 2) + mod + dcPlus.value : null,
+      dc: skill ? 10 + Math.floor(ranks / 2) + mod + dcPlus.value + dcForwarded : null,
       ...guileRanges(ranks),
     };
   });

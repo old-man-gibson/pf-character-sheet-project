@@ -21,7 +21,7 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, evaluateAmount, normalizeName, slug } from './util.js';
+import { closestName, evaluateAmount, normalizeName, slug, sphereForwardKey } from './util.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -1107,6 +1107,12 @@ export function recomputeSphereRows(model) {
       }
       const rank = amount(row.rankBonus);
       const dcPlus = amount(row.dcBonus);
+      // A bonus forwarded here from elsewhere on the sheet is kept beside
+      // the one typed in, never folded into it -- the column has to go on
+      // saying what was written in it -- and shows in gold beside the field.
+      const key = sphereForwardKey(row.sphere);
+      const babForwarded = key ? forwarded(model, `${key}.bab`) : 0;
+      const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
       return {
         ...row,
         talents: (t.combat.tally || {})[row.sphere] || 0,
@@ -1114,8 +1120,10 @@ export function recomputeSphereRows(model) {
         rankBonusError: rank.error,
         dcBonusNum: dcPlus.value,
         dcBonusError: dcPlus.error,
-        attack: Math.min(Math.floor(attackBase + rank.value), level),
-        dc: dc + dcPlus.value,
+        babForwarded,
+        dcForwarded,
+        attack: Math.min(Math.floor(attackBase + rank.value + babForwarded), level),
+        dc: dc + dcPlus.value + dcForwarded,
       };
     });
   }
@@ -1123,6 +1131,10 @@ export function recomputeSphereRows(model) {
     t.magic.sphereRows = (t.magic.sphereBonuses || []).map((row) => {
       const cl = amount(row.clBonus);
       const dcPlus = amount(row.dcBonus);
+      const key = sphereForwardKey(row.sphere);
+      const clForwarded = key ? forwarded(model, `${key}.cl`) : 0;
+      const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
+      const clPlus = cl.value + clForwarded;
       return {
         ...row,
         talents: (t.magic.tally || {})[row.sphere] || 0,
@@ -1130,10 +1142,13 @@ export function recomputeSphereRows(model) {
         clBonusError: cl.error,
         dcBonusNum: dcPlus.value,
         dcBonusError: dcPlus.error,
-        cl: t.magic.globalCL + cl.value,
-        // A sphere's DC follows its caster level, so a CL bonus is worth
-        // half of itself here as well, as the global one is.
-        dc: t.magic.globalDC + Math.floor(cl.value / 2) + dcPlus.value,
+        clForwarded,
+        dcForwarded,
+        cl: t.magic.globalCL + clPlus,
+        // A sphere's DC follows its caster level, so a CL bonus -- typed or
+        // forwarded -- is worth half of itself here as well, as the global
+        // one is.
+        dc: t.magic.globalDC + Math.floor(clPlus / 2) + dcPlus.value + dcForwarded,
       };
     });
   }

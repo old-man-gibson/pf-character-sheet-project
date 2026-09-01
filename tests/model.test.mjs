@@ -9100,5 +9100,94 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
   check('with nothing drifted', again.diffFromSource(), []);
 }
 
+/*
+ * The same numbers are destinations: a rule written in prose can send a
+ * bonus to a sphere's caster level, attack bonus, ranks or DC, and it lands
+ * beside the typed bonus in the same column.
+ */
+console.log('\nthe sphere tables -- a place to send a bonus');
+{
+  const c = new Character(blankDocument({ name: 'Spheres' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Sphere', clBonus: 0, dcBonus: 0, sheetValue: 'Sphere CL / DC' });
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 1, dcBonus: 0 });
+  c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
+  c.addGuileSphere('Study');
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  const magic = () => c.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  const combat = () => c.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics');
+  const guile = () => c.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+
+  // Readable first: the numbers publish under the sphere's slugged name.
+  check('a magic sphere publishes its caster level and DC',
+    [c.scope().sphere.dark.cl, c.scope().sphere.dark.dc, c.scope().sphere.dark.talents],
+    [magic().cl, magic().dc, 0]);
+  check('a combat sphere its attack bonus and DC',
+    [c.scope().sphere.athletics.bab, c.scope().sphere.athletics.dc], [combat().attack, combat().dc]);
+  check('the skill spheres are still there beside them', c.scope().sphere.study.dc, guile().dc);
+  check('and the workbook\'s header row publishes nothing', c.scope().sphere.sphere, undefined);
+  check('the names validate', ['sphere.dark.cl', 'sphere.athletics.bab', 'sphere.study.ranks']
+    .filter((n) => !new NameIndex(c.scopeNames()).has(n)), []);
+
+  // Destinations, decided off the stored rows.
+  const names = c.forwardTargets().list.filter((t) => t.name.startsWith('sphere.')).map((t) => t.name);
+  check('every column is a destination, and the header row is not', names,
+    ['sphere.dark.cl', 'sphere.dark.dc', 'sphere.athletics.bab', 'sphere.athletics.dc',
+      'sphere.study.ranks', 'sphere.study.dc']);
+  check('labelled by the sphere', c.forwardTargets().list.find((t) => t.name === 'sphere.dark.cl')?.label,
+    'Dark: caster level');
+
+  const before = {
+    cl: magic().cl, mdc: magic().dc, attack: combat().attack, cdc: combat().dc, gdc: guile().dc,
+  };
+  const note = (text) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Test', body: text });
+    return () => c.listRemove('notes', at);
+  };
+
+  // Magic: a CL bonus is worth half of itself to the DC, as a typed one is.
+  let drop = note('Dark focus {sphere.dark.cl += 2} and {sphere.dark.dc += 1}.');
+  check('a forwarded CL lands beside the typed one', [magic().clForwarded, magic().clBonusNum, magic().cl],
+    [2, 1, before.cl + 2]);
+  check('and carries half of itself into the DC, with the DC bonus on top',
+    [magic().dcForwarded, magic().dc], [1, before.mdc + 1 + 1]);
+  check('the column still says what was typed in it', c.data.training.magic.sphereBonuses[1].clBonus, 1);
+  check('and the badge knows where it came from',
+    c.forwardedInto('sphere.dark.cl')?.from?.[0]?.where, 'note 1 on Lore');
+  drop();
+  check('gone when the note goes', [magic().cl, magic().dc], [before.cl, before.mdc]);
+
+  // Combat.
+  drop = note('Athletic focus {sphere.athletics.bab += 3} and {sphere.athletics.dc += 2}.');
+  check('a combat sphere takes an attack bonus and a DC bonus',
+    [combat().babForwarded, combat().attack, combat().dcForwarded, combat().dc],
+    [3, Math.min(before.attack + 3, 8), 2, before.cdc + 2]);
+  drop();
+
+  // Guile: the DC lands after the skills; the ranks land before them and
+  // so cost a second pass, which the sheet takes.
+  drop = note('Studious {sphere.study.dc += 2}.');
+  check('a skill sphere takes a DC bonus', [guile().dcForwarded, guile().dc], [2, before.gdc + 2]);
+  drop();
+  drop = note('Studious {sphere.study.ranks += 4}.');
+  check('a rank bonus is early, and read on the second pass', guile().ranksForwarded, 4);
+  // With no talents in the sphere the ranks are owed nothing, so the bonus
+  // is held rather than paid -- the same line the typed Rank+ draws.
+  check('and is held until the sphere has a talent to pay on', guile().ranksGranted, 0);
+  drop();
+
+  // Saved and reopened with a bonus in play: forwarded, not absorbed.
+  drop = note('Dark focus {sphere.dark.cl += 2}.');
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const dark = again.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  check('reopened, the bonus is still forwarded rather than absorbed',
+    [dark.clForwarded, dark.cl, dark.clBonus], [2, before.cl + 2, 1]);
+  check('and the saved row carries nothing of the working',
+    Object.keys(JSON.parse(JSON.stringify(again.toJSON())).training.guile.spheres[0]).sort(),
+    ['dcBonus', 'package', 'rankBonus', 'skill', 'sphere']);
+  drop();
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

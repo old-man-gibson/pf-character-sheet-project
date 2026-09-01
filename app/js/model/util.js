@@ -42,6 +42,20 @@ export function speedForwardKey(sp) {
 }
 
 /**
+ * The name a formula reads a sphere's numbers under, and forwards to --
+ * `sphere.dark` for the Dark sphere, whichever of the three systems it
+ * belongs to; the three lists share no name, so the slug says which.
+ *
+ * A row with no sphere has no name. Nor does the workbook's own header row,
+ * which rides along in an imported list under the word "Sphere" and names
+ * nothing anybody trained in.
+ */
+export function sphereForwardKey(name) {
+  const key = slug(name);
+  return key === 'x' || key === 'sphere' ? null : `sphere.${key}`;
+}
+
+/**
  * A bonus that may be a number or a formula, worked out either way.
  *
  * The one shape every "+N" field on the sheet shares once it is allowed to

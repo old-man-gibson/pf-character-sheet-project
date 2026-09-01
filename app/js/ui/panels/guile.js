@@ -20,7 +20,8 @@ import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { talentCell } from '../talents.js';
-import { sphereNames } from '../../model.js';
+import { sphereForwardKey, sphereNames } from '../../model.js';
+import { forwardedBadge } from '../badges.js';
 import {
   ABILITY_LABELS, EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT,
   TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, expertiseTalents, fmt,
@@ -242,8 +243,10 @@ function guileSpherePanel(model, g) {
         : 'Choose an associated skill and this sphere pays into it.')}">${
   [r.paysRanks ? `${r.ranksGranted || ''}` : r.duplicate ? `<span class="was">${owed}</span>` : '',
     r.competence ? `<span class="dupskill">+${r.competence}</span>` : ''].filter(Boolean).join(' ')}</td>
-          <td class="num">${bonus(r, i, 'rankBonus', 'floor(level / 4)')}</td>
-          <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}</td>
+          <td class="num">${bonus(r, i, 'rankBonus', 'floor(level / 4)')}${
+  forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.ranks` : '')}</td>
+          <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}${
+  forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.dc` : '')}</td>
           <td class="num total"${r.skillIndex >= 0 ? ` title="${esc(`10 + half of ${r.ranks} ranks in ${r.skill}`
       + ` + ${fmt(g.operativeAbilityMod || 0)} operative modifier`)}"` : ''}>${r.dc ?? '—'}</td>
           <td class="num" title="25 ft. + 5 ft. per 2 ranks / 100 ft. + 10 ft. per rank / 400 ft. + 40 ft. per rank">${

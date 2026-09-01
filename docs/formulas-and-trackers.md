@@ -364,6 +364,9 @@ recompute have anywhere to *put* an arriving bonus:
 | `speed.land`, `speed.fly`, … | one movement rate — see below |
 | `speed` | every speed the character has |
 | `class.<name>.level` | levels in one class — see below |
+| `sphere.dark.cl`, `sphere.dark.dc` | a magic sphere's caster level and save DC — the CL+ and DC+ columns of Sphere CL / DC, by the sphere's slugged name |
+| `sphere.athletics.bab`, `sphere.athletics.dc` | a combat sphere's attack bonus and save DC — the BAB+ and DC+ columns of Sphere BAB / DC |
+| `sphere.study.ranks`, `sphere.study.dc` | a skill sphere's granted ranks and save DC — the Rank+ and DC+ columns on the Guile tab |
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |

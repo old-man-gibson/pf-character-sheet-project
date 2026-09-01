@@ -28,7 +28,9 @@ import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { trackerFacts } from './trackers.js';
-import { classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey } from './util.js';
+import {
+  classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey, sphereForwardKey,
+} from './util.js';
 
 /**
  * Forwarded destinations that are totalled *before* the prose forwarding to
@@ -315,6 +317,32 @@ export function characterScope(model) {
     if (key) s.speed[key.slice('speed.'.length)] = Number(sp.final) || 0;
   }
 
+  // The magic and combat spheres join the skill spheres under `sphere.`:
+  // sphere.dark.cl and sphere.dark.dc, sphere.athletics.bab and its dc, each
+  // with the talents taken in it. "Per two caster levels in the Dark sphere"
+  // is a rule about a number this sheet already works out, and the same
+  // names are where a bonus to one of them is sent.
+  const sphereOf = (name) => {
+    const key = sphereForwardKey(name);
+    if (!key) return null;
+    const short = key.slice('sphere.'.length);
+    return (s.sphere[short] ??= {});
+  };
+  for (const r of c.training?.magic?.sphereRows || []) {
+    const into = sphereOf(r.sphere);
+    if (!into) continue;
+    into.cl = Number(r.cl) || 0;
+    into.dc = Number(r.dc) || 0;
+    into.talents = Number(r.talents) || 0;
+  }
+  for (const r of c.training?.combat?.sphereRows || []) {
+    const into = sphereOf(r.sphere);
+    if (!into) continue;
+    into.bab = Number(r.attack) || 0;
+    into.dc = Number(r.dc) || 0;
+    into.talents = Number(r.talents) || 0;
+  }
+
   for (const sk of c.skills) {
     const name = slug(sk.spec ? `${sk.name} ${sk.spec}` : sk.name);
     if (s.skill[name] === undefined) s.skill[name] = sk.bonus;
@@ -503,6 +531,28 @@ export function forwardTargets(model) {
     expand.set('speed', moves);
     list.push({ name: 'speed', label: 'Every speed you have', family: moves });
   }
+
+  // A sphere's numbers, under the names the scope reads them by: a magic
+  // sphere's caster level and save DC, a combat sphere's attack bonus and
+  // DC, a skill sphere's granted ranks and DC. Each lands beside the typed
+  // bonus in the same column of the sphere table and shows there in gold.
+  // Read off the stored rows rather than the worked-out ones, which do not
+  // exist yet on the first pass of a fresh load -- and the destinations are
+  // decided once, on that pass.
+  const training = model.data.training || {};
+  const sphereTargets = (rows, columns) => {
+    for (const r of rows || []) {
+      const key = sphereForwardKey(r.sphere);
+      if (!key) continue;
+      for (const [suffix, what] of columns) {
+        const name = `${key}.${suffix}`;
+        if (!expand.has(name)) add(name, `${String(r.sphere).trim()}: ${what}`);
+      }
+    }
+  };
+  sphereTargets(training.magic?.sphereBonuses, [['cl', 'caster level'], ['dc', 'save DC']]);
+  sphereTargets(training.combat?.sphereBonuses, [['bab', 'attack bonus'], ['dc', 'save DC']]);
+  sphereTargets(training.guile?.spheres, [['ranks', 'ranks'], ['dc', 'save DC']]);
 
   /*
    * The companions, every number of theirs that is rolled or asked for in a
@@ -1091,8 +1141,11 @@ export function forwardsEarly(model) {
   // training pass reads it before any prose has been looked at, and the
   // casting tables it feeds are downstream of that. A speed is early because
   // the speeds resolve before the prose too, and because another speed may
-  // be written to read it.
+  // be written to read it. A skill sphere's ranks are early because they
+  // are paid into a skill, and the skills are totalled before the prose;
+  // every other sphere number settles after it and costs no second pass.
   return Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value
-      && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')));
+      && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')
+        || (name.startsWith('sphere.') && name.endsWith('.ranks'))));
 }
