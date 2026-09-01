@@ -3133,17 +3133,29 @@
      "dmgTokens": [],
      "tokAtk": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "tokDmg": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "totalAtk": 0,
      "totalAtkStr": "+0",
      "tokMultDmg": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "totalDmgDice": {
       "6": 1
@@ -3156,11 +3168,19 @@
      "critMultNum": 2,
      "critAtk": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "critTagged": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "critExtra": {
       "dice": {},
@@ -3235,17 +3255,29 @@
      "dmgTokens": [],
      "tokAtk": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "tokDmg": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "totalAtk": 0,
      "totalAtkStr": "+0",
      "tokMultDmg": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "totalDmgDice": {
       "8": 1
@@ -3258,11 +3290,19 @@
      "critMultNum": 2,
      "critAtk": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "critTagged": {
       "dice": {},
-      "flat": 0
+      "flat": 0,
+      "termDice": {},
+      "termFlat": 0,
+      "terms": [],
+      "queries": []
      },
      "critExtra": {
       "dice": {},
