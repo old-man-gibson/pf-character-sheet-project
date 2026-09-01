@@ -397,7 +397,8 @@ function controlKey(input) {
       : input.dataset.build ? `build:${input.dataset.build}`
         : input.dataset.offset ? `offset:${input.dataset.offset}`
           : input.dataset.pick ? `pick:${input.dataset.pick}`
-            : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
+            : input.dataset.sphereBonus ? `spherebonus:${input.dataset.sphereBonus}`
+              : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
   return attr;
 }
 
@@ -1315,7 +1316,10 @@ export class CharacterSheetElement extends HTMLElement {
     this.#render();
     if (!key) return;
     const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-    const attr = { set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick', extsearch: 'data-ext-search' }[kind];
+    const attr = {
+      set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
+      spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search',
+    }[kind];
     const next = this.shadowRoot.querySelector(`[${attr}="${CSS.escape(ref)}"]`);
     if (!next) return;
     // A formula field that regains focus keeps showing its source. Set that
@@ -5661,6 +5665,17 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    // A sphere table's bonus cell: the table lists every sphere and the
+    // document stores a row only where something was typed, so the cell is
+    // addressed by side, sphere and column rather than by a row index.
+    root.querySelectorAll('[data-sphere-bonus]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [side, sphere, field] = input.dataset.sphereBonus.split('|');
+        this.#model.setSphereBonus(side, sphere, field, readControl(input));
+        this.#rerender(input);
+      });
+    });
+
     root.querySelectorAll('[data-offset]').forEach((input) => {
       input.addEventListener('change', () => {
         // A number, or a formula the model keeps as text -- readControl
@@ -6541,7 +6556,8 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-guile-sphere':
-        this.#model.addGuileSphere();
+        // Named when the button sits on a sphere in the All spheres list.
+        this.#model.addGuileSphere(button?.dataset.sphere || '');
         this.#render();
         break;
       case 'add-customization': {

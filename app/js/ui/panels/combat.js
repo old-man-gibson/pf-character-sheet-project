@@ -656,34 +656,39 @@ function magicGlobalsPanel(model, m) {
 
 
 function sphereBonusPanel(model, sideKey, side) {
+    // Every sphere the catalogue knows is a row (see sphereTableNames), and
+    // every row is worked out. The ones in the table are the character's:
+    // a talent in the sphere from any source -- a class level, the
+    // tradition, a bonus talent, a customized weapon, a technique -- or a
+    // bonus typed or forwarded into it. The rest fold under All spheres.
     const rows = side.sphereRows || [];
     const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus
       || r.clForwarded || r.babForwarded || r.dcForwarded);
     const isMagic = sideKey === 'magic';
-    const list = `training.${sideKey}.sphereBonuses`;
     // A number, or a rule: the model resolves it into `<field>Num` and flags
     // a bad one in `<field>Error`, so the cell shows the answer and the
     // source on a click, like every other formula field. A bonus forwarded
     // here from prose is the badge beside it, under the sphere's own name --
     // sphere.dark.cl, sphere.athletics.bab -- never folded into the field.
-    const bonus = (r, i, field, example, into) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
-      width: '4rem',
-      value: r[`${field}Num`],
-      error: r[`${field}Error`],
-      title: `A number, or a formula — e.g. ${example}`,
-    }) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '');
-    const render = (r) => {
-      const i = (side.sphereBonuses || []).findIndex((x) => x.sphere === r.sphere);
-      return `<tr>
+    // The cell is addressed by side, sphere and column: the document keeps
+    // a row only where something was typed, and the first edit writes it.
+    const bonus = (r, field, example, into) => exprField(
+      `data-sphere-bonus="${esc(`${sideKey}|${r.sphere}|${field}`)}"`, r[field], {
+        width: '4rem',
+        value: r[`${field}Num`],
+        error: r[`${field}Error`],
+        title: `A number, or a formula — e.g. ${example}`,
+      },
+    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '');
+    const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
         <td class="num">${isMagic
-    ? bonus(r, i, 'clBonus', 'floor(level / 4)', 'cl')
-    : bonus(r, i, 'rankBonus', 'floor(level / 4)', 'bab')}</td>
-        <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
+    ? bonus(r, 'clBonus', 'floor(level / 4)', 'cl')
+    : bonus(r, 'rankBonus', 'floor(level / 4)', 'bab')}</td>
+        <td class="num">${bonus(r, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
       </tr>`;
-    };
     return `<section class="panel">
       <h3>${isMagic ? 'Sphere CL / DC' : 'Sphere BAB / DC'}</h3>
       <div class="tablewrap"><table>
@@ -699,9 +704,10 @@ function sphereBonusPanel(model, sideKey, side) {
   isMagic ? 'CL+' : 'BAB+'}</th>
           <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${isMagic ? 'CL / DC' : 'BAB / DC'}</th></tr></thead>
-        <tbody>${active.map(render).join('')}</tbody>
+        <tbody>${active.length ? active.map(render).join('')
+    : `<tr><td colspan="5" class="hint">No spheres yet — a talent in one, from a class level, the tradition or a bonus talent, puts it here. Every sphere is worked out below.</td></tr>`}</tbody>
       </table></div>
-      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres</summary>
+      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rows.length - active.length})</summary>
         <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
       </details>
       ${!isMagic ? '<p class="hint">Alchemy keys off Craft (alchemy) ranks; Beastmastery off Handle Animal / Ride.</p>' : ''}

@@ -23,6 +23,7 @@ import {
 import { NameIndex, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
+import { sphereTableNames } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
@@ -536,23 +537,23 @@ export function forwardTargets(model) {
   // sphere's caster level and save DC, a combat sphere's attack bonus and
   // DC, a skill sphere's granted ranks and DC. Each lands beside the typed
   // bonus in the same column of the sphere table and shows there in gold.
-  // Read off the stored rows rather than the worked-out ones, which do not
-  // exist yet on the first pass of a fresh load -- and the destinations are
-  // decided once, on that pass.
+  // Read off the names the tables are drawn from rather than the worked-out
+  // rows, which do not exist yet on the first pass of a fresh load -- and
+  // the destinations are decided once, on that pass.
   const training = model.data.training || {};
-  const sphereTargets = (rows, columns) => {
-    for (const r of rows || []) {
-      const key = sphereForwardKey(r.sphere);
+  const sphereTargets = (names, columns) => {
+    for (const sphere of names) {
+      const key = sphereForwardKey(sphere);
       if (!key) continue;
       for (const [suffix, what] of columns) {
         const name = `${key}.${suffix}`;
-        if (!expand.has(name)) add(name, `${String(r.sphere).trim()}: ${what}`);
+        if (!expand.has(name)) add(name, `${String(sphere).trim()}: ${what}`);
       }
     }
   };
-  sphereTargets(training.magic?.sphereBonuses, [['cl', 'caster level'], ['dc', 'save DC']]);
-  sphereTargets(training.combat?.sphereBonuses, [['bab', 'attack bonus'], ['dc', 'save DC']]);
-  sphereTargets(training.guile?.spheres, [['ranks', 'ranks'], ['dc', 'save DC']]);
+  sphereTargets(sphereTableNames(model, 'magic'), [['cl', 'caster level'], ['dc', 'save DC']]);
+  sphereTargets(sphereTableNames(model, 'combat'), [['bab', 'attack bonus'], ['dc', 'save DC']]);
+  sphereTargets((training.guile?.spheres || []).map((r) => r.sphere), [['ranks', 'ranks'], ['dc', 'save DC']]);
 
   /*
    * The companions, every number of theirs that is rolled or asked for in a

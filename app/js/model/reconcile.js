@@ -17,7 +17,7 @@ import { emit } from './events.js';
 import { applyGestalt } from './progression.js';
 import { forwarded } from './scope.js';
 import { resolveDefenceBonuses } from './stats/defenses.js';
-import { evaluateAmount, flatNames, getPath, safe } from './util.js';
+import { evaluateAmount, flatNames, getPath, safe, sphereForwardKey } from './util.js';
 
 /** Where a non-prose formula lives, for a reader who needs to go and find it. */
 const SOURCE_WORD = {
@@ -514,8 +514,12 @@ export function audit(model) {
         const unknown = info.variables.filter((v) => !known.has(v));
         const error = row[`${field}Error`] || info.error
           || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+        // By the sphere's name where the table is the catalogue and a
+        // sphere appears once; by position on the guile side, where a row
+        // is the player's and two may name the same sphere.
+        const at = side === 'guile' ? i : (sphereForwardKey(row.sphere) || `sphere.${i}`).slice('sphere.'.length);
         sphereFormulas.push({
-          id: `sphere-${side}-${i}-${field}`,
+          id: `sphere-${side}-${at}-${field}`,
           name: `${row.sphere || 'Sphere'} ${label}`,
           source: 'player',
           formula: text,

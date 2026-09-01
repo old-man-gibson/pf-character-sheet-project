@@ -77,7 +77,7 @@ import {
   addCustomization, applyBudget, blendedClasses, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
   setTalentEntry,
-  removeCustomization, setBlended, setCustomizationActive, setCustomizationRule,
+  removeCustomization, setBlended, setCustomizationActive, setCustomizationRule, setSphereBonus,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
 import {
@@ -538,6 +538,7 @@ export class Character {
   removeCustomization(...a) { return removeCustomization(this, ...a); }
   setCustomizationRule(...a) { return setCustomizationRule(this, ...a); }
   setCustomizationActive(...a) { return setCustomizationActive(this, ...a); }
+  setSphereBonus(...a) { return setSphereBonus(this, ...a); }
   #sphereTally(...a) { return sphereTally(this, ...a); }
   #pairBlended(...a) { return pairBlended(this, ...a); }
   setBlended(...a) { return setBlended(this, ...a); }

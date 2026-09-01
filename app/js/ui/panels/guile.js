@@ -258,6 +258,23 @@ function guileSpherePanel(model, g) {
       <div style="margin-top:6px">
         <button data-action="add-guile-sphere">+ Add sphere</button>
       </div>
+      ${(() => {
+    // The rest of the catalogue, folded: a skill sphere is on the table
+    // because a talent went into it or the player put it there, and the
+    // ones that are neither still have to be findable -- with the choice
+    // of skill that makes the row, which is why each carries an Add.
+    const have = new Set(rows.map((r) => String(r.sphere || '').trim().toLowerCase()));
+    const rest = spheres.filter((s) => !have.has(String(s).trim().toLowerCase()));
+    if (!rest.length) return '';
+    return `<details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rest.length})</summary>
+        <div class="tablewrap"><table class="guilespheres"><tbody>${rest.map((s) => `<tr>
+          <td>${esc(s)}</td>
+          <td class="hint">no talents — choose its associated skill to put it on the table</td>
+          <td class="tools"><button data-action="add-guile-sphere" data-sphere="${esc(s)}"
+            title="${esc(`Add ${s} to the table`)}">+ Add</button></td>
+        </tr>`).join('')}</tbody></table></div>
+      </details>`;
+  })()}
       <p class="hint">
         A skill sphere has no caster level and no practitioner level. Its save DC is
         <strong>10 + half your ranks in the associated skill + your operative modifier</strong>,

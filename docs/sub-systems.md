@@ -181,6 +181,12 @@ sheets contain `#ERROR!`s and internally inconsistent caches), the app shows a r
 
 **Sphere BAB/CL/DC tables** per sphere with BAB+ (or CL+) and DC+ bonus fields — Alchemy
 keys off Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
+Every sphere the catalogue knows is worked out; the table itself shows the character's —
+any sphere with a talent in it from a class level, the tradition, a bonus talent, a
+customized weapon or a technique, or with a bonus typed or forwarded into it — and the
+rest fold under **All spheres**. The document stores a row only where a bonus was typed.
+The Guile tab folds its catalogue the same way, with an **Add** on each sphere, since a
+skill sphere's row is the choice of associated skill.
 Each bonus field takes a number or a formula (`floor(level / 4)`), as do Rank+ and DC+
 on the Guile tab; a formula shows what it comes to, its source on a click, and is listed
 in the Formula Audit.

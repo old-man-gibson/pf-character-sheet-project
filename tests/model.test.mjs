@@ -65,6 +65,8 @@ import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline } from '../app/js/ui/rows.js';
+import * as combatPanels from '../app/js/ui/panels/combat.js';
+import * as guilePanels from '../app/js/ui/panels/guile.js';
 
 let pass = 0;
 let fail = 0;
@@ -9067,12 +9069,12 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
 
   // The audit lists every one of them.
   const audit = c.audit();
-  check('the audit lists them', ['sphere-magic-0-clBonus', 'sphere-magic-0-dcBonus',
-    'sphere-combat-0-rankBonus', 'sphere-combat-0-dcBonus', 'sphere-guile-0-rankBonus',
+  check('the audit lists them', ['sphere-magic-dark-clBonus', 'sphere-magic-dark-dcBonus',
+    'sphere-combat-athletics-rankBonus', 'sphere-combat-athletics-dcBonus', 'sphere-guile-0-rankBonus',
     'sphere-guile-0-dcBonus'].map((id) => audit.find((r) => r.id === id)?.status), Array(6).fill('ok'));
   check('by the column they sit in',
-    [audit.find((r) => r.id === 'sphere-magic-0-clBonus')?.name,
-      audit.find((r) => r.id === 'sphere-combat-0-rankBonus')?.name,
+    [audit.find((r) => r.id === 'sphere-magic-dark-clBonus')?.name,
+      audit.find((r) => r.id === 'sphere-combat-athletics-rankBonus')?.name,
       audit.find((r) => r.id === 'sphere-guile-0-rankBonus')?.name],
     ['Dark CL+', 'Athletics BAB+', 'Study Rank+']);
 
@@ -9080,7 +9082,7 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
   c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 'nope');
   check('a broken rule is worth nothing and carries its error',
     [magic().clBonusNum, magic().cl, typeof magic().clBonusError], [0, globalCL(), 'string']);
-  check('and the audit flags it', c.audit().find((r) => r.id === 'sphere-magic-0-clBonus')?.status, 'error');
+  check('and the audit flags it', c.audit().find((r) => r.id === 'sphere-magic-dark-clBonus')?.status, 'error');
   c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 1);
   check('a number is still a number', [magic().clBonusNum, magic().clBonusError, magic().cl], [1, null, globalCL() + 1]);
 
@@ -9094,8 +9096,9 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
   const again = new Character(doc);
   const g2 = again.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
   check('and reopened, every rule still reads',
-    [again.data.training.magic.sphereRows[0].dcBonusNum,
-      again.data.training.combat.sphereRows[0].rankBonusNum, g2.rankBonusNum, g2.dcBonusNum],
+    [again.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark').dcBonusNum,
+      again.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics').rankBonusNum,
+      g2.rankBonusNum, g2.dcBonusNum],
     [6, 4, 3, 2]);
   check('with nothing drifted', again.diffFromSource(), []);
 }
@@ -9129,11 +9132,14 @@ console.log('\nthe sphere tables -- a place to send a bonus');
   check('the names validate', ['sphere.dark.cl', 'sphere.athletics.bab', 'sphere.study.ranks']
     .filter((n) => !new NameIndex(c.scopeNames()).has(n)), []);
 
-  // Destinations, decided off the stored rows.
+  // Destinations: every sphere on the tables, which is the whole catalogue,
+  // and never the workbook's header row.
   const names = c.forwardTargets().list.filter((t) => t.name.startsWith('sphere.')).map((t) => t.name);
-  check('every column is a destination, and the header row is not', names,
+  check('every column is a destination',
     ['sphere.dark.cl', 'sphere.dark.dc', 'sphere.athletics.bab', 'sphere.athletics.dc',
-      'sphere.study.ranks', 'sphere.study.dc']);
+      'sphere.study.ranks', 'sphere.study.dc', 'sphere.alteration.cl', 'sphere.alchemy.bab']
+      .filter((n) => !names.includes(n)), []);
+  check('and the header row is not', names.some((n) => n.startsWith('sphere.sphere.')), false);
   check('labelled by the sphere', c.forwardTargets().list.find((t) => t.name === 'sphere.dark.cl')?.label,
     'Dark: caster level');
 
@@ -9187,6 +9193,67 @@ console.log('\nthe sphere tables -- a place to send a bonus');
     Object.keys(JSON.parse(JSON.stringify(again.toJSON())).training.guile.spheres[0]).sort(),
     ['dcBonus', 'package', 'rankBonus', 'skill', 'sphere']);
   drop();
+}
+
+/*
+ * The sphere tables list the whole catalogue, worked out, whether or not
+ * the document stores a row -- a character built here rather than imported
+ * has none. A sphere with a talent in it, from any source, is on the table;
+ * the rest fold away; and the first edit to one writes its row.
+ */
+console.log('\nthe sphere tables -- every sphere, and only the trained ones in front');
+{
+  const c = new Character(blankDocument({ name: 'Fresh' }));
+  const magicRows = () => c.data.training.magic.sphereRows;
+  const combatRows = () => c.data.training.combat.sphereRows;
+  check('nothing is stored on a fresh sheet',
+    [c.data.training.magic.sphereBonuses, c.data.training.combat.sphereBonuses], [[], []]);
+  check('but every sphere is on the table, in catalogue order',
+    [magicRows().length >= MAGIC_SPHERES.length, magicRows().slice(0, 3).map((r) => r.sphere),
+      combatRows().length >= COMBAT_SPHERES.length, combatRows()[0].sphere],
+    [true, MAGIC_SPHERES.slice(0, 3), true, COMBAT_SPHERES[0]]);
+  const dark = () => magicRows().find((r) => r.sphere === 'Dark');
+  check('and worked out', [dark().cl, dark().dc, dark().talents],
+    [c.data.training.magic.globalCL, c.data.training.magic.globalDC, 0]);
+  check('readable and targetable without a row',
+    [c.scope().sphere.dark.cl, c.forwardTargets().list.some((t) => t.name === 'sphere.alteration.cl')],
+    [dark().cl, true]);
+
+  // A talent from a class level puts the sphere in front.
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', levels: [{ level: 1, talent: 'Dark Sphere', sphere: 'Dark' }],
+  });
+  check('a class talent counts', dark().talents, 1);
+  const magicHtml = combatPanels.renderMagicPanel(c);
+  const start = magicHtml.indexOf('<h3>Sphere CL / DC');
+  const foldAt = magicHtml.indexOf('<details', start);
+  check('the panel rendered its table and its fold', [start > 0, foldAt > start], [true, true]);
+  const table = magicHtml.slice(start, foldAt);
+  const folded = magicHtml.slice(foldAt);
+  check('and the table shows it, with the rest folded',
+    [table.includes('<td>Dark</td>'), table.includes('<td>Alteration</td>'), folded.includes('<td>Alteration</td>')],
+    [true, false, true]);
+
+  // The first edit to a sphere writes its row; a later one finds it.
+  c.setSphereBonus('magic', 'Weather', 'clBonus', 'floor(level / 4)');
+  check('an edit writes the one row', c.data.training.magic.sphereBonuses,
+    [{ sphere: 'Weather', clBonus: 'floor(level / 4)', dcBonus: 0 }]);
+  c.setSphereBonus('magic', 'Weather', 'dcBonus', 2);
+  check('and the next finds it', c.data.training.magic.sphereBonuses.length, 1);
+  const weather = () => magicRows().find((r) => r.sphere === 'Weather');
+  check('the row reads the edit', [weather().clBonus, weather().dcBonusNum], ['floor(level / 4)', 2]);
+  c.setSphereBonus('combat', 'Athletics', 'rankBonus', 1);
+  check('the combat side names its column', c.data.training.combat.sphereBonuses,
+    [{ sphere: 'Athletics', rankBonus: 1, dcBonus: 0 }]);
+  c.setSphereBonus('combat', 'Athletics', 'clBonus', 1);
+  check('and refuses the other side\'s', c.data.training.combat.sphereBonuses[0].clBonus, undefined);
+
+  // The guile tab folds the catalogue the same way, and Add names the sphere.
+  const guileHtml = guilePanels.renderGuilePanel(c);
+  check('the guile tab offers the rest of its catalogue',
+    guileHtml.includes('data-action="add-guile-sphere" data-sphere="Study"'), true);
+  c.addGuileSphere('Study');
+  check('and adds the one named', c.data.training.guile.spheres.map((r) => r.sphere), ['Study']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
