@@ -1695,7 +1695,7 @@ label.fld.tall textarea { min-height: 58px; }
    language slots Int grants -- gets the same box as the fields beside it,
    drawn as read-only, so a computed number is not a stray word under a
    heading that the eye skips over. */
-label.fld > .value {
+label.fld > .value, .rovalue {
   display: flex; align-items: center; min-height: 1.95rem; box-sizing: border-box;
   padding: 4px 7px; font-size: 0.85rem; font-weight: 640;
   font-variant-numeric: tabular-nums; color: var(--cs-accent);
@@ -1703,6 +1703,12 @@ label.fld > .value {
   text-transform: none; letter-spacing: 0;
 }
 label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+/* The same box in a table cell, sized like the field it stands in for: an
+   alternate attack's Other, which is the attack above it's and not its own. */
+.rovalue {
+  display: inline-flex; justify-content: flex-end; width: 3.6rem; min-height: 1.85rem;
+  vertical-align: middle; cursor: default;
+}
 /* Wraps, because a pair is a row of controls inside something that is itself
    a wrapping row: without this the outer row wraps and the pair does not, so
    on a narrow screen one long pair carries the page sideways with it. */

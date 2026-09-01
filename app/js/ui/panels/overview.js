@@ -99,7 +99,7 @@ import {
   THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
 } from '../../tracker-style.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
-import { abilitySelect, area, check, num, roField, select, text } from '../fields.js';
+import { abilitySelect, area, check, num, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
@@ -1481,9 +1481,11 @@ function attackPanel(model) {
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
           // An alternate is the base attack with one ability swapped, so it
           // is already carrying the base's Other -- editing it here would be
-          // editing the same number twice.
+          // editing the same number twice. The number is shown all the same,
+          // read-only, so the row adds up in front of the reader.
           const other = alt
-            ? `<td class="num"><span class="hint" title="${esc(`Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}">as ${esc(ATTACK_MODE_LABELS[alt].toLowerCase())}</span></td>`
+            ? `<td class="num" data-label="Other">${roValue(model.offsetOf(ATTACK_MODE_KEY[alt]),
+              `Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}</td>`
             : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
           return `
           ${/* Not a stacked table, deliberately. Folded to a name and a total it

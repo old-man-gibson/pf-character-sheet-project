@@ -596,9 +596,9 @@ on each says what is underneath it (*Show the alternate — Wis, +36*). An alter
 not a second sum:
 it is its own mode's total with one modifier swapped for the other, so it shares the
 BAB, the misc bonus, the size modifier and the import reconciliation, and cannot drift
-from the number above it. Its **Other** cell says *as melee* for the same reason — the
-offset it carries belongs to the attack above it, and editing it in two places would be
-editing one number twice.
+from the number above it. Its **Other** cell is a read-only box showing the attack
+above it's, for the same reason — the offset it carries belongs to that attack, and
+editing it in two places would be editing one number twice.
 
 **Other** on an attack row is the import reconciliation made visible: what the source
 workbook's own attack cell claimed, less what this sheet can work out from BAB and the
