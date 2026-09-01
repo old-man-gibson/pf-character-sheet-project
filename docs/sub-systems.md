@@ -179,8 +179,8 @@ Where a character's own workbook cached a different number (Nico/Narockro/Saburo
 sheets contain `#ERROR!`s and internally inconsistent caches), the app shows a red
 "sheet: N" hint beside the computed value.
 
-**Sphere BAB/CL/DC tables** per sphere with rank/DC bonus fields — Alchemy keys off
-Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
+**Sphere BAB/CL/DC tables** per sphere with BAB+ (or CL+) and DC+ bonus fields — Alchemy
+keys off Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
 
 **Bonus skill ranks**: 5 ranks per talent in the associated sphere, capped at level,
 toggleable per row, flowing straight into the Skills tab's Spheres column. Light Body

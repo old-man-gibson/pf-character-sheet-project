@@ -674,7 +674,16 @@ function sphereBonusPanel(sideKey, side) {
       <h3>${isMagic ? 'Sphere CL / DC' : 'Sphere BAB / DC'}</h3>
       <div class="tablewrap"><table>
         <thead><tr><th>Sphere</th><th class="num">Talents</th>
-          <th class="num">${isMagic ? 'CL+' : 'Rank+'}</th><th class="num">DC+</th>
+          ${/* BAB+, not Rank+: the column adds to the sphere's attack bonus,
+                which is BAB for every sphere but the two that key off skill
+                ranks, and those are named in the hint under the table. The
+                skill spheres' Rank+ is on the Guile tab, where ranks are the
+                thing being added to. */''}
+          <th class="num" title="${esc(isMagic
+    ? 'A bonus to this sphere’s caster level only'
+    : 'A bonus to this sphere’s attack bonus only — its BAB, or the skill ranks Alchemy and Beastmastery use instead')}">${
+  isMagic ? 'CL+' : 'BAB+'}</th>
+          <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${isMagic ? 'CL / DC' : 'BAB / DC'}</th></tr></thead>
         <tbody>${active.map(render).join('')}</tbody>
       </table></div>
