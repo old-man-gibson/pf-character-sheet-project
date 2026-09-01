@@ -3383,8 +3383,7 @@
    "customizations": [],
    "tally": {},
    "tallyOwn": {},
-   "practitionerDC": 13,
-   "sphereRows": []
+   "practitionerDC": 13
   },
   "magic": {
    "classes": [],
@@ -3434,8 +3433,7 @@
    "totalSP": 0,
    "spOnEssence": 0,
    "spShort": 0,
-   "availableSP": 0,
-   "sphereRows": []
+   "availableSP": 0
   },
   "guile": {
    "classes": [],
