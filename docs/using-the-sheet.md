@@ -608,6 +608,10 @@ the same column the AC and save tables have, and for the same reason — left hi
 is the only place those bonuses live, so an attack bonus nobody can account for could
 be neither found nor corrected. A bonus this sheet forwards itself is *not* folded into
 it: that one is written down, so it stays forwarded and shows in gold beside the field.
+Every **Other** field — here, on the AC and save tables, and on the hit points — takes a
+number or a formula, so a bonus that grows with the level is written as the rule it is
+(`floor(level / 4)`) and keeps up; the field shows what it comes to, and the source on a
+click.
 
 **Speed** takes its bonus as a formula, because that is where class features land:
 a monk's fast movement is `floor(level / 3) * 10`, and written that way it keeps up

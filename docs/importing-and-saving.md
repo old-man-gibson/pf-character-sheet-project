@@ -37,9 +37,12 @@ The UI shows which values have drifted from the source sheet.
 
 Offsets are ordinary editable fields, not hidden bookkeeping: AC, touch, flat-footed
 and CMD carry one each in the Overview's Defense panel, and the three saves in the
-Saves panel, under **Other**. Nothing extra is stored for an edited one: the offset is
-recovered on load as `savedTotal − computedFromVisibleParts`, so it round-trips through
-`localStorage` and Export JSON exactly as an imported one does.
+Saves panel, under **Other**. Nothing extra is stored for one edited to a number: the
+offset is recovered on load as `savedTotal − computedFromVisibleParts`, so it round-trips
+through `localStorage` and Export JSON exactly as an imported one does. One written as a
+**formula** (`floor(level / 4)`) is the one exception, because a rule cannot be recovered
+from the number it came to: the text is kept on the document under `otherFormulas`, keyed
+by the stat it belongs to, and worked out again on every load.
 
 Most of what used to sit in those offsets is now itemised — see
 [Save & AC bonuses](using-the-sheet.md#save--ac-bonuses) — and what remains is whatever the export could

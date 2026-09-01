@@ -66,7 +66,8 @@ import {
   setClassFeatureRuleGroup, setColumnWidth, setProgressionClass,
 } from './progression.js';
 import {
-  audit, diffFromSource, formulaProblems, offsetOf, orphans, reconcile, setOffset,
+  audit, diffFromSource, formulaProblems, offsetError, offsetOf, offsetSource, orphans, reconcile,
+  resolveOffsets, setOffset,
 } from './reconcile.js';
 import {
   characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly,
@@ -211,6 +212,10 @@ export class Character {
     const c = this.data;
     this.#applyMythic();
     this.#refreshAbilities();
+    // An offset written as a formula is worked out here, once per pass and
+    // before anything that reads one: the hit points under applyGestalt,
+    // and the derived stats below.
+    this.#resolveOffsets();
     this.#applyGestalt();
     this.#resolveDefenceBonuses();
 
@@ -219,7 +224,7 @@ export class Character {
       // additions and are deliberately kept apart: the offset is what the
       // source workbook added and this sheet cannot see, while the forwarded
       // amount is a rule the player wrote down and can point at.
-      const value = safe(() => d.compute(c), 0) + (this.offsets[d.key] || 0)
+      const value = safe(() => d.compute(c), 0) + this.offsetOf(d.key)
         + this.#forwarded(FORWARD_BY_DERIVED[d.key]);
       if (d.key === 'initiative') c.hp.initiative = value;
       else setPath(c, d.key, value);
@@ -379,6 +384,9 @@ export class Character {
   // reconcile.js
   #reconcile(...a) { return reconcile(this, ...a); }
   offsetOf(...a) { return offsetOf(this, ...a); }
+  offsetSource(...a) { return offsetSource(this, ...a); }
+  offsetError(...a) { return offsetError(this, ...a); }
+  #resolveOffsets(...a) { return resolveOffsets(this, ...a); }
   setOffset(...a) { return setOffset(this, ...a); }
   diffFromSource(...a) { return diffFromSource(this, ...a); }
   audit(...a) { return audit(this, ...a); }

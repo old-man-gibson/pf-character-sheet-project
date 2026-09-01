@@ -41,6 +41,31 @@ export function speedForwardKey(sp) {
   return head ? `speed.${slug(head)}` : null;
 }
 
+/**
+ * A bonus that may be a number or a formula, worked out either way.
+ *
+ * The one shape every "+N" field on the sheet shares once it is allowed to
+ * be written as a rule: a plain number is itself, a string is evaluated in
+ * the scope handed in, and what comes back is an integer -- a bonus to a
+ * caster level or a save is one -- with the error, if the formula had one,
+ * kept beside it for the field and the audit to show.
+ */
+export function evaluateAmount(raw, scope) {
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      const v = Number(evaluateFormula(raw, scope));
+      return { value: Number.isFinite(v) ? Math.floor(v) : 0, error: null };
+    } catch (err) {
+      return { value: 0, error: err.message };
+    }
+  }
+  return { value: Number(raw) || 0, error: null };
+}
+
+/** A stored amount, kept as the formula it was typed as or read as a number. */
+export const amountOrText = (v) => (typeof v === 'string' && v.trim() !== '' && !/^-?\d+(\.\d+)?$/.test(v.trim())
+  ? v : Number(v) || 0);
+
 export function getPath(obj, path) {
   return String(path).split('.').reduce((a, k) => (a == null ? undefined : a[k]), obj);
 }

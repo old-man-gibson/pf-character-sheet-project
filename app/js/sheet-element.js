@@ -5663,7 +5663,9 @@ export class CharacterSheetElement extends HTMLElement {
 
     root.querySelectorAll('[data-offset]').forEach((input) => {
       input.addEventListener('change', () => {
-        this.#model.setOffset(input.dataset.offset, Number(input.value) || 0);
+        // A number, or a formula the model keeps as text -- readControl
+        // tells the two apart the way it does for every other expr field.
+        this.#model.setOffset(input.dataset.offset, readControl(input));
         this.#rerender(input);
       });
     });

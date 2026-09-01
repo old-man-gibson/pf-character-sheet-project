@@ -17,7 +17,7 @@ import { emit } from './events.js';
 import { applyGestalt } from './progression.js';
 import { forwarded } from './scope.js';
 import { resolveDefenceBonuses } from './stats/defenses.js';
-import { flatNames, getPath, safe } from './util.js';
+import { evaluateAmount, flatNames, getPath, safe } from './util.js';
 
 /** Where a non-prose formula lives, for a reader who needs to go and find it. */
 const SOURCE_WORD = {
@@ -151,6 +151,7 @@ export function describeSource(path) {
 
 /** Compute the one-time offsets that make imported values reproduce exactly. */
 export function reconcile(model) {
+  seedOffsetFormulas(model);
   applyMythic(model);
   refreshAbilities(model);
   applyGestalt(model);
@@ -171,11 +172,55 @@ export function reconcile(model) {
     // this runs a second time once forwarded bonuses are known, and by then
     // `data` holds what the first pass worked out rather than what was saved.
     const target = Number(model.imported[d.key]) || 0;
+    // An offset written as a formula is not measured: the saved total holds
+    // what the formula came to when it was saved, and the formula is what it
+    // means. See seedOffsetFormulas.
+    if (typeof model.offsets[d.key] === 'string') continue;
     // An offset is what the source workbook added and this sheet cannot see.
     // A bonus this sheet forwards here is not that -- it is visible, it is
     // written down, and it was already in the saved figure -- so it comes
     // off before the difference is called an offset.
     model.offsets[d.key] = target - bare - forwarded(model, FORWARD_BY_DERIVED[d.key]);
+  }
+}
+
+/**
+ * The offsets that are formulas rather than measurements.
+ *
+ * An offset is normally recovered on load as the saved total less what the
+ * visible parts come to, and nothing extra is stored. One written as a rule
+ * -- `floor(level / 4)` in the Other column of a save -- cannot be recovered
+ * that way: the saved total holds what the rule came to at the time, not the
+ * rule. So the text is kept on the document under `otherFormulas`, filed by
+ * the same key the offset is, and on load the offset *is* the formula;
+ * `resolveOffsets` turns it into a number every pass, against the sheet as it
+ * then stands.
+ */
+export function seedOffsetFormulas(model) {
+  const formulas = model.data.otherFormulas;
+  if (!formulas || typeof formulas !== 'object') return;
+  for (const [key, text] of Object.entries(formulas)) {
+    if (typeof text === 'string' && text.trim() && offsetKey(key)) model.offsets[key] = text;
+  }
+}
+
+/**
+ * Work out every formula offset against the scope as it stands.
+ *
+ * Runs at the top of each compute pass, before anything the offsets feed:
+ * hit points and the derived stats read the answers through offsetOf. One
+ * scope for all of them, built only if there is a formula to read it.
+ */
+export function resolveOffsets(model) {
+  model.offsetValues = {};
+  model.offsetErrors = {};
+  let scope = null;
+  for (const [key, raw] of Object.entries(model.offsets)) {
+    if (typeof raw !== 'string') continue;
+    scope ??= model.scope();
+    const { value, error } = evaluateAmount(raw, scope);
+    model.offsetValues[key] = value;
+    model.offsetErrors[key] = error;
   }
 }
 
@@ -196,20 +241,54 @@ export const offsetKey = (key) => key === 'hp.total'
  * ABP, resistance bonuses, traits).
  */
 export function offsetOf(model, key) {
-  return Number(model.offsets[key]) || 0;
+  const raw = model.offsets[key];
+  if (typeof raw === 'string') return Number(model.offsetValues?.[key]) || 0;
+  return Number(raw) || 0;
+}
+
+/** The offset as it was written: the formula's text, or the number. */
+export function offsetSource(model, key) {
+  const raw = model.offsets[key];
+  return typeof raw === 'string' ? raw : Number(raw) || 0;
+}
+
+/** What went wrong with a formula offset, or null. */
+export function offsetError(model, key) {
+  return model.offsetErrors?.[key] || null;
+}
+
+/** A human name for the stat an offset belongs to. */
+export function offsetLabel(key) {
+  if (key === 'hp.total') return 'Hit points';
+  return DERIVED.find((d) => d.key === key)?.label || key;
 }
 
 /**
  * Edit that offset. It is the only place a flat AC or save bonus can go, so
  * it is a real field rather than hidden bookkeeping.
  *
- * Nothing extra is stored: the offset is recovered on load as
+ * A number stores nothing extra: the offset is recovered on load as
  * `savedTotal - computedFromVisibleParts`, so an edited one round-trips
- * through localStorage and Export JSON exactly as an imported one does.
+ * through localStorage and Export JSON exactly as an imported one does. A
+ * formula is kept as text under `otherFormulas`, because a rule is not
+ * recoverable from the number it came to -- see seedOffsetFormulas.
  */
 export function setOffset(model, key, value) {
   if (!offsetKey(key)) return model;
-  model.offsets[key] = Number(value) || 0;
+  const text = typeof value === 'string' ? value.trim() : '';
+  const numeric = typeof value !== 'string' ? Number(value) || 0
+    : text === '' ? 0
+      : /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : null;
+  if (numeric === null) {
+    model.data.otherFormulas = { ...(model.data.otherFormulas || {}), [key]: text };
+    model.offsets[key] = text;
+  } else {
+    if (model.data.otherFormulas) {
+      delete model.data.otherFormulas[key];
+      if (!Object.keys(model.data.otherFormulas).length) delete model.data.otherFormulas;
+    }
+    model.offsets[key] = numeric;
+  }
   model.recompute();
   emit(model, { type: 'set', path: `offset:${key}`, value });
   return model;
@@ -400,6 +479,29 @@ export function audit(model) {
       };
     });
 
+  // The Other column, where it holds a rule rather than a number.
+  const otherFormulas = Object.entries(model.data.otherFormulas || {})
+    .filter(([key, text]) => typeof text === 'string' && text.trim() && offsetKey(key))
+    .map(([key, text]) => {
+      const info = analyse(text);
+      const unknown = info.variables.filter((v) => !known.has(v));
+      const error = offsetError(model, key) || info.error
+        || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+      return {
+        id: `other-${key}`,
+        name: `${offsetLabel(key)} — Other`,
+        source: 'player',
+        formula: text,
+        reads: info.variables,
+        functions: info.functions,
+        unknownReferences: unknown,
+        value: error ? null : offsetOf(model, key),
+        error,
+        status: error ? 'error' : 'ok',
+        createdAt: null,
+      };
+    });
+
   // Extra language slots, when written as a rule.
   const langExtra = model.data.identity?.languageExtra;
   const languageFormulas = typeof langExtra === 'string' && langExtra.trim() ? [(() => {
@@ -577,7 +679,7 @@ export function audit(model) {
 
   return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas)
     .concat(weaponMiscFormulas).concat(weaponFormulas)
-    .concat(speedFormulas).concat(languageFormulas).concat(hpFormulas)
+    .concat(speedFormulas).concat(otherFormulas).concat(languageFormulas).concat(hpFormulas)
     .concat(craftingFormulas).concat(deckFormulas)
     .concat(trackerFormulas);
 }

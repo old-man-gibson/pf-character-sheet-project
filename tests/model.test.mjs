@@ -8943,5 +8943,82 @@ console.log('a question on a weapon -- the sheet takes the first answer');
     doubled.calc.tokMultDmg.termFlat, 0);
 }
 
+/*
+ * The Other column takes a formula. A number is recovered on load as the
+ * saved total less the visible parts, as it always was; a rule cannot be, so
+ * its text rides on the document and is worked out again each pass.
+ */
+console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
+{
+  const control = (level) => {
+    const k = new Character(blankDocument({ name: 'Control' }));
+    k.set('identity.level', level);
+    return k;
+  };
+  const c = new Character(blankDocument({ name: 'Offset' }));
+  c.set('identity.level', 8);
+  const will = (m = c) => m.data.saves.will.total;
+  check('nothing in Other to begin with',
+    [c.offsetSource('saves.will.total'), c.offsetOf('saves.will.total')], [0, 0]);
+
+  c.setOffset('saves.will.total', 'floor(level / 4)');
+  check('a formula in Other is worked out', [c.offsetOf('saves.will.total'), will()], [2, will(control(8)) + 2]);
+  check('and kept as the text it was typed', c.offsetSource('saves.will.total'), 'floor(level / 4)');
+  check('on the document, under the stat it belongs to',
+    c.data.otherFormulas, { 'saves.will.total': 'floor(level / 4)' });
+  c.set('identity.level', 12);
+  check('it follows the level', [c.offsetOf('saves.will.total'), will()], [3, will(control(12)) + 3]);
+  const row = c.audit().find((r) => r.id === 'other-saves.will.total');
+  check('and the audit lists it', [row?.name, row?.status, row?.value, row?.formula],
+    ['Will — Other', 'ok', 3, 'floor(level / 4)']);
+
+  // Round trip: the rule survives a save, and is not counted twice on the
+  // way back in -- the saved total already holds it, and the offset is the
+  // rule rather than a measurement of that total.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('reopened, it is still a rule', again.offsetSource('saves.will.total'), 'floor(level / 4)');
+  check('and the total is what it was, not that plus the rule again',
+    [will(again), again.offsetOf('saves.will.total')], [will(), 3]);
+  check('so nothing reads as drifted', again.diffFromSource(), []);
+  // A document whose level moved between the save and the load: the rule is
+  // read against the level it finds, not the number it came to before.
+  const doc = JSON.parse(JSON.stringify(c.toJSON()));
+  doc.identity.level = 16;
+  const later = new Character(doc);
+  check('and a rule reopened at a new level is read at that level',
+    [later.offsetOf('saves.will.total'), will(later)], [4, will(control(16)) + 4]);
+
+  // A rule that cannot be read is worth nothing and says so.
+  c.setOffset('saves.will.total', 'level +');
+  check('a broken rule adds nothing and carries its error',
+    [c.offsetOf('saves.will.total'), will(), typeof c.offsetError('saves.will.total')],
+    [0, will(control(12)), 'string']);
+  check('and the audit flags it', c.audit().find((r) => r.id === 'other-saves.will.total')?.status, 'error');
+
+  // Back to a number, typed as a field types it -- text -- and the document
+  // has nothing extra to say.
+  c.setOffset('saves.will.total', '4');
+  check('a number typed into the field is a number',
+    [c.offsetSource('saves.will.total'), will(), c.data.otherFormulas], [4, will(control(12)) + 4, undefined]);
+  check('and nothing is left in the audit', c.audit().some((r) => r.id.startsWith('other-')), false);
+  c.setOffset('saves.will.total', '');
+  check('cleared is zero', [c.offsetSource('saves.will.total'), will()], [0, will(control(12))]);
+
+  // Hit points carry the same field, on a different footing (not a DERIVED
+  // stat), and take the same rule.
+  const hp = (m = c) => m.data.hp.total;
+  const hpBase = (m = c) => Number(m.data.hp.base) || 0;
+  // A blank sheet's hit points are all Other: nothing in the class table
+  // reaches them, so the template's figure is the offset. A rule written
+  // there replaces that figure, as a number typed there would.
+  check('a blank sheet keeps its hit points in Other', hp(), hpBase() + c.offsetOf('hp.total'));
+  c.setOffset('hp.total', 'level * 2');
+  check('hit points take a rule in Other too', [c.offsetOf('hp.total'), hp()], [24, hpBase() + 24]);
+  const hpAgain = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and keep it across a save without doubling',
+    [hpAgain.offsetSource('hp.total'), hp(hpAgain), hpAgain.diffFromSource()], ['level * 2', hp(), []]);
+  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points — Other');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

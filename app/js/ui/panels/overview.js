@@ -18,7 +18,7 @@ import { field } from '../fields.js';
 import { collapsible, foldButton, isCollapsed } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
-import { forwardedBadge, sheetBonusCell, sheetBonusHead, sheetBonusHint } from '../badges.js';
+import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { formulaMeta, isDraining, meterStyleButton, meterStyleEditor, meterVisual, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
@@ -1923,12 +1923,11 @@ function hpBuild(model) {
     c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
     (c.identity?.mythicTier || 0) === 1 ? '' : 's'} — set the per-tier figure on the Features tab`)}"
           >${fmt(model.mythicHp)}</span>`)}
-        ${field('Other', `<input type="number" value="${other}" data-offset="hp.total"
-          style="width:5.4rem" aria-label="Other hit points"
-          title="${esc('What the sheet’s own total holds that the parts here cannot reach — rolled '
+        ${field('Other', `<span title="${esc('What the sheet’s own total holds that the parts here cannot reach — rolled '
             + 'dice rather than maximums, a bonus a formula added that the export could not carry, a '
             + 'number the GM handed over. It is what makes an import match, and the place to add your '
-            + 'own; every part above goes on counting either way.')}">`)}
+            + 'own, as a number or a formula; every part above goes on counting either way.')}">${
+  sheetBonusField(model, 'hp.total', '5.4rem')}</span>`)}
       </div>
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Misc', hpPart(c, 'misc', 'A number, or a formula — e.g. con.mod * 2', '100%'), 'wide')}

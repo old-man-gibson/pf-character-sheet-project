@@ -7,6 +7,7 @@
  * where every panel can reach them.
  */
 import { esc } from './html.js';
+import { exprField } from './rows.js';
 import { fmt, FORWARD_BY_DERIVED } from '../rules.js';
 
 /* ----- the import offset, as a field -----
@@ -23,9 +24,27 @@ export function sheetBonusHead() {
 export function sheetBonusCell(model, key) {
   // `data-label` for the card layout on a narrow screen, where the column
   // heading this sits under is gone; see `table.stacked` in the stylesheet.
-  return `<td class="num" data-label="Other"><input type="number" value="${model.offsetOf(key)}"
-      data-offset="${key}" style="width:3.6rem" aria-label="Other bonuses to ${esc(key)}"
-      >${forwardedBadge(model, FORWARD_BY_DERIVED[key])}</td>`;
+  return `<td class="num" data-label="Other">${sheetBonusField(model, key)}${
+    forwardedBadge(model, FORWARD_BY_DERIVED[key])}</td>`;
+}
+
+/**
+ * The Other field on its own: a number, or a formula the model resolves.
+ *
+ * A formula, because half of what lands here is a rule -- a bonus that grows
+ * with the level, a modifier that applies while something else is true --
+ * and typed as the number it comes to today it goes stale at the next
+ * level-up. The model keeps the text and works it out each pass; the cell
+ * shows the answer and the source on a click, like every formula field.
+ */
+export function sheetBonusField(model, key, width = '4rem') {
+  return exprField(`data-offset="${key}" aria-label="Other bonuses to ${esc(key)}"`,
+    model.offsetSource(key), {
+      width,
+      value: model.offsetOf(key),
+      error: model.offsetError(key),
+      title: 'A number, or a formula — e.g. floor(level / 4)',
+    });
 }
 
 /**
