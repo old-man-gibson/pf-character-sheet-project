@@ -45,6 +45,7 @@ import {
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
 import { sphereTalent } from '../spheres.js';
+import { amountOrText, evaluateAmount } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
 const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({
@@ -130,8 +131,9 @@ export function normalizeGuileTraining(raw) {
     sphere: String(s?.sphere || ''),
     package: str(s?.package) ?? '',
     skill: str(s?.skill) ?? '',
-    rankBonus: Number(s?.rankBonus) || 0,
-    dcBonus: Number(s?.dcBonus) || 0,
+    // A number, or a rule kept as the text it was written in.
+    rankBonus: amountOrText(s?.rankBonus),
+    dcBonus: amountOrText(s?.dcBonus),
   })).filter((s) => s.sphere);
 
   out.leverageBonus = Number(out.leverageBonus) || 0;
@@ -154,7 +156,11 @@ export const GUILE_DERIVED = [
   'tally', 'tallySpent', 'sphereRows', 'plans', 'leverage', 'operativeAbilityMod',
   { path: 'classes', keys: ['side', 'classLevels', 'classLevelsCurrent', 'totalTalents', 'totalUtility'] },
   { path: 'classes', list: 'levels', keys: ['count', 'utilityCount', 'granted', 'utilityGranted', 'future'] },
-  { path: 'spheres', keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'competence'] },
+  {
+    path: 'spheres',
+    keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'competence',
+      'rankBonusNum', 'rankBonusError'],
+  },
 ];
 
 /* ------------------------------------------------------------------ *
@@ -380,16 +386,30 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
   const level = Number(model.data.identity.level) || 0;
   const tally = g.tallySpent || g.tally || {};
 
+  // Rank+ may be a rule rather than a number. This runs before the prose is
+  // read -- the ranks it grants feed the skills, which feed everything -- so
+  // a rule here reads abilities, level and class levels, and a name defined
+  // in prose only as the last pass left it. The scope is built once, and
+  // only if a row asks for it.
+  let scope = null;
+  const amount = (raw) => {
+    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
+    return evaluateAmount(raw, scope);
+  };
+
   // What each row is owed, before any of them find out they are sharing.
   const byIndex = new Map();
   for (const row of g.spheres || []) {
     const talents = Number(tally[row.sphere]) || 0;
     const i = skillIndexOf(model, row.skill);
+    const rank = amount(row.rankBonus);
     row.skillIndex = i;
     row.talents = talents;
+    row.rankBonusNum = rank.value;
+    row.rankBonusError = rank.error;
     row.ranksGranted = i < 0 || !talents
       ? 0
-      : Math.min(level, talents * RANKS_PER_TALENT + (Number(row.rankBonus) || 0));
+      : Math.min(level, talents * RANKS_PER_TALENT + rank.value);
     row.paysRanks = false;
     row.duplicate = false;
     row.competence = 0;
@@ -445,18 +465,28 @@ export function recomputeGuileSpheres(model) {
   if (!g) return;
   const mod = Number(g.operativeAbilityMod) || 0;
   const skills = model.data.skills || [];
+  // DC+ may be a rule. Unlike Rank+ this runs after the prose, so a name
+  // defined there resolves. The scope is built once, and only if asked for.
+  let scope = null;
+  const amount = (raw) => {
+    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
+    return evaluateAmount(raw, scope);
+  };
   g.sphereRows = (g.spheres || []).map((row) => {
     const skill = row.skillIndex >= 0 ? skills[row.skillIndex] : null;
     const ranks = Number(skill?.totalRanks) || 0;
+    const dcPlus = amount(row.dcBonus);
     return {
       ...row,
       ranks,
+      dcBonusNum: dcPlus.value,
+      dcBonusError: dcPlus.error,
       // No associated skill, no DC. Not zero ranks' worth of one: the whole
       // number is built on a skill this sphere has not been pointed at yet,
       // and a DC of 10 + the operative modifier is a number that would read
       // as real. Vocation never has one at all -- it has no base ability and
       // no skill of its own; its talents borrow whichever skill they name.
-      dc: skill ? 10 + Math.floor(ranks / 2) + mod + (Number(row.dcBonus) || 0) : null,
+      dc: skill ? 10 + Math.floor(ranks / 2) + mod + dcPlus.value : null,
       ...guileRanges(ranks),
     };
   });

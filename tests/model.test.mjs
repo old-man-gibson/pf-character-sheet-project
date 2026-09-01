@@ -9020,5 +9020,85 @@ console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
   check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points — Other');
 }
 
+/*
+ * The sphere tables' bonus columns -- CL+ and DC+ on the magic side, BAB+
+ * and DC+ on the martial, Rank+ and DC+ on the guile -- take a rule as well
+ * as a number, the way the speed bonus does.
+ */
+console.log('\nthe sphere tables -- a bonus column that takes a rule');
+{
+  const c = new Character(blankDocument({ name: 'Spheres' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
+  c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
+  c.addGuileSphere('Study');
+  const magic = () => c.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  const combat = () => c.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics');
+  const guile = () => c.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+  const globalCL = () => c.data.training.magic.globalCL;
+  const globalDC = () => c.data.training.magic.globalDC;
+  const pracDC = () => c.data.training.combat.practitionerDC;
+
+  // Magic: CL+ and DC+.
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 'floor(level / 4)');
+  check('a CL+ written as a rule', [magic().clBonusNum, magic().cl, magic().dc],
+    [2, globalCL() + 2, globalDC() + 1]);
+  c.setItem('training.magic.sphereBonuses', 0, 'dcBonus', 'level / 2');
+  check('and a DC+', [magic().dcBonusNum, magic().dc], [4, globalDC() + 1 + 4]);
+  c.set('identity.level', 12);
+  check('both follow the level', [magic().clBonusNum, magic().dcBonusNum], [3, 6]);
+  check('the rule is what is stored', c.data.training.magic.sphereBonuses[0].clBonus, 'floor(level / 4)');
+
+  // Martial: BAB+ (stored as rankBonus) and DC+.
+  const bab = Number(c.data.attack.bab) || 0;
+  c.setItem('training.combat.sphereBonuses', 0, 'rankBonus', 'level / 3');
+  c.setItem('training.combat.sphereBonuses', 0, 'dcBonus', 'floor(level / 6)');
+  check('a BAB+ and DC+ written as rules',
+    [combat().rankBonusNum, combat().attack, combat().dcBonusNum, combat().dc],
+    [4, Math.min(bab + 4, 12), 2, pracDC() + 2]);
+
+  // Guile: Rank+ resolves before the skills (it feeds them); DC+ after.
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  const dcBefore = guile().dc;
+  c.setItem('training.guile.spheres', 0, 'rankBonus', 'level / 4');
+  c.setItem('training.guile.spheres', 0, 'dcBonus', 'level / 6');
+  check('a Rank+ and DC+ written as rules',
+    [guile().rankBonusNum, guile().dcBonusNum, guile().dc], [3, 2, dcBefore + 2]);
+
+  // The audit lists every one of them.
+  const audit = c.audit();
+  check('the audit lists them', ['sphere-magic-0-clBonus', 'sphere-magic-0-dcBonus',
+    'sphere-combat-0-rankBonus', 'sphere-combat-0-dcBonus', 'sphere-guile-0-rankBonus',
+    'sphere-guile-0-dcBonus'].map((id) => audit.find((r) => r.id === id)?.status), Array(6).fill('ok'));
+  check('by the column they sit in',
+    [audit.find((r) => r.id === 'sphere-magic-0-clBonus')?.name,
+      audit.find((r) => r.id === 'sphere-combat-0-rankBonus')?.name,
+      audit.find((r) => r.id === 'sphere-guile-0-rankBonus')?.name],
+    ['Dark CL+', 'Athletics BAB+', 'Study Rank+']);
+
+  // A rule that cannot be read adds nothing and says so.
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 'nope');
+  check('a broken rule is worth nothing and carries its error',
+    [magic().clBonusNum, magic().cl, typeof magic().clBonusError], [0, globalCL(), 'string']);
+  check('and the audit flags it', c.audit().find((r) => r.id === 'sphere-magic-0-clBonus')?.status, 'error');
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 1);
+  check('a number is still a number', [magic().clBonusNum, magic().clBonusError, magic().cl], [1, null, globalCL() + 1]);
+
+  // Saved and reopened: the rules survive, and the guile side saves only
+  // what was typed.
+  const doc = JSON.parse(JSON.stringify(c.toJSON()));
+  check('the guile row saves the rule and not its working',
+    doc.training.guile.spheres[0], {
+      sphere: 'Study', package: '', skill: 'Perception', rankBonus: 'level / 4', dcBonus: 'level / 6',
+    });
+  const again = new Character(doc);
+  const g2 = again.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+  check('and reopened, every rule still reads',
+    [again.data.training.magic.sphereRows[0].dcBonusNum,
+      again.data.training.combat.sphereRows[0].rankBonusNum, g2.rankBonusNum, g2.dcBonusNum],
+    [6, 4, 3, 2]);
+  check('with nothing drifted', again.diffFromSource(), []);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

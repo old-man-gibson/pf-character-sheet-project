@@ -502,6 +502,38 @@ export function audit(model) {
       };
     });
 
+  // The sphere tables: a CL+, BAB+, Rank+ or DC+ written as a rule.
+  const training = model.data.training || {};
+  const sphereFormulas = [];
+  const sphereRules = (side, rows, columns) => {
+    (rows || []).forEach((row, i) => {
+      for (const [field, label] of columns) {
+        const text = row[field];
+        if (typeof text !== 'string' || !text.trim()) continue;
+        const info = analyse(text);
+        const unknown = info.variables.filter((v) => !known.has(v));
+        const error = row[`${field}Error`] || info.error
+          || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+        sphereFormulas.push({
+          id: `sphere-${side}-${i}-${field}`,
+          name: `${row.sphere || 'Sphere'} ${label}`,
+          source: 'player',
+          formula: text,
+          reads: info.variables,
+          functions: info.functions,
+          unknownReferences: unknown,
+          value: error ? null : row[`${field}Num`] ?? null,
+          error,
+          status: error ? 'error' : 'ok',
+          createdAt: null,
+        });
+      }
+    });
+  };
+  sphereRules('magic', training.magic?.sphereRows, [['clBonus', 'CL+'], ['dcBonus', 'DC+']]);
+  sphereRules('combat', training.combat?.sphereRows, [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']]);
+  sphereRules('guile', training.guile?.sphereRows, [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']]);
+
   // Extra language slots, when written as a rule.
   const langExtra = model.data.identity?.languageExtra;
   const languageFormulas = typeof langExtra === 'string' && langExtra.trim() ? [(() => {
@@ -679,7 +711,8 @@ export function audit(model) {
 
   return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas)
     .concat(weaponMiscFormulas).concat(weaponFormulas)
-    .concat(speedFormulas).concat(otherFormulas).concat(languageFormulas).concat(hpFormulas)
+    .concat(speedFormulas).concat(otherFormulas).concat(sphereFormulas)
+    .concat(languageFormulas).concat(hpFormulas)
     .concat(craftingFormulas).concat(deckFormulas)
     .concat(trackerFormulas);
 }

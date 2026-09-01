@@ -29,7 +29,7 @@ import {
 import { DAILY_LEVERAGE_EXTRA } from '../../model.js';
 import { check, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, itemCheck, itemNum, itemSelect, itemText, line,
+  addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line,
   rowRemove, rowTools,
 } from '../rows.js';
 import { classNames } from './combat.js';
@@ -188,6 +188,15 @@ function guileSpherePanel(model, g) {
     const spheres = guileSphereList();
     const level = Number(model.data.identity.level) || 0;
     const anyDupes = rows.some((r) => r.duplicate);
+    // A number, or a rule: the model resolves it into `<field>Num` and flags
+    // a bad one in `<field>Error`, so the cell shows the answer and the
+    // source on a click, like every other formula field.
+    const bonus = (r, i, field, example) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
+      width: '4rem',
+      value: r[`${field}Num`],
+      error: r[`${field}Error`],
+      title: `A number, or a formula — e.g. ${example}`,
+    });
     return `<section class="panel span2">
       <h3>Skill spheres <span class="badge">${rows.length}</span></h3>
       ${rows.length ? `<div class="tablewrap"><table class="guilespheres">
@@ -233,8 +242,8 @@ function guileSpherePanel(model, g) {
         : 'Choose an associated skill and this sphere pays into it.')}">${
   [r.paysRanks ? `${r.ranksGranted || ''}` : r.duplicate ? `<span class="was">${owed}</span>` : '',
     r.competence ? `<span class="dupskill">+${r.competence}</span>` : ''].filter(Boolean).join(' ')}</td>
-          <td class="num">${itemNum(list, i, 'rankBonus', r.rankBonus)}</td>
-          <td class="num">${itemNum(list, i, 'dcBonus', r.dcBonus)}</td>
+          <td class="num">${bonus(r, i, 'rankBonus', 'floor(level / 4)')}</td>
+          <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}</td>
           <td class="num total"${r.skillIndex >= 0 ? ` title="${esc(`10 + half of ${r.ranks} ranks in ${r.skill}`
       + ` + ${fmt(g.operativeAbilityMod || 0)} operative modifier`)}"` : ''}>${r.dc ?? '—'}</td>
           <td class="num" title="25 ft. + 5 ft. per 2 ranks / 100 ft. + 10 ft. per rank / 400 ft. + 40 ft. per rank">${

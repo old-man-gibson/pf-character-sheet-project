@@ -21,7 +21,7 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, normalizeName, slug } from './util.js';
+import { closestName, evaluateAmount, normalizeName, slug } from './util.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -1080,6 +1080,15 @@ export function recomputeSphereRows(model) {
       && (specRe ? specRe.test(String(x.spec || '')) : true));
     return Number(s?.totalRanks) || 0;
   };
+  // A bonus column may hold a rule rather than a number -- "+1 CL per four
+  // levels" is one, and typed as the number it comes to today it goes stale.
+  // The scope is the one every formula reads, built once and only if a row
+  // asks for it. This runs after the prose, so a name defined there resolves.
+  let scope = null;
+  const amount = (raw) => {
+    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
+    return evaluateAmount(raw, scope);
+  };
 
   if (t.combat) {
     const dcBase = t.combat.practitionerDC;
@@ -1096,20 +1105,36 @@ export function recomputeSphereRows(model) {
         attackBase = r;
         dc = 10 + Math.floor(ranksOf('Handle Animal') / 2) + bestMod;
       }
+      const rank = amount(row.rankBonus);
+      const dcPlus = amount(row.dcBonus);
       return {
         ...row,
         talents: (t.combat.tally || {})[row.sphere] || 0,
-        attack: Math.min(Math.floor(attackBase + (Number(row.rankBonus) || 0)), level),
-        dc: dc + (Number(row.dcBonus) || 0),
+        rankBonusNum: rank.value,
+        rankBonusError: rank.error,
+        dcBonusNum: dcPlus.value,
+        dcBonusError: dcPlus.error,
+        attack: Math.min(Math.floor(attackBase + rank.value), level),
+        dc: dc + dcPlus.value,
       };
     });
   }
   if (t.magic) {
-    t.magic.sphereRows = (t.magic.sphereBonuses || []).map((row) => ({
-      ...row,
-      talents: (t.magic.tally || {})[row.sphere] || 0,
-      cl: t.magic.globalCL + (Number(row.clBonus) || 0),
-      dc: t.magic.globalDC + Math.floor((Number(row.clBonus) || 0) / 2) + (Number(row.dcBonus) || 0),
-    }));
+    t.magic.sphereRows = (t.magic.sphereBonuses || []).map((row) => {
+      const cl = amount(row.clBonus);
+      const dcPlus = amount(row.dcBonus);
+      return {
+        ...row,
+        talents: (t.magic.tally || {})[row.sphere] || 0,
+        clBonusNum: cl.value,
+        clBonusError: cl.error,
+        dcBonusNum: dcPlus.value,
+        dcBonusError: dcPlus.error,
+        cl: t.magic.globalCL + cl.value,
+        // A sphere's DC follows its caster level, so a CL bonus is worth
+        // half of itself here as well, as the global one is.
+        dc: t.magic.globalDC + Math.floor(cl.value / 2) + dcPlus.value,
+      };
+    });
   }
 }

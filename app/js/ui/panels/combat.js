@@ -41,7 +41,7 @@ import {
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
-  addButton, editLine, itemCheck, itemNum, itemSelect, itemText, line, lineHtml,
+  addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
   rowRemove, rowTools,
 } from '../rows.js';
 
@@ -660,13 +660,22 @@ function sphereBonusPanel(sideKey, side) {
     const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus);
     const isMagic = sideKey === 'magic';
     const list = `training.${sideKey}.sphereBonuses`;
+    // A number, or a rule: the model resolves it into `<field>Num` and flags
+    // a bad one in `<field>Error`, so the cell shows the answer and the
+    // source on a click, like every other formula field.
+    const bonus = (r, i, field, example) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
+      width: '4rem',
+      value: r[`${field}Num`],
+      error: r[`${field}Error`],
+      title: `A number, or a formula — e.g. ${example}`,
+    });
     const render = (r) => {
       const i = (side.sphereBonuses || []).findIndex((x) => x.sphere === r.sphere);
       return `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
-        <td class="num">${itemNum(list, i, isMagic ? 'clBonus' : 'rankBonus', isMagic ? r.clBonus : r.rankBonus)}</td>
-        <td class="num">${itemNum(list, i, 'dcBonus', r.dcBonus)}</td>
+        <td class="num">${bonus(r, i, isMagic ? 'clBonus' : 'rankBonus', 'floor(level / 4)')}</td>
+        <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
       </tr>`;
     };
