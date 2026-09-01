@@ -390,6 +390,25 @@ console.log('a question the sheet cannot answer becomes a Roll20 query');
   check('jammed against the braces it is not a question at all',
     weaponRollSpec(jammed.data, 0, jammed.conditionState).queries, []);
 
+  // The arithmetic around a question has to travel with it. This was wrong
+  // once, and quietly: the sheet doubled its own total while the table was
+  // handed an undoubled question, so the two disagreed and neither said so.
+  const doubled = built({
+    weapons: [{ ...GREATSWORD, critRange: 20, special: '[[{?Deathgrip Self-HP Damage|}*2 Mult]]' }],
+  });
+  const dbl = (label, given = null) => weaponRollSpec(doubled.data, 0, doubled.conditionState, given)
+    .rolls.find((r) => r.label.startsWith(label))?.formula;
+  check('a doubled question arrives doubled',
+    dbl('Damage'), '2d6+7+(?{Deathgrip Self-HP Damage|0})*2');
+  // Doubled by the gauntlets, then again by the critical -- two multipliers
+  // that are two different rules, so they stay two.
+  check('and the critical doubles it again',
+    dbl('Crit damage'), '4d6+14+((?{Deathgrip Self-HP Damage|0})*2)*2');
+  check('answered here, the arithmetic is simply done',
+    [dbl('Damage', { 'Deathgrip Self-HP Damage': 3 }),
+      dbl('Crit damage', { 'Deathgrip Self-HP Damage': 3 })],
+    ['2d6+7+6', '4d6+14+12']);
+
   const free = built({
     weapons: [{ ...GREATSWORD, critRange: 20, special: '[[{?Extra damage | 0}]]' }],
   });

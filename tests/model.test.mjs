@@ -8915,13 +8915,32 @@ console.log('a question on a weapon -- the sheet takes the first answer');
   check('a label is not a keyword',
     [w2.calc.tokMultDmg.queries.length, w2.calc.tokDmg.queries.length], [0, 1]);
 
-  // The Dice field is the one place a question cannot go: the crit multiplies
-  // those dice rather than adding them, so it says so instead of dropping it.
-  const inDice = { ...gauntlet, dice: '{?Size | small, 1 | large, 2}', special: '' };
-  const w3 = new Character({ ...doc, equipment: { ...doc.equipment, weapons: [inDice] } })
+  // A question survives to the roll by keeping the whole expression it sits
+  // in, and only the two token properties are carried that way. The plain
+  // columns are read as one number each, so they refuse it out loud rather
+  // than splicing the first answer and losing the rest.
+  const refused = /can only be asked in a/;
+  const only = (w) => new Character({ ...doc, equipment: { ...doc.equipment, weapons: [w] } })
     .data.equipment.weapons[0];
+  const q = '{?Size | small, 1 | large, 2}';
   check('a question in the Dice field is refused out loud',
-    /cannot change the weapon/.test(w3.diceError || ''), true);
+    refused.test(only({ ...gauntlet, dice: q, special: '' }).diceError || ''), true);
+  check('and in Misc dmg',
+    refused.test(only({ ...gauntlet, miscDamage: q, special: '' }).miscDamageError || ''), true);
+  check('and in Bonus crit damage',
+    refused.test(only({ ...gauntlet, bonusCritDamage: q, special: '' })
+      .calc.errors.concat(only({ ...gauntlet, bonusCritDamage: q, special: '' }).bonusCritError || '')
+      .join(' ') || ''), true);
+
+  // The arithmetic *around* a question has to survive with it. This was wrong
+  // once: the sheet doubled its own total and handed the table an undoubled
+  // question, which is the one outcome worse than not supporting it.
+  const doubled = only({ ...gauntlet, special: '[[{?Blood|}*2 Mult]]' });
+  check('a question keeps the expression it was written in',
+    doubled.calc.tokMultDmg.terms.length, 1);
+  check('and the sheet still reads its first answer', doubled.calc.totalDmgStr, '1d3+5');
+  check('the pool remembers what the term already stands for',
+    doubled.calc.tokMultDmg.termFlat, 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

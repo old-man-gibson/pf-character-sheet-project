@@ -41,6 +41,7 @@ import {
   attackModeTotal, parseDiceExpr, stepDiceMap,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
+import { evaluateFormula } from './formula.js';
 
 /** The formats a copy can be taken in, and what to call them in the UI. */
 export const ROLL_FORMATS = [
@@ -114,28 +115,63 @@ export function queryText(q) {
 }
 
 /**
- * A pool's questions as formula terms, multiplied where the critical
- * multiplies them.
+ * One token's whole expression, with its questions put back into it.
  *
- * `(?{…})*4` puts the multiplier outside the question rather than inside each
- * answer, so the pool a `[[… Mult]]` token lands in behaves on a threat
- * exactly as the weapon's own damage does, whatever the player picks.
+ * A term is what the model kept of a token holding a question: the text as it
+ * was written, in pieces, with the question sitting where it stood. That is
+ * the only way the arithmetic *around* a question survives -- `{?...}*2` is a
+ * doubled answer, and a question lifted out of its expression would reach the
+ * table undoubled while the sheet's own total was not.
+ *
+ * A question inside an expression is bracketed, so the `*2` takes the answer
+ * and not whatever the answer happens to end with. A question that is the
+ * whole term needs no brackets and reads better without them.
  *
  * `answers` is what the sheet asked before it copied: a label to the answer
- * chosen for it. Where one is given the number goes in and the question does
- * not, which is the difference between a roll the player has already settled
- * and one the table is still to be asked.
+ * chosen for it. Where one is given, the number goes in and the question does
+ * not.
  */
-function queryTerms(queries, times = 1, answers = null) {
-  return (queries || []).map((q) => {
-    const picked = answers?.[q.label];
-    const text = picked === undefined || picked === null ? queryText(q) : String(picked);
-    if (times <= 1) return text;
-    // An answer already given is just a number, and a number times a number is
-    // arithmetic the reader should not have to do: `+16`, not `+(8)*2`.
-    return /^-?\d+$/.test(text) ? String(Number(text) * times) : `(${text})*${times}`;
+function renderTerm(term, answers = null) {
+  const meaningful = term.filter((seg) => typeof seg !== 'string' || seg.trim());
+  const alone = meaningful.length === 1 && typeof meaningful[0] !== 'string';
+  return term.map((seg) => {
+    if (typeof seg === 'string') return seg;
+    const picked = answers?.[seg.label];
+    const text = picked === undefined || picked === null ? queryText(seg) : String(picked);
+    return alone ? text : `(${text})`;
+  }).join('').trim();
+}
+
+/** Arithmetic with every question answered is arithmetic: work it out. */
+function settle(text) {
+  if (!/^[-+*/().\s0-9]+$/.test(text)) return text;
+  try {
+    const v = evaluateFormula(text, {});
+    return Number.isFinite(v) ? String(Math.floor(v)) : text;
+  } catch {
+    return text;   // not something the sandbox reads; it is Roll20's to work out
+  }
+}
+
+/**
+ * A pool's terms, multiplied where the critical multiplies them.
+ *
+ * The multiplier goes outside the whole term rather than inside it, which is
+ * the rule the dice and the flat parts already follow: everything in a Mult
+ * pool is gathered first and multiplied once.
+ */
+function termTexts(pool, times = 1, answers = null) {
+  return (pool?.terms || []).map((t) => {
+    const text = renderTerm(t, answers);
+    return settle(times > 1 ? `(${text})*${times}` : text);
   });
 }
+
+/** What a pool contributes as a plain number, with its terms taken back out. */
+const rollFlat = (pool) => (pool?.flat || 0) - (pool?.termFlat || 0);
+
+/** ... and the same for its dice. */
+const rollDice = (pool) => subDice(pool?.dice || {}, pool?.termDice || {});
 
 /** Every question a list of pools holds, in order, without repeating one. */
 function gatherQueries(...pools) {
@@ -604,24 +640,22 @@ export function weaponRollSpec(c, index, cs = null, answers = null) {
   // and the flat parts follow, because a question is only a number the player
   // has not picked yet -- and a critical has to treat it as the number it will
   // become, not as a special case.
-  const qAtk = calc.tokAtk?.queries || [];
-  const qCritAtk = calc.critAtk?.queries || [];
-  const qDmg = calc.tokDmg?.queries || [];
-  const qMult = calc.tokMultDmg?.queries || [];
-  const qCrit = calc.critTagged?.queries || [];
-  const qBcd = calc.bcdQueries || [];
-  const terms = (queries, times) => queryTerms(queries, times, answers);
-
-  const atkOpts = { dice: calc.tokAtk?.dice, critRange, terms: terms(qAtk) };
+  const atkTerms = termTexts(calc.tokAtk, 1, answers);
+  // Every total below is the sheet's own, which has each question's first
+  // answer already in it -- so the part the terms stand for comes back out
+  // before the terms go in, or the ordinary case would be counted twice.
+  const atkOpts = { dice: rollDice(calc.tokAtk), critRange, terms: atkTerms };
+  const atkTotal = calc.totalAtk - (calc.tokAtk?.termFlat || 0) + atkDelta;
   const rolls = iterates(modeKey)
-    ? iterativeRolls(c.attack?.bab, calc.totalAtk + atkDelta, 'Attack', atkOpts)
-    : [{ label: 'Attack', formula: d20(calc.totalAtk + atkDelta, atkOpts) }];
+    ? iterativeRolls(c.attack?.bab, atkTotal, 'Attack', atkOpts)
+    : [{ label: 'Attack', formula: d20(atkTotal, atkOpts) }];
   rolls.push({
     label: 'Damage',
     formula: damageFormula(
-      addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
-      calc.totalDmgFlat + dmgDelta + sized.flat,
-      terms([...qDmg, ...qMult]),
+      addDice(addDice(sized.dice, rollDice(calc.tokDmg)), rollDice(calc.tokMultDmg)),
+      calc.totalDmgFlat + dmgDelta + sized.flat
+        - (calc.tokDmg?.termFlat || 0) - (calc.tokMultDmg?.termFlat || 0),
+      [...termTexts(calc.tokDmg, 1, answers), ...termTexts(calc.tokMultDmg, 1, answers)],
     ),
   });
 
@@ -636,33 +670,35 @@ export function weaponRollSpec(c, index, cs = null, answers = null) {
   // `multBase` the card prints as `(12d8+26)×4`: the weapon's own damage, the
   // ability, enhancement and Misc dmg, and any [[... Mult]] token.
   const multBase = {
-    dice: addDice(sized.dice, calc.tokMultDmg?.dice || {}),
-    flat: (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + (calc.tokMultDmg?.flat || 0),
+    dice: addDice(sized.dice, rollDice(calc.tokMultDmg)),
+    flat: (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + rollFlat(calc.tokMultDmg),
   };
   const critDice = addDice(
-    addDice(scaleDice(multBase.dice, mult), calc.tokDmg?.dice || {}),
-    addDice(scaleDice(calc.critTagged?.dice || {}, mult), bcd.dice),
+    addDice(scaleDice(multBase.dice, mult), rollDice(calc.tokDmg)),
+    addDice(scaleDice(rollDice(calc.critTagged), mult), bcd.dice),
   );
   const critFlat = multBase.flat * mult
-    + (calc.tokDmg?.flat || 0)
-    + (calc.critTagged?.flat || 0) * mult
+    + rollFlat(calc.tokDmg)
+    + rollFlat(calc.critTagged) * mult
     + bcd.flat;
   rolls.push({
     label: 'Crit confirm',
-    formula: d20((calc.confirmTotal || 0) + atkDelta, {
-      dice: calc.critAtk?.dice,
+    formula: d20((calc.confirmTotal || 0) + atkDelta
+      - (calc.tokAtk?.termFlat || 0) - (calc.critAtk?.termFlat || 0), {
+      dice: rollDice(calc.critAtk),
       critRange,
       // The confirmation is the attack again, so a question that moved the
       // attack moves this too -- the same way `confirmTotal` already carries
       // the attack tokens' flat part.
-      terms: terms([...qAtk, ...qCritAtk]),
+      terms: [...atkTerms, ...termTexts(calc.critAtk, 1, answers)],
     }),
   });
   rolls.push({
     label: `Crit damage (x${mult})`,
     formula: damageFormula(critDice, critFlat, [
-      ...terms([...qMult, ...qCrit], mult),   // multiplied, with the base
-      ...terms([...qDmg, ...qBcd]),           // riders and burst dice, once
+      ...termTexts(calc.tokMultDmg, mult, answers),   // multiplied, with the base
+      ...termTexts(calc.critTagged, mult, answers),   // crit-only, multiplied
+      ...termTexts(calc.tokDmg, 1, answers),          // riders, added once
     ]),
   });
 
@@ -680,7 +716,8 @@ export function weaponRollSpec(c, index, cs = null, answers = null) {
   // damage and the critical are two of them in the one message. Saying so is
   // cheaper than a player answering the two differently and never working out
   // why the crit does not follow from the hit.
-  const queries = gatherQueries(qAtk, qCritAtk, qDmg, qMult, qCrit, qBcd);
+  const queries = gatherQueries(calc.tokAtk?.queries, calc.critAtk?.queries,
+    calc.tokDmg?.queries, calc.tokMultDmg?.queries, calc.critTagged?.queries);
   const unanswered = queries.filter((q) => answers?.[q.label] === undefined);
   if (unanswered.length) {
     notes.push({
