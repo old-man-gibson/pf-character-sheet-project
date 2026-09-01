@@ -1315,7 +1315,7 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.primordia { min-width: 32rem; }
 .tablewrap > table.build { min-width: 26rem; }
 .tablewrap > table.tradition { min-width: 28rem; }
-.tablewrap > table.attackmodes { min-width: 30rem; }
+.tablewrap > table.attackmodes { min-width: 21rem; }
 .tablewrap > table.racetraits { min-width: 26rem; }
 .tablewrap > table.craftlist { min-width: 30rem; }
 .tablewrap > table.perks { min-width: 0; }
@@ -3092,6 +3092,18 @@ table.saves td, table.defense td { white-space: nowrap; }
 table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
+
+/* The attack modes: five columns in a panel a third of the page wide. Mode,
+   Total and Other are as wide as what they hold and no wider -- the table used
+   to be floored at 30rem and share the slack out over all five, so "Melee" sat
+   in a column three times its width and the whole thing scrolled inside a panel
+   it would have fitted. What is left over goes to the two ability pickers, and
+   the picker fills its cell, so the surplus reads as a control rather than as
+   a gap beside one. */
+table.attackmodes th:nth-child(-n+3), table.attackmodes td:nth-child(-n+3) {
+  width: 1%; white-space: nowrap;
+}
+table.attackmodes select { width: 100%; min-width: 3.4rem; }
 td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
 td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
 tr:hover > td.tools.quiet button,
