@@ -3834,6 +3834,34 @@ textarea.rolltext {
 }
 .rolltoast p.hint { margin: 5px 0 0; }
 
+/* ---------- what a roll asks before it can be copied ---------- */
+/* A <dialog> for the same reason the palette is one: :host declares
+   container-type, so anything fixed inside the sheet is pinned to the sheet
+   rather than to the screen, and the top layer is the one way out of that.
+   Small, because it is one question and two ways to answer it -- not a panel. */
+dialog.rollask {
+  position: fixed; inset: 0; margin: auto; padding: 0; border: 0;
+  width: min(26rem, 92vw);
+  background: transparent; color: var(--cs-text); font-family: var(--cs-font);
+}
+dialog.rollask::backdrop { background: rgba(6, 8, 13, 0.55); backdrop-filter: blur(2px); }
+dialog.rollask form {
+  background: var(--cs-panel); border: 1px solid var(--cs-accent);
+  border-radius: var(--cs-radius); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  padding: 12px 14px;
+}
+dialog.rollask h2 { margin: 0; font-size: 0.9rem; color: var(--cs-accent); }
+dialog.rollask p.hint { margin: 3px 0 10px; }
+.askrow { display: grid; gap: 3px; margin-bottom: 9px; }
+.askrow > span { font-size: 0.78rem; }
+/* The answer is a number the roll will carry, so it is shown in the same face
+   the copied roll is shown in -- the two are the same thing twice. */
+.askrow select, .askrow input { font-family: var(--cs-mono); font-size: 0.78rem; width: 100%; }
+dialog.rollask menu {
+  display: flex; justify-content: flex-end; gap: 6px;
+  margin: 12px 0 0; padding: 0; list-style: none; flex-wrap: wrap;
+}
+
 /* ---------- the search palette (Ctrl+K) ---------- */
 /* A <dialog> rather than a floating box, and showModal() rather than a class:
    the top layer is above every stacking context on the page, the backdrop and

@@ -7,6 +7,9 @@
  *   {name}            reference: display a previously named value
  *   {dest += expr}    forwarded bonus: evaluate, display, and add the answer
  *                     to `dest` -- a skill, a save, AC, an attack
+ *   {?Label | a, expr | b, expr}
+ *                     question: a choice the sheet cannot make, because it is
+ *                     the player's to make at the moment of rolling
  *
  * Everything outside the braces is ordinary text. Names may be dotted labels
  * (arms.hp, qi.max) and can reference each other; definitions are resolved
@@ -20,6 +23,13 @@
  * same expression copied into the Misc column of every skill it touches,
  * where nothing says where it came from and nothing moves the other five when
  * the rule is read again.
+ *
+ * The fifth does neither: it asks. Some rules end in a decision rather than a
+ * number -- Deathgrip Gauntlets turn as much of your own blood as you like
+ * into damage -- and a sheet that picks for you is wrong every time but one.
+ * So the sheet reads the *first* answer, which keeps every printed total a
+ * number, and the roll it hands to the table carries the question itself.
+ * See roll20.js, which turns one of these into Roll20's `?{…}`.
  *
  * All evaluation goes through the same sandbox as trackers (formula.js), so
  * inline formulas can only read character values and the whitelisted
@@ -96,10 +106,56 @@ function parseType(expr) {
   };
 }
 
+/**
+ * A question, and the answers on offer: `{?Label | Spend nothing, 0 | 1 HP, 2}`.
+ *
+ * The label runs to the first bar; each bar after it introduces one answer,
+ * written "what to call it, what it is worth". An answer with no comma is its
+ * own expression, which is how Roll20 lets a dropdown's label stand as its
+ * value and how `{?Bonus | 0 | 2 | 4}` says three plain numbers.
+ *
+ * One answer and no comma anywhere is not a list at all but a free number with
+ * a default -- `{?Extra damage | 0}` -- the form to reach for when the answers
+ * are not a short list. Roll20 spells that one `?{Extra damage|0}`, and the
+ * difference between the two is exactly this: whether there is a comma.
+ *
+ * `expr` is the first answer either way, because something has to be the
+ * number the sheet prints, and the first answer is the one a player writes
+ * first: the ordinary case, the one where the ability is not being used.
+ *
+ * Returns null when the text is not a question, so parseToken can go on to
+ * read it as one of the four older forms.
+ */
+export function parseQuery(inner, raw = `{${inner}}`) {
+  const s = String(inner).trim();
+  if (!s.startsWith('?')) return null;
+  const parts = s.slice(1).split('|');
+  const label = parts.shift().trim();
+  const options = parts.map((p) => {
+    const at = p.indexOf(',');
+    const text = at < 0 ? p.trim() : p.slice(at + 1).trim();
+    return { label: at < 0 ? p.trim() : p.slice(0, at).trim(), expr: text };
+  }).filter((o) => o.expr);
+  const free = options.length <= 1 && !parts.some((p) => p.includes(','));
+  return {
+    kind: 'query',
+    label,
+    free,
+    options: free ? [] : options,
+    // A free question with nothing after the bar still opens on something.
+    expr: options[0]?.expr || '0',
+    raw,
+  };
+}
+
 function parseToken(inner, raw) {
   const s = inner.trim();
   // {= expr}
   if (s.startsWith('=')) return { kind: 'value', expr: s.slice(1).trim(), raw };
+
+  // {?Deathgrip Gauntlets | Spend nothing, 0 | 1 HP, 2}
+  const query = parseQuery(s, raw);
+  if (query) return query;
 
   // {skill.bluff += 4}, {saves.will -= 2}, {skill.bluff, skill.diplomacy += tier},
   // {str.score += 2 as size}
@@ -207,10 +263,16 @@ export function collectUses(sources) {
         out.push({ name: t.name, path, scope, kind: 'ref', source: t.raw });
         continue;
       }
-      if (t.kind !== 'value' && t.kind !== 'define' && t.kind !== 'push') continue;
+      if (t.kind !== 'value' && t.kind !== 'define' && t.kind !== 'push' && t.kind !== 'query') continue;
+      // A question is all of its answers at once. An answer reading a name
+      // that has gone missing is as broken as any other formula, and it is no
+      // less broken for being the answer nobody usually picks -- which is
+      // exactly the one that would otherwise go unnoticed until it was needed.
+      const exprs = t.kind === 'query' && t.options.length
+        ? t.options.map((o) => o.expr) : [t.expr];
       let names = [];
       try {
-        names = collectReferences(parse(t.expr)).variables;
+        names = [...new Set(exprs.flatMap((e) => collectReferences(parse(e)).variables))];
       } catch {
         continue;   // a formula that does not parse is reported as itself, not as its names
       }
@@ -218,7 +280,7 @@ export function collectUses(sources) {
         // A definition naming itself is a cycle, reported as one; it is not a
         // use of some other name that has gone missing.
         if (t.kind === 'define' && name === t.name) continue;
-        out.push({ name, path, scope, kind: 'expr', source: t.expr });
+        out.push({ name, path, scope, kind: 'expr', source: t.kind === 'query' ? t.raw : t.expr });
       }
     }
   }

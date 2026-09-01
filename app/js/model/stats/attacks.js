@@ -15,6 +15,7 @@ import {
   stepDice, unarmedDice,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
+import { parseQuery } from '../../inline.js';
 import { weaponProficient } from '../document.js';
 import { emit } from '../events.js';
 import { forwarded } from '../scope.js';
@@ -136,9 +137,35 @@ export function recomputeEquipment(model) {
    */
   const spliceNames = (text) => {
     const src = String(text ?? '');
-    if (!src.includes('{')) return { text: src, error: null };
+    if (!src.includes('{')) return { text: src, parts: [src], error: null, queries: [] };
     let error = null;
+    const queries = [];
+    // A question cannot be spliced away like a name, because the number it
+    // stands for has not been chosen. It leaves a marker instead, and the two
+    // readings below are taken from the marked text: `text`, with the first
+    // answer put in, which is what the sheet works out and prints; and
+    // `parts`, which keeps the question where it stood so the arithmetic
+    // *around* it survives -- `{?…}*2` is a doubled answer, and dropping the
+    // ×2 from the roll while keeping it in the total is the one outcome worse
+    // than not supporting it at all.
     const out = src.replace(/\{([^{}]*)\}/g, (whole, inner) => {
+      const q = parseQuery(inner);
+      if (q) {
+        const answers = (q.free ? [{ label: q.label, expr: q.expr }] : q.options).map((o) => {
+          try {
+            const v = evaluateFormula(o.expr, scope);
+            return { ...o, text: typeof v === 'number' ? String(v) : String(v ?? '') };
+          } catch (err) {
+            error = error || err.message;
+            return { ...o, text: '0', error: err.message };
+          }
+        });
+        queries.push({ ...q, answers });
+        // The marker is NUL, written as an escape so the source stays plain
+        // text: it has to be something a player cannot type, and a marker
+        // made of spaces and digits would be found again in "x * 2".
+        return `\u0000${queries.length - 1}\u0000`;
+      }
       const expr = inner.trim().replace(/^=\s*/, '').trim();
       if (!expr) return whole;
       try {
@@ -151,8 +178,35 @@ export function recomputeEquipment(model) {
         return '';
       }
     });
-    return { text: out, error };
+    if (!queries.length) return { text: out, parts: [out], error, queries };
+
+    const answerOf = (i) => queries[i].answers[0]?.text ?? '0';
+    const marks = /\u0000(\d+)\u0000/g;
+    const parts = [];
+    let last = 0;
+    for (const m of out.matchAll(marks)) {
+      if (m.index > last) parts.push(out.slice(last, m.index));
+      parts.push(queries[Number(m[1])]);
+      last = m.index + m[0].length;
+    }
+    if (last < out.length) parts.push(out.slice(last));
+    return { text: out.replace(marks, (m, i) => answerOf(Number(i))), parts, error, queries };
   };
+
+  /**
+   * Where a question cannot go, said out loud.
+   *
+   * A question survives to the roll by keeping the whole expression it was
+   * written in, and only the {{…}} and [[…]] properties are carried that
+   * way -- the plain columns are read as one number each, which is exactly
+   * what a question is not. The Dice field could not take one regardless: a
+   * critical multiplies those dice rather than adding them.
+   *
+   * Saying so beats splicing the first answer in and letting the rest of the
+   * question go missing in silence, which is what a column would otherwise do.
+   */
+  const NO_QUESTION_HERE = 'A question can only be asked in a {{…}} or [[…]] property, '
+    + 'which is the one place a roll knows how to carry one.';
 
   for (const [wi, w] of e.weapons.entries()) {
     // What a formula calls this weapon. Resolved rather than stored so the
@@ -174,7 +228,10 @@ export function recomputeEquipment(model) {
     w.diceError = null;
     let diceText = w.dice ?? '';
     const ref = String(diceText).trim().match(/^(?:\{\{|\[\[|\{)\s*=?\s*(.+?)\s*(?:\}\}|\]\]|\})$/);
-    if (ref) {
+    if (ref && parseQuery(ref[1])) {
+      w.diceError = NO_QUESTION_HERE;
+      diceText = '';
+    } else if (ref) {
       try {
         const v = evaluateFormula(ref[1], scope);
         // A whole field that is one name: a number means that many d6, the
@@ -188,7 +245,7 @@ export function recomputeEquipment(model) {
     } else {
       const named = spliceNames(diceText);
       diceText = named.text;
-      w.diceError = named.error;
+      w.diceError = named.error || (named.queries.length ? NO_QUESTION_HERE : null);
     }
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
@@ -210,7 +267,7 @@ export function recomputeEquipment(model) {
     // and read a formula as 0, silently.
     const misc = spliceNames(w.miscDamage);
     w.miscDamageNum = 0;
-    w.miscDamageError = misc.error;
+    w.miscDamageError = misc.error || (misc.queries.length ? NO_QUESTION_HERE : null);
     if (String(misc.text).trim()) {
       try {
         w.miscDamageNum = Math.floor(Number(evalFormula(misc.text)) || 0);
@@ -241,24 +298,66 @@ export function recomputeEquipment(model) {
     //   {{4 Crit}}   confirmation rolls only
     //
     // Mult means nothing on an attack token: attack rolls are not multiplied.
+    //
+    // A token may also hold a question -- `[[{?Blood | none, 0 | 1 HP, 2} Mult]]`
+    // -- which the sheet reads as its first answer and the copied roll asks at
+    // the table. One trap, and it is worth knowing before it bites: leave a
+    // space inside the attack braces, `{{ {?…} }}`, because `{{{?…}}}` ends at
+    // the first `}}` and the question loses its own closing brace. The damage
+    // brackets have no such quarrel with it.
     const special = String(w.special ?? '');
     const parseTokens = (re, damage) => [...special.matchAll(re)].map((m) => {
       const raw = m[1].trim();
-      const crit = /\bcrit\b/i.test(raw);
-      const mult = damage && !crit && /\bmult(iplied)?\b/i.test(raw);
-      const named = spliceNames(raw.replace(/\b(?:crit|mult(?:iplied)?)\.?\b/gi, ' '));
-      const p = parseDiceExpr(named.text, evalFormula);
+      // Names and questions resolve first, so the two keywords are then read
+      // off dice and numbers alone. A question labelled "Multiply your blood"
+      // is prose; reading Mult out of it would quietly change what the token
+      // does on a critical, and the player would have no way to see why.
+      const named = spliceNames(raw);
+      const crit = /\bcrit\b/i.test(named.text);
+      const mult = damage && !crit && /\bmult(iplied)?\b/i.test(named.text);
+      const strip = (s) => s.replace(/\b(?:crit|mult(?:iplied)?)\.?\b/gi, ' ');
+      const p = parseDiceExpr(strip(named.text), evalFormula);
+      // A token holding a question keeps its whole expression, question and
+      // all. The number below is what that expression comes to when the first
+      // answer is taken -- right for the sheet, and wrong for the roll the
+      // moment a different answer is picked -- so the roll subtracts it back
+      // out and puts the expression in its place. Without this the arithmetic
+      // *around* a question was lost: `{?…}*2` doubled the sheet's total and
+      // handed the table an undoubled question.
+      const term = named.queries.length
+        ? named.parts.map((seg) => (typeof seg === 'string' ? strip(seg) : seg))
+        : null;
       // The token still reads as what the player wrote; only the fault, if
       // there is one, comes from the name that would not resolve.
-      return { text: raw, crit, mult, ...p, error: named.error || p.error };
+      return {
+        text: raw, crit, mult, queries: named.queries, term, ...p, error: named.error || p.error,
+      };
     });
     const atkTokens = parseTokens(/\{\{(.+?)\}\}/gs, false);
     const dmgTokens = parseTokens(/\[\[(.+?)\]\]/gs, true);
 
     const baseDice = parseDiceExpr(w.diceResolved, null);
+    // A pool's questions travel with its dice and its flat part, because the
+    // roll builder has to put all three into one formula and multiply the
+    // right ones on a critical.
     const tok = (list) => list.reduce(
-      (acc, t) => ({ dice: addDice(acc.dice, t.dice), flat: acc.flat + (t.error ? 0 : t.flat) }),
-      { dice: {}, flat: 0 },
+      (acc, t) => {
+        const counts = !t.error;
+        const termed = counts && t.term;
+        return {
+          dice: addDice(acc.dice, t.dice),
+          flat: acc.flat + (counts ? t.flat : 0),
+          // What the terms already stand for. It is inside `dice` and `flat`
+          // above, because the sheet's own totals want the first answer put in
+          // -- and it comes back out again in the roll, where the answer is
+          // not settled and the expression goes instead.
+          termDice: termed ? addDice(acc.termDice, t.dice) : acc.termDice,
+          termFlat: acc.termFlat + (termed ? t.flat : 0),
+          terms: termed ? [...acc.terms, t.term] : acc.terms,
+          queries: counts ? [...acc.queries, ...(t.queries || [])] : acc.queries,
+        };
+      },
+      { dice: {}, flat: 0, termDice: {}, termFlat: 0, terms: [], queries: [] },
     );
     // Forwarded damage joins the token pools rather than sitting beside
     // them: a bonus written as a rule elsewhere on the sheet is the same
@@ -280,7 +379,12 @@ export function recomputeEquipment(model) {
     // and reads names the same way the tokens do.
     const bcdNamed = spliceNames(w.bonusCritDamage);
     const bcdParsed = parseDiceExpr(bcdNamed.text, evalFormula);
-    const bcd = { ...bcdParsed, error: bcdNamed.error || bcdParsed.error };
+    const bcd = {
+      ...bcdParsed,
+      error: bcdNamed.error
+        || (bcdNamed.queries.length ? NO_QUESTION_HERE : null)
+        || bcdParsed.error,
+    };
     const critExtra = {
       dice: addDice(critDmg.dice, bcd.error ? {} : bcd.dice),
       flat: critDmg.flat + (bcd.error ? 0 : bcd.flat),
@@ -303,8 +407,15 @@ export function recomputeEquipment(model) {
       tokMultDmg: multDmg,
       totalDmgDice: addDice(addDice(baseDice.dice, dmg.dice), multDmg.dice),
       totalDmgFlat: baseDice.flat + bonus + dmg.flat + multDmg.flat,
-      errors: [...atkTokens, ...dmgTokens].filter((t) => t.error)
-        .map((t) => `${t.text}: ${t.error}`),
+      // The two plain columns report here as well. Only the Dice field had a
+      // place of its own to complain in, so a bad formula in Misc dmg or
+      // Bonus crit damage used to contribute nothing and say nothing -- and a
+      // question refused there would have done the same.
+      errors: [
+        ...[...atkTokens, ...dmgTokens].filter((t) => t.error).map((t) => `${t.text}: ${t.error}`),
+        ...(w.miscDamageError ? [`Misc dmg: ${w.miscDamageError}`] : []),
+        ...(bcd.error ? [`Bonus crit damage: ${bcd.error}`] : []),
+      ],
     };
     w.calc.totalDmgStr = diceString(w.calc.totalDmgDice, w.calc.totalDmgFlat)
       + (baseDice.notes.length ? ` ${baseDice.notes.join(' ')}` : '');

@@ -30,12 +30,18 @@
  *     prints, so a weapon called "Longsword [holy]" would truncate the message
  *     it is pasted into. Names and notes go through `escapeRoll20` for that
  *     reason; formulas do not, since those brackets are the point.
+ *   - A rule can end in a decision rather than a number, and Roll20 has a
+ *     shape for exactly that: `?{Label|Answer, value|…}`, which prompts the
+ *     player as the message resolves. A weapon written with a `{?…}` token
+ *     (see inline.js) carries its question into every line the answer
+ *     changes, multiplied on the crit lines where the answer multiplies.
  */
 import {
   ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
   attackModeTotal, parseDiceExpr, stepDiceMap,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
+import { evaluateFormula } from './formula.js';
 
 /** The formats a copy can be taken in, and what to call them in the UI. */
 export const ROLL_FORMATS = [
@@ -66,6 +72,120 @@ export function escapeRoll20(text) {
 }
 
 /**
+ * The three characters that are query syntax, and nothing else is.
+ *
+ * A separate table from the one above, and a much shorter one, because these
+ * go *inside* a formula rather than instead of one: a bar, a closing brace or
+ * a comma in an answer's name would split the question in two, while an
+ * ampersand or a bracket there is only itself. Escaping more than this would
+ * put entities on the screen at the table for no reason.
+ */
+const QUERY_ENTITIES = [['|', '&#124;'], ['}', '&#125;'], [',', '&#44;']];
+
+function escapeQueryPart(text) {
+  let out = String(text ?? '').replace(/\s+/g, ' ').trim();
+  for (const [ch, ent] of QUERY_ENTITIES) out = out.split(ch).join(ent);
+  return out;
+}
+
+/**
+ * A question, as Roll20 asks it.
+ *
+ *   ?{Deathgrip|Spend nothing, 0|1 HP, 2|1 + invested, 8}   a list
+ *   ?{Extra damage|0}                                       a free number
+ *
+ * Those are the two shapes Roll20 documents, and they are the two the sheet's
+ * `{?…}` token already tells apart -- by whether an answer has a comma in it,
+ * which is the same rule Roll20 parses by. So `free` decides it here rather
+ * than the number of answers: a one-answer list is still a list, because that
+ * is what the player wrote.
+ *
+ * By the time a question reaches here its answers are dice and numbers the
+ * model worked out. Only the labels are still the player's own text, and they
+ * are the half that can carry a comma.
+ */
+export function queryText(q) {
+  if (!q) return '';
+  const label = escapeQueryPart(q.label) || 'Choose';
+  const answers = q.answers || [];
+  if (q.free) return `?{${label}|${escapeQueryPart(answers[0]?.text ?? '0')}}`;
+  return `?{${label}|${answers
+    .map((a) => `${escapeQueryPart(a.label)}, ${escapeQueryPart(a.text)}`)
+    .join('|')}}`;
+}
+
+/**
+ * One token's whole expression, with its questions put back into it.
+ *
+ * A term is what the model kept of a token holding a question: the text as it
+ * was written, in pieces, with the question sitting where it stood. That is
+ * the only way the arithmetic *around* a question survives -- `{?...}*2` is a
+ * doubled answer, and a question lifted out of its expression would reach the
+ * table undoubled while the sheet's own total was not.
+ *
+ * A question inside an expression is bracketed, so the `*2` takes the answer
+ * and not whatever the answer happens to end with. A question that is the
+ * whole term needs no brackets and reads better without them.
+ *
+ * `answers` is what the sheet asked before it copied: a label to the answer
+ * chosen for it. Where one is given, the number goes in and the question does
+ * not.
+ */
+function renderTerm(term, answers = null) {
+  const meaningful = term.filter((seg) => typeof seg !== 'string' || seg.trim());
+  const alone = meaningful.length === 1 && typeof meaningful[0] !== 'string';
+  return term.map((seg) => {
+    if (typeof seg === 'string') return seg;
+    const picked = answers?.[seg.label];
+    const text = picked === undefined || picked === null ? queryText(seg) : String(picked);
+    return alone ? text : `(${text})`;
+  }).join('').trim();
+}
+
+/** Arithmetic with every question answered is arithmetic: work it out. */
+function settle(text) {
+  if (!/^[-+*/().\s0-9]+$/.test(text)) return text;
+  try {
+    const v = evaluateFormula(text, {});
+    return Number.isFinite(v) ? String(Math.floor(v)) : text;
+  } catch {
+    return text;   // not something the sandbox reads; it is Roll20's to work out
+  }
+}
+
+/**
+ * A pool's terms, multiplied where the critical multiplies them.
+ *
+ * The multiplier goes outside the whole term rather than inside it, which is
+ * the rule the dice and the flat parts already follow: everything in a Mult
+ * pool is gathered first and multiplied once.
+ */
+function termTexts(pool, times = 1, answers = null) {
+  return (pool?.terms || []).map((t) => {
+    const text = renderTerm(t, answers);
+    return settle(times > 1 ? `(${text})*${times}` : text);
+  });
+}
+
+/** What a pool contributes as a plain number, with its terms taken back out. */
+const rollFlat = (pool) => (pool?.flat || 0) - (pool?.termFlat || 0);
+
+/** ... and the same for its dice. */
+const rollDice = (pool) => subDice(pool?.dice || {}, pool?.termDice || {});
+
+/** Every question a list of pools holds, in order, without repeating one. */
+function gatherQueries(...pools) {
+  const seen = new Set();
+  const out = [];
+  for (const q of pools.flatMap((p) => p || [])) {
+    if (seen.has(q.label)) continue;
+    seen.add(q.label);
+    out.push(q);
+  }
+  return out;
+}
+
+/**
  * A d20 roll: the die, the modifier, and anything else rolled alongside it.
  *
  * `dice` is the sheet's {size: count} map, which is how a `{{1d6}}` bonus
@@ -73,19 +193,30 @@ export function escapeRoll20(text) {
  * `critRange` below 20 becomes Roll20's `cs>`, so a threat is highlighted at
  * the table rather than worked out by hand.
  */
-export function d20(mod, { dice = null, critRange = 20 } = {}) {
+export function d20(mod, { dice = null, critRange = 20, terms = [] } = {}) {
   const range = Math.floor(Number(critRange) || 20);
   let out = `1d20${range > 1 && range < 20 ? `cs>${range}` : ''}`;
   const m = Math.round(Number(mod) || 0);
   if (m) out += fmt(m);
   const extra = dice && Object.values(dice).some((n) => n) ? diceString(dice) : '';
   if (extra) out += extra.startsWith('-') ? extra : `+${extra}`;
+  for (const t of terms) out += `+${t}`;
   return out;
 }
 
-/** "2d6+12" from the sheet's dice map and its flat part. */
-export function damageFormula(dice, flat = 0) {
-  return diceString(dice || {}, Math.round(Number(flat) || 0));
+/**
+ * "2d6+12" from the sheet's dice map and its flat part.
+ *
+ * `terms` are whole expressions to add on the end -- a question, or the answer
+ * one was given. They cannot be folded into `flat` because neither is a
+ * number yet, which is the whole reason they travel separately.
+ */
+export function damageFormula(dice, flat = 0, terms = []) {
+  const base = diceString(dice || {}, Math.round(Number(flat) || 0));
+  if (!terms.length) return base;
+  // A roll that is nothing but a question is the question: the "0" that
+  // diceString falls back to would read at the table as a stray zero.
+  return base === '0' ? terms.join('+') : `${base}+${terms.join('+')}`;
 }
 
 /** Every count in a dice map multiplied -- a critical rolls its dice again. */
@@ -109,7 +240,11 @@ function subDice(a, b) {
 /**
  * A roll spec is what the sheet knows about one thing you can roll:
  *
- *   { name, rolls: [{ label, formula }], notes: [{ label, text }] }
+ *   { name, rolls: [{ label, formula }], notes: [{ label, text }], queries }
+ *
+ * `queries` is the questions this roll cannot answer on its own -- already
+ * written into the formulas as Roll20's `?{…}`, and listed separately so the
+ * sheet can offer to ask them here instead. Only weapons have any.
  *
  * The builders below produce these; `rollText` is the only thing that knows
  * what Roll20's syntax looks like, so a third format would be a third branch
@@ -469,7 +604,7 @@ const iterates = (modeKey) => !!MODE_ROLLS[modeKey]?.iteratives;
  * base x mult, plus the untagged [[...]] riders once, plus [[... Crit]] damage
  * multiplied, plus the bonus crit damage column once.
  */
-export function weaponRollSpec(c, index, cs = null) {
+export function weaponRollSpec(c, index, cs = null, answers = null) {
   const w = c?.equipment?.weapons?.[index];
   if (!w) return null;
   const { calc } = w;
@@ -489,6 +624,7 @@ export function weaponRollSpec(c, index, cs = null) {
         formula: d20((Number(w.attackTotal) || 0) + atkDelta, { critRange }),
       }],
       notes: conditionNote(cs, atkDelta),
+      queries: [],
     };
   }
 
@@ -500,15 +636,26 @@ export function weaponRollSpec(c, index, cs = null) {
     ? stepDiceMap(calc.baseDmgDice || {}, grow, c.identity?.size)
     : { dice: calc.baseDmgDice || {}, flat: 0 };
 
-  const atkOpts = { dice: calc.tokAtk?.dice, critRange };
+  // The questions each pool holds. They follow the same four rules the dice
+  // and the flat parts follow, because a question is only a number the player
+  // has not picked yet -- and a critical has to treat it as the number it will
+  // become, not as a special case.
+  const atkTerms = termTexts(calc.tokAtk, 1, answers);
+  // Every total below is the sheet's own, which has each question's first
+  // answer already in it -- so the part the terms stand for comes back out
+  // before the terms go in, or the ordinary case would be counted twice.
+  const atkOpts = { dice: rollDice(calc.tokAtk), critRange, terms: atkTerms };
+  const atkTotal = calc.totalAtk - (calc.tokAtk?.termFlat || 0) + atkDelta;
   const rolls = iterates(modeKey)
-    ? iterativeRolls(c.attack?.bab, calc.totalAtk + atkDelta, 'Attack', atkOpts)
-    : [{ label: 'Attack', formula: d20(calc.totalAtk + atkDelta, atkOpts) }];
+    ? iterativeRolls(c.attack?.bab, atkTotal, 'Attack', atkOpts)
+    : [{ label: 'Attack', formula: d20(atkTotal, atkOpts) }];
   rolls.push({
     label: 'Damage',
     formula: damageFormula(
-      addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
-      calc.totalDmgFlat + dmgDelta + sized.flat,
+      addDice(addDice(sized.dice, rollDice(calc.tokDmg)), rollDice(calc.tokMultDmg)),
+      calc.totalDmgFlat + dmgDelta + sized.flat
+        - (calc.tokDmg?.termFlat || 0) - (calc.tokMultDmg?.termFlat || 0),
+      [...termTexts(calc.tokDmg, 1, answers), ...termTexts(calc.tokMultDmg, 1, answers)],
     ),
   });
 
@@ -523,22 +670,37 @@ export function weaponRollSpec(c, index, cs = null) {
   // `multBase` the card prints as `(12d8+26)×4`: the weapon's own damage, the
   // ability, enhancement and Misc dmg, and any [[... Mult]] token.
   const multBase = {
-    dice: addDice(sized.dice, calc.tokMultDmg?.dice || {}),
-    flat: (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + (calc.tokMultDmg?.flat || 0),
+    dice: addDice(sized.dice, rollDice(calc.tokMultDmg)),
+    flat: (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + rollFlat(calc.tokMultDmg),
   };
   const critDice = addDice(
-    addDice(scaleDice(multBase.dice, mult), calc.tokDmg?.dice || {}),
-    addDice(scaleDice(calc.critTagged?.dice || {}, mult), bcd.dice),
+    addDice(scaleDice(multBase.dice, mult), rollDice(calc.tokDmg)),
+    addDice(scaleDice(rollDice(calc.critTagged), mult), bcd.dice),
   );
   const critFlat = multBase.flat * mult
-    + (calc.tokDmg?.flat || 0)
-    + (calc.critTagged?.flat || 0) * mult
+    + rollFlat(calc.tokDmg)
+    + rollFlat(calc.critTagged) * mult
     + bcd.flat;
   rolls.push({
     label: 'Crit confirm',
-    formula: d20((calc.confirmTotal || 0) + atkDelta, { dice: calc.critAtk?.dice, critRange }),
+    formula: d20((calc.confirmTotal || 0) + atkDelta
+      - (calc.tokAtk?.termFlat || 0) - (calc.critAtk?.termFlat || 0), {
+      dice: rollDice(calc.critAtk),
+      critRange,
+      // The confirmation is the attack again, so a question that moved the
+      // attack moves this too -- the same way `confirmTotal` already carries
+      // the attack tokens' flat part.
+      terms: [...atkTerms, ...termTexts(calc.critAtk, 1, answers)],
+    }),
   });
-  rolls.push({ label: `Crit damage (x${mult})`, formula: damageFormula(critDice, critFlat) });
+  rolls.push({
+    label: `Crit damage (x${mult})`,
+    formula: damageFormula(critDice, critFlat, [
+      ...termTexts(calc.tokMultDmg, mult, answers),   // multiplied, with the base
+      ...termTexts(calc.critTagged, mult, answers),   // crit-only, multiplied
+      ...termTexts(calc.tokDmg, 1, answers),          // riders, added once
+    ]),
+  });
 
   const notes = [];
   if (critRange < 20 || mult !== 2) {
@@ -549,7 +711,23 @@ export function weaponRollSpec(c, index, cs = null) {
   // it is not in the formula -- but it is on the sheet, and dropping it without
   // saying so would quietly hand over the smaller of two numbers.
   if (calc.notes?.length) notes.push({ label: 'Dice', text: `${w.diceResolved ?? ''}`.trim() });
-  return { name, rolls, notes: [...notes, ...conditionNote(cs, atkDelta || dmgDelta)] };
+
+  // A question left for the table is asked on every line it changes, and the
+  // damage and the critical are two of them in the one message. Saying so is
+  // cheaper than a player answering the two differently and never working out
+  // why the crit does not follow from the hit.
+  const queries = gatherQueries(calc.tokAtk?.queries, calc.critAtk?.queries,
+    calc.tokDmg?.queries, calc.tokMultDmg?.queries, calc.critTagged?.queries);
+  const unanswered = queries.filter((q) => answers?.[q.label] === undefined);
+  if (unanswered.length) {
+    notes.push({
+      label: unanswered.length > 1 ? 'Questions' : 'Question',
+      text: `${unanswered.map((q) => q.label).join(', ')} — answer the same way each time you are asked`,
+    });
+  }
+  return {
+    name, rolls, queries, notes: [...notes, ...conditionNote(cs, atkDelta || dmgDelta)],
+  };
 }
 
 /**
@@ -558,7 +736,7 @@ export function weaponRollSpec(c, index, cs = null) {
  * `kind` is split off at the first bar, so a ref is free to carry its own
  * parts after it -- `eidolon|attack:0`, `concentration|vancian:1`.
  */
-export function rollSpec(c, kind, ref, cs = null) {
+export function rollSpec(c, kind, ref, cs = null, answers = null) {
   // A companion button may name which of a kind: `eidolon:2|attack:0` is the
   // third eidolon. A bare kind stays the first of them, which is every button
   // that existed before a character could keep more than one.
@@ -568,7 +746,7 @@ export function rollSpec(c, kind, ref, cs = null) {
     case 'save': return saveRollSpec(c, ref, cs);
     case 'mode': return attackRollSpec(c, ref, cs);
     case 'skill': return skillRollSpec(c, Number(ref), cs);
-    case 'weapon': return weaponRollSpec(c, Number(ref), cs);
+    case 'weapon': return weaponRollSpec(c, Number(ref), cs, answers);
     case 'initiative': return initiativeRollSpec(c, cs);
     case 'concentration': return concentrationRollSpec(c, ref);
     case 'familiar':
@@ -581,6 +759,6 @@ export function rollSpec(c, kind, ref, cs = null) {
 }
 
 /** Spec and text in one call, for a caller that only wants the string. */
-export function roll20Text(c, kind, ref, cs = null, format = DEFAULT_ROLL_FORMAT) {
-  return rollText(rollSpec(c, kind, ref, cs), format);
+export function roll20Text(c, kind, ref, cs = null, format = DEFAULT_ROLL_FORMAT, answers = null) {
+  return rollText(rollSpec(c, kind, ref, cs, answers), format);
 }
