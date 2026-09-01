@@ -622,8 +622,10 @@ export class CharacterSheetElement extends HTMLElement {
   #formulaQuery = '';
   #formulaRefOpen = false;
   /** The last roll copied, shown back so the player can see what they got. */
-  #rollToast = null;    // { kind, ref, what, text, failed }
+  #rollToast = null;    // { kind, ref, what, text, failed, answers }
   #rollToastTimer = null;
+  #ask = null;          // the open "what does this roll ask?" dialog, if any
+  #askReturn = null;
   /* What the last structural change was, offered back. One slot, shared with
      the roll toast: both report the last thing that happened, and there is
      only ever one last thing. */
@@ -3538,8 +3540,17 @@ export class CharacterSheetElement extends HTMLElement {
    * refused inside one, so a failure is not an error state: the text goes into
    * the toast selected, which is the same thing one keystroke later.
    */
-  async #copyRoll(kind, ref, what) {
-    const spec = rollSpec(this.#model.data, kind, ref, this.#model.conditionState);
+  async #copyRoll(kind, ref, what, answers = null) {
+    const spec = rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
+    // A roll with a question in it is not a roll yet. Asking here rather than
+    // copying a `?{…}` for Roll20 to ask is the difference between a number
+    // the player has settled and one the table is still owed -- and the only
+    // way the sheet can hand a resolved roll to anything that is not Roll20.
+    // `answers` already set (even to nothing) means the asking is done.
+    if (answers === null && spec?.queries?.length) {
+      this.#askRoll(spec, kind, ref, what);
+      return;
+    }
     const text = rollText(spec, this.#rollFormat);
     if (!text) return;
     let failed = false;
@@ -3550,9 +3561,81 @@ export class CharacterSheetElement extends HTMLElement {
     }
     this.#undoToast = null;
     this.#rollToast = {
-      kind, ref, what: what || spec.name, text, failed,
+      kind, ref, what: what || spec.name, text, failed, answers,
     };
     this.#renderRollToast({ select: failed });
+  }
+
+  /**
+   * Put the questions a roll carries, and let the player settle them.
+   *
+   * Two ways out, because there are two tables. Answering here copies the
+   * numbers, which is the roll for a game that is not Roll20 -- or for a
+   * player who would rather decide while looking at the sheet that explains
+   * the choice. Leaving them copies the `?{…}` queries, and Roll20 asks at the
+   * moment of the roll, which is later and in front of everyone.
+   *
+   * Built and thrown away per opening, like the palette: what it holds is a
+   * roll that is true now, and keeping one in step with every edit would cost
+   * more than making it again.
+   */
+  #askRoll(spec, kind, ref, what) {
+    this.#closeAsk();
+    const dlg = this.ownerDocument.createElement('dialog');
+    dlg.className = 'rollask';
+    dlg.innerHTML = `<form method="dialog">
+      <h2>${esc(spec.name)}</h2>
+      <p class="hint">This roll asks something the sheet cannot answer for you.</p>
+      ${spec.queries.map((q, i) => `<label class="askrow">
+        <span>${esc(q.label)}</span>
+        ${q.free
+    ? `<input type="number" data-ask="${i}" value="${esc(q.answers?.[0]?.text ?? '0')}" step="1">`
+    : `<select data-ask="${i}">${(q.answers || []).map((a, j) => `
+            <option value="${esc(a.text)}"${j === 0 ? ' selected' : ''}>${esc(a.label)} — ${esc(a.text)}</option>`).join('')}</select>`}
+      </label>`).join('')}
+      <menu>
+        <button value="cancel" data-askcancel>Cancel</button>
+        <button value="table" data-asktable
+          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>
+        <button value="here" data-askhere class="primary">Copy with these answers</button>
+      </menu>
+    </form>`;
+    this.#ask = dlg;
+    this.#askReturn = this.shadowRoot.activeElement;
+    this.shadowRoot.append(dlg);
+
+    const chosen = () => Object.fromEntries(spec.queries.map((q, i) => {
+      const el = dlg.querySelector(`[data-ask="${i}"]`);
+      return [q.label, el ? el.value : q.answers?.[0]?.text];
+    }));
+    dlg.querySelector('[data-askhere]')?.addEventListener('click', () => {
+      const answers = chosen();
+      this.#closeAsk();
+      this.#copyRoll(kind, ref, what, answers);
+    });
+    // An empty set of answers is not "no answers given": it is the player
+    // saying the table should be asked instead, which is why it is an object
+    // and not the null that would send us round again.
+    dlg.querySelector('[data-asktable]')?.addEventListener('click', () => {
+      this.#closeAsk();
+      this.#copyRoll(kind, ref, what, {});
+    });
+    dlg.querySelector('[data-askcancel]')?.addEventListener('click', () => this.#closeAsk());
+    dlg.addEventListener('close', () => this.#closeAsk());
+    dlg.showModal();
+    dlg.querySelector('[data-ask="0"]')?.focus();
+  }
+
+  #closeAsk() {
+    const dlg = this.#ask;
+    if (!dlg) return;
+    // Cleared first: closing the dialog fires `close`, which comes back here.
+    this.#ask = null;
+    if (dlg.open) dlg.close();
+    dlg.remove();
+    const back = this.#askReturn;
+    this.#askReturn = null;
+    if (back?.isConnected) back.focus();
   }
 
   #bindRollToast(scope) {
@@ -3561,7 +3644,9 @@ export class CharacterSheetElement extends HTMLElement {
         this.#rollFormat = b.dataset.rollformat;
         writeRollFormat(this.#rollFormat);
         const t = this.#rollToast;
-        if (t) this.#copyRoll(t.kind, t.ref, t.what);
+        // The answers come with it, so switching shape re-copies the roll that
+        // was copied rather than asking the same questions over again.
+        if (t) this.#copyRoll(t.kind, t.ref, t.what, t.answers ?? null);
       });
     });
     scope.querySelectorAll('[data-rollclose]').forEach((b) => {

@@ -333,6 +333,82 @@ console.log('a Mult token multiplies with the weapon, a rider does not');
   check('only one of them doubles', by('Crit damage'), '4d6+32');
 }
 
+console.log('a question the sheet cannot answer becomes a Roll20 query');
+{
+  // Deathgrip Gauntlets: spend your own blood for twice as much damage. The
+  // amount is the player's to choose, and Mult means the multiplier takes it.
+  const c = built({
+    weapons: [{
+      ...GREATSWORD,
+      critRange: 20,
+      special: '[[{?Deathgrip | Spend nothing, 0 | 1 HP, 2 | 1 + invested, 8} Mult]]',
+    }],
+  });
+  const spec = weaponRollSpec(c.data, 0, c.conditionState);
+  const by = (label) => spec.rolls.find((r) => r.label.startsWith(label))?.formula;
+  const QUERY = '?{Deathgrip|Spend nothing, 0|1 HP, 2|1 + invested, 8}';
+  check('the sheet prints the first answer and asks for the rest',
+    by('Damage'), `2d6+7+${QUERY}`);
+  // The multiplier goes outside the question, not inside each answer, so the
+  // pool behaves on a threat exactly as the weapon's own damage does.
+  check('the multiplier takes the answer, whatever it turns out to be',
+    by('Crit damage'), `4d6+14+(${QUERY})*2`);
+  check('and the roll says what it will ask',
+    spec.notes.find((n) => n.label === 'Question')?.text,
+    'Deathgrip — answer the same way each time you are asked');
+  check('the questions are listed for a caller that would rather ask them',
+    spec.queries.map((q) => q.label), ['Deathgrip']);
+
+  // Answered here instead: the numbers go in, the question does not, and the
+  // note goes with it -- there is nothing left to be asked.
+  const settled = weaponRollSpec(c.data, 0, c.conditionState, { Deathgrip: 8 });
+  const at = (label) => settled.rolls.find((r) => r.label.startsWith(label))?.formula;
+  // Kept as its own term rather than folded into the flat part: an answer may
+  // be dice, and a reader at the table can see which +8 came from the choice.
+  check('an answer given here is just a number', at('Damage'), '2d6+7+8');
+  check('and it multiplies as the number it is', at('Crit damage'), '4d6+14+16');
+  check('nothing is left to ask', settled.notes.some((n) => n.label === 'Question'), false);
+
+  // A question on the attack side needs a space inside the {{…}}, or the
+  // token's own closing braces eat the question's. Worth a test: the broken
+  // form looks right and fails quietly.
+  const atk = built({
+    weapons: [{
+      ...GREATSWORD, critRange: 20, special: '{{ {?Power attack | No, 0 | Yes, -3} }}',
+    }],
+  });
+  check('a question can move the attack roll',
+    weaponRollSpec(atk.data, 0, atk.conditionState).rolls[0].formula,
+    '1d20+16+?{Power attack|No, 0|Yes, -3}');
+  check('and the confirmation carries it too, since it is the attack again',
+    weaponRollSpec(atk.data, 0, atk.conditionState).rolls
+      .find((r) => r.label === 'Crit confirm').formula,
+    '1d20+16+?{Power attack|No, 0|Yes, -3}');
+  const jammed = built({
+    weapons: [{ ...GREATSWORD, critRange: 20, special: '{{{?Power attack | No, 0 | Yes, -3}}}' }],
+  });
+  check('jammed against the braces it is not a question at all',
+    weaponRollSpec(jammed.data, 0, jammed.conditionState).queries, []);
+
+  const free = built({
+    weapons: [{ ...GREATSWORD, critRange: 20, special: '[[{?Extra damage | 0}]]' }],
+  });
+  check('a free number is Roll20’s other shape',
+    weaponRollSpec(free.data, 0, free.conditionState).rolls
+      .find((r) => r.label === 'Damage').formula, '2d6+7+?{Extra damage|0}');
+
+  // A bar, a brace or a comma in a label is query syntax and would split the
+  // question in two; nothing else needs escaping, and escaping it would only
+  // put entities on the screen.
+  const risky = built({
+    weapons: [{ ...GREATSWORD, critRange: 20, special: '[[{?Spend, or not | No, 0 | Yes, 4}]]' }],
+  });
+  check('a comma in a label is escaped, and only that',
+    weaponRollSpec(risky.data, 0, risky.conditionState).rolls
+      .find((r) => r.label === 'Damage').formula,
+    '2d6+7+?{Spend&#44; or not|No, 0|Yes, 4}');
+}
+
 console.log('an aside in the dice field is carried, not silently dropped');
 {
   // "4d6 (8d6)" is what a kineticist's fist looks like on the sheet: the
@@ -452,7 +528,13 @@ if (!hasFixtures()) {
   console.log('every roll on every real character is well formed');
   // A roll is well formed if it is a d20 (or damage dice) and nothing in it
   // could start a construct the chat parser would try to resolve.
-  const FORMULA = /^(1d20(cs>\d+)?)?[-+0-9d ]*$/;
+  const FORMULA = /^(1d20(cs>\d+)?)?[-+0-9d ()*]*$/;
+  // A question is the one construct that is *meant* to reach the parser, so it
+  // is taken out before the rest is held to the rule above rather than the rule
+  // being loosened to let it through -- which would let anything else through
+  // with it. What is left must still be dice and numbers.
+  const QUERY = /\?\{[^{}]*\}/g;
+  const bare = (f) => f.replace(QUERY, '0');
   for (const id of fixtureIds()) {
     const c = new Character(loadCharacter(id));
     const d = c.data;
@@ -478,14 +560,15 @@ if (!hasFixtures()) {
     check(`${id} every row builds a spec`, specs.filter((s) => !s).length, 0);
     const rolls = specs.flatMap((s) => s.rolls);
     check(`${id} ${rolls.length} formulas are dice and numbers`,
-      rolls.map((r) => r.formula).filter((f) => !FORMULA.test(f)), []);
+      rolls.map((r) => bare(r.formula)).filter((f) => !FORMULA.test(f)), []);
     for (const format of ROLL_FORMATS.map(([k]) => k)) {
       const texts = specs.map((s) => rollText(s, format));
       check(`${id} ${format}: nothing comes out empty`, texts.filter((t) => !t).length, 0);
       // The template's own braces are the only ones allowed through; a name
       // that carried its own would truncate the message at the table.
       if (format === 'template') {
-        const bad = texts.filter((t) => !/^&\{template:default\}( \{\{[^{}]*\}\})+$/.test(t));
+        const bad = texts.map((t) => t.replace(QUERY, '0'))
+          .filter((t) => !/^&\{template:default\}( \{\{[^{}]*\}\})+$/.test(t));
         check(`${id} template: every field closes`, bad, []);
       }
     }

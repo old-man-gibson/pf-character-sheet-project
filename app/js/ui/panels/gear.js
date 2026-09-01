@@ -181,6 +181,22 @@ function sharedUnarmedBlock(u, base) {
       ${u.improvedUnarmedStrike ? '<p class="hint">Gains Improved Unarmed Strike (1+ unarmed-sphere talents).</p>' : ''}`;
   }
 
+/**
+ * One token pool as the card reads it: its dice and flat part, then the
+ * questions in it by name.
+ *
+ * A pool holding nothing but a question totals zero, and "[[Mult]] 0 damage"
+ * is how a player comes to believe their gauntlets are not wired up. The
+ * question is the part that is not a number yet, so it is named here rather
+ * than added -- the number it becomes is settled at the moment of the roll.
+ */
+function poolText(pool) {
+  const base = diceString(pool.dice, pool.flat);
+  const asked = (pool.queries || []).map((q) => q.label).filter(Boolean);
+  if (!asked.length) return base;
+  return `${base === '0' ? '' : `${base} + `}${asked.join(', ')} (asked when you roll)`;
+}
+
   /** The six-block weapon layout from the workbook, as editable cards. */
 export function weaponsPanel(model, e) {
     const weapons = e.weapons || [];
@@ -293,11 +309,11 @@ export function weaponsPanel(model, e) {
             ${!w.calc.hasTokens && !w.calc.hasCritTokens
     ? `<span class="crit">crit ${esc(w.calc.critStr)} <span class="avg">avg ${w.calc.critAvg}</span></span>` : ''}</div>
           ${w.calc.hasTokens ? `<div class="hint">
-            ${w.calc.atkTokens.some((t) => !t.crit) ? `{{…}} ${esc(diceString(w.calc.tokAtk.dice, w.calc.tokAtk.flat))} to hit` : ''}
-            ${w.calc.dmgTokens.some((t) => !t.crit && !t.mult) ? ` · [[…]] ${esc(diceString(w.calc.tokDmg.dice, w.calc.tokDmg.flat))} damage, added once on a crit` : ''}
-            ${w.calc.dmgTokens.some((t) => t.mult) ? ` · [[Mult]] ${esc(diceString(w.calc.tokMultDmg.dice, w.calc.tokMultDmg.flat))} damage, multiplied on a crit` : ''}
-            ${w.calc.atkTokens.some((t) => t.crit) ? ` · {{Crit}} ${esc(diceString(w.calc.critAtk.dice, w.calc.critAtk.flat))} to confirm` : ''}
-            ${w.calc.dmgTokens.some((t) => t.crit) ? ` · [[Crit]] ${esc(diceString(w.calc.critTagged.dice, w.calc.critTagged.flat))}×${w.calc.critMultNum} crit damage` : ''}
+            ${w.calc.atkTokens.some((t) => !t.crit) ? `{{…}} ${esc(poolText(w.calc.tokAtk))} to hit` : ''}
+            ${w.calc.dmgTokens.some((t) => !t.crit && !t.mult) ? ` · [[…]] ${esc(poolText(w.calc.tokDmg))} damage, added once on a crit` : ''}
+            ${w.calc.dmgTokens.some((t) => t.mult) ? ` · [[Mult]] ${esc(poolText(w.calc.tokMultDmg))} damage, multiplied on a crit` : ''}
+            ${w.calc.atkTokens.some((t) => t.crit) ? ` · {{Crit}} ${esc(poolText(w.calc.critAtk))} to confirm` : ''}
+            ${w.calc.dmgTokens.some((t) => t.crit) ? ` · [[Crit]] ${esc(poolText(w.calc.critTagged))}×${w.calc.critMultNum} crit damage` : ''}
           </div>` : ''}
           ${w.calc.hasTokens || w.calc.hasCritTokens ? `<div class="wtotal">atk <strong>${esc(w.calc.totalAtkStr)}</strong> ·
             dmg <strong>${esc(w.calc.totalDmgStr)}</strong>

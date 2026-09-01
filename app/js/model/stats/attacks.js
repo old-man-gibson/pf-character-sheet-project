@@ -277,6 +277,13 @@ export function recomputeEquipment(model) {
     //   {{4 Crit}}   confirmation rolls only
     //
     // Mult means nothing on an attack token: attack rolls are not multiplied.
+    //
+    // A token may also hold a question -- `[[{?Blood | none, 0 | 1 HP, 2} Mult]]`
+    // -- which the sheet reads as its first answer and the copied roll asks at
+    // the table. One trap, and it is worth knowing before it bites: leave a
+    // space inside the attack braces, `{{ {?…} }}`, because `{{{?…}}}` ends at
+    // the first `}}` and the question loses its own closing brace. The damage
+    // brackets have no such quarrel with it.
     const special = String(w.special ?? '');
     const parseTokens = (re, damage) => [...special.matchAll(re)].map((m) => {
       const raw = m[1].trim();
