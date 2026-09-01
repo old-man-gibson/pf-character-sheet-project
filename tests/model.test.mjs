@@ -8849,5 +8849,80 @@ console.log('row labels -- what a toast calls the thing that just went');
   check('a long one is cut to fit a sentence', rowLabel({ name: 'x'.repeat(80) }).length, 40);
 }
 
+console.log('a question in prose -- the fifth inline form');
+{
+  const { tokenize, plainTokens, renderTokens, collectUses } = await import('../app/js/inline.js');
+  const one = (text) => tokenize(text)[0];
+
+  const list = one('{?Deathgrip | Spend nothing, 0 | 1 HP, 2 | 1 + invested, 2 * (1 + 3)}');
+  check('a list of answers', [list.kind, list.label, list.free], ['query', 'Deathgrip', false]);
+  check('each answer is a label and an expression',
+    list.options.map((o) => [o.label, o.expr]),
+    [['Spend nothing', '0'], ['1 HP', '2'], ['1 + invested', '2 * (1 + 3)']]);
+  check('the first answer is the one the sheet reads', list.expr, '0');
+
+  // Roll20 offers both shapes, and so does this: the difference is the comma.
+  const free = one('{?Extra damage | 0}');
+  check('no comma and one answer is a free number', [free.free, free.expr], [true, '0']);
+  check('nothing after the label still opens on something',
+    [one('{?Bonus}').free, one('{?Bonus}').expr], [true, '0']);
+  const bare = one('{?Attack die | 0 | 2 | 4}');
+  check('several answers with no commas are their own labels',
+    [bare.free, bare.options.map((o) => o.label)], [false, ['0', '2', '4']]);
+
+  check('the four older forms are untouched',
+    ['{= 1 + 2}', '{name = 4}', '{skill.bluff += 4}', '{name}'].map((t) => one(t).kind),
+    ['value', 'define', 'push', 'ref']);
+  check('a question reads as its first answer',
+    plainTokens(renderTokens('deals {?Blood | none, 0 | 1 HP, 2} extra', {}, {})),
+    'deals 0 extra');
+  // Every answer is checked, not just the one that is usually taken -- the
+  // unpicked answer is exactly the one whose broken name would go unnoticed.
+  check('every answer is watched for a missing name',
+    collectUses([{ path: 'p', text: '{?Q | a, str.mod | b, con.mod}' }]).map((u) => u.name),
+    ['str.mod', 'con.mod']);
+}
+
+console.log('a question on a weapon -- the sheet takes the first answer');
+{
+  const doc = blankDocument({ name: 'Gauntlet', level: 11 });
+  delete doc.statsBuild;
+  doc.abilities.str = { ...doc.abilities.str, score: 18, tempScore: 18 };
+  doc.attack.bab = 11;
+  const gauntlet = {
+    name: 'Deathgrip Gauntlets', attackType: 'Melee', dice: '1d3', damageAbility: 'Str',
+    abilityMult: 1, miscDamage: 0, miscAttack: 0, enhancement: 1, critRange: 20, critMult: 'x2',
+    damageType: 'B', groups: [], size: '', range: '', handedness: '', familiarity: '',
+    ammunition: '', weight: 2, price: 0, attackOffset: 0,
+    special: '[[{?Deathgrip | Spend nothing, 0 | 1 HP, 2 | 1 + invested, 2 * (1 + 3)} Mult]]',
+  };
+  doc.equipment.weapons.push({ ...gauntlet });
+  const w = new Character(doc).data.equipment.weapons[0];
+  // 1d3 + Str 4 + enhancement 1, and nothing from the question: its first
+  // answer is 0, which is the ability not being used.
+  check('the printed total is still a number', w.calc.totalDmgStr, '1d3+5');
+  check('and nothing is broken about it', w.calc.errors, []);
+  check('the question rides in the pool the multiplier takes',
+    w.calc.tokMultDmg.queries.map((q) => q.label), ['Deathgrip']);
+  check('with every answer worked out',
+    w.calc.tokMultDmg.queries[0].answers.map((a) => a.text), ['0', '2', '8']);
+
+  // The keywords are read after the answers are spliced in, so a label that
+  // happens to say "multiply" is prose and not the Mult keyword.
+  const proseKeyword = { ...gauntlet, special: '[[{?Multiply your blood | none, 0 | some, 4}]]' };
+  const w2 = new Character({ ...doc, equipment: { ...doc.equipment, weapons: [proseKeyword] } })
+    .data.equipment.weapons[0];
+  check('a label is not a keyword',
+    [w2.calc.tokMultDmg.queries.length, w2.calc.tokDmg.queries.length], [0, 1]);
+
+  // The Dice field is the one place a question cannot go: the crit multiplies
+  // those dice rather than adding them, so it says so instead of dropping it.
+  const inDice = { ...gauntlet, dice: '{?Size | small, 1 | large, 2}', special: '' };
+  const w3 = new Character({ ...doc, equipment: { ...doc.equipment, weapons: [inDice] } })
+    .data.equipment.weapons[0];
+  check('a question in the Dice field is refused out loud',
+    /cannot change the weapon/.test(w3.diceError || ''), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

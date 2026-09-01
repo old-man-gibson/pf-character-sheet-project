@@ -15,6 +15,7 @@ import {
   stepDice, unarmedDice,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
+import { parseQuery } from '../../inline.js';
 import { weaponProficient } from '../document.js';
 import { emit } from '../events.js';
 import { forwarded } from '../scope.js';
@@ -136,9 +137,29 @@ export function recomputeEquipment(model) {
    */
   const spliceNames = (text) => {
     const src = String(text ?? '');
-    if (!src.includes('{')) return { text: src, error: null };
+    if (!src.includes('{')) return { text: src, error: null, queries: [] };
     let error = null;
+    const queries = [];
     const out = src.replace(/\{([^{}]*)\}/g, (whole, inner) => {
+      // A question is not answered here. Its first answer is spliced in, so
+      // every total the sheet prints stays a number and stays the ordinary
+      // case; the question itself is kept, for the roll to carry to the table
+      // where the player can actually be asked. Answers are spliced as text
+      // for the same reason names are -- an answer may be "3d6".
+      const q = parseQuery(inner);
+      if (q) {
+        const answers = (q.free ? [{ label: q.label, expr: q.expr }] : q.options).map((o) => {
+          try {
+            const v = evaluateFormula(o.expr, scope);
+            return { ...o, text: typeof v === 'number' ? String(v) : String(v ?? '') };
+          } catch (err) {
+            error = error || err.message;
+            return { ...o, text: '0', error: err.message };
+          }
+        });
+        queries.push({ ...q, answers });
+        return answers[0]?.text ?? '0';
+      }
       const expr = inner.trim().replace(/^=\s*/, '').trim();
       if (!expr) return whole;
       try {
@@ -151,8 +172,20 @@ export function recomputeEquipment(model) {
         return '';
       }
     });
-    return { text: out, error };
+    return { text: out, error, queries };
   };
+
+  /**
+   * Where a question cannot go, said out loud.
+   *
+   * The Dice field is the weapon's own damage, and the roll builder multiplies
+   * it on a critical rather than adding it -- so a question there would have to
+   * change the dice themselves. It is a [[…]] property instead, which is a
+   * pool the crit maths already knows how to carry. Saying so beats splicing
+   * the first answer in and letting the other answers go missing in silence.
+   */
+  const NO_QUESTION_HERE = 'A question cannot change the weapon’s own dice. '
+    + 'Write it as a [[…]] property instead.';
 
   for (const [wi, w] of e.weapons.entries()) {
     // What a formula calls this weapon. Resolved rather than stored so the
@@ -174,7 +207,10 @@ export function recomputeEquipment(model) {
     w.diceError = null;
     let diceText = w.dice ?? '';
     const ref = String(diceText).trim().match(/^(?:\{\{|\[\[|\{)\s*=?\s*(.+?)\s*(?:\}\}|\]\]|\})$/);
-    if (ref) {
+    if (ref && parseQuery(ref[1])) {
+      w.diceError = NO_QUESTION_HERE;
+      diceText = '';
+    } else if (ref) {
       try {
         const v = evaluateFormula(ref[1], scope);
         // A whole field that is one name: a number means that many d6, the
@@ -188,7 +224,7 @@ export function recomputeEquipment(model) {
     } else {
       const named = spliceNames(diceText);
       diceText = named.text;
-      w.diceError = named.error;
+      w.diceError = named.error || (named.queries.length ? NO_QUESTION_HERE : null);
     }
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
@@ -244,21 +280,32 @@ export function recomputeEquipment(model) {
     const special = String(w.special ?? '');
     const parseTokens = (re, damage) => [...special.matchAll(re)].map((m) => {
       const raw = m[1].trim();
-      const crit = /\bcrit\b/i.test(raw);
-      const mult = damage && !crit && /\bmult(iplied)?\b/i.test(raw);
-      const named = spliceNames(raw.replace(/\b(?:crit|mult(?:iplied)?)\.?\b/gi, ' '));
-      const p = parseDiceExpr(named.text, evalFormula);
+      // Names and questions resolve first, so the two keywords are then read
+      // off dice and numbers alone. A question labelled "Multiply your blood"
+      // is prose; reading Mult out of it would quietly change what the token
+      // does on a critical, and the player would have no way to see why.
+      const named = spliceNames(raw);
+      const crit = /\bcrit\b/i.test(named.text);
+      const mult = damage && !crit && /\bmult(iplied)?\b/i.test(named.text);
+      const p = parseDiceExpr(named.text.replace(/\b(?:crit|mult(?:iplied)?)\.?\b/gi, ' '), evalFormula);
       // The token still reads as what the player wrote; only the fault, if
       // there is one, comes from the name that would not resolve.
-      return { text: raw, crit, mult, ...p, error: named.error || p.error };
+      return { text: raw, crit, mult, queries: named.queries, ...p, error: named.error || p.error };
     });
     const atkTokens = parseTokens(/\{\{(.+?)\}\}/gs, false);
     const dmgTokens = parseTokens(/\[\[(.+?)\]\]/gs, true);
 
     const baseDice = parseDiceExpr(w.diceResolved, null);
+    // A pool's questions travel with its dice and its flat part, because the
+    // roll builder has to put all three into one formula and multiply the
+    // right ones on a critical.
     const tok = (list) => list.reduce(
-      (acc, t) => ({ dice: addDice(acc.dice, t.dice), flat: acc.flat + (t.error ? 0 : t.flat) }),
-      { dice: {}, flat: 0 },
+      (acc, t) => ({
+        dice: addDice(acc.dice, t.dice),
+        flat: acc.flat + (t.error ? 0 : t.flat),
+        queries: t.error ? acc.queries : [...acc.queries, ...(t.queries || [])],
+      }),
+      { dice: {}, flat: 0, queries: [] },
     );
     // Forwarded damage joins the token pools rather than sitting beside
     // them: a bonus written as a rule elsewhere on the sheet is the same
@@ -273,6 +320,10 @@ export function recomputeEquipment(model) {
     // base rather than adding it once afterwards.
     const multDmg = tok(dmgTokens.filter((t) => t.mult));
     multDmg.flat += fwdDmg('damage.mult');
+    // Misc damage is flat damage that behaves like the weapon's own, so a
+    // question asked there is a question the multiplier takes -- the same
+    // pool a [[… Mult]] token lands in, and for the same reason.
+    multDmg.queries.push(...misc.queries);
     const critAtk = tok(atkTokens.filter((t) => t.crit));
     const critDmg = tok(dmgTokens.filter((t) => t.crit));
     critDmg.flat += fwdDmg('damage.crit');
@@ -280,7 +331,11 @@ export function recomputeEquipment(model) {
     // and reads names the same way the tokens do.
     const bcdNamed = spliceNames(w.bonusCritDamage);
     const bcdParsed = parseDiceExpr(bcdNamed.text, evalFormula);
-    const bcd = { ...bcdParsed, error: bcdNamed.error || bcdParsed.error };
+    const bcd = {
+      ...bcdParsed,
+      queries: bcdNamed.queries,
+      error: bcdNamed.error || bcdParsed.error,
+    };
     const critExtra = {
       dice: addDice(critDmg.dice, bcd.error ? {} : bcd.dice),
       flat: critDmg.flat + (bcd.error ? 0 : bcd.flat),
@@ -331,6 +386,11 @@ export function recomputeEquipment(model) {
     w.calc.critAtk = critAtk;
     w.calc.critTagged = critTagged;
     w.calc.critExtra = critExtra;
+    // The Bonus Crit Damage column's questions, kept apart from critExtra's
+    // rather than subtracted back out of it. The roll builder works that
+    // column out as critExtra minus critTagged, which is fine for dice and
+    // numbers and hopeless for a list of questions.
+    w.calc.bcdQueries = bcd.error ? [] : bcd.queries;
     w.calc.hasCritTokens = atkTokens.some((t) => t.crit) || dmgTokens.some((t) => t.crit)
       || !!w.forwardedDamage.crit;
     w.calc.confirmTotal = w.calc.totalAtk + critAtk.flat;
