@@ -194,11 +194,11 @@ function trainingSide(model, sideKey, side) {
         const ci = (side.classes || []).indexOf(cls);
         return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
+          <label class="fld ratepick"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
-          <label class="fld"><span>Talents / level</span>
+          <label class="fld ratepick"><span>Talents / level</span>
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
           ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
@@ -395,9 +395,9 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
    */
 function blendedPanel(model, pairs) {
     const head = (half, label, types) => {
-      if (!half) return `<label class="fld"><span>${label} type</span><select disabled><option>—</option></select></label>`;
+      if (!half) return `<label class="fld ratepick"><span>${label} type</span><select disabled><option>—</option></select></label>`;
       const list = `training.${half.side}.classes`;
-      return `<label class="fld"><span>${label} type</span>
+      return `<label class="fld ratepick"><span>${label} type</span>
           ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
         ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
     };
@@ -412,12 +412,12 @@ function blendedPanel(model, pairs) {
     const counts = blendedCounts(cls);
     return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, owner.index, 'name', cls.name, classNames(model))}</label>
           ${/* The pool is one, sized the way the base class -- the block the
                 pair was made from -- grants talents, so the rates offered are
                 that side's and not both sides' at once. */''}
-          <label class="fld"><span>Talents / level</span>
+          <label class="fld ratepick"><span>Talents / level</span>
             ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, TALENT_RATE_OPTIONS[owner.side])}</label>
           ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}
           ${head(casting, 'Casting', CASTING_TYPES)}

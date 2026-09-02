@@ -1820,6 +1820,12 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
 .trainhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
 .trainhead > label.fld { flex: 1 1 120px; min-width: 0; }
 .trainhead > label.fld.abmod { flex: 0 0 auto; }
+/* The class picker and the rate pickers -- type, talents a level, expertise
+   tier -- are the same width on all three tabs, and no wider than a class
+   name or a rate needs: a row that shared its slack out over them put
+   "High" in a box a third of the page wide. */
+.trainhead > label.fld.classpick { flex: 0 0 13rem; }
+.trainhead > label.fld.ratepick { flex: 0 0 8.5rem; }
 .trainhead .pair.abmod { flex-wrap: nowrap; }
 .trainhead .pair.abmod select { width: auto; min-width: 4.4rem; }
 .trainhead .pair.abmod .hint { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 1.6rem; }

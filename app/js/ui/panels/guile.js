@@ -103,9 +103,9 @@ function guileTrainingPanel(model, g) {
         const at = expertiseTalents(cls.expertise, cls.classLevels || 0);
         return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld"><span>Expertise tier</span>
+          <label class="fld ratepick"><span>Expertise tier</span>
             ${itemSelect(list, ci, 'expertise', cls.expertise, EXPERTISE_TIERS)}</label>
           ${/* Where the other two tabs put the class's casting score or
                 practitioner modifier. It is one choice for the whole
