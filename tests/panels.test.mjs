@@ -72,7 +72,7 @@ const shutCtx = () => ({
   },
   lore: { menuLists: new Map() },
   admin: {
-    formulaDraft: '', formulaQuery: '', formulaRefOpen: false, tab: 'formulas',
+    formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: false, tab: 'formulas',
   },
   skills: { showAllSkills: false },
 });
@@ -124,7 +124,7 @@ const openCtx = (model) => {
     },
     lore: { menuLists: new Map() },
     admin: {
-      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaRefOpen: true, tab: 'audit',
+      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaValueQuery: 'mod', formulaTargetQuery: 'will', formulaRefOpen: true, tab: 'audit',
     },
     skills: { showAllSkills: true },
   };

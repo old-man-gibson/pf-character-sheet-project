@@ -86,9 +86,12 @@ names that only work in one kind of field — `essence.self` and `self.*`. Every
 it, so `10 + con.mod * 2` shows what it means for *them* — and clicking any example
 loads it into the scratchpad.
 
-The **one search box** at the top narrows both the value index and the list of formulas
-at once, which is what "pull it up" usually means in practice: type `burn` to get every
-`tracker.burn.*` name and every formula that mentions burn.
+The **search box** at the top narrows every list on the tab at once — the value index,
+the destinations, the formulas and the forwarded bonuses — which is what "pull it up"
+usually means in practice: type `burn` to get every `tracker.burn.*` name and every formula
+that mentions burn. *Values you can read* and *Bonuses you can send* each carry a box of
+their own as well, since they sit a long way down the tab from the first one: it narrows
+that list alone, and a name has to satisfy both boxes when both are filled.
 
 The function and operator tables are generated from the engine's own `FUNCTIONS` map, and
 `tests/formula-format.test.mjs` fails if a built-in is added without being documented (or
