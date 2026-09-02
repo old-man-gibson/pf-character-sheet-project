@@ -9256,5 +9256,39 @@ console.log('\nthe sphere tables -- every sphere, and only the trained ones in f
   check('and adds the one named', c.data.training.guile.spheres.map((r) => r.sphere), ['Study']);
 }
 
+/*
+ * A class gains talents the way its own system grants them, so each tab's
+ * Talents / level offers that system's three rates and no other's; and the
+ * guile block carries the operative modifier where the other two carry the
+ * class's casting score or practitioner modifier.
+ */
+console.log('\ntalents per level -- each system\'s own three rates');
+{
+  const c = new Character(blankDocument({ name: 'Rates' }));
+  const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: null, talentsPerLevel: null, mod1: null, mod2: null, levels: blankLevels() });
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: null, talentsPerLevel: 'Mid-Caster', mod1: null, mod2: null, levels: blankLevels() });
+  c.addGuileClass('Operative');
+  const options = (html, path) => {
+    const at = html.indexOf(`data-item="${path}"`);
+    const open = html.lastIndexOf('<select', at);
+    const close = html.indexOf('</select>', at);
+    return [...html.slice(open, close).matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]).filter(Boolean);
+  };
+  check('the magic tab offers the caster rates',
+    options(combatPanels.renderMagicPanel(c), 'training.magic.classes|0|talentsPerLevel'),
+    ['High Caster', 'Mid-Caster', 'Low Caster']);
+  check('the martial tab the practitioner rates, keeping a stray value rather than blanking it',
+    options(combatPanels.renderMartialPanel(c), 'training.combat.classes|0|talentsPerLevel'),
+    ['Expert', 'Adept', 'Proficient', 'Mid-Caster']);
+  const guile = guilePanels.renderGuilePanel(c);
+  const tier = guile.indexOf('Expertise tier');
+  const operative = guile.indexOf('Operative ability modifier', tier);
+  const levels = guile.indexOf('Class levels', tier);
+  check('the guile block puts the operative modifier between the tier and the levels',
+    [tier > 0, operative > tier, levels > operative], [true, true, true]);
+  check('and it is the one setting, bound to the character', guile.includes('data-set="training.guile.operativeMod"'), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -107,6 +107,17 @@ function guileTrainingPanel(model, g) {
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
           <label class="fld"><span>Expertise tier</span>
             ${itemSelect(list, ci, 'expertise', cls.expertise, EXPERTISE_TIERS)}</label>
+          ${/* Where the other two tabs put the class's casting score or
+                practitioner modifier. It is one choice for the whole
+                character rather than one per class, so every block here
+                shows the same field bound to the same path; the hint under
+                the panel says so. */''}
+          <label class="fld"><span>Operative ability modifier</span>
+            <span class="pair">
+              ${select('training.guile.operativeMod', g.operativeMod,
+    OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k))}
+              <span class="hint">${fmt(g.operativeAbilityMod || 0)}</span>
+            </span></label>
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
@@ -165,6 +176,10 @@ function guileTrainingPanel(model, g) {
         operative's picks are mostly utility ones. Class levels come from the Planner; set the
         override for a sparse one. A class that trades its feats or its spellcasting for a
         progression (the two conversion tables) is one of these blocks like any other.
+        The <strong>operative ability modifier</strong> — Int, Wis or Cha — is one choice for
+        the whole character, and every skill sphere's save DC is built on it: the field
+        appears on each class block and they are the one setting. A class that traded its
+        spellcasting for a progression uses whichever score its casting used.
       </p>
     </section>`;
   }
@@ -415,20 +430,8 @@ function tradeTraditionPanel(model, g) {
 function operativePanel(model, g) {
     const lev = g.leverage || {};
     const plans = g.plans || {};
-    const abilities = OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k);
     return `<section class="panel">
       <h3>The operative</h3>
-      <label class="fld"><span>Operative ability modifier</span>
-        <span class="pair">
-          ${select('training.guile.operativeMod', g.operativeMod, abilities)}
-          <span class="hint">${fmt(g.operativeAbilityMod || 0)}</span>
-        </span></label>
-      <p class="hint">
-        Int, Wis or Cha — one choice for the whole character, and every skill sphere's save DC
-        is built on it. A class that traded its spellcasting for a progression uses whichever
-        score its casting used.
-      </p>
-
       <h4 class="subhead">Skill leverage</h4>
       ${lev.unlocked ? `
       <div class="bigstats" style="margin-bottom:8px">
