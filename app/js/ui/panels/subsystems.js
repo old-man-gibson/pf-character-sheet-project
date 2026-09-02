@@ -1555,7 +1555,7 @@ function companionHeadPanel(model, cc) {
       : kind === 'conjured'
         ? 'The level is the caster level (or a class’s levels), less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
         : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
-        Readable from a formula as <code>${sn}.hp</code>, <code>${sn}.ac</code>, <code>${sn}.str.mod</code>…</p>
+        Readable from a formula as <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
     </section>`;
   }
 
@@ -1790,7 +1790,7 @@ function eidolonEvolutionsPanel(model, cc) {
           ${prose(model, `data-set="${p}.baseEvolutions"`, b.baseEvolutions, 2)}</label>
       </div>
       <p class="hint">The pool is the table’s at this level, less the master-level penalty, plus the bonus points.
-        Readable as <code>${sn}.evoPool</code> and <code>${sn}.evoLeft</code>.</p>
+        Readable as <code>${esc(sn)}.evoPool</code> and <code>${esc(sn)}.evoLeft</code>.</p>
     </section>`;
   }
 
@@ -2054,10 +2054,10 @@ function companionItemsPanel(model, cc) {
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
       <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose on the sheet, and
         every number ${esc(label.toLowerCase())} rolls is something a bonus can be aimed at:
-        <code>{${sn}.str.score += 4 as enhancement}</code>, <code>{${sn}.ac.total += 2 as armor}</code>,
-        <code>{${sn}.skill.perception += 5}</code>, <code>{${sn}.attack += 1}</code>,
-        <code>{${sn}.damage += 1}</code>, <code>{${sn}.saves += 2 as resistance}</code>,
-        <code>{${sn}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
+        <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac.total += 2 as armor}</code>,
+        <code>{${esc(sn)}.skill.perception += 5}</code>, <code>{${esc(sn)}.attack += 1}</code>,
+        <code>{${esc(sn)}.damage += 1}</code>, <code>{${esc(sn)}.saves += 2 as resistance}</code>,
+        <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
         would do without doing it.</p>
     </section>`;
   }
@@ -2126,7 +2126,7 @@ function companionNotesPanel(model, cc) {
     return `<section class="panel">
       <h3>Notes</h3>
       ${prose(model, `data-set="${p}.notes"`, b.notes, 6)}
-      <p class="hint">Formulas work here: <code>{= ${sn}.hp}</code>, <code>{= ${sn}.hd * 2}</code>.</p>
+      <p class="hint">Formulas work here: <code>{= ${esc(sn)}.hp}</code>, <code>{= ${esc(sn)}.hd * 2}</code>.</p>
     </section>`;
   }
 

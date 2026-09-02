@@ -630,7 +630,12 @@ export function normalizeCompanionList(kind, value) {
   if (!list.length) list.push(defaultCompanion(kind));
   return list.map((b, i) => {
     const out = normalizeCompanion(kind, b);
-    if (!String(out.id || '').trim()) out.id = i === 0 ? kind : `${kind}${i + 1}`;
+    // An id is a name a formula reads, so it has the shape of one: letters,
+    // digits and underscores, starting with a letter. Anything else -- a
+    // blank, or a value something wrote into the field that was never an
+    // id -- is replaced by the block's positional name rather than published
+    // to the scope and printed on the tab as it stands.
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(String(out.id || ''))) out.id = i === 0 ? kind : `${kind}${i + 1}`;
     return out;
   });
 }
