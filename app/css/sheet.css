@@ -2969,10 +2969,16 @@ input[type="color"] {
 /* A companion's skills, in two tables side by side -- one across the panel
    put a skill's name in a box four times its length. Every column but the
    name is as wide as what it holds; the name takes the rest of its half. */
-.compskills { display: grid; gap: 0 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@container (min-width: 900px) {
-  .compskills { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.compskills {
+  display: grid; gap: 0 14px; align-items: start;
+  /* Two columns while two tables fit at the width their fixed columns need
+     -- a name a skill's length, and the rest as wide as what they hold --
+     and one column the moment they do not. Sized off the table rather than
+     the page, so the pair never overlaps at the widths in between. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 33rem), 1fr));
 }
+/* A familiar's table carries the master's ranks as well, so it needs more. */
+.compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 37rem), 1fr)); }
 .compskills table { width: 100%; }
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
 .compskills td.cvar input { width: 5.5rem; }

@@ -1953,7 +1953,7 @@ function companionSkillsPanel(model, cc) {
     const half = Math.ceil(indexed.length / 2);
     return `<section class="panel span2">
       <h3>Skills ${budget}</h3>
-      <div class="compskills">
+      <div class="compskills${fam ? ' fam' : ''}">
         ${table(indexed.slice(0, half))}
         ${indexed.length > half ? table(indexed.slice(half)) : ''}
       </div>
