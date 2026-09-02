@@ -35,7 +35,7 @@ import { TEMPLATE_TYPES, classForwardKey, sphereForwardKey, sphereNames } from '
 import {
   ABILITIES, ABILITY_LABELS, BLENDED_SPHERES,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
-  SP_PER_TEMP_ESSENCE, TALENT_RATES, TRACK_SPHERE_LABELS,
+  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
   sphereSide, trackSpheres,
 } from '../../rules.js';
@@ -160,7 +160,10 @@ function trainingSide(model, sideKey, side) {
     const title = isMagic ? 'Magic training' : 'Combat training';
     const spheres = sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat');
     const types = isMagic ? CASTING_TYPES : PRACTITIONER_TYPES;
-    const tplOptions = Object.keys(TALENT_RATES);
+    // A class gains talents the way its own system grants them: a caster is
+    // Low, Mid or High and a practitioner Proficient, Adept or Expert. The
+    // one list used to offer all nine rates, guile's included, on every tab.
+    const tplOptions = TALENT_RATE_OPTIONS[sideKey];
     const list = `training.${sideKey}.classes`;
     // A blended class trains both ways off one pool of talents; it has a group
     // of its own above, and appears here only as the note that says so.
@@ -376,7 +379,6 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
    * sphere rather than which tab the block came off.
    */
 function blendedPanel(model, pairs) {
-    const tplOptions = Object.keys(TALENT_RATES);
     const abilities = ABILITIES.map((k) => ABILITY_LABELS[k]);
     const head = (half, label, types) => {
       if (!half) return `<label class="fld"><span>${label} type</span><select disabled><option>—</option></select></label>`;
@@ -399,8 +401,11 @@ function blendedPanel(model, pairs) {
         <div class="trainhead">
           <label class="fld"><span>Class</span>
             ${itemSelect(list, owner.index, 'name', cls.name, classNames(model))}</label>
+          ${/* The pool is one, sized the way the base class -- the block the
+                pair was made from -- grants talents, so the rates offered are
+                that side's and not both sides' at once. */''}
           <label class="fld"><span>Talents / level</span>
-            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
+            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, TALENT_RATE_OPTIONS[owner.side])}</label>
           ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}
           ${head(casting, 'Casting', CASTING_TYPES)}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>

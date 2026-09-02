@@ -18,8 +18,12 @@ strings in the export and verified against every cached value):
 (from the Planner), its **type** (Low/Mid/High casting, Proficient/Adept/Expert
 practitioner), its **Talents/level** rate — separately, for classes where the two
 don't match (Bryva's Blacksmith casts as Mid but learns talents as a High Caster) —
-and its ability scores. Rates: High Caster/Expert 1, Mid 3/4, Low/Journeyman 1/2,
-Virtuoso 3/4, Trained 1/4.
+and its ability scores. Each tab offers its own system's three rates: High/Mid/Low
+Caster on the magic side, Expert/Adept/Proficient on the martial, Virtuoso/Journeyman/
+Trained on the guile; a blended class offers the rates of the side its block lives on.
+Rates: High Caster/Expert 1, Mid/Adept/Virtuoso 3/4, Low/Proficient/Journeyman 1/2,
+Trained 1/4. A rate imported from a workbook that is not on the list is kept and marked
+with a `*`.
 
 **Talent slots per level** unlock exactly like the sheet's conditional formatting:
 a level that grants a talent gets a green, writable name field and a sphere dropdown
