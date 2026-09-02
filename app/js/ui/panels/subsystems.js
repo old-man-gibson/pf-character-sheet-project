@@ -1928,9 +1928,13 @@ function companionSkillsPanel(model, cc) {
     // gets the width a skill name needs and the list fits on a screen. The
     // rows keep their index in the stored list, which is what every field
     // on them binds to.
+    // No Variant column: a companion with a specific Craft or Profession
+    // gets it typed into the name, as its player would write it. A variant
+    // a document already holds is still shown, under the name, so it is
+    // not lost -- none of the imported companions carries one.
     const row = (s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
-          <td class="cname">${itemText(list, i, 'name', s.name, 'Skill', true)}</td>
-          <td class="cvar">${itemText(list, i, 'spec', s.spec, '', true)}</td>
+          <td class="cname">${itemText(list, i, 'name', s.name, 'Skill', true)}${
+            String(s.spec || '').trim() ? `<div class="hint">(${esc(s.spec)})</div>` : ''}</td>
           <td>${itemSelect(list, i, 'ability', s.ability, ABILITY_LABELS_LIST, null)}</td>
           <td class="mid">${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
@@ -1942,7 +1946,7 @@ function companionSkillsPanel(model, cc) {
           ${rowRemove(list, i)}
         </tr>`;
     const table = (indexed) => `<table class="build"><thead><tr>
-        <th scope="col" class="cname">Skill</th><th scope="col" class="cvar">Variant</th><th scope="col">Ability</th>
+        <th scope="col" class="cname">Skill</th><th scope="col">Ability</th>
         <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
         ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
         <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>

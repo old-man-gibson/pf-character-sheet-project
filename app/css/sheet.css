@@ -2975,13 +2975,12 @@ input[type="color"] {
      -- a name a skill's length, and the rest as wide as what they hold --
      and one column the moment they do not. Sized off the table rather than
      the page, so the pair never overlaps at the widths in between. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 33rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
 }
 /* A familiar's table carries the master's ranks as well, so it needs more. */
-.compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 37rem), 1fr)); }
+.compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); }
 .compskills table { width: 100%; }
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
-.compskills td.cvar input { width: 5.5rem; }
 .compskills select { width: auto; min-width: 3.6rem; }
 .compskills td.mid { text-align: center; }
 @container (min-width: 900px) {
