@@ -310,13 +310,11 @@ export function companionMaster(model) {
  * collapse to one destination and both take the bonus, which is what "+2 to
  * Craft" means when a creature keeps two Craft rows.
  *
- * Every companion is aimable as `companion.<id>.…`; the first of its kind is
- * also every bare spelling that predates keeping more than one, and takes
- * what lands on either name.
+ * Every companion is aimable under its own id -- `eidolon.…` for the first
+ * of its kind, `eidolon2.…` and so on after -- and under nothing else.
  */
-export function companionBonuses(model, kind, b, index) {
-  const names = [`companion.${b.id}`, ...(index === 0 ? [kind] : [])];
-  const at = (name) => names.reduce((n, under) => n + forwarded(model, `${under}.${name}`), 0);
+export function companionBonuses(model, kind, b) {
+  const at = (name) => (b.id ? forwarded(model, `${b.id}.${name}`) : 0);
   const out = { saves: {}, scores: {}, skill: {}, attackBy: {}, damageBy: {} };
   for (const [name, , path] of COMPANION_TARGETS) setPath(out, path, at(name));
   for (const s of b.skills || []) {
@@ -335,8 +333,8 @@ export function companionBonuses(model, kind, b, index) {
 export function recomputeCompanions(model) {
   const master = companionMaster(model);
   for (const kind of COMPANION_KINDS) {
-    (model.data[kind] || []).forEach((b, i) => {
-      const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b, i));
+    (model.data[kind] || []).forEach((b) => {
+      const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b));
       b.calc = calc;
       b.skills = skills;
       b.attacks = attacks;
@@ -348,16 +346,18 @@ export function recomputeCompanions(model) {
  * Another companion of this kind -- what the minionmancer's Add button does.
  *
  * The block starts as the kind's default; the id it will answer to in a
- * formula (`companion.<id>.*`) is coined here and never changes afterwards,
- * the way a tracker's is. Taken from the next free number across every kind,
- * because the ids share the one `companion.` namespace.
+ * formula is coined here and never changes afterwards, the way a tracker's
+ * is: the kind's own name for the first of a kind, then the kind with a
+ * number appended -- eidolon2, eidolon3 -- the lowest not in use. The ids
+ * are top-level names in the scope, so they are kept unique across every
+ * kind. Neither a rename nor a reordering of the list moves one.
  */
 export function addCompanion(model, kind) {
   const list = model.data[kind] || (model.data[kind] = []);
   const taken = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b.id))));
-  let n = list.length + 1;
-  while (taken.has(`${kind}${n}`)) n++;
-  const block = { ...defaultCompanion(kind), id: `${kind}${n}` };
+  let id = kind;
+  for (let n = 2; taken.has(id); n++) id = `${kind}${n}`;
+  const block = { ...defaultCompanion(kind), id };
   list.push(block);
   model.recompute();
   return block;

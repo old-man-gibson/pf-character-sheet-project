@@ -359,19 +359,16 @@ export function characterScope(model) {
   }
 
   // The companions, so a tracker or an ability can read them: familiar.hp,
-  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Every companion is
-  // also `companion.<id>.*` under the id shown on its own tab -- stable
-  // through a rename, exactly as a tracker's -- and the first of each kind
-  // keeps the bare kind name, which is every spelling that existed before a
-  // character could keep more than one.
-  s.companion = {};
+  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Each block reads
+  // under its own id -- the first of a kind is the kind's bare name, the
+  // next are eidolon2, eidolon3 -- and the id is the block's for good:
+  // assigned when it is created, kept through a rename, and never moved by
+  // reordering the list, exactly as a tracker's is.
   for (const kind of COMPANION_KINDS) {
-    (c[kind] || []).forEach((block, i) => {
+    for (const block of c[kind] || []) {
       const cs = companionScope(block);
-      if (!cs) return;
-      if (i === 0) s[kind] = cs;
-      if (block.id) s.companion[block.id] = cs;
-    });
+      if (cs && block.id && s[block.id] === undefined) s[block.id] = cs;
+    }
   }
 
   // Every tracker publishes its numbers as tracker.<id>.* -- the id is the
@@ -573,16 +570,14 @@ export function forwardTargets(model) {
    * something to wear.
    */
   for (const kind of COMPANION_KINDS) {
-    (model.data[kind] || []).forEach((comp, index) => {
-      if (!companionInUse(kind, comp)) return;
-      // Each companion offers its stats under its own `companion.<id>.…`
-      // spelling; the first of its kind offers the bare names too, so
-      // everything written before a character could keep several still lands.
+    for (const comp of model.data[kind] || []) {
+      if (!companionInUse(kind, comp) || !comp.id) continue;
+      // Each companion offers its stats under its own id -- the bare kind
+      // name for the first of a kind, eidolon2 and so on after -- which is
+      // the same name the scope reads them under.
       const kindLabel = COMPANION_LABELS[kind] || kind;
       const own = String(comp.name || '').trim() || kindLabel;
-      const prefixes = index === 0
-        ? [[kind, kindLabel], [`companion.${comp.id}`, own]]
-        : [[`companion.${comp.id}`, own]];
+      const prefixes = [[comp.id, comp.id === kind ? own : `${own} (${comp.id})`]];
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
         for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
@@ -607,7 +602,7 @@ export function forwardTargets(model) {
           add(under(`damage.${key}`), `${label}: ${a.type} damage`);
         }
       }
-    });
+    }
   }
 
   expand.set('skill', skills);

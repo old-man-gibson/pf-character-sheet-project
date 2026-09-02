@@ -44,7 +44,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
  * ------------------------------------------------------------------ */
 
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
-const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon', 'conjured', 'companion']);
+// A companion's id: the kind's name, or the kind with a number appended for
+// the second and later of a kind (eidolon2, eidolon3).
+const COMPANION_HEAD = /^(familiar|animalCompanion|eidolon|conjured)\d*$/;
 // The defence lists join the armour classes and the saves: `dr.magic`,
 // `resistance.fire`, `immune.sleep` and the `defenses.*` totals over them are
 // all answers to "what does it take to hurt this character".
@@ -64,7 +66,7 @@ export const VALUE_SECTIONS = [
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill total, by its slugged name.' },
   { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck, and each skill sphere.' },
-  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, when the character has one. The first of each kind answers to its kind’s bare name; every companion also answers to companion.<id>, the id shown on its chip.' },
+  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, when the character has one. Each reads under the id on its tab: the kind’s bare name for the first of a kind, eidolon2 and so on for the rest.' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -150,7 +152,7 @@ export function classify(name, inlineNames = {}) {
   if (head === 'attack') return 'offence';
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
-  if (COMPANION_KEYS.has(head)) return 'companion';
+  if (COMPANION_HEAD.test(head)) return 'companion';
   if (MAGIC_KEYS.has(head)) return 'magic';
   if (CHARACTER_KEYS.has(head)) return 'character';
   return 'other';

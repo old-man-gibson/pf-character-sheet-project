@@ -399,7 +399,11 @@ resistance to frost, and says so in the box, where it is easy to spot.
 **A companion's numbers.** Every stat a familiar, animal companion or eidolon rolls or is
 asked for is a destination under its own name — `animalCompanion.str.score`,
 `eidolon.ac.total`, `familiar.skill.perception`, `animalCompanion.attack.bite`,
-`eidolon.cmb`, with `saves`, `ac` and `skill` standing for all of theirs at once. That is
+`eidolon.cmb`, with `saves`, `ac` and `skill` standing for all of theirs at once. A
+character who keeps several of a kind names each by the id shown on its tab: the kind's
+bare name for the first, then `eidolon2`, `eidolon3` for each one added after. The id is
+coined when the companion is created and stays with the creature through a rename or a
+reordering of the list, exactly as a tracker's does. That is
 what makes a companion's *equipment* work: each row on its Items panel has an Effect,
 Effect is prose, and prose forwards. A belt of giant strength is written where the belt
 is, once, and the attack, the damage, the CMB, Climb and Swim all move because the

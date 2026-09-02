@@ -245,7 +245,7 @@ console.log('a minionmancer\'s tab draws its chips and the companion selected');
   m.data.uiPrefs.activeCompanion = { eidolon: 1 };
   const second = renders('a minionmancer', 'Eidolon (second selected)',
     (x) => subsystems.companionPanel(x, 'eidolon'), m);
-  if (second && !(second.includes('companion.eidolon2') && second.includes('eidolon.1.name'))) {
+  if (second && !(second.includes('>eidolon2<') && second.includes('eidolon.1.name') && !second.includes('companion.'))) {
     fail++;
     console.log('  FAIL a minionmancer — the second companion does not draw under its own names');
   }

@@ -62,7 +62,7 @@ import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
-  companionAttackKey, companionSkillKey, emptyCompanionFeat,
+  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
@@ -1395,9 +1395,9 @@ function manifestingClassPanel(c, i) {
    * The context `cc` carries what every sub-panel needs to know about *which*
    * companion it is drawing: `p` is the data path its fields write to
    * (`eidolon.1`), `sn` the scope name its numbers read back and take bonuses
-   * under (`eidolon` for the first of a kind, `companion.<id>` after), and
-   * `roll` the kind a d20 button reports (`eidolon:1`). One companion, three
-   * spellings, all decided in one place.
+   * under (the block's id: `eidolon` for the first of a kind, `eidolon2`
+   * after), and `roll` the kind a d20 button reports (`eidolon:1`). One
+   * companion, three spellings, all decided in one place.
    */
 export function companionPanel(model, kind) {
     const list = model.data[kind] || [];
@@ -1410,7 +1410,7 @@ export function companionPanel(model, kind) {
     const cc = {
       kind, i, b, k, label,
       p: `${kind}.${i}`,
-      sn: i === 0 ? kind : `companion.${b.id}`,
+      sn: companionScopeName(kind, b),
       roll: i === 0 ? kind : `${kind}:${i}`,
     };
     return `<div class="grid">
@@ -1448,8 +1448,8 @@ export function companionPanel(model, kind) {
  *
  * Shown once there is more than one to switch between (or the strip would be
  * a single chip restating the tab), but the Add is always there -- it is how
- * the second one comes to exist. Every companion past the first wears the id
- * a formula reads it by, the way a tracker's row wears its own.
+ * the second one comes to exist. Every chip wears the id a formula reads the
+ * companion by, the way a tracker's row wears its own.
  */
 function companionSwitchPanel(model, kind, list, active, label) {
     const many = list.length > 1;
@@ -1457,17 +1457,18 @@ function companionSwitchPanel(model, kind, list, active, label) {
       <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
         ${many ? list.map((c, i) => `<button data-action="companion-select" data-kind="${kind}" data-index="${i}"
           aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
-          title="${i === 0 ? `Reads in formulas as ${kind}.* (and companion.${esc(c.id)}.*)` : `Reads in formulas as companion.${esc(c.id)}.*`}">
+          title="Reads in formulas as ${esc(c.id)}.*">
           ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
-          <span class="hint">${c.calc?.level ? `L${c.calc.level}` : ''}${i > 0 ? ` #${esc(c.id)}` : ''}</span>
+          <span class="hint">${c.calc?.level ? `L${c.calc.level} ` : ''}<code>${esc(c.id)}</code></span>
         </button>`).join('') : ''}
         <button data-action="companion-add" data-kind="${kind}"
-          title="Another ${label.toLowerCase()} — its numbers get their own names (companion.<id>.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
+          title="Another ${label.toLowerCase()} — its numbers get a name of their own (${kind}2.*, ${kind}3.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
         ${many ? `<button class="danger" data-remove="${kind}|${active}" style="margin-left:auto"
           title="Remove the ${esc(label.toLowerCase())} being shown. Undo brings it back.">Remove this one</button>` : ''}
       </div>
-      ${many ? `<p class="hint">One of ${list.length} — the first answers to <code>${kind}.hp</code> and friends;
-        every one of them also reads and takes bonuses as <code>companion.&lt;id&gt;.…</code>, id shown on its chip.</p>` : ''}
+      ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip —
+        <code>${kind}.hp</code>, <code>${kind}2.hp</code> — and the id stays with the creature through a
+        rename or a reordering.</p>` : ''}
     </section>`;
   }
 
@@ -1520,7 +1521,7 @@ function companionHeadPanel(model, cc) {
         ${field('Alignment', text(`${p}.alignment`, b.alignment))}`;
     return `<section class="panel span2">
       <h3>${esc(String(b.name || '').trim() || label)}
-        ${cc.i > 0 ? `<span class="badge" title="The name this companion’s numbers read by in a formula">companion.${esc(b.id)}</span>` : ''}
+        <span class="badge" title="${esc(`The name this companion’s numbers read by in a formula — ${cc.sn}.hp, ${cc.sn}.ac.total — and a bonus is sent to. It stays with the creature through a rename or a reordering.`)}">${esc(cc.sn)}</span>
         <span class="badge">level ${k.level ?? 0}</span>
         <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
         ${kind === 'conjured' && k.summonCost !== undefined

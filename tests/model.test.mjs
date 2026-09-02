@@ -998,20 +998,24 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   c.set('eidolon.1.levelOverride', 5);
   check('each level is its own', [c.data.eidolon[0].calc.hd, c.data.eidolon[1].calc.hd], [9, 4]);
 
-  // Reading: the bare kind name is the first of the kind -- every formula
-  // written before a character could keep several -- and every companion
-  // also reads under companion.<id>.
+  // Reading: each companion reads under its own id -- the bare kind name for
+  // the first of the kind, which is every formula written before a character
+  // could keep several, and eidolon2 for the next.
   const s = c.scope();
-  check('bare names are the first of the kind', s.eidolon.hd, 9);
-  check('every companion reads as companion.<id>', [s.companion.eidolon.hd, s.companion.eidolon2.hd], [9, 4]);
-  check('the id names validate', ['companion.eidolon2.hp', 'companion.eidolon2.str.mod']
+  check('the first of a kind reads under the bare kind name', s.eidolon.hd, 9);
+  check('the next under the kind with a number', s.eidolon2.hd, 4);
+  check('the id names validate', ['eidolon2.hp', 'eidolon2.str.mod']
     .every((n) => c.scopeNames().includes(n)), true);
+  check('and there is no second spelling', [s.companion, c.scopeNames().some((n) => n.startsWith('companion.'))],
+    [undefined, false]);
+  check('the destinations name the creature and its id',
+    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armour class');
 
   // Aiming: by id at the second, by the bare name at the first -- each lands
   // on its own creature and nothing else.
   const ac0 = c.data.eidolon[0].calc.ac;
   const ac1 = c.data.eidolon[1].calc.ac;
-  c.listAdd('eidolon.1.slotless', { name: 'Amulet', cost: 0, worn: true, effect: '{companion.eidolon2.ac.total += 2 as natural}' });
+  c.listAdd('eidolon.1.slotless', { name: 'Amulet', cost: 0, worn: true, effect: '{eidolon2.ac.total += 2 as natural}' });
   check('a bonus aimed by id lands on that companion alone',
     [c.data.eidolon[0].calc.ac, c.data.eidolon[1].calc.ac], [ac0, ac1 + 2]);
   c.listAdd('eidolon.0.slotless', { name: 'Ring', cost: 0, worn: true, effect: '{eidolon.ac.total += 1 as dodge}' });
@@ -1043,13 +1047,21 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   check('and comes back whole', [back.data.eidolon[1].name, back.data.eidolon[1].id,
     back.data.eidolon[1].calc.hd, back.data.eidolon[1].calc.ac], ['Brutus', 'eidolon2', 4, ac1 + 2]);
 
-  // Removing the first promotes the next: the bare names follow the list's
-  // order, while companion.<id> follows the creature -- so the amulet aimed
-  // at Brutus by id is still Brutus's after the promotion.
+  // An id is the creature's for good. Reordering the list moves nothing, and
+  // removing the first does not promote the next into its name: the bare
+  // name goes with the block that carried it, and the amulet aimed at Brutus
+  // is still Brutus's.
+  back.listMove('eidolon', 1, -1);
+  check('reordering moves no id', [back.data.eidolon[0].id, back.scope().eidolon.hd, back.scope().eidolon2.hd],
+    ['eidolon2', 9, 4]);
+  back.listMove('eidolon', 0, 1);
   back.listRemove('eidolon', 0);
-  check('the survivor answers to the bare name and keeps its id',
-    [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon.hd], ['Brutus', 'eidolon2', 4]);
-  check('and a bonus aimed at its id still lands', back.data.eidolon[0].calc.ac, ac1 + 2);
+  check('the survivor keeps its id and its bonus, and the bare name goes with the block that had it',
+    [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon2.hd, back.scope().eidolon,
+      back.data.eidolon[0].calc.ac],
+    ['Brutus', 'eidolon2', 4, undefined, ac1 + 2]);
+  // The lowest free id is coined for the next one, the bare name included.
+  check('a new one takes the lowest free id', back.addCompanion('eidolon').id, 'eidolon');
 }
 
 console.log('alternate training -- the primordia spelling migrates and nothing is lost');
