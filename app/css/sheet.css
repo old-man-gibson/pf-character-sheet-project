@@ -1813,11 +1813,17 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
 .foldstrip > .panel.collapsed { flex: 0 1 auto; }
 
 .trainclass { border: 1px solid var(--cs-line); border-radius: 6px; padding: 9px 10px; margin-bottom: 10px; }
-.trainhead {
-  display: grid; gap: 8px; align-items: end; margin-bottom: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
-.trainhead button.danger { justify-self: end; max-width: 3rem; }
+/* A row of fields that share the width -- except the ability pickers. Those
+   hold three letters and used to be stretched to a column each, with the
+   modifier they stand for nowhere in sight; now each is as wide as its own
+   title or its picker-and-modifier, whichever is more, and no wider. */
+.trainhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+.trainhead > label.fld { flex: 1 1 120px; min-width: 0; }
+.trainhead > label.fld.abmod { flex: 0 0 auto; }
+.trainhead .pair.abmod { flex-wrap: nowrap; }
+.trainhead .pair.abmod select { width: auto; min-width: 4.4rem; }
+.trainhead .pair.abmod .hint { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 1.6rem; }
+.trainhead button.danger { flex: 0 0 auto; max-width: 3rem; }
 /* Fixed layout so the columns are the widths the colgroup asks for: the level
    is two digits and the sphere is a dropdown of known names, so neither needs
    a share of the table. Notes is the column with no width of its own -- it

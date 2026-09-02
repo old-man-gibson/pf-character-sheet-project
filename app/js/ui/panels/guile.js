@@ -112,11 +112,11 @@ function guileTrainingPanel(model, g) {
                 character rather than one per class, so every block here
                 shows the same field bound to the same path; the hint under
                 the panel says so. */''}
-          <label class="fld"><span>Operative ability modifier</span>
-            <span class="pair">
+          <label class="fld abmod"><span>Operative modifier</span>
+            <span class="pair abmod">
               ${select('training.guile.operativeMod', g.operativeMod,
     OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k))}
-              <span class="hint">${fmt(g.operativeAbilityMod || 0)}</span>
+              <span class="hint">${g.operativeMod ? fmt(g.operativeAbilityMod || 0) : ''}</span>
             </span></label>
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
@@ -176,7 +176,7 @@ function guileTrainingPanel(model, g) {
         operative's picks are mostly utility ones. Class levels come from the Planner; set the
         override for a sparse one. A class that trades its feats or its spellcasting for a
         progression (the two conversion tables) is one of these blocks like any other.
-        The <strong>operative ability modifier</strong> — Int, Wis or Cha — is one choice for
+        The <strong>operative modifier</strong> — Int, Wis or Cha — is one choice for
         the whole character, and every skill sphere's save DC is built on it: the field
         appears on each class block and they are the one setting. A class that traded its
         spellcasting for a progression uses whichever score its casting used.

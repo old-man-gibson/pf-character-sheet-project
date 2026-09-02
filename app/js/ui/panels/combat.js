@@ -37,7 +37,7 @@ import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  sphereSide, trackSpheres,
+  sphereSide, statMod, trackSpheres,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
@@ -155,6 +155,23 @@ export function classNames(model) {
   }
 
 
+/**
+ * An ability picker with the modifier it stands for beside it.
+ *
+ * Three letters in a box sized for three letters, and the number the class
+ * actually reads off them on the same line -- the score is chosen once and
+ * the modifier is what every DC and spell-point count is built from. Blank
+ * for a slot that names nothing, as the 2nd score usually does.
+ */
+function abilityField(model, list, index, field, value, label) {
+    const named = ABILITIES.includes(String(value || '').trim().toLowerCase().slice(0, 3));
+    return `<label class="fld abmod"><span>${esc(label)}</span>
+            <span class="pair abmod">
+              ${itemSelect(list, index, field, value, ABILITIES.map((k) => ABILITY_LABELS[k]))}
+              <span class="hint">${named ? fmt(statMod(model.data, value, null)) : ''}</span>
+            </span></label>`;
+}
+
 function trainingSide(model, sideKey, side) {
     const isMagic = sideKey === 'magic';
     const title = isMagic ? 'Magic training' : 'Combat training';
@@ -183,10 +200,8 @@ function trainingSide(model, sideKey, side) {
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
           <label class="fld"><span>Talents / level</span>
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
-          <label class="fld"><span>${isMagic ? 'Casting score' : 'Practitioner mod'}</span>
-            ${itemSelect(list, ci, 'mod1', cls.mod1, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
-          <label class="fld"><span>2nd score</span>
-            ${itemSelect(list, ci, 'mod2', cls.mod2, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
+          ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
+          ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
@@ -379,14 +394,12 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
    * sphere rather than which tab the block came off.
    */
 function blendedPanel(model, pairs) {
-    const abilities = ABILITIES.map((k) => ABILITY_LABELS[k]);
     const head = (half, label, types) => {
       if (!half) return `<label class="fld"><span>${label} type</span><select disabled><option>—</option></select></label>`;
       const list = `training.${half.side}.classes`;
       return `<label class="fld"><span>${label} type</span>
           ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
-        <label class="fld"><span>${label === 'Casting' ? 'Casting score' : 'Practitioner mod'}</span>
-          ${itemSelect(list, half.index, 'mod1', half.cls.mod1, abilities)}</label>`;
+        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
     };
 
     return `<section class="panel span2">

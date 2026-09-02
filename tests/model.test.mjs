@@ -9283,7 +9283,7 @@ console.log('\ntalents per level -- each system\'s own three rates');
     ['Expert', 'Adept', 'Proficient', 'Mid-Caster']);
   const guile = guilePanels.renderGuilePanel(c);
   const tier = guile.indexOf('Expertise tier');
-  const operative = guile.indexOf('Operative ability modifier', tier);
+  const operative = guile.indexOf('Operative modifier', tier);
   const levels = guile.indexOf('Class levels', tier);
   check('the guile block puts the operative modifier between the tier and the levels',
     [tier > 0, operative > tier, levels > operative], [true, true, true]);
