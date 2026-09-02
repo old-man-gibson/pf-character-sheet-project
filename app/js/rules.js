@@ -293,6 +293,18 @@ export const TALENT_RATES = {
   Virtuoso: 0.75, Journeyman: 0.5, Trained: 0.25,
 };
 
+/**
+ * The rates a class on each side may pick from. One table above, because
+ * the numbers are shared; three lists here, because a class gains talents
+ * the way its own system grants them -- a practitioner is Proficient, Adept
+ * or Expert and never a Mid-Caster, whichever other tab it also trains on.
+ */
+export const TALENT_RATE_OPTIONS = {
+  magic: ['High Caster', 'Mid-Caster', 'Low Caster'],
+  combat: ['Expert', 'Adept', 'Proficient'],
+  guile: ['Virtuoso', 'Journeyman', 'Trained'],
+};
+
 /** Progression (caster level / practitioner level) per class level, by type. */
 export const TYPE_RATES = {
   High: 1, Mid: 0.75, Low: 0.5,

@@ -20,7 +20,8 @@ import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { talentCell } from '../talents.js';
-import { sphereNames } from '../../model.js';
+import { sphereForwardKey, sphereNames } from '../../model.js';
+import { forwardedBadge } from '../badges.js';
 import {
   ABILITY_LABELS, EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT,
   TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, expertiseTalents, fmt,
@@ -29,7 +30,7 @@ import {
 import { DAILY_LEVERAGE_EXTRA } from '../../model.js';
 import { check, select, text } from '../fields.js';
 import {
-  addButton, bigStat, editLine, itemCheck, itemNum, itemSelect, itemText, line,
+  addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line,
   rowRemove, rowTools,
 } from '../rows.js';
 import { classNames } from './combat.js';
@@ -102,10 +103,21 @@ function guileTrainingPanel(model, g) {
         const at = expertiseTalents(cls.expertise, cls.classLevels || 0);
         return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld"><span>Expertise tier</span>
+          <label class="fld ratepick"><span>Expertise tier</span>
             ${itemSelect(list, ci, 'expertise', cls.expertise, EXPERTISE_TIERS)}</label>
+          ${/* Where the other two tabs put the class's casting score or
+                practitioner modifier. It is one choice for the whole
+                character rather than one per class, so every block here
+                shows the same field bound to the same path; the hint under
+                the panel says so. */''}
+          <label class="fld abmod"><span>Operative modifier</span>
+            <span class="pair abmod">
+              ${select('training.guile.operativeMod', g.operativeMod,
+    OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k))}
+              <span class="hint">${g.operativeMod ? fmt(g.operativeAbilityMod || 0) : ''}</span>
+            </span></label>
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
@@ -164,6 +176,10 @@ function guileTrainingPanel(model, g) {
         operative's picks are mostly utility ones. Class levels come from the Planner; set the
         override for a sparse one. A class that trades its feats or its spellcasting for a
         progression (the two conversion tables) is one of these blocks like any other.
+        The <strong>operative modifier</strong> — Int, Wis or Cha — is one choice for
+        the whole character, and every skill sphere's save DC is built on it: the field
+        appears on each class block and they are the one setting. A class that traded its
+        spellcasting for a progression uses whichever score its casting used.
       </p>
     </section>`;
   }
@@ -188,6 +204,15 @@ function guileSpherePanel(model, g) {
     const spheres = guileSphereList();
     const level = Number(model.data.identity.level) || 0;
     const anyDupes = rows.some((r) => r.duplicate);
+    // A number, or a rule: the model resolves it into `<field>Num` and flags
+    // a bad one in `<field>Error`, so the cell shows the answer and the
+    // source on a click, like every other formula field.
+    const bonus = (r, i, field, example) => exprField(`data-item="${list}|${i}|${field}"`, r[field], {
+      width: '4rem',
+      value: r[`${field}Num`],
+      error: r[`${field}Error`],
+      title: `A number, or a formula — e.g. ${example}`,
+    });
     return `<section class="panel span2">
       <h3>Skill spheres <span class="badge">${rows.length}</span></h3>
       ${rows.length ? `<div class="tablewrap"><table class="guilespheres">
@@ -233,8 +258,10 @@ function guileSpherePanel(model, g) {
         : 'Choose an associated skill and this sphere pays into it.')}">${
   [r.paysRanks ? `${r.ranksGranted || ''}` : r.duplicate ? `<span class="was">${owed}</span>` : '',
     r.competence ? `<span class="dupskill">+${r.competence}</span>` : ''].filter(Boolean).join(' ')}</td>
-          <td class="num">${itemNum(list, i, 'rankBonus', r.rankBonus)}</td>
-          <td class="num">${itemNum(list, i, 'dcBonus', r.dcBonus)}</td>
+          <td class="num">${bonus(r, i, 'rankBonus', 'floor(level / 4)')}${
+  forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.ranks` : '')}</td>
+          <td class="num">${bonus(r, i, 'dcBonus', 'floor(level / 6)')}${
+  forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.dc` : '')}</td>
           <td class="num total"${r.skillIndex >= 0 ? ` title="${esc(`10 + half of ${r.ranks} ranks in ${r.skill}`
       + ` + ${fmt(g.operativeAbilityMod || 0)} operative modifier`)}"` : ''}>${r.dc ?? '—'}</td>
           <td class="num" title="25 ft. + 5 ft. per 2 ranks / 100 ft. + 10 ft. per rank / 400 ft. + 40 ft. per rank">${
@@ -246,6 +273,23 @@ function guileSpherePanel(model, g) {
       <div style="margin-top:6px">
         <button data-action="add-guile-sphere">+ Add sphere</button>
       </div>
+      ${(() => {
+    // The rest of the catalogue, folded: a skill sphere is on the table
+    // because a talent went into it or the player put it there, and the
+    // ones that are neither still have to be findable -- with the choice
+    // of skill that makes the row, which is why each carries an Add.
+    const have = new Set(rows.map((r) => String(r.sphere || '').trim().toLowerCase()));
+    const rest = spheres.filter((s) => !have.has(String(s).trim().toLowerCase()));
+    if (!rest.length) return '';
+    return `<details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rest.length})</summary>
+        <div class="tablewrap"><table class="guilespheres"><tbody>${rest.map((s) => `<tr>
+          <td>${esc(s)}</td>
+          <td class="hint">no talents — choose its associated skill to put it on the table</td>
+          <td class="tools"><button data-action="add-guile-sphere" data-sphere="${esc(s)}"
+            title="${esc(`Add ${s} to the table`)}">+ Add</button></td>
+        </tr>`).join('')}</tbody></table></div>
+      </details>`;
+  })()}
       <p class="hint">
         A skill sphere has no caster level and no practitioner level. Its save DC is
         <strong>10 + half your ranks in the associated skill + your operative modifier</strong>,
@@ -386,20 +430,8 @@ function tradeTraditionPanel(model, g) {
 function operativePanel(model, g) {
     const lev = g.leverage || {};
     const plans = g.plans || {};
-    const abilities = OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k);
     return `<section class="panel">
       <h3>The operative</h3>
-      <label class="fld"><span>Operative ability modifier</span>
-        <span class="pair">
-          ${select('training.guile.operativeMod', g.operativeMod, abilities)}
-          <span class="hint">${fmt(g.operativeAbilityMod || 0)}</span>
-        </span></label>
-      <p class="hint">
-        Int, Wis or Cha — one choice for the whole character, and every skill sphere's save DC
-        is built on it. A class that traded its spellcasting for a progression uses whichever
-        score its casting used.
-      </p>
-
       <h4 class="subhead">Skill leverage</h4>
       ${lev.unlocked ? `
       <div class="bigstats" style="margin-bottom:8px">

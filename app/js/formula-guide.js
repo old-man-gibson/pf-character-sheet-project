@@ -44,7 +44,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
  * ------------------------------------------------------------------ */
 
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
-const COMPANION_KEYS = new Set(['familiar', 'animalCompanion', 'eidolon', 'conjured', 'companion']);
+// A companion's id: the kind's name, or the kind with a number appended for
+// the second and later of a kind (eidolon2, eidolon3).
+const COMPANION_HEAD = /^(familiar|animalCompanion|eidolon|conjured)\d*$/;
 // The defence lists join the armour classes and the saves: `dr.magic`,
 // `resistance.fire`, `immune.sleep` and the `defenses.*` totals over them are
 // all answers to "what does it take to hurt this character".
@@ -64,7 +66,7 @@ export const VALUE_SECTIONS = [
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill total, by its slugged name.' },
   { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck, and each skill sphere.' },
-  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, when the character has one. The first of each kind answers to its kind’s bare name; every companion also answers to companion.<id>, the id shown on its chip.' },
+  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, when the character has one. Each reads under the id on its tab: the kind’s bare name for the first of a kind, eidolon2 and so on for the rest.' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -89,6 +91,19 @@ export const TARGET_SECTIONS = [
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
+/**
+ * A search, as the terms every match must contain.
+ *
+ * One string, or several: the tab's own box at the top narrows every list
+ * at once, and the values and destinations lists each carry a box of their
+ * own, so a list may be filtered by both. Blank terms are no terms.
+ */
+function queryTerms(query) {
+  return (Array.isArray(query) ? query : [query])
+    .map((q) => String(q || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
 /** Which group a destination belongs to. */
 export function classifyTarget(name) {
   const head = String(name).split('.')[0];
@@ -110,10 +125,11 @@ export function classifyTarget(name) {
  * reader is choosing between.
  */
 export function targetGroups(list, query = '') {
-  const q = String(query || '').trim().toLowerCase();
+  const terms = queryTerms(query);
   const buckets = new Map(TARGET_SECTIONS.map((sec) => [sec.key, []]));
   for (const t of list || []) {
-    if (q && !t.name.toLowerCase().includes(q) && !String(t.label).toLowerCase().includes(q)) continue;
+    const hay = `${t.name}\n${t.label}`.toLowerCase();
+    if (!terms.every((q) => hay.includes(q))) continue;
     buckets.get(classifyTarget(t.name)).push({
       name: t.name, label: t.label, reaches: t.family ? t.family.length : 0,
     });
@@ -136,7 +152,7 @@ export function classify(name, inlineNames = {}) {
   if (head === 'attack') return 'offence';
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
-  if (COMPANION_KEYS.has(head)) return 'companion';
+  if (COMPANION_HEAD.test(head)) return 'companion';
   if (MAGIC_KEYS.has(head)) return 'magic';
   if (CHARACTER_KEYS.has(head)) return 'character';
   return 'other';
@@ -150,10 +166,10 @@ export function classify(name, inlineNames = {}) {
  * value, and a formula reading it would get nothing.
  */
 export function valueGroups(names, scope, inlineNames = {}, query = '') {
-  const q = String(query || '').trim().toLowerCase();
+  const terms = queryTerms(query);
   const buckets = new Map(VALUE_SECTIONS.map((s) => [s.key, []]));
   for (const name of names) {
-    if (q && !name.toLowerCase().includes(q)) continue;
+    if (!terms.every((q) => name.toLowerCase().includes(q))) continue;
     const value = resolvePath(scope, name);
     if (value === undefined || (value && typeof value === 'object')) continue;
     buckets.get(classify(name, inlineNames)).push({ name, value, display: formatNumber(value) });
@@ -260,15 +276,21 @@ export function ownFormulasHtml(html) {
 }
 
 /** The searchable index of everything this character publishes. */
-export function browserHtml(groups, total, query) {
+export function browserHtml(groups, total, query, own = '') {
   const shown = groups.reduce((n, g) => n + g.items.length, 0);
+  const searching = !!(query || own);
   return `<section class="panel span2" data-fx-section="values">
     <h3>Values you can read
-      <span class="badge">${query ? `${shown} of ${total}` : `${total}`}</span>
+      <span class="badge">${searching ? `${shown} of ${total}` : `${total}`}</span>
     </h3>
     <p class="hint">Every name this character publishes, with what it is worth right now.
       Click one to drop it into the box above.</p>
-    ${shown ? groups.map((g) => `<details class="fx-group" ${g.key === 'mine' || query ? 'open' : ''}>
+    ${/* A box of this list's own, because the list is a long way down the
+          tab from the one at the top: a reader who has scrolled to it is
+          looking for a value, not for a formula. Both boxes apply. */''}
+    <input class="fx-search" data-fx-value-query placeholder="Find a value — wis.mod, skill.stealth, sphere.dark.cl"
+      value="${esc(own)}" aria-label="Find a value you can read" spellcheck="false">
+    ${shown ? groups.map((g) => `<details class="fx-group" ${g.key === 'mine' || searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
         ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
       <div class="fx-names">${g.items.map((it) => `<button type="button" class="fx-name-chip"
@@ -276,7 +298,7 @@ export function browserHtml(groups, total, query) {
         <span class="n">${esc(it.name)}</span><span class="v">${esc(it.display)}</span>
       </button>`).join('')}</div>
     </details>`).join('')
-    : `<p class="empty">No value on this character matches “${esc(query)}”.</p>`}
+    : `<p class="empty">No value on this character matches “${esc([query, own].filter(Boolean).join(' '))}”.</p>`}
   </section>`;
 }
 
@@ -293,17 +315,20 @@ export function browserHtml(groups, total, query) {
  * copies the whole token instead, ready to paste into the feature that grants
  * it.
  */
-export function targetsHtml(groups, total, query) {
+export function targetsHtml(groups, total, query, own = '') {
   const shown = groups.reduce((n, g) => n + g.items.length, 0);
+  const searching = !!(query || own);
   return `<section class="panel span2" data-fx-section="targets">
     <h3>Bonuses you can send
-      <span class="badge">${query ? `${shown} of ${total}` : `${total}`}</span>
+      <span class="badge">${searching ? `${shown} of ${total}` : `${total}`}</span>
     </h3>
     <p class="hint">Every destination <code>{… += …}</code> accepts on this character. Click one
       to copy the whole token — paste it into the feat, talent or feature that grants the bonus
       and it lands here, showing in gold beside the field. A destination is written to, not read:
       these names are not values and will not resolve in the box above.</p>
-    ${shown ? groups.map((g) => `<details class="fx-group" ${query ? 'open' : ''}>
+    <input class="fx-search" data-fx-target-query placeholder="Find a destination — will, damage, sphere.dark.cl, every skill"
+      value="${esc(own)}" aria-label="Find a bonus you can send" spellcheck="false">
+    ${shown ? groups.map((g) => `<details class="fx-group" ${searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
         ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
       <div class="fx-names">${g.items.map((it) => `<button type="button" class="fx-name-chip fx-target"
@@ -313,7 +338,7 @@ export function targetsHtml(groups, total, query) {
         ${it.reaches ? `<span class="badge">${it.reaches}</span>` : ''}
       </button>`).join('')}</div>
     </details>`).join('')
-    : `<p class="empty">No destination on this character matches “${esc(query)}”.</p>`}
+    : `<p class="empty">No destination on this character matches “${esc([query, own].filter(Boolean).join(' '))}”.</p>`}
     <p class="hint"><strong>A weapon destination is a shape, not a list.</strong>
       <code>weapon.&lt;which&gt;.&lt;what&gt;</code> — where <em>which</em> is
       <code>melee</code>, <code>ranged</code> or <code>cmb</code>, a weapon group
@@ -700,17 +725,19 @@ export function referenceHtml(scope, open) {
  * @param {object[]} o.targets      model.forwardTargetList -- every {… += …} destination
  * @param {string}   o.draft        what is in the try-it box
  * @param {string}   o.own          the tab's own prose field, already rendered
- * @param {string}   o.query        what is in the search box
+ * @param {string}   o.query        what is in the search box at the top, which narrows every list
+ * @param {string}   o.valueQuery   what is in the values list's own box
+ * @param {string}   o.targetQuery  what is in the destinations list's own box
  * @param {boolean}  o.refOpen      whether the reference is unfolded
  */
 export function formulaPanelHtml({
   names, scope, inlineNames = {}, audit = [], problems = [], forwarded = [],
-  targets = [], draft = '', own = '', query = '', refOpen = false,
+  targets = [], draft = '', own = '', query = '', valueQuery = '', targetQuery = '', refOpen = false,
 }) {
   const known = new Set(names);
-  const groups = valueGroups(names, scope, inlineNames, query);
+  const groups = valueGroups(names, scope, inlineNames, [query, valueQuery]);
   const total = names.length;
-  const tgroups = targetGroups(targets, query);
+  const tgroups = targetGroups(targets, [query, targetQuery]);
   return `<div class="grid fx-tab">
     <section class="panel span2 fx-intro">
       <h3>Formulas</h3>
@@ -726,8 +753,8 @@ export function formulaPanelHtml({
     ${ownFormulasHtml(own)}
     ${myFormulasHtml(audit, query)}
     ${forwardedHtml(forwarded, query)}
-    ${browserHtml(groups, total, query)}
-    ${targets.length ? targetsHtml(tgroups, targets.length, query) : ''}
+    ${browserHtml(groups, total, query, valueQuery)}
+    ${targets.length ? targetsHtml(tgroups, targets.length, query, targetQuery) : ''}
     ${referenceHtml(scope, refOpen)}
   </div>`;
 }

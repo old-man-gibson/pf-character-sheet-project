@@ -31,17 +31,17 @@ const TEMPLATE_TYPE_HINTS = {
 const NEW_TEMPLATE_TABLE = () => ({
   caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
 });
-import { TEMPLATE_TYPES, classForwardKey, sphereNames } from '../../model.js';
+import { TEMPLATE_TYPES, classForwardKey, sphereForwardKey, sphereNames } from '../../model.js';
 import {
   ABILITIES, ABILITY_LABELS, BLENDED_SPHERES,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
-  SP_PER_TEMP_ESSENCE, TALENT_RATES, TRACK_SPHERE_LABELS,
+  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  sphereSide, trackSpheres,
+  sphereSide, statMod, trackSpheres,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
-  addButton, editLine, itemCheck, itemNum, itemSelect, itemText, line, lineHtml,
+  addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
   rowRemove, rowTools,
 } from '../rows.js';
 
@@ -102,7 +102,7 @@ export function renderMartialPanel(model) {
         <div class="sidepanels">
           ${wrap('combat-tradition', combatTraditionPanel(model, side))}
           ${wrap('sphere-skills', sphereSkillPanel(model))}
-          ${wrap('combat-spheres', sphereBonusPanel('combat', side))}
+          ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
         </div>` : ''}
     </div>`;
   }
@@ -121,7 +121,7 @@ export function renderMagicPanel(model) {
         <div class="sidepanels">
           ${wrap('magic-tradition', magicTraditionPanel(model, t.magic))}
           ${wrap('magic-globals', magicGlobalsPanel(model, t.magic))}
-          ${wrap('magic-spheres', sphereBonusPanel('magic', t.magic))}
+          ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', t.magic))}
         </div>` : ''}
     </div>`;
   }
@@ -155,12 +155,32 @@ export function classNames(model) {
   }
 
 
+/**
+ * An ability picker with the modifier it stands for beside it.
+ *
+ * Three letters in a box sized for three letters, and the number the class
+ * actually reads off them on the same line -- the score is chosen once and
+ * the modifier is what every DC and spell-point count is built from. Blank
+ * for a slot that names nothing, as the 2nd score usually does.
+ */
+function abilityField(model, list, index, field, value, label) {
+    const named = ABILITIES.includes(String(value || '').trim().toLowerCase().slice(0, 3));
+    return `<label class="fld abmod"><span>${esc(label)}</span>
+            <span class="pair abmod">
+              ${itemSelect(list, index, field, value, ABILITIES.map((k) => ABILITY_LABELS[k]))}
+              <span class="hint">${named ? fmt(statMod(model.data, value, null)) : ''}</span>
+            </span></label>`;
+}
+
 function trainingSide(model, sideKey, side) {
     const isMagic = sideKey === 'magic';
     const title = isMagic ? 'Magic training' : 'Combat training';
     const spheres = sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat');
     const types = isMagic ? CASTING_TYPES : PRACTITIONER_TYPES;
-    const tplOptions = Object.keys(TALENT_RATES);
+    // A class gains talents the way its own system grants them: a caster is
+    // Low, Mid or High and a practitioner Proficient, Adept or Expert. The
+    // one list used to offer all nine rates, guile's included, on every tab.
+    const tplOptions = TALENT_RATE_OPTIONS[sideKey];
     const list = `training.${sideKey}.classes`;
     // A blended class trains both ways off one pool of talents; it has a group
     // of its own above, and appears here only as the note that says so.
@@ -174,16 +194,14 @@ function trainingSide(model, sideKey, side) {
         const ci = (side.classes || []).indexOf(cls);
         return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
+          <label class="fld ratepick"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
-          <label class="fld"><span>Talents / level</span>
+          <label class="fld ratepick"><span>Talents / level</span>
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
-          <label class="fld"><span>${isMagic ? 'Casting score' : 'Practitioner mod'}</span>
-            ${itemSelect(list, ci, 'mod1', cls.mod1, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
-          <label class="fld"><span>2nd score</span>
-            ${itemSelect(list, ci, 'mod2', cls.mod2, ABILITIES.map((k) => ABILITY_LABELS[k]))}</label>
+          ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
+          ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
@@ -376,15 +394,12 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
    * sphere rather than which tab the block came off.
    */
 function blendedPanel(model, pairs) {
-    const tplOptions = Object.keys(TALENT_RATES);
-    const abilities = ABILITIES.map((k) => ABILITY_LABELS[k]);
     const head = (half, label, types) => {
-      if (!half) return `<label class="fld"><span>${label} type</span><select disabled><option>—</option></select></label>`;
+      if (!half) return `<label class="fld ratepick"><span>${label} type</span><select disabled><option>—</option></select></label>`;
       const list = `training.${half.side}.classes`;
-      return `<label class="fld"><span>${label} type</span>
+      return `<label class="fld ratepick"><span>${label} type</span>
           ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
-        <label class="fld"><span>${label === 'Casting' ? 'Casting score' : 'Practitioner mod'}</span>
-          ${itemSelect(list, half.index, 'mod1', half.cls.mod1, abilities)}</label>`;
+        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
     };
 
     return `<section class="panel span2">
@@ -397,10 +412,13 @@ function blendedPanel(model, pairs) {
     const counts = blendedCounts(cls);
     return `<div class="trainclass">
         <div class="trainhead">
-          <label class="fld"><span>Class</span>
+          <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, owner.index, 'name', cls.name, classNames(model))}</label>
-          <label class="fld"><span>Talents / level</span>
-            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
+          ${/* The pool is one, sized the way the base class -- the block the
+                pair was made from -- grants talents, so the rates offered are
+                that side's and not both sides' at once. */''}
+          <label class="fld ratepick"><span>Talents / level</span>
+            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, TALENT_RATE_OPTIONS[owner.side])}</label>
           ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}
           ${head(casting, 'Casting', CASTING_TYPES)}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
@@ -655,30 +673,59 @@ function magicGlobalsPanel(model, m) {
   /* ----- sphere bonuses / skill ranks / unarmed ----- */
 
 
-function sphereBonusPanel(sideKey, side) {
+function sphereBonusPanel(model, sideKey, side) {
+    // Every sphere the catalogue knows is a row (see sphereTableNames), and
+    // every row is worked out. The ones in the table are the character's:
+    // a talent in the sphere from any source -- a class level, the
+    // tradition, a bonus talent, a customized weapon, a technique -- or a
+    // bonus typed or forwarded into it. The rest fold under All spheres.
     const rows = side.sphereRows || [];
-    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus);
+    const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus
+      || r.clForwarded || r.babForwarded || r.dcForwarded);
     const isMagic = sideKey === 'magic';
-    const list = `training.${sideKey}.sphereBonuses`;
-    const render = (r) => {
-      const i = (side.sphereBonuses || []).findIndex((x) => x.sphere === r.sphere);
-      return `<tr>
+    // A number, or a rule: the model resolves it into `<field>Num` and flags
+    // a bad one in `<field>Error`, so the cell shows the answer and the
+    // source on a click, like every other formula field. A bonus forwarded
+    // here from prose is the badge beside it, under the sphere's own name --
+    // sphere.dark.cl, sphere.athletics.bab -- never folded into the field.
+    // The cell is addressed by side, sphere and column: the document keeps
+    // a row only where something was typed, and the first edit writes it.
+    const bonus = (r, field, example, into) => exprField(
+      `data-sphere-bonus="${esc(`${sideKey}|${r.sphere}|${field}`)}"`, r[field], {
+        width: '4rem',
+        value: r[`${field}Num`],
+        error: r[`${field}Error`],
+        title: `A number, or a formula — e.g. ${example}`,
+      },
+    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '');
+    const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
-        <td class="num">${itemNum(list, i, isMagic ? 'clBonus' : 'rankBonus', isMagic ? r.clBonus : r.rankBonus)}</td>
-        <td class="num">${itemNum(list, i, 'dcBonus', r.dcBonus)}</td>
+        <td class="num">${isMagic
+    ? bonus(r, 'clBonus', 'floor(level / 4)', 'cl')
+    : bonus(r, 'rankBonus', 'floor(level / 4)', 'bab')}</td>
+        <td class="num">${bonus(r, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
       </tr>`;
-    };
     return `<section class="panel">
       <h3>${isMagic ? 'Sphere CL / DC' : 'Sphere BAB / DC'}</h3>
       <div class="tablewrap"><table>
         <thead><tr><th>Sphere</th><th class="num">Talents</th>
-          <th class="num">${isMagic ? 'CL+' : 'Rank+'}</th><th class="num">DC+</th>
+          ${/* BAB+, not Rank+: the column adds to the sphere's attack bonus,
+                which is BAB for every sphere but the two that key off skill
+                ranks, and those are named in the hint under the table. The
+                skill spheres' Rank+ is on the Guile tab, where ranks are the
+                thing being added to. */''}
+          <th class="num" title="${esc(isMagic
+    ? 'A bonus to this sphere’s caster level only'
+    : 'A bonus to this sphere’s attack bonus only — its BAB, or the skill ranks Alchemy and Beastmastery use instead')}">${
+  isMagic ? 'CL+' : 'BAB+'}</th>
+          <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
           <th class="num">${isMagic ? 'CL / DC' : 'BAB / DC'}</th></tr></thead>
-        <tbody>${active.map(render).join('')}</tbody>
+        <tbody>${active.length ? active.map(render).join('')
+    : `<tr><td colspan="5" class="hint">No spheres yet — a talent in one, from a class level, the tradition or a bonus talent, puts it here. Every sphere is worked out below.</td></tr>`}</tbody>
       </table></div>
-      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres</summary>
+      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">All spheres (${rows.length - active.length})</summary>
         <div class="tablewrap"><table><tbody>${rows.filter((r) => !active.includes(r)).map(render).join('')}</tbody></table></div>
       </details>
       ${!isMagic ? '<p class="hint">Alchemy keys off Craft (alchemy) ranks; Beastmastery off Handle Animal / Ride.</p>' : ''}

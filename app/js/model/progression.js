@@ -1102,7 +1102,13 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
   // field has nothing left to say.
   delete c.hp.totalOverride;
   c.hp.base = base;
-  c.hp.total = base + (Number(model.offsets['hp.total']) || 0);
+  // An offset written as a formula is the text, and its number is what
+  // `resolveOffsets` made of it at the top of this pass; see reconcile.js.
+  // Read here rather than through offsetOf, which would be a circular import.
+  const offset = model.offsets['hp.total'];
+  c.hp.total = base + (typeof offset === 'string'
+    ? Number(model.offsetValues?.['hp.total']) || 0
+    : Number(offset) || 0);
 
   /*
    * The two figures the readout needs that are nowhere else: what the ability

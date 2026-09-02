@@ -18,7 +18,7 @@ import { field } from '../fields.js';
 import { collapsible, foldButton, isCollapsed } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
-import { forwardedBadge, sheetBonusCell, sheetBonusHead, sheetBonusHint } from '../badges.js';
+import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { formulaMeta, isDraining, meterStyleButton, meterStyleEditor, meterVisual, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
@@ -99,7 +99,7 @@ import {
   THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
 } from '../../tracker-style.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
-import { abilitySelect, area, check, num, roField, select, text } from '../fields.js';
+import { abilitySelect, area, check, num, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
@@ -1481,9 +1481,11 @@ function attackPanel(model) {
     : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
           // An alternate is the base attack with one ability swapped, so it
           // is already carrying the base's Other -- editing it here would be
-          // editing the same number twice.
+          // editing the same number twice. The number is shown all the same,
+          // read-only, so the row adds up in front of the reader.
           const other = alt
-            ? `<td class="num"><span class="hint" title="${esc(`Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}">as ${esc(ATTACK_MODE_LABELS[alt].toLowerCase())}</span></td>`
+            ? `<td class="num" data-label="Other">${roValue(model.offsetOf(ATTACK_MODE_KEY[alt]),
+              `Shares ${ATTACK_MODE_LABELS[alt]}'s — an alternate is that attack with a different ability in the slot`)}</td>`
             : sheetBonusCell(model, ATTACK_MODE_KEY[k]);
           return `
           ${/* Not a stacked table, deliberately. Folded to a name and a total it
@@ -1921,12 +1923,11 @@ function hpBuild(model) {
     c.mythic?.path || 'No path'}, ${c.identity?.mythicTier || 0} tier${
     (c.identity?.mythicTier || 0) === 1 ? '' : 's'} — set the per-tier figure on the Features tab`)}"
           >${fmt(model.mythicHp)}</span>`)}
-        ${field('Other', `<input type="number" value="${other}" data-offset="hp.total"
-          style="width:5.4rem" aria-label="Other hit points"
-          title="${esc('What the sheet’s own total holds that the parts here cannot reach — rolled '
+        ${field('Other', `<span title="${esc('What the sheet’s own total holds that the parts here cannot reach — rolled '
             + 'dice rather than maximums, a bonus a formula added that the export could not carry, a '
             + 'number the GM handed over. It is what makes an import match, and the place to add your '
-            + 'own; every part above goes on counting either way.')}">`)}
+            + 'own, as a number or a formula; every part above goes on counting either way.')}">${
+  sheetBonusField(model, 'hp.total', '5.4rem')}</span>`)}
       </div>
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Misc', hpPart(c, 'misc', 'A number, or a formula — e.g. con.mod * 2', '100%'), 'wide')}

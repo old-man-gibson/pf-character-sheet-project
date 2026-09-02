@@ -28,6 +28,15 @@ export function roField(value, title = '', extra = '') {
       ${title ? `title="${esc(title)}"` : ''} ${extra}>`;
 }
 
+/**
+ * A value that is read, not typed, in a cell of a table: the dashed box the
+ * Details panel gives the mythic tier, so a number the sheet works out is not
+ * a stray word sitting in a column of fields.
+ */
+export function roValue(value, title = '') {
+  return `<span class="rovalue"${title ? ` title="${esc(title)}"` : ''}>${esc(value ?? '')}</span>`;
+}
+
 export function area(path, value, rows = 3) {
   return `<textarea data-set="${path}" data-kind="text" rows="${rows}">${esc(value ?? '')}</textarea>`;
 }

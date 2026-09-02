@@ -1315,7 +1315,7 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.primordia { min-width: 32rem; }
 .tablewrap > table.build { min-width: 26rem; }
 .tablewrap > table.tradition { min-width: 28rem; }
-.tablewrap > table.attackmodes { min-width: 30rem; }
+.tablewrap > table.attackmodes { min-width: 21rem; }
 .tablewrap > table.racetraits { min-width: 26rem; }
 .tablewrap > table.craftlist { min-width: 30rem; }
 .tablewrap > table.perks { min-width: 0; }
@@ -1695,7 +1695,7 @@ label.fld.tall textarea { min-height: 58px; }
    language slots Int grants -- gets the same box as the fields beside it,
    drawn as read-only, so a computed number is not a stray word under a
    heading that the eye skips over. */
-label.fld > .value {
+label.fld > .value, .rovalue {
   display: flex; align-items: center; min-height: 1.95rem; box-sizing: border-box;
   padding: 4px 7px; font-size: 0.85rem; font-weight: 640;
   font-variant-numeric: tabular-nums; color: var(--cs-accent);
@@ -1703,6 +1703,12 @@ label.fld > .value {
   text-transform: none; letter-spacing: 0;
 }
 label.fld > .value.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
+/* The same box in a table cell, sized like the field it stands in for: an
+   alternate attack's Other, which is the attack above it's and not its own. */
+.rovalue {
+  display: inline-flex; justify-content: flex-end; width: 3.6rem; min-height: 1.85rem;
+  vertical-align: middle; cursor: default;
+}
 /* Wraps, because a pair is a row of controls inside something that is itself
    a wrapping row: without this the outer row wraps and the pair does not, so
    on a narrow screen one long pair carries the page sideways with it. */
@@ -1807,11 +1813,23 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
 .foldstrip > .panel.collapsed { flex: 0 1 auto; }
 
 .trainclass { border: 1px solid var(--cs-line); border-radius: 6px; padding: 9px 10px; margin-bottom: 10px; }
-.trainhead {
-  display: grid; gap: 8px; align-items: end; margin-bottom: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-}
-.trainhead button.danger { justify-self: end; max-width: 3rem; }
+/* A row of fields that share the width -- except the ability pickers. Those
+   hold three letters and used to be stretched to a column each, with the
+   modifier they stand for nowhere in sight; now each is as wide as its own
+   title or its picker-and-modifier, whichever is more, and no wider. */
+.trainhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+.trainhead > label.fld { flex: 1 1 120px; min-width: 0; }
+.trainhead > label.fld.abmod { flex: 0 0 auto; }
+/* The class picker and the rate pickers -- type, talents a level, expertise
+   tier -- are the same width on all three tabs, and no wider than a class
+   name or a rate needs: a row that shared its slack out over them put
+   "High" in a box a third of the page wide. */
+.trainhead > label.fld.classpick { flex: 0 0 13rem; }
+.trainhead > label.fld.ratepick { flex: 0 0 8.5rem; }
+.trainhead .pair.abmod { flex-wrap: nowrap; }
+.trainhead .pair.abmod select { width: auto; min-width: 4.4rem; }
+.trainhead .pair.abmod .hint { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 1.6rem; }
+.trainhead button.danger { flex: 0 0 auto; max-width: 3rem; }
 /* Fixed layout so the columns are the widths the colgroup asks for: the level
    is two digits and the sphere is a dropdown of known names, so neither needs
    a share of the table. Notes is the column with no width of its own -- it
@@ -2947,6 +2965,24 @@ input[type="color"] {
   .pairrow.wide-first { grid-template-columns: minmax(0, 1fr) minmax(300px, 22rem); }
 }
 .pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
+
+/* A companion's skills, in two tables side by side -- one across the panel
+   put a skill's name in a box four times its length. Every column but the
+   name is as wide as what it holds; the name takes the rest of its half. */
+.compskills {
+  display: grid; gap: 0 14px; align-items: start;
+  /* Two columns while two tables fit at the width their fixed columns need
+     -- a name a skill's length, and the rest as wide as what they hold --
+     and one column the moment they do not. Sized off the table rather than
+     the page, so the pair never overlaps at the widths in between. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+}
+/* A familiar's table carries the master's ranks as well, so it needs more. */
+.compskills.fam { grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); }
+.compskills table { width: 100%; }
+.compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
+.compskills select { width: auto; min-width: 3.6rem; }
+.compskills td.mid { text-align: center; }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   /* The ledger takes the width it is worth and the buffs take the rest -- with
@@ -3092,6 +3128,18 @@ table.saves td, table.defense td { white-space: nowrap; }
 table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
+
+/* The attack modes: five columns in a panel a third of the page wide. Mode,
+   Total and Other are as wide as what they hold and no wider -- the table used
+   to be floored at 30rem and share the slack out over all five, so "Melee" sat
+   in a column three times its width and the whole thing scrolled inside a panel
+   it would have fitted. What is left over goes to the two ability pickers, and
+   the picker fills its cell, so the surplus reads as a control rather than as
+   a gap beside one. */
+table.attackmodes th:nth-child(-n+3), table.attackmodes td:nth-child(-n+3) {
+  width: 1%; white-space: nowrap;
+}
+table.attackmodes select { width: 100%; min-width: 3.4rem; }
 td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
 td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
 tr:hover > td.tools.quiet button,

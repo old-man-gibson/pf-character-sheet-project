@@ -80,6 +80,23 @@ check('narrows by substring',
 check('is case-insensitive', valueGroups(names, scope, inlineNames, 'WIS').length, 1);
 check('matches mid-name', valueGroups(names, scope, inlineNames, 'perception')[0].items.length, 1);
 check('no match is an empty list', valueGroups(names, scope, inlineNames, 'zzz'), []);
+// Two boxes may narrow the one list -- the tab's, and the list's own -- and
+// a name has to satisfy both.
+check('two searches both apply',
+  valueGroups(names, scope, inlineNames, ['tracker', 'max']).flatMap((g) => g.items.map((i) => i.name)),
+  ['tracker.burn.max']);
+check('a blank second search is no search',
+  valueGroups(names, scope, inlineNames, ['', 'tracker']).length,
+  valueGroups(names, scope, inlineNames, 'tracker').length);
+{
+  const own = browserHtml(valueGroups(names, scope, inlineNames, ['', 'wis']), names.length, '', 'wis');
+  check('the values list carries a search box of its own, holding what was typed',
+    own.includes('data-fx-value-query') && own.includes('value="wis"'), true);
+  check('and counts the matches against the whole', /<span class="badge">1 of \d+<\/span>/.test(own), true);
+  const tab = formulaPanelHtml({ names, scope, inlineNames, audit: [], valueQuery: 'zzz' });
+  check('the list\'s own box narrows the list on the tab', tab.includes('No value on this character matches “zzz”'), true);
+  check('and leaves the formulas list alone', tab.includes('data-fx-section="formulas"'), true);
+}
 
 console.log('workingHtml: the substitution, and what it reads');
 const w = workingHtml('floor(level / 2) + wis.mod', scope, new Set(names));
@@ -319,6 +336,16 @@ console.log('where a bonus can be sent -- the half a reader cannot see on the sh
     html.includes('weapon.&lt;which&gt;.&lt;what&gt;'), true);
   check('a no-match search says so', targetsHtml(targetGroups(targets, 'zzz'), targets.length, 'zzz')
     .includes('No destination'), true);
+  check('two searches both apply', targetGroups(targets, ['damage', 'rapier']).map((g) => g.items.map((i) => i.name)),
+    [['weapon.rapier.damage.mult']]);
+  const own = targetsHtml(targetGroups(targets, ['', 'rapier']), targets.length, '', 'rapier');
+  check('the list carries a search box of its own, holding what was typed',
+    own.includes('data-fx-target-query') && own.includes('value="rapier"'), true);
+  check('and counts the matches against the whole', /<span class="badge">1 of \d+<\/span>/.test(own), true);
+  const tab = formulaPanelHtml({ names, scope, inlineNames, audit: [], targets, targetQuery: 'zzz' });
+  check('the list\'s own box narrows the list on the tab, and only it',
+    [tab.includes('No destination on this character matches “zzz”'), tab.includes('No value on this character')],
+    [true, false]);
 
   // On the whole tab, and only when the character has somewhere to send one.
   const withTargets = formulaPanelHtml({ names, scope, inlineNames, audit, targets });

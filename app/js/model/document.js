@@ -1579,9 +1579,14 @@ export function toDocument(model) {
       .map(({ resolvedZones, edited, ...t }) => t),
     sheetTrackerState,
     // The guile side sits inside `training` beside the two that predate it,
-    // so it is stripped in place rather than as a block of its own.
+    // so it is stripped in place rather than as a block of its own. The two
+    // older sides save most of their working -- an accident of their age --
+    // but not the sphere tables: those are now the whole catalogue, worked
+    // out, and rebuilt on every load from the few rows that were typed.
     training: model.data.training && {
       ...model.data.training,
+      ...(model.data.training.combat ? { combat: stripDerived(model.data.training.combat, ['sphereRows']) } : {}),
+      ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, ['sphereRows']) } : {}),
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
     // The defence boxes go on holding exactly what was typed; `calc` is the

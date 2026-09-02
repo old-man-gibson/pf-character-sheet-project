@@ -23,12 +23,15 @@ import {
 import { NameIndex, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
+import { sphereTableNames } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { trackerFacts } from './trackers.js';
-import { classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey } from './util.js';
+import {
+  classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey, sphereForwardKey,
+} from './util.js';
 
 /**
  * Forwarded destinations that are totalled *before* the prose forwarding to
@@ -315,6 +318,32 @@ export function characterScope(model) {
     if (key) s.speed[key.slice('speed.'.length)] = Number(sp.final) || 0;
   }
 
+  // The magic and combat spheres join the skill spheres under `sphere.`:
+  // sphere.dark.cl and sphere.dark.dc, sphere.athletics.bab and its dc, each
+  // with the talents taken in it. "Per two caster levels in the Dark sphere"
+  // is a rule about a number this sheet already works out, and the same
+  // names are where a bonus to one of them is sent.
+  const sphereOf = (name) => {
+    const key = sphereForwardKey(name);
+    if (!key) return null;
+    const short = key.slice('sphere.'.length);
+    return (s.sphere[short] ??= {});
+  };
+  for (const r of c.training?.magic?.sphereRows || []) {
+    const into = sphereOf(r.sphere);
+    if (!into) continue;
+    into.cl = Number(r.cl) || 0;
+    into.dc = Number(r.dc) || 0;
+    into.talents = Number(r.talents) || 0;
+  }
+  for (const r of c.training?.combat?.sphereRows || []) {
+    const into = sphereOf(r.sphere);
+    if (!into) continue;
+    into.bab = Number(r.attack) || 0;
+    into.dc = Number(r.dc) || 0;
+    into.talents = Number(r.talents) || 0;
+  }
+
   for (const sk of c.skills) {
     const name = slug(sk.spec ? `${sk.name} ${sk.spec}` : sk.name);
     if (s.skill[name] === undefined) s.skill[name] = sk.bonus;
@@ -330,19 +359,16 @@ export function characterScope(model) {
   }
 
   // The companions, so a tracker or an ability can read them: familiar.hp,
-  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Every companion is
-  // also `companion.<id>.*` under the id shown on its own tab -- stable
-  // through a rename, exactly as a tracker's -- and the first of each kind
-  // keeps the bare kind name, which is every spelling that existed before a
-  // character could keep more than one.
-  s.companion = {};
+  // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Each block reads
+  // under its own id -- the first of a kind is the kind's bare name, the
+  // next are eidolon2, eidolon3 -- and the id is the block's for good:
+  // assigned when it is created, kept through a rename, and never moved by
+  // reordering the list, exactly as a tracker's is.
   for (const kind of COMPANION_KINDS) {
-    (c[kind] || []).forEach((block, i) => {
+    for (const block of c[kind] || []) {
       const cs = companionScope(block);
-      if (!cs) return;
-      if (i === 0) s[kind] = cs;
-      if (block.id) s.companion[block.id] = cs;
-    });
+      if (cs && block.id && s[block.id] === undefined) s[block.id] = cs;
+    }
   }
 
   // Every tracker publishes its numbers as tracker.<id>.* -- the id is the
@@ -504,6 +530,28 @@ export function forwardTargets(model) {
     list.push({ name: 'speed', label: 'Every speed you have', family: moves });
   }
 
+  // A sphere's numbers, under the names the scope reads them by: a magic
+  // sphere's caster level and save DC, a combat sphere's attack bonus and
+  // DC, a skill sphere's granted ranks and DC. Each lands beside the typed
+  // bonus in the same column of the sphere table and shows there in gold.
+  // Read off the names the tables are drawn from rather than the worked-out
+  // rows, which do not exist yet on the first pass of a fresh load -- and
+  // the destinations are decided once, on that pass.
+  const training = model.data.training || {};
+  const sphereTargets = (names, columns) => {
+    for (const sphere of names) {
+      const key = sphereForwardKey(sphere);
+      if (!key) continue;
+      for (const [suffix, what] of columns) {
+        const name = `${key}.${suffix}`;
+        if (!expand.has(name)) add(name, `${String(sphere).trim()}: ${what}`);
+      }
+    }
+  };
+  sphereTargets(sphereTableNames(model, 'magic'), [['cl', 'caster level'], ['dc', 'save DC']]);
+  sphereTargets(sphereTableNames(model, 'combat'), [['bab', 'attack bonus'], ['dc', 'save DC']]);
+  sphereTargets((training.guile?.spheres || []).map((r) => r.sphere), [['ranks', 'ranks'], ['dc', 'save DC']]);
+
   /*
    * The companions, every number of theirs that is rolled or asked for in a
    * fight or a conversation: the six ability scores, the armour classes, CMD
@@ -522,16 +570,14 @@ export function forwardTargets(model) {
    * something to wear.
    */
   for (const kind of COMPANION_KINDS) {
-    (model.data[kind] || []).forEach((comp, index) => {
-      if (!companionInUse(kind, comp)) return;
-      // Each companion offers its stats under its own `companion.<id>.…`
-      // spelling; the first of its kind offers the bare names too, so
-      // everything written before a character could keep several still lands.
+    for (const comp of model.data[kind] || []) {
+      if (!companionInUse(kind, comp) || !comp.id) continue;
+      // Each companion offers its stats under its own id -- the bare kind
+      // name for the first of a kind, eidolon2 and so on after -- which is
+      // the same name the scope reads them under.
       const kindLabel = COMPANION_LABELS[kind] || kind;
       const own = String(comp.name || '').trim() || kindLabel;
-      const prefixes = index === 0
-        ? [[kind, kindLabel], [`companion.${comp.id}`, own]]
-        : [[`companion.${comp.id}`, own]];
+      const prefixes = [[comp.id, comp.id === kind ? own : `${own} (${comp.id})`]];
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
         for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
@@ -556,7 +602,7 @@ export function forwardTargets(model) {
           add(under(`damage.${key}`), `${label}: ${a.type} damage`);
         }
       }
-    });
+    }
   }
 
   expand.set('skill', skills);
@@ -1091,8 +1137,11 @@ export function forwardsEarly(model) {
   // training pass reads it before any prose has been looked at, and the
   // casting tables it feeds are downstream of that. A speed is early because
   // the speeds resolve before the prose too, and because another speed may
-  // be written to read it.
+  // be written to read it. A skill sphere's ranks are early because they
+  // are paid into a skill, and the skills are totalled before the prose;
+  // every other sphere number settles after it and costs no second pass.
   return Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value
-      && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')));
+      && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')
+        || (name.startsWith('sphere.') && name.endsWith('.ranks'))));
 }

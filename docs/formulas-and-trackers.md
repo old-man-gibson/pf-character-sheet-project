@@ -86,9 +86,12 @@ names that only work in one kind of field — `essence.self` and `self.*`. Every
 it, so `10 + con.mod * 2` shows what it means for *them* — and clicking any example
 loads it into the scratchpad.
 
-The **one search box** at the top narrows both the value index and the list of formulas
-at once, which is what "pull it up" usually means in practice: type `burn` to get every
-`tracker.burn.*` name and every formula that mentions burn.
+The **search box** at the top narrows every list on the tab at once — the value index,
+the destinations, the formulas and the forwarded bonuses — which is what "pull it up"
+usually means in practice: type `burn` to get every `tracker.burn.*` name and every formula
+that mentions burn. *Values you can read* and *Bonuses you can send* each carry a box of
+their own as well, since they sit a long way down the tab from the first one: it narrows
+that list alone, and a name has to satisfy both boxes when both are filled.
 
 The function and operator tables are generated from the engine's own `FUNCTIONS` map, and
 `tests/formula-format.test.mjs` fails if a built-in is added without being documented (or
@@ -364,6 +367,9 @@ recompute have anywhere to *put* an arriving bonus:
 | `speed.land`, `speed.fly`, … | one movement rate — see below |
 | `speed` | every speed the character has |
 | `class.<name>.level` | levels in one class — see below |
+| `sphere.dark.cl`, `sphere.dark.dc` | a magic sphere's caster level and save DC — the CL+ and DC+ columns of Sphere CL / DC, by the sphere's slugged name |
+| `sphere.athletics.bab`, `sphere.athletics.dc` | a combat sphere's attack bonus and save DC — the BAB+ and DC+ columns of Sphere BAB / DC |
+| `sphere.study.ranks`, `sphere.study.dc` | a skill sphere's granted ranks and save DC — the Rank+ and DC+ columns on the Guile tab |
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
@@ -393,7 +399,11 @@ resistance to frost, and says so in the box, where it is easy to spot.
 **A companion's numbers.** Every stat a familiar, animal companion or eidolon rolls or is
 asked for is a destination under its own name — `animalCompanion.str.score`,
 `eidolon.ac.total`, `familiar.skill.perception`, `animalCompanion.attack.bite`,
-`eidolon.cmb`, with `saves`, `ac` and `skill` standing for all of theirs at once. That is
+`eidolon.cmb`, with `saves`, `ac` and `skill` standing for all of theirs at once. A
+character who keeps several of a kind names each by the id shown on its tab: the kind's
+bare name for the first, then `eidolon2`, `eidolon3` for each one added after. The id is
+coined when the companion is created and stays with the creature through a rename or a
+reordering of the list, exactly as a tracker's does. That is
 what makes a companion's *equipment* work: each row on its Items panel has an Effect,
 Effect is prose, and prose forwards. A belt of giant strength is written where the belt
 is, once, and the attack, the damage, the CMB, Climb and Swim all move because the

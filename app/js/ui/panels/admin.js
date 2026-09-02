@@ -40,6 +40,8 @@ export function renderFormulaPanel(model, ctx) {
       // tokens against.
       own: prose(model, 'data-set="formulaNotes"', model.data.formulaNotes, 6, 'grow'),
       query: ctx.formulaQuery,
+      valueQuery: ctx.formulaValueQuery || '',
+      targetQuery: ctx.formulaTargetQuery || '',
       refOpen: ctx.formulaRefOpen,
     });
   }

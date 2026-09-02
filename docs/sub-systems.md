@@ -18,8 +18,12 @@ strings in the export and verified against every cached value):
 (from the Planner), its **type** (Low/Mid/High casting, Proficient/Adept/Expert
 practitioner), its **Talents/level** rate — separately, for classes where the two
 don't match (Bryva's Blacksmith casts as Mid but learns talents as a High Caster) —
-and its ability scores. Rates: High Caster/Expert 1, Mid 3/4, Low/Journeyman 1/2,
-Virtuoso 3/4, Trained 1/4.
+and its ability scores. Each tab offers its own system's three rates: High/Mid/Low
+Caster on the magic side, Expert/Adept/Proficient on the martial, Virtuoso/Journeyman/
+Trained on the guile; a blended class offers the rates of the side its block lives on.
+Rates: High Caster/Expert 1, Mid/Adept/Virtuoso 3/4, Low/Proficient/Journeyman 1/2,
+Trained 1/4. A rate imported from a workbook that is not on the list is kept and marked
+with a `*`.
 
 **Talent slots per level** unlock exactly like the sheet's conditional formatting:
 a level that grants a talent gets a green, writable name field and a sphere dropdown
@@ -179,8 +183,17 @@ Where a character's own workbook cached a different number (Nico/Narockro/Saburo
 sheets contain `#ERROR!`s and internally inconsistent caches), the app shows a red
 "sheet: N" hint beside the computed value.
 
-**Sphere BAB/CL/DC tables** per sphere with rank/DC bonus fields — Alchemy keys off
-Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
+**Sphere BAB/CL/DC tables** per sphere with BAB+ (or CL+) and DC+ bonus fields — Alchemy
+keys off Craft (alchemy) ranks and Beastmastery off Handle Animal/Ride, like the sheet.
+Every sphere the catalogue knows is worked out; the table itself shows the character's —
+any sphere with a talent in it from a class level, the tradition, a bonus talent, a
+customized weapon or a technique, or with a bonus typed or forwarded into it — and the
+rest fold under **All spheres**. The document stores a row only where a bonus was typed.
+The Guile tab folds its catalogue the same way, with an **Add** on each sphere, since a
+skill sphere's row is the choice of associated skill.
+Each bonus field takes a number or a formula (`floor(level / 4)`), as do Rank+ and DC+
+on the Guile tab; a formula shows what it comes to, its source on a click, and is listed
+in the Formula Audit.
 
 **Bonus skill ranks**: 5 ranks per talent in the associated sphere, capped at level,
 toggleable per row, flowing straight into the Skills tab's Spheres column. Light Body

@@ -397,7 +397,8 @@ function controlKey(input) {
       : input.dataset.build ? `build:${input.dataset.build}`
         : input.dataset.offset ? `offset:${input.dataset.offset}`
           : input.dataset.pick ? `pick:${input.dataset.pick}`
-            : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
+            : input.dataset.sphereBonus ? `spherebonus:${input.dataset.sphereBonus}`
+              : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
   return attr;
 }
 
@@ -620,6 +621,8 @@ export class CharacterSheetElement extends HTMLElement {
      reference underneath has been unfolded. */
   #formulaDraft = '';
   #formulaQuery = '';
+  #formulaValueQuery = '';
+  #formulaTargetQuery = '';
   #formulaRefOpen = false;
   /** The last roll copied, shown back so the player can see what they got. */
   #rollToast = null;    // { kind, ref, what, text, failed, answers }
@@ -1315,7 +1318,10 @@ export class CharacterSheetElement extends HTMLElement {
     this.#render();
     if (!key) return;
     const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-    const attr = { set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick', extsearch: 'data-ext-search' }[kind];
+    const attr = {
+      set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
+      spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search',
+    }[kind];
     const next = this.shadowRoot.querySelector(`[${attr}="${CSS.escape(ref)}"]`);
     if (!next) return;
     // A formula field that regains focus keeps showing its source. Set that
@@ -2922,6 +2928,8 @@ export class CharacterSheetElement extends HTMLElement {
     return {
       formulaDraft: this.#formulaDraft,
       formulaQuery: this.#formulaQuery,
+      formulaValueQuery: this.#formulaValueQuery,
+      formulaTargetQuery: this.#formulaTargetQuery,
       formulaRefOpen: this.#formulaRefOpen,
       tab: this.#tab,
     };
@@ -5661,9 +5669,22 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    // A sphere table's bonus cell: the table lists every sphere and the
+    // document stores a row only where something was typed, so the cell is
+    // addressed by side, sphere and column rather than by a row index.
+    root.querySelectorAll('[data-sphere-bonus]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const [side, sphere, field] = input.dataset.sphereBonus.split('|');
+        this.#model.setSphereBonus(side, sphere, field, readControl(input));
+        this.#rerender(input);
+      });
+    });
+
     root.querySelectorAll('[data-offset]').forEach((input) => {
       input.addEventListener('change', () => {
-        this.#model.setOffset(input.dataset.offset, Number(input.value) || 0);
+        // A number, or a formula the model keeps as text -- readControl
+        // tells the two apart the way it does for every other expr field.
+        this.#model.setOffset(input.dataset.offset, readControl(input));
         this.#rerender(input);
       });
     });
@@ -6071,30 +6092,67 @@ export class CharacterSheetElement extends HTMLElement {
       this.#bindFormulaInserts(root);
     };
 
+    // The two lists at the bottom carry a search box each, and each box
+    // sits inside the section it filters -- so rebuilding the section
+    // replaces the box being typed in. The one that had focus gets it back,
+    // caret and all, once the new markup is in.
+    const refreshValues = () => {
+      const valueSection = root.querySelector('[data-fx-section="values"]');
+      if (!valueSection) return;
+      const names = this.#model.scopeNames();
+      const q = [this.#formulaQuery, this.#formulaValueQuery];
+      valueSection.outerHTML = browserHtml(
+        valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length,
+        this.#formulaQuery, this.#formulaValueQuery,
+      );
+    };
+    const refreshTargets = () => {
+      const targetSection = root.querySelector('[data-fx-section="targets"]');
+      if (!targetSection) return;
+      const targets = this.#model.forwardTargetList || [];
+      targetSection.outerHTML = targetsHtml(
+        targetGroups(targets, [this.#formulaQuery, this.#formulaTargetQuery]), targets.length,
+        this.#formulaQuery, this.#formulaTargetQuery,
+      );
+    };
+    const bindSectionSearch = () => {
+      const rebind = (attr, refresh, store) => {
+        const box = root.querySelector(`[${attr}]`);
+        if (!box || box.dataset.fxBound) return;
+        box.dataset.fxBound = '1';
+        box.addEventListener('input', () => {
+          const caret = box.selectionStart;
+          store(box.value);
+          refresh();
+          bindSectionSearch();
+          this.#bindFormulaInserts(root);
+          const again = root.querySelector(`[${attr}]`);
+          if (again) {
+            again.focus();
+            try { again.setSelectionRange(caret, caret); } catch { /* unsupported */ }
+          }
+        });
+      };
+      rebind('data-fx-value-query', refreshValues, (v) => { this.#formulaValueQuery = v; });
+      rebind('data-fx-target-query', refreshTargets, (v) => { this.#formulaTargetQuery = v; });
+    };
+
     const refreshSearch = () => {
       const q = this.#formulaQuery;
-      const names = this.#model.scopeNames();
       const formulaSection = root.querySelector('[data-fx-section="formulas"]');
       const forwardedSection = root.querySelector('[data-fx-section="forwarded"]');
-      const valueSection = root.querySelector('[data-fx-section="values"]');
       if (formulaSection) {
         formulaSection.outerHTML = myFormulasHtml(this.#model.audit(), q);
       }
       if (forwardedSection) {
         forwardedSection.outerHTML = forwardedHtml(this.#forwardedRows(), q);
       }
-      if (valueSection) {
-        valueSection.outerHTML = browserHtml(
-          valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length, q,
-        );
-      }
-      const targetSection = root.querySelector('[data-fx-section="targets"]');
-      if (targetSection) {
-        const targets = this.#model.forwardTargetList || [];
-        targetSection.outerHTML = targetsHtml(targetGroups(targets, q), targets.length, q);
-      }
+      refreshValues();
+      refreshTargets();
+      bindSectionSearch();
       this.#bindFormulaInserts(root);
     };
+    bindSectionSearch();
 
     draft?.addEventListener('input', () => {
       const wasEmpty = !this.#formulaDraft.trim();
@@ -6539,7 +6597,8 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-guile-sphere':
-        this.#model.addGuileSphere();
+        // Named when the button sits on a sphere in the All spheres list.
+        this.#model.addGuileSphere(button?.dataset.sphere || '');
         this.#render();
         break;
       case 'add-customization': {

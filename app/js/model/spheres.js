@@ -8,6 +8,7 @@
  */
 
 import {
+  COMBAT_SPHERES, MAGIC_SPHERES,
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
@@ -21,7 +22,7 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, normalizeName, slug } from './util.js';
+import { closestName, evaluateAmount, normalizeName, slug, sphereForwardKey } from './util.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -1066,8 +1067,65 @@ export function sphereRanksBySkill(model) {
 }
 
 /**
- * Per-sphere attack/DC rows. Runs after skills because two spheres
- * (Alchemy, Beastmastery) key off skill ranks instead of BAB.
+ * The spheres a side's CL / DC or BAB / DC table lists, in order.
+ *
+ * Every sphere the catalogue knows -- the engine's list and whatever the
+ * packs add -- then any the document names that the catalogue does not: a
+ * stored bonus row, or a talent taken in a sphere nobody has catalogued.
+ * A character built here rather than imported has no stored rows at all,
+ * and used to get an empty table for it; the table is the catalogue, and
+ * the rows are only where a bonus was typed.
+ *
+ * The workbook's own header row rides along in an imported list under the
+ * word "Sphere" and names nothing anybody trained in, so it is left out.
+ */
+export function sphereTableNames(model, sideKey) {
+  const side = model.data.training?.[sideKey];
+  if (!side) return [];
+  const names = [];
+  const have = new Set();
+  const take = (name) => {
+    const clean = String(name ?? '').trim();
+    const key = clean.toLowerCase();
+    if (!clean || have.has(key) || !sphereForwardKey(clean)) return;
+    have.add(key);
+    names.push(clean);
+  };
+  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) take(s);
+  for (const r of side.sphereBonuses || []) take(r.sphere);
+  for (const s of Object.keys(side.tally || {})) take(s);
+  return names;
+}
+
+/**
+ * Edit one bonus cell of a sphere table.
+ *
+ * The table lists every sphere; the document stores a row only for those
+ * with something typed in them, so the first edit to a sphere writes the
+ * row and later ones find it. Names match as typed -- a stored row is
+ * looked up by the same name the table drew it under.
+ */
+export function setSphereBonus(model, sideKey, sphere, field, value) {
+  const side = model.data.training?.[sideKey];
+  const fields = sideKey === 'magic' ? ['clBonus', 'dcBonus'] : ['rankBonus', 'dcBonus'];
+  const name = String(sphere ?? '').trim();
+  if (!side || !fields.includes(field) || !name) return model;
+  side.sphereBonuses ??= [];
+  let row = side.sphereBonuses.find((r) => String(r.sphere ?? '').trim() === name);
+  if (!row) {
+    row = { sphere: name, [fields[0]]: 0, dcBonus: 0 };
+    side.sphereBonuses.push(row);
+  }
+  row[field] = value;
+  model.recompute();
+  emit(model, { type: 'set-sphere-bonus', side: sideKey, sphere: name, field, value });
+  return model;
+}
+
+/**
+ * Per-sphere attack/DC rows, one for every sphere on the table -- see
+ * sphereTableNames. Runs after skills because two spheres (Alchemy,
+ * Beastmastery) key off skill ranks instead of BAB.
  */
 export function recomputeSphereRows(model) {
   const t = model.data.training;
@@ -1075,16 +1133,31 @@ export function recomputeSphereRows(model) {
   const c = model.data;
   const level = Number(c.identity.level) || 0;
   const bab = Number(c.attack.bab) || 0;
+  // The stored row for a sphere, or the blank one the table shows for it.
+  const rowsOf = (sideKey, blank) => {
+    const stored = t[sideKey].sphereBonuses || [];
+    return sphereTableNames(model, sideKey).map((sphere) => stored
+      .find((r) => String(r.sphere ?? '').trim() === sphere) || { sphere, ...blank });
+  };
   const ranksOf = (name, specRe) => {
     const s = c.skills.find((x) => x.name === name
       && (specRe ? specRe.test(String(x.spec || '')) : true));
     return Number(s?.totalRanks) || 0;
   };
+  // A bonus column may hold a rule rather than a number -- "+1 CL per four
+  // levels" is one, and typed as the number it comes to today it goes stale.
+  // The scope is the one every formula reads, built once and only if a row
+  // asks for it. This runs after the prose, so a name defined there resolves.
+  let scope = null;
+  const amount = (raw) => {
+    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
+    return evaluateAmount(raw, scope);
+  };
 
   if (t.combat) {
     const dcBase = t.combat.practitionerDC;
     const bestMod = dcBase - 10 - Math.floor(bab / 2);
-    t.combat.sphereRows = (t.combat.sphereBonuses || []).map((row) => {
+    t.combat.sphereRows = rowsOf('combat', { rankBonus: 0, dcBonus: 0 }).map((row) => {
       let attackBase = bab;
       let dc = dcBase;
       if (row.sphere === 'Alchemy') {
@@ -1096,20 +1169,51 @@ export function recomputeSphereRows(model) {
         attackBase = r;
         dc = 10 + Math.floor(ranksOf('Handle Animal') / 2) + bestMod;
       }
+      const rank = amount(row.rankBonus);
+      const dcPlus = amount(row.dcBonus);
+      // A bonus forwarded here from elsewhere on the sheet is kept beside
+      // the one typed in, never folded into it -- the column has to go on
+      // saying what was written in it -- and shows in gold beside the field.
+      const key = sphereForwardKey(row.sphere);
+      const babForwarded = key ? forwarded(model, `${key}.bab`) : 0;
+      const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
       return {
         ...row,
         talents: (t.combat.tally || {})[row.sphere] || 0,
-        attack: Math.min(Math.floor(attackBase + (Number(row.rankBonus) || 0)), level),
-        dc: dc + (Number(row.dcBonus) || 0),
+        rankBonusNum: rank.value,
+        rankBonusError: rank.error,
+        dcBonusNum: dcPlus.value,
+        dcBonusError: dcPlus.error,
+        babForwarded,
+        dcForwarded,
+        attack: Math.min(Math.floor(attackBase + rank.value + babForwarded), level),
+        dc: dc + dcPlus.value + dcForwarded,
       };
     });
   }
   if (t.magic) {
-    t.magic.sphereRows = (t.magic.sphereBonuses || []).map((row) => ({
-      ...row,
-      talents: (t.magic.tally || {})[row.sphere] || 0,
-      cl: t.magic.globalCL + (Number(row.clBonus) || 0),
-      dc: t.magic.globalDC + Math.floor((Number(row.clBonus) || 0) / 2) + (Number(row.dcBonus) || 0),
-    }));
+    t.magic.sphereRows = rowsOf('magic', { clBonus: 0, dcBonus: 0 }).map((row) => {
+      const cl = amount(row.clBonus);
+      const dcPlus = amount(row.dcBonus);
+      const key = sphereForwardKey(row.sphere);
+      const clForwarded = key ? forwarded(model, `${key}.cl`) : 0;
+      const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
+      const clPlus = cl.value + clForwarded;
+      return {
+        ...row,
+        talents: (t.magic.tally || {})[row.sphere] || 0,
+        clBonusNum: cl.value,
+        clBonusError: cl.error,
+        dcBonusNum: dcPlus.value,
+        dcBonusError: dcPlus.error,
+        clForwarded,
+        dcForwarded,
+        cl: t.magic.globalCL + clPlus,
+        // A sphere's DC follows its caster level, so a CL bonus -- typed or
+        // forwarded -- is worth half of itself here as well, as the global
+        // one is.
+        dc: t.magic.globalDC + Math.floor(clPlus / 2) + dcPlus.value + dcForwarded,
+      };
+    });
   }
 }

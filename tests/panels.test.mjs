@@ -72,7 +72,7 @@ const shutCtx = () => ({
   },
   lore: { menuLists: new Map() },
   admin: {
-    formulaDraft: '', formulaQuery: '', formulaRefOpen: false, tab: 'formulas',
+    formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: false, tab: 'formulas',
   },
   skills: { showAllSkills: false },
 });
@@ -124,7 +124,7 @@ const openCtx = (model) => {
     },
     lore: { menuLists: new Map() },
     admin: {
-      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaRefOpen: true, tab: 'audit',
+      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaValueQuery: 'mod', formulaTargetQuery: 'will', formulaRefOpen: true, tab: 'audit',
     },
     skills: { showAllSkills: true },
   };
@@ -245,7 +245,7 @@ console.log('a minionmancer\'s tab draws its chips and the companion selected');
   m.data.uiPrefs.activeCompanion = { eidolon: 1 };
   const second = renders('a minionmancer', 'Eidolon (second selected)',
     (x) => subsystems.companionPanel(x, 'eidolon'), m);
-  if (second && !(second.includes('companion.eidolon2') && second.includes('eidolon.1.name'))) {
+  if (second && !(second.includes('>eidolon2<') && second.includes('eidolon.1.name') && !second.includes('companion.'))) {
     fail++;
     console.log('  FAIL a minionmancer — the second companion does not draw under its own names');
   }

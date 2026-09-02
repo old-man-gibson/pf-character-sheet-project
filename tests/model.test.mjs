@@ -65,6 +65,8 @@ import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline } from '../app/js/ui/rows.js';
+import * as combatPanels from '../app/js/ui/panels/combat.js';
+import * as guilePanels from '../app/js/ui/panels/guile.js';
 
 let pass = 0;
 let fail = 0;
@@ -996,20 +998,24 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   c.set('eidolon.1.levelOverride', 5);
   check('each level is its own', [c.data.eidolon[0].calc.hd, c.data.eidolon[1].calc.hd], [9, 4]);
 
-  // Reading: the bare kind name is the first of the kind -- every formula
-  // written before a character could keep several -- and every companion
-  // also reads under companion.<id>.
+  // Reading: each companion reads under its own id -- the bare kind name for
+  // the first of the kind, which is every formula written before a character
+  // could keep several, and eidolon2 for the next.
   const s = c.scope();
-  check('bare names are the first of the kind', s.eidolon.hd, 9);
-  check('every companion reads as companion.<id>', [s.companion.eidolon.hd, s.companion.eidolon2.hd], [9, 4]);
-  check('the id names validate', ['companion.eidolon2.hp', 'companion.eidolon2.str.mod']
+  check('the first of a kind reads under the bare kind name', s.eidolon.hd, 9);
+  check('the next under the kind with a number', s.eidolon2.hd, 4);
+  check('the id names validate', ['eidolon2.hp', 'eidolon2.str.mod']
     .every((n) => c.scopeNames().includes(n)), true);
+  check('and there is no second spelling', [s.companion, c.scopeNames().some((n) => n.startsWith('companion.'))],
+    [undefined, false]);
+  check('the destinations name the creature and its id',
+    c.forwardTargets().list.find((t) => t.name === 'eidolon2.ac.total')?.label, 'Brutus (eidolon2): Armour class');
 
   // Aiming: by id at the second, by the bare name at the first -- each lands
   // on its own creature and nothing else.
   const ac0 = c.data.eidolon[0].calc.ac;
   const ac1 = c.data.eidolon[1].calc.ac;
-  c.listAdd('eidolon.1.slotless', { name: 'Amulet', cost: 0, worn: true, effect: '{companion.eidolon2.ac.total += 2 as natural}' });
+  c.listAdd('eidolon.1.slotless', { name: 'Amulet', cost: 0, worn: true, effect: '{eidolon2.ac.total += 2 as natural}' });
   check('a bonus aimed by id lands on that companion alone',
     [c.data.eidolon[0].calc.ac, c.data.eidolon[1].calc.ac], [ac0, ac1 + 2]);
   c.listAdd('eidolon.0.slotless', { name: 'Ring', cost: 0, worn: true, effect: '{eidolon.ac.total += 1 as dodge}' });
@@ -1041,13 +1047,21 @@ console.log('companions -- a minionmancer keeps more than one of a kind');
   check('and comes back whole', [back.data.eidolon[1].name, back.data.eidolon[1].id,
     back.data.eidolon[1].calc.hd, back.data.eidolon[1].calc.ac], ['Brutus', 'eidolon2', 4, ac1 + 2]);
 
-  // Removing the first promotes the next: the bare names follow the list's
-  // order, while companion.<id> follows the creature -- so the amulet aimed
-  // at Brutus by id is still Brutus's after the promotion.
+  // An id is the creature's for good. Reordering the list moves nothing, and
+  // removing the first does not promote the next into its name: the bare
+  // name goes with the block that carried it, and the amulet aimed at Brutus
+  // is still Brutus's.
+  back.listMove('eidolon', 1, -1);
+  check('reordering moves no id', [back.data.eidolon[0].id, back.scope().eidolon.hd, back.scope().eidolon2.hd],
+    ['eidolon2', 9, 4]);
+  back.listMove('eidolon', 0, 1);
   back.listRemove('eidolon', 0);
-  check('the survivor answers to the bare name and keeps its id',
-    [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon.hd], ['Brutus', 'eidolon2', 4]);
-  check('and a bonus aimed at its id still lands', back.data.eidolon[0].calc.ac, ac1 + 2);
+  check('the survivor keeps its id and its bonus, and the bare name goes with the block that had it',
+    [back.data.eidolon[0].name, back.data.eidolon[0].id, back.scope().eidolon2.hd, back.scope().eidolon,
+      back.data.eidolon[0].calc.ac],
+    ['Brutus', 'eidolon2', 4, undefined, ac1 + 2]);
+  // The lowest free id is coined for the next one, the bare name included.
+  check('a new one takes the lowest free id', back.addCompanion('eidolon').id, 'eidolon');
 }
 
 console.log('alternate training -- the primordia spelling migrates and nothing is lost');
@@ -8941,6 +8955,351 @@ console.log('a question on a weapon -- the sheet takes the first answer');
   check('and the sheet still reads its first answer', doubled.calc.totalDmgStr, '1d3+5');
   check('the pool remembers what the term already stands for',
     doubled.calc.tokMultDmg.termFlat, 0);
+}
+
+/*
+ * The Other column takes a formula. A number is recovered on load as the
+ * saved total less the visible parts, as it always was; a rule cannot be, so
+ * its text rides on the document and is worked out again each pass.
+ */
+console.log('\nthe Other column -- a number, or a rule the sheet keeps as one');
+{
+  const control = (level) => {
+    const k = new Character(blankDocument({ name: 'Control' }));
+    k.set('identity.level', level);
+    return k;
+  };
+  const c = new Character(blankDocument({ name: 'Offset' }));
+  c.set('identity.level', 8);
+  const will = (m = c) => m.data.saves.will.total;
+  check('nothing in Other to begin with',
+    [c.offsetSource('saves.will.total'), c.offsetOf('saves.will.total')], [0, 0]);
+
+  c.setOffset('saves.will.total', 'floor(level / 4)');
+  check('a formula in Other is worked out', [c.offsetOf('saves.will.total'), will()], [2, will(control(8)) + 2]);
+  check('and kept as the text it was typed', c.offsetSource('saves.will.total'), 'floor(level / 4)');
+  check('on the document, under the stat it belongs to',
+    c.data.otherFormulas, { 'saves.will.total': 'floor(level / 4)' });
+  c.set('identity.level', 12);
+  check('it follows the level', [c.offsetOf('saves.will.total'), will()], [3, will(control(12)) + 3]);
+  const row = c.audit().find((r) => r.id === 'other-saves.will.total');
+  check('and the audit lists it', [row?.name, row?.status, row?.value, row?.formula],
+    ['Will — Other', 'ok', 3, 'floor(level / 4)']);
+
+  // Round trip: the rule survives a save, and is not counted twice on the
+  // way back in -- the saved total already holds it, and the offset is the
+  // rule rather than a measurement of that total.
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('reopened, it is still a rule', again.offsetSource('saves.will.total'), 'floor(level / 4)');
+  check('and the total is what it was, not that plus the rule again',
+    [will(again), again.offsetOf('saves.will.total')], [will(), 3]);
+  check('so nothing reads as drifted', again.diffFromSource(), []);
+  // A document whose level moved between the save and the load: the rule is
+  // read against the level it finds, not the number it came to before.
+  const doc = JSON.parse(JSON.stringify(c.toJSON()));
+  doc.identity.level = 16;
+  const later = new Character(doc);
+  check('and a rule reopened at a new level is read at that level',
+    [later.offsetOf('saves.will.total'), will(later)], [4, will(control(16)) + 4]);
+
+  // A rule that cannot be read is worth nothing and says so.
+  c.setOffset('saves.will.total', 'level +');
+  check('a broken rule adds nothing and carries its error',
+    [c.offsetOf('saves.will.total'), will(), typeof c.offsetError('saves.will.total')],
+    [0, will(control(12)), 'string']);
+  check('and the audit flags it', c.audit().find((r) => r.id === 'other-saves.will.total')?.status, 'error');
+
+  // Back to a number, typed as a field types it -- text -- and the document
+  // has nothing extra to say.
+  c.setOffset('saves.will.total', '4');
+  check('a number typed into the field is a number',
+    [c.offsetSource('saves.will.total'), will(), c.data.otherFormulas], [4, will(control(12)) + 4, undefined]);
+  check('and nothing is left in the audit', c.audit().some((r) => r.id.startsWith('other-')), false);
+  c.setOffset('saves.will.total', '');
+  check('cleared is zero', [c.offsetSource('saves.will.total'), will()], [0, will(control(12))]);
+
+  // Hit points carry the same field, on a different footing (not a DERIVED
+  // stat), and take the same rule.
+  const hp = (m = c) => m.data.hp.total;
+  const hpBase = (m = c) => Number(m.data.hp.base) || 0;
+  // A blank sheet's hit points are all Other: nothing in the class table
+  // reaches them, so the template's figure is the offset. A rule written
+  // there replaces that figure, as a number typed there would.
+  check('a blank sheet keeps its hit points in Other', hp(), hpBase() + c.offsetOf('hp.total'));
+  c.setOffset('hp.total', 'level * 2');
+  check('hit points take a rule in Other too', [c.offsetOf('hp.total'), hp()], [24, hpBase() + 24]);
+  const hpAgain = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and keep it across a save without doubling',
+    [hpAgain.offsetSource('hp.total'), hp(hpAgain), hpAgain.diffFromSource()], ['level * 2', hp(), []]);
+  check('named for the reader', c.audit().find((r) => r.id === 'other-hp.total')?.name, 'Hit points — Other');
+}
+
+/*
+ * The sphere tables' bonus columns -- CL+ and DC+ on the magic side, BAB+
+ * and DC+ on the martial, Rank+ and DC+ on the guile -- take a rule as well
+ * as a number, the way the speed bonus does.
+ */
+console.log('\nthe sphere tables -- a bonus column that takes a rule');
+{
+  const c = new Character(blankDocument({ name: 'Spheres' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
+  c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
+  c.addGuileSphere('Study');
+  const magic = () => c.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  const combat = () => c.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics');
+  const guile = () => c.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+  const globalCL = () => c.data.training.magic.globalCL;
+  const globalDC = () => c.data.training.magic.globalDC;
+  const pracDC = () => c.data.training.combat.practitionerDC;
+
+  // Magic: CL+ and DC+.
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 'floor(level / 4)');
+  check('a CL+ written as a rule', [magic().clBonusNum, magic().cl, magic().dc],
+    [2, globalCL() + 2, globalDC() + 1]);
+  c.setItem('training.magic.sphereBonuses', 0, 'dcBonus', 'level / 2');
+  check('and a DC+', [magic().dcBonusNum, magic().dc], [4, globalDC() + 1 + 4]);
+  c.set('identity.level', 12);
+  check('both follow the level', [magic().clBonusNum, magic().dcBonusNum], [3, 6]);
+  check('the rule is what is stored', c.data.training.magic.sphereBonuses[0].clBonus, 'floor(level / 4)');
+
+  // Martial: BAB+ (stored as rankBonus) and DC+.
+  const bab = Number(c.data.attack.bab) || 0;
+  c.setItem('training.combat.sphereBonuses', 0, 'rankBonus', 'level / 3');
+  c.setItem('training.combat.sphereBonuses', 0, 'dcBonus', 'floor(level / 6)');
+  check('a BAB+ and DC+ written as rules',
+    [combat().rankBonusNum, combat().attack, combat().dcBonusNum, combat().dc],
+    [4, Math.min(bab + 4, 12), 2, pracDC() + 2]);
+
+  // Guile: Rank+ resolves before the skills (it feeds them); DC+ after.
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  const dcBefore = guile().dc;
+  c.setItem('training.guile.spheres', 0, 'rankBonus', 'level / 4');
+  c.setItem('training.guile.spheres', 0, 'dcBonus', 'level / 6');
+  check('a Rank+ and DC+ written as rules',
+    [guile().rankBonusNum, guile().dcBonusNum, guile().dc], [3, 2, dcBefore + 2]);
+
+  // The audit lists every one of them.
+  const audit = c.audit();
+  check('the audit lists them', ['sphere-magic-dark-clBonus', 'sphere-magic-dark-dcBonus',
+    'sphere-combat-athletics-rankBonus', 'sphere-combat-athletics-dcBonus', 'sphere-guile-0-rankBonus',
+    'sphere-guile-0-dcBonus'].map((id) => audit.find((r) => r.id === id)?.status), Array(6).fill('ok'));
+  check('by the column they sit in',
+    [audit.find((r) => r.id === 'sphere-magic-dark-clBonus')?.name,
+      audit.find((r) => r.id === 'sphere-combat-athletics-rankBonus')?.name,
+      audit.find((r) => r.id === 'sphere-guile-0-rankBonus')?.name],
+    ['Dark CL+', 'Athletics BAB+', 'Study Rank+']);
+
+  // A rule that cannot be read adds nothing and says so.
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 'nope');
+  check('a broken rule is worth nothing and carries its error',
+    [magic().clBonusNum, magic().cl, typeof magic().clBonusError], [0, globalCL(), 'string']);
+  check('and the audit flags it', c.audit().find((r) => r.id === 'sphere-magic-dark-clBonus')?.status, 'error');
+  c.setItem('training.magic.sphereBonuses', 0, 'clBonus', 1);
+  check('a number is still a number', [magic().clBonusNum, magic().clBonusError, magic().cl], [1, null, globalCL() + 1]);
+
+  // Saved and reopened: the rules survive, and the guile side saves only
+  // what was typed.
+  const doc = JSON.parse(JSON.stringify(c.toJSON()));
+  check('the guile row saves the rule and not its working',
+    doc.training.guile.spheres[0], {
+      sphere: 'Study', package: '', skill: 'Perception', rankBonus: 'level / 4', dcBonus: 'level / 6',
+    });
+  const again = new Character(doc);
+  const g2 = again.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+  check('and reopened, every rule still reads',
+    [again.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark').dcBonusNum,
+      again.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics').rankBonusNum,
+      g2.rankBonusNum, g2.dcBonusNum],
+    [6, 4, 3, 2]);
+  check('with nothing drifted', again.diffFromSource(), []);
+}
+
+/*
+ * The same numbers are destinations: a rule written in prose can send a
+ * bonus to a sphere's caster level, attack bonus, ranks or DC, and it lands
+ * beside the typed bonus in the same column.
+ */
+console.log('\nthe sphere tables -- a place to send a bonus');
+{
+  const c = new Character(blankDocument({ name: 'Spheres' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Sphere', clBonus: 0, dcBonus: 0, sheetValue: 'Sphere CL / DC' });
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 1, dcBonus: 0 });
+  c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
+  c.addGuileSphere('Study');
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  const magic = () => c.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  const combat = () => c.data.training.combat.sphereRows.find((r) => r.sphere === 'Athletics');
+  const guile = () => c.data.training.guile.sphereRows.find((r) => r.sphere === 'Study');
+
+  // Readable first: the numbers publish under the sphere's slugged name.
+  check('a magic sphere publishes its caster level and DC',
+    [c.scope().sphere.dark.cl, c.scope().sphere.dark.dc, c.scope().sphere.dark.talents],
+    [magic().cl, magic().dc, 0]);
+  check('a combat sphere its attack bonus and DC',
+    [c.scope().sphere.athletics.bab, c.scope().sphere.athletics.dc], [combat().attack, combat().dc]);
+  check('the skill spheres are still there beside them', c.scope().sphere.study.dc, guile().dc);
+  check('and the workbook\'s header row publishes nothing', c.scope().sphere.sphere, undefined);
+  check('the names validate', ['sphere.dark.cl', 'sphere.athletics.bab', 'sphere.study.ranks']
+    .filter((n) => !new NameIndex(c.scopeNames()).has(n)), []);
+
+  // Destinations: every sphere on the tables, which is the whole catalogue,
+  // and never the workbook's header row.
+  const names = c.forwardTargets().list.filter((t) => t.name.startsWith('sphere.')).map((t) => t.name);
+  check('every column is a destination',
+    ['sphere.dark.cl', 'sphere.dark.dc', 'sphere.athletics.bab', 'sphere.athletics.dc',
+      'sphere.study.ranks', 'sphere.study.dc', 'sphere.alteration.cl', 'sphere.alchemy.bab']
+      .filter((n) => !names.includes(n)), []);
+  check('and the header row is not', names.some((n) => n.startsWith('sphere.sphere.')), false);
+  check('labelled by the sphere', c.forwardTargets().list.find((t) => t.name === 'sphere.dark.cl')?.label,
+    'Dark: caster level');
+
+  const before = {
+    cl: magic().cl, mdc: magic().dc, attack: combat().attack, cdc: combat().dc, gdc: guile().dc,
+  };
+  const note = (text) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Test', body: text });
+    return () => c.listRemove('notes', at);
+  };
+
+  // Magic: a CL bonus is worth half of itself to the DC, as a typed one is.
+  let drop = note('Dark focus {sphere.dark.cl += 2} and {sphere.dark.dc += 1}.');
+  check('a forwarded CL lands beside the typed one', [magic().clForwarded, magic().clBonusNum, magic().cl],
+    [2, 1, before.cl + 2]);
+  check('and carries half of itself into the DC, with the DC bonus on top',
+    [magic().dcForwarded, magic().dc], [1, before.mdc + 1 + 1]);
+  check('the column still says what was typed in it', c.data.training.magic.sphereBonuses[1].clBonus, 1);
+  check('and the badge knows where it came from',
+    c.forwardedInto('sphere.dark.cl')?.from?.[0]?.where, 'note 1 on Lore');
+  drop();
+  check('gone when the note goes', [magic().cl, magic().dc], [before.cl, before.mdc]);
+
+  // Combat.
+  drop = note('Athletic focus {sphere.athletics.bab += 3} and {sphere.athletics.dc += 2}.');
+  check('a combat sphere takes an attack bonus and a DC bonus',
+    [combat().babForwarded, combat().attack, combat().dcForwarded, combat().dc],
+    [3, Math.min(before.attack + 3, 8), 2, before.cdc + 2]);
+  drop();
+
+  // Guile: the DC lands after the skills; the ranks land before them and
+  // so cost a second pass, which the sheet takes.
+  drop = note('Studious {sphere.study.dc += 2}.');
+  check('a skill sphere takes a DC bonus', [guile().dcForwarded, guile().dc], [2, before.gdc + 2]);
+  drop();
+  drop = note('Studious {sphere.study.ranks += 4}.');
+  check('a rank bonus is early, and read on the second pass', guile().ranksForwarded, 4);
+  // With no talents in the sphere the ranks are owed nothing, so the bonus
+  // is held rather than paid -- the same line the typed Rank+ draws.
+  check('and is held until the sphere has a talent to pay on', guile().ranksGranted, 0);
+  drop();
+
+  // Saved and reopened with a bonus in play: forwarded, not absorbed.
+  drop = note('Dark focus {sphere.dark.cl += 2}.');
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  const dark = again.data.training.magic.sphereRows.find((r) => r.sphere === 'Dark');
+  check('reopened, the bonus is still forwarded rather than absorbed',
+    [dark.clForwarded, dark.cl, dark.clBonus], [2, before.cl + 2, 1]);
+  check('and the saved row carries nothing of the working',
+    Object.keys(JSON.parse(JSON.stringify(again.toJSON())).training.guile.spheres[0]).sort(),
+    ['dcBonus', 'package', 'rankBonus', 'skill', 'sphere']);
+  drop();
+}
+
+/*
+ * The sphere tables list the whole catalogue, worked out, whether or not
+ * the document stores a row -- a character built here rather than imported
+ * has none. A sphere with a talent in it, from any source, is on the table;
+ * the rest fold away; and the first edit to one writes its row.
+ */
+console.log('\nthe sphere tables -- every sphere, and only the trained ones in front');
+{
+  const c = new Character(blankDocument({ name: 'Fresh' }));
+  const magicRows = () => c.data.training.magic.sphereRows;
+  const combatRows = () => c.data.training.combat.sphereRows;
+  check('nothing is stored on a fresh sheet',
+    [c.data.training.magic.sphereBonuses, c.data.training.combat.sphereBonuses], [[], []]);
+  check('but every sphere is on the table, in catalogue order',
+    [magicRows().length >= MAGIC_SPHERES.length, magicRows().slice(0, 3).map((r) => r.sphere),
+      combatRows().length >= COMBAT_SPHERES.length, combatRows()[0].sphere],
+    [true, MAGIC_SPHERES.slice(0, 3), true, COMBAT_SPHERES[0]]);
+  const dark = () => magicRows().find((r) => r.sphere === 'Dark');
+  check('and worked out', [dark().cl, dark().dc, dark().talents],
+    [c.data.training.magic.globalCL, c.data.training.magic.globalDC, 0]);
+  check('readable and targetable without a row',
+    [c.scope().sphere.dark.cl, c.forwardTargets().list.some((t) => t.name === 'sphere.alteration.cl')],
+    [dark().cl, true]);
+
+  // A talent from a class level puts the sphere in front.
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', levels: [{ level: 1, talent: 'Dark Sphere', sphere: 'Dark' }],
+  });
+  check('a class talent counts', dark().talents, 1);
+  const magicHtml = combatPanels.renderMagicPanel(c);
+  const start = magicHtml.indexOf('<h3>Sphere CL / DC');
+  const foldAt = magicHtml.indexOf('<details', start);
+  check('the panel rendered its table and its fold', [start > 0, foldAt > start], [true, true]);
+  const table = magicHtml.slice(start, foldAt);
+  const folded = magicHtml.slice(foldAt);
+  check('and the table shows it, with the rest folded',
+    [table.includes('<td>Dark</td>'), table.includes('<td>Alteration</td>'), folded.includes('<td>Alteration</td>')],
+    [true, false, true]);
+
+  // The first edit to a sphere writes its row; a later one finds it.
+  c.setSphereBonus('magic', 'Weather', 'clBonus', 'floor(level / 4)');
+  check('an edit writes the one row', c.data.training.magic.sphereBonuses,
+    [{ sphere: 'Weather', clBonus: 'floor(level / 4)', dcBonus: 0 }]);
+  c.setSphereBonus('magic', 'Weather', 'dcBonus', 2);
+  check('and the next finds it', c.data.training.magic.sphereBonuses.length, 1);
+  const weather = () => magicRows().find((r) => r.sphere === 'Weather');
+  check('the row reads the edit', [weather().clBonus, weather().dcBonusNum], ['floor(level / 4)', 2]);
+  c.setSphereBonus('combat', 'Athletics', 'rankBonus', 1);
+  check('the combat side names its column', c.data.training.combat.sphereBonuses,
+    [{ sphere: 'Athletics', rankBonus: 1, dcBonus: 0 }]);
+  c.setSphereBonus('combat', 'Athletics', 'clBonus', 1);
+  check('and refuses the other side\'s', c.data.training.combat.sphereBonuses[0].clBonus, undefined);
+
+  // The guile tab folds the catalogue the same way, and Add names the sphere.
+  const guileHtml = guilePanels.renderGuilePanel(c);
+  check('the guile tab offers the rest of its catalogue',
+    guileHtml.includes('data-action="add-guile-sphere" data-sphere="Study"'), true);
+  c.addGuileSphere('Study');
+  check('and adds the one named', c.data.training.guile.spheres.map((r) => r.sphere), ['Study']);
+}
+
+/*
+ * A class gains talents the way its own system grants them, so each tab's
+ * Talents / level offers that system's three rates and no other's; and the
+ * guile block carries the operative modifier where the other two carry the
+ * class's casting score or practitioner modifier.
+ */
+console.log('\ntalents per level -- each system\'s own three rates');
+{
+  const c = new Character(blankDocument({ name: 'Rates' }));
+  const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: null, talentsPerLevel: null, mod1: null, mod2: null, levels: blankLevels() });
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: null, talentsPerLevel: 'Mid-Caster', mod1: null, mod2: null, levels: blankLevels() });
+  c.addGuileClass('Operative');
+  const options = (html, path) => {
+    const at = html.indexOf(`data-item="${path}"`);
+    const open = html.lastIndexOf('<select', at);
+    const close = html.indexOf('</select>', at);
+    return [...html.slice(open, close).matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]).filter(Boolean);
+  };
+  check('the magic tab offers the caster rates',
+    options(combatPanels.renderMagicPanel(c), 'training.magic.classes|0|talentsPerLevel'),
+    ['High Caster', 'Mid-Caster', 'Low Caster']);
+  check('the martial tab the practitioner rates, keeping a stray value rather than blanking it',
+    options(combatPanels.renderMartialPanel(c), 'training.combat.classes|0|talentsPerLevel'),
+    ['Expert', 'Adept', 'Proficient', 'Mid-Caster']);
+  const guile = guilePanels.renderGuilePanel(c);
+  const tier = guile.indexOf('Expertise tier');
+  const operative = guile.indexOf('Operative modifier', tier);
+  const levels = guile.indexOf('Class levels', tier);
+  check('the guile block puts the operative modifier between the tier and the levels',
+    [tier > 0, operative > tier, levels > operative], [true, true, true]);
+  check('and it is the one setting, bound to the character', guile.includes('data-set="training.guile.operativeMod"'), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

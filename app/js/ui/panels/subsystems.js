@@ -62,7 +62,7 @@ import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
-  companionAttackKey, companionSkillKey, emptyCompanionFeat,
+  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
@@ -1395,9 +1395,9 @@ function manifestingClassPanel(c, i) {
    * The context `cc` carries what every sub-panel needs to know about *which*
    * companion it is drawing: `p` is the data path its fields write to
    * (`eidolon.1`), `sn` the scope name its numbers read back and take bonuses
-   * under (`eidolon` for the first of a kind, `companion.<id>` after), and
-   * `roll` the kind a d20 button reports (`eidolon:1`). One companion, three
-   * spellings, all decided in one place.
+   * under (the block's id: `eidolon` for the first of a kind, `eidolon2`
+   * after), and `roll` the kind a d20 button reports (`eidolon:1`). One
+   * companion, three spellings, all decided in one place.
    */
 export function companionPanel(model, kind) {
     const list = model.data[kind] || [];
@@ -1410,7 +1410,7 @@ export function companionPanel(model, kind) {
     const cc = {
       kind, i, b, k, label,
       p: `${kind}.${i}`,
-      sn: i === 0 ? kind : `companion.${b.id}`,
+      sn: companionScopeName(kind, b),
       roll: i === 0 ? kind : `${kind}:${i}`,
     };
     return `<div class="grid">
@@ -1448,8 +1448,8 @@ export function companionPanel(model, kind) {
  *
  * Shown once there is more than one to switch between (or the strip would be
  * a single chip restating the tab), but the Add is always there -- it is how
- * the second one comes to exist. Every companion past the first wears the id
- * a formula reads it by, the way a tracker's row wears its own.
+ * the second one comes to exist. Every chip wears the id a formula reads the
+ * companion by, the way a tracker's row wears its own.
  */
 function companionSwitchPanel(model, kind, list, active, label) {
     const many = list.length > 1;
@@ -1457,17 +1457,18 @@ function companionSwitchPanel(model, kind, list, active, label) {
       <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
         ${many ? list.map((c, i) => `<button data-action="companion-select" data-kind="${kind}" data-index="${i}"
           aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
-          title="${i === 0 ? `Reads in formulas as ${kind}.* (and companion.${esc(c.id)}.*)` : `Reads in formulas as companion.${esc(c.id)}.*`}">
+          title="Reads in formulas as ${esc(c.id)}.*">
           ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
-          <span class="hint">${c.calc?.level ? `L${c.calc.level}` : ''}${i > 0 ? ` #${esc(c.id)}` : ''}</span>
+          <span class="hint">${c.calc?.level ? `L${c.calc.level} ` : ''}<code>${esc(c.id)}</code></span>
         </button>`).join('') : ''}
         <button data-action="companion-add" data-kind="${kind}"
-          title="Another ${label.toLowerCase()} — its numbers get their own names (companion.<id>.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
+          title="Another ${label.toLowerCase()} — its numbers get a name of their own (${kind}2.*, ${kind}3.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
         ${many ? `<button class="danger" data-remove="${kind}|${active}" style="margin-left:auto"
           title="Remove the ${esc(label.toLowerCase())} being shown. Undo brings it back.">Remove this one</button>` : ''}
       </div>
-      ${many ? `<p class="hint">One of ${list.length} — the first answers to <code>${kind}.hp</code> and friends;
-        every one of them also reads and takes bonuses as <code>companion.&lt;id&gt;.…</code>, id shown on its chip.</p>` : ''}
+      ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip —
+        <code>${kind}.hp</code>, <code>${kind}2.hp</code> — and the id stays with the creature through a
+        rename or a reordering.</p>` : ''}
     </section>`;
   }
 
@@ -1520,7 +1521,7 @@ function companionHeadPanel(model, cc) {
         ${field('Alignment', text(`${p}.alignment`, b.alignment))}`;
     return `<section class="panel span2">
       <h3>${esc(String(b.name || '').trim() || label)}
-        ${cc.i > 0 ? `<span class="badge" title="The name this companion’s numbers read by in a formula">companion.${esc(b.id)}</span>` : ''}
+        <span class="badge" title="${esc(`The name this companion’s numbers read by in a formula — ${cc.sn}.hp, ${cc.sn}.ac.total — and a bonus is sent to. It stays with the creature through a rename or a reordering.`)}">${esc(cc.sn)}</span>
         <span class="badge">level ${k.level ?? 0}</span>
         <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
         ${kind === 'conjured' && k.summonCost !== undefined
@@ -1554,7 +1555,7 @@ function companionHeadPanel(model, cc) {
       : kind === 'conjured'
         ? 'The level is the caster level (or a class’s levels), less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
         : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
-        Readable from a formula as <code>${sn}.hp</code>, <code>${sn}.ac</code>, <code>${sn}.str.mod</code>…</p>
+        Readable from a formula as <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
     </section>`;
   }
 
@@ -1789,7 +1790,7 @@ function eidolonEvolutionsPanel(model, cc) {
           ${prose(model, `data-set="${p}.baseEvolutions"`, b.baseEvolutions, 2)}</label>
       </div>
       <p class="hint">The pool is the table’s at this level, less the master-level penalty, plus the bonus points.
-        Readable as <code>${sn}.evoPool</code> and <code>${sn}.evoLeft</code>.</p>
+        Readable as <code>${esc(sn)}.evoPool</code> and <code>${esc(sn)}.evoLeft</code>.</p>
     </section>`;
   }
 
@@ -1920,19 +1921,22 @@ function companionSkillsPanel(model, cc) {
     const fam = kind === 'familiar';
     const budget = k.ranksAllowed === null || k.ranksAllowed === undefined ? ''
       : `<span class="badge${(k.ranksSpent ?? 0) > k.ranksAllowed ? ' err' : ''}">${k.ranksSpent ?? 0} of ${k.ranksAllowed} ranks</span>`;
-    return `<section class="panel span2">
-      <h3>Skills ${budget}</h3>
-      <table class="build"><thead><tr>
-        <th scope="col">Skill</th><th scope="col">Variant</th><th scope="col">Ability</th>
-        <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
-        ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
-        <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>
-      </tr></thead><tbody>
-        ${rows.map((s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
-          <td>${itemText(list, i, 'name', s.name, 'Skill')}</td>
-          <td>${itemText(list, i, 'spec', s.spec, '')}</td>
+    // Two tables side by side rather than one across the panel. A companion
+    // keeps thirty-odd skills of a name, a variant and five small numbers,
+    // and one table the width of the page put the name in a box four times
+    // its length and the list a screen and a half tall. Halved, the name
+    // gets the width a skill name needs and the list fits on a screen. The
+    // rows keep their index in the stored list, which is what every field
+    // on them binds to.
+    // No Variant column: a companion with a specific Craft or Profession
+    // gets it typed into the name, as its player would write it. A variant
+    // a document already holds is still shown, under the name, so it is
+    // not lost -- none of the imported companions carries one.
+    const row = (s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
+          <td class="cname">${itemText(list, i, 'name', s.name, 'Skill', true)}${
+            String(s.spec || '').trim() ? `<div class="hint">(${esc(s.spec)})</div>` : ''}</td>
           <td>${itemSelect(list, i, 'ability', s.ability, ABILITY_LABELS_LIST, null)}</td>
-          <td>${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
+          <td class="mid">${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
           <td>${itemNum(list, i, 'misc', s.misc)}${
@@ -1940,8 +1944,23 @@ function companionSkillsPanel(model, cc) {
           <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
             rollButton(model, roll, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
-        </tr>`).join('')}
-      </tbody></table>
+        </tr>`;
+    const table = (indexed) => `<table class="build"><thead><tr>
+        <th scope="col" class="cname">Skill</th><th scope="col">Ability</th>
+        <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
+        ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
+        <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>
+      </tr></thead><tbody>
+        ${indexed.map(([s, i]) => row(s, i)).join('')}
+      </tbody></table>`;
+    const indexed = rows.map((s, i) => [s, i]);
+    const half = Math.ceil(indexed.length / 2);
+    return `<section class="panel span2">
+      <h3>Skills ${budget}</h3>
+      <div class="compskills${fam ? ' fam' : ''}">
+        ${table(indexed.slice(0, half))}
+        ${indexed.length > half ? table(indexed.slice(half)) : ''}
+      </div>
       <div style="margin-top:6px">${addButton(list, 'Add skill', { name: '', spec: '', ability: 'Int', trained: false, classSkill: false, ranks: 0, misc: 0 })}</div>
       <p class="hint">${fam
     ? 'A familiar uses its own ranks or its master’s, whichever is higher; the +3 class-skill bonus applies once there is a rank.'
@@ -2035,10 +2054,10 @@ function companionItemsPanel(model, cc) {
       <div style="margin-top:6px">${addButton(list, slots.length ? 'Add slotless item' : 'Add item', { name: '', cost: 0, worn: true, effect: '' })}</div>
       <p class="hint"><strong>Effect</strong> reads <code>{…}</code> like any prose on the sheet, and
         every number ${esc(label.toLowerCase())} rolls is something a bonus can be aimed at:
-        <code>{${sn}.str.score += 4 as enhancement}</code>, <code>{${sn}.ac.total += 2 as armor}</code>,
-        <code>{${sn}.skill.perception += 5}</code>, <code>{${sn}.attack += 1}</code>,
-        <code>{${sn}.damage += 1}</code>, <code>{${sn}.saves += 2 as resistance}</code>,
-        <code>{${sn}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
+        <code>{${esc(sn)}.str.score += 4 as enhancement}</code>, <code>{${esc(sn)}.ac.total += 2 as armor}</code>,
+        <code>{${esc(sn)}.skill.perception += 5}</code>, <code>{${esc(sn)}.attack += 1}</code>,
+        <code>{${esc(sn)}.damage += 1}</code>, <code>{${esc(sn)}.saves += 2 as resistance}</code>,
+        <code>{${esc(sn)}.cmb += 2}</code>. Untick <em>Worn</em> and the row keeps saying what it
         would do without doing it.</p>
     </section>`;
   }
@@ -2107,7 +2126,7 @@ function companionNotesPanel(model, cc) {
     return `<section class="panel">
       <h3>Notes</h3>
       ${prose(model, `data-set="${p}.notes"`, b.notes, 6)}
-      <p class="hint">Formulas work here: <code>{= ${sn}.hp}</code>, <code>{= ${sn}.hd * 2}</code>.</p>
+      <p class="hint">Formulas work here: <code>{= ${esc(sn)}.hp}</code>, <code>{= ${esc(sn)}.hd * 2}</code>.</p>
     </section>`;
   }
 
