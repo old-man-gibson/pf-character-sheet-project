@@ -1921,19 +1921,18 @@ function companionSkillsPanel(model, cc) {
     const fam = kind === 'familiar';
     const budget = k.ranksAllowed === null || k.ranksAllowed === undefined ? ''
       : `<span class="badge${(k.ranksSpent ?? 0) > k.ranksAllowed ? ' err' : ''}">${k.ranksSpent ?? 0} of ${k.ranksAllowed} ranks</span>`;
-    return `<section class="panel span2">
-      <h3>Skills ${budget}</h3>
-      <table class="build"><thead><tr>
-        <th scope="col">Skill</th><th scope="col">Variant</th><th scope="col">Ability</th>
-        <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
-        ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
-        <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>
-      </tr></thead><tbody>
-        ${rows.map((s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
-          <td>${itemText(list, i, 'name', s.name, 'Skill')}</td>
-          <td>${itemText(list, i, 'spec', s.spec, '')}</td>
+    // Two tables side by side rather than one across the panel. A companion
+    // keeps thirty-odd skills of a name, a variant and five small numbers,
+    // and one table the width of the page put the name in a box four times
+    // its length and the list a screen and a half tall. Halved, the name
+    // gets the width a skill name needs and the list fits on a screen. The
+    // rows keep their index in the stored list, which is what every field
+    // on them binds to.
+    const row = (s, i) => `<tr${s.trained && !(s.effectiveRanks > 0) ? ' class="future" title="Trained only — no ranks yet"' : ''}>
+          <td class="cname">${itemText(list, i, 'name', s.name, 'Skill', true)}</td>
+          <td class="cvar">${itemText(list, i, 'spec', s.spec, '', true)}</td>
           <td>${itemSelect(list, i, 'ability', s.ability, ABILITY_LABELS_LIST, null)}</td>
-          <td>${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
+          <td class="mid">${itemCheck(list, i, 'classSkill', s.classSkill)}</td>
           <td>${itemNum(list, i, 'ranks', s.ranks)}</td>
           ${fam ? `<td class="num derived">${s.masterRanks || 0}</td>` : ''}
           <td>${itemNum(list, i, 'misc', s.misc)}${
@@ -1941,8 +1940,23 @@ function companionSkillsPanel(model, cc) {
           <td class="num total"><span class="rollpair">${fmt(s.total ?? 0)}${
             rollButton(model, roll, `skill:${i}`, `a ${skillLabel(s.name, s.spec) || 'skill'} check`)}</span></td>
           ${rowRemove(list, i)}
-        </tr>`).join('')}
-      </tbody></table>
+        </tr>`;
+    const table = (indexed) => `<table class="build"><thead><tr>
+        <th scope="col" class="cname">Skill</th><th scope="col" class="cvar">Variant</th><th scope="col">Ability</th>
+        <th scope="col" title="Class skill">Class</th><th scope="col">Ranks</th>
+        ${fam ? '<th scope="col" class="num" title="The master’s ranks in the same skill">Master</th>' : ''}
+        <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col"></th>
+      </tr></thead><tbody>
+        ${indexed.map(([s, i]) => row(s, i)).join('')}
+      </tbody></table>`;
+    const indexed = rows.map((s, i) => [s, i]);
+    const half = Math.ceil(indexed.length / 2);
+    return `<section class="panel span2">
+      <h3>Skills ${budget}</h3>
+      <div class="compskills">
+        ${table(indexed.slice(0, half))}
+        ${indexed.length > half ? table(indexed.slice(half)) : ''}
+      </div>
       <div style="margin-top:6px">${addButton(list, 'Add skill', { name: '', spec: '', ability: 'Int', trained: false, classSkill: false, ranks: 0, misc: 0 })}</div>
       <p class="hint">${fam
     ? 'A familiar uses its own ranks or its master’s, whichever is higher; the +3 class-skill bonus applies once there is a rank.'

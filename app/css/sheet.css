@@ -2965,6 +2965,19 @@ input[type="color"] {
   .pairrow.wide-first { grid-template-columns: minmax(0, 1fr) minmax(300px, 22rem); }
 }
 .pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
+
+/* A companion's skills, in two tables side by side -- one across the panel
+   put a skill's name in a box four times its length. Every column but the
+   name is as wide as what it holds; the name takes the rest of its half. */
+.compskills { display: grid; gap: 0 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@container (min-width: 900px) {
+  .compskills { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+.compskills table { width: 100%; }
+.compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
+.compskills td.cvar input { width: 5.5rem; }
+.compskills select { width: auto; min-width: 3.6rem; }
+.compskills td.mid { text-align: center; }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   /* The ledger takes the width it is worth and the buffs take the rest -- with
