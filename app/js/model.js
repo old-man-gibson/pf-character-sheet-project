@@ -39,6 +39,7 @@ export * from './model/stats/attacks.js';
 export * from './model/stats/wealth.js';
 export * from './model/subsystems/akashic.js';
 export * from './model/subsystems/cardcasting.js';
+export * from './model/subsystems/catalogues.js';
 export * from './model/subsystems/companions.js';
 export * from './model/subsystems/cooking.js';
 export * from './model/subsystems/crafting.js';

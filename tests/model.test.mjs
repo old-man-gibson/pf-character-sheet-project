@@ -11,7 +11,7 @@
  *  private fixtures. Without them it reports what the sweeps found and exits 0.
  *
  *  Run: node tests/model.test.mjs */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import {
   loadCharacter, fixtureIds, missingCharacters, missingNote, CHARACTERS_DIR,
 } from './fixtures.mjs';
@@ -82,9 +82,25 @@ const check = (label, actual, expected) => {
 // tables, the deck manipulations, the iron chef's ingredients -- are what a
 // character's disciplines, slots, pools and dishes are read from, so they are
 // registered before any character is constructed, exactly as the app does on
-// load: every bundled extension pack, merged, through the same registrars.
-const packIndex = JSON.parse(readFileSync('data/extensions/index.json', 'utf8'));
-const packs = packIndex.extensions.map((e) => JSON.parse(readFileSync(`data/extensions/${e.file}`, 'utf8')));
+/*
+ * load: every extension pack this checkout has, merged, through the same
+ * registrars the page uses.
+ *
+ * Both folders, the way the app reads them. `data/extensions/` is what ships
+ * and holds structure only; `private/extensions/` is the git-ignored one, and
+ * since 2026-09-02 it is where the two packs carrying *rules prose* live --
+ * deck manipulations and the Alternate Training techniques. A fresh clone has
+ * only the first, so the handful of checks that read a technique's ladder
+ * stand down there, the same way the ones naming a real character do.
+ */
+const packFolder = (dir) => {
+  if (!existsSync(`${dir}/index.json`)) return [];
+  return JSON.parse(readFileSync(`${dir}/index.json`, 'utf8'))
+    .extensions.map((e) => JSON.parse(readFileSync(`${dir}/${e.file}`, 'utf8')));
+};
+const packs = [...packFolder('data/extensions'), ...packFolder('private/extensions')];
+/** Whether this checkout has the techniques to read a ladder off. */
+const hasAltTraining = packs.some((p) => (p?.provides?.altTraining?.techniques || []).length);
 const merged = mergeTables(packs);
 registerTables(merged, {
   setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
@@ -1086,7 +1102,13 @@ console.log('alternate training -- the primordia spelling migrates and nothing i
   check('the saved tab bar follows the tab', c.data.uiPrefs.tabOrder, ['overview', 'altTraining']);
   check('so do its hidden flag and colour',
     [c.data.uiPrefs.hiddenTabs.altTraining, c.data.uiPrefs.tabColors.altTraining], [true, '#123456']);
-  check('and the ladder still computes off the pack', c.data.altTraining.calc.technique, 'Light Body');
+  // The one check in this suite that needs the *techniques* pack rather than
+  // just the ladder shape, and that pack is not shipped -- see `packFolder`.
+  // Everything below it works from `setAltTrainingTables` directly and holds
+  // either way, which is why this is the only line that has to stand down.
+  if (hasAltTraining) {
+    check('and the ladder still computes off the pack', c.data.altTraining.calc.technique, 'Light Body');
+  }
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('a save writes only the new spelling',
     ['primordia' in saved, saved.altTraining.technique], [false, 'Light Body']);

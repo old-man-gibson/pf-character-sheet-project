@@ -86,7 +86,12 @@ for (const file of files) {
   read.push({ file, name: titleOf(file), result: r });
   const kinds = new Map();
   for (const b of r.blocks) kinds.set(b.kind, (kinds.get(b.kind) || 0) + 1);
+  const cat = [
+    [r.feats?.length, 'feat'], [r.spells?.length, 'spell'], [r.powers?.length, 'power'],
+    [r.catalogue?.length, 'reference entry'],
+  ].filter(([n]) => n).map(([n, w]) => `${n} ${w}${n === 1 ? '' : (w.endsWith('y') ? 'ies' : 's')}`.replace('entryies', 'entries')).join(', ');
   const what = [...kinds].map(([k, n]) => `${n} ${k}`).join(', ')
+    || cat
     || (r.spheres.length ? `${r.spheres.length} sphere(s)` : '')
     || (r.maneuvers.length ? `${r.maneuvers.length} maneuver(s)` : '')
     || 'nothing';
@@ -185,6 +190,37 @@ const provisions = (results) => {
   const provides = {};
   const spheres = results.flatMap((r) => r.spheres);
   const maneuvers = results.flatMap((r) => r.maneuvers).filter((m) => m.discipline);
+  /*
+   * Feats, spells and powers are catalogues, the way veils are: they leave as
+   * a table rather than as blocks, so that a character keeps the name it
+   * picked and reads the rules where they stand. Unlike veils there is no
+   * conversion on the way out -- `readStructured` produced table entries in
+   * the first place, because nothing ever wanted them as blocks.
+   */
+  const feats = results.flatMap((r) => r.feats ?? []);
+  const spellList = results.flatMap((r) => r.spells ?? []);
+  const powers = results.flatMap((r) => r.powers ?? []);
+  /*
+   * The general catalogue leaves grouped by kind: one `deity` group, one
+   * `plane` group, the way maneuvers leave grouped by discipline. Grouping
+   * here rather than in the reader keeps `readStructured` returning a flat
+   * list of what it found, which is what the review panel shows.
+   */
+  const byKind = new Map();
+  for (const e of results.flatMap((r) => r.catalogue ?? [])) {
+    if (!e.kind) continue;
+    if (!byKind.has(e.kind)) byKind.set(e.kind, []);
+    const { kind, ...rest } = e;
+    byKind.get(e.kind).push(rest);
+  }
+  if (byKind.size) {
+    provides.catalogues = {
+      catalogues: [...byKind].map(([kind, entries]) => ({ kind, entries })),
+    };
+  }
+  if (feats.length) provides.feats = { feats };
+  if (spellList.length) provides.spells = { spells: spellList };
+  if (powers.length) provides.powers = { powers };
   if (spheres.length) provides.spheres = { spheres };
   if (maneuvers.length) {
     const by = new Map();

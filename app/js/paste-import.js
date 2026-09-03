@@ -251,7 +251,23 @@ export function parsePaste(text) {
   if (!segments.length && leftovers.length) {
     report.push('Nothing here looked like a class, a race, a veil, a sphere or a maneuver. Tag the text below, or keep it as a note.');
   }
-  return { blocks: blocks.filter(Boolean), maneuvers, spheres, report, leftovers };
+  /*
+   * The catalogue buckets are empty here and always will be: a feat, a spell
+   * and a power are read out of a scraper's document, not off a page somebody
+   * copied. They are still named, so that both halves of `parsePaste` hand
+   * back the same shape and a caller need not ask which one answered.
+   */
+  return {
+    blocks: blocks.filter(Boolean),
+    maneuvers,
+    spheres,
+    feats: [],
+    spells: [],
+    powers: [],
+    catalogue: [],
+    report,
+    leftovers,
+  };
 }
 
 /**
@@ -1207,6 +1223,148 @@ export function readVeil(lines, pre = new Set()) {
   };
 }
 
+/**
+ * `Wizard 3, Cleric 4` -- whose list a spell or a power is on, and at what
+ * level. The pair is how every book states it and how the wiki's infobox
+ * numbers it, and it is what a picker narrows on: a caster is offered the
+ * spells on *their* class's list, the way a chakra offers its own veils.
+ *
+ * A name with no number keeps the name and no level, rather than being
+ * dropped -- "Unlisted" is a real answer for a spell nobody's list carries.
+ */
+function listedClasses(raw) {
+  return String(raw ?? '').split(/\s*,\s*/).map((part) => {
+    const m = part.trim().match(/^(.*?)\s+(\d+)$/);
+    if (m) return { name: m[1].trim(), level: Number(m[2]) };
+    return part.trim() ? { name: part.trim(), level: null } : null;
+  }).filter(Boolean);
+}
+
+/**
+ * A feat, a spell, a psionic power and a kineticist wild talent, each out of
+ * a structured entry.
+ *
+ * These four are **catalogue** entries rather than blocks, for the reason a
+ * veil is one: they are read where they stand and never copied onto a
+ * character. A feat picked on the sheet is a name and whatever the player
+ * wrote about it; the rules text stays in the pack, so a corrected pack
+ * corrects every character that took the feat, and a character sent to a
+ * friend carries "Power Attack" rather than a paragraph of somebody's book.
+ *
+ * Each is identified by the field naming what it is -- `Feat type`,
+ * `Spell level`, `Power points`, `Wild talent type` -- which the scraper
+ * states outright because the page did.
+ */
+function structuredFeat(e) {
+  return {
+    name: e.name,
+    type: pick(e.fields, 'feat type', 'type'),
+    prerequisites: pick(e.fields, 'prerequisites', 'prerequisite'),
+    text: [e.summary, e.text].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  };
+}
+
+function structuredSpell(e) {
+  const classes = listedClasses(pick(e.fields, 'spell level', 'level'));
+  const levels = classes.map((c) => c.level).filter((n) => Number.isFinite(n));
+  return {
+    name: e.name,
+    classes,
+    // The lowest list it appears on, which is the one a "3rd-level spells"
+    // heading means when a sheet groups them.
+    level: levels.length ? Math.min(...levels) : null,
+    school: pick(e.fields, 'school'),
+    descriptor: pick(e.fields, 'descriptors', 'descriptor'),
+    components: pick(e.fields, 'components'),
+    time: pick(e.fields, 'casting time', 'time'),
+    range: pick(e.fields, 'range'),
+    target: pick(e.fields, 'target', 'targets', 'area', 'effect'),
+    duration: pick(e.fields, 'duration'),
+    save: pick(e.fields, 'saving throw', 'save'),
+    sr: pick(e.fields, 'spell resistance', 'sr'),
+    text: [e.summary, e.text].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  };
+}
+
+function structuredPower(e) {
+  const classes = listedClasses(pick(e.fields, 'power level', 'level'));
+  const levels = classes.map((c) => c.level).filter((n) => Number.isFinite(n));
+  return {
+    name: e.name,
+    kind: 'power',
+    classes,
+    level: levels.length ? Math.min(...levels) : null,
+    discipline: pick(e.fields, 'discipline'),
+    points: pick(e.fields, 'power points'),
+    display: pick(e.fields, 'display'),
+    time: pick(e.fields, 'manifesting time', 'time'),
+    range: pick(e.fields, 'range'),
+    target: pick(e.fields, 'target', 'targets', 'area', 'effect'),
+    duration: pick(e.fields, 'duration'),
+    save: pick(e.fields, 'saving throw', 'save'),
+    sr: pick(e.fields, 'power resistance', 'resistance'),
+    text: [e.summary, e.text].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  };
+}
+
+/**
+ * A wild talent is kineticist rather than psionic -- element and burn, not
+ * discipline and power points -- and shares this catalogue because the two
+ * are picked the same way and the books that carry them are the same books.
+ * The `kind` says which, so a picker can group them apart.
+ */
+function structuredWildTalent(e) {
+  return {
+    name: e.name,
+    kind: 'wild talent',
+    classes: [],
+    level: Number(pick(e.fields, 'level').match(/\d+/)?.[0] ?? '') || null,
+    type: pick(e.fields, 'wild talent type'),
+    element: pick(e.fields, 'element'),
+    burn: pick(e.fields, 'burn'),
+    blastType: pick(e.fields, 'blast type'),
+    damage: pick(e.fields, 'damage'),
+    save: pick(e.fields, 'saving throw', 'save'),
+    sr: pick(e.fields, 'spell resistance', 'sr'),
+    text: [e.summary, e.text].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  };
+}
+
+/**
+ * Anything else a scraper found, kept under the kind it said it was.
+ *
+ * A deity, a plane, a special material, a covenant, a madness. Forty kinds of
+ * them, and what they have in common is the thing that matters: they are
+ * **reference**. Nothing about a herald changes a number on a sheet, and a
+ * reader written for each would be one reader written forty times.
+ *
+ * So the fields are kept as the page stated them, in the order it stated
+ * them, rather than being mapped onto anything -- there is nothing to map
+ * them onto. `kind` is what a picker groups by and what a search says it
+ * found. A kind that later earns a place on the sheet earns a row of its own
+ * above this one, and stops arriving here; nothing needs removing for that to
+ * happen, because a narrower row wins.
+ */
+function structuredCatalogueEntry(e) {
+  const fields = [];
+  for (const [key, value] of e.fields) {
+    if (key === 'entry kind' || key === 'source' || key === 'sources') continue;
+    const label = e.labels.get(key) || key;
+    if (String(value).trim()) fields.push([label, String(value).trim()]);
+  }
+  return {
+    kind: lower(pick(e.fields, 'entry kind')),
+    name: e.name,
+    fields,
+    text: [e.summary, e.text].filter(Boolean).join('\n\n'),
+    source: pick(e.fields, 'source', 'sources'),
+  };
+}
+
 /* ---------------- a scraper's structured markdown ---------------- */
 
 /**
@@ -1749,6 +1907,29 @@ const STRUCTURED_KINDS = [
     read: structuredVeil,
     into: 'blocks',
   },
+  // Each of these four names itself, so one field is both enough and exact.
+  // `power` sits above `wild talent` only for tidiness -- their fields do not
+  // overlap, a power having points and a wild talent an element.
+  {
+    kind: 'feat', wants: ['feat type'], drops: [], read: structuredFeat, into: 'feats',
+  },
+  {
+    kind: 'spell', wants: ['spell level'], drops: [], read: structuredSpell, into: 'spells',
+  },
+  {
+    kind: 'power', wants: ['power points'], drops: [], read: structuredPower, into: 'powers',
+  },
+  {
+    kind: 'wild talent', wants: ['wild talent type'], drops: [], read: structuredWildTalent, into: 'powers',
+  },
+  /*
+   * Last, and on purpose: every row above is narrower, and the first match
+   * wins. A page that says `Entry kind` *and* carries a shapeable slot is a
+   * veil that also stated what it was, and should be read as a veil.
+   */
+  {
+    kind: 'catalogue', wants: ['entry kind'], drops: [], read: structuredCatalogueEntry, into: 'catalogue',
+  },
 ];
 
 /** What was read off a sphere document, in one line. */
@@ -1770,7 +1951,8 @@ function sphereLine(s) {
 export function readStructured(text) {
   const doc = parseStructured(text);
   const out = {
-    blocks: [], maneuvers: [], spheres: [], report: [], leftovers: [],
+    blocks: [], maneuvers: [], spheres: [], feats: [], spells: [], powers: [], catalogue: [],
+    report: [], leftovers: [],
   };
   const dropped = new Set();
   const unknown = [];

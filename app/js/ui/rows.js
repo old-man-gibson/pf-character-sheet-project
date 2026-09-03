@@ -21,11 +21,19 @@ import { fmt } from '../rules.js';
  * scrolls rather than showing an ellipsis, so the whole of it has to be
  * readable from somewhere. Left off where the column is wide enough to
  * speak for itself, so the tooltip stays a signal.
+ *
+ * The last argument grew a second job when the catalogue tables arrived: a
+ * feat, a spell and a power are typed into a cell like this with the
+ * catalogue behind them, which wants a `list`. It still takes the bare
+ * boolean every existing caller passes -- `true` is `{ title: true }` -- so
+ * that adding the option changed nothing that was already written.
  */
-export function itemText(list, i, field, value, placeholder = '', title = false) {
+export function itemText(list, i, field, value, placeholder = '', opts = false) {
+  const o = (opts && typeof opts === 'object') ? opts : { title: !!opts };
   const text = String(value ?? '');
   return `<input type="text" value="${esc(text)}" data-item="${list}|${i}|${field}"
-      data-kind="text" placeholder="${esc(placeholder)}"${title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
+      data-kind="text" placeholder="${esc(placeholder)}"${
+  o.list ? ` list="${esc(o.list)}"` : ''}${o.title && text.trim() ? ` title="${esc(text)}"` : ''}>`;
 }
 
 export function itemNum(list, i, field, value) {

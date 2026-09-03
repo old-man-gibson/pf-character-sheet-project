@@ -4190,3 +4190,67 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   /* Neither a shadow nor a rounded corner survives a laser printer usefully. */
   * { box-shadow: none !important; text-shadow: none !important; }
 }
+
+/* ---------- what a catalogue knows ----------
+   Feats, spells and powers are picked by name and read where they stand, so
+   the cell that would otherwise be empty carries the pack's own words: the
+   stat line a book prints above a rule, then the rule, then where it is from.
+
+   It is deliberately quieter than the box above it. The player's own note is
+   the thing they wrote and the only thing the sheet saves; this is reference,
+   and reference that shouted would make every row look filled in.
+
+   Both are on the row at once, so telling them apart at a glance is the whole
+   job of this rule: the note is a bordered box you can type in, this is
+   indented behind a rule, unbordered, and set in the muted colour. The small
+   caps on the field labels and the source line do the rest. */
+.catface {
+  /* A little more air above than below: it hangs off the note it sits under
+     rather than floating between two rows. */
+  margin: 5px 0 1px; padding: 4px 6px;
+  border-left: 2px solid var(--cs-line); border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--cs-panel) 70%, transparent);
+  font-size: 0.74rem; line-height: 1.4; color: var(--cs-muted);
+}
+/* Label and value, repeated across the line. `row-gap` does the separating,
+   so two fields never run into one another the way "Type CombatPrerequisites"
+   did when they were bare spans. */
+.catfields { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-bottom: 3px; }
+.catfield {
+  display: inline-flex; align-items: baseline; gap: 4px; min-width: 0;
+  color: var(--cs-fg); overflow-wrap: anywhere;
+}
+.catfield i {
+  font-style: normal; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted); opacity: 0.8; flex: none;
+}
+.cattext { color: var(--cs-fg); opacity: 0.85; overflow-wrap: anywhere; }
+.catsource {
+  margin-top: 3px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cs-muted); opacity: 0.75;
+}
+/* Stacked (narrow) tables put the label above the cell, and a reference block
+   under a one-line textarea wants the same breathing room as the note does. */
+table.stacked .catface { margin-left: 0; }
+
+/* ---------- a notes cell with a pack note under it ----------
+   The box gives up a caret's width, and only when there is something for the
+   caret to open: a row whose entry no pack knows is the full-width prose box
+   it has always been, with nothing beside it to explain. */
+.notecell { display: flex; flex-direction: column; }
+.noteline { display: flex; align-items: flex-start; gap: 2px; }
+.notebox { flex: 1 1 auto; min-width: 0; }
+/* Big enough to find and to hit. At the inherited `.disclose` size this was a
+   13×14 mark in the muted colour, which read as a speck of punctuation beside
+   the box rather than as the control that opens the pack's note — the one
+   thing on the row a player is meant to reach for. Sized to the row's line
+   height instead, and it takes the accent on hover the way the gear tab's
+   disclosure does. */
+.catfold {
+  padding: 0; font-size: 0.85rem; line-height: 1;
+  min-width: 20px; min-height: 20px; margin-top: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+}
+.catfold:hover { color: var(--cs-accent); background: var(--cs-panel); }
+.catfold:focus-visible { color: var(--cs-accent); }

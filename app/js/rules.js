@@ -679,7 +679,9 @@ export const BACKGROUND_SKILLS = ['Appraise', 'Artistry', 'Craft', 'Handle Anima
  * (provides.altTraining) and are registered through setAltTrainingTables in
  * model/subsystems/alt-training.js, where everything that reads them now
  * lives. This section was the five Primordia techniques, hard-coded; see the
- * alt-training-techniques pack for them.
+ * alt-training-techniques pack for them -- imported rather than shipped,
+ * since a technique's text is somebody's rules; `private/extensions/` holds
+ * this repo's copy.
  * ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ *

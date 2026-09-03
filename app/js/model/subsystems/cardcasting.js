@@ -64,7 +64,10 @@ function splitBracketNote(raw) {
  *
  * "For every deck feat a character possesses, they may also select a special
  * deck manipulation" -- the list is on the wiki's Card and Deck Feats page and
- * lives in the deck-manipulations extension pack (`data/extensions/deck-manipulations.json`): name, group, what it needs, and the rule.
+ * lives in the deck-manipulations extension pack: name, group, what it needs,
+ * and the rule. That pack is not shipped -- it is the rule text that keeps it
+ * out -- so it is imported, and `private/extensions/` is where this repo's
+ * copy sits.
  * Registered once at startup; without it a manipulation is still a name and a
  * count, it simply has no rule text to show.
  * ------------------------------------------------------------------ */

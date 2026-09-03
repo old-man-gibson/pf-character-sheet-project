@@ -12,9 +12,15 @@
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
 
-export function text(path, value, placeholder = '') {
+/**
+ * `opts.list` points the cell at a `<datalist>`, the way `rows.itemText` does.
+ * The granted-feat rows are the reason: they are `data-set` fields rather
+ * than list items, and a feat picked there should offer the same catalogue a
+ * feat picked anywhere else does.
+ */
+export function text(path, value, placeholder = '', opts = {}) {
   return `<input type="text" value="${esc(value ?? '')}" data-set="${path}"
-      data-kind="text" placeholder="${esc(placeholder)}">`;
+      data-kind="text" placeholder="${esc(placeholder)}"${opts.list ? ` list="${esc(opts.list)}"` : ''}>`;
 }
 
 export function num(path, value, extra = '') {
