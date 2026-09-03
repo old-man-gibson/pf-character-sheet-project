@@ -601,10 +601,37 @@ console.log('bundled -- the shipped packs load through the index and merge clean
   // Pinned to the repository's own folder: a checkout may also hold a
   // `private/extensions/`, and this block is about what is shipped.
   const packs = await loadBundledExtensions(base, { fetcher, folders: ['data/extensions/'] });
-  ok('six bundled packs', packs.length === 6);
-  check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'deck-manipulations', 'iron-chef-ingredients', 'alt-training-techniques']);
+  /*
+   * Four, not six. Deck manipulations and the Alternate Training techniques
+   * moved to `private/extensions/` on 2026-09-02: they were the only bundled
+   * packs carrying *rules prose* -- 5.9 KB and 2.0 KB of it -- and the engine
+   * ships content-free. What is left is structure. Path of War's 76 KB and
+   * the casting tables' 54 KB are names, levels and numbers; the only prose
+   * in any of them is the pack's own one-line description of itself.
+   */
+  ok('four bundled packs', packs.length === 4);
+  check('ids follow the index', packs.map((p) => p.id), ['path-of-war-disciplines', 'vancian-casting-tables', 'psionic-manifesting-tables', 'iron-chef-ingredients']);
   const m = mergeTables(packs);
-  check('30 disciplines, 34 casting tables, 5 curves, 33 manipulations, 5 techniques', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length, m.altTraining.techniques.length], [30, 34, 5, 33, 5]);
+  check('30 disciplines, 34 casting tables, 5 curves, and no manipulations or techniques shipped', [m.maneuvers.disciplines.length, m.vancian.classes.length, m.psionics.curves.length, m.cardcasting.manipulations.length, m.altTraining.techniques.length], [30, 34, 5, 0, 0]);
+
+  /*
+   * The reason they went, stated as a number rather than a promise: nothing
+   * the app ships may carry somebody's rules text. Counted over every prose
+   * field in every bundled pack, and generous about what counts as one.
+   */
+  const shippedProse = (() => {
+    let n = 0;
+    const walk = (o) => {
+      if (!o || typeof o !== 'object') return;
+      for (const [k, v] of Object.entries(o)) {
+        if (typeof v === 'string' && /^(text|note|desc|body)$/.test(k)) n += v.length;
+        else if (v && typeof v === 'object') walk(v);
+      }
+    };
+    for (const p of packs) walk(p);
+    return n;
+  })();
+  ok('and no bundled pack carries rules text', shippedProse === 0);
   setManeuverCatalogue(m.maneuvers);
   ok('the catalogue answers by discipline name', disciplineEntries('Broken Blade').length > 0);
   // The bundled catalogue is names and types only: the rules text of 1,033

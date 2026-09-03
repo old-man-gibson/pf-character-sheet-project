@@ -16,6 +16,34 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
 - **Still hard-coded in the engine** (from the extension-store work): the sphere name lists
   in `rules.js` (they drive skill-rank and unarmed logic), the Primordia techniques, and the
   mythic path names. To be lifted into packs so the engine ships fully content-free.
+- **Empty `data/extensions/` before 1.0.** The complement of the item above: those are
+  names the *engine* holds, these are packs the *repository* ships. Four are left —
+  `path-of-war-disciplines` (76 KB), `vancian-casting-tables` (54 KB),
+  `psionic-manifesting-tables`, `iron-chef-ingredients` — and they are structure rather
+  than prose: names, levels and numbers, with no rules text in any of them (asserted in
+  `tests/extensions.test.mjs`, which fails if a bundled pack grows a `text`, `note`,
+  `desc` or `body` field). That is why they are still here and why shipping them is fine
+  for now. It is not fine for a release: a discipline's maneuver list is somebody's table
+  even with the rules text taken out of it, and the engine's claim is that it carries no
+  content at all. **At 1.0 all four move to `private/extensions/`, and `data/extensions/`
+  ships an `index.json` with an empty list.**
+
+  They move **legibly**: plain, readable JSON, exactly as they are now. Nothing gets
+  stripped, minified or locked — the point is that the player who owns the book can be
+  handed the file and import it, not that the content is hidden. The two that already
+  went this way on 2026-09-02 (`deck-manipulations`, `alt-training-techniques`, moved
+  because they carried actual rules prose) are the worked example, and they took three
+  things with them worth repeating: an entry in `private/extensions/index.json`, the
+  bundled-pack id list in `tests/extensions.test.mjs`, and a gate in `tests/model.test.mjs`
+  for the one check that reads a technique off the pack (`hasAltTraining` — a fresh clone
+  runs 270 assertions, a checkout with `private/` runs 3,603, both green).
+
+  Two things to decide when it happens. The app fetches **both** folders, so a pack in
+  `private/` still auto-loads in a dev checkout — which is what keeps your own play
+  working, and means the move only takes effect where `private/` is not published. If the
+  app should never auto-load them even locally, that is a change to `loadBundledExtensions`
+  and a separate decision. And `data/characters/` wants the same look: it is the roster the
+  repository ships, and a character is content too.
 - **Read a workbook's customization block into its track.** Bryva's Item Crafting tab
   carries her two customized weapons as cells (`M2:S9`: a *Weapon* row, then talent/sphere
   pairs down two columns), and the model now has

@@ -65,12 +65,20 @@ A pack carries two kinds of thing:
 **Where packs come from.** *Bundled* packs are listed in an `index.json` and sit beside
 it, in either of two folders. `data/extensions/` is the repository's own — the same
 arrangement as `data/characters/`, and like it the published engine can ship the index
-empty. This repository's five bundled packs are the campaign's shared tables (disciplines,
-casting and manifesting tables, deck manipulations, cooking ingredients), which used to be
+empty. This repository's four bundled packs are the campaign's shared tables (disciplines,
+casting and manifesting tables, cooking ingredients), which used to be
 bare files under `data/`; the `tools/*_ref.py` scripts now write them as packs, keeping an
 existing pack's header and bumping its revision. `private/extensions/` is the folder git
 ignores — the same bargain as `private/` characters: yours to hold, not the repository's
 to publish, so a deployment carries content the published engine will not.
+
+What is left in `data/extensions/` is **structure**: names, levels and numbers, and no
+rules text in any of it — a test asserts that, failing if a bundled pack grows a `text`,
+`note`, `desc` or `body` field. The two that did carry rules prose, deck manipulations
+and the Alternate Training techniques, moved to `private/extensions/` for that reason.
+The rest follow at 1.0, when `data/extensions/` ships an empty index and every pack is
+handed out as a file to whoever owns the book — plainly and legibly, since the point is
+that a player can import it, not that it is hidden. See [To do](todo.md).
 
 A pack in either folder is **fetched into memory at load and never written to storage**,
 and that is the reason to prefer one for anything large: a 4 MB catalogue that will not go
