@@ -48,9 +48,10 @@ import {
   maneuverOwn,
   altTrainingLink, altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques,
   psionicCurveTotals, psionicTables,
+  spellCatalogue, spellDetails, powerCatalogue, powerDetails,
   veilsAvailable, veilDetails, veilOwn, slug,
 } from '../../model.js';
-import { ABILITY_LABELS_LIST } from '../html.js';
+import { ABILITY_LABELS_LIST, nameDatalist, noteCell } from '../html.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -1021,6 +1022,49 @@ function castingClassPanel(model, c, i) {
    * A row with a label and no spell is a section heading the player wrote, and
    * gets no pool of its own.
    */
+/**
+ * What the spell list offers, as a `<datalist>` behind its name cells.
+ *
+ * One list for the tab rather than one per row: 5,344 spells is a large
+ * enough document to emit once and no larger, and every row on the tab wants
+ * the same one. It is narrowed to the casting classes this character
+ * actually has -- a wizard is not offered the psychic list -- and left whole
+ * where the sheet names none, because narrowing on what nobody imported has
+ * to widen the answer rather than empty it.
+ *
+ * The row's own `C / L` cell says which level it was prepared at, and that is
+ * a note to the player rather than a filter: a spell on two lists at two
+ * levels is one spell, and hiding it because the cell reads "Wiz 3" when the
+ * catalogue also calls it a 4th-level bard spell would be wrong.
+ */
+const SPELL_LIST_ID = 'cat-spells';
+
+function spellDatalist(v) {
+  const classes = (v?.classes || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+  return nameDatalist(SPELL_LIST_ID, 'spells', {
+    classes, has: spellCatalogue().spells.length > 0,
+  });
+}
+
+/**
+ * The same for one manifesting class's powers, narrowed to its own list.
+ *
+ * One list per class rather than per tab, because that is the grain the
+ * narrowing works at -- a psion and a wilder on the same sheet do not offer
+ * each other's powers -- and the id carries the class name so two panels
+ * never point at the same one.
+ */
+function powerListId(c) {
+  return `cat-powers-${slug(String(c?.name || 'any'))}`;
+}
+
+function powerDatalist(c) {
+  const name = String(c?.name || '').trim();
+  return nameDatalist(powerListId(c), 'powers', {
+    classes: name ? [name] : [], has: powerCatalogue().powers.length > 0,
+  });
+}
+
 function vancianPreparedPanel(model, v) {
     const list = 'vancian.prepared';
     const rows = v.prepared || [];
@@ -1035,6 +1079,7 @@ function vancianPreparedPanel(model, v) {
         how many times this spell is committed, and the squares beside it are what is
         left of them. <strong>Notes</strong> reads {…} like any prose, so a spell's text
         can carry its numbers — <code>heals {2 + level}d8</code> — and stay right.</p>
+      ${spellDatalist(v)}
       ${rows.length ? `<table class="spelllist"><thead><tr>
         <th style="width:6.5rem">Label</th>
         <th style="width:4.5rem" title="Class and spell level">C / L</th>
@@ -1046,8 +1091,11 @@ function vancianPreparedPanel(model, v) {
         ${rows.map((r, i) => `<tr>
           <td>${itemText(list, i, 'prepUsed', r.prepUsed, '')}</td>
           <td>${itemText(list, i, 'classLevel', r.classLevel, '')}</td>
-          <td>${itemText(list, i, 'name', r.name, 'Spell')}</td>
-          <td>${r.name ? prose(model, `data-item="${list}|${i}|note"`, r.note, 1, 'grow') : ''}</td>
+          <td>${itemText(list, i, 'name', r.name, 'Spell', { list: SPELL_LIST_ID })}</td>
+          <td>${r.name ? noteCell(
+    prose(model, `data-item="${list}|${i}|note"`, r.note, 1, 'grow'),
+    spellDetails(r), model.data.uiPrefs?.collapsed || {}, `${list}|${i}`,
+  ) : ''}</td>
           <td class="num">${r.name ? itemNum(list, i, 'uses', r.uses) : ''}</td>
           <td class="spendcell">${r.name ? slotSpend({
     path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
@@ -1310,7 +1358,7 @@ export function psionicsPanel(model, ctx) {
         ${(p.classes || []).length ? '' : '<p class="empty">No manifesting classes yet.</p>'}
       </section>
 
-      ${(p.classes || []).map((c, i) => manifestingClassPanel(c, i)).join('')}
+      ${(p.classes || []).map((c, i) => manifestingClassPanel(model, c, i)).join('')}
 
       <section class="panel span2">
         ${addButton('psionics.classes', 'Add manifesting class', {
@@ -1331,7 +1379,7 @@ function curveOptions() {
   }
 
 
-function manifestingClassPanel(c, i) {
+function manifestingClassPanel(model, c, i) {
     const base = `psionics.classes.${i}`;
     const list = `${base}.powers`;
     const levels = psionicTables().powerLevels || [];
@@ -1361,16 +1409,22 @@ function manifestingClassPanel(c, i) {
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
       ${pinned && Number(c.manifesterLevel) !== Number(c.plannerLevel)
     ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'} of this class.</p>` : ''}
+      ${powerDatalist(c)}
       ${(c.powers || []).length ? `<table style="margin-top:8px"><thead><tr>
-        <th>Power</th><th style="width:7rem">Level</th><th></th>
+        <th>Power</th><th style="width:7rem">Level</th>
+        <th title="The power's text or your own note — {…} formulas resolve">Notes</th><th></th>
       </tr></thead><tbody>
         ${(c.powers || []).map((w, wi) => `<tr>
-          <td>${itemText(list, wi, 'name', w.name, 'Power')}</td>
+          <td>${itemText(list, wi, 'name', w.name, 'Power', { list: powerListId(c) })}</td>
           <td>${itemSelect(list, wi, 'level', w.level, levels)}</td>
+          <td>${w.name ? noteCell(
+    prose(model, `data-item="${list}|${wi}|note"`, w.note, 1, 'grow'),
+    powerDetails(w), model.data.uiPrefs?.collapsed || {}, `${list}|${wi}`,
+  ) : ''}</td>
           ${rowRemove(list, wi)}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No powers known.</p>'}
-      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '' })}</div>
+      <div style="margin-top:6px">${addButton(list, 'Add power', { name: '', level: '', note: '' })}</div>
     </section>`;
   }
 

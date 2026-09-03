@@ -55,6 +55,8 @@ import {
   COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
   MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
   classForwardKey, gearColumnInUse,
+  featsAvailable, featDetails, featCatalogue,
+  spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -64,8 +66,18 @@ import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
   esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
+  nameDatalist, noteCell,
 } from './ui/html.js';
 import * as fields from './ui/fields.js';
+
+/** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
+const FEAT_LIST_ID = 'cat-feats';
+/*
+ * How many suggestions a catalogue cell offers at once. A `<datalist>` is a
+ * hint, not a browser: nobody scrolls forty of them, and the whole reason
+ * these are filled on demand is that carrying 8,912 was 61 ms of every render.
+ */
+const DATALIST_MAX = 40;
 import * as rows from './ui/rows.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
 import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
@@ -2261,8 +2273,11 @@ export class CharacterSheetElement extends HTMLElement {
            below, which can. */''}
       <td class="grip"></td>
       <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
-      <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?')}</td>
-      <td data-label="Notes">${this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow')}</td>
+      <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+      <td class="fnote" data-label="Notes">${noteCell(
+    this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow'),
+    featDetails(g[key] || {}), this.#folds(), `grantedFeats.${key}`,
+  )}</td>
     </tr>`;
 
     return `<h4 class="subhead">Granted feats
@@ -2277,8 +2292,11 @@ export class CharacterSheetElement extends HTMLElement {
           ${(g.others || []).map((f, i) => `<tr data-granteddrop="${i}">
             <td class="grip"><span class="grip" data-grantedgrip title="Drag to reorder">&#10495;</span></td>
             <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
-            <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?')}</td>
-            <td class="fnote" data-label="Notes">${this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow')}</td>
+            <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
+            <td class="fnote" data-label="Notes">${noteCell(
+    this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow'),
+    featDetails(f), this.#folds(), `grantedFeats.others|${i}`,
+  )}</td>
             ${this.#rowToolsDragged('grantedFeats.others', i)}
           </tr>`).join('')}
         </tbody>
@@ -2298,6 +2316,74 @@ export class CharacterSheetElement extends HTMLElement {
         <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
         each, so they cannot drift apart.` : ''}
       </p>`;
+  }
+
+  /**
+   * Every feat a pack carries, as a `<datalist>` the name cells point at.
+   *
+   * A feat is picked here rather than attached from the extension manager,
+   * the way a veil is picked in its chakra: it is content, so the sheet keeps
+   * the *name* and whatever the player wrote beside it, and the rules text
+   * stays in the pack to be read where it stands. That is also why there is
+   * no filter on this one. A veil's chakra narrows its list to a few hundred
+   * and a spell's class list narrows its own, but a feat is open to anyone
+   * who meets its prerequisites, and reading those is a person's job -- so
+   * the honest list is the whole catalogue, typed into rather than scrolled.
+   *
+   * Nothing is emitted where no pack provides one, and the cell is then the
+   * free-text box it has always been: a player writing down a feat nobody has
+   * published is not doing anything wrong.
+   */
+  /** What the player has folded away, as `noteCell` and friends want it. */
+  #folds() { return this.#model.data.uiPrefs?.collapsed || {}; }
+
+  #featDatalistHtml() {
+    return nameDatalist(FEAT_LIST_ID, 'feats', { has: featCatalogue().feats.length > 0 });
+  }
+
+  /**
+   * Put matches for what is being typed into the list a cell points at.
+   *
+   * One handler for all three catalogues, because the datalist says which one
+   * it wants and how to narrow it. What is typed matches anywhere in a name
+   * rather than only at the front -- "blades" should find *Sigil of Blades* --
+   * and the answer is capped, which is what keeps this cheap at 8,912 feats.
+   *
+   * An empty cell gets the first names alphabetically rather than nothing:
+   * the point of the box is to show that there is something to choose from.
+   */
+  #fillDatalist(input) {
+    const list = this.shadowRoot?.getElementById(input.getAttribute('list'));
+    if (!list) return;
+    const classes = (list.dataset.classes || '').split(',').filter(Boolean);
+    const pool = list.dataset.fill === 'spells' ? spellsAvailable({ classes })
+      : list.dataset.fill === 'powers' ? powersAvailable({ classes })
+        : featsAvailable();
+
+    const q = String(input.value || '').trim().toLowerCase();
+    const hits = [];
+    for (const e of pool) {
+      if (q && !e.name.toLowerCase().includes(q)) continue;
+      hits.push(e);
+      if (hits.length >= DATALIST_MAX) break;
+    }
+    // Rebuilt only when the answer actually changed: typing another letter
+    // that narrows nothing should not churn the DOM.
+    const signature = hits.map((e) => e.name).join(' ');
+    if (list.dataset.showing === signature) return;
+    list.dataset.showing = signature;
+    list.replaceChildren(...hits.map((e) => {
+      const o = document.createElement('option');
+      o.value = e.name;
+      const label = list.dataset.fill === 'feats' ? e.type
+        : list.dataset.fill === 'spells'
+          ? [e.school, e.classes.map((c) => `${c.name}${c.level === null ? '' : ` ${c.level}`}`).join(', ')]
+            .filter(Boolean).join(' · ')
+          : [e.discipline || e.element, e.points ? `${e.points} pp` : '', e.burn ? `burn ${e.burn}` : '']
+            .filter(Boolean).join(' · ');
+      if (label) o.label = label;
+      return o;
+    }));
   }
 
   /**
@@ -2323,14 +2409,18 @@ export class CharacterSheetElement extends HTMLElement {
    * grants a pool can define it where the feat is written down.
    */
   #featGroupTable(group, g) {
+    const folds = this.#folds();
     return `<div class="tablewrap"><table class="feats stacked">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
           <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
-          <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name)}</td>
+          <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
           <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-          <td class="fnote" data-label="Notes">${this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow')}</td>
+          <td class="fnote" data-label="Notes">${noteCell(
+    this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
+    featDetails(f), folds, `featGroups.${g}.entries|${i}`,
+  )}</td>
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
                above are the same bargain and write the same cell. */''}
@@ -2377,7 +2467,17 @@ export class CharacterSheetElement extends HTMLElement {
       </div>`).join('')}
     </section>`);
 
+    /*
+     * The catalogue sits at the tab, not inside a panel.
+     *
+     * Every feat cell on this tab points at it -- the groups, the granted
+     * rows, and the mythic abilities in the panel below -- and a `<datalist>`
+     * inside a folded panel is a `<datalist>` that is not in the document.
+     * Fold the Feats panel and the mythic cells would quietly stop offering
+     * anything.
+     */
     return `<div class="grid">
+      ${this.#featDatalistHtml()}
       ${featured}${main}
       <div class="addgroup">
         ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
@@ -2435,7 +2535,7 @@ export class CharacterSheetElement extends HTMLElement {
                 <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
                 <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
                 <td data-label="Path">${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
-                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'name', a.name, '', true)}</td>
+                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'name', a.name, '', { title: true, list: FEAT_LIST_ID })}</td>
                 <td data-label="Effect">${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
                 ${t % 2 === 0
                   ? `<td data-label="Stat">${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
@@ -3359,7 +3459,7 @@ export class CharacterSheetElement extends HTMLElement {
    * from outside the class.
    */
 
-  #text(path, value, placeholder = '') { return fields.text(path, value, placeholder); }
+  #text(path, value, placeholder = '', opts = {}) { return fields.text(path, value, placeholder, opts); }
 
   #num(path, value, extra = '') { return fields.num(path, value, extra); }
 
@@ -3376,8 +3476,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ----- list rows ----- */
 
-  #itemText(list, i, field, value, placeholder = '', title = false) {
-    return rows.itemText(list, i, field, value, placeholder, title);
+  #itemText(list, i, field, value, placeholder = '', opts = false) {
+    return rows.itemText(list, i, field, value, placeholder, opts);
   }
 
   #itemNum(list, i, field, value) { return rows.itemNum(list, i, field, value); }
@@ -4859,7 +4959,9 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         const path = input.dataset.set;
         this.#model.set(path, readControl(input));
-        if (AFFECTS_DERIVED.test(path)) this.#rerender(input);
+        // A catalogue cell has something to show the moment it holds a name
+        // the catalogue knows, and that showing happens at render.
+        if (AFFECTS_DERIVED.test(path) || input.hasAttribute('list')) this.#rerender(input);
       });
     });
 
@@ -4885,13 +4987,43 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    /*
+     * A catalogue cell's suggestions, filled while it is typed into.
+     *
+     * The `<datalist>` is emitted empty (see `nameDatalist`) because carrying
+     * every option was 91% of the Feats tab's DOM and 61 ms of every render
+     * of it. Filling it here costs nothing until somebody is actually
+     * choosing, and the cap means it never costs much: a `<datalist>` is a
+     * suggestion box, and forty suggestions is already more than anyone reads.
+     *
+     * `input` rather than `change`, so the list narrows as the letters go in
+     * -- and it is safe to write into the DOM here precisely because these
+     * cells commit on `change`: nothing re-renders mid-word and throws the
+     * options away.
+     */
+    root.querySelectorAll('input[list]').forEach((input) => {
+      input.addEventListener('input', () => this.#fillDatalist(input));
+      // Focusing an empty cell should offer something rather than nothing.
+      input.addEventListener('focus', () => this.#fillDatalist(input));
+    });
+
     // Generic list-item field -> model path.
     root.querySelectorAll('[data-item]').forEach((input) => {
       if (input.dataset.talentFill) return;
       input.addEventListener('change', () => {
         const [list, index, field] = input.dataset.item.split('|');
         this.#model.setItem(list, Number(index), field, readControl(input));
-        if (AFFECTS_DERIVED.test(list)) this.#rerender(input);
+        /*
+         * A catalogue cell re-renders on the way out of it.
+         *
+         * `AFFECTS_DERIVED` is about numbers moving, and a feat's name moves
+         * none -- so naming one wrote the model and left the row exactly as
+         * it was, with the rules text the catalogue had for it nowhere in
+         * sight until something else happened to re-render the tab. The
+         * catalogue face is computed at render, so the render is the thing
+         * that was missing.
+         */
+        if (AFFECTS_DERIVED.test(list) || input.hasAttribute('list')) this.#rerender(input);
       });
     });
 
