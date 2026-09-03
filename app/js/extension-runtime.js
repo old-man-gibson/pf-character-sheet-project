@@ -17,6 +17,7 @@
 
 import {
   setAltTrainingTables, setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue,
+  setFeatCatalogue, setSpellCatalogue, setPowerCatalogue, setReferenceCatalogue,
   setVancianTables, setPsionicTables,
   setCardcastingTables, setCookingTables, setOptionCatalogues,
 } from './model.js';
@@ -32,6 +33,7 @@ import { packMedium } from './pack-storage.js';
 const REGISTRARS = {
   setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue, setVancianTables, setPsionicTables,
   setCardcastingTables, setCookingTables, setAltTrainingTables,
+  setFeatCatalogue, setSpellCatalogue, setPowerCatalogue, setReferenceCatalogue,
 };
 
 class ExtensionRuntime extends EventTarget {

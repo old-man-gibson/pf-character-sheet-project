@@ -21,7 +21,16 @@
  * Bundled packs come from an `index.json` in `data/extensions/` (what the
  * repository ships, exactly as `data/characters/index.json` lists characters --
  * and the published engine ships neither) or in `private/extensions/`, the
- * folder git ignores. Either way they are fetched into memory and never
+ * folder git ignores.
+ *
+ * TODO (1.0): `data/extensions/` ships empty. What is in it today is four
+ * packs of pure structure -- disciplines, casting and manifesting tables,
+ * ingredients: names, levels and numbers, and no rules text in any of them,
+ * which `tests/extensions.test.mjs` checks rather than trusts. Structure is
+ * still somebody's table, so at a release they move to `private/extensions/`
+ * and are handed out as files, legibly, to whoever owns the book. See
+ * `docs/todo.md`; the two packs that carried actual prose went that way on
+ * 2026-09-02 and are the worked example. Either way they are fetched into memory and never
  * stored. Local packs -- the ones a player imports -- are stored, in this
  * browser only: IndexedDB where there is one and localStorage where there is
  * not (see `pack-storage.js`), alongside the imported characters.
@@ -31,12 +40,20 @@
  */
 
 import { storageMedium } from './pack-storage.js';
+// Straight from the subsystem rather than through `model.js`: `applyBlock`
+// needs to know whether the veil catalogue can speak for a veil, and nothing
+// else here wants the model. Narrow on purpose -- akashic.js imports nothing
+// from this file, so there is no cycle to think about.
+import { veilEntry } from './model/subsystems/akashic.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
 /** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = ['maneuvers', 'spheres', 'veils', 'vancian', 'psionics', 'cardcasting', 'cooking'];
+export const TABLE_KINDS = [
+  'maneuvers', 'spheres', 'veils', 'feats', 'spells', 'powers', 'catalogues',
+  'vancian', 'psionics', 'cardcasting', 'cooking',
+];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -602,6 +619,10 @@ function tableCount(kind, table) {
     case 'maneuvers': return arr(t.disciplines).length;
     case 'spheres': return arr(t.spheres).length;
     case 'veils': return arr(t.veils).length;
+    case 'feats': return arr(t.feats).length;
+    case 'spells': return arr(t.spells).length;
+    case 'powers': return arr(t.powers).length;
+    case 'catalogues': return arr(t.catalogues).reduce((n, g) => n + arr(g?.entries).length, 0);
     case 'vancian': return arr(t.classes).length;
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
@@ -616,6 +637,8 @@ export function describeSummary(s) {
   const words = {
     maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
     veils: ['veil', 'veils'],
+    feats: ['feat', 'feats'], spells: ['spell', 'spells'], powers: ['power', 'powers'],
+    catalogues: ['reference entry', 'reference entries'],
     vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
@@ -897,17 +920,50 @@ export function mergeTables(extensions) {
     maneuvers: { disciplines: [] },
     spheres: { spheres: [] },
     veils: { veils: [] },
+    feats: { feats: [] },
+    spells: { spells: [] },
+    powers: { powers: [] },
+    catalogues: { catalogues: [] },
     vancian: { spellLevels: null, classes: [] },
     psionics: { powerLevels: null, curves: [], classes: [] },
     cardcasting: { manipulations: [] },
     cooking: { durationHours: null, entrees: [], flavors: [], sides: [], aroma: [], garnish: [] },
     altTraining: { levels: null, repeatFrom: null, techniques: [], links: {} },
   };
+  /*
+   * An index per list, because a scan per entry is quadratic and these lists
+   * got long. Merging the whole wiki -- 117 packs, 32,592 entries, 8,912 of
+   * them feats -- spent 2.1 seconds here, nearly all of it in `findIndex`
+   * walking a list that was already thousands long. With the index it is 60.
+   *
+   * Safe because each of these lists is created empty in `out` above and
+   * these three functions are the only things that ever touch one, so the
+   * index cannot fall behind what it describes. Keyed on the array itself and
+   * held weakly, so nothing outlives the merge that made it.
+   */
+  const indexes = new WeakMap();
+  const keyIndex = (list, key) => {
+    let idx = indexes.get(list);
+    if (!idx) {
+      idx = new Map();
+      for (let i = 0; i < list.length; i++) idx.set(lower(list[i]?.[key]), i);
+      indexes.set(list, idx);
+    }
+    return idx;
+  };
+  /** Where `k` sits in `list`, or -1; the index does the looking. */
+  const at = (list, key, k) => {
+    const found = keyIndex(list, key).get(k);
+    return found === undefined ? -1 : found;
+  };
+  /** Remember that `k` is now at the end of `list`. */
+  const noteAdded = (list, key, k) => keyIndex(list, key).set(k, list.length - 1);
+
   const upsert = (list, item, key = 'name') => {
     const k = lower(item?.[key]);
     if (!k) return;
-    const i = list.findIndex((x) => lower(x?.[key]) === k);
-    if (i === -1) list.push(item); else list[i] = item;
+    const i = at(list, key, k);
+    if (i === -1) { list.push(item); noteAdded(list, key, k); } else list[i] = item;
   };
   /**
    * A veil joins one already there, field by field, rather than replacing it.
@@ -927,9 +983,9 @@ export function mergeTables(extensions) {
   const upsertVeil = (list, veil) => {
     const k = lower(veil?.name);
     if (!k) return;
-    const at = list.findIndex((x) => lower(x?.name) === k);
-    if (at === -1) { list.push(veil); return; }
-    const had = list[at];
+    const i = at(list, 'name', k);
+    if (i === -1) { list.push(veil); noteAdded(list, 'name', k); return; }
+    const had = list[i];
     const merged = { ...had };
     for (const [key, value] of Object.entries(veil)) {
       if (key === 'classes') continue;
@@ -945,22 +1001,37 @@ export function mergeTables(extensions) {
     const seen = new Map();
     for (const c of classes) if (!seen.has(lower(c))) seen.set(lower(c), c);
     if (seen.size) merged.classes = [...seen.values()];
-    list[at] = merged;
+    list[i] = merged;
+  };
+
+  /**
+   * A group of named entries joins one already there, entry by entry: the
+   * shape a discipline and a catalogue kind share.
+   */
+  const upsertGroup = (list, group, key) => {
+    const k = lower(group?.[key]);
+    if (!k) return;
+    const i = at(list, key, k);
+    if (i === -1) {
+      list.push({ ...group, entries: [...arr(group.entries)] });
+      noteAdded(list, key, k);
+      return;
+    }
+    // The entries inside a group get an index of their own for the same
+    // reason: `class option` is 3,003 of them under one kind, and a second
+    // pack contributing to that kind would otherwise scan all of them each.
+    const entries = [...arr(list[i].entries)];
+    const where = new Map();
+    for (let j = 0; j < entries.length; j++) where.set(lower(entries[j]?.name), j);
+    for (const e of arr(group.entries)) {
+      const j = where.get(lower(e?.name));
+      if (j === undefined) { entries.push(e); where.set(lower(e?.name), entries.length - 1); } else entries[j] = e;
+    }
+    list[i] = { ...list[i], ...group, entries };
   };
 
   /** A discipline joins one already there rather than replacing it. */
-  const upsertDiscipline = (list, disc) => {
-    const k = lower(disc?.name);
-    if (!k) return;
-    const at = list.findIndex((x) => lower(x?.name) === k);
-    if (at === -1) { list.push({ ...disc, entries: [...arr(disc.entries)] }); return; }
-    const entries = [...arr(list[at].entries)];
-    for (const e of arr(disc.entries)) {
-      const j = entries.findIndex((x) => lower(x?.name) === lower(e?.name));
-      if (j === -1) entries.push(e); else entries[j] = e;
-    }
-    list[at] = { ...list[at], ...disc, entries };
-  };
+  const upsertDiscipline = (list, disc) => upsertGroup(list, disc, 'name');
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
     for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
@@ -974,6 +1045,24 @@ export function mergeTables(extensions) {
     // same text each time. Sixteen per-chakra packs together come to the 1,496
     // veils that exist rather than the 2,149 entries they are written as.
     for (const x of arr(p.veils?.veils)) upsertVeil(out.veils.veils, x);
+    /*
+     * A feat, a spell and a power are each one fact under one name, so the
+     * ordinary later-wins rule is enough -- no `upsertVeil` here. The union
+     * a veil needs is for the *other* kind of page, the one that lists a
+     * class's veils and knows nothing else about them; a spell's own page
+     * already names every class whose list it is on, and there is no second
+     * page contributing half the answer.
+     */
+    for (const x of arr(p.feats?.feats)) upsert(out.feats.feats, x);
+    for (const x of arr(p.spells?.spells)) upsert(out.spells.spells, x);
+    for (const x of arr(p.powers?.powers)) upsert(out.powers.powers, x);
+    /*
+     * A kind's entries join a kind already there rather than replacing it --
+     * the same rule a discipline's maneuvers follow, and for the same reason.
+     * Deities arrive in more than one pack (one per source book, most likely),
+     * and replace-by-kind would mean whichever loaded second erased the rest.
+     */
+    for (const g of arr(p.catalogues?.catalogues)) upsertGroup(out.catalogues.catalogues, g, 'kind');
     if (arr(p.vancian?.spellLevels).length) out.vancian.spellLevels = [...p.vancian.spellLevels];
     for (const c of arr(p.vancian?.classes)) upsert(out.vancian.classes, c);
     if (arr(p.psionics?.powerLevels).length) out.psionics.powerLevels = [...p.psionics.powerLevels];
@@ -1010,6 +1099,10 @@ export function registerTables(merged, registrars) {
   r.setManeuverCatalogue?.(merged.maneuvers);
   r.setSphereCatalogue?.(merged.spheres);
   r.setVeilCatalogue?.(merged.veils);
+  r.setFeatCatalogue?.(merged.feats);
+  r.setSpellCatalogue?.(merged.spells);
+  r.setPowerCatalogue?.(merged.powers);
+  r.setReferenceCatalogue?.(merged.catalogues);
   r.setVancianTables?.(merged.vancian);
   r.setPsionicTables?.(merged.psionics);
   r.setCardcastingTables?.(merged.cardcasting);
@@ -1195,7 +1288,28 @@ export function applyBlock(model, rawBlock) {
         si = slots.length - 1;
         where = slots.some((s, i) => i !== si && lower(s.slot) === lower(slotName)) ? 'in a second' : 'in a new';
       }
-      model.listAdd(`akashic.slots.${si}.veils`, { name: block.name, desc: block.text, essence: 0 });
+      /*
+       * The name goes on the board; the rules text does not follow it.
+       *
+       * `desc` is the *player's* cell -- `veilOwn` reads it as the only thing
+       * on a veil the sheet saves -- so putting a pack's paragraph in it made
+       * the sheet claim the player wrote it, banked two and a half kilobytes
+       * of somebody's book on every character that shaped it, and put that
+       * text beyond the reach of a pack correcting it. The catalogue is where
+       * a veil's text is read from, and it is read where it stands.
+       *
+       * The exception is a veil no catalogue has: a page somebody pasted
+       * themselves, whose block is the only copy there is. Dropping its text
+       * would lose it outright, and text a player pasted is text a player
+       * copied -- which is theirs to keep. So it is kept exactly when nothing
+       * else can supply it, which for any pack built by `scrape-pack.mjs`
+       * -- where `convertPack` has already moved the veils into the table --
+       * is never.
+       */
+      const known = !!veilEntry(block.name);
+      model.listAdd(`akashic.slots.${si}.veils`, {
+        name: block.name, desc: known ? '' : block.text, essence: 0,
+      });
       return `Shaped ${block.name} ${where} ${slotName} slot on the Akashic tab (essence 0).`;
     }
     case 'archetype':
