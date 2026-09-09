@@ -87,6 +87,7 @@ import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
+import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
 import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -188,6 +189,7 @@ const PALETTE_RECENT = 8;
 
 const TABS = [
   ['overview', 'Overview'],
+  monster.MONSTER_TAB,
   ['stats', 'Stats'],
   ['skills', 'Skills'],
   ['martial', 'Martial Spheres'],
@@ -385,7 +387,7 @@ function readControl(input) {
  * only cost time. The biggest grids run to several thousand inputs, where a
  * needless rebuild is plainly laggy.
  */
-const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
+const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
 /** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
@@ -1793,11 +1795,11 @@ export class CharacterSheetElement extends HTMLElement {
         ${i.image ? `<img class="portrait" src="${esc(i.image)}" alt="" loading="lazy">` : '<div class="portrait"></div>'}
         <div class="head-main">
           <div class="name">${val(i.name)}</div>
-          <div class="subtitle">
+          ${monster.headerSubtitle(this.#model) || `<div class="subtitle">
             Level ${val(i.level)} ${val(i.race)}${i.variant ? ` (${esc(i.variant)})` : ''}
             ${classes ? ` &middot; ${esc(classes)}` : ''}
             ${i.alignment ? ` &middot; ${esc(i.alignment)}` : ''}
-          </div>
+          </div>`}
           <div class="subtitle">
             ${i.mythicPath ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
@@ -1852,6 +1854,7 @@ export class CharacterSheetElement extends HTMLElement {
     return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
+        ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-action="theme">${light ? 'Dark theme' : 'Light theme'}</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
@@ -2173,6 +2176,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'trackers': return this.#trackersPanel();
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();
+      case 'statblock': return monster.renderStatBlockPanel(this.#model, {});
       case 'extras': return this.#extrasPanel();
       case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
@@ -4616,7 +4620,10 @@ export class CharacterSheetElement extends HTMLElement {
     try { saved = localStorage.getItem(this.#viewKey()); } catch { /* private window */ }
     // `#render` drops a tab this character does not have, so an id that has
     // since gone simply falls back to the first on the bar.
+    // A sheet never opened before starts on the first tab of its own bar --
+    // the Overview for a character, the block for a monster.
     if (saved) this.#tab = saved;
+    else this.#tab = this.#barEntries()[0]?.id ?? 'overview';
     this.#tabWritten = saved;
   }
 
@@ -7029,6 +7036,17 @@ export class CharacterSheetElement extends HTMLElement {
       case 'view-mode':
         this.#model.setViewMode(this.#model.viewMode() === 'session' ? 'build' : 'session');
         this.#render();
+        break;
+      // The monster tool (monster/sheet.js): its tab from anywhere, riding
+      // along as a guest where the bar does not carry it, and the actions
+      // that put a block on a sheet or take it off.
+      case 'statblock':
+        this.#chromeMenu = false;
+        this.#paletteJump({ tab: 'statblock' });
+        break;
+      case 'monster-block':
+      case 'monster-unblock':
+        if (monster.handleAction(this.#model, name)) this.#render();
         break;
       case 'class-systems': {
         const index = Number(button?.dataset.index);

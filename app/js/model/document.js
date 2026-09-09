@@ -36,6 +36,7 @@ import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vanci
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
 import { normalizeName, skillKey, slug } from './util.js';
+import { MONSTER_TAB_ORDER } from '../monster/block.js';
 
 /**
  * The document shape this build understands, written by tools/convert.py.
@@ -1540,7 +1541,8 @@ export function normalise(model) {
  * again. So a tab put back in the manager stays there.
  */
 export function buildDefaultTabs(model) {
-  const base = [...DEFAULT_TAB_ORDER];
+  // A monster opens on its block (see monster/block.js); a character on the nine.
+  const base = model?.data?.monster ? [...MONSTER_TAB_ORDER] : [...DEFAULT_TAB_ORDER];
   // Called during `normalise`, so be defensive about what is on the model.
   if (typeof model?.systemTabsInUse !== 'function') return base;
   const inUse = model.systemTabsInUse();

@@ -258,6 +258,7 @@
   import { zip, safeName } from './js/zip.js';
   import { runtime as extensions } from './js/extension-runtime.js';
   import { mountExtensionManager, looksLikeExtension } from './js/extension-manager.js';
+  import { mountMonsterTool } from './js/monster/picker.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -752,6 +753,9 @@
   });
   extensions.load(new URL('../', document.baseURI));
   document.getElementById('extBtn').addEventListener('click', () => extManager.open());
+
+  // The GM's + Monster button and its dialog; see docs/monsters.md.
+  mountMonsterTool({ picker, welcome: welcome.querySelector('.actions'), adminToggle, add });
 
   draw();
   select();
