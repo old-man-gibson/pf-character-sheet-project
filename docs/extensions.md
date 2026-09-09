@@ -396,6 +396,45 @@ Packs scraped before veils were a table carry them as blocks instead.
 duplicates, and lifting the `Class access:` line the old reader had appended to the foot
 of each veil's text into the `classes` field where it belongs.
 
+### From Homebrew Workbench
+
+The campaign's homebrew is written in **Homebrew Workbench** — `forge/index.html`, a page of
+this site beside the sheet (the **Workbench** button in the sheet's header opens it) — where a
+discipline, a feat, a class with its archetypes, a race, an item or a page of lore is one
+entry, and entries link to each other with `[[wiki links]]`; the entry list filters by
+type and by tag, a discipline's preview audits its slots against the thirty published
+ones, and the preview renders every entry the way a rulebook prints it. Entries live in
+the visitor's browser (IndexedDB, a `homebrew-workbench` database of its own; localStorage
+where there is none) and never on the server, so the repository ships the workbench
+empty, exactly as it ships the sheet. It speaks this format both ways.
+
+- **Publish to this sheet** writes everything the Forge holds as one pack — id
+  `homebrew-workbench`, revision climbing each time — straight into the sheet's local
+  extension store, the same IndexedDB the Extensions dialog imports into. A sheet tab
+  already open reads its packs at load, so reload it; the pack then shows in the dialog
+  as a local pack and can be switched off or exported like any other.
+- **Download extension pack** in the Import / Export menu writes the same pack as a file,
+  for a friend or for `tools/forge-pack.mjs` below. Disciplines and their maneuvers become the `maneuvers` table
+  (every cell of the card, DC included); feats and spells become the `feats` and
+  `spells` catalogues; a class with its features, an archetype with what each feature
+  replaces and what it alters, a race with its traits read off its body, and a race trait
+  become blocks;
+  everything else — character traits, items, creatures, NPCs, locations, sessions,
+  articles, a discipline's own description — lands under `catalogues`, one group per
+  kind, fields in the order the Forge shows them. Links come out as their label and
+  emphasis marks come off, since a cell is prose.
+- **Import** on the Forge side reads a pack back: disciplines join maneuver by maneuver,
+  feats, spells and catalogue entries become entries, class, archetype, race and trait
+  blocks become entries with their children.
+
+`node tools/forge-pack.mjs <file>` shelves either kind of file — the Forge's own
+project export (`format: homebrew-workbench`; older files say `primordia-forge`, converted by the same mapping) or a pack it
+already made — as `private/extensions/homebrew-workbench.json`, hands the revision up by
+one when a copy is already there, and rewrites the folder's index, so the sheet offers
+the new revision on its next load. `--out` picks another path, `--id` and `--name`
+another header. `tests/forge-pack.test.mjs` runs the mapping through the sheet's own
+inspector and catalogues.
+
 ## Paste text — a scraper's document
 
 **Paste text…** takes two quite different things, and tells them apart before it reads
