@@ -369,7 +369,10 @@ export function sessionDefaultTabs(model) {
   const inUse = model.systemTabsInUse();
   const tagged = model.taggedSystemTabs();
   const systems = Object.keys(inUse).filter((id) => inUse[id] || tagged.has(id));
-  return ['overview', 'skills', ...systems, 'features', 'altTraining', 'trackers', 'gear', 'lore'];
+  // A monster's block is the thing read mid-fight, so it leads the session
+  // bar the way it leads the build bar.
+  const head = model.data.monster ? ['statblock'] : [];
+  return [...head, 'overview', 'skills', ...systems, 'features', 'altTraining', 'trackers', 'gear', 'lore'];
 }
 
 /** The keys on the active view's tab bar, in order (a copy). */

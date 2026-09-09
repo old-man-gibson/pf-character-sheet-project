@@ -44,8 +44,13 @@ export function resolveDefenceBonuses(model) {
   // deliberately out of reach here -- a skill's own bonus can read AC.
   const scope = model.scope();
   // The three ABP defence bonuses follow the character's level along the
-  // progression's own ladder; they are read, not typed.
-  const abp = abpDefence(model.data.identity?.level);
+  // progression's own ladder; they are read, not typed. A monster is outside
+  // the progression -- its natural armour and saves are its own -- unless the
+  // GM has said otherwise on its block, which is what `monster.abp` is for.
+  const monster = model.data.monster;
+  const abp = monster && !monster.abp
+    ? { abpResistance: 0, abpDeflection: 0, abpNatural: 0 }
+    : abpDefence(model.data.identity?.level);
   resolveSaveBonuses(model, scope, abp);
   resolveAcBonuses(model, scope, abp);
 }

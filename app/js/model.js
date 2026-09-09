@@ -33,6 +33,7 @@ export * from './model/trackers.js';
 export * from './model/templates.js';
 export * from './model/traits.js';
 export * from './model/spheres.js';
+export * from './model/monster.js';
 export * from './model/stats/saves.js';
 export * from './model/stats/defenses.js';
 export * from './model/stats/attacks.js';

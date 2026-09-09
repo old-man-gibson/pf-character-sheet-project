@@ -58,7 +58,10 @@ remember to add it to the tests as well.
 
 ## Getting characters in
 
-Four ways in, for four different jobs.
+Four ways in, for four different jobs — and a fifth for the GM: **+ Monster** reads a
+creature's stat block, pasted off a page, into a document that takes this same path from
+here (vetted, stored, listed, tagged *monster*), with every printed number reconciled the
+way a workbook's are. That one has a page of its own: [Monsters](monsters.md).
 
 ### From nothing — in the app
 

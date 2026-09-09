@@ -497,7 +497,10 @@ formula guide, scratchpad and value index, on every character, described in
 Audit**, which only appears under `role="admin"`. Neither can be hidden or dragged,
 because help you cannot find is not help; **ƒx Formulas** in the rail's **⋯** menu
 opens the tab from wherever you are, and wears a count when something on the character
-is not working.
+is not working. A third, **Stat Block**, is the GM's: under `role="admin"` the same menu
+carries **Stat block**, which opens the sheet as a Bestiary would print it — every number
+live — as a guest on the bar; a monster carries the tab on its bar already. See
+[Monsters](monsters.md).
 
 The manager lists what is off the bar **alphabetically**, in three groups:
 

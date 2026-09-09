@@ -36,6 +36,7 @@ import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vanci
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
 import { normalizeName, skillKey, slug } from './util.js';
+import { MONSTER_TAB_ORDER, normalizeMonster } from './monster.js';
 
 /**
  * The document shape this build understands, written by tools/convert.py.
@@ -277,6 +278,9 @@ export function inspectDocument(doc) {
       classes: (d.classes || []).map((c) => c.name).filter(Boolean),
       image: d.identity.image || '',
       schemaVersion: doc.schemaVersion,
+      // A monster's rating, for the picker to say instead of a level; null on
+      // a character, which has none.
+      cr: d.monster ? String(d.monster.cr || '') : null,
     },
   };
 }
@@ -1512,6 +1516,14 @@ export function normalise(model) {
     for (const name of Object.keys(d.conditions)) d.conditions[name] = 0;
   }
 
+  /*
+   * The monster block, where there is one. A character has no such section
+   * and is not given one here -- its absence is what says "character" -- so
+   * only a document that arrived carrying it is tidied. See model/monster.js.
+   */
+  if (d.monster !== undefined && d.monster !== null) d.monster = normalizeMonster(d.monster);
+  else delete d.monster;
+
   // Last, because it reads everything above: the bar a character opens on.
   if (!Array.isArray(d.uiPrefs.tabOrder)) d.uiPrefs.tabOrder = buildDefaultTabs(model);
 }
@@ -1540,7 +1552,9 @@ export function normalise(model) {
  * again. So a tab put back in the manager stays there.
  */
 export function buildDefaultTabs(model) {
-  const base = [...DEFAULT_TAB_ORDER];
+  // A monster opens on its block: the bar is the one a GM reads at the table,
+  // not the one a player builds a character on.
+  const base = model?.data?.monster ? [...MONSTER_TAB_ORDER] : [...DEFAULT_TAB_ORDER];
   // Called during `normalise`, so be defensive about what is on the model.
   if (typeof model?.systemTabsInUse !== 'function') return base;
   const inUse = model.systemTabsInUse();

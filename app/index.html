@@ -126,6 +126,32 @@
     border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin: 2px 0 10px;
   }
   dialog#importDialog select:disabled { opacity: 0.5; }
+  /* The monster dialog is the new-character one with a pasting box in it. */
+  dialog#monsterDialog {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; width: min(44rem, 92vw);
+  }
+  dialog#monsterDialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog#monsterDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
+  dialog#monsterDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
+  dialog#monsterDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
+  dialog#monsterDialog label input {
+    flex: 1; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+  }
+  dialog#monsterDialog textarea {
+    display: block; width: 100%; box-sizing: border-box; min-height: 14rem; resize: vertical;
+    font: inherit; font-size: 0.8rem; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+  }
+  dialog#monsterDialog .preview { font-size: 0.8rem; color: var(--muted); min-height: 1.2em; margin: 8px 0 0; }
+  dialog#monsterDialog .preview.err { color: #e0635f; }
+  dialog#monsterDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  dialog#monsterDialog button {
+    font: inherit; font-size: 0.85rem; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
+  }
+  dialog#monsterDialog button.primary { border-color: var(--accent); color: var(--accent); }
   dialog#extDialog {
     background: var(--panel); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 18px 20px;
@@ -174,6 +200,7 @@
     <div class="actions">
       <button type="button" id="welcomeNew" class="primary">+ New character</button>
       <button type="button" id="welcomeImport">+ Import a workbook or JSON</button>
+      <button type="button" id="welcomeMonster" hidden>+ Monster from a stat block</button>
     </div>
     <p class="hint">You can also drop a file anywhere on this page.</p>
   </section>
@@ -218,6 +245,31 @@
     <label>Level <input name="level" type="number" min="3" max="20" value="3"></label>
     <div class="actions">
       <button type="button" id="newCancel">Cancel</button>
+      <button type="submit" class="primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="monsterDialog">
+  <form id="monsterForm" method="dialog">
+    <h2>New monster from a stat block</h2>
+    <p class="hint">Paste a creature's stat block — Archives of Nethys, d20pfsrd, a PDF — from its
+      <em>Name CR n</em> line down through its description. The reader takes the scores, AC,
+      hit points, saves, attacks, feats, skills and special abilities onto a sheet whose
+      numbers come out exactly as pasted and still move when a score is edited. Lines it
+      cannot place are kept on the Stat Block tab to file by hand.</p>
+    <textarea name="block" spellcheck="false" placeholder="Baalzebul CR 30
+XP 9,830,400
+LE Large outsider (devil, evil, extraplanar, lawful)
+Init +14; Senses …
+Defense
+AC 48, touch 40, flat-footed 37 (…)
+hp 717 (35d10+525)
+…"></textarea>
+    <p class="preview" id="monsterPreview"></p>
+    <label>Name <input name="name" type="text" maxlength="80" placeholder="Read from the block unless given" autocomplete="off"></label>
+    <div class="actions">
+      <button type="button" id="monsterCancel">Cancel</button>
       <button type="submit" class="primary">Create</button>
     </div>
   </form>
@@ -372,13 +424,13 @@
     const chip = (c) => (c.local
       ? `<span class="chip local">
            <button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
-             <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
+             <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">${c.cr ? `CR ${esc(c.cr)}` : `L${esc(c.level)}`}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : c.origin === 'monster' ? 'monster' : 'imported'}</span>
            </button>
            <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
              aria-label="Remove ${esc(c.name)}">×</button>
          </span>`
       : `<span class="chip"><button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
-           <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span>
+           <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">${c.cr ? `CR ${esc(c.cr)}` : `L${esc(c.level)}`}</span>
          </button></span>`);
     picker.innerHTML = `${shown.map(chip).join('')}
       ${folded
@@ -386,6 +438,7 @@
           title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
     : `<button class="import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
       <button class="import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
+      ${adminToggle.checked ? `<button class="import" id="monsterBtn" title="Paste a stat block off a page and get it as a sheet: the GM's monster view">+ Monster</button>` : ''}
       <button class="exportall" id="exportAllBtn"
         title="Download every character in this picker as one .zip">Export all</button>
       <button class="fold" id="foldBtn" aria-expanded="true"
@@ -399,6 +452,7 @@
     });
     picker.querySelector('#newBtn')?.addEventListener('click', () => newDialog.showModal());
     picker.querySelector('#importBtn')?.addEventListener('click', () => importFile.click());
+    picker.querySelector('#monsterBtn')?.addEventListener('click', openMonsterDialog);
     picker.querySelector('#exportAllBtn')?.addEventListener('click', exportAll);
     picker.querySelector('#foldBtn')?.addEventListener('click', () => { setPickerFolded(true); draw(); });
     picker.querySelector('#unfoldBtn')?.addEventListener('click', () => { setPickerFolded(false); draw(); });
@@ -421,6 +475,63 @@
     newDialog.close();
     newForm.reset();
     add(doc, [], 'blank');
+  });
+
+  /*
+   * A monster from a stat block. The reader is loaded when the dialog is
+   * first opened rather than with the page: it is the GM's tool, and most
+   * visitors are not the GM. The preview line under the box says what the
+   * reader makes of the paste as it is typed -- CR, hit dice, AC, how many
+   * attacks and feats -- so a block that came through wrong is seen before
+   * it becomes a sheet, not after. The document then takes exactly the path
+   * a blank one does: vetted, stored, listed, tagged *monster*.
+   */
+  const monsterDialog = document.getElementById('monsterDialog');
+  const monsterForm = document.getElementById('monsterForm');
+  const monsterPreview = document.getElementById('monsterPreview');
+  const welcomeMonster = document.getElementById('welcomeMonster');
+  let monsterReader = null;
+  const loadMonsterReader = () => {
+    monsterReader ??= import('./js/monster-import.js');
+    return monsterReader;
+  };
+  function openMonsterDialog() {
+    loadMonsterReader();
+    monsterPreview.textContent = '';
+    monsterPreview.classList.remove('err');
+    monsterDialog.showModal();
+    monsterForm.elements.block.focus();
+  }
+  document.getElementById('monsterCancel').addEventListener('click', () => monsterDialog.close());
+  welcomeMonster.addEventListener('click', openMonsterDialog);
+  monsterForm.elements.block.addEventListener('input', async () => {
+    const text = monsterForm.elements.block.value;
+    if (!text.trim()) { monsterPreview.textContent = ''; return; }
+    const { parseStatBlock, describeBlock } = await loadMonsterReader();
+    const block = parseStatBlock(text);
+    const read = describeBlock(block);
+    const notes = [...block.warnings, block.unread.length ? `${block.unread.length} line${block.unread.length === 1 ? '' : 's'} not placed` : ''].filter(Boolean);
+    monsterPreview.textContent = `${block.name ? `${block.name}: ` : ''}${read || 'nothing read yet'}${notes.length ? ` — ${notes.join('; ')}` : ''}`;
+    monsterPreview.classList.toggle('err', !read);
+  });
+  monsterForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = monsterForm.elements.block.value;
+    const { parseStatBlock, monsterDocument, describeBlock } = await loadMonsterReader();
+    const block = parseStatBlock(text);
+    if (!describeBlock(block)) {
+      monsterPreview.textContent = 'Nothing here reads as a stat block — it wants a "Name CR n" line, then the AC, hp and ability-score lines.';
+      monsterPreview.classList.add('err');
+      return;
+    }
+    const name = monsterForm.elements.name.value.trim();
+    if (name) block.name = name;
+    const doc = monsterDocument(block);
+    monsterDialog.close();
+    monsterForm.reset();
+    const warnings = [...block.warnings];
+    if (block.unread.length) warnings.push(`${block.unread.length} line${block.unread.length === 1 ? ' was' : 's were'} not placed and wait on the Stat Block tab`);
+    add(doc, warnings, 'monster');
   });
 
   /*
@@ -659,10 +770,10 @@
     // template, so the sheet will be thin in places. Better said than
     // discovered.
     say(warnings.length ? 'info' : 'ok',
-      `${origin === 'blank' ? 'Created' : 'Imported'} ${verdict.summary.name} (level ${verdict.summary.level})`
+      `${origin === 'blank' ? 'Created' : origin === 'monster' ? 'Read' : 'Imported'} ${verdict.summary.name} (${verdict.summary.cr ? `CR ${verdict.summary.cr}` : `level ${verdict.summary.level}`})`
       + `${id === verdict.summary.id ? '' : ` as “${id}”, because “${verdict.summary.id}” was taken`}.`
       + (warnings.length ? ` Note — ${warnings.join('; ')}.` : '')
-      + (origin === 'blank' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
+      + (origin === 'blank' || origin === 'monster' ? ' It is saved in this browser like an import; use Export JSON to keep a copy.' : ''));
     return id;
   }
 
@@ -739,7 +850,11 @@
 
   adminToggle.addEventListener('change', () => {
     sheet.setAttribute('role', adminToggle.checked ? 'admin' : 'player');
+    // The monster button is the GM's: it comes and goes with the view.
+    welcomeMonster.hidden = !adminToggle.checked;
+    draw();
   });
+  welcomeMonster.hidden = !adminToggle.checked;
 
   /*
    * Extensions: the packs this browser holds, managed in a dialog. The runtime

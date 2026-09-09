@@ -1046,6 +1046,28 @@ function dashTalentsCard(model) {
   }
 
 
+  /**
+   * The sub-system cards a stat block borrows: for every system the creature
+   * actually uses -- or a class row marks -- the same card the session
+   * dashboard shows, so a monster given the Vancian tab prints its slots and
+   * a Path of War monster its readied maneuvers, off the one set of pips.
+   *
+   * Only the reference cards. The standing ones (conditions, resources,
+   * offense…) are the block's own lines, printed once.
+   */
+export function dashSystemCards(model) {
+    const inUse = model.systemTabsInUse();
+    const tagged = model.taggedSystemTabs();
+    const on = (id) => inUse[id] || tagged.has(id);
+    const out = [];
+    if (on('vancian')) out.push(dashVancianCard(model));
+    if (on('psionics')) out.push(dashPsionicsCard(model));
+    if (on('magic') || on('martial')) out.push(dashSpheresCard(model), dashTalentsCard(model));
+    if (on('akashic')) out.push(dashVeilsCard(model));
+    if (on('maneuvers')) out.push(dashManeuversCard(model));
+    return out.join('');
+  }
+
 function detailsPanel(model) {
     const c = model.data;
     return `<section class="panel details">

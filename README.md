@@ -108,6 +108,8 @@ app/js/extensions.js    extension packs: format, local store, table merge, attac
 app/js/extension-runtime.js  the page's one set of active packs, registered with the model
 app/js/extension-manager.js  the Extensions dialog a host page mounts
 app/js/paste-import.js  rules text off a page -> extension blocks + leftovers to tag
+app/js/monster-import.js  a stat block off a page -> a character document, numbers reconciled
+app/js/model/monster.js the monster block's shape: what a creature has that a character has not
 app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/roll20.js        a row's totals as text a Roll20 chat box will roll
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry
@@ -199,5 +201,6 @@ is what the converter's `extraTabs` capture is for.
 | [Formulas & trackers](docs/formulas-and-trackers.md) | The **ƒx Formulas** tab (scratchpad, value index, in-app guide), the sandboxed formula language: `{name = expr}` and `{dest += expr}` in prose, custom trackers and meters, their appearance (zones, gradients, pips), the GM / inspector view and why player-written formulas are safe. |
 | [Embedding](docs/embedding.md) | The `<character-sheet>` custom element: attributes, events, theming through custom properties, and the audit API. |
 | [Extensions](docs/extensions.md) | Content packs: the engine ships content-free and classes, disciplines, races and building blocks arrive in JSON packs — bundled or local, written, imported and shared from the Extensions dialog; the paste importer that reads a rules page into blocks, with its review stage. |
+| [Monsters](docs/monsters.md) | The GM's side: **+ Monster** reads a pasted stat block into a sheet whose numbers come out exactly as printed and still recalculate, the **Stat Block** tab prints any sheet as a Bestiary would with every figure live, and a monster is given a sub-system the way a character is. |
 | [To do](docs/todo.md) | Agreed but not built: a picker for option menus, reading menu pages, the names still hard-coded in the engine. |
 | [Importing & saving](docs/importing-and-saving.md) | How the converters read a workbook (defined names, label-anchored scans, reconciliation), the four ways a character comes in, Export all, and saving, snapshots, checkpoints and the schema. |
