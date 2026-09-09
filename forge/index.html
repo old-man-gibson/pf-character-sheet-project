@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Homebrew Workbench</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="forge.css">
+</head>
+<body>
+<div id="app" data-pane="edit">
+  <header class="topbar">
+    <div class="brand"><a href="./" title="Homebrew Workbench">Homebrew Workbench</a> <small>Homebrew workbench</small></div>
+    <div class="panetabs" role="tablist">
+      <button role="tab" data-pane="list">Entries</button>
+      <button role="tab" data-pane="edit" aria-selected="true">Edit</button>
+      <button role="tab" data-pane="view">Preview</button>
+    </div>
+    <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search names, tags, text…" aria-label="Search entries"></div>
+    <div class="spacer"></div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">opening</span></div>
+    <button class="btn primary" id="newBtn">+ New entry</button>
+    <button class="btn" id="publishBtn" title="Write everything here as an extension pack into this browser's sheet, beside the packs you imported">Publish to this sheet</button>
+    <div class="menu" id="ioMenu">
+      <button class="btn" id="ioBtn">Import / Export ▾</button>
+      <div class="drop">
+        <button data-act="import">Import JSON…<small>Forge project file, or a character‑sheet‑extension pack</small></button>
+        <hr>
+        <button data-act="exp-ext">Download extension pack<small>Everything as one pack: disciplines, feats, spells, class / archetype / race blocks, the rest as reference entries</small></button>
+        <button data-act="exp-project">Download project<small>Everything, as a Forge JSON file you can re‑import</small></button>
+        <button data-act="exp-md">Download this entry as Markdown<small>Includes its children</small></button>
+        <button data-act="exp-md-all">Download everything as Markdown<small>One document, grouped by type</small></button>
+        <hr>
+        <button data-act="sheet">Open the character sheet<small>The app next door, where the published pack is read</small></button>
+      </div>
+    </div>
+  </header>
+
+  <aside class="rail">
+    <div class="typegroups" id="typegroups"></div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <main class="edit" id="edit"></main>
+
+  <aside class="view" id="view"></aside>
+</div>
+
+<div class="modal" id="ask"><div class="box">
+  <h3>Are you sure?</h3><div id="askMsg"></div>
+  <div class="acts"><button class="btn" id="askNo">Cancel</button><button class="btn danger" id="askOk">Yes, go ahead</button></div>
+</div></div>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="js/forge.js"></script>
+</body>
+</html>

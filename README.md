@@ -91,6 +91,8 @@ tools/extension_pack.py what the *_ref tools use to write a table as a pack
 tools/audit-diff.mjs    the audit diff between two character JSON documents, for a GM
 tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
                         reader the Paste text… panel uses
+tools/forge-pack.mjs    a Homebrew Workbench export into a pack under private/extensions,
+                        index rewritten (docs/extensions.md, From Homebrew Workbench)
 app/index.html          local host page (character picker)
 app/embed-example.html  embedding demo
 app/js/xlsx.js          dependency-free .xlsx reader (ZIP + OOXML)
@@ -118,6 +120,11 @@ app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geome
 app/js/publish.js       a character as a third party receives it: only the pack entries it
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
+forge/                  Homebrew Workbench, the homebrew workbench: index.html, forge.css, js/
+                        (schema, store, pack, forge) -- entries in this browser, packs out
+                        to the sheet (docs/extensions.md, From Homebrew Workbench)
+app/js/forge-pack.js    a Forge project as an extension pack: the one mapping, shared by
+                        the Forge page and tools/forge-pack.mjs
 app/js/sheet-element.js the <character-sheet> custom element
 app/js/ui/palette.js    the Ctrl+K search palette: the character as searchable rows
 app/js/styles.js        loads the stylesheet and shares it as one adopted sheet
@@ -133,7 +140,7 @@ private/                git-ignored: real characters and their workbooks, if you
 Run the tests with:
 
 ```bash
-node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/column-widths.test.mjs && node tests/model.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
+node tests/formula.test.mjs && node tests/formula-format.test.mjs && node tests/formula-guide.test.mjs && node tests/tracker-style.test.mjs && node tests/column-widths.test.mjs && node tests/model.test.mjs && node tests/diff.test.mjs && node tests/publish.test.mjs && node tests/convert.test.mjs && node tests/history.test.mjs && node tests/zip.test.mjs && node tests/extensions.test.mjs && node tests/forge-pack.test.mjs && node tests/forge.test.mjs && node tests/paste-import.test.mjs && node tests/roll20.test.mjs && node tests/palette.test.mjs && node tests/panels.test.mjs
 ```
 
 Every suite passes in a fresh clone. The ones that sweep a roster fall back to the

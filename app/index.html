@@ -141,9 +141,9 @@
   }
   dialog#extDialog::backdrop { background: rgba(0,0,0,0.55); }
   dialog#extDialog h2 { color: var(--accent); }
-  button.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; }
-  button.ext:hover { border-color: var(--accent); color: var(--accent); }
+  button.ext, a.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; text-decoration: none; }
+  button.ext:hover, a.ext:hover { border-color: var(--accent); color: var(--accent); }
   /* Printing: the sheet does its own print styling (see app/css/sheet.css).
      All this page has to do is get out of the way -- the picker, the roster
      chrome and the dark backdrop are for choosing a character, not for the
@@ -166,6 +166,7 @@
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
   <button type="button" class="ext" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
+  <a class="ext" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
   <label class="role">
     <input type="checkbox" id="adminToggle"> GM / inspector view
   </label>
