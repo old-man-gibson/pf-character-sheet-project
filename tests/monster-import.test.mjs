@@ -5,10 +5,11 @@
 import {
   parseStatBlock, monsterDocument, parseAttacks, readDamage, readSkills, readFeats, readSpeeds,
   describeBlock, MONSTER_TAB_ORDER,
-} from '../app/js/monster-import.js';
-import { Character, inspectDocument, emptyMonster, normalizeMonster } from '../app/js/model.js';
+} from '../app/js/monster/import.js';
+import { Character, inspectDocument } from '../app/js/model.js';
+import { emptyMonster, normalizeMonster } from '../app/js/monster/block.js';
 import { blankDocument } from '../app/js/convert.js';
-import { renderStatBlockPanel } from '../app/js/ui/panels/statblock.js';
+import { renderStatBlockPanel } from '../app/js/monster/panel.js';
 
 let pass = 0;
 let fail = 0;
@@ -126,7 +127,7 @@ console.log('the document reproduces the block, and holds on reload');
 {
   const doc = monsterDocument(parseStatBlock(BAALZEBUL), { createdAt: '2026-01-01T00:00:00' });
   const verdict = inspectDocument(doc);
-  check('it passes the gate the picker applies', [verdict.ok, verdict.summary.cr, verdict.summary.level], [true, '30', 35]);
+  check('it passes the gate the picker applies', [verdict.ok, verdict.summary.level, verdict.summary.classes], [true, 35, ['Outsider']]);
   check('kind, tab bar', [doc.source.kind, doc.uiPrefs.tabOrder], ['monster', MONSTER_TAB_ORDER]);
   const m = new Character(doc);
   const c = m.data;
@@ -177,6 +178,31 @@ console.log('the Stat Block tab prints the block, and prints a character too');
     ok(`the block prints ${bit}`, html.includes(bit));
   }
   ok('no sub-system cards on a creature with none', !html.includes('From the sub-systems'));
+  // The sweep tests/panels.test.mjs gives every other panel, kept here so the
+  // main suite need not know this tab exists: both views, folds open and shut,
+  // a nonability, a stray line, a formula in an ability.
+  {
+    const stray = new Character(monsterDocument(parseStatBlock([
+      'Sweep Fiend CR 12', 'CE Huge undead (extraplanar)', 'Defense',
+      'AC 27, touch 11, flat-footed 24 (+3 Dex, +16 natural, -2 size)', 'hp 161 (14d8+98)', 'Fort +11, Ref +7, Will +12',
+      'Offense', 'Speed 40 ft., fly 60 ft. (poor)', 'Melee 2 claws +18 (2d6+9 plus 1d6 fire) or bite +18 (2d8+13/19-20)', 'Ranged 3 spines +12 (1d8+9)',
+      'Statistics', 'Str 28, Dex 16, Con —, Int 12, Wis 16, Cha 17', 'Base Atk +10; CMB +21; CMD 34',
+      'Something the reader has no label for', 'Feats Cleave', 'Special Abilities',
+      'Burn (Ex) A creature hit takes {= 1 + floor(level / 2)} fire damage.',
+    ].join('\n')), { createdAt: '2026-01-01T00:00:00' }));
+    for (const mode of ['build', 'session']) {
+      stray.setViewMode(mode);
+      for (const folds of [false, true]) {
+        const real = stray.data.uiPrefs.collapsed;
+        if (folds) stray.data.uiPrefs.collapsed = new Proxy({}, { get: () => true });
+        let out = null;
+        try { out = renderStatBlockPanel(stray, {}); } catch (err) { out = err; }
+        stray.data.uiPrefs.collapsed = real;
+        ok(`the tab draws in the ${mode} view, folds ${folds ? 'shut' : 'open'}`, typeof out === 'string'
+          && out.includes('2 claws') && out.includes('Not read') && out.includes('Con</b> —') && out.includes('>8</span> fire damage'));
+      }
+    }
+  }
   m.toggleClassSystem(0, 'vancian');
   ok('a system marked on the class row brings its card', renderStatBlockPanel(m, {}).includes('From the sub-systems'));
 

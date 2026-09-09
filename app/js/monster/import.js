@@ -26,11 +26,11 @@
  * Pure: text in, block and document out. No DOM, no storage.
  */
 
-import { blankDocument } from './convert.js';
-import { STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from './rules.js';
-import { MONSTER_TAB_ORDER, normalizeMonster } from './model/monster.js';
+import { blankDocument } from '../convert.js';
+import { STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from '../rules.js';
+import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 
-export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './model/monster.js';
+export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './block.js';
 
 /* ---------------- text helpers ---------------- */
 

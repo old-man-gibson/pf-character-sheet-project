@@ -34,8 +34,6 @@ import * as combat from '../app/js/ui/panels/combat.js';
 import * as guile from '../app/js/ui/panels/guile.js';
 import * as subsystems from '../app/js/ui/panels/subsystems.js';
 import * as lore from '../app/js/ui/panels/lore.js';
-import * as statblock from '../app/js/ui/panels/statblock.js';
-import { parseStatBlock, monsterDocument } from '../app/js/monster-import.js';
 import * as admin from '../app/js/ui/panels/admin.js';
 import * as gear from '../app/js/ui/panels/gear.js';
 import * as trackers from '../app/js/ui/panels/trackers.js';
@@ -158,7 +156,6 @@ const panelsWith = (CTX) => [
   ['Conjured Companion', (m) => subsystems.companionPanel(m, 'conjured')],
   ['Progression', (m) => lore.renderProgressionPanel(m, CTX.lore)],
   ['Lore', (m) => lore.renderLorePanel(m, CTX.lore)],
-  ['Stat Block', (m) => statblock.renderStatBlockPanel(m, {})],
   ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX.lore)],
   ['Formulas', (m) => admin.renderFormulaPanel(m, CTX.admin)],
   ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX.admin)],
@@ -228,53 +225,6 @@ const sweep = (who, model) => {
 
 console.log('a blank sheet draws every panel');
 sweep('a blank sheet', new Character(blankDocument('panels-test')));
-
-console.log('a monster read off a stat block draws every panel');
-{
-  // A creature rather than a character: 35 hit dice, a nonability, two
-  // attack groups, spell-like abilities, special abilities, and a line the
-  // reader could not place -- every branch the Stat Block tab has.
-  const block = parseStatBlock([
-    'Sweep Fiend CR 12',
-    'XP 19,200',
-    'CE Huge undead (extraplanar)',
-    'Init +3; Senses darkvision 60 ft.; Perception +20',
-    'Aura frightful presence (30 ft., DC 20)',
-    'Defense',
-    'AC 27, touch 11, flat-footed 24 (+3 Dex, +16 natural, -2 size)',
-    'hp 161 (14d8+98)',
-    'Fort +11, Ref +7, Will +12',
-    'DR 10/good; Immune undead traits; Resist fire 10; SR 23',
-    'Offense',
-    'Speed 40 ft., fly 60 ft. (poor)',
-    'Melee 2 claws +18 (2d6+9 plus 1d6 fire) or bite +18 (2d8+13/19-20)',
-    'Ranged 3 spines +12 (1d8+9)',
-    'Space 15 ft., Reach 15 ft.',
-    'Spell-Like Abilities (CL 12th; concentration +15)',
-    'At will—darkness',
-    '3/day—fireball (DC 16)',
-    'Statistics',
-    'Str 28, Dex 16, Con —, Int 12, Wis 16, Cha 17',
-    'Base Atk +10; CMB +21; CMD 34 (can’t be tripped)',
-    // A line with no label after one that takes no continuation: the one
-    // shape the reader has to leave for the GM.
-    'Something the reader has no label for',
-    'Feats Cleave, Power Attack, Toughness',
-    'Skills Fly +10, Perception +20, Stealth +12',
-    'Languages Abyssal; telepathy 100 ft.',
-    'Special Abilities',
-    'Burn (Ex) A creature hit takes {= 1 + floor(level / 2)} fire damage.',
-    'Description',
-    'A fiend invented for the panel sweep.',
-  ].join('\n'));
-  const monster = new Character(monsterDocument(block, { createdAt: '2026-01-01T00:00:00' }));
-  sweep('a monster', monster);
-  const html = renders('a monster', 'Stat Block (content)', (x) => statblock.renderStatBlockPanel(x, {}), monster);
-  if (html && !(html.includes('CR 12') && html.includes('2 claws') && html.includes('Burn (Ex)') && html.includes('Not read'))) {
-    fail++;
-    console.log('  FAIL a monster — the Stat Block tab is missing its lines');
-  }
-}
 
 console.log('a minionmancer\'s tab draws its chips and the companion selected');
 {

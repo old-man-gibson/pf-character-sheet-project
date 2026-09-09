@@ -17,16 +17,16 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc } from '../html.js';
-import { collapsible, itemText, movedInline, rowTools } from '../rows.js';
-import { prose, renderedProse } from '../prose.js';
-import { check, field, num, text } from '../fields.js';
-import { hasTokens } from '../../inline.js';
-import { dashSystemCards } from './overview.js';
+import { esc } from '../ui/html.js';
+import { collapsible, itemText, movedInline, rowTools } from '../ui/rows.js';
+import { prose, renderedProse } from '../ui/prose.js';
+import { check, field, num, text } from '../ui/fields.js';
+import { hasTokens } from '../inline.js';
+import { dashSystemCards } from '../ui/panels/overview.js';
 import {
   ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, armorParts, fmt, statMod,
-} from '../../rules.js';
-import { group } from '../format.js';
+} from '../rules.js';
+import { group } from '../ui/format.js';
 
 /** The two-letter alignment a block prints, from the sheet's full words. */
 function alignmentCode(text) {
@@ -248,12 +248,53 @@ export function renderStatBlockPanel(model, ctx = {}) {
     </section>` : '';
 
     return `<div class="grid">
+      <style>${STATBLOCK_CSS}</style>
       ${block}
       ${systemsPanel}
       ${editPanel(model, m, ctx)}
       ${unreadPanel(model, m)}
     </div>`;
   }
+
+/**
+ * The tab's own styles, carried in its markup rather than in the sheet's
+ * stylesheet, so the feature adds nothing to a file the rest of the sheet
+ * edits. A Bestiary entry's layout: runs of "Label value" on one line,
+ * sections as small-caps rules, the special abilities as paragraphs led by
+ * their name. Dense on purpose -- a block is read at a glance at the table
+ * -- and it prints as it shows.
+ */
+const STATBLOCK_CSS = `
+.statblock { font-size: 0.86rem; line-height: 1.45; }
+.statblock .sb-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  border-bottom: 2px solid var(--cs-accent); padding-bottom: 4px; margin-bottom: 6px;
+}
+.statblock .sb-name { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.01em; }
+.statblock .sb-cr { font-size: 1rem; font-weight: 700; color: var(--cs-accent); white-space: nowrap; }
+.statblock .sb-section {
+  margin: 10px 0 4px; padding-bottom: 2px; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--cs-accent);
+  border-bottom: 1px solid var(--cs-line);
+}
+.statblock .sb-line { margin: 2px 0; }
+.statblock .sb-line b, .statblock .sb-ability b { font-weight: 700; }
+.statblock .sb-run { display: inline; }
+.statblock .sb-prose, .statblock .sb-ability { white-space: pre-wrap; margin: 4px 0; }
+.statblock .sb-ability { padding-left: 1em; text-indent: -1em; }
+.statblock .dim { color: var(--cs-muted); }
+.statblock .prose-view { display: inline; }
+.sb-edit .sb-fields {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 6px 14px;
+}
+.sb-edit .sb-fields.wide { grid-template-columns: 1fr; margin-top: 10px; }
+.sb-edit .sb-fields .fld { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--cs-muted); }
+.sb-edit .sb-fields .fld > span { font-weight: 600; }
+.sb-systems .dashboard { margin-top: 8px; }
+@media print {
+  .statblock .sb-head { border-bottom-color: #000; }
+  .statblock .sb-section, .statblock .sb-cr { color: #000; }
+}`;
 
   /**
    * The block's own fields, to edit -- or, on a character with no block, the

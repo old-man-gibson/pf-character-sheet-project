@@ -108,8 +108,10 @@ app/js/extensions.js    extension packs: format, local store, table merge, attac
 app/js/extension-runtime.js  the page's one set of active packs, registered with the model
 app/js/extension-manager.js  the Extensions dialog a host page mounts
 app/js/paste-import.js  rules text off a page -> extension blocks + leftovers to tag
-app/js/monster-import.js  a stat block off a page -> a character document, numbers reconciled
-app/js/model/monster.js the monster block's shape: what a creature has that a character has not
+app/js/monster/         the GM's monster tool, kept to itself: import.js (a stat block off a page ->
+                        a document, numbers reconciled), block.js (its shape), panel.js (the Stat
+                        Block tab), sheet.js and picker.js (the one-line hooks the sheet and the
+                        picker page call)
 app/js/companions.js    familiar / animal companion / eidolon tables and sums
 app/js/roll20.js        a row's totals as text a Roll20 chat box will roll
 app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geometry

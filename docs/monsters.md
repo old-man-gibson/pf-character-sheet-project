@@ -125,6 +125,19 @@ the character had it; **Remove the block** takes them off again and touches noth
 - **Racial skill modifiers** stay as text; the rows reconcile the number, so nothing is
   lost, but the *+4 racial* is not a column.
 
-The reader itself is `app/js/monster-import.js` — pure, text in and document out — and
+The reader itself is `app/js/monster/import.js` — pure, text in and document out — and
 `tests/monster-import.test.mjs` is the place a block that comes through wrong should be
 added to.
+
+## Where it lives, and what it touches
+
+The whole tool sits in `app/js/monster/` — the reader, the block's shape, the tab, and
+two hook modules — so the main sheet can change around it. What the shared files carry
+is deliberately one line each, every one delegating to `monster/`: the element imports
+`monster/sheet.js` for its tab entry, panel case, ⋯ menu button, header line and two
+actions; the picker page mounts `monster/picker.js` with one call, which writes its own
+dialog and places its own button; `buildDefaultTabs` and `sessionDefaultTabs` lead with
+the block for a monster; the defence resolver zeroes the ABP ladder for one; the overview
+exports the dashboard cards the tab borrows. The tab's styles ride in its own markup, and
+its render sweep lives in the monster suite rather than the panel sweep. Nothing else on
+the sheet is edited, and a character document gains no field.

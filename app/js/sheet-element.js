@@ -57,7 +57,6 @@ import {
   classForwardKey, gearColumnInUse,
   featsAvailable, featDetails, featCatalogue,
   spellsAvailable, powersAvailable,
-  emptyMonster,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import {
@@ -88,7 +87,7 @@ import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
-import * as statblock from './ui/panels/statblock.js';
+import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
 import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -190,7 +189,7 @@ const PALETTE_RECENT = 8;
 
 const TABS = [
   ['overview', 'Overview'],
-  ['statblock', 'Stat Block'],
+  monster.MONSTER_TAB,
   ['stats', 'Stats'],
   ['skills', 'Skills'],
   ['martial', 'Martial Spheres'],
@@ -1796,11 +1795,7 @@ export class CharacterSheetElement extends HTMLElement {
         ${i.image ? `<img class="portrait" src="${esc(i.image)}" alt="" loading="lazy">` : '<div class="portrait"></div>'}
         <div class="head-main">
           <div class="name">${val(i.name)}</div>
-          ${c.monster ? `<div class="subtitle">
-            CR ${val(c.monster.cr)}${c.monster.xp != null ? ` &middot; XP ${esc(String(c.monster.xp).replace(/\B(?=(\d{3})+(?!\d))/g, ','))}` : ''}
-            &middot; ${val(i.level)} HD ${esc(i.size || '')} ${val(i.race)}
-            ${i.alignment ? ` &middot; ${esc(i.alignment)}` : ''}
-          </div>` : `<div class="subtitle">
+          ${monster.headerSubtitle(this.#model) || `<div class="subtitle">
             Level ${val(i.level)} ${val(i.race)}${i.variant ? ` (${esc(i.variant)})` : ''}
             ${classes ? ` &middot; ${esc(classes)}` : ''}
             ${i.alignment ? ` &middot; ${esc(i.alignment)}` : ''}
@@ -1859,13 +1854,7 @@ export class CharacterSheetElement extends HTMLElement {
     return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
-        ${/*
-           * The GM's view of a creature: the Stat Block tab from wherever
-           * you are. On a monster it is on the bar already; on a character it
-           * is the NPC view, and that is the GM's to ask for.
-           */''}
-        ${this.isAdmin || this.#model.data.monster ? `
-        <button data-action="statblock" title="This sheet as a Bestiary prints one: every number worked out now">Stat block</button>` : ''}
+        ${monster.menuButton(this.#model, this.isAdmin)}
         <button data-action="theme">${light ? 'Dark theme' : 'Light theme'}</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
@@ -2187,7 +2176,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'trackers': return this.#trackersPanel();
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();
-      case 'statblock': return this.#statBlockPanel();
+      case 'statblock': return monster.renderStatBlockPanel(this.#model, {});
       case 'extras': return this.#extrasPanel();
       case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
@@ -2749,9 +2738,6 @@ export class CharacterSheetElement extends HTMLElement {
   #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#loreCtx()); }
 
   #lorePanel() { return lore.renderLorePanel(this.#model, this.#loreCtx()); }
-
-  /** The Stat Block tab: the character as a Bestiary prints one. See ui/panels/statblock.js. */
-  #statBlockPanel() { return statblock.renderStatBlockPanel(this.#model, {}); }
 
   #extrasPanel() { return lore.renderExtrasPanel(this.#model, this.#loreCtx()); }
 
@@ -4633,10 +4619,9 @@ export class CharacterSheetElement extends HTMLElement {
     let saved = null;
     try { saved = localStorage.getItem(this.#viewKey()); } catch { /* private window */ }
     // `#render` drops a tab this character does not have, so an id that has
-    // since gone simply falls back to the first on the bar. A character never
-    // opened before starts on the first tab of its own bar rather than on the
-    // Overview by name: for a character that is the Overview, and for a
-    // monster it is the block.
+    // since gone simply falls back to the first on the bar.
+    // A sheet never opened before starts on the first tab of its own bar --
+    // the Overview for a character, the block for a monster.
     if (saved) this.#tab = saved;
     else this.#tab = this.#barEntries()[0]?.id ?? 'overview';
     this.#tabWritten = saved;
@@ -7052,23 +7037,16 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.setViewMode(this.#model.viewMode() === 'session' ? 'build' : 'session');
         this.#render();
         break;
-      // The Stat Block tab from anywhere. On a bar that does not carry it,
-      // it rides along as a guest the way a search result does.
+      // The monster tool (monster/sheet.js): its tab from anywhere, riding
+      // along as a guest where the bar does not carry it, and the actions
+      // that put a block on a sheet or take it off.
       case 'statblock':
         this.#chromeMenu = false;
         this.#paletteJump({ tab: 'statblock' });
         break;
-      // A monster block on a character that had none: the CR, senses and
-      // ecology lines, with the progression left on because the character
-      // had it. And the block off again, the rest of the sheet untouched.
       case 'monster-block':
-        this.#model.set('monster', { ...emptyMonster(), abp: true });
-        this.#render();
-        break;
       case 'monster-unblock':
-        delete this.#model.data.monster;
-        this.#model.recompute();
-        this.#render();
+        if (monster.handleAction(this.#model, name)) this.#render();
         break;
       case 'class-systems': {
         const index = Number(button?.dataset.index);
