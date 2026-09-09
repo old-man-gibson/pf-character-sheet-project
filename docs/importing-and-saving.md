@@ -201,10 +201,18 @@ The character already in the picker under the id the import would take (or under
 name) is the one preselected, because that is almost always the one meant.
 
 The page cannot write to `data/characters/`, so an imported character lives in
-`localStorage` and joins the picker marked *imported*, with an × to remove it (which
-takes its edits, its saved version and its whole history with it, and leaves the
-converted sheets alone). Each is ~260 KB against a typical 5–10 MB budget, and a full
-store reports that rather than failing silently.
+`localStorage` and joins the picker marked *imported*, with an × to remove it. Each is
+~260 KB against a typical 5–10 MB budget, and a full store reports that rather than
+failing silently.
+
+**The × asks first, and can be taken back.** It opens a dialog naming the character;
+*Remove* takes it out of the picker and the banner offers **Undo**. Nothing is erased at
+that point: the document, the working edits and the whole history stay in storage and
+the character is merely held out of sight, so Undo — and a **Restore** offered on the
+next visit, for a day — puts it back whole. After a day the held copy is erased for
+real, edits, saved version, history and all (the converted sheets under
+`data/characters/` are never touched). A browser that runs out of room for a new
+character empties that holding area first, before reporting the store full.
 
 ### Every character at once — Export all
 

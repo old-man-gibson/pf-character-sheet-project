@@ -75,6 +75,12 @@
   .banner.ok { color: #6bbf7b; background: rgba(107,191,123,0.10); border: 1px solid #6bbf7b; }
   .banner.info { color: var(--muted); background: rgba(154,162,184,0.10); border: 1px solid var(--line); }
   .banner button { margin-left: auto; font: inherit; background: none; border: 0; color: inherit; cursor: pointer; }
+  /* The banner's one action -- Undo, Restore -- reads as a button, not as text. */
+  .banner button.act {
+    margin-left: 0; padding: 1px 12px; border: 1px solid currentColor; border-radius: 20px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .banner button.act + button { margin-left: 0; }
   .spacer { flex: 1; }
   label.role {
     display: flex; align-items: center; gap: 6px;
@@ -99,24 +105,27 @@
   .welcome button:hover, .welcome button.primary { border-color: var(--accent); color: var(--accent); }
   .note { color: var(--muted); font-size: 0.8rem; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
   .note code { background: var(--panel); padding: 1px 5px; border-radius: 3px; }
-  dialog#newDialog, dialog#importDialog {
+  dialog#newDialog, dialog#importDialog, dialog#removeDialog {
     background: var(--panel); color: var(--text); border: 1px solid var(--line);
     border-radius: 10px; padding: 18px 20px; min-width: min(22rem, 90vw);
   }
-  dialog#newDialog::backdrop, dialog#importDialog::backdrop { background: rgba(0,0,0,0.55); }
-  dialog#newDialog h2, dialog#importDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
-  dialog#newDialog .hint, dialog#importDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
+  dialog#newDialog::backdrop, dialog#importDialog::backdrop, dialog#removeDialog::backdrop { background: rgba(0,0,0,0.55); }
+  dialog#newDialog h2, dialog#importDialog h2, dialog#removeDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
+  dialog#newDialog .hint, dialog#importDialog .hint, dialog#removeDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
   dialog#newDialog label, dialog#importDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
   dialog#newDialog label input, dialog#importDialog label input {
     flex: 1; font: inherit; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
   }
-  dialog#newDialog .actions, dialog#importDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  dialog#newDialog button, dialog#importDialog button {
+  dialog#newDialog .actions, dialog#importDialog .actions, dialog#removeDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  dialog#newDialog button, dialog#importDialog button, dialog#removeDialog button {
     font: inherit; font-size: 0.85rem; color: var(--text); background: var(--bg);
     border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
   }
-  dialog#newDialog button.primary, dialog#importDialog button.primary { border-color: var(--accent); color: var(--accent); }
+  dialog#newDialog button.primary, dialog#importDialog button.primary, dialog#removeDialog button.primary { border-color: var(--accent); color: var(--accent); }
+  dialog#removeDialog { max-width: 30rem; }
+  dialog#removeDialog button.danger { border-color: #e0635f; color: #e0635f; }
+  dialog#removeDialog button.danger:focus-visible { outline: 2px solid #e0635f; outline-offset: 2px; }
   /* A choice, not a field: the radio keeps its own size and the sentence
      beside it takes the room, where a text input would have taken it all. */
   dialog#importDialog label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
@@ -207,6 +216,22 @@
   </form>
 </dialog>
 
+<dialog id="removeDialog">
+  <!-- Not method="dialog", for the same reason as the import dialog: the
+       submit handler is the one place the decision is read. -->
+  <form id="removeForm">
+    <h2>Remove <span id="removeName">this character</span>?</h2>
+    <p class="hint">It leaves the picker, and its sheet, saved version and history go with it.
+      <strong>Undo</strong> stays on offer in the banner, and the character is kept out of
+      sight for a day in case you change your mind — after that it is gone. If you want a
+      copy for good, cancel and use <strong>Export JSON</strong> on the sheet first.</p>
+    <div class="actions">
+      <button type="button" id="removeCancel">Cancel</button>
+      <button type="submit" class="danger">Remove</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="newDialog">
   <form id="newForm" method="dialog">
     <h2>New character</h2>
@@ -278,6 +303,9 @@
     e.preventDefault();
     importDialog.close('go');
   });
+  const removeDialog = document.getElementById('removeDialog');
+  const removeForm = document.getElementById('removeForm');
+  document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
   document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
   document.getElementById('welcomeImport').addEventListener('click', () => importFile.click());
 
@@ -320,6 +348,47 @@
 
   let library = readLibrary();
   const all = () => [...bundled, ...library];
+
+  /*
+   * Removed characters are not erased, they are put out of sight.
+   *
+   * A × pressed by mistake used to take hours of work with it, at once and for
+   * good. Now the entry moves from the library to this list and nothing else
+   * is touched: the document, the working edits and the history all stay in
+   * storage under the same keys, so Undo is just moving the entry back. What
+   * is here is erased for real when it is a day old (checked on each load),
+   * or sooner when the browser runs out of room for a new character.
+   */
+  const TRASH_KEY = 'character-sheet:trash';
+  const TRASH_TTL = 24 * 60 * 60 * 1000;
+  function readTrash() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(TRASH_KEY) || '{}');
+      return Array.isArray(raw.characters) ? raw.characters : [];
+    } catch { return []; }
+  }
+  function writeTrash(list) {
+    try {
+      if (list.length) localStorage.setItem(TRASH_KEY, JSON.stringify({ characters: list }));
+      else localStorage.removeItem(TRASH_KEY);
+    } catch { /* not fatal: the entry is simply not remembered as removed */ }
+  }
+  /** Erase for real: the document, the edits and every history record. */
+  async function erase(id) {
+    localStorage.removeItem(docKey(id));
+    await forget(id, { storageKey: editsKey(id) });
+  }
+  /** Empty the trash of what is older than `age`; everything, with 0. */
+  async function emptyTrash(age = TRASH_TTL) {
+    const now = Date.now();
+    const keep = [];
+    for (const c of readTrash()) {
+      if (now - (c.removedAt || 0) >= age) await erase(c.id);
+      else keep.push(c);
+    }
+    writeTrash(keep);
+    return keep;
+  }
   /*
    * The character you had open, not the first one on the list.
    *
@@ -337,10 +406,16 @@
     return all().some((c) => c.id === want) ? want : all()[0]?.id;
   })();
 
-  function say(kind, text) {
-    banner.innerHTML = `<div class="banner ${kind}"><span></span><button>Dismiss</button></div>`;
+  /** `action` is an optional { label, run } -- the Undo after a removal. */
+  function say(kind, text, action = null) {
+    banner.innerHTML = `<div class="banner ${kind}"><span></span>${action ? '<button class="act"></button>' : ''}<button>Dismiss</button></div>`;
     banner.querySelector('span').textContent = text;
-    banner.querySelector('button').addEventListener('click', () => { banner.innerHTML = ''; });
+    if (action) {
+      const act = banner.querySelector('button.act');
+      act.textContent = action.label;
+      act.addEventListener('click', () => { banner.innerHTML = ''; action.run(); });
+    }
+    banner.querySelector('button:last-child').addEventListener('click', () => { banner.innerHTML = ''; });
   }
 
   // Names and ids in an imported file are arbitrary text, so nothing reaches
@@ -530,7 +605,9 @@
 
   /** A character already in the picker keeps its id; a clash gets the next free one. */
   function freeId(wanted) {
-    const taken = new Set(all().map((c) => c.id));
+    // A removed character still holds its keys until the trash is emptied, so
+    // its id is not free either -- or an import could land on its document.
+    const taken = new Set([...all(), ...readTrash()].map((c) => c.id));
     if (!taken.has(wanted)) return wanted;
     let n = 2;
     while (taken.has(`${wanted}-${n}`)) n += 1;
@@ -596,14 +673,7 @@
     const store = historyFor(id, { storageKey: editsKey(id) });
     const before = entry ? await currentDocument(entry) : null;
     const stored = { ...doc, id };
-    try {
-      localStorage.setItem(docKey(id), JSON.stringify(stored));
-    } catch (err) {
-      say('err', `Could not store ${verdict.summary.name} — ${err.name === 'QuotaExceededError'
-        ? 'this browser is out of space. Remove an imported character and try again.'
-        : err.message}`);
-      return null;
-    }
+    if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
     let kept = false;
     try {
       if (before) { await store.checkpoint(before, 'before import'); kept = true; }
@@ -640,17 +710,10 @@
     return addNew(doc, warnings, origin, verdict);
   }
 
-  function addNew(doc, warnings, origin, verdict) {
+  async function addNew(doc, warnings, origin, verdict) {
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
-    try {
-      localStorage.setItem(docKey(id), JSON.stringify(stored));
-    } catch (err) {
-      say('err', `Could not store ${verdict.summary.name} — ${err.name === 'QuotaExceededError'
-        ? 'this browser is out of space. Remove an imported character and try again.'
-        : err.message}`);
-      return null;
-    }
+    if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
     library = [...library, { ...verdict.summary, id, origin, local: true }];
     writeLibrary(library);
     current = id;
@@ -667,22 +730,87 @@
     return id;
   }
 
-  async function remove(id) {
+  /**
+   * Write a character's document, making room if the browser is full.
+   *
+   * The trash is the first thing to go: what it holds was removed on purpose,
+   * and the alternative is refusing the character that is being added now.
+   * Says why on failure; true on success.
+   */
+  async function store(key, stored, name) {
+    const json = JSON.stringify(stored);
+    for (const attempt of [0, 1]) {
+      try {
+        localStorage.setItem(key, json);
+        return true;
+      } catch (err) {
+        if (err.name === 'QuotaExceededError' && attempt === 0 && readTrash().length) {
+          await emptyTrash(0);
+          continue;
+        }
+        say('err', `Could not store ${name} — ${err.name === 'QuotaExceededError'
+          ? 'this browser is out of space. Remove an imported character and try again.'
+          : err.message}`);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /** The × on a chip: ask first, then put the character out of sight. */
+  let removing = null;
+  function remove(id) {
+    const entry = library.find((c) => c.id === id);
+    if (!entry) return;
+    document.getElementById('removeName').textContent = entry.name;
+    removing = id;
+    removeDialog.showModal();
+  }
+  removeForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = removing;
+    removing = null;
+    removeDialog.close();
+    if (id) discard(id);
+  });
+
+  function discard(id) {
     const entry = library.find((c) => c.id === id);
     if (!entry) return;
     library = library.filter((c) => c.id !== id);
     writeLibrary(library);
-    localStorage.removeItem(docKey(id));
-    // Its edits go with it, and so do its saved version and its whole history --
-    // including the named checkpoints, which a Reset would have kept. The
-    // character itself is going, so there is nothing left for them to be
-    // checkpoints of, and leaving them would hand them to the next import that
-    // happened to take the same id.
-    await forget(id, { storageKey: editsKey(id) });
+    const { local, ...rest } = entry;
+    writeTrash([...readTrash().filter((c) => c.id !== id), { ...rest, removedAt: Date.now() }]);
     if (current === id) current = all()[0]?.id;
+    rememberOpen();
     draw();
     select();
-    say('ok', `Removed ${entry.name} from this browser, with its saved version and history.`);
+    say('ok', `Removed ${entry.name} from this browser. It is kept out of sight for a day, then erased with its history.`,
+      { label: 'Undo', run: () => restore(id) });
+  }
+
+  /** Undo a removal: the entry comes back, and everything under it was never gone. */
+  function restore(id) {
+    const entry = readTrash().find((c) => c.id === id);
+    if (!entry) { say('err', 'That character has already been erased.'); return; }
+    writeTrash(readTrash().filter((c) => c.id !== id));
+    const { removedAt, ...rest } = entry;
+    library = [...library.filter((c) => c.id !== id), { ...rest, local: true }];
+    writeLibrary(library);
+    current = id;
+    rememberOpen();
+    draw();
+    select();
+    say('ok', `${entry.name} is back, with its edits and history.`);
+  }
+
+  /** "2 hours ago", for the offer to restore on the next visit. */
+  function ago(when) {
+    const mins = Math.max(0, Math.round((Date.now() - when) / 60000));
+    if (mins < 2) return 'just now';
+    if (mins < 60) return `${mins} minutes ago`;
+    const hours = Math.round(mins / 60);
+    return hours === 1 ? 'an hour ago' : `${hours} hours ago`;
   }
 
   /*
@@ -759,6 +887,16 @@
 
   draw();
   select();
+
+  // What was removed on an earlier visit is still restorable until it is a day
+  // old; say so, unless the load already had something to say.
+  emptyTrash().then((held) => {
+    if (!held.length || banner.innerHTML) return;
+    const latest = held.reduce((a, b) => ((b.removedAt || 0) > (a.removedAt || 0) ? b : a));
+    say('info', `${latest.name} was removed ${ago(latest.removedAt || 0)}`
+      + (held.length > 1 ? ` (and ${held.length - 1} more before it)` : '')
+      + '. It is kept for a day, then erased.', { label: 'Restore', run: () => restore(latest.id) });
+  });
 </script>
 
 </body>
