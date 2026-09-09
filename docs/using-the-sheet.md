@@ -319,6 +319,21 @@ off their own headings. It is for the question Ctrl+K does not answer: the palet
 you to a *row* — *where is my Disguise modifier* — and this takes you to a *section*.
 Gone on a tab with fewer than three.
 
+### Column widths
+
+The edge between two column headings can be dragged, on any table, to set that
+column's width — the pointer turns into the resize cursor and the edge is marked when
+it is on one. Only the dragged column moves: the others keep their width, so the table
+grows (and scrolls inside its box) rather than crushing its neighbours to make room.
+Widths are remembered per browser, by the table's headings, and put back on every
+render and every visit; a double-click on an edge lets that table size itself again.
+A formula field that has a cell to itself fills that cell and follows the column as it
+is dragged; a click on an edge that does not move leaves the table sizing itself. The
+class-feature grids on the Progression tab have a handle of their own, saved with the
+character, and are not part of this.
+Tables folded into cards on a narrow screen have no columns to widen and are left as
+they are.
+
 ### Where it opens
 
 **On the character and the tab you left.** Which character was open, and which tab on

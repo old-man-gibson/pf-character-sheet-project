@@ -98,6 +98,7 @@ import { round, group, pct, same, PIP_LIMIT } from './ui/format.js';
 import * as prose from './ui/prose.js';
 import { renderStatsPanel, pickSelect, mythicPickAt } from './ui/panels/stats.js';
 import { renderSkillsPanel } from './ui/panels/skills.js';
+import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
   BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
@@ -619,6 +620,8 @@ export class CharacterSheetElement extends HTMLElement {
   #openCell = null;
   /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
   #armedRemove = null;
+  /** Takes the column-resize listeners off again; see `ui/column-widths.js`. */
+  #unbindColumnResize = null;
   #openPosts = new Map();   // generated crafting post -> expanded?
   // Template tables showing every stored cell rather than the merges they
   // describe. An editing mode rather than a preference, so it is not saved.
@@ -794,6 +797,10 @@ export class CharacterSheetElement extends HTMLElement {
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.addEventListener('pointerdown', this.#onPointerDownAway, true);
+    // Column edges can be dragged on every table; the widths are a browser
+    // preference, kept beside the roll format rather than in any document.
+    this.#unbindColumnResize = bindColumnResize(this.shadowRoot,
+      { read: readColumnWidths, write: writeColumnWidths });
     // The page scrolling and the window resizing both move the sheet out from
     // under an open breakdown panel. A scroll *inside* the sheet does not
     // reach here -- scroll events are not composed, so they never cross the
@@ -808,6 +815,8 @@ export class CharacterSheetElement extends HTMLElement {
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
+    this.#unbindColumnResize?.();
+    this.#unbindColumnResize = null;
     this.ownerDocument.removeEventListener('scroll', this.#onViewportChange, true);
     window.removeEventListener('resize', this.#onViewportChange);
     this.#closeBreakdown();
@@ -1466,6 +1475,8 @@ export class CharacterSheetElement extends HTMLElement {
     this.#fillJumpTo();
     this.#markLongText();
     this.#stackRows();
+    // After the stacking, which decides whether a table has columns at all.
+    applyColumnWidths(this.shadowRoot, readColumnWidths(), { stacked: this.clientWidth <= 620 });
     this.#clampHints();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the

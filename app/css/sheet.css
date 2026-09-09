@@ -1347,6 +1347,12 @@ tbody tr:nth-child(even) { background: var(--cs-zebra); }
 tbody tr:hover { background: var(--cs-panel-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 th.num {text-align: left}
+/* The edge between two headings can be dragged to set the column's width
+   (see ui/column-widths.js). The hand shows on the cell whose edge it is, and
+   while a drag is on nothing under the pointer may be selected or hovered. */
+th.colgrip, td.colgrip { cursor: col-resize; box-shadow: inset -2px 0 0 var(--cs-accent); }
+.tablewrap thead th.colgrip { box-shadow: inset -2px 0 0 var(--cs-accent), inset 0 -1px 0 var(--cs-line); }
+table.colresizing, table.colresizing * { cursor: col-resize !important; user-select: none; }
 td.total { font-weight: 660; color: var(--cs-accent); }
 tr.trained td:first-child { font-weight: 600; }
 tr.untrained { color: var(--cs-muted); }
@@ -1476,6 +1482,8 @@ tr.untrained { color: var(--cs-muted); }
      floor above: a card rule that loses to a column rule leaves the card
      wearing the column's shape. */
   table.stacked > tbody > tr > td.num[data-label] input { width: 6rem; text-align: left; }
+  /* A card has no column to fill; the field keeps its own width there. */
+  table.stacked > tbody > tr > td > .xf:only-child { width: var(--xf-w, 5rem); min-width: 0; }
   table.stacked > tbody > tr > td.tools { display: flex; gap: 4px; }
   button.rowfold {
     flex: none; padding: 0 5px; font-size: 0.85rem; line-height: 1.5;
@@ -2297,6 +2305,14 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: inherit;
 }
 .xf.editing .xf-view { display: none; }
+/* In a table cell the field is the cell: it takes the column's width and
+   follows it when the column is dragged (see ui/column-widths.js). Its own
+   width stays as a floor until then, so no column moves on its own; a table
+   whose columns were set by hand drops the floor and the field shrinks with
+   the column. `:only-child` because a cell that also carries a forwarded
+   badge keeps the fixed box, or the badge would wrap under the field. */
+td > .xf:only-child { width: 100%; min-width: var(--xf-w, 5rem); }
+table.colsized td > .xf:only-child { min-width: 0; }
 .xf.invalid input.xf-src { border-color: var(--cs-bad); color: var(--cs-bad); }
 
 /* ---------- which fields compute ----------

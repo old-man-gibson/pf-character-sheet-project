@@ -159,7 +159,7 @@ function classFeatureGroups(model, ctx) {
           ${parked.length ? `<span class="badge" title="Written for ${esc(name)} level${parked.length === 1 ? '' : 's'} ${parked.join(', ')}, which this character no longer has. Kept, and back the moment the class is that long again.">${parked.length} parked</span>` : ''}
           ${orphaned ? groupDelete(name, g, arming) : ''}
         </h3>
-        <div class="tablewrap"><table class="gridtab featgrid" style="width:${total}px">
+        <div class="tablewrap"><table class="gridtab featgrid" style="width:${total}px" data-colresize="off">
           <colgroup>
             <col style="width:46px">
             ${g.columns.map((col) => `<col style="width:${colW(col)}px">`).join('')}

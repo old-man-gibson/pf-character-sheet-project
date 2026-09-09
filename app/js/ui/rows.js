@@ -65,7 +65,7 @@ export function exprField(bindingAttr, raw, {
   const view = isFormula && !error && value !== null && value !== undefined && value !== '';
   const explain = `${src} = ${value}`;
   return `<span class="xf${view ? ' has-value' : ''}${error ? ' invalid' : ''}" style="--xf-w:${width}">
-      <input type="text" class="xf-src${isFormula ? ' mono' : ''}" value="${esc(src)}"
+      <input type="text" size="1" class="xf-src${isFormula ? ' mono' : ''}" value="${esc(src)}"
         ${bindingAttr} data-kind="${kind}" placeholder="${esc(placeholder)}"
         title="${esc(error || (view ? explain : title) || EXPR_HINT)}">
       ${view ? `<span class="xf-view" title="${esc(explain)} — click to edit">${esc(value)}</span>` : ''}
