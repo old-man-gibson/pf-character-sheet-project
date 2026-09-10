@@ -21,7 +21,9 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. The `<char
 |---|---|
 | `src` | URL of a character JSON document |
 | `role` | `player` (default) or `admin` — admin reveals the Formula Audit tab |
-| `theme` | `dark` (default) or `light` |
+| `theme` | a palette: `dark` (default), `light`, `workbench`, `workbench-dark`, `parchment`, `slate` or `ink` |
+| `width` | how much of its container the sheet takes: `100` (default), `90`, `80` or `70`, centred when less than all of it |
+| `layout` | `top` (default) runs the tab bar across the sheet; `side` runs it down the left where there is room (780px of sheet), and falls back to the bar below that. The rail has a `<slot name="rail">` at its top for the host's own furniture — the app page puts its character picker there |
 | `storage-key` | localStorage key for edits; omit for the per-character default |
 | `snapshot-every` | changes between automatic snapshots (default 20) |
 | `hotkeys` | `off` stops the sheet claiming <kbd>Ctrl</kbd>+<kbd>K</kbd> and <kbd>Ctrl</kbd>+<kbd>S</kbd> from the host page (see below) |
@@ -49,6 +51,26 @@ A host page that saves server-side can ignore all of the local machinery and lis
 `character-change`. One that wants the saved-version and history behaviour gets it for
 free; see [Saving, and going back](importing-and-saving.md#saving-and-going-back) for what is stored where.
 
+**Themes and the person's own choice.** The palettes are declared in
+`app/css/sheet.css`, one `:host([theme="…"])` block each, and listed in
+`app/js/themes.js`. Beside `theme` the element stamps `scheme="light"` or
+`scheme="dark"` on itself, which is what the few rules that care about lightness rather
+than hue key on; a host does not set it. The sheet's **⋯ → Theme & layout** picker lets
+the person choose a palette and a layout, and that choice is remembered in the browser
+(`localStorage`, under `character-sheet:theme`) and applied when the element connects —
+*over* the attributes, since the attributes are the page's choice for everyone and the
+preference is this person's. A host that must look one way can keep the picker out of
+reach; one that wants to follow the sheet listens for `theme-change` (composed, with
+`detail: {palette, theme, scheme, layout, width}`) and can read the sheet's computed custom
+properties — `getComputedStyle(sheet).getPropertyValue('--cs-bg')` and the rest work from
+outside the shadow root — which is how `app/index.html` colours its own chrome without a
+second copy of any palette.
+
+Two of the palettes (Workbench and Parchment) are set in web faces — Alegreya, Alegreya SC,
+IBM Plex Sans and IBM Plex Mono. The element does not load fonts; `app/index.html` carries
+the same Google Fonts link the Workbench page does, and a host that does not gets Georgia
+and the system face in their place.
+
 The component renders into a shadow root, so host CSS and sheet CSS cannot collide
 in either direction. Theming is done with custom properties, which do pierce the
 boundary:
@@ -59,8 +81,10 @@ character-sheet { --cs-accent: #7b3f9d; --cs-radius: 14px; }
 
 Available: `--cs-bg`, `--cs-panel`, `--cs-panel-2`, `--cs-line`, `--cs-text`,
 `--cs-muted`, `--cs-accent`, `--cs-good`, `--cs-bad`, `--cs-edit`, `--cs-radius`,
-`--cs-font`, `--cs-mono`, and `--cs-formula` / `--cs-formula-strong` (the edge that
-marks a field as accepting formulas, at rest and on hover).
+`--cs-font`, `--cs-mono`, `--cs-display` (the face the character's name and the panel
+headings take; the body face unless a palette says otherwise), and `--cs-formula` /
+`--cs-formula-strong` (the edge that marks a field as accepting formulas, at rest and on
+hover).
 
 The six ability hues are properties too — `--ab-str`, `--ab-dex`, `--ab-con`,
 `--ab-int`, `--ab-wis`, `--ab-cha` — with `--ab-wash`, `--ab-edge` and `--ab-ink`

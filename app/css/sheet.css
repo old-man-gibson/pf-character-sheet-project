@@ -71,6 +71,10 @@
   --cs-radius: 8px;
   --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cs-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  /* The face the character's name and the panel headings are set in. The
+     built-in palettes leave it as the body face; the Workbench ones put a
+     serif here, the way the Workbench sets its own headings. */
+  --cs-display: var(--cs-font);
   /* Where the pinned tab rail comes to rest. Zero against the top of the
      window; a host page with a fixed header of its own sets this to its
      height, and the rail sits under it instead of behind it. Public --
@@ -147,6 +151,188 @@
   --ab-ink: 66%;
 }
 
+/* ---------- the other palettes ---------- *
+ *
+ * One block per entry in app/js/themes.js, each redefining the same set the
+ * light theme does above: the surfaces, the inks, the four accent washes, the
+ * two states, the formula colours, and the three ability knobs. A palette that
+ * changes a face or the corner radius says so here too; everything else in
+ * this file reads the properties and never a colour, so a palette is these
+ * lines and nothing more.
+ *
+ * Every text-on-surface pairing in these was measured (tests/themes.test.mjs
+ * keeps measuring them): text and muted on every surface, the accent on the
+ * panel and on the ground under buttons, good and bad on the panel, all at
+ * 4.5:1 or better. A hue that failed was moved until it passed, not excused.
+ *
+ * The `scheme` attribute beside `theme` is stamped by the element from the
+ * palette's entry in themes.js, and is what the handful of rules that care
+ * about light-versus-dark rather than about a hue key on. */
+
+/* The Homebrew Workbench's own look: ivory paper, oxblood, and the serif it
+   sets its headings in. The faces are the ones forge/index.html loads; a page
+   that does not load them falls back to Georgia and the system face. */
+:host([theme="workbench"]) {
+  color-scheme: light;
+  --cs-bg: #eef0ec;
+  --cs-panel: #fafaf7;
+  --cs-panel-2: #e4e7e1;
+  --cs-line: #cbd0c8;
+  --cs-text: #1b1f24;
+  --cs-muted: #4f5761;
+  --cs-accent: #8b2b2e;
+  --cs-accent-soft: rgba(139, 43, 46, 0.11);
+  --cs-formula: rgba(139, 43, 46, 0.38);
+  --cs-formula-strong: rgba(139, 43, 46, 0.80);
+  /* The Workbench's link gold, where the other palettes put a blue: it is the
+     one colour that says "this is yours to change" there too. */
+  --cs-edit: #7a5a18;
+  --cs-good: #2f6b3a;
+  --cs-bad: #a83232;
+  --fx-number: #1f6b3a;
+  --fx-string: #6b3fa0;
+  --fx-nest-0: #226b82;
+  --fx-nest-1: #99306f;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(122, 90, 24, 0.26);
+  --fx-match-bad: rgba(168, 50, 50, 0.22);
+  --ab-wash: 38%;
+  --ab-edge: 72%;
+  --ab-ink: 66%;
+  --cs-radius: 5px;
+  --cs-font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cs-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --cs-display: "Alegreya SC", "Alegreya", Georgia, serif;
+}
+
+/* The Workbench after dark: its own night palette, same faces. The accent is
+   a step brighter than the Workbench's, which measured 4.1:1 on this panel. */
+:host([theme="workbench-dark"]) {
+  color-scheme: dark;
+  --cs-bg: #15171b;
+  --cs-panel: #1e2127;
+  --cs-panel-2: #272b33;
+  --cs-line: #343943;
+  --cs-text: #e4e1da;
+  --cs-muted: #a2a7ae;
+  --cs-accent: #e27578;
+  --cs-accent-soft: rgba(226, 117, 120, 0.14);
+  --cs-formula: rgba(226, 117, 120, 0.40);
+  --cs-formula-strong: rgba(226, 117, 120, 0.85);
+  --cs-edit: #d3a655;
+  --cs-good: #6dba7a;
+  --cs-bad: #df6b6b;
+  --fx-number: #8fcf9d;
+  --fx-string: #c9a3e0;
+  --fx-nest-0: #7fb7c9;
+  --fx-nest-1: #d99ac0;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(211, 166, 85, 0.34);
+  --fx-match-bad: rgba(223, 107, 107, 0.30);
+  --ab-wash: 15%;
+  --ab-edge: 55%;
+  --ab-ink: 30%;
+  --cs-radius: 5px;
+  --cs-font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cs-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --cs-display: "Alegreya SC", "Alegreya", Georgia, serif;
+}
+
+/* Sepia paper and umber ink, set in a book face throughout: the sheet as a
+   page of the rulebook. Corners barely rounded, as printed boxes are. */
+:host([theme="parchment"]) {
+  color-scheme: light;
+  --cs-bg: #e6dcc3;
+  --cs-panel: #f5ecd9;
+  --cs-panel-2: #e8ddc2;
+  --cs-line: #c9b994;
+  --cs-text: #2c2416;
+  --cs-muted: #6b5b3e;
+  --cs-accent: #7a3e12;
+  --cs-accent-soft: rgba(122, 62, 18, 0.12);
+  --cs-formula: rgba(122, 62, 18, 0.40);
+  --cs-formula-strong: rgba(122, 62, 18, 0.82);
+  --cs-edit: #245c7a;
+  --cs-good: #3b6a2a;
+  --cs-bad: #9b2f22;
+  --fx-number: #1f6b3a;
+  --fx-string: #6b3fa0;
+  --fx-nest-0: #226b82;
+  --fx-nest-1: #99306f;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(36, 92, 122, 0.24);
+  --fx-match-bad: rgba(155, 47, 34, 0.22);
+  --ab-wash: 38%;
+  --ab-edge: 72%;
+  --ab-ink: 66%;
+  --cs-radius: 3px;
+  --cs-font: "Alegreya", Georgia, "Times New Roman", serif;
+  --cs-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --cs-display: "Alegreya SC", "Alegreya", Georgia, serif;
+}
+
+/* Cool grey-blue with a teal edge. The bracket hues move off the blue side of
+   the wheel, where this palette's accent and function colours already are. */
+:host([theme="slate"]) {
+  color-scheme: dark;
+  --cs-bg: #0f141a;
+  --cs-panel: #161d25;
+  --cs-panel-2: #1e2832;
+  --cs-line: #2b3946;
+  --cs-text: #d7e0e8;
+  --cs-muted: #8fa1b3;
+  --cs-accent: #4fc3c9;
+  --cs-accent-soft: rgba(79, 195, 201, 0.13);
+  --cs-formula: rgba(79, 195, 201, 0.40);
+  --cs-formula-strong: rgba(79, 195, 201, 0.85);
+  --cs-edit: #8ab4f8;
+  --cs-good: #67c587;
+  --cs-bad: #f0716b;
+  --fx-number: #8fcf9d;
+  --fx-string: #c9a3e0;
+  --fx-nest-0: #d99ac0;
+  --fx-nest-1: #e0c070;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(138, 180, 248, 0.34);
+  --fx-match-bad: rgba(240, 113, 107, 0.30);
+  --ab-wash: 15%;
+  --ab-edge: 55%;
+  --ab-ink: 30%;
+  --cs-radius: 4px;
+}
+
+/* Black on white with hard lines and no washes: the sheet as a printed form.
+   Square corners; the accent is a navy that still reads as ink. The string
+   colour leaves purple to the edit colour and goes brown instead. */
+:host([theme="ink"]) {
+  color-scheme: light;
+  --cs-bg: #ffffff;
+  --cs-panel: #ffffff;
+  --cs-panel-2: #f2f2f2;
+  --cs-line: #8a8a8a;
+  --cs-text: #111111;
+  --cs-muted: #555555;
+  --cs-accent: #1f3d7a;
+  --cs-accent-soft: rgba(31, 61, 122, 0.08);
+  --cs-formula: rgba(31, 61, 122, 0.45);
+  --cs-formula-strong: rgba(31, 61, 122, 0.90);
+  --cs-edit: #6a1b9a;
+  --cs-good: #1a6b2c;
+  --cs-bad: #a32320;
+  --fx-number: #1f7a43;
+  --fx-string: #8a3d00;
+  --fx-nest-0: #226b82;
+  --fx-nest-1: #99306f;
+  --fx-nest-2: var(--cs-text);
+  --fx-match: rgba(106, 27, 154, 0.22);
+  --fx-match-bad: rgba(163, 35, 32, 0.22);
+  --ab-wash: 38%;
+  --ab-edge: 72%;
+  --ab-ink: 66%;
+  --cs-radius: 0px;
+  --cs-display: Georgia, "Times New Roman", serif;
+}
+
 * { box-sizing: border-box; }
 
 /* Positioned so the tab-colour panel can be placed against the sheet rather
@@ -164,7 +350,7 @@
   object-fit: cover; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
 }
 .head-main { flex: 1 1 20rem; min-width: min(18rem, 60vw); }
-.name { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
+.name { font-family: var(--cs-display); font-size: 1.35rem; font-weight: 650; letter-spacing: 0.2px; }
 .subtitle { color: var(--cs-muted); font-size: 0.85rem; margin-top: 2px; }
 /* The session view's standing line: the numbers a table asks for mid-fight,
    visible on every tab while that view is on. */
@@ -290,7 +476,7 @@
      the 140ms the script waits before closing: long enough to cross the 8px
      of table between the number and the panel, short enough not to linger. */
 }
-:host([theme="light"]) .bdpop {
+:host([scheme="light"]) .bdpop {
   box-shadow: 0 10px 30px rgba(26, 29, 38, 0.22), 0 1px 3px rgba(26, 29, 38, 0.18);
 }
 /* Long ones scroll rather than growing past the window: AC on a built
@@ -719,10 +905,10 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
       color-mix(in srgb, var(--tab-color) 16%, transparent)),
     linear-gradient(var(--cs-bg), var(--cs-bg));
 }
-:host([theme="light"]) .tabs.oneline button.tinted[aria-selected="true"] {
+:host([scheme="light"]) .tabs.oneline button.tinted[aria-selected="true"] {
   background:
-    linear-gradient(color-mix(in srgb, var(--tab-color) 18%, transparent),
-      color-mix(in srgb, var(--tab-color) 18%, transparent)),
+    linear-gradient(color-mix(in srgb, var(--tab-color) 30%, transparent),
+      color-mix(in srgb, var(--tab-color) 30%, transparent)),
     linear-gradient(var(--cs-bg), var(--cs-bg));
 }
 
@@ -758,10 +944,22 @@ select.jumpto[hidden] { display: none; }
   border-color: var(--tab-color);
   background: color-mix(in srgb, var(--tab-color) 16%, transparent);
 }
-/* The wash sits on paper rather than under it here, so it can carry more hue
-   before it starts competing with the words on top of it. */
-:host([theme="light"]) .tabs button.tinted[aria-selected="true"] {
-  background: color-mix(in srgb, var(--tab-color) 18%, transparent);
+/* On paper the edges take the ink rather than the hue as picked: the palette
+   is pastels, drawn to glow on a dark bar, and a pastel edge on a pale line is
+   barely an edge at all -- which was the whole tab, faintly. The ink is that
+   hue taken as far towards black as it needs to be read, which is also how far
+   an edge needs to go to be seen; and the wash under the open tab carries
+   nearly twice the hue it does on the dark bar, since it sits on white rather
+   than competing with it. A resting tab gets a breath of the wash too, so the
+   colour is there to be found before the tab is the open one. */
+:host([scheme="light"]) .tabs button.tinted {
+  border-color: color-mix(in srgb, var(--tab-ink, var(--tab-color)) 55%, var(--cs-line));
+  background: color-mix(in srgb, var(--tab-color) 9%, transparent);
+}
+:host([scheme="light"]) .tabs button.tinted:hover { border-color: var(--tab-ink, var(--tab-color)); }
+:host([scheme="light"]) .tabs button.tinted[aria-selected="true"] {
+  border-color: var(--tab-ink, var(--tab-color));
+  background: color-mix(in srgb, var(--tab-color) 30%, transparent);
 }
 /* The row swatch in the ⚙ manager, and the panel both entry points open. */
 .swatch.tabswatch { width: 18px; height: 18px; }
@@ -801,6 +999,136 @@ select.jumpto[hidden] { display: none; }
 .tabrow.drop-after { box-shadow: 0 2px 0 0 var(--cs-accent); }
 .tabrow .grip { color: var(--cs-muted); font-size: 0.8rem; letter-spacing: -2px; user-select: none; }
 
+/* ---------- the side rail ---------- */
+/* `layout="side"`: the tab rail down the left, the way the Workbench keeps its
+ * entries, and the panels beside it. Only where there is room -- the wrap
+ * becomes a two-column grid at 780px of sheet and stays a stack below that, so
+ * a phone never sees a 13.5rem column it cannot spare. 780 rather than more: the
+ * app page puts its own roster rail beside the sheet from 1100px of window, and
+ * the sheet has to have switched by then too, or the two rails arrive one at a
+ * time as the window widens. The header keeps the
+ * full width above both; the rail pins under it just as the bar does, with
+ * the same `--cs-sticky-top`, and the tab list scrolls inside itself when it
+ * is taller than the window so the strip and the two buttons stay put.
+ *
+ * The open tab is marked with a bar on its left edge rather than by breaking
+ * through a rule: there is no rule under a column to break through, and the
+ * `.oneline` shape the bar computes is switched off here for the same reason. */
+@container (min-width: 780px) {
+  :host([layout="side"]) .wrap {
+    display: grid; grid-template-columns: 13.5rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "rail head" "rail main";
+    column-gap: 18px; align-items: start;
+  }
+  :host([layout="side"]) .head { grid-area: head; }
+  :host([layout="side"]) .main { grid-area: main; min-width: 0; }
+  /* The rail runs the whole height of the window, from the top of the sheet,
+     with the header beside it rather than above: it is a sidebar, and a
+     sidebar that starts a portrait's height down is a box. It pins as the
+     page scrolls and is exactly a window tall, so its own contents scroll
+     inside `.railbody` -- the roster, the strip, the tabs, as one column --
+     while the copied roll hangs outside that box, beside it. */
+  :host([layout="side"]) .tabrail {
+    grid-area: rail; align-self: start;
+    display: flex; flex-direction: column;
+    height: calc(100svh - var(--cs-sticky-top));
+    margin: 0; padding: 0 12px 0 0;
+    border-bottom: 0; border-right: 1px solid var(--cs-line);
+  }
+  :host([layout="side"]) .railbody {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin;
+    display: flex; flex-direction: column; padding-bottom: 6px;
+  }
+  :host([layout="side"]) .railtop { flex-direction: column; align-items: stretch; margin-bottom: 8px; }
+  /* Whatever the host slotted in -- the app page's roster -- sits above the
+     strip, ruled off from it. Nothing is slotted in the ordinary case. */
+  :host([layout="side"]) ::slotted([slot="rail"]) {
+    display: flex; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--cs-line);
+  }
+  :host([layout="side"]) .railtop .sessionstrip { flex: none; }
+  :host([layout="side"]) .railactions { margin-left: 0; flex-wrap: wrap; }
+  /* `width: 100%` and not `flex` alone: a select is as wide as its longest
+     option unless told otherwise, and a 34-character section name is wider
+     than the column. */
+  :host([layout="side"]) .railactions select.jumpto { flex: 1 1 100%; width: 100%; min-width: 0; max-width: 100%; }
+  /* Kept in place when there is nowhere to jump, so the column under it does
+     not move by a row from tab to tab; the element disables it as it hides it. */
+  :host([layout="side"]) .railactions select.jumpto[hidden] { display: block; }
+  :host([layout="side"]) .railactions select.jumpto:disabled { opacity: 0.45; cursor: default; }
+  :host([layout="side"]) .chromemenu { right: auto; left: 0; }
+  :host([layout="side"]) .tabs { flex: none; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+  :host([layout="side"]) .tabs button {
+    flex: none; text-align: left; border-radius: 6px; padding: 6px 10px 6px 12px;
+  }
+  :host([layout="side"]) .tabs.oneline { margin-bottom: 0; }
+  :host([layout="side"]) .tabs button[aria-selected="true"],
+  :host([layout="side"]) .tabs.oneline button[aria-selected="true"] {
+    border-bottom-color: var(--cs-accent);
+    background: var(--cs-accent-soft);
+    box-shadow: inset 3px 0 0 0 var(--cs-accent);
+  }
+  :host([layout="side"]) .tabs button.tinted[aria-selected="true"],
+  :host([layout="side"]) .tabs.oneline button.tinted[aria-selected="true"] {
+    border-bottom-color: var(--tab-color);
+    background: color-mix(in srgb, var(--tab-color) 16%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--tab-color);
+  }
+  :host([layout="side"][scheme="light"]) .tabs button.tinted[aria-selected="true"],
+  :host([layout="side"][scheme="light"]) .tabs.oneline button.tinted[aria-selected="true"] {
+    border-bottom-color: var(--tab-ink, var(--tab-color));
+    background: color-mix(in srgb, var(--tab-color) 30%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--tab-ink, var(--tab-color));
+  }
+  :host([layout="side"]) .tabs button.drop-before { box-shadow: 0 -3px 0 0 var(--cs-accent); }
+  :host([layout="side"]) .tabs button.drop-after { box-shadow: 0 3px 0 0 var(--cs-accent); }
+  /* The copied roll hangs beside the rail at the top of the panels, not under
+     a 13.5rem column. */
+  :host([layout="side"]) .rollslot { top: 0; left: 100%; right: auto; width: 0; }
+  :host([layout="side"]) .rolltoast { top: 0; right: auto; left: 18px; width: 32rem; max-width: 70vw; }
+}
+
+/* ---------- width ---------- */
+/* How much of its container the sheet takes. Nothing at "100", which is also
+   the default; a step down is that share of the room, centred. The rail's
+   780px container query reads the sheet's own width, so a narrow sheet on a
+   narrow window falls back to the bar a little sooner, which is right. */
+:host([width="90"]) { width: 90%; margin-inline: auto; }
+:host([width="80"]) { width: 80%; margin-inline: auto; }
+:host([width="70"]) { width: 70%; margin-inline: auto; }
+
+/* ---------- the theme picker ---------- */
+/* Under the rail with the other things the rail raises. A card per preset,
+   with the palette's four colours as a strip you can read before pressing,
+   and the two choices underneath for mixing a palette with the other rail. */
+.thememenu .presets {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 8px;
+}
+.thememenu .preset {
+  display: grid; gap: 5px; text-align: left; padding: 8px 9px;
+  color: var(--cs-text); align-content: start;
+}
+.thememenu .preset[aria-pressed="true"] { color: var(--cs-text); }
+.thememenu .swatches { display: flex; gap: 3px; height: 14px; }
+.thememenu .swatches i {
+  flex: 1; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.thememenu .pname { font-weight: 620; font-size: 0.85rem; }
+.thememenu .pname small { font-weight: 400; color: var(--cs-muted); margin-left: 4px; }
+.thememenu .pblurb { font-size: 0.72rem; color: var(--cs-muted); line-height: 1.35; }
+.thememenu .mix {
+  display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--cs-line);
+}
+.thememenu .mix label {
+  display: inline-flex; gap: 6px; align-items: center;
+  font-size: 0.8rem; color: var(--cs-muted);
+}
+.thememenu .mix select { width: auto; max-width: 14rem; }
+.thememenu .mix .close { margin-left: auto; }
+.thememenu p.hint { margin: 8px 0 0; }
+
 /* ---------- layout ---------- */
 /* Panels now hold editable controls rather than plain text, so they need more
    room than a display-only layout did. */
@@ -817,7 +1145,7 @@ select.jumpto[hidden] { display: none; }
   border-radius: var(--cs-radius); padding: 11px 12px;
 }
 .panel > h3 {
-  margin: 0 0 9px; font-size: 0.72rem; text-transform: uppercase;
+  margin: 0 0 9px; font-family: var(--cs-display); font-size: 0.72rem; text-transform: uppercase;
   letter-spacing: 0.09em; color: var(--cs-accent); font-weight: 650;
 }
 .panel.span2 { grid-column: 1 / -1; }
@@ -1282,7 +1610,7 @@ option[data-ab]:not([data-ab=""]) {
     linear-gradient(to left, rgba(0, 0, 0, 0.30), transparent) 100% 0 / 14px 100% no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
-:host([theme="light"]) .tablewrap {
+:host([scheme="light"]) .tablewrap {
   background:
     linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
     linear-gradient(to left, var(--cs-tablebg) 40%, transparent) 100% 0 / 22px 100% no-repeat,
@@ -2684,7 +3012,7 @@ table.build td.linked select:disabled {
   background-image: repeating-linear-gradient(135deg,
     rgba(255, 255, 255, 0.20) 0 3px, transparent 3px 7px);
 }
-:host([theme="light"]) .meter .mlayer.over {
+:host([scheme="light"]) .meter .mlayer.over {
   background-image: repeating-linear-gradient(135deg,
     rgba(0, 0, 0, 0.16) 0 3px, transparent 3px 7px);
 }
@@ -2694,7 +3022,7 @@ table.build td.linked select:disabled {
     rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 6px);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
-:host([theme="light"]) .meter .mlayer.mark {
+:host([scheme="light"]) .meter .mlayer.mark {
   background-image: repeating-linear-gradient(45deg,
     rgba(255, 255, 255, 0.55) 0 2px, transparent 2px 6px);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
@@ -4128,6 +4456,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
   .histnote,
   .resume,
   .resetconfirm,
+  .thememenu,
   .tabmenu,
   .bdpop,
   dialog { display: none !important; }

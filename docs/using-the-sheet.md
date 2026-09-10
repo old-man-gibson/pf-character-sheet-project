@@ -267,7 +267,8 @@ the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an 
 once the header above it has scrolled away — a tab runs several screens deep, and the way
 through them should not be one of the things that leaves first. **Search** and **Save**
 ride the rail with it, and everything else the sheet can do is under **⋯**: switching
-view, ƒx Formulas, the theme, History, Export JSON, Preview published, Import and Reset.
+view, ƒx Formulas, the theme and layout, History, Export JSON, Preview published, Import
+and Reset.
 <kbd>Ctrl</kbd>+<kbd>S</kbd> saves without going near the button. Clicking a tab lands you
 at the top of it rather than at whatever offset the last tab had, and leaves the keyboard
 on the tab you pressed. Below 700px the bar is one row that scrolls sideways instead of
@@ -278,6 +279,49 @@ a fixed header of its own sets `--cs-sticky-top` to that header's height; see
 A table longer than the window scrolls inside its own box rather than running the page
 down, which is what keeps its column headings in place while you read the rows. The
 threshold is `--cs-table-max`.
+
+### Themes and layout
+
+**⋯ → Theme & layout** opens a picker under the rail. Seven palettes, each a card with
+its four colours on it:
+
+| Palette | What it is | Tabs |
+|---|---|---|
+| **Midnight** | the sheet as it has always been, gold on slate | top |
+| **Daylight** | the same on white, for a bright room or a projector | top |
+| **Workbench** | the [Homebrew Workbench](extensions.md)'s own look — ivory paper, oxblood headings, a serif for the names | side |
+| **Workbench, dark** | the Workbench after hours, the same faces on charcoal | side |
+| **Parchment** | sepia and umber, set in a book face throughout | top |
+| **Slate** | cool grey-blue with a teal edge | side |
+| **Ink** | black on white, hard lines, square corners, no washes | top |
+
+Pressing a card sets both halves of the look: the palette, and where the tabs go. The
+selects under the cards change one thing at a time, so any palette can be put with either
+rail; a third, **Width**, takes the sheet down from the whole window to 90, 80 or 70% of
+it, centred, for a screen wide enough that edge to edge is a long way for the eye to
+travel. The palette list also carries *Follow the system*, which is Midnight or
+Daylight as the operating system's light/dark setting says, and follows it when that
+changes. **Switch light / dark** in the search palette flips to the same look on the other
+scheme — Workbench to Workbench dark, Slate to Ink — in one press.
+
+**Tabs down the side** runs the rail down the left of the sheet the way the Workbench
+keeps its entries: the session strip, Search and Save at the top of the column, the tabs
+under them, pinned as you scroll, with **↑/↓** moving along them as **←/→** do on the bar.
+It needs room — 780px of sheet — and on anything narrower the bar comes back on its own,
+so a phone never sees it. The app page joins in: with the side rail on, the character
+picker moves off the header and into the top of that same rail, one row per character
+above the open one's tabs, so one sidebar holds both — the shape the Workbench has. It
+folds there as it does in the strip: **▾ Fold** leaves the open character and a count of
+the rest.
+
+The choice is a browser preference, not part of any character: it is remembered for every
+sheet you open here and travels with nothing. The [Homebrew Workbench](extensions.md) wears
+the same palette — its own picker sits in its top bar and reads the same memory, so a look
+chosen on either page is what the other opens in. Left unchosen, the Workbench keeps its
+own ivory-and-oxblood look, dark after the system's setting. Every palette was measured, not eyeballed —
+each colour that carries text clears 4.5:1 on every surface it is read on — and a
+[character colour](#character-colour) or a [tab colour](#colouring-a-tab) is corrected for
+whichever palette is up, as before.
 
 ### Colouring a tab
 
@@ -292,7 +336,10 @@ tab among many and the *selected* tab is still obviously the selected one. The p
 finding *Maneuvers* at a glance in a bar of fifteen, not decorating the sheet. Colouring a
 tab does not put it on the bar: a colour set on a hidden tab waits for it to be shown. The
 label is corrected for the theme it is being read on the same way the character colour is
-(see *[Character colour](#character-colour)*); the tab's edge keeps the hue as picked.
+(see *[Character colour](#character-colour)*). On a dark palette the tab's edge keeps the
+hue as picked; on a light one the edge takes the corrected ink too and the wash under the
+open tab is heavier, because the palette is pastels drawn to glow on a dark bar, and a
+pastel edge on paper is barely an edge at all.
 
 ### Keyboard
 
@@ -1170,6 +1217,10 @@ past that and come back untouched, the correction flips direction when you switc
 themes, and it applies only where the colour is *read* — swatches, borders, tracker
 fills and the wash behind a computed value all keep the hue exactly as chosen. The same
 goes for a tab's colour: the label is corrected, the edge is not.
+
+**Right-click a character in the roster** to open the same picker at the pointer — a
+character that is not the open one is opened first, since the colour is that character's
+own. The roster row wears the colour too, tinted the way a coloured tab is.
 
 It is stored as `identity.color` and travels with the character's JSON. Embedders can
 still override it per instance with `--cs-accent`, since the character's own colour is

@@ -16,7 +16,15 @@
  *          published view wants: a reader who happens to own the same packs
  *          would otherwise see them quietly filling in gaps that a stranger
  *          gets empty, which is the one thing a preview must not do.
- *   theme  "dark" (default) or "light"
+ *   theme  a palette from app/js/themes.js: "dark" (default), "light",
+ *          "workbench", "workbench-dark", "parchment", "slate" or "ink". The
+ *          element stamps a matching scheme="light|dark" beside it.
+ *   layout  "top" (default) puts the tab bar across the sheet; "side" runs it
+ *          down the left, where there is room for that (780px of sheet). The
+ *          rail carries a <slot name="rail"> at its top for the host's own
+ *          furniture -- the app page's roster goes there.
+ *   width  how much of its container the sheet takes: "100" (default), "90",
+ *          "80" or "70", centred when less than all of it
  *   storage-key  localStorage key for edits; omit to disable persistence
  *   snapshot-every  changes between automatic snapshots (default 20)
  *   hotkeys  "off" stops the sheet claiming Ctrl+K on the host page (see
@@ -64,6 +72,10 @@ import {
 } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
+import {
+  PALETTES, LAYOUTS, WIDTHS, AUTO, paletteOf, isPalette, isLayout, isWidth, resolvePalette, schemeOf,
+  flipped, readThemePrefs, writeThemePrefs,
+} from './themes.js';
 import {
   esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
   nameDatalist, noteCell,
@@ -529,7 +541,7 @@ function helpKey(hint) {
 }
 
 export class CharacterSheetElement extends HTMLElement {
-  static observedAttributes = ['src', 'role', 'theme'];
+  static observedAttributes = ['src', 'role', 'theme', 'layout'];
 
   #model = null;
   #sourceDoc = null;        // the document as loaded, before any local edits
@@ -593,6 +605,17 @@ export class CharacterSheetElement extends HTMLElement {
   #confirmReset = false;
   /** Whether the rail's `⋯` menu is open. */
   #chromeMenu = false;
+  /** Whether the theme picker is open under the rail. */
+  #themeMenu = false;
+  /**
+   * What this browser asked for: `{ palette, layout }`, either half optional,
+   * or null when it never chose and the attributes are the host's. Kept apart
+   * from the attributes because `auto` is a preference and never an attribute:
+   * the element resolves it to a palette and writes that.
+   */
+  #themePref = null;
+  /** The system's light/dark setting, watched while the preference is `auto`. */
+  #schemeQuery = null;
   /** Whether the dashboard's card arranger is open. */
   #dashArrange = false;
   /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
@@ -787,10 +810,35 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #onViewportChange = () => {
     if (this.#bdAnchor) this.#closeBreakdown();
+    this.#fitRail();
   };
 
+  /**
+   * Size the side rail to the part of the window it is actually in.
+   *
+   * The rail pins at the top of the window and scrolls inside itself, and a
+   * scroll box has to end where the window does or its last rows cannot be
+   * reached: a rail a full window tall, standing a header's height down the
+   * page before it has pinned, keeps its bottom below the fold until the page
+   * is scrolled -- so the page had to move before the rail could. Its height
+   * is the window less wherever its top is right now, which is its natural
+   * place before it pins and `--cs-sticky-top` after; measured again on
+   * every scroll and resize, since that is exactly what changes it. The
+   * stylesheet's own `calc(100svh …)` is the value before this has run, and
+   * the bar layout, where the rail is not a column, is left alone.
+   */
+  #fitRail() {
+    const rail = this.shadowRoot.querySelector('.tabrail');
+    const wrap = this.shadowRoot.querySelector('.wrap');
+    if (!rail || !wrap) return;
+    if (getComputedStyle(wrap).display !== 'grid') { rail.style.removeProperty('height'); return; }
+    const stickyTop = parseFloat(getComputedStyle(this).getPropertyValue('--cs-sticky-top')) || 0;
+    const top = Math.max(rail.getBoundingClientRect().top, stickyTop);
+    rail.style.height = `${Math.max(200, Math.round(window.innerHeight - top))}px`;
+  }
+
   connectedCallback() {
-    if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+    this.#applyThemePrefs();
     this.#bindBracketMatching();
     this.#bindBreakdowns();
     this.#renderShell();
@@ -821,12 +869,139 @@ export class CharacterSheetElement extends HTMLElement {
     window.removeEventListener('resize', this.#onViewportChange);
     this.#closeBreakdown();
     this.#closePalette();
+    this.#schemeQuery?.removeEventListener('change', this.#onSchemeChange);
+    this.#schemeQuery = null;
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
     if (oldValue === newValue) return;
+    // The scheme rides beside the theme, always: a host that writes
+    // theme="parchment" gets scheme="light" without knowing the word.
+    if (name === 'theme') this.setAttribute('scheme', schemeOf(newValue));
     if (name === 'src' && newValue) this.load(newValue);
     else if (this.#model) this.#render();
+  }
+
+  /* ---------------- themes ---------------- */
+
+  /**
+   * Put the browser's remembered look on, or leave the host's attributes as
+   * they are when nothing was remembered. Runs once, on connect.
+   *
+   * The preference beats the attribute on purpose: the attribute is what the
+   * page's author chose for everyone, the preference is what this person
+   * chose for themselves, and the second is the later and more specific word.
+   * An embed that must look one way can leave the picker out of reach --
+   * the roll format works the same way.
+   */
+  #applyThemePrefs() {
+    this.#themePref = readThemePrefs();
+    if (!this.hasAttribute('theme')) this.setAttribute('theme', 'dark');
+    if (!this.hasAttribute('layout')) this.setAttribute('layout', 'top');
+    if (this.#themePref?.palette) this.setAttribute('theme', this.#resolvedPalette());
+    if (this.#themePref?.layout) this.setAttribute('layout', this.#themePref.layout);
+    if (this.#themePref?.width) this.setAttribute('width', this.#themePref.width);
+    // Whatever the theme came from, the scheme has to match it.
+    this.setAttribute('scheme', schemeOf(this.getAttribute('theme')));
+    if (typeof matchMedia === 'function' && !this.#schemeQuery) {
+      this.#schemeQuery = matchMedia('(prefers-color-scheme: dark)');
+      this.#schemeQuery.addEventListener('change', this.#onSchemeChange);
+    }
+  }
+
+  /** The palette the preference stands for right now (`auto` asks the system). */
+  #resolvedPalette() {
+    return resolvePalette(this.#themePref?.palette, !!this.#schemeQuery?.matches);
+  }
+
+  /** The system flipped its setting; only a sheet on `auto` follows it. */
+  #onSchemeChange = () => {
+    if (this.#themePref?.palette !== AUTO) return;
+    this.setAttribute('theme', this.#resolvedPalette());
+    this.#announceTheme();
+  };
+
+  /**
+   * Choose a look. Either half may be left out to keep what is there; the
+   * choice is remembered for this browser, put on the element, and told to
+   * the host page as a `theme-change` event so the page's own chrome can
+   * follow the sheet.
+   */
+  #setTheme({ palette, layout, width } = {}) {
+    const next = { ...(this.#themePref || {}) };
+    if (isPalette(palette)) next.palette = palette;
+    if (isLayout(layout)) next.layout = layout;
+    if (isWidth(width)) next.width = String(width);
+    this.#themePref = writeThemePrefs(next) || next;
+    if (next.palette) this.setAttribute('theme', this.#resolvedPalette());
+    if (next.layout) this.setAttribute('layout', next.layout);
+    if (next.width) this.setAttribute('width', next.width);
+    // The rail's height follows the sheet's edges; a narrower sheet is not a
+    // re-render, so it is measured here.
+    this.#fitRail();
+    this.#announceTheme();
+  }
+
+  #announceTheme() {
+    this.dispatchEvent(new CustomEvent('theme-change', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        palette: this.#themePref?.palette ?? this.getAttribute('theme'),
+        theme: this.getAttribute('theme'),
+        scheme: this.getAttribute('scheme'),
+        layout: this.getAttribute('layout'),
+        width: this.getAttribute('width') || '100',
+      },
+    }));
+  }
+
+  /**
+   * The picker. A card per palette -- its four colours as a strip, its name,
+   * a line on what it is for -- and under them the two halves separately, for
+   * putting one palette with the other rail. Pressing a card sets both halves
+   * to what that palette was designed with; the selects change one.
+   */
+  #themeMenuHtml() {
+    const theme = this.getAttribute('theme');
+    const pref = this.#themePref?.palette ?? theme;
+    const layout = this.getAttribute('layout') || 'top';
+    const width = this.getAttribute('width') || '100';
+    const card = (p) => `
+        <button type="button" class="preset" data-action="set-theme"
+          data-palette="${p.id}" data-layout="${p.layout}"
+          aria-pressed="${pref === p.id && layout === p.layout}"
+          title="${esc(p.name)}: ${p.layout === 'side' ? 'tabs down the side' : 'tabs across the top'}">
+          <span class="swatches" aria-hidden="true">${p.swatch.map((c) => `<i style="background:${c}"></i>`).join('')}</span>
+          <span class="pname">${esc(p.name)}<small>${p.layout === 'side' ? 'side rail' : 'top bar'}</small></span>
+          <span class="pblurb">${esc(p.blurb)}</span>
+        </button>`;
+    const opt = (id, name, on) => `<option value="${id}"${on ? ' selected' : ''}>${esc(name)}</option>`;
+    return `<section class="panel thememenu" aria-label="Theme and layout">
+        <h3>Theme &amp; layout</h3>
+        <div class="presets">${PALETTES.map(card).join('')}</div>
+        <div class="mix">
+          <label>Palette
+            <select data-themepick="palette" aria-label="Palette">
+              ${opt(AUTO, 'Follow the system (light / dark)', pref === AUTO)}
+              ${PALETTES.map((p) => opt(p.id, p.name, pref === p.id)).join('')}
+            </select>
+          </label>
+          <label>Tabs
+            <select data-themepick="layout" aria-label="Where the tabs go">
+              ${LAYOUTS.map((l) => opt(l.id, l.name, layout === l.id)).join('')}
+            </select>
+          </label>
+          <label>Width
+            <select data-themepick="width" aria-label="How wide the sheet is">
+              ${WIDTHS.map((w) => opt(w.id, w.name, width === w.id)).join('')}
+            </select>
+          </label>
+          <button type="button" class="close" data-action="theme-close">Done</button>
+        </div>
+        <p class="hint">Remembered in this browser, for every character. The side rail needs a wide window
+          and falls back to the bar on a narrow one.</p>
+      </section>`;
   }
 
   /* ---------------- public API ---------------- */
@@ -843,6 +1018,20 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** Resolves once the sheet has settled on which stored state to show. */
   whenReady() { return this.#adopting ?? Promise.resolve(); }
+
+  /**
+   * Open the colour panel for the character, at a point on the page.
+   *
+   * Public, for a host page's roster: a right-click on a character's row
+   * there is the same gesture as a right-click on a tab here, and it opens the
+   * same panel, on the character's colour instead of a tab's. Nothing happens
+   * on a published sheet or before a character is loaded.
+   */
+  openCharacterColor(atX, atY) {
+    if (!this.#model || this.isPublished) return;
+    const name = this.#model.data.identity?.name || 'Character';
+    this.#placeColorPanel({ kind: 'character', key: null, label: name, base: name }, atX, atY);
+  }
 
   /**
    * Decide which version of this character to open, and show it.
@@ -1436,6 +1625,13 @@ export class CharacterSheetElement extends HTMLElement {
       <div class="wrap">
         ${this.#header()}
         <div class="tabrail">
+        ${/* The rail's own scroll box in the side layout, so the copied roll's
+             slot below can hang outside it. A plain wrapper on the bar. */''}
+        <div class="railbody">
+        ${/* A host page's own things, above the sheet's: app/index.html puts
+             its roster here when the rail is a column, so one sidebar carries
+             the characters and then the open one's tabs. Nothing, otherwise. */''}
+        <slot name="rail"></slot>
         <div class="railtop">${this.#sessionStrip()}${this.#railActions()}</div>
         <nav class="tabs" role="tablist" aria-label="Character sheet sections">
           ${bar.map((e) => {
@@ -1461,12 +1657,15 @@ export class CharacterSheetElement extends HTMLElement {
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
             aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
+        </div>
         <div class="rollslot">${this.#slotHtml()}</div>
         </div>
         ${this.#tabColorMenuHtml()}
+        <div class="main">
         ${this.#notices()}
         <div class="body" id="sheet-panel" role="tabpanel" aria-labelledby="tab-${this.#tab}"
           tabindex="0">${this.#panel()}</div>
+        </div>
       </div>`;
     this.#rememberTab();
     this.#applyCharacterColor();
@@ -1478,6 +1677,7 @@ export class CharacterSheetElement extends HTMLElement {
     // After the stacking, which decides whether a table has columns at all.
     applyColumnWidths(this.shadowRoot, readColumnWidths(), { stacked: this.clientWidth <= 620 });
     this.#clampHints();
+    this.#fitRail();
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
@@ -1861,12 +2061,12 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** Everything the rail does not keep on its face. */
   #chromeMenuHtml() {
-    const light = this.getAttribute('theme') === 'light';
     return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
-        <button data-action="theme">${light ? 'Dark theme' : 'Light theme'}</button>
+        <button data-action="theme" aria-pressed="${this.#themeMenu}"
+          title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
@@ -1894,6 +2094,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #notices() {
     return `<div class="notices">
+        ${this.#themeMenu ? this.#themeMenuHtml() : ''}
         ${this.#resumeBanner()}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
@@ -4127,6 +4328,10 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
+    scope.querySelectorAll('select[data-themepick]').forEach((box) => {
+      box.addEventListener('change', () => this.#setTheme({ [box.dataset.themepick]: box.value }));
+    });
+
     scope.querySelectorAll('select.jumpto').forEach((box) => {
       box.addEventListener('change', () => {
         const to = box.value;
@@ -4346,7 +4551,13 @@ export class CharacterSheetElement extends HTMLElement {
   #tabColorMenuHtml() {
     const m = this.#tabColorFor;
     if (!m || !this.#model) return '';
-    const cur = this.#model.tabColor(m.key);
+    // The same panel colours the character, opened from the roster: no rename
+    // field, and the swatches write `identity.color` -- the Details panel's
+    // own control, at the pointer.
+    const forCharacter = m.kind === 'character';
+    const cur = forCharacter
+      ? normalizeHex(this.#model.data.identity?.color)
+      : this.#model.tabColor(m.key);
     const swatch = (hex, name) => `<button class="swatch${hex ? '' : ' none'}" data-tabswatch
       data-hex="${hex}"${hex ? ` style="background:${hex}"` : ''}
       title="${esc(hex ? `${name} ${hex}` : 'Theme default')}" aria-label="${esc(hex ? name : 'Theme default')}"
@@ -4354,8 +4565,9 @@ export class CharacterSheetElement extends HTMLElement {
     // The head wears the tab's own name, whatever it is being called: the
     // rename field below is where the calling happens, and a head that
     // followed the keystrokes would be the field said twice.
-    const renamable = !FIXED_TABS.has(m.key);
-    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog" aria-label="Tab name and colour">
+    const renamable = !forCharacter && !FIXED_TABS.has(m.key);
+    return `<div class="tabmenu" style="left:${m.x}px;top:${m.y}px" role="dialog"
+      aria-label="${forCharacter ? 'Character colour' : 'Tab name and colour'}">
       <div class="tabmenu-head">
         <span class="tabmenu-name">${esc(m.base || m.label)}</span>
         <button data-action="tabcolor-close" title="Close" aria-label="Close">×</button>
@@ -4365,7 +4577,7 @@ export class CharacterSheetElement extends HTMLElement {
           placeholder="${esc(m.base || m.label)}" maxlength="40" aria-label="Tab name"
           title="What this tab is called on your sheet. Blank gives its own name back; the GM’s inspector view always shows the original.">
       </div>` : ''}
-      <div class="swatches" role="group" aria-label="Tab colour">
+      <div class="swatches" role="group" aria-label="${forCharacter ? 'Character colour' : 'Tab colour'}">
         ${swatch('', '')}
         ${TRACKER_PALETTE.map(([h, n]) => swatch(h, n)).join('')}
       </div>
@@ -4386,15 +4598,18 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #openTabColor(key, label, atX, atY) {
     if (this.isPublished) return;            // a reader's colours go nowhere
-    const box = this.getBoundingClientRect();
-    const WIDTH = 232;
-    const x = Math.max(6, Math.min(atX - box.left, box.width - WIDTH - 6));
     // The tab's own name rides along for the rename field's placeholder and
     // the head -- the label clicked may already be the player's word for it.
     const base = this.#tabEntries().find((e) => e.key === key)?.base || label;
-    this.#tabColorFor = {
-      key, label, base, x, y: Math.max(6, atY - box.top),
-    };
+    this.#placeColorPanel({ kind: 'tab', key, label, base }, atX, atY);
+  }
+
+  /** Put the colour panel at a page point, clamped to stay on the sheet. */
+  #placeColorPanel(target, atX, atY) {
+    const box = this.getBoundingClientRect();
+    const WIDTH = 232;
+    const x = Math.max(6, Math.min(atX - box.left, box.width - WIDTH - 6));
+    this.#tabColorFor = { ...target, x, y: Math.max(6, atY - box.top) };
     this.#render();
   }
 
@@ -4429,10 +4644,20 @@ export class CharacterSheetElement extends HTMLElement {
 
     /** Write the colour, then repaint everything wearing it, in place. */
     const apply = (hex, { fromHexBox = false } = {}) => {
-      const key = this.#tabColorFor.key;
-      this.#model.setTabColor(key, hex);
-      const sel = `[data-tabkey="${CSS.escape(key)}"]`;
-      const tab = root.querySelector(`nav.tabs ${sel}`);
+      const { key, kind } = this.#tabColorFor;
+      if (kind === 'character') {
+        // The character's colour: onto the host's properties, and onto the
+        // Details panel's own controls if that panel is the one on screen.
+        this.#model.set('identity.color', hex);
+        this.#applyCharacterColor();
+        const box = root.querySelector('[data-charhex]');
+        if (box) { box.value = hex || ''; box.classList.remove('bad'); }
+        root.querySelectorAll('[data-charswatch]').forEach((b) => {
+          b.setAttribute('aria-pressed', (normalizeHex(b.dataset.hex) || null) === hex ? 'true' : 'false');
+        });
+      } else this.#model.setTabColor(key, hex);
+      const sel = kind === 'character' ? null : `[data-tabkey="${CSS.escape(key)}"]`;
+      const tab = sel && root.querySelector(`nav.tabs ${sel}`);
       if (tab) {
         tab.classList.toggle('tinted', !!hex);
         if (hex) {
@@ -4443,7 +4668,7 @@ export class CharacterSheetElement extends HTMLElement {
           tab.style.removeProperty('--tab-ink');
         }
       }
-      const rowSwatch = root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
+      const rowSwatch = sel && root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
       if (rowSwatch) {
         rowSwatch.classList.toggle('none', !hex);
         if (hex) rowSwatch.style.background = hex;
@@ -4583,8 +4808,9 @@ export class CharacterSheetElement extends HTMLElement {
       let to = at;
       switch (e.key) {
         // Wrapping at both ends, so the bar is a loop rather than a dead stop.
-        case 'ArrowRight': to = (at + 1) % tabs.length; break;
-        case 'ArrowLeft': to = (at - 1 + tabs.length) % tabs.length; break;
+        // Down and up are right and left on a rail that runs down the side.
+        case 'ArrowRight': case 'ArrowDown': to = (at + 1) % tabs.length; break;
+        case 'ArrowLeft': case 'ArrowUp': to = (at - 1 + tabs.length) % tabs.length; break;
         case 'Home': to = 0; break;
         case 'End': to = tabs.length - 1; break;
         default: return;
@@ -4658,9 +4884,10 @@ export class CharacterSheetElement extends HTMLElement {
   #showPanelTop() {
     const body = this.shadowRoot.querySelector('.body');
     if (!body) return;
-    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
-    body.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
-    if (body.getBoundingClientRect().top < (rail?.bottom ?? 0) - 1) {
+    const clear = this.#railClearance();
+    body.style.scrollMarginTop = `${clear}px`;
+    const top = this.getBoundingClientRect().top;
+    if (body.getBoundingClientRect().top < Math.max(top, 0) + clear - 10) {
       body.scrollIntoView({ block: 'start' });
     }
   }
@@ -4679,7 +4906,10 @@ export class CharacterSheetElement extends HTMLElement {
    * `#clampHints` is doing beside it.
    *
    * Hidden below three sections, where a tab is short enough to see the whole
-   * of and the control would be one more thing to read past.
+   * of and the control would be one more thing to read past. On the side rail
+   * it stays, greyed: a column that grew and shrank a row with every tab would
+   * move every button under it, and a control that is there but not usable is
+   * a steadier thing than one that comes and goes.
    */
   #fillJumpTo() {
     const box = this.shadowRoot.querySelector('select.jumpto');
@@ -4687,6 +4917,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (!box || !body) return;
     const heads = [...body.querySelectorAll('section.panel > h3, .supergroup > .supergroup-title')];
     box.hidden = heads.length < 3;
+    box.disabled = box.hidden;
     if (box.hidden) { box.innerHTML = '<option value="">Jump to…</option>'; return; }
     box.innerHTML = ['<option value="">Jump to…</option>', ...heads.map((h, i) => {
       // The heading's own words, without the badges and fold buttons that sit
@@ -4702,10 +4933,24 @@ export class CharacterSheetElement extends HTMLElement {
   #jumpToSection(index) {
     const head = this.shadowRoot.querySelector(`.body [data-section="${CSS.escape(index)}"]`);
     if (!head) return;
-    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
     const target = head.closest('section.panel, .supergroup') ?? head;
-    target.style.scrollMarginTop = `${Math.round(rail?.height ?? 0) + 10}px`;
+    target.style.scrollMarginTop = `${this.#railClearance()}px`;
     target.scrollIntoView({ block: 'start' });
+  }
+
+  /**
+   * How far below the top of the window a landing has to be to clear the
+   * pinned rail: the rail's height on the bar, where it sits over the panels,
+   * and next to nothing on the side, where it stands beside them and covers
+   * none of them -- a side rail is the height of the window, and a landing
+   * pushed that far down would be off the bottom of it.
+   */
+  #railClearance() {
+    const rail = this.shadowRoot.querySelector('.tabrail')?.getBoundingClientRect();
+    const body = this.shadowRoot.querySelector('.body')?.getBoundingClientRect();
+    if (!rail) return 10;
+    const beside = body && rail.right <= body.left + 1;
+    return beside ? 10 : Math.round(rail.height) + 10;
   }
 
   /**
@@ -4844,6 +5089,9 @@ export class CharacterSheetElement extends HTMLElement {
     // the panel below it -- see `.tabs.oneline`.
     const rows = new Set([...bar.children].map((c) => c.offsetTop)).size;
     bar.classList.toggle('oneline', rows <= 1);
+    // A side rail scrolls up and down inside itself; the bar scrolls across.
+    const box = bar.closest('.railbody') || bar;
+    if (box.scrollHeight > box.clientHeight + 1) tab.scrollIntoView({ block: 'nearest' });
     if (bar.scrollWidth <= bar.clientWidth) return;
     const t = tab.getBoundingClientRect();
     const b = bar.getBoundingClientRect();
@@ -4866,7 +5114,10 @@ export class CharacterSheetElement extends HTMLElement {
       .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
     const after = (e, el) => {
       const r = el.getBoundingClientRect();
-      const horizontal = el.matches('nav.tabs [data-tabkey]');
+      // The bar runs across in the top layout and down in the side one;
+      // the manager's rows always run down.
+      const horizontal = el.matches('nav.tabs [data-tabkey]')
+        && getComputedStyle(el.parentElement).flexDirection !== 'column';
       return horizontal ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
     };
     draggables.forEach((el) => {
@@ -6762,7 +7013,20 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'theme':
-        this.setAttribute('theme', this.getAttribute('theme') === 'light' ? 'dark' : 'light');
+        this.#themeMenu = !this.#themeMenu;
+        this.#renderHeader();
+        break;
+      case 'theme-close':
+        this.#themeMenu = false;
+        this.#renderHeader();
+        break;
+      // The one-press switch: the same look on the other scheme. A sheet on
+      // `auto` leaves auto behind, since a press is a choice.
+      case 'theme-flip':
+        this.#setTheme({ palette: flipped(this.getAttribute('theme')) });
+        break;
+      case 'set-theme':
+        this.#setTheme({ palette: button?.dataset.palette, layout: button?.dataset.layout });
         break;
       case 'palette':
         this.#togglePalette();

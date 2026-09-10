@@ -1067,7 +1067,8 @@ function commands(model, add) {
   cmd(session ? 'Switch to Build view' : 'Switch to Session view', 'view-mode',
     session ? 'Everything, arranged for building' : 'Only the tabs that come up at the table',
     'view mode session build table');
-  cmd('Switch theme', 'theme', 'Light and dark', 'theme light dark colour');
+  cmd('Theme & layout', 'theme', 'Palettes, and where the tabs go', 'theme palette layout colour sidebar rail');
+  cmd('Switch light / dark', 'theme-flip', 'The same look on the other scheme', 'theme light dark switch toggle');
   cmd('Formulas guide', 'formulas', 'Values, destinations and every formula on the sheet', 'formula fx guide search values');
   cmd('Rest — refresh daily trackers', 'quick-rest', 'Everything with a daily refresh comes back', 'rest sleep night day refresh');
   if ((model.data.vancian?.classes || []).length) {

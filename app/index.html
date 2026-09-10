@@ -4,17 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pathfinder Character Sheets</title>
+<!-- The faces the Workbench and Parchment themes are set in: the same link
+     forge/index.html carries. A theme that does not use them costs nothing
+     here beyond the request; one that does falls back to Georgia and the
+     system face if it never arrives. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+  /* The page wears the sheet's palette. These are the dark theme's values, so
+     the first paint is right for the default; `followSheet()` in the script
+     then copies whichever palette the sheet is actually wearing onto :root,
+     and again every time it changes. The colours themselves live in one place,
+     app/css/sheet.css, and this page never names one of its own. */
   :root {
-    --bg: #0f1116; --panel: #1c1f27; --line: #333949;
+    --bg: #14161c; --panel: #1c1f27; --panel2: #232733; --line: #333949;
     --text: #e6e8ef; --muted: #9aa2b8; --accent: #d4a24a;
-    /* This page is dark, so the browser's own widgets should be too. */
+    --good: #6bbf7b; --bad: #e0635f;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* The page starts dark, so the browser's own widgets should be too. */
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font);
   }
   /* Off-screen until it is the thing being used, which is the only time it is
      any use. Not `display: none`: that takes it out of the tab order too. */
@@ -24,14 +36,21 @@
     border-radius: 0 0 6px 0; padding: 8px 14px; font-size: 0.85rem; text-decoration: none;
   }
   .skiplink:focus { left: 0; }
-  /* Not sticky, deliberately. It grows a row per few characters -- five of them
-     hold 170px of the window on a laptop and 314px on a phone -- to keep in
-     view a strip that is touched once a session. The sheet's own tab rail is
-     what gets pinned instead; this scrolls away like anything else. */
+  /* Pinned, and the sheet is told how tall it is: `--cs-sticky-top` on the
+     element is where its rail comes to rest, and the script below keeps it at
+     this header's height, so the tab bar or the side rail pins under the
+     header rather than behind it. On a phone the roster strip can be several
+     rows; Fold is what keeps it to one. */
   header.app {
+    /* Above the sheet's pinned rail (z-index 30 inside its shadow root, which
+       competes here because the element opens no stacking context of its own)
+       and below the menus the rail hangs under itself, which never reach up
+       this far. */
+    position: sticky; top: 0; z-index: 35;
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 12px 18px; border-bottom: 1px solid var(--line); background: #14161c;
+    padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
   }
+  header.app .tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   header.app h1 {
     margin: 0; font-size: 1rem; letter-spacing: 0.04em;
     text-transform: uppercase; color: var(--accent);
@@ -43,7 +62,7 @@
   }
   .picker button:hover { border-color: var(--accent); }
   .picker button[aria-pressed="true"] {
-    background: rgba(212,162,74,0.16); border-color: var(--accent); color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--accent);
   }
   /* Imported characters live in this browser only, so they say so and can go. */
   .chip { display: inline-flex; align-items: center; }
@@ -51,7 +70,7 @@
   .chip.local button.drop {
     border-left: 0; border-radius: 0 20px 20px 0; padding: 5px 9px; color: var(--muted);
   }
-  .chip.local button.drop:hover { color: #e0635f; border-color: #e0635f; }
+  .chip.local button.drop:hover { color: var(--bad); border-color: var(--bad); }
   .picker .local-tag { font-size: 0.68rem; opacity: 0.55; margin-left: 5px; }
   /* Long names clamp rather than widen the strip; the full name is the title. */
   .picker .cname {
@@ -66,14 +85,29 @@
   .picker button.exportall { color: var(--muted); }
   .picker button.exportall:hover { color: var(--accent); }
   .picker button:disabled { opacity: 0.5; cursor: default; }
+  /* A character with a colour wears it on its row, the way a coloured tab
+     does on the bar: `--char-color` is the hue as picked, for the edges and
+     the wash; `--char-ink` is that hue taken far enough to be read on this
+     palette's panel, for the words. Both are set inline by draw(). */
+  .picker button.pick.tinted {
+    color: var(--char-ink, var(--char-color));
+    border-color: color-mix(in srgb, var(--char-ink, var(--char-color)) 55%, var(--line));
+    background: color-mix(in srgb, var(--char-color) 9%, var(--panel));
+  }
+  .picker button.pick.tinted:hover { border-color: var(--char-ink, var(--char-color)); }
+  .picker button.pick.tinted[aria-pressed="true"] {
+    border-color: var(--char-ink, var(--char-color));
+    background: color-mix(in srgb, var(--char-color) 24%, var(--panel));
+  }
+  .chip.local button.pick.tinted + button.drop { border-color: color-mix(in srgb, var(--char-ink, var(--char-color)) 55%, var(--line)); }
   .picker.dragging button.import { border-color: var(--accent); color: var(--accent); }
   .banner {
     max-width: 1500px; margin: 12px auto 0; padding: 8px 12px; border-radius: 6px;
     font-size: 0.85rem; display: flex; gap: 10px; align-items: flex-start;
   }
-  .banner.err { color: #e0635f; background: rgba(224,99,95,0.10); border: 1px solid #e0635f; }
-  .banner.ok { color: #6bbf7b; background: rgba(107,191,123,0.10); border: 1px solid #6bbf7b; }
-  .banner.info { color: var(--muted); background: rgba(154,162,184,0.10); border: 1px solid var(--line); }
+  .banner.err { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); border: 1px solid var(--bad); }
+  .banner.ok { color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); border: 1px solid var(--good); }
+  .banner.info { color: var(--muted); background: color-mix(in srgb, var(--muted) 10%, transparent); border: 1px solid var(--line); }
   .banner button { margin-left: auto; font: inherit; background: none; border: 0; color: inherit; cursor: pointer; }
   /* The banner's one action -- Undo, Restore -- reads as a button, not as text. */
   .banner button.act {
@@ -124,8 +158,8 @@
   }
   dialog#newDialog button.primary, dialog#importDialog button.primary, dialog#removeDialog button.primary { border-color: var(--accent); color: var(--accent); }
   dialog#removeDialog { max-width: 30rem; }
-  dialog#removeDialog button.danger { border-color: #e0635f; color: #e0635f; }
-  dialog#removeDialog button.danger:focus-visible { outline: 2px solid #e0635f; outline-offset: 2px; }
+  dialog#removeDialog button.danger { border-color: var(--bad); color: var(--bad); }
+  dialog#removeDialog button.danger:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
   /* A choice, not a field: the radio keeps its own size and the sentence
      beside it takes the room, where a text input would have taken it all. */
   dialog#importDialog label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
@@ -144,6 +178,42 @@
   button.ext, a.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
     border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; text-decoration: none; }
   button.ext:hover, a.ext:hover { border-color: var(--accent); color: var(--accent); }
+  /* ---------- the roster in the sheet's rail ---------- */
+  /* When the sheet runs its tabs down its left (layout="side"), the roster
+     goes into the same column: the sheet's rail carries a slot named "rail",
+     and the script below moves the picker into it, so one sidebar holds the
+     characters and then the open one's tabs -- the shape the Workbench has.
+     Back in the header the moment the layout is the bar again, or the window
+     is too narrow for a column at all. The picker keeps this page's styling
+     wherever it stands; slotted light DOM is styled by the page it is in. */
+  /* `nowrap` matters: the strip wraps, and a wrapped column sizes its rows to
+     the widest one rather than to the rail, so a long name pushed every row
+     out past the edge. Unwrapped, the rows stretch to the rail and clip. */
+  .picker[slot="rail"] { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 3px; }
+  /* `min-width: 0` on the row and the button both: a flex item will not shrink
+     below its content unless told to, and a long name would otherwise widen
+     the row past the rail rather than clip inside it. */
+  .picker[slot="rail"] .chip { display: flex; min-width: 0; }
+  .picker[slot="rail"] .chip button.pick {
+    flex: 1; min-width: 0; text-align: left; border-radius: 6px; padding: 7px 10px;
+  }
+  .picker[slot="rail"] .chip.local button.drop { flex: none; }
+  .picker[slot="rail"] .chip.local button.pick { border-radius: 6px 0 0 6px; }
+  .picker[slot="rail"] .chip.local button.drop { border-radius: 0 6px 6px 0; }
+  /* A row rather than a chip: the name on its own line, the level under it. */
+  .picker[slot="rail"] .cname { display: block; max-width: 100%; }
+  .picker[slot="rail"] button.import,
+  .picker[slot="rail"] button.exportall,
+  .picker[slot="rail"] button.fold { border-radius: 6px; text-align: left; }
+  .picker[slot="rail"] button.import:first-of-type,
+  .picker[slot="rail"] button.fold { margin-top: 8px; }
+  /* The bar layout centres the sheet in 1500px, which on a wide screen leaves a
+     margin either side; with a rail inside the sheet that margin is a column of
+     nothing beside a column of tabs. The side layout takes the whole width. */
+  html[data-layout="side"] main, html[data-layout="side"] .banner, html[data-layout="side"] .note { max-width: none; }
+  /* A chosen width is a share of the window, not of a 1500px column: the cap
+     comes off so "90%" means 90% of the screen, whichever layout is up. */
+  html[data-width]:not([data-width="100"]) main { max-width: none; }
   /* Printing: the sheet does its own print styling (see app/css/sheet.css).
      All this page has to do is get out of the way -- the picker, the roster
      chrome and the dark backdrop are for choosing a character, not for the
@@ -151,7 +221,7 @@
   @media print {
     :root { color-scheme: light; }
     body { background: #fff; color: #000; }
-    header.app, #banner, .welcome, .skiplink, dialog { display: none !important; }
+    header.app, .picker, #banner, .welcome, .skiplink, dialog { display: none !important; }
     character-sheet { border: 0; }
   }
 </style>
@@ -165,11 +235,13 @@
   <h1>Character Sheets</h1>
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
-  <button type="button" class="ext" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
-  <a class="ext" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
-  <label class="role">
-    <input type="checkbox" id="adminToggle"> GM / inspector view
-  </label>
+  <div class="tools">
+    <button type="button" class="ext" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
+    <a class="ext" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <label class="role">
+      <input type="checkbox" id="adminToggle"> GM / inspector view
+    </label>
+  </div>
 </header>
 
 <div id="banner"></div>
@@ -285,6 +357,7 @@
   import { runtime as extensions } from './js/extension-runtime.js';
   import { mountExtensionManager, looksLikeExtension } from './js/extension-manager.js';
   import { mountMonsterTool } from './js/monster/picker.js';
+  import { normalizeHex, readableOn } from './js/tracker-style.js';
 
   const sheet = document.getElementById('sheet');
   const picker = document.getElementById('picker');
@@ -446,15 +519,21 @@
     const roster = all();
     const shown = folded ? roster.filter((c) => c.id === current) : roster;
     const others = roster.length - shown.length;
+    // The surface a row's ink has to be read on, once per draw.
+    const panel = normalizeHex(getComputedStyle(document.documentElement).getPropertyValue('--panel')) || '#1c1f27';
+    const tint = (c) => {
+      const hex = normalizeHex(c.color);
+      return hex ? ` class="pick tinted" style="--char-color:${hex};--char-ink:${readableOn(hex, panel)}"` : ' class="pick"';
+    };
     const chip = (c) => (c.local
       ? `<span class="chip local">
-           <button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
+           <button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
              <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
            </button>
            <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
              aria-label="Remove ${esc(c.name)}">×</button>
          </span>`
-      : `<span class="chip"><button class="pick" data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}">
+      : `<span class="chip"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
            <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span>
          </button></span>`);
     picker.innerHTML = `${shown.map(chip).join('')}
@@ -470,6 +549,16 @@
 
     picker.querySelectorAll('button.pick').forEach((b) => {
       b.addEventListener('click', () => { current = b.dataset.id; rememberOpen(); select(); draw(); });
+      // Right-click colours the character, the way it colours a tab on the
+      // bar. The colour is the character's own (identity.color), so the sheet
+      // has to be showing that character to write it: a row that is not the
+      // open one is opened first, then the panel comes up at the pointer.
+      b.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        if (b.dataset.id !== current) { current = b.dataset.id; rememberOpen(); select(); draw(); }
+        await sheet.whenReady();
+        sheet.openCharacterColor(e.clientX, e.clientY);
+      });
     });
     picker.querySelectorAll('button.drop').forEach((b) => {
       b.addEventListener('click', () => remove(b.dataset.drop));
@@ -683,8 +772,8 @@
     } catch { /* no database: the document is in, the history simply is not */ }
     // A bundled character replaced becomes one of this browser's own.
     library = library.some((c) => c.id === id)
-      ? library.map((c) => (c.id === id ? { ...verdict.summary, id, origin: 'import', local: true } : c))
-      : [...library, { ...verdict.summary, id, origin: 'import', local: true }];
+      ? library.map((c) => (c.id === id ? { ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true } : c))
+      : [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin: 'import', local: true }];
     writeLibrary(library);
     current = id;
     draw();
@@ -715,7 +804,7 @@
     const id = freeId(verdict.summary.id);
     const stored = { ...doc, id };
     if (!(await store(docKey(id), stored, verdict.summary.name))) return null;
-    library = [...library, { ...verdict.summary, id, origin, local: true }];
+    library = [...library, { ...verdict.summary, color: doc.identity?.color || null, id, origin, local: true }];
     writeLibrary(library);
     current = id;
     draw();
@@ -869,6 +958,89 @@
 
   adminToggle.addEventListener('change', () => {
     sheet.setAttribute('role', adminToggle.checked ? 'admin' : 'player');
+  });
+
+  /*
+   * The page wears whatever the sheet is wearing.
+   *
+   * The palettes are declared once, in app/css/sheet.css, as the custom
+   * properties the sheet reads -- and a custom property's computed value can
+   * be read off the element from outside its shadow root. So the page keeps
+   * no palette of its own: after each change it copies the handful it needs
+   * onto :root, and the picker, banners and dialogs above follow. The sheet
+   * announces a change with `theme-change`; the first copy is taken here,
+   * since the element applied the remembered choice when it connected.
+   *
+   * The accent is read with the character's own colour lifted off first: that
+   * is set inline on the element and would otherwise be what the page took,
+   * and it changes with the character rather than with the theme.
+   */
+  const CHROME_VARS = [
+    ['--bg', '--cs-bg'], ['--panel', '--cs-panel'], ['--panel2', '--cs-panel-2'],
+    ['--line', '--cs-line'], ['--text', '--cs-text'], ['--muted', '--cs-muted'],
+    ['--accent', '--cs-accent'], ['--good', '--cs-good'], ['--bad', '--cs-bad'],
+    ['--font', '--cs-font'],
+  ];
+  function followSheet() {
+    const root = document.documentElement;
+    const own = sheet.style.getPropertyValue('--cs-accent');
+    if (own) sheet.style.removeProperty('--cs-accent');
+    const cs = getComputedStyle(sheet);
+    for (const [mine, theirs] of CHROME_VARS) {
+      const v = cs.getPropertyValue(theirs).trim();
+      if (v) root.style.setProperty(mine, v);
+    }
+    if (own) sheet.style.setProperty('--cs-accent', own);
+    root.style.colorScheme = sheet.getAttribute('scheme') === 'light' ? 'light' : 'dark';
+    root.dataset.theme = sheet.getAttribute('theme') || 'dark';
+    root.dataset.layout = sheet.getAttribute('layout') || 'top';
+    root.dataset.width = sheet.getAttribute('width') || '100';
+    placePicker();
+  }
+
+  /*
+   * Where the roster stands: in the header as a strip, or inside the sheet's
+   * own rail under its tabs. The sheet's rail is a column from 780px of sheet,
+   * which with this page's margins is about 820px of window; below that the
+   * sheet's rail is the bar again and a roster slotted into it would sit in
+   * the bar's sticky strip, so it goes back to the header. The node is moved,
+   * not rebuilt, and everything bound to it comes along.
+   */
+  const railFits = window.matchMedia('(min-width: 820px)');
+  function placePicker() {
+    const inRail = document.documentElement.dataset.layout === 'side' && railFits.matches;
+    if (inRail) {
+      picker.slot = 'rail';
+      if (picker.parentElement !== sheet) sheet.prepend(picker);
+    } else {
+      picker.removeAttribute('slot');
+      if (picker.parentElement === sheet) document.querySelector('header.app h1').after(picker);
+    }
+  }
+  railFits.addEventListener('change', placePicker);
+
+  // The header is pinned, so the sheet's rail has to stop under it: its height
+  // goes onto the element as `--cs-sticky-top`, and follows every change to it
+  // -- the roster strip wrapping to a second row, the picker moving to the rail.
+  const header = document.querySelector('header.app');
+  const pinUnderHeader = () => sheet.style.setProperty('--cs-sticky-top', `${header.offsetHeight}px`);
+  new ResizeObserver(pinUnderHeader).observe(header);
+  pinUnderHeader();
+  // The roster is drawn again as well: a row's ink is picked to be read on the
+  // panel it sits on, and the panel has just changed colour.
+  sheet.addEventListener('theme-change', () => { followSheet(); draw(); });
+  followSheet();
+
+  // A colour picked on the sheet -- in Details, or from the roster's own
+  // right-click -- lands on the roster row as it is picked. The library entry
+  // carries it so the row is tinted next visit before any sheet has loaded.
+  sheet.addEventListener('character-change', (e) => {
+    const color = e.detail?.character?.identity?.color || null;
+    const entry = library.find((c) => c.id === current);
+    if (!entry || (entry.color || null) === color) return;
+    library = library.map((c) => (c.id === current ? { ...c, color } : c));
+    writeLibrary(library);
+    draw();
   });
 
   /*
