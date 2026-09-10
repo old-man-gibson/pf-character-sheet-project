@@ -20,7 +20,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const stable = (o) => JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((a, kk) => { a[kk] = v[kk]; return a; }, {}) : v));
 
 const store = forgeStore();
-const S = { selected: null, dirty: false, filter: 'all', tag: '', q: '', nameIndex: new Map(), saveTimer: null, pendingSave: new Map(), rendered: '', folded: readFolded() };
+const S = { selected: null, dirty: false, filter: 'all', tag: '', q: '', nameIndex: new Map(), saveTimer: null, pendingSave: new Map(), rendered: '', folded: readFolded(), revealed: null };
 
 /* Which containers in the list are folded shut. A browser preference: the
    list is a way of reading, and which disciplines you keep shut is nothing
@@ -238,7 +238,14 @@ function renderRail() {
     const host = (e.tags || []).map((t) => resolveName(t)).find((id) => id && id !== e.id && inList.has(id) && isContainer(entries().get(id)));
     if (host) file(e, host);
   }
-  for (let p = under.get(S.selected); p; p = under.get(p)) S.folded.delete(p);
+  // The open entry's containers open -- once, when it becomes the open one.
+  // Not on every redraw: a fold made over the open entry would otherwise be
+  // undone by the redraw the fold itself causes, and a group holding the open
+  // entry could never be shut at all.
+  if (S.revealed !== S.selected) {
+    for (let p = under.get(S.selected); p; p = under.get(p)) S.folded.delete(p);
+    S.revealed = S.selected;
+  }
   const drawn = new Set();
   const row = (e, depth) => {
     // Two containers tagged with each other's names would otherwise nest forever.
