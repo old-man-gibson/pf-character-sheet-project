@@ -18,6 +18,7 @@
     </div>
     <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search names, tags, text…" aria-label="Search entries"></div>
     <div class="spacer"></div>
+    <button class="btn" id="settingsBtn" title="Categories of your own, and where they sit">Settings</button>
     <select class="themepick" id="themePick" aria-label="Theme" title="The look of this page and of the character sheet: one choice, remembered in this browser"></select>
     <div class="status" id="status"><span class="dot"></span><span id="statusText">opening</span></div>
     <button class="btn primary" id="newBtn">+ New entry</button>
@@ -39,6 +40,7 @@
 
   <aside class="rail">
     <div class="typegroups" id="typegroups"></div>
+    <div class="railsplit" id="railSplit" role="separator" aria-orientation="horizontal" aria-label="Drag to resize the filters and the list; double-click to reset" title="Drag to resize; double-click to reset"></div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -51,8 +53,15 @@
   <h3>Are you sure?</h3><div id="askMsg"></div>
   <div class="acts"><button class="btn" id="askNo">Cancel</button><button class="btn danger" id="askOk">Yes, go ahead</button></div>
 </div></div>
+<div class="modal" id="settings"><div class="box wide">
+  <h3>Categories</h3>
+  <p class="hint">A category of your own is a kind of entry beside the built-in ones. Put it under another kind and it is a subcategory, listed and folded under that kind's entries the way maneuvers sit under a discipline. Categories are kept in this browser and travel in a project export (Import / Export → Download project), so another workbench reads them in with the entries. Save before choosing a new category as another's parent. Removing a category keeps its entries, shown as articles.</p>
+  <div id="catList" class="catlist"></div>
+  <div class="acts"><button class="btn" id="catAdd">+ Add category</button><span class="spacer"></span><button class="btn" id="catCancel">Cancel</button><button class="btn primary" id="catSave">Save</button></div>
+</div></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <div class="toasts" id="toasts"></div>
+<div id="colorMenu" hidden></div>
 
 <script type="module" src="js/forge.js"></script>
 </body>

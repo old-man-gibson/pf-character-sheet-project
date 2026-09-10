@@ -408,6 +408,37 @@ the visitor's browser (IndexedDB, a `homebrew-workbench` database of its own; lo
 where there is none) and never on the server, so the repository ships the workbench
 empty, exactly as it ships the sheet. It speaks this format both ways.
 
+The editor has the keys an editor is expected to have: **Ctrl+B**, **Ctrl+I** and **Ctrl+U**
+wrap the selection in bold, italic or underline marks (pressed again on a wrapped selection,
+they take the marks off), **Ctrl+K** makes a `[[link]]` — or, on a selected web address, a
+`[label](https://…)` web link; a bare address in the text links itself too — and **Ctrl+Shift+8**, **Ctrl+Shift+9**
+and **Ctrl+Shift+1** to **3** put a bullet, a note mark or a heading on every line the selection
+touches. A class feature's *Replaces* and *Alters* sit under its description, as the last thing
+said about it, and print there in the preview and the Markdown export.
+
+The entry list is a tree: a maneuver sits under its discipline, a class feature under its
+class or archetype, a session under its campaign — and any entry can sit under another of
+its own kind, to any depth, so *Isougiri → Topological Iaijutsu Techniques → Cuts → Zero
+Point Thrust* is four class features, each under the one above (the *Belongs to* field
+offers them). A pack flattens such a group into the block the sheet reads, in tree order,
+each nested entry named after its group: "Cuts: Zero Point Thrust", at its own level or
+its group's. A container with entries under it
+folds shut to one row and a count (the fold is remembered in the browser; a search opens
+everything). An entry with no container of its own can still be filed with one by **tagging
+it with the container's name**: an article tagged *Tempest Gale* sits under that discipline
+in the list, in the discipline's preview and in the Markdown export, after the discipline's
+own maneuvers, instead of at the end with the other articles. Nothing structural changes —
+the tag is the whole of the link. **Right-click an entry** in the list to give it a colour,
+worn on its row and on its preview's heading, and kept with the entry in a project export.
+The bar between the filter chips and the list drags to resize the two, each keeping a
+minimum; double-click it to reset. **Delete** offers **Undo** for a few seconds, which puts
+the entry back and re-links whatever sat under it. **Settings** in the top bar adds categories of your own: a name, the group it
+is listed under (one of the five, or a new one), what its text is called, its cells, and,
+to make it a subcategory, the kind it sits under. A category is kept in the browser and
+travels in a project export as `customTypes`, so another workbench that imports the file
+reads the categories in with the entries; the pack writer names a custom category's
+catalogue by its plural and keeps its cells' labels.
+
 - **Publish to this sheet** writes everything the Forge holds as one pack — id
   `homebrew-workbench`, revision climbing each time — straight into the sheet's local
   extension store, the same IndexedDB the Extensions dialog imports into. A sheet tab
