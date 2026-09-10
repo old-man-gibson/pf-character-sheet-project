@@ -371,9 +371,14 @@ async function createEntry() {
   const type = S.filter !== 'all' ? S.filter : 'article'; const e = newEntry(type, '');
   if (type === 'maneuver') e.fields = { level: 1, mtype: 'Strike', action: 'Standard' };
   if (S.tag) e.tags = [S.tag];
-  S.selected = e.id; S.dirty = false; await writeEntry(e); renderAll(); $('#app').dataset.pane = 'edit'; $('#edit .name')?.focus();
+  S.selected = e.id; S.dirty = false; await writeEntry(e); renderAll(); if (window.innerWidth <= 1100) setPane('edit'); $('#edit .name')?.focus();
 }
-function go(id) { if (S.pendingSave.size) flushSaves(); S.selected = id; S.dirty = false; renderAll(); if (window.innerWidth <= 1100) $('#app').dataset.pane = 'edit'; }
+/* Which pane a narrow window shows; the tab buttons follow. */
+function setPane(pane) { $('#app').dataset.pane = pane; $$('.panetabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.pane === pane)); }
+/* Open an entry. On a narrow window the pane it opens in is the editor,
+   unless the link was followed from inside the preview, where a reader who
+   is reading stays reading. */
+function go(id, pane = 'edit') { if (S.pendingSave.size) flushSaves(); S.selected = id; S.dirty = false; renderAll(); if (window.innerWidth <= 1100) setPane(pane); }
 async function makeFromLink(name) {
   const cur = entries().get(S.selected); let type = 'article'; let parent = '';
   if (cur?.type === 'discipline') { type = 'maneuver'; parent = cur.id; } else if (cur?.type === 'maneuver') { type = 'maneuver'; parent = cur.parent; } else if (cur?.type === 'campaign') { parent = cur.id; type = 'location'; }
@@ -383,15 +388,15 @@ async function makeFromLink(name) {
   toast(`Created “${name}” as ${TYPES[type].label.toLowerCase()} — change its type in the editor if needed`);
 }
 document.addEventListener('click', (ev) => {
-  const go_ = ev.target.closest('[data-go]'); if (go_) { go(go_.dataset.go); return; }
+  const go_ = ev.target.closest('[data-go]'); if (go_) { go(go_.dataset.go, go_.closest('#view') && $('#app').dataset.pane === 'view' ? 'view' : 'edit'); return; }
   const mk = ev.target.closest('[data-make]'); if (mk) { makeFromLink(mk.dataset.make); return; }
-  const tg = ev.target.closest('[data-tag-go]'); if (tg) { S.tag = tg.dataset.tagGo; S.filter = 'all'; renderRail(); $('#app').dataset.pane = 'list'; return; }
+  const tg = ev.target.closest('[data-tag-go]'); if (tg) { S.tag = tg.dataset.tagGo; S.filter = 'all'; renderRail(); setPane('list'); return; }
   const fold = ev.target.closest('[data-fold]');
   if (fold) { const id = fold.dataset.fold; if (S.folded.has(id)) S.folded.delete(id); else S.folded.add(id); writeFolded(); renderRail(); return; }
   const row = ev.target.closest('.row[data-id]'); if (row) { go(row.dataset.id); return; }
   const chip = ev.target.closest('.chip[data-f]'); if (chip) { S.filter = chip.dataset.f; renderRail(); return; }
   const tchip = ev.target.closest('.chip[data-tag]'); if (tchip) { S.tag = S.tag === tchip.dataset.tag ? '' : tchip.dataset.tag; renderRail(); return; }
-  const tab = ev.target.closest('.panetabs [data-pane]'); if (tab) { $('#app').dataset.pane = tab.dataset.pane; $$('.panetabs button').forEach((b) => b.setAttribute('aria-selected', b === tab)); return; }
+  const tab = ev.target.closest('.panetabs [data-pane]'); if (tab) { setPane(tab.dataset.pane); return; }
   if (!ev.target.closest('#ioMenu')) $('#ioMenu').classList.remove('open');
 });
 $('#newBtn').addEventListener('click', createEntry);

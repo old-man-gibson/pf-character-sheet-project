@@ -222,12 +222,15 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
   #app{grid-template-columns:240px minmax(0,1fr);grid-template-areas:"top top" "rail edit"}
   .view{display:none}
   .panetabs{display:flex}
+  /* The rail is on screen at this width, so an Entries tab would do nothing; it comes back below 720px, where the rail is a pane. */
+  .panetabs [data-pane="list"]{display:none}
   #app[data-pane="view"] .edit{display:none}
   #app[data-pane="view"] .view{display:block;grid-area:edit}
 }
 @media (max-width:720px){
   #app{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "edit"}
   .rail{display:none}
+  .panetabs [data-pane="list"]{display:inline-block}
   #app[data-pane="list"] .rail{display:flex;grid-area:edit;border-right:0}
   #app[data-pane="list"] .edit,#app[data-pane="list"] .view{display:none}
   .topbar{flex-wrap:wrap;gap:8px}
