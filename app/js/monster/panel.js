@@ -22,6 +22,7 @@ import { collapsible, itemText, movedInline, rowTools } from '../ui/rows.js';
 import { prose, renderedProse } from '../ui/prose.js';
 import { check, field, num, text } from '../ui/fields.js';
 import { hasTokens } from '../inline.js';
+import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
 import {
   ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, armorParts, fmt, statMod,
@@ -117,11 +118,14 @@ function attackLines(model, type) {
     const n = Array.isArray(w.iteratives) ? w.iteratives.length : 1;
     const atk = Array.from({ length: n }, (_, k) => fmt(total - 5 * k)).join('/');
     const crit = `${Number(w.critRange) > 1 ? `/${21 - Number(w.critRange)}-20` : ''}${Number(w.critMult) > 2 ? `/×${w.critMult}` : ''}`;
-    const special = String(w.special || '').replace(/\[\[|\]\]|\{\{|\}\}/g, '').trim();
+    // The rider is prose, and prose takes formulas: a weapon whose special
+    // says `{bloodburst.dmg}` prints the number here, as it does on
+    // Equipment. The damage string can carry one too.
+    const special = proseText(model, String(w.special || '').replace(/\[\[|\]\]|\{\{|\}\}/g, '')).trim();
     const rider = special ? ` plus ${special}` : '';
     const count = Number(w.count) > 1 ? `${w.count} ` : '';
     const name = `${w.enhancement && !w.natural ? `+${w.enhancement} ` : ''}${w.name || 'attack'}${Number(w.count) > 1 && w.natural ? 's' : ''}`;
-    return `${count}${esc(name)} ${atk} (${esc(w.damageTotal || '—')}${crit}${esc(rider)})`;
+    return `${count}${esc(name)} ${atk} (${esc(proseText(model, w.damageTotal || '—'))}${crit}${esc(rider)})`;
   };
   return [...groups.values()].map((g) => g.map(one).join(' and ')).join(' or ');
 }

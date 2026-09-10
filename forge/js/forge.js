@@ -13,6 +13,7 @@ import { forgeStore } from './store.js';
 import { forgeToPack, importPack } from './pack.js';
 import { extensionStore, isPackKey, packsWorthMoving } from '../../app/js/extensions.js';
 import { packMedium } from '../../app/js/pack-storage.js';
+import { mountThemes } from './theme.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -430,6 +431,7 @@ $('#edit').addEventListener('scroll', () => { if (!acBox.hidden && AC.el) acPlac
 acBox.addEventListener('mousedown', (ev) => { ev.preventDefault(); const r = ev.target.closest('.ac-row'); if (r) acAccept(+r.dataset.i); });
 
 /* ===================== Boot ===================== */
+mountThemes($('#themePick'));
 (async () => {
   try { await store.open(); } catch (err) { setStatus('local', err.message); }
   reindex(); if (!S.selected && entries().size) S.selected = firstId();

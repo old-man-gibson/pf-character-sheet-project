@@ -1,37 +1,51 @@
-/* Homebrew Workbench — the homebrew workbench. Its own stylesheet: the sheet's
-   dark host page is one look, and a rulebook page is another. Light by
-   default, dark with the system or a data-theme stamp on <html>. */
+/* Homebrew Workbench — the homebrew workbench. Its own stylesheet, but not
+   its own colours: it wears whichever of the sheet's palettes the browser has
+   chosen (app/js/themes.js), read out of app/css/sheet.css by
+   forge/js/theme.js and stamped on <html> as data-theme. Everything below is
+   written against the workbench's own properties, and those are mapped here
+   onto the sheet's, so a palette added to the sheet is a palette here with
+   no line added. The fallbacks are the workbench's own look -- ivory and
+   oxblood, or its night palette when data-scheme says dark -- for the moment
+   before the sheet's stylesheet has been read, and for a browser that cannot
+   read it at all. */
 
 :root{
-  --bg:#EEF0EC; --surface:#FAFAF7; --surface2:#E4E7E1; --surface3:#D9DDD5;
-  --ink:#1B1F24; --ink2:#4F5761; --ink3:#7C838C; --line:#CBD0C8; --line2:#B5BBB1;
-  --accent:#8B2B2E; --accent-soft:#F0DEDD; --on-accent:#FFFFFF;
-  --link:#7A5A18; --link-soft:#F1E7CF;
-  --ok:#2F6B3A; --warn:#A6631B; --bad:#A83232; --ok-soft:#DCEBDD; --warn-soft:#F3E3CB; --bad-soft:#F2D7D7; --saving:#E0B400;
+  --bg:var(--cs-bg,#EEF0EC); --surface:var(--cs-panel,#FAFAF7); --surface2:var(--cs-panel-2,#E4E7E1);
+  --surface3:color-mix(in srgb,var(--surface2) 90%,var(--ink));
+  --ink:var(--cs-text,#1B1F24); --ink2:var(--cs-muted,#4F5761); --ink3:color-mix(in srgb,var(--ink2) 72%,var(--bg));
+  --line:var(--cs-line,#CBD0C8); --line2:color-mix(in srgb,var(--line) 82%,var(--ink));
+  --accent:var(--cs-accent,#8B2B2E); --accent-soft:var(--cs-accent-soft,#F0DEDD); --on-accent:#FFFFFF;
+  --link:var(--cs-edit,#7A5A18); --link-soft:color-mix(in srgb,var(--link) 14%,var(--surface));
+  --ok:var(--cs-good,#2F6B3A); --warn:#A6631B; --bad:var(--cs-bad,#A83232);
+  --ok-soft:color-mix(in srgb,var(--ok) 16%,var(--surface)); --warn-soft:color-mix(in srgb,var(--warn) 18%,var(--surface)); --bad-soft:color-mix(in srgb,var(--bad) 16%,var(--surface));
+  --saving:#E0B400;
   --shadow:0 1px 2px rgba(20,25,30,.08),0 4px 14px rgba(20,25,30,.06);
-  --ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --ui:var(--cs-font,"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif);
+  --mono:var(--cs-mono,"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace);
   --serif:"Alegreya",Georgia,"Times New Roman",serif;
-  --sc:"Alegreya SC","Alegreya",Georgia,serif;
+  --sc:var(--cs-display,"Alegreya SC","Alegreya",Georgia,serif);
   color-scheme:light;
 }
+/* The night side: the fallbacks become the workbench's own dark palette, the
+   text on an accent fill goes dark (the accents are pastels there), and the
+   shadows deepen. `data-scheme` is stamped beside `data-theme` from the
+   palette's entry in themes.js, and before any script runs the system's
+   setting decides. */
 @media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#15171B; --surface:#1E2127; --surface2:#272B33; --surface3:#30353F;
-    --ink:#E4E1DA; --ink2:#A2A7AE; --ink3:#767C85; --line:#343943; --line2:#454B57;
-    --accent:#CF5C5F; --accent-soft:#3B2426; --on-accent:#16090A;
-    --link:#D3A655; --link-soft:#3A3120;
-    --ok:#6DBA7A; --warn:#D89A4B; --bad:#DF6B6B; --ok-soft:#1F3324; --warn-soft:#3A2C18; --bad-soft:#3D1F1F;
+  :root:not([data-scheme="light"]){
+    --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
+    --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
+    --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
+    --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
     --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
     color-scheme:dark;
   }
 }
-:root[data-theme="dark"]{
-  --bg:#15171B; --surface:#1E2127; --surface2:#272B33; --surface3:#30353F;
-  --ink:#E4E1DA; --ink2:#A2A7AE; --ink3:#767C85; --line:#343943; --line2:#454B57;
-  --accent:#CF5C5F; --accent-soft:#3B2426; --on-accent:#16090A;
-  --link:#D3A655; --link-soft:#3A3120;
-  --ok:#6DBA7A; --warn:#D89A4B; --bad:#DF6B6B; --ok-soft:#1F3324; --warn-soft:#3A2C18; --bad-soft:#3D1F1F;
+:root[data-scheme="dark"]{
+  --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
+  --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
+  --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
+  --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
   --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
   color-scheme:dark;
 }
@@ -58,6 +72,7 @@ a{color:var(--link)}
 .status .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3)}
 .status.ok .dot{background:var(--ok)} .status.local .dot{background:var(--warn)} .status.saving .dot{background:var(--saving)}
 .status span:last-child{min-width:150px}
+.themepick{padding:5px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px;max-width:11rem}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-weight:500;white-space:nowrap;text-decoration:none}
 .btn:hover{background:var(--surface2)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
@@ -186,5 +201,6 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
   .topbar{flex-wrap:wrap;gap:8px}
   .topbar .search{max-width:none;min-width:160px}
   .brand small{display:none}
+  .themepick{max-width:8rem}
 }
 @media (prefers-reduced-motion:no-preference){ .row,.chip,.btn{transition:background .12s} }
