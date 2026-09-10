@@ -19,6 +19,8 @@ const FIELD_LABELS = {
   article: {},
 };
 
+import { normalizeCustomTypes } from '../../forge/js/schema.js';
+
 const str = (v) => (v === null || v === undefined ? '' : String(v));
 
 /** Forge prose as a sheet cell reads it: links to their label, emphasis off, pipe tables to tabs. */
@@ -27,6 +29,9 @@ export function plainText(t) {
     .replace(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g, (m, n, l) => (l || n).trim())
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
+    .replace(/__([^_\n]+)__/g, '$1')
+    // A web link keeps its address beside the label: a cell cannot be clicked.
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1 ($2)')
     .replace(/^#{1,3} /gm, '')
     .replace(/^> ?/gm, '')
     .replace(/^\|(.*)\|\s*$/gm, (m, r) => r.split('|').map((c) => c.trim()).join('\t'))
@@ -69,11 +74,32 @@ const withoutTraitLines = (body) => str(body).split('\n').filter((line) => !TRAI
  */
 export function forgeToPack(entries, header = {}) {
   const all = (Array.isArray(entries) ? entries : []).filter((e) => e && e.id && e.type);
+  // Categories of the player's own (`header.customTypes`, as a project export
+  // carries them): their cells' labels, and the plural the catalogue is named
+  // by, since a kind called "x-ritual" is nothing to a reader.
+  const custom = new Map(normalizeCustomTypes(header.customTypes).map((c) => [c.id, c]));
+  const labelsOf = (type) => FIELD_LABELS[type]
+    || (custom.has(type) ? Object.fromEntries(custom.get(type).fields.map((fd) => [fd.k, fd.l])) : {});
+  const kindOf = (type) => custom.get(type)?.plural || type;
   const byId = new Map(all.map((e) => [e.id, e]));
   const nameOf = (id) => byId.get(id)?.name || '';
   const kids = (id, type) => all.filter((e) => e.parent === id && (!type || e.type === type))
     .sort((a, b) => (Number(a.fields?.level) || 0) - (Number(b.fields?.level) || 0) || a.name.localeCompare(b.name));
   const f = (e) => e.fields || {};
+  /*
+   * A kind nested under its own kind, flattened in tree order for a block
+   * that reads a flat list: "Cuts" under "Topological Iaijutsu Techniques"
+   * and "Zero Point Thrust" under "Cuts" arrive as features named
+   * "Cuts: Zero Point Thrust", each at its own level or, with none, its
+   * group's. A cycle is not followed.
+   */
+  const tree = (id, type, seen = new Set(), group = null) => kids(id, type).flatMap((c) => {
+    if (seen.has(c.id)) return [];
+    seen.add(c.id);
+    const name = group ? `${group.name}: ${c.name}` : c.name;
+    const level = Number(f(c).level) || (group ? group.level : 0) || null;
+    return [{ e: c, name, level }, ...tree(c.id, type, seen, { name: c.name, level })];
+  });
 
   const disciplines = [];
   const feats = [];
@@ -82,7 +108,7 @@ export function forgeToPack(entries, header = {}) {
   const catalogues = new Map();
   const catalogue = (kind, e, extraFields = []) => {
     if (!catalogues.has(kind)) catalogues.set(kind, []);
-    const labels = FIELD_LABELS[e.type] || {};
+    const labels = labelsOf(e.type);
     const fields = [];
     for (const [k, label] of Object.entries(labels)) if (str(f(e)[k]).trim()) fields.push([label, str(f(e)[k]).trim()]);
     for (const pair of extraFields) if (str(pair[1]).trim()) fields.push([pair[0], str(pair[1]).trim()]);
@@ -97,10 +123,10 @@ export function forgeToPack(entries, header = {}) {
       case 'discipline':
         disciplines.push({
           name: e.name,
-          entries: kids(e.id, 'maneuver').map((m) => ({
-            level: Number(f(m).level) || 1,
+          entries: tree(e.id, 'maneuver').map(({ e: m, name, level }) => ({
+            level: level || 1,
             kind: f(m).mtype === 'Stance' ? 'stance' : 'maneuver',
-            name: m.name,
+            name,
             type: str(f(m).mtype) || 'Strike',
             action: str(f(m).action),
             range: str(f(m).range),
@@ -139,21 +165,23 @@ export function forgeToPack(entries, header = {}) {
           goodFort: x.fort === 'Good', goodRef: x.ref === 'Good', goodWill: x.will === 'Good',
           skillRanks: numIn(x.ranks) ?? 2, classSkills: list(x.classSkills), systems: [],
           archetypes: kids(e.id, 'archetype').map((a) => a.name).join(', '),
-          features: kids(e.id, 'classFeature').map((c) => ({ level: Number(f(c).level) || 1, name: c.name, text: plainText(c.body) })),
+          features: tree(e.id, 'classFeature').map(({ e: c, name, level }) => ({ level: level || 1, name, text: plainText(c.body) })),
         });
         break;
       case 'archetype':
         blocks.push({
           kind: 'archetype', name: e.name, text: plainText(e.body), source: '', group: '',
           class: nameOf(e.parent) || str(x.baseClass),
-          features: kids(e.id, 'classFeature').map((c) => ({
-            level: Number(f(c).level) || null, name: c.name, type: f(c).kind && f(c).kind !== '—' ? f(c).kind : null,
+          features: tree(e.id, 'classFeature').map(({ e: c, name, level }) => ({
+            level, name, type: f(c).kind && f(c).kind !== '—' ? f(c).kind : null,
             text: plainText(c.body), replaces: list(f(c).replaces), alters: list(f(c).alters),
           })),
         });
         break;
       case 'classFeature':
-        if (!e.parent || !['class', 'archetype'].includes(byId.get(e.parent)?.type || '')) {
+        // Loose only when nothing above it is a class or archetype: a feature
+        // under a feature under an archetype went out with the archetype.
+        if (!(function held(id, seen = new Set()) { const p = id && byId.get(id); if (!p || seen.has(p.id)) return false; seen.add(p.id); return ['class', 'archetype'].includes(p.type) || held(p.parent, seen); }(e.parent))) {
           blocks.push({ kind: 'feature', name: e.name, type: x.kind && x.kind !== '—' ? x.kind : null, text: plainText(e.body), source: '', group: '' });
         }
         break;
@@ -169,7 +197,7 @@ export function forgeToPack(entries, header = {}) {
         else catalogue('trait', e);
         break;
       default:
-        catalogue(e.type, e);
+        catalogue(kindOf(e.type), e);
     }
   }
 

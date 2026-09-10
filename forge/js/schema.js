@@ -28,7 +28,10 @@ export const TYPES = {
     { k: 'baseClass', l: 'Base class (if not linked)', t: 'text' }, { k: 'replaces', l: 'Replaced features', t: 'text', wide: true }] },
   classFeature: { label: 'Class feature', plural: 'Class features', group: 'Character options', bodyLabel: 'Description', parent: ['class', 'archetype'], fields: [
     { k: 'level', l: 'Level', t: 'number' }, { k: 'kind', l: 'Kind', t: 'select', o: ['Ex', 'Su', 'Sp', '—'] },
-    { k: 'replaces', l: 'Replaces (archetype: features removed)', t: 'text' }, { k: 'alters', l: 'Alters (archetype: features changed, kept)', t: 'text' }] },
+    // `after`: under the description rather than above it. What a feature
+    // replaces is the last thing a printed archetype says about it, and the
+    // editor, the preview and the Markdown all keep that order.
+    { k: 'replaces', l: 'Replaces (archetype: features removed)', t: 'text', after: true }, { k: 'alters', l: 'Alters (archetype: features changed, kept)', t: 'text', after: true }] },
   race: { label: 'Race', plural: 'Races', group: 'Character options', bodyLabel: 'Racial traits', fields: [
     { k: 'size', l: 'Size', t: 'select', o: ['Fine', 'Diminutive', 'Tiny', 'Small', 'Medium', 'Large', 'Huge'] }, { k: 'ctype', l: 'Type', t: 'text' },
     { k: 'abilities', l: 'Ability modifiers', t: 'text' }, { k: 'speed', l: 'Speed', t: 'text' }, { k: 'languages', l: 'Languages', t: 'text', wide: true }] },
@@ -61,6 +64,102 @@ export const TYPES = {
 };
 
 export const GROUPS = ['Character options', 'Magic & gear', 'Path of War', 'World', 'Reference'];
+
+/*
+ * Every kind can hold entries of its own kind, on top of the containers it
+ * already names: a class feature under a class feature ("Cuts" under
+ * "Topological Iaijutsu Techniques", and the cuts under that), an article
+ * under an article, a maneuver under a maneuver. That is what makes a group
+ * of any depth: the list folds at every level, the preview and the Markdown
+ * follow it, and the pack writer flattens a nested feature or maneuver into
+ * the block the sheet reads with its group's name in front. The kind is
+ * added last in `children`, so "+ Add" under a container still makes what
+ * it always made.
+ */
+export function selfNesting(id, t) {
+  t.parent = [...(t.parent || []).filter((p) => p !== id), id];
+  t.children = [...(t.children || []).filter((c) => c !== id), id];
+}
+for (const [id, t] of Object.entries(TYPES)) selfNesting(id, t);
+
+/* ---------------- custom categories ---------------- */
+/*
+ * A category a player adds is a type like the ones above, made in Settings:
+ * a label, a group (one of the five, or a new one), the body's label, an
+ * optional parent type it sits under -- which makes it a subcategory, a
+ * child the way a maneuver is a discipline's -- and any text cells it wants.
+ * They are kept as plain data in the store's meta and in a project export,
+ * and applied to TYPES and GROUPS in place, so every renderer that reads
+ * those sees a custom category as it sees a built-in one. Re-applying
+ * replaces the previous set: what was custom and is no longer listed goes,
+ * and a built-in parent it had been added to as a child forgets it.
+ */
+
+/** How many of GROUPS are the built-in ones; the rest are custom. */
+const BUILTIN_GROUPS = GROUPS.length;
+
+/**
+ * Custom categories as clean data: one per usable row, a slugged id that
+ * cannot collide with a built-in type, labels defaulted from each other,
+ * cells as `{k, l}` text fields with keys slugged from their labels. A row
+ * with no label at all is dropped.
+ */
+export function normalizeCustomTypes(list) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const label = str(raw.label).trim();
+    if (!label) continue;
+    let id = str(raw.id).trim() || `x-${slug(label)}`;
+    if (!id.startsWith('x-')) id = `x-${slug(id)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const fields = (Array.isArray(raw.fields) ? raw.fields : str(raw.fields).split(','))
+      .map((c) => (c && typeof c === 'object' ? { k: str(c.k).trim(), l: str(c.l).trim() } : { k: '', l: str(c).trim() }))
+      .filter((c) => c.l)
+      .map((c) => ({ k: c.k || slug(c.l).replace(/-/g, '_'), l: c.l, t: 'text' }));
+    out.push({
+      id, label,
+      plural: str(raw.plural).trim() || `${label}s`,
+      group: str(raw.group).trim() || 'Reference',
+      parent: str(raw.parent).trim(),
+      bodyLabel: str(raw.bodyLabel).trim() || 'Text',
+      fields,
+    });
+  }
+  return out;
+}
+
+/**
+ * Put a set of custom categories into TYPES and GROUPS, replacing whatever
+ * custom set was there. Returns the clean list that was applied.
+ */
+export function applyCustomTypes(list) {
+  for (const [id, t] of Object.entries(TYPES)) if (t.custom) delete TYPES[id];
+  for (const t of Object.values(TYPES)) if (t.children) t.children = t.children.filter((c) => TYPES[c]);
+  for (const t of Object.values(TYPES)) if (t.parent) t.parent = t.parent.filter((c) => TYPES[c]);
+  GROUPS.splice(BUILTIN_GROUPS);
+  const custom = normalizeCustomTypes(list);
+  for (const c of custom) {
+    TYPES[c.id] = {
+      label: c.label, plural: c.plural, group: c.group, bodyLabel: c.bodyLabel, custom: true,
+      fields: c.fields.map((fd) => ({ ...fd, wide: true })),
+      ...(c.parent ? { parent: [c.parent] } : {}),
+    };
+    if (!GROUPS.includes(c.group)) GROUPS.push(c.group);
+  }
+  for (const c of custom) selfNesting(c.id, TYPES[c.id]);
+  // Parents after every custom type exists: a custom parent may be listed
+  // after its child, and a parent that does not exist is no parent.
+  for (const c of custom) {
+    const p = c.parent && TYPES[c.parent];
+    if (!p) { TYPES[c.id].parent = [c.id]; continue; }
+    p.children = p.children || [];
+    if (!p.children.includes(c.id)) p.children.push(c.id);
+  }
+  return custom;
+}
 
 /**
  * The published Path of War baseline: thirty disciplines, 1,034 entries.

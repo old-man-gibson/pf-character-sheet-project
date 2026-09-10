@@ -4,7 +4,7 @@
  *  Run: node tests/forge.test.mjs */
 import { importPack, forgeToPack } from '../forge/js/pack.js';
 import { forgeStore } from '../forge/js/store.js';
-import { TYPES, newEntry, linksIn, sortEntries } from '../forge/js/schema.js';
+import { TYPES, GROUPS, newEntry, linksIn, sortEntries, normalizeCustomTypes, applyCustomTypes } from '../forge/js/schema.js';
 
 let pass = 0;
 let fail = 0;
@@ -91,6 +91,56 @@ eq(linksIn('a [[B]] and [[C|see c]]'), ['B', 'C'], 'linksIn');
 const nameOf = (id) => original.find((e) => e.id === id)?.name || '';
 eq(sortEntries(original, nameOf).map((e) => e.name).slice(0, 3), ['Cloud Lancer', 'Sky Knight', 'Lance dive'], 'sorted by group, type, container, level');
 ok(Object.values(TYPES).every((t) => t.label && t.plural && t.group && Array.isArray(t.fields)), 'every type is complete');
+ok(Object.entries(TYPES).every(([id, t]) => t.parent.includes(id) && t.children.includes(id)), 'every kind nests under its own kind');
+eq(TYPES.discipline.children[0], 'maneuver', 'a container still adds what it always added first');
+eq(TYPES.classFeature.parent, ['class', 'archetype', 'classFeature'], 'a class feature sits under a class, an archetype, or a class feature');
+
+/* ----- nested groups flatten into the pack ----- */
+{
+  const arch = newEntry('archetype', 'Isougiri'); arch.fields = { baseClass: 'Legendary Samurai' };
+  const tech = newEntry('classFeature', 'Topological Iaijutsu Techniques', arch.id); tech.fields = { level: 1 };
+  const cuts = newEntry('classFeature', 'Cuts', tech.id); cuts.fields = {};
+  const zpt = newEntry('classFeature', 'Zero Point Thrust', cuts.id); zpt.fields = { level: 3 }; zpt.body = 'A thrust.';
+  const loose = newEntry('classFeature', 'Loose feature'); loose.body = 'On its own.';
+  const disc = newEntry('discipline', 'Sky Doctrine');
+  const m1 = newEntry('maneuver', 'Wing Cut', disc.id); m1.fields = { level: 2, mtype: 'Strike' };
+  const m2 = newEntry('maneuver', 'Feathered Wing Cut', m1.id); m2.fields = { mtype: 'Strike' };
+  const pack = forgeToPack([arch, tech, cuts, zpt, loose, disc, m1, m2], { revision: 1 });
+  const a = pack.blocks.find((b) => b.kind === 'archetype');
+  eq(a.features.map((x) => `${x.name}@${x.level}`), ['Topological Iaijutsu Techniques@1', 'Topological Iaijutsu Techniques: Cuts@1', 'Cuts: Zero Point Thrust@3'],
+    'nested features flatten in tree order, named by their group, at their own level or the group\'s');
+  eq(pack.blocks.filter((b) => b.kind === 'feature').map((b) => b.name), ['Loose feature'], 'a feature under a feature under an archetype is not loose');
+  eq(pack.provides.maneuvers.disciplines[0].entries.map((x) => `${x.name}@${x.level}`), ['Wing Cut@2', 'Wing Cut: Feathered Wing Cut@2'], 'nested maneuvers flatten the same way');
+}
+
+/* ----- categories of the player's own ----- */
+const builtinCount = Object.keys(TYPES).length;
+const builtinGroups = GROUPS.length;
+const cats = normalizeCustomTypes([
+  { label: 'Ritual', group: 'Magic & gear', fields: 'Casting time, Cost' },
+  { label: 'Rite', parent: 'x-ritual', fields: [{ k: 'dc', l: 'DC' }] },
+  { label: 'Vow', group: 'Oaths', parent: 'campaign' },
+  { label: '' }, null, { id: 'feat', label: 'Feat again' },
+]);
+eq(cats.map((c) => c.id), ['x-ritual', 'x-rite', 'x-vow', 'x-feat'], 'ids are slugged and prefixed, never a built-in id');
+eq(cats[0].plural, 'Rituals', 'plural defaults from the label');
+eq(cats[0].fields, [{ k: 'casting_time', l: 'Casting time', t: 'text' }, { k: 'cost', l: 'Cost', t: 'text' }], 'cells from a comma list');
+eq(cats[1].fields, [{ k: 'dc', l: 'DC', t: 'text' }], 'cells as objects keep their keys');
+eq(cats[1].group, 'Reference', 'group defaults');
+applyCustomTypes(cats);
+eq(Object.keys(TYPES).length, builtinCount + 4, 'four custom types applied');
+ok(TYPES['x-ritual'].custom && TYPES['x-ritual'].children?.includes('x-rite'), 'a custom parent lists its custom child');
+eq(TYPES['x-rite'].parent, ['x-ritual', 'x-rite'], 'the child names its parent, and itself');
+ok(TYPES.campaign.children.includes('x-vow'), 'a built-in parent gains a custom child');
+ok(GROUPS.includes('Oaths') && GROUPS.length === builtinGroups + 1, 'a new group is listed once');
+ok(sortEntries([newEntry('x-vow', 'Silence'), newEntry('article', 'A')], () => '').map((e) => e.type)[0] === 'article', 'custom groups sort after the built-in ones');
+applyCustomTypes([{ label: 'Ritual' }]);
+eq(Object.keys(TYPES).length, builtinCount + 1, 're-applying replaces the set');
+ok(!TYPES.campaign.children.includes('x-vow'), 'a dropped child leaves its built-in parent');
+ok(!TYPES['x-ritual'].children.includes('x-rite'), 'a dropped child leaves its custom parent');
+eq(GROUPS.length, builtinGroups, 'a dropped group goes');
+applyCustomTypes([]);
+eq(Object.keys(TYPES).length, builtinCount, 'none applied is the built-in set');
 
 console.log(`forge: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

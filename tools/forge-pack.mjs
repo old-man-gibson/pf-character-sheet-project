@@ -63,6 +63,7 @@ if (isMain) {
     if (previous && Number(previous.revision) >= Number(pack.revision || 1)) pack.revision = Number(previous.revision) + 1;
   } else if ((doc.format === 'homebrew-workbench' || doc.format === 'primordia-forge') && Array.isArray(doc.entries)) {
     pack = forgeToPack(doc.entries, {
+      customTypes: doc.customTypes,
       id: opt('--id') || previous?.id, name: opt('--name') || previous?.name, author: previous?.author,
       source: previous?.source, license: previous?.license, createdAt: previous?.createdAt,
       revision: previous ? Number(previous.revision) + 1 : 1,

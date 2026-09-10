@@ -92,7 +92,11 @@ a{color:var(--link)}
 
 /* ---------- rail ---------- */
 .rail{grid-area:rail;display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--surface)}
-.typegroups{padding:10px 10px 6px;border-bottom:1px solid var(--line);overflow:auto;max-height:46%}
+.typegroups{padding:10px 10px 6px;overflow:auto;max-height:46%;flex:none}
+/* A dragged split fixes the chips' height instead of capping it. */
+.rail.split .typegroups{max-height:none;height:var(--rail-split)}
+.railsplit{flex:none;height:7px;margin:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface2);cursor:row-resize;touch-action:none}
+.railsplit:hover,.railsplit.dragging{background:var(--accent-soft);border-color:var(--accent)}
 .tg h4{margin:8px 0 3px;font:500 10.5px var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
 .tg .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:12px;color:var(--ink2)}
@@ -106,6 +110,23 @@ a{color:var(--link)}
 .row .n{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .m{grid-column:1/-1;font-size:11.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .k{font-family:var(--mono);font-size:10.5px;color:var(--ink3);align-self:center}
+/* The tree: a child is set in by its depth, and a container carries a fold
+   at its left edge, out of the grid so the name and the meta keep their cells. */
+.row.child{margin-left:calc(var(--depth,0) * 14px)}
+.row.hasfold{position:relative;padding-left:26px}
+.row .fold{position:absolute;left:5px;top:6px;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink3);font-size:11px;line-height:18px;text-align:center}
+.row .fold:hover{background:var(--surface3);color:var(--ink)}
+/* An entry's own colour: on the row's edge and its name, and on the preview's heading. */
+.row.tinted{border-left:3px solid var(--entry-color);padding-left:calc(9px - 2px)}
+.row.tinted.hasfold{padding-left:calc(26px - 2px)}
+.row.tinted .n{color:var(--entry-color)}
+.row.tinted[aria-current="true"]{border-color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 12%,var(--surface))}
+.sheet[style*="--entry-color"] h1{color:var(--entry-color);border-bottom-color:var(--entry-color)}
+#colorMenu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:6px;font-size:13px}
+#colorMenu .swatches{display:flex;flex-wrap:wrap;gap:4px;width:calc(6 * 24px + 5 * 4px)}
+#colorMenu .swatch{width:24px;height:24px;border-radius:5px;border:2px solid transparent;padding:0;cursor:pointer}
+#colorMenu .swatch[aria-pressed="true"]{border-color:var(--ink)}
+#colorMenu .swatch.none{background:linear-gradient(135deg,transparent 45%,var(--bad) 45%,var(--bad) 55%,transparent 55%);border-color:var(--line2)}
 .empty{padding:28px 14px;color:var(--ink3);text-align:center;font-size:13px;line-height:1.5}
 
 /* ---------- editor ---------- */
@@ -148,6 +169,9 @@ select.type{padding:6px 8px;border:1px solid var(--line2);border-radius:6px;back
 a.wl{color:var(--link);text-decoration:none;border-bottom:1px solid var(--link);cursor:pointer}
 a.wl:hover{background:var(--link-soft)}
 a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
+.sheet a.ext{color:var(--link);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--link) 50%,transparent);word-break:break-all}
+.sheet a.ext:hover{border-bottom-color:var(--link)}
+.sheet a.ext::after{content:" ↗";font-size:10px;color:var(--ink3)}
 .children{margin-top:8px}
 .children .lvl{font-family:var(--sc);font-weight:700;font-size:14px;margin:8px 0 2px;color:var(--ink2)}
 .children ul{margin:0;padding-left:18px}
@@ -180,11 +204,19 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
 .modal{position:fixed;inset:0;background:rgba(10,12,15,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
 .modal.open{display:flex}
 .modal .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);width:min(420px,100%);max-height:90vh;display:flex;flex-direction:column;gap:10px;padding:16px}
+.modal .box.wide{width:min(760px,100%)}
+.modal .box .hint{margin:0}
+.catlist{overflow:auto;min-height:0;flex:1}
+.catrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:end}
+.catrow:last-of-type{border-bottom:0}
+.modal .acts .spacer{flex:1}
 .modal h3{margin:0;font-family:var(--sc);font-size:18px}
 .modal .acts{display:flex;gap:8px;justify-content:flex-end}
 .toasts{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:60}
 .toast{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:var(--shadow)}
 .toast.bad{background:var(--bad);color:#fff}
+.toast{display:flex;align-items:center;gap:12px}
+.toast .act{padding:2px 10px;border:1px solid currentColor;border-radius:999px;background:transparent;color:inherit;font-weight:600;font-size:12px}
 
 @media (max-width:1100px){
   #app{grid-template-columns:240px minmax(0,1fr);grid-template-areas:"top top" "rail edit"}
