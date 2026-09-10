@@ -103,6 +103,12 @@ a{color:var(--link)}
 .chip b{font-family:var(--mono);font-weight:500;font-size:10.5px;color:var(--ink3)}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .chip[aria-pressed="true"] b{color:var(--accent)}
+/* A coloured tag: its chip, its badge on a row, its name in a preview. */
+.chip.tinted{border-color:color-mix(in srgb,var(--entry-color) 55%,var(--line));color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 8%,var(--bg))}
+.chip.tinted b{color:var(--entry-color)}
+.chip.tinted[aria-pressed="true"]{background:color-mix(in srgb,var(--entry-color) 18%,var(--bg));border-color:var(--entry-color)}
+.badge.tinted{color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 12%,var(--surface2))}
+a.wl.tinted{color:var(--entry-color);border-bottom-color:var(--entry-color)}
 .list{flex:1;overflow:auto;padding:6px}
 .row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 9px;border-radius:6px;cursor:pointer;border:1px solid transparent}
 .row:hover{background:var(--surface2)}

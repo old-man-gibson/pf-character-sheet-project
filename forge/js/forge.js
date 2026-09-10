@@ -61,6 +61,11 @@ function reindex() {
 }
 const resolveName = (n) => S.nameIndex.get(String(n).trim().toLowerCase()) || null;
 const backlinksTo = (id) => sortedEntries().filter((e) => e.id !== id && linksIn(`${e.body} ${fieldText(e)}`).some((n) => resolveName(n) === id));
+/* A tag's colour, by the tag's lower-cased text. Kept in the store's meta and
+   in a project export, beside the categories. */
+const tagColors = () => (store.getMeta('tagColors') && typeof store.getMeta('tagColors') === 'object' ? store.getMeta('tagColors') : {});
+const tagColor = (t) => { const c = tagColors()[String(t).trim().toLowerCase()]; return /^#[0-9a-f]{6}$/i.test(c || '') ? c : ''; };
+const tagTint = (t) => { const c = tagColor(t); return c ? ` tinted" style="--entry-color:${c}` : ''; };
 const allTags = () => {
   const c = new Map();
   for (const e of entries().values()) for (const t of e.tags || []) { const k = t.trim(); if (k) c.set(k, (c.get(k) || 0) + 1); }
@@ -208,7 +213,7 @@ function renderRail() {
     h += `<div class="tg"><h4>${esc(g)}</h4><div class="chips">${ts.map((t) => `<button class="chip" data-f="${t}" aria-pressed="${S.filter === t}">${esc(TYPES[t].plural)} <b>${counts[t] || 0}</b></button>`).join('')}</div></div>`;
   }
   const tags = allTags();
-  if (tags.length) h += `<div class="tg"><h4>Tags</h4><div class="chips">${tags.map(([t, n]) => `<button class="chip" data-tag="${esc(t)}" aria-pressed="${S.tag === t}">${esc(t)} <b>${n}</b></button>`).join('')}</div></div>`;
+  if (tags.length) h += `<div class="tg"><h4>Tags</h4><div class="chips">${tags.map(([t, n]) => `<button class="chip${tagTint(t)}" data-tag="${esc(t)}" aria-pressed="${S.tag === t}" title="Right-click to colour">${esc(t)} <b>${n}</b></button>`).join('')}</div></div>`;
   $('#typegroups').innerHTML = h;
   const q = S.q.trim().toLowerCase();
   const items = sortedEntries().filter((e) => (S.filter === 'all' || e.type === S.filter)
@@ -255,7 +260,7 @@ function renderRail() {
     const kids = kidsOf.get(e.id) || [];
     const folded = !q && kids.length > 0 && S.folded.has(e.id);
     const meta = [TYPES[e.type]?.label, f.mtype, f.level ? `L${f.level}` : '', f.number ? `#${f.number}` : '', depth ? '' : nameOf(e.parent)].filter(Boolean).join(' · ');
-    const tagBadges = (e.tags || []).filter(Boolean).map((t) => `<span class="badge">${esc(t)}</span>`).join(' ');
+    const tagBadges = (e.tags || []).filter(Boolean).map((t) => `<span class="badge${tagTint(t)}">${esc(t)}</span>`).join(' ');
     const fold = kids.length
       ? `<button class="fold" data-fold="${e.id}" aria-expanded="${!folded}" title="${folded ? 'Show' : 'Hide'} the ${kids.length} ${kids.length === 1 ? 'entry' : 'entries'} under this">${folded ? '▸' : '▾'}</button>`
       : '';
@@ -357,7 +362,7 @@ function renderPreview() {
   let h = `${renderSheet(e)}<div class="side">`;
   if (e.type === 'discipline') h += renderAudit(e);
   const tags = (e.tags || []).filter(Boolean);
-  if (tags.length) h += `<h5>Tags</h5><ul><li>${tags.map((t) => `<a class="wl" data-tag-go="${esc(t)}">${esc(t)}</a>`).join(' · ')}</li></ul>`;
+  if (tags.length) h += `<h5>Tags</h5><ul><li>${tags.map((t) => `<a class="wl${tagTint(t)}" data-tag-go="${esc(t)}">${esc(t)}</a>`).join(' · ')}</li></ul>`;
   const bl = backlinksTo(e.id);
   h += `<h5>Linked from</h5>${bl.length ? `<ul>${bl.map((b) => `<li><a class="wl" data-go="${b.id}">${esc(b.name)}</a> <span class="badge">${esc(TYPES[b.type]?.label || b.type)}</span></li>`).join('')}</ul>` : `<div class="none">Nothing links here yet. Write [[${esc(e.name || 'Name')}]] in another entry to create a link.</div>`}`;
   const broken = [...new Set(linksIn(`${e.body} ${fieldText(e)}`).filter((n) => !resolveName(n)))];
@@ -451,7 +456,7 @@ async function doIO(act) {
   const cur = entries().get(S.selected);
   if (act === 'import') { $('#fileIn').value = ''; $('#fileIn').click(); return; }
   if (act === 'sheet') { window.open('../app/', '_blank'); return; }
-  if (act === 'exp-project') return download('homebrew-workbench-project.json', JSON.stringify({ format: 'homebrew-workbench', version: 1, exportedAt: now(), customTypes: store.getMeta('customTypes') || [], entries: sortedEntries() }, null, 1));
+  if (act === 'exp-project') return download('homebrew-workbench-project.json', JSON.stringify({ format: 'homebrew-workbench', version: 1, exportedAt: now(), customTypes: store.getMeta('customTypes') || [], tagColors: tagColors(), entries: sortedEntries() }, null, 1));
   if (act === 'exp-ext') {
     if (!entries().size) return toast('Nothing to export', 'bad');
     const rev = await nextRevision();
@@ -478,6 +483,11 @@ $('#fileIn').addEventListener('change', async (ev) => {
       const mine = normalizeCustomTypes(store.getMeta('customTypes'));
       const merged = [...mine.filter((c) => !incoming.some((i) => i.id === c.id)), ...incoming];
       await store.setMeta('customTypes', merged); applyCustomTypes(merged); cats = incoming.length;
+    }
+    if (data.tagColors && typeof data.tagColors === 'object') {
+      const merged = { ...tagColors() };
+      for (const [k, v] of Object.entries(data.tagColors)) if (/^#[0-9a-f]{6}$/i.test(String(v))) merged[String(k).trim().toLowerCase()] = v;
+      try { await store.setMeta('tagColors', merged); } catch { /* the entries still import */ }
     }
     list = data.entries.filter((e) => e && e.id && TYPES[e.type]);
   }
@@ -567,8 +577,8 @@ acBox.addEventListener('mousedown', (ev) => { ev.preventDefault(); const r = ev.
    two rows, the list a few entries -- so neither can be dragged away, and a
    double-click gives the default back. */
 const SPLIT_KEY = 'homebrew-workbench:rail-split';
-const SPLIT_MIN_CHIPS = 72;
-const SPLIT_MIN_LIST = 140;
+const SPLIT_MIN_CHIPS = 180;
+const SPLIT_MIN_LIST = 350;
 function applySplit(px) {
   const rail = $('.rail');
   if (px == null) { rail.style.removeProperty('--rail-split'); rail.classList.remove('split'); return; }
@@ -599,27 +609,42 @@ $('#railSplit').addEventListener('dblclick', () => { applySplit(null); try { loc
    name, and the preview's heading takes it. */
 const ENTRY_COLORS = ['#c0392b', '#d35400', '#c98a12', '#7d8a1c', '#2e8b57', '#1f8a8a', '#2a6fb0', '#5b4fbf', '#8e44ad', '#b3366f', '#8b6b4a', '#6b7280'];
 const colorBox = $('#colorMenu');
-const COL = { id: null };
-function openColor(id, x, y) {
-  const e = entries().get(id); if (!e) return;
-  COL.id = id;
-  colorBox.innerHTML = `<div class="ac-none" style="padding:2px 6px 6px">${esc(e.name || 'Untitled')}</div>
-    <div class="swatches"><button class="swatch none" data-color="" title="No colour" aria-label="No colour" aria-pressed="${!e.color}"></button>
-    ${ENTRY_COLORS.map((c) => `<button class="swatch" data-color="${c}" style="background:${c}" title="${c}" aria-label="${c}" aria-pressed="${e.color === c}"></button>`).join('')}</div>`;
+/* What the panel is colouring: an entry (`{ id }`) or a tag (`{ tag }`).
+   A tag's colour is worn by its chip in the filter, by its badge on every
+   row that carries it, and by its name in a preview's tag list. */
+const COL = { id: null, tag: null };
+function openColor(target, x, y) {
+  const e = target.id ? entries().get(target.id) : null;
+  if (target.id && !e) return;
+  COL.id = target.id || null; COL.tag = target.tag || null;
+  const cur = e ? e.color : tagColor(target.tag);
+  colorBox.innerHTML = `<div class="ac-none" style="padding:2px 6px 6px">${esc(e ? (e.name || 'Untitled') : `Tag: ${target.tag}`)}</div>
+    <div class="swatches"><button class="swatch none" data-color="" title="No colour" aria-label="No colour" aria-pressed="${!cur}"></button>
+    ${ENTRY_COLORS.map((c) => `<button class="swatch" data-color="${c}" style="background:${c}" title="${c}" aria-label="${c}" aria-pressed="${cur === c}"></button>`).join('')}</div>`;
   colorBox.hidden = false;
   const w = colorBox.offsetWidth; const h = colorBox.offsetHeight;
   colorBox.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
   colorBox.style.top = `${Math.max(8, Math.min(y, window.innerHeight - h - 8))}px`;
 }
-function closeColor() { colorBox.hidden = true; COL.id = null; }
+function closeColor() { colorBox.hidden = true; COL.id = null; COL.tag = null; }
 $('#list').addEventListener('contextmenu', (ev) => {
   const row = ev.target.closest('.row[data-id]'); if (!row) return;
-  ev.preventDefault(); openColor(row.dataset.id, ev.clientX, ev.clientY);
+  ev.preventDefault(); openColor({ id: row.dataset.id }, ev.clientX, ev.clientY);
+});
+$('#typegroups').addEventListener('contextmenu', (ev) => {
+  const chip = ev.target.closest('.chip[data-tag]'); if (!chip) return;
+  ev.preventDefault(); openColor({ tag: chip.dataset.tag }, ev.clientX, ev.clientY);
 });
 colorBox.addEventListener('click', async (ev) => {
   const b = ev.target.closest('[data-color]'); if (!b) return;
-  const e = entries().get(COL.id); if (!e) return closeColor();
   const hex = b.dataset.color;
+  if (COL.tag) {
+    const key = COL.tag.trim().toLowerCase(); const next = { ...tagColors() };
+    if (hex) next[key] = hex; else delete next[key];
+    try { await store.setMeta('tagColors', next); } catch (err) { toast(`Could not save: ${err.message}`, 'bad'); }
+    closeColor(); renderRail(); renderPreview(); return undefined;
+  }
+  const e = entries().get(COL.id); if (!e) return closeColor();
   if (hex) e.color = hex; else delete e.color;
   e.updatedAt = now(); await writeEntry(e); closeColor(); renderRail(); renderPreview();
   return undefined;
