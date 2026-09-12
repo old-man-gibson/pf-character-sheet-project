@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Homebrew Workbench</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../app/css/chrome.css">
 <link rel="stylesheet" href="forge.css">
 </head>
 <body>
 <div id="app" data-pane="edit">
   <header class="topbar">
-    <div class="brand"><a href="./" title="Homebrew Workbench">Homebrew Workbench</a> <small>Homebrew workbench</small></div>
+    <div class="brand"><a href="./" title="Homebrew Workbench">Homebrew Workbench</a> <small>Pathfinder</small></div>
     <div class="panetabs" role="tablist">
       <button role="tab" data-pane="list">Entries</button>
       <button role="tab" data-pane="edit" aria-selected="true">Edit</button>
@@ -18,6 +19,7 @@
     </div>
     <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search names, tags, text…" aria-label="Search entries"></div>
     <div class="spacer"></div>
+    <a class="btn" href="../app/" title="The character sheet, where a published pack is read">Sheet</a>
     <button class="btn" id="settingsBtn" title="Categories of your own, and where they sit">Settings</button>
     <select class="themepick" id="themePick" aria-label="Theme" title="The look of this page and of the character sheet: one choice, remembered in this browser"></select>
     <div class="status" id="status"><span class="dot"></span><span id="statusText">opening</span></div>

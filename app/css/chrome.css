@@ -1,0 +1,162 @@
+/* chrome.css -- the page furniture the character-sheet app and the Homebrew
+   Workbench share: the top bar and its brand, buttons, chips, list rows,
+   dialogs, toasts, the small colour menu. One file so the two pages are one
+   look, and so a change to a button is a change to both.
+
+   Colours are not written here. Everything is set in the sheet's own palette
+   properties (--cs-*, declared in sheet.css and listed in app/js/themes.js),
+   which each page puts on its root: the Workbench by reading the palette
+   blocks out of sheet.css (forge/js/theme.js), the sheet app by copying them
+   off the element (followSheet() in app/index.html). The first block maps
+   those onto the working names the rules below use, with the Workbench's
+   ivory-and-oxblood as the fallback for the moment before a palette lands,
+   and its night palette when the root says data-scheme="dark". */
+
+:root{
+  --bg:var(--cs-bg,#EEF0EC); --surface:var(--cs-panel,#FAFAF7); --surface2:var(--cs-panel-2,#E4E7E1);
+  --surface3:color-mix(in srgb,var(--surface2) 90%,var(--ink));
+  --ink:var(--cs-text,#1B1F24); --ink2:var(--cs-muted,#4F5761); --ink3:color-mix(in srgb,var(--ink2) 72%,var(--bg));
+  --line:var(--cs-line,#CBD0C8); --line2:color-mix(in srgb,var(--line) 82%,var(--ink));
+  --accent:var(--cs-accent,#8B2B2E); --accent-soft:var(--cs-accent-soft,#F0DEDD); --on-accent:#FFFFFF;
+  --link:var(--cs-edit,#7A5A18); --link-soft:color-mix(in srgb,var(--link) 14%,var(--surface));
+  --ok:var(--cs-good,#2F6B3A); --warn:#A6631B; --bad:var(--cs-bad,#A83232);
+  --ok-soft:color-mix(in srgb,var(--ok) 16%,var(--surface)); --warn-soft:color-mix(in srgb,var(--warn) 18%,var(--surface)); --bad-soft:color-mix(in srgb,var(--bad) 16%,var(--surface));
+  --saving:#E0B400;
+  --shadow:0 1px 2px rgba(20,25,30,.08),0 4px 14px rgba(20,25,30,.06);
+  --ui:var(--cs-font,"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif);
+  --mono:var(--cs-mono,"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace);
+  --serif:"Alegreya",Georgia,"Times New Roman",serif;
+  --sc:var(--cs-display,"Alegreya SC","Alegreya",Georgia,serif);
+  color-scheme:light;
+}
+/* The night side: the fallbacks become the night palette, the text on an
+   accent fill goes dark (the accents are pastels there), and the shadows
+   deepen. Before any script has stamped data-scheme, the system decides. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-scheme="light"]){
+    --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
+    --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
+    --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
+    --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+:root[data-scheme="dark"]{
+  --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
+  --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
+  --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
+  --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+
+/* ---------- base ---------- */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--ui)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--link);outline-offset:1px}
+a{color:var(--link)}
+::placeholder{color:var(--ink3)}
+
+/* ---------- top bar ---------- */
+.topbar{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;margin:0;font-family:var(--sc);font-size:20px;font-weight:700;letter-spacing:.02em;color:var(--accent)}
+.brand small{font-family:var(--ui);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.brand a{color:inherit;text-decoration:none}
+.spacer{flex:1}
+.status{font-family:var(--mono);font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.status.ok .dot{background:var(--ok)} .status.local .dot{background:var(--warn)} .status.saving .dot{background:var(--saving)}
+.status span:last-child{min-width:150px}
+.themepick{padding:5px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px;max-width:11rem}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-weight:500;white-space:nowrap;text-decoration:none;cursor:pointer}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.small{padding:3px 8px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.menu{position:relative}
+.menu .drop{display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:270px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:6px;z-index:20}
+.menu.open .drop{display:block}
+.drop button{display:block;width:100%;text-align:left;padding:7px 9px;border:0;background:transparent;border-radius:5px}
+.drop button:hover{background:var(--surface2)}
+.drop button small{display:block;color:var(--ink3);font-size:11px}
+.drop hr{border:0;border-top:1px solid var(--line);margin:5px 0}
+
+/* ---------- chips and badges ---------- */
+/* A chip is a pill with a name and, in <b>, a small number: a filter with its
+   count on the Workbench, a character with its level on the sheet. Pressed
+   is the accent wash; tinted is the thing's own colour. */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:12px;color:var(--ink2);text-decoration:none}
+.chip:hover{border-color:var(--line2);color:var(--ink)}
+.chip b{font-family:var(--mono);font-weight:500;font-size:10.5px;color:var(--ink3)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip[aria-pressed="true"] b{color:var(--accent)}
+.chip.tinted{border-color:color-mix(in srgb,var(--entry-color) 55%,var(--line));color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 8%,var(--bg))}
+.chip.tinted b{color:var(--entry-color)}
+.chip.tinted:hover{border-color:var(--entry-color)}
+.chip.tinted[aria-pressed="true"]{background:color-mix(in srgb,var(--entry-color) 18%,var(--bg));border-color:var(--entry-color)}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font:500 10.5px var(--mono);background:var(--surface2);color:var(--ink2);vertical-align:middle}
+.badge.tinted{color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 12%,var(--surface2))}
+
+/* ---------- list rows ---------- */
+/* A row in a rail: the name, a small key on the right, a line of meta under. */
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 9px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+.row:hover{background:var(--surface2)}
+.row[aria-current="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.row .n{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .m{grid-column:1/-1;font-size:11.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .k{font-family:var(--mono);font-size:10.5px;color:var(--ink3);align-self:center}
+/* The tree: a child is set in by its depth, and a container carries a fold
+   at its left edge, out of the grid so the name and the meta keep their cells. */
+.row.child{margin-left:calc(var(--depth,0) * 14px)}
+.row.hasfold{position:relative;padding-left:26px}
+.row .fold{position:absolute;left:5px;top:6px;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink3);font-size:11px;line-height:18px;text-align:center}
+.row .fold:hover{background:var(--surface3);color:var(--ink)}
+/* A row's own colour: on its edge and its name. */
+.row.tinted{border-left:3px solid var(--entry-color);padding-left:calc(9px - 2px)}
+.row.tinted.hasfold{padding-left:calc(26px - 2px)}
+.row.tinted .n{color:var(--entry-color)}
+.row.tinted[aria-current="true"]{border-color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 12%,var(--surface))}
+.empty{padding:28px 14px;color:var(--ink3);text-align:center;font-size:13px;line-height:1.5}
+
+/* ---------- fields ---------- */
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:500}
+.field input,.field select,.field textarea{padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);width:100%;min-width:0}
+.hint{font-size:11.5px;color:var(--ink3);margin-top:4px}
+.hint code{font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px}
+kbd{font-family:var(--mono);font-size:10.5px;background:var(--surface2);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+
+/* ---------- the colour menu ---------- */
+#colorMenu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:6px;font-size:13px}
+#colorMenu .swatches{display:flex;flex-wrap:wrap;gap:4px;width:calc(6 * 24px + 5 * 4px)}
+#colorMenu .swatch{width:24px;height:24px;border-radius:5px;border:2px solid transparent;padding:0;cursor:pointer}
+#colorMenu .swatch[aria-pressed="true"]{border-color:var(--ink)}
+#colorMenu .swatch.none{background:linear-gradient(135deg,transparent 45%,var(--bad) 45%,var(--bad) 55%,transparent 55%);border-color:var(--line2)}
+
+/* ---------- dialogs and toasts ---------- */
+/* Two kinds of dialog share one look: the Workbench's .modal (a div it opens
+   itself) and the sheet app's <dialog> elements. */
+.modal{position:fixed;inset:0;background:rgba(10,12,15,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal.open{display:flex}
+.modal .box,dialog.box{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);width:min(420px,100%);max-height:90vh;display:flex;flex-direction:column;gap:10px;padding:16px}
+dialog.box{width:auto;min-width:min(22rem,90vw);max-width:min(40rem,92vw)}
+dialog.box:not([open]){display:none}
+dialog.box::backdrop{background:rgba(10,12,15,.45)}
+.modal .box.wide{width:min(760px,100%)}
+.modal .box .hint,dialog.box .hint{margin:0}
+.modal h3,dialog.box h2{margin:0;font-family:var(--sc);font-size:18px;font-weight:700}
+.modal .acts,dialog.box .actions{display:flex;gap:8px;justify-content:flex-end}
+.modal .acts .spacer{flex:1}
+.toasts{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:60}
+.toast{display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:var(--shadow)}
+.toast.bad{background:var(--bad);color:#fff}
+.toast .act{padding:2px 10px;border:1px solid currentColor;border-radius:999px;background:transparent;color:inherit;font-weight:600;font-size:12px;cursor:pointer}
+
+@media (prefers-reduced-motion:no-preference){ .row,.chip,.btn{transition:background .12s} }
