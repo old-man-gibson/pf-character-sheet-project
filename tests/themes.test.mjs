@@ -130,9 +130,12 @@ for (const p of PALETTES) {
   ok(`${p.id}: the rule carries no layout`, !/(^|\n)\s*(display|font-family|padding|container-type|overflow-anchor)\s*:/.test(m[1]));
 }
 check('nothing in from no stylesheet', paletteRules(''), '');
+const chromeCss = fs.readFileSync(fileURLToPath(new URL('../app/css/chrome.css', import.meta.url)), 'utf8');
 const forgeCss = fs.readFileSync(fileURLToPath(new URL('../forge/forge.css', import.meta.url)), 'utf8');
-ok('the workbench maps its colours onto the sheet\'s', /--bg:var\(--cs-bg,/.test(forgeCss));
-ok('the workbench keeps no palette of its own', !/:root\[data-theme="(dark|light)"\]/.test(forgeCss));
+ok('the shared chrome maps its colours onto the sheet\'s', /--bg:var\(--cs-bg,/.test(chromeCss));
+ok('the shared chrome keeps no palette of its own', !/:root\[data-theme="(dark|light)"\]/.test(chromeCss));
+ok('the workbench names no colour of its own', !/#[0-9a-f]{6}\b/i.test(forgeCss.replace(/\/\*[\s\S]*?\*\//g, '')));
+ok('the workbench leaves the shared furniture to the chrome', !/^\.(btn|chip|row|modal|toast)\{/m.test(forgeCss));
 
 /* ----- the names ----- */
 check('every palette has a distinct id', new Set(PALETTES.map((p) => p.id)).size, PALETTES.length);

@@ -1,91 +1,15 @@
-/* Homebrew Workbench — the homebrew workbench. Its own stylesheet, but not
-   its own colours: it wears whichever of the sheet's palettes the browser has
-   chosen (app/js/themes.js), read out of app/css/sheet.css by
-   forge/js/theme.js and stamped on <html> as data-theme. Everything below is
-   written against the workbench's own properties, and those are mapped here
-   onto the sheet's, so a palette added to the sheet is a palette here with
-   no line added. The fallbacks are the workbench's own look -- ivory and
-   oxblood, or its night palette when data-scheme says dark -- for the moment
-   before the sheet's stylesheet has been read, and for a browser that cannot
-   read it at all. */
-
-:root{
-  --bg:var(--cs-bg,#EEF0EC); --surface:var(--cs-panel,#FAFAF7); --surface2:var(--cs-panel-2,#E4E7E1);
-  --surface3:color-mix(in srgb,var(--surface2) 90%,var(--ink));
-  --ink:var(--cs-text,#1B1F24); --ink2:var(--cs-muted,#4F5761); --ink3:color-mix(in srgb,var(--ink2) 72%,var(--bg));
-  --line:var(--cs-line,#CBD0C8); --line2:color-mix(in srgb,var(--line) 82%,var(--ink));
-  --accent:var(--cs-accent,#8B2B2E); --accent-soft:var(--cs-accent-soft,#F0DEDD); --on-accent:#FFFFFF;
-  --link:var(--cs-edit,#7A5A18); --link-soft:color-mix(in srgb,var(--link) 14%,var(--surface));
-  --ok:var(--cs-good,#2F6B3A); --warn:#A6631B; --bad:var(--cs-bad,#A83232);
-  --ok-soft:color-mix(in srgb,var(--ok) 16%,var(--surface)); --warn-soft:color-mix(in srgb,var(--warn) 18%,var(--surface)); --bad-soft:color-mix(in srgb,var(--bad) 16%,var(--surface));
-  --saving:#E0B400;
-  --shadow:0 1px 2px rgba(20,25,30,.08),0 4px 14px rgba(20,25,30,.06);
-  --ui:var(--cs-font,"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif);
-  --mono:var(--cs-mono,"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace);
-  --serif:"Alegreya",Georgia,"Times New Roman",serif;
-  --sc:var(--cs-display,"Alegreya SC","Alegreya",Georgia,serif);
-  color-scheme:light;
-}
-/* The night side: the fallbacks become the workbench's own dark palette, the
-   text on an accent fill goes dark (the accents are pastels there), and the
-   shadows deepen. `data-scheme` is stamped beside `data-theme` from the
-   palette's entry in themes.js, and before any script runs the system's
-   setting decides. */
-@media (prefers-color-scheme:dark){
-  :root:not([data-scheme="light"]){
-    --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
-    --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
-    --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
-    --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
-    color-scheme:dark;
-  }
-}
-:root[data-scheme="dark"]{
-  --bg:var(--cs-bg,#15171B); --surface:var(--cs-panel,#1E2127); --surface2:var(--cs-panel-2,#272B33);
-  --ink:var(--cs-text,#E4E1DA); --ink2:var(--cs-muted,#A2A7AE); --line:var(--cs-line,#343943);
-  --accent:var(--cs-accent,#E27578); --accent-soft:var(--cs-accent-soft,#3B2426); --on-accent:var(--bg);
-  --link:var(--cs-edit,#D3A655); --ok:var(--cs-good,#6DBA7A); --warn:#D89A4B; --bad:var(--cs-bad,#DF6B6B);
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
-  color-scheme:dark;
-}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--ui);}
-button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer}
-:focus-visible{outline:2px solid var(--link);outline-offset:1px}
-a{color:var(--link)}
-::placeholder{color:var(--ink3)}
+/* Homebrew Workbench -- its own layout: the three panes, the rail, the
+   editor, the preview. The furniture it shares with the sheet app -- the top
+   bar, buttons, chips, rows, dialogs, toasts, and the palette mapping every
+   rule here reads through (--bg, --surface, --ink, --line, --accent…) -- is
+   app/css/chrome.css, loaded before this file. The palette itself is the
+   sheet's, read out of app/css/sheet.css by forge/js/theme.js. */
 
 /* ---------- shell ---------- */
 #app{height:100vh;display:grid;grid-template-rows:auto 1fr;grid-template-columns:280px minmax(0,1fr) minmax(0,1fr);grid-template-areas:"top top top" "rail edit view";}
-.topbar{grid-area:top;display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--line);}
-.brand{display:flex;align-items:baseline;gap:10px;font-family:var(--sc);font-size:20px;font-weight:700;letter-spacing:.02em;color:var(--accent)}
-.brand small{font-family:var(--ui);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
-.brand a{color:inherit;text-decoration:none}
 .topbar .search{flex:1;max-width:420px;position:relative}
 .topbar .search input{width:100%;padding:7px 10px 7px 32px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .topbar .search svg{position:absolute;left:10px;top:9px;width:14px;height:14px;fill:none;stroke:var(--ink3);stroke-width:2}
-.spacer{flex:1}
-.status{font-family:var(--mono);font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px;white-space:nowrap}
-.status .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3)}
-.status.ok .dot{background:var(--ok)} .status.local .dot{background:var(--warn)} .status.saving .dot{background:var(--saving)}
-.status span:last-child{min-width:150px}
-.themepick{padding:5px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-size:12px;max-width:11rem}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line2);border-radius:6px;background:var(--surface);color:var(--ink);font-weight:500;white-space:nowrap;text-decoration:none}
-.btn:hover{background:var(--surface2)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.btn.primary:hover{filter:brightness(1.08)}
-.btn.danger{color:var(--bad);border-color:var(--bad)}
-.btn.small{padding:3px 8px;font-size:12px}
-.menu{position:relative}
-.menu .drop{display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:270px;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:6px;z-index:20}
-.menu.open .drop{display:block}
-.drop button{display:block;width:100%;text-align:left;padding:7px 9px;border:0;background:transparent;border-radius:5px}
-.drop button:hover{background:var(--surface2)}
-.drop button small{display:block;color:var(--ink3);font-size:11px}
-.drop hr{border:0;border-top:1px solid var(--line);margin:5px 0}
 .panetabs{display:none;gap:4px}
 .panetabs button{padding:5px 10px;border:1px solid var(--line2);background:var(--surface);border-radius:6px}
 .panetabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
@@ -99,51 +23,20 @@ a{color:var(--link)}
 .railsplit:hover,.railsplit.dragging{background:var(--accent-soft);border-color:var(--accent)}
 .tg h4{margin:8px 0 3px;font:500 10.5px var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
 .tg .chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:12px;color:var(--ink2)}
-.chip b{font-family:var(--mono);font-weight:500;font-size:10.5px;color:var(--ink3)}
-.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
-.chip[aria-pressed="true"] b{color:var(--accent)}
+a.wl.tinted{color:var(--entry-color);border-bottom-color:var(--entry-color)}
 .list{flex:1;overflow:auto;padding:6px}
-.row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 9px;border-radius:6px;cursor:pointer;border:1px solid transparent}
-.row:hover{background:var(--surface2)}
-.row[aria-current="true"]{background:var(--accent-soft);border-color:var(--accent)}
-.row .n{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .m{grid-column:1/-1;font-size:11.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .k{font-family:var(--mono);font-size:10.5px;color:var(--ink3);align-self:center}
-/* The tree: a child is set in by its depth, and a container carries a fold
-   at its left edge, out of the grid so the name and the meta keep their cells. */
-.row.child{margin-left:calc(var(--depth,0) * 14px)}
-.row.hasfold{position:relative;padding-left:26px}
-.row .fold{position:absolute;left:5px;top:6px;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--ink3);font-size:11px;line-height:18px;text-align:center}
-.row .fold:hover{background:var(--surface3);color:var(--ink)}
-/* An entry's own colour: on the row's edge and its name, and on the preview's heading. */
-.row.tinted{border-left:3px solid var(--entry-color);padding-left:calc(9px - 2px)}
-.row.tinted.hasfold{padding-left:calc(26px - 2px)}
-.row.tinted .n{color:var(--entry-color)}
-.row.tinted[aria-current="true"]{border-color:var(--entry-color);background:color-mix(in srgb,var(--entry-color) 12%,var(--surface))}
 .sheet[style*="--entry-color"] h1{color:var(--entry-color);border-bottom-color:var(--entry-color)}
-#colorMenu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:6px;font-size:13px}
-#colorMenu .swatches{display:flex;flex-wrap:wrap;gap:4px;width:calc(6 * 24px + 5 * 4px)}
-#colorMenu .swatch{width:24px;height:24px;border-radius:5px;border:2px solid transparent;padding:0;cursor:pointer}
-#colorMenu .swatch[aria-pressed="true"]{border-color:var(--ink)}
-#colorMenu .swatch.none{background:linear-gradient(135deg,transparent 45%,var(--bad) 45%,var(--bad) 55%,transparent 55%);border-color:var(--line2)}
-.empty{padding:28px 14px;color:var(--ink3);text-align:center;font-size:13px;line-height:1.5}
 
 /* ---------- editor ---------- */
 .edit{grid-area:edit;min-height:0;overflow:auto;padding:16px 18px 40px;border-right:1px solid var(--line)}
 .edit .head{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;margin-bottom:10px}
 .edit .head input.name{font-family:var(--sc);font-size:24px;font-weight:700;padding:4px 8px;border:0;border-bottom:2px solid var(--line);background:transparent;width:100%;color:var(--accent)}
 .edit .head input.name:focus{border-color:var(--accent);outline:0}
-.field{display:flex;flex-direction:column;gap:3px;min-width:0}
-.field label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:500}
-.field input,.field select,.field textarea{padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);width:100%;min-width:0}
 .field textarea{resize:vertical;min-height:60px;font-family:var(--serif);font-size:15px;line-height:1.5}
 .field textarea.body{min-height:260px}
 .field.mono input{font-family:var(--mono);font-size:12.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 12px;margin:10px 0}
 .grid .wide{grid-column:1/-1}
-.hint{font-size:11.5px;color:var(--ink3);margin-top:4px}
-.hint code{font-family:var(--mono);font-size:11px;background:var(--surface2);padding:1px 4px;border-radius:3px}
 .editfoot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .editfoot .save{font-family:var(--mono);font-size:11px;color:var(--ink3);flex:1}
 select.type{padding:6px 8px;border:1px solid var(--line2);border-radius:6px;background:var(--surface2);font-weight:500}
@@ -191,7 +84,6 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
 .audit td.ok{color:var(--ok)}
 .audit tfoot td{font-weight:600;background:var(--surface2)}
 .audit .cap{padding:6px 9px;font-size:11.5px;color:var(--ink3);border-top:1px solid var(--line)}
-.badge{display:inline-block;padding:1px 6px;border-radius:4px;font:500 10.5px var(--mono);background:var(--surface2);color:var(--ink2);vertical-align:middle}
 
 /* ---------- link autocomplete ---------- */
 #ac{position:fixed;z-index:70;min-width:240px;max-width:340px;background:var(--surface);border:1px solid var(--line2);border-radius:8px;box-shadow:var(--shadow);padding:4px;font-size:13px}
@@ -201,33 +93,23 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
 .ac-none{padding:6px 8px;color:var(--ink3);font-size:12px;line-height:1.4}
 
 /* ---------- modal + toast ---------- */
-.modal{position:fixed;inset:0;background:rgba(10,12,15,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
-.modal.open{display:flex}
-.modal .box{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);width:min(420px,100%);max-height:90vh;display:flex;flex-direction:column;gap:10px;padding:16px}
-.modal .box.wide{width:min(760px,100%)}
-.modal .box .hint{margin:0}
 .catlist{overflow:auto;min-height:0;flex:1}
 .catrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:end}
 .catrow:last-of-type{border-bottom:0}
-.modal .acts .spacer{flex:1}
-.modal h3{margin:0;font-family:var(--sc);font-size:18px}
-.modal .acts{display:flex;gap:8px;justify-content:flex-end}
-.toasts{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:60}
-.toast{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:var(--shadow)}
-.toast.bad{background:var(--bad);color:#fff}
-.toast{display:flex;align-items:center;gap:12px}
-.toast .act{padding:2px 10px;border:1px solid currentColor;border-radius:999px;background:transparent;color:inherit;font-weight:600;font-size:12px}
 
 @media (max-width:1100px){
   #app{grid-template-columns:240px minmax(0,1fr);grid-template-areas:"top top" "rail edit"}
   .view{display:none}
   .panetabs{display:flex}
+  /* The rail is on screen at this width, so an Entries tab would do nothing; it comes back below 720px, where the rail is a pane. */
+  .panetabs [data-pane="list"]{display:none}
   #app[data-pane="view"] .edit{display:none}
   #app[data-pane="view"] .view{display:block;grid-area:edit}
 }
 @media (max-width:720px){
   #app{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "edit"}
   .rail{display:none}
+  .panetabs [data-pane="list"]{display:inline-block}
   #app[data-pane="list"] .rail{display:flex;grid-area:edit;border-right:0}
   #app[data-pane="list"] .edit,#app[data-pane="list"] .view{display:none}
   .topbar{flex-wrap:wrap;gap:8px}
@@ -235,4 +117,3 @@ a.wl.broken{color:var(--bad);border-bottom:1px dotted var(--bad)}
   .brand small{display:none}
   .themepick{max-width:8rem}
 }
-@media (prefers-reduced-motion:no-preference){ .row,.chip,.btn{transition:background .12s} }

@@ -9,175 +9,111 @@
      here beyond the request; one that does falls back to Georgia and the
      system face if it never arrives. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/chrome.css">
 <style>
-  /* The page wears the sheet's palette. These are the dark theme's values, so
-     the first paint is right for the default; `followSheet()` in the script
-     then copies whichever palette the sheet is actually wearing onto :root,
-     and again every time it changes. The colours themselves live in one place,
-     app/css/sheet.css, and this page never names one of its own. */
+  /* The page's furniture -- the top bar, buttons, chips, dialogs -- is
+     css/chrome.css, shared with the Workbench, written against the sheet's
+     own palette properties. These are Midnight's values, so the first paint
+     is right for the default; followSheet() below then puts whichever palette
+     the sheet is wearing onto :root, and again on every change. The colours
+     themselves live in one place, app/css/sheet.css. */
   :root {
-    --bg: #14161c; --panel: #1c1f27; --panel2: #232733; --line: #333949;
-    --text: #e6e8ef; --muted: #9aa2b8; --accent: #d4a24a;
-    --good: #6bbf7b; --bad: #e0635f;
-    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    /* The page starts dark, so the browser's own widgets should be too. */
+    --cs-bg: #14161c; --cs-panel: #1c1f27; --cs-panel-2: #232733; --cs-line: #333949;
+    --cs-text: #e6e8ef; --cs-muted: #9aa2b8; --cs-accent: #d4a24a; --cs-accent-soft: rgba(212, 162, 74, 0.14);
+    --cs-edit: #6ea8fe; --cs-good: #6bbf7b; --cs-bad: #e0635f;
+    --cs-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     color-scheme: dark;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: var(--font);
   }
   /* Off-screen until it is the thing being used, which is the only time it is
      any use. Not `display: none`: that takes it out of the tab order too. */
   .skiplink {
-    position: absolute; left: -9999px; top: 0; z-index: 20;
-    background: var(--panel); color: var(--accent); border: 1px solid var(--accent);
-    border-radius: 0 0 6px 0; padding: 8px 14px; font-size: 0.85rem; text-decoration: none;
+    position: absolute; left: -9999px; top: 0; z-index: 40;
+    background: var(--surface); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 0 0 6px 0; padding: 8px 14px; font-size: 13px; text-decoration: none;
   }
   .skiplink:focus { left: 0; }
   /* Pinned, and the sheet is told how tall it is: `--cs-sticky-top` on the
      element is where its rail comes to rest, and the script below keeps it at
      this header's height, so the tab bar or the side rail pins under the
-     header rather than behind it. On a phone the roster strip can be several
-     rows; Fold is what keeps it to one. */
-  header.app {
-    /* Above the sheet's pinned rail (z-index 30 inside its shadow root, which
-       competes here because the element opens no stacking context of its own)
-       and below the menus the rail hangs under itself, which never reach up
-       this far. */
-    position: sticky; top: 0; z-index: 35;
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
-  }
-  header.app .tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-  header.app h1 {
-    margin: 0; font-size: 1rem; letter-spacing: 0.04em;
-    text-transform: uppercase; color: var(--accent);
-  }
+     header rather than behind it. Above the sheet's pinned rail (z-index 30
+     inside its shadow root, which competes here because the element opens no
+     stacking context of its own) and below the menus the rail hangs under
+     itself, which never reach up this far. */
+  header.app { position: sticky; top: 0; z-index: 35; flex-wrap: wrap; }
+  header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* The roster: a strip of chips in the header, one per character, the level
+     as the chip's number. */
   .picker { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .picker button {
-    font: inherit; font-size: 0.85rem; color: var(--text); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
-  }
-  .picker button:hover { border-color: var(--accent); }
-  .picker button[aria-pressed="true"] {
-    background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--accent);
-  }
+  .picker .member { display: inline-flex; align-items: center; }
+  .picker .chip.pick { cursor: pointer; }
+  .picker .chip.pick:hover { border-color: var(--accent); color: var(--accent); }
   /* Imported characters live in this browser only, so they say so and can go. */
-  .chip { display: inline-flex; align-items: center; }
-  .chip.local button.pick { border-style: dashed; border-radius: 20px 0 0 20px; padding-right: 9px; }
-  .chip.local button.drop {
-    border-left: 0; border-radius: 0 20px 20px 0; padding: 5px 9px; color: var(--muted);
+  .member.local .chip.pick { border-style: dashed; border-radius: 999px 0 0 999px; padding-right: 7px; }
+  .member.local .drop {
+    border: 1px solid var(--line); border-left: 0; border-radius: 0 999px 999px 0;
+    padding: 3px 8px; background: var(--bg); color: var(--ink3); font-size: 12px; line-height: 1.45;
   }
-  .chip.local button.drop:hover { color: var(--bad); border-color: var(--bad); }
-  .picker .local-tag { font-size: 0.68rem; opacity: 0.55; margin-left: 5px; }
+  .member.local .drop:hover { color: var(--bad); border-color: var(--bad); }
+  .picker .local-tag { font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; opacity: .65; margin-left: 4px; }
   /* Long names clamp rather than widen the strip; the full name is the title. */
   .picker .cname {
     display: inline-block; max-width: 14rem; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
   }
   @media (max-width: 768px) { .picker .cname { max-width: 9rem; } }
-  .picker button.fold { color: var(--muted); }
-  .picker button.fold:hover { color: var(--accent); }
-  .picker button.import { border-style: dashed; color: var(--muted); }
-  .picker button.import:hover { color: var(--accent); }
-  .picker button.exportall { color: var(--muted); }
-  .picker button.exportall:hover { color: var(--accent); }
-  .picker button:disabled { opacity: 0.5; cursor: default; }
-  /* A character with a colour wears it on its row, the way a coloured tab
-     does on the bar: `--char-color` is the hue as picked, for the edges and
-     the wash; `--char-ink` is that hue taken far enough to be read on this
-     palette's panel, for the words. Both are set inline by draw(). */
-  .picker button.pick.tinted {
-    color: var(--char-ink, var(--char-color));
-    border-color: color-mix(in srgb, var(--char-ink, var(--char-color)) 55%, var(--line));
-    background: color-mix(in srgb, var(--char-color) 9%, var(--panel));
-  }
-  .picker button.pick.tinted:hover { border-color: var(--char-ink, var(--char-color)); }
-  .picker button.pick.tinted[aria-pressed="true"] {
-    border-color: var(--char-ink, var(--char-color));
-    background: color-mix(in srgb, var(--char-color) 24%, var(--panel));
-  }
-  .chip.local button.pick.tinted + button.drop { border-color: color-mix(in srgb, var(--char-ink, var(--char-color)) 55%, var(--line)); }
-  .picker.dragging button.import { border-color: var(--accent); color: var(--accent); }
+  .picker .chip.import { border-style: dashed; }
+  .picker .chip:disabled { opacity: 0.5; cursor: default; }
+  .picker.dragging .chip.import { border-color: var(--accent); color: var(--accent); }
+  /* A character with a colour wears it on its chip, the way a coloured tab
+     does on the bar: `--entry-color` is the hue taken far enough to be read
+     on this palette's panel, set inline by draw(). The chrome's own tinted
+     chip rule does the drawing. */
+  .member.local .chip.tinted + .drop { border-color: color-mix(in srgb, var(--entry-color) 55%, var(--line)); }
   .banner {
     max-width: 1500px; margin: 12px auto 0; padding: 8px 12px; border-radius: 6px;
-    font-size: 0.85rem; display: flex; gap: 10px; align-items: flex-start;
+    font-size: 13px; display: flex; gap: 10px; align-items: flex-start;
   }
-  .banner.err { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); border: 1px solid var(--bad); }
-  .banner.ok { color: var(--good); background: color-mix(in srgb, var(--good) 10%, transparent); border: 1px solid var(--good); }
-  .banner.info { color: var(--muted); background: color-mix(in srgb, var(--muted) 10%, transparent); border: 1px solid var(--line); }
+  .banner.err { color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); }
+  .banner.ok { color: var(--ok); background: var(--ok-soft); border: 1px solid var(--ok); }
+  .banner.info { color: var(--ink2); background: var(--surface); border: 1px solid var(--line); }
   .banner button { margin-left: auto; font: inherit; background: none; border: 0; color: inherit; cursor: pointer; }
   /* The banner's one action -- Undo, Restore -- reads as a button, not as text. */
   .banner button.act {
-    margin-left: 0; padding: 1px 12px; border: 1px solid currentColor; border-radius: 20px;
+    margin-left: 0; padding: 1px 12px; border: 1px solid currentColor; border-radius: 999px;
     font-weight: 600; white-space: nowrap;
   }
   .banner button.act + button { margin-left: 0; }
-  .spacer { flex: 1; }
   label.role {
     display: flex; align-items: center; gap: 6px;
-    font-size: 0.82rem; color: var(--muted); cursor: pointer;
+    font-size: 12.5px; color: var(--ink2); cursor: pointer; white-space: nowrap;
   }
   main { padding: 18px; max-width: 1500px; margin: 0 auto; }
   character-sheet { border: 1px solid var(--line); }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
-    background: var(--panel); border: 1px dashed var(--line); border-radius: 12px;
+    background: var(--surface); border: 1px dashed var(--line); border-radius: 10px;
   }
-  .welcome h2 { margin: 0 0 10px; font-size: 1.15rem; color: var(--accent); }
-  .welcome p { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
-  .welcome p.hint { margin: 14px 0 0; font-size: 0.8rem; opacity: 0.8; }
+  .welcome h2 { margin: 0 0 10px; font-family: var(--sc); font-size: 20px; color: var(--accent); }
+  .welcome p { margin: 0 0 16px; color: var(--ink2); font-size: 13.5px; line-height: 1.55; }
+  .welcome p.hint { margin: 14px 0 0; }
   .welcome code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
   .welcome .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .welcome button {
-    font: inherit; font-size: 0.9rem; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 20px; padding: 7px 18px; cursor: pointer;
+  .note { color: var(--ink2); font-size: 12.5px; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
+  .note code { background: var(--surface); padding: 1px 5px; border-radius: 3px; }
+  /* The dialogs take the chrome's box; what is left is their forms. */
+  dialog.box label { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
+  dialog.box label input, dialog.box select {
+    flex: 1; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
   }
-  .welcome button:hover, .welcome button.primary { border-color: var(--accent); color: var(--accent); }
-  .note { color: var(--muted); font-size: 0.8rem; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
-  .note code { background: var(--panel); padding: 1px 5px; border-radius: 3px; }
-  dialog#newDialog, dialog#importDialog, dialog#removeDialog {
-    background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 10px; padding: 18px 20px; min-width: min(22rem, 90vw);
-  }
-  dialog#newDialog::backdrop, dialog#importDialog::backdrop, dialog#removeDialog::backdrop { background: rgba(0,0,0,0.55); }
-  dialog#newDialog h2, dialog#importDialog h2, dialog#removeDialog h2 { margin: 0 0 6px; font-size: 1rem; color: var(--accent); }
-  dialog#newDialog .hint, dialog#importDialog .hint, dialog#removeDialog .hint { margin: 0 0 12px; font-size: 0.8rem; color: var(--muted); }
-  dialog#newDialog label, dialog#importDialog label { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 0.85rem; }
-  dialog#newDialog label input, dialog#importDialog label input {
-    flex: 1; font: inherit; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
-  }
-  dialog#newDialog .actions, dialog#importDialog .actions, dialog#removeDialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-  dialog#newDialog button, dialog#importDialog button, dialog#removeDialog button {
-    font: inherit; font-size: 0.85rem; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer;
-  }
-  dialog#newDialog button.primary, dialog#importDialog button.primary, dialog#removeDialog button.primary { border-color: var(--accent); color: var(--accent); }
-  dialog#removeDialog { max-width: 30rem; }
-  dialog#removeDialog button.danger { border-color: var(--bad); color: var(--bad); }
-  dialog#removeDialog button.danger:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
+  dialog.box select { width: 100%; margin: 2px 0 10px; }
+  dialog.box select:disabled { opacity: 0.5; }
+  dialog.box .actions { margin-top: 8px; }
   /* A choice, not a field: the radio keeps its own size and the sentence
      beside it takes the room, where a text input would have taken it all. */
-  dialog#importDialog label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
-  dialog#importDialog label.radio input { flex: 0 0 auto; width: auto; padding: 0; }
-  dialog#importDialog select {
-    font: inherit; font-size: 0.85rem; width: 100%; color: var(--text); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin: 2px 0 10px;
-  }
-  dialog#importDialog select:disabled { opacity: 0.5; }
-  dialog#extDialog {
-    background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 10px; padding: 18px 20px;
-  }
-  dialog#extDialog::backdrop { background: rgba(0,0,0,0.55); }
-  dialog#extDialog h2 { color: var(--accent); }
-  button.ext, a.ext { font: inherit; font-size: 0.82rem; color: var(--muted); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 20px; padding: 5px 14px; cursor: pointer; text-decoration: none; }
-  button.ext:hover, a.ext:hover { border-color: var(--accent); color: var(--accent); }
+  dialog.box label.radio { align-items: flex-start; gap: 8px; margin: 10px 0 2px; }
+  dialog.box label.radio input { flex: 0 0 auto; width: auto; padding: 0; }
+  dialog#removeDialog { max-width: 30rem; }
   /* ---------- the roster in the sheet's rail ---------- */
   /* When the sheet runs its tabs down its left (layout="side"), the roster
      goes into the same column: the sheet's rail carries a slot named "rail",
@@ -185,28 +121,28 @@
      characters and then the open one's tabs -- the shape the Workbench has.
      Back in the header the moment the layout is the bar again, or the window
      is too narrow for a column at all. The picker keeps this page's styling
-     wherever it stands; slotted light DOM is styled by the page it is in. */
-  /* `nowrap` matters: the strip wraps, and a wrapped column sizes its rows to
-     the widest one rather than to the rail, so a long name pushed every row
-     out past the edge. Unwrapped, the rows stretch to the rail and clip. */
+     wherever it stands; slotted light DOM is styled by the page it is in.
+     `nowrap` matters: a wrapped column sizes its rows to the widest one
+     rather than to the rail, so a long name pushed every row out past the
+     edge; unwrapped, the rows stretch to the rail and clip. */
   .picker[slot="rail"] { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 3px; }
   /* `min-width: 0` on the row and the button both: a flex item will not shrink
-     below its content unless told to, and a long name would otherwise widen
-     the row past the rail rather than clip inside it. */
-  .picker[slot="rail"] .chip { display: flex; min-width: 0; }
-  .picker[slot="rail"] .chip button.pick {
-    flex: 1; min-width: 0; text-align: left; border-radius: 6px; padding: 7px 10px;
+     below its content unless told to. In the rail a chip is a row, the way the
+     Workbench's entries are rows: the name on its own line, the level under. */
+  .picker[slot="rail"] .member { display: flex; min-width: 0; }
+  .picker[slot="rail"] .chip { border-radius: 6px; }
+  .picker[slot="rail"] .chip.pick {
+    flex: 1; min-width: 0; display: block; text-align: left; padding: 7px 10px; font-size: 13px;
   }
-  .picker[slot="rail"] .chip.local button.drop { flex: none; }
-  .picker[slot="rail"] .chip.local button.pick { border-radius: 6px 0 0 6px; }
-  .picker[slot="rail"] .chip.local button.drop { border-radius: 0 6px 6px 0; }
-  /* A row rather than a chip: the name on its own line, the level under it. */
-  .picker[slot="rail"] .cname { display: block; max-width: 100%; }
-  .picker[slot="rail"] button.import,
-  .picker[slot="rail"] button.exportall,
-  .picker[slot="rail"] button.fold { border-radius: 6px; text-align: left; }
-  .picker[slot="rail"] button.import:first-of-type,
-  .picker[slot="rail"] button.fold { margin-top: 8px; }
+  .picker[slot="rail"] .chip.pick b { display: inline; }
+  .picker[slot="rail"] .member.local .chip.pick { border-radius: 6px 0 0 6px; }
+  .picker[slot="rail"] .member.local .drop { flex: none; border-radius: 0 6px 6px 0; align-self: stretch; }
+  .picker[slot="rail"] .cname { display: block; max-width: 100%; font-weight: 500; }
+  .picker[slot="rail"] .chip.import,
+  .picker[slot="rail"] .chip.exportall,
+  .picker[slot="rail"] .chip.fold { justify-content: flex-start; padding: 5px 10px; }
+  .picker[slot="rail"] .chip.import:first-of-type,
+  .picker[slot="rail"] .chip.fold { margin-top: 8px; }
   /* The bar layout centres the sheet in 1500px, which on a wide screen leaves a
      margin either side; with a rail inside the sheet that margin is a column of
      nothing beside a column of tabs. The side layout takes the whole width. */
@@ -231,13 +167,13 @@
      sheet, and it grows with the roster. This is the way past them. -->
 <a class="skiplink" href="#sheet">Skip to the sheet</a>
 
-<header class="app">
-  <h1>Character Sheets</h1>
+<header class="app topbar">
+  <h1 class="brand"><a href="./">Character Sheets</a> <small>Pathfinder</small></h1>
   <nav class="picker" id="picker"></nav>
   <span class="spacer"></span>
   <div class="tools">
-    <button type="button" class="ext" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
-    <a class="ext" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <button type="button" class="btn" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
+    <a class="btn" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
     <label class="role">
       <input type="checkbox" id="adminToggle"> GM / inspector view
     </label>
@@ -254,8 +190,8 @@
       app exported. Files are read here in your browser and never uploaded; everything you
       make is saved to this browser only.</p>
     <div class="actions">
-      <button type="button" id="welcomeNew" class="primary">+ New character</button>
-      <button type="button" id="welcomeImport">+ Import a workbook or JSON</button>
+      <button type="button" id="welcomeNew" class="btn primary">+ New character</button>
+      <button type="button" id="welcomeImport" class="btn">+ Import a workbook or JSON</button>
     </div>
     <p class="hint">You can also drop a file anywhere on this page.</p>
   </section>
@@ -264,9 +200,9 @@
 
 <input type="file" id="importFile" accept="application/json,.json,.xlsx,.xlsm" hidden>
 
-<dialog id="extDialog"></dialog>
+<dialog id="extDialog" class="box"></dialog>
 
-<dialog id="importDialog">
+<dialog id="importDialog" class="box">
   <!-- Not method="dialog": that closes with the submitter's value, which is
        empty whenever the form is submitted without one, and an import that
        quietly read as "cancel" is the worst possible failure here. The submit
@@ -283,13 +219,13 @@
       version is filed as a checkpoint named “before import” first, so nothing is lost —
       open <strong>History</strong> on the sheet to go back to it.</p>
     <div class="actions">
-      <button type="button" id="importCancel">Cancel</button>
-      <button type="submit" class="primary">Import</button>
+      <button type="button" id="importCancel" class="btn">Cancel</button>
+      <button type="submit" class="btn primary">Import</button>
     </div>
   </form>
 </dialog>
 
-<dialog id="removeDialog">
+<dialog id="removeDialog" class="box">
   <!-- Not method="dialog", for the same reason as the import dialog: the
        submit handler is the one place the decision is read. -->
   <form id="removeForm">
@@ -299,13 +235,13 @@
       sight for a day in case you change your mind — after that it is gone. If you want a
       copy for good, cancel and use <strong>Export JSON</strong> on the sheet first.</p>
     <div class="actions">
-      <button type="button" id="removeCancel">Cancel</button>
-      <button type="submit" class="danger">Remove</button>
+      <button type="button" id="removeCancel" class="btn">Cancel</button>
+      <button type="submit" class="btn danger">Remove</button>
     </div>
   </form>
 </dialog>
 
-<dialog id="newDialog">
+<dialog id="newDialog" class="box">
   <form id="newForm" method="dialog">
     <h2>New character</h2>
     <p class="hint">A blank sheet: 10 in every score, the standard skill list, 6 hit points a
@@ -315,8 +251,8 @@
     <label>Player <input name="player" type="text" maxlength="80" autocomplete="off"></label>
     <label>Level <input name="level" type="number" min="3" max="20" value="3"></label>
     <div class="actions">
-      <button type="button" id="newCancel">Cancel</button>
-      <button type="submit" class="primary">Create</button>
+      <button type="button" id="newCancel" class="btn">Cancel</button>
+      <button type="submit" class="btn primary">Create</button>
     </div>
   </form>
 </dialog>
@@ -520,31 +456,33 @@
     const shown = folded ? roster.filter((c) => c.id === current) : roster;
     const others = roster.length - shown.length;
     // The surface a row's ink has to be read on, once per draw.
-    const panel = normalizeHex(getComputedStyle(document.documentElement).getPropertyValue('--panel')) || '#1c1f27';
+    const panel = normalizeHex(getComputedStyle(document.documentElement).getPropertyValue('--cs-bg')) || '#14161c';
+    // The colour is worn at reading strength: the chip rule in chrome.css sets
+    // the words in `--entry-color`, so the hue goes in already corrected.
     const tint = (c) => {
       const hex = normalizeHex(c.color);
-      return hex ? ` class="pick tinted" style="--char-color:${hex};--char-ink:${readableOn(hex, panel)}"` : ' class="pick"';
+      return hex ? ` class="chip pick tinted" style="--entry-color:${readableOn(hex, panel)}"` : ' class="chip pick"';
     };
     const chip = (c) => (c.local
-      ? `<span class="chip local">
+      ? `<span class="member local">
            <button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
-             <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
+             <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b><span class="local-tag">${c.origin === 'blank' ? 'new' : 'imported'}</span>
            </button>
            <button class="drop" data-drop="${esc(c.id)}" title="Remove from this browser"
              aria-label="Remove ${esc(c.name)}">×</button>
          </span>`
-      : `<span class="chip"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
-           <span class="cname">${esc(c.name)}</span> <span style="opacity:.6">L${esc(c.level)}</span>
+      : `<span class="member"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
+           <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b>
          </button></span>`);
     picker.innerHTML = `${shown.map(chip).join('')}
       ${folded
-    ? `<button class="fold" id="unfoldBtn" aria-expanded="false"
+    ? `<button class="chip fold" id="unfoldBtn" aria-expanded="false"
           title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
-    : `<button class="import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
-      <button class="import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
-      <button class="exportall" id="exportAllBtn"
+    : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+      <button class="chip import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
+      <button class="chip exportall" id="exportAllBtn"
         title="Download every character in this picker as one .zip">Export all</button>
-      <button class="fold" id="foldBtn" aria-expanded="true"
+      <button class="chip fold" id="foldBtn" aria-expanded="true"
         title="Fold the picker to just the open character">▾ Fold</button>`}`;
 
     picker.querySelectorAll('button.pick').forEach((b) => {
@@ -976,22 +914,22 @@
    * and it changes with the character rather than with the theme.
    */
   const CHROME_VARS = [
-    ['--bg', '--cs-bg'], ['--panel', '--cs-panel'], ['--panel2', '--cs-panel-2'],
-    ['--line', '--cs-line'], ['--text', '--cs-text'], ['--muted', '--cs-muted'],
-    ['--accent', '--cs-accent'], ['--good', '--cs-good'], ['--bad', '--cs-bad'],
-    ['--font', '--cs-font'],
+    '--cs-bg', '--cs-panel', '--cs-panel-2', '--cs-line', '--cs-text', '--cs-muted',
+    '--cs-accent', '--cs-accent-soft', '--cs-edit', '--cs-good', '--cs-bad',
+    '--cs-font', '--cs-mono', '--cs-display',
   ];
   function followSheet() {
     const root = document.documentElement;
     const own = sheet.style.getPropertyValue('--cs-accent');
     if (own) sheet.style.removeProperty('--cs-accent');
     const cs = getComputedStyle(sheet);
-    for (const [mine, theirs] of CHROME_VARS) {
-      const v = cs.getPropertyValue(theirs).trim();
-      if (v) root.style.setProperty(mine, v);
+    for (const name of CHROME_VARS) {
+      const v = cs.getPropertyValue(name).trim();
+      if (v) root.style.setProperty(name, v);
     }
     if (own) sheet.style.setProperty('--cs-accent', own);
     root.style.colorScheme = sheet.getAttribute('scheme') === 'light' ? 'light' : 'dark';
+    root.dataset.scheme = sheet.getAttribute('scheme') === 'light' ? 'light' : 'dark';
     root.dataset.theme = sheet.getAttribute('theme') || 'dark';
     root.dataset.layout = sheet.getAttribute('layout') || 'top';
     root.dataset.width = sheet.getAttribute('width') || '100';

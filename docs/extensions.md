@@ -429,7 +429,10 @@ it with the container's name**: an article tagged *Tempest Gale* sits under that
 in the list, in the discipline's preview and in the Markdown export, after the discipline's
 own maneuvers, instead of at the end with the other articles. Nothing structural changes —
 the tag is the whole of the link. **Right-click an entry** in the list to give it a colour,
-worn on its row and on its preview's heading, and kept with the entry in a project export.
+worn on its row and on its preview's heading, and kept with the entry in a project export;
+**right-click a tag** in the filter to colour the tag, worn by its chip, by its badge on every
+row that carries it and by its name in a preview, and carried in a project export as
+`tagColors`.
 The bar between the filter chips and the list drags to resize the two, each keeping a
 minimum; double-click it to reset. **Delete** offers **Undo** for a few seconds, which puts
 the entry back and re-links whatever sat under it. **Settings** in the top bar adds categories of your own: a name, the group it
