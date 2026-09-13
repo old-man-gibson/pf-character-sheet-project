@@ -89,5 +89,24 @@ eq(referenceEntry('Kestrel', 'npc').fields, [['Role', 'Captain'], ['Belongs to',
 ok(referenceEntry('Wind Lance', 'item') && referenceEntry('Sky Doctrine', 'discipline'), 'items and discipline descriptions are reference entries');
 ok(!referenceEntry('Aerial Impaler'), 'a maneuver under a discipline is not doubled into reference');
 
+// kineticist: an element and its wild talents become the sheet's powers catalogue
+{
+  const { setPowerCatalogue, powerEntry, powersAvailable } = await import('../app/js/model/subsystems/catalogues.js');
+  const kin = forgeToPack([
+    entry('air', 'element', 'Air', { skills: 'Fly, Perception', blast: 'Air Blast' }, 'The element of air.'),
+    entry('ab', 'wildTalent', 'Air Blast', { ttype: 'Simple blast', kind: 'Sp', level: '', burn: '0', blastType: 'physical', damage: 'bludgeoning' }, 'You batter a foe.', 'air'),
+    entry('ae', 'wildTalent', 'Aerial Evasion', { ttype: 'Utility', kind: 'Su', level: 3, burn: '1', prereq: 'enveloping winds' }, 'You gain evasion.', 'air'),
+    entry('tb', 'wildTalent', 'Thunderstorm Blast', { ttype: 'Composite blast', kind: 'Sp', burn: '2', elements: 'air and water', prereq: 'air blast, cold blast' }, 'Lightning and hail.', 'air'),
+  ]);
+  ok(inspectExtension(kin).ok, 'kineticist pack passes the inspector');
+  setPowerCatalogue(kin.provides.powers);
+  const ae = powerEntry('Aerial Evasion');
+  eq([ae.kind, ae.element, ae.type, ae.level, ae.burn], ['wild talent', 'Air', 'utility (Su)', 3, '1'], 'a utility lands as a wild talent power under its element');
+  ok(ae.text.startsWith('Prerequisite(s): enveloping winds'), 'prerequisite kept at the head of the text');
+  eq([powerEntry('Thunderstorm Blast').element, powerEntry('Air Blast').blastType], ['air and water', 'physical'], 'own element list wins; blast cells carried');
+  eq(powersAvailable({ kind: 'wild talent' }).map((p) => p.name), ['Aerial Evasion', 'Air Blast', 'Thunderstorm Blast'], 'all three offered as wild talents');
+  ok(kin.provides.catalogues.catalogues.find((g) => g.kind === 'element')?.entries[0].fields.some(([l, v]) => l === 'Class skills' && v === 'Fly, Perception'), 'the element itself is a reference entry with its cells');
+}
+
 console.log(`forge-pack: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

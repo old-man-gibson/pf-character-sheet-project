@@ -8,9 +8,9 @@
  * sheet's own local extension store so the app next door reads it on its
  * next load.
  */
-import { TYPES, GROUPS, BASE, esc, uid, slug, now, ord, str, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes } from './schema.js';
+import { TYPES, GROUPS, BASE, ELEMENT_BASE, esc, uid, slug, now, ord, str, newEntry, linksIn, sortEntries, applyCustomTypes, normalizeCustomTypes } from './schema.js';
 import { forgeStore } from './store.js';
-import { forgeToPack, importPack } from './pack.js';
+import { forgeToPack, importPack, importWildTalents, looksLikeWildTalents } from './pack.js';
 import { extensionStore, isPackKey, packsWorthMoving } from '../../app/js/extensions.js';
 import { packMedium } from '../../app/js/pack-storage.js';
 import { mountThemes } from './theme.js';
@@ -165,6 +165,17 @@ function renderSheet(e) {
       h += `<p class="sub">${parentLink ? `${parentLink} · ` : ''}Session ${esc(f.number || '?')}${f.date ? ` · ${esc(f.date)}` : ''}${tagStr}</p>${f.title ? `<h3>${esc(f.title)}</h3>` : ''}${md(e.body)}`; break;
     case 'campaign':
       h += `<p class="sub">${esc(f.setting || 'Campaign')}${f.status ? ` · ${esc(f.status)}` : ''}${tagStr}</p>${kv('Players:', f.players)}${md(e.body)}`; break;
+    case 'element':
+      h += `<p class="sub">Kineticist element${tagStr}</p>${kv('Class Skills:', f.skills)}${kv('Simple Blast:', f.blast)}${kv('Basic Utility:', f.basicUtility)}<div class="sect">Description</div>${md(e.body)}`; break;
+    case 'wildTalent': {
+      // The card as the wiki prints it: one line of cells, then the prerequisite and the rest.
+      const own = f.elements || nameOf(e.parent) || '—';
+      const cells = [`<b>Element(s)</b> ${inline(own)}`, `<b>Type</b> ${esc((f.ttype || 'utility').toLowerCase())}${f.kind && f.kind !== '—' ? ` (${esc(f.kind)})` : ''}`, `<b>Level</b> ${f.level ? esc(f.level) : '—'}`, `<b>Burn</b> ${esc(f.burn || '—')}`];
+      h += `<p class="kv">${cells.join('; ')}</p>`;
+      if (f.blastType || f.damage) h += `<p class="kv">${[f.blastType ? `<b>Blast Type</b> ${esc(f.blastType)}` : '', f.damage ? `<b>Damage</b> ${esc(f.damage)}` : ''].filter(Boolean).join('; ')}</p>`;
+      h += kv('Associated Blast(s)', f.associated) + kv('Prerequisite(s)', f.prereq) + kv('Saving Throw', f.save) + (tagStr ? `<p class="sub">${tagStr}</p>` : '') + md(e.body);
+      break;
+    }
     default:
       // A category of the player's own: its cells, then its text.
       h += `<p class="sub">${esc(T.label)}${tagStr}</p>${T.fields.map((fd) => kv(`${fd.l}:`, f[fd.k])).join('')}${md(e.body)}`;
@@ -182,6 +193,15 @@ function renderSheet(e) {
       }
       const un = kids.filter((m) => !(+m.fields?.level >= 1 && +m.fields?.level <= 9));
       if (un.length) h += `<div class="lvl">Unleveled</div><ul>${un.map((m) => `<li><a class="wl" data-go="${m.id}">${esc(m.name)}</a></li>`).join('')}</ul>`;
+    } else if (e.type === 'element') {
+      // By type, the way an element's page lists them; leveled kinds in level order.
+      for (const t of TYPES.wildTalent.fields[0].o) {
+        const k = kids.filter((m) => m.type === 'wildTalent' && (m.fields?.ttype || 'Utility') === t).sort((a, b) => (+a.fields?.level || 0) - (+b.fields?.level || 0) || a.name.localeCompare(b.name));
+        if (!k.length) continue;
+        h += `<div class="lvl">${esc(t === 'Utility' ? 'Utilities' : `${t}s`)}</div><ul>${k.map((m) => `<li><a class="wl" data-go="${m.id}">${esc(m.name)}</a>${m.fields?.level ? ` <span class="badge">L${esc(m.fields.level)}</span>` : ''}${m.fields?.burn ? ` <span class="badge">burn ${esc(m.fields.burn)}</span>` : ''}</li>`).join('')}</ul>`;
+      }
+      const other = kids.filter((m) => m.type !== 'wildTalent');
+      if (other.length) h += `<div class="lvl">Other</div><ul>${other.map((m) => `<li><a class="wl" data-go="${m.id}">${esc(m.name)}</a></li>`).join('')}</ul>`;
     } else {
       const byType = {}; kids.forEach((k) => (byType[k.type] = byType[k.type] || []).push(k));
       for (const t in byType) h += `<div class="lvl">${esc(TYPES[t]?.plural || t)}</div><ul>${byType[t].flatMap((m) => [{ k: m, depth: 0 }, ...deep(m.id, 1)]).map(({ k: m, depth }) => `<li style="margin-left:${depth * 14}px">${depth ? '↳ ' : ''}<a class="wl" data-go="${m.id}">${esc(m.name)}</a>${m.fields?.level ? ` <span class="badge">L${esc(m.fields.level)}</span>` : ''}</li>`).join('')}</ul>`;
@@ -202,6 +222,31 @@ function renderAudit(e) {
   const tot = `<tr><td>All</td><td>${sum('Strike')}<small> /16</small></td><td>${sum('Boost')}<small> /7</small></td><td>${sum('Counter')}<small> /5.5</small></td><td>${sum('Stance')}<small> /6</small></td><td>${sum('total')}<small> /34.5</small></td></tr>`;
   return `<h5>Slot audit against 30 published disciplines</h5><div class="audit"><table><thead><tr><th>Lvl</th><th>Strike</th><th>Boost</th><th>Counter</th><th>Stance</th><th>Total</th></tr></thead><tbody>${rows}</tbody><tfoot>${tot}</tfoot></table>
   <div class="cap">Each cell is your count / published average. Amber is below the published minimum, red above the maximum. Published stances land on levels 1, 1, 3, 5, 6, 8 in 20 of 30 disciplines.</div></div>`;
+}
+
+/**
+ * An element's slot audit against the wiki's fourteen full elements: counts
+ * by type, then the leveled types by level -- each cell your count over the
+ * median, amber below the least any element carries, red above the most.
+ */
+function renderElementAudit(e) {
+  const kids = childrenOf(e.id).filter((k) => k.type === 'wildTalent');
+  const B = ELEMENT_BASE;
+  const typeOf = (k) => (k.fields?.ttype || 'Utility').toLowerCase();
+  const flag = (v, b, i) => { const lo = i == null ? b.lo : b.lo[i]; const hi = i == null ? b.hi : b.hi[i]; return v < lo ? 'low' : v > hi ? 'high' : (v ? 'ok' : ''); };
+  const types = Object.keys(B.byType).filter((t) => t !== 'total');
+  let rows = '';
+  for (const t of types) { const v = kids.filter((k) => typeOf(k) === t).length; rows += `<tr><td>${esc(t)}</td><td class="${flag(v, B.byType[t])}">${v}<small> /${B.byType[t].m}</small></td><td><small>${B.byType[t].lo}–${B.byType[t].hi}</small></td></tr>`; }
+  const tot = `<tr><td>All</td><td class="${flag(kids.length, B.byType.total)}">${kids.length}<small> /${B.byType.total.m}</small></td><td><small>${B.byType.total.lo}–${B.byType.total.hi}</small></td></tr>`;
+  let h = `<h5>Slot audit against 14 published elements</h5><div class="audit"><table><thead><tr><th>Type</th><th>Count / median</th><th>Range</th></tr></thead><tbody>${rows}</tbody><tfoot>${tot}</tfoot></table></div>`;
+  const lvlTypes = ['form infusion', 'substance infusion', 'utility'];
+  const cnt = Object.fromEntries([...lvlTypes, 'total'].map((t) => [t, Array(9).fill(0)]));
+  kids.forEach((k) => { const L = +k.fields?.level; const t = typeOf(k); if (L >= 1 && L <= 9 && lvlTypes.includes(t)) { cnt[t][L - 1]++; cnt.total[L - 1]++; } });
+  const cell = (t, i) => `<td class="${flag(cnt[t][i], B.byLevel[t], i)}">${cnt[t][i]}<small> /${B.byLevel[t].m[i]}</small></td>`;
+  let lrows = ''; for (let i = 0; i < 9; i++) lrows += `<tr><td>L${i + 1}</td>${cell('form infusion', i)}${cell('substance infusion', i)}${cell('utility', i)}${cell('total', i)}</tr>`;
+  h += `<div class="audit"><table><thead><tr><th>Lvl</th><th>Form</th><th>Substance</th><th>Utility</th><th>Total</th></tr></thead><tbody>${lrows}</tbody></table>
+  <div class="cap">Each cell is your count / the median element. Amber is below the smallest published element, red above the largest. Blasts and defenses carry no level and are counted above only. Infusion burn runs 1 at level 1, 2 at levels 2–3, 3 at 4–5, 4 at 6–8, 5 at 9; utilities are 0 burn far more often than not.</div></div>`;
+  return h;
 }
 
 /* ===================== Render: rail ===================== */
@@ -361,6 +406,7 @@ function renderPreview() {
   if (!e) { $('#view').innerHTML = ''; return; }
   let h = `${renderSheet(e)}<div class="side">`;
   if (e.type === 'discipline') h += renderAudit(e);
+  if (e.type === 'element') h += renderElementAudit(e);
   const tags = (e.tags || []).filter(Boolean);
   if (tags.length) h += `<h5>Tags</h5><ul><li>${tags.map((t) => `<a class="wl${tagTint(t)}" data-tag-go="${esc(t)}">${esc(t)}</a>`).join(' · ')}</li></ul>`;
   const bl = backlinksTo(e.id);
@@ -492,7 +538,8 @@ $('#fileIn').addEventListener('change', async (ev) => {
     list = data.entries.filter((e) => e && e.id && TYPES[e.type]);
   }
   else if (data.format === 'character-sheet-extension' || data.provides || data.blocks) list = importPack(data, sortedEntries());
-  else return toast('Unrecognised file. Expected a Forge project or a character-sheet-extension pack.', 'bad');
+  else if (looksLikeWildTalents(data)) list = importWildTalents(data, sortedEntries());
+  else return toast('Unrecognised file. Expected a Forge project, a character-sheet-extension pack, or a wild talent list.', 'bad');
   if (!list.length) { if (cats) renderAll(); return toast(cats ? `Read ${cats} categories; no entries to import` : 'Nothing new to import'); }
   if (!await ask(`Import ${list.length} entries${cats ? ` and ${cats} categories` : ''}?`)) return;
   try { await store.saveMany(list); } catch (err) { return toast(`Import failed: ${err.message}`, 'bad'); }

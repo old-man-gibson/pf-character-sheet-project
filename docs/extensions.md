@@ -450,9 +450,10 @@ catalogue by its plural and keeps its cells' labels.
 - **Download extension pack** in the Import / Export menu writes the same pack as a file,
   for a friend or for `tools/forge-pack.mjs` below. Disciplines and their maneuvers become the `maneuvers` table
   (every cell of the card, DC included); feats and spells become the `feats` and
-  `spells` catalogues; a class with its features, an archetype with what each feature
-  replaces and what it alters, a race with its traits read off its body, and a race trait
-  become blocks;
+  `spells` catalogues; a kineticist element's wild talents become the `powers` catalogue
+  (`kind: "wild talent"`, the element named on each); a class with its features, an
+  archetype with what each feature replaces and what it alters, a race with its traits
+  read off its body, and a race trait become blocks;
   everything else — character traits, items, creatures, NPCs, locations, sessions,
   articles, a discipline's own description — lands under `catalogues`, one group per
   kind, fields in the order the Forge shows them. Links come out as their label and

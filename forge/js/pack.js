@@ -62,13 +62,26 @@ export function importPack(data, existing = []) {
     e.fields = { school: str(x.school) + (x.descriptor ? ` [${x.descriptor}]` : ''), level: classes, casting: str(x.time), components: str(x.components), range: str(x.range), target: str(x.target), duration: str(x.duration), save: str(x.save), sr: str(x.sr) };
     e.body = str(x.text);
   }
+  for (const x of P.powers?.powers || []) {
+    if (str(x.kind).toLowerCase() !== 'wild talent') continue;
+    const e = fresh('wildTalent', x.name); if (!e) continue;
+    const elems = listOf(str(x.element).replace(/\s+(?:or|and)\s+/gi, ', '));
+    const typ = str(x.type).toLowerCase();
+    const kind = typ.match(/\((sp|su|ex)\)/)?.[1];
+    const ttype = TYPES.wildTalent.fields[0].o.find((o) => typ.startsWith(o.toLowerCase())) || 'Utility';
+    let body = str(x.text); let prereq = ''; let associated = '';
+    body = body.replace(/^Prerequisite\(s\):\s*([^\n]*)\n*/, (m, t) => { prereq = t.trim(); return ''; }).replace(/^Associated Blast\(s\):\s*([^\n]*)\n*/, (m, t) => { associated = t.trim(); return ''; });
+    e.fields = { ttype, kind: kind ? kind[0].toUpperCase() + kind.slice(1) : '—', level: Number(x.level) || '', burn: str(x.burn), elements: elems.length === 1 ? '' : elems.join(', '), prereq, associated, save: str(x.save), blastType: str(x.blastType), damage: str(x.damage) };
+    e.body = body.trim();
+    if (elems.length === 1) pending.push([e, elems[0], ['element']]);
+  }
   for (const g of P.catalogues?.catalogues || []) {
     const type = TYPES[g.kind] ? g.kind : 'article';
     const keys = labelKeys(type);
     for (const x of g.entries || []) {
-      if (type === 'discipline') {
-        // the description of a discipline whose maneuvers arrived above: fill what is still empty
-        const d = [...list, ...existing].find((o) => o.type === 'discipline' && o.name.toLowerCase() === str(x.name).toLowerCase());
+      if (type === 'discipline' || type === 'element') {
+        // the description of a discipline (or element) whose talents arrived above: fill what is still empty
+        const d = [...list, ...existing].find((o) => o.type === type && o.name.toLowerCase() === str(x.name).toLowerCase());
         if (d) {
           let changed = false;
           if (!d.body && str(x.text)) { d.body = str(x.text); changed = true; }
@@ -116,10 +129,60 @@ export function importPack(data, existing = []) {
       e.tags = [kind]; e.body = str(b.text || b.body) || JSON.stringify(b, null, 1);
     }
   }
+  resolveParents(existing, list, pending);
+  return list;
+}
+
+/**
+ * `Belongs to` and the like, resolved by name against what is here and what
+ * arrived. A wild talent naming an element nobody has yet makes the element.
+ */
+function resolveParents(existing, list, pending) {
   const pool = [...existing, ...list];
   for (const [e, parentName, types] of pending) {
-    const p = pool.find((o) => o.name.toLowerCase() === parentName.toLowerCase() && (!types || types.includes(o.type)));
+    let p = pool.find((o) => o.name.toLowerCase() === parentName.toLowerCase() && (!types || types.includes(o.type)));
+    if (!p && e.type === 'wildTalent' && parentName) {
+      const name = parentName[0].toUpperCase() + parentName.slice(1);
+      p = newEntry('element', name); list.push(p); pool.push(p);
+    }
     if (p) e.parent = p.id;
   }
+}
+
+/** Is this the wiki's wild talent list -- an array of `{name, elements, type, burn, …}`? */
+export function looksLikeWildTalents(data) {
+  return Array.isArray(data) && data.length > 0 && data.every((t) => t && typeof t === 'object' && Array.isArray(t.elements) && 'type' in t && 'burn' in t);
+}
+
+/**
+ * The wiki's wild talent list (tools/wild-talents, or any array of that
+ * shape) as entries: one element per element name, each talent under its
+ * element -- a talent naming several elements goes under the first and
+ * keeps the whole list in its own cell. Source tags become tags.
+ */
+export function importWildTalents(data, existing = []) {
+  const list = [];
+  const pending = [];
+  const have = new Set(existing.map((e) => `${e.type}|${e.name}`.toLowerCase()));
+  const strip = (n) => str(n).replace(/\s*\((?:wild talent|power|feat)\)\s*$/i, '').trim();
+  for (const t of data) {
+    const name = strip(t.name); if (!name) continue;
+    const k = `wildtalent|${name}`.toLowerCase(); if (have.has(k)) continue; have.add(k);
+    const e = newEntry('wildTalent', name);
+    const typ = str(t.type).toLowerCase();
+    const ttype = TYPES.wildTalent.fields[0].o.find((o) => typ.startsWith(o.toLowerCase())) || 'Utility';
+    const kind = str(t.kind).toLowerCase();
+    const elems = (t.elements || []).map((x) => str(x).trim()).filter(Boolean);
+    e.fields = {
+      ttype, kind: kind ? kind[0].toUpperCase() + kind.slice(1) : '—', level: Number(t.level) || '',
+      burn: str(t.burn).replace(/^[—–-]+$/, '—'), elements: elems.length > 1 ? elems.join(', ') : '',
+      prereq: str(t.prereqText || ''), associated: str(t.associated || ''), save: str(t.save || ''), blastType: str(t.blastType || '').toLowerCase(), damage: str(t.damage || ''),
+    };
+    e.body = str(t.text || '');
+    e.tags = [t.source ? str(t.source) : ''].filter(Boolean);
+    list.push(e);
+    if (elems.length) pending.push([e, elems[0], ['element']]);
+  }
+  resolveParents(existing, list, pending);
   return list;
 }

@@ -142,5 +142,37 @@ eq(GROUPS.length, builtinGroups, 'a dropped group goes');
 applyCustomTypes([]);
 eq(Object.keys(TYPES).length, builtinCount, 'none applied is the built-in set');
 
+/* ---- kineticist: round trip through the powers catalogue, and the wiki list ---- */
+{
+  const { importWildTalents, looksLikeWildTalents } = await import('../forge/js/pack.js');
+  const kin = [
+    entry('air', 'element', 'Air', { skills: 'Fly', basicUtility: 'Basic aerokinesis', blast: 'Air Blast' }, 'Air.'),
+    entry('ae', 'wildTalent', 'Aerial Evasion', { ttype: 'Utility', kind: 'Su', level: 3, burn: '1', elements: '', prereq: 'enveloping winds', associated: '', save: '', blastType: '', damage: '' }, 'You gain evasion.', 'air'),
+    entry('tb', 'wildTalent', 'Thunderstorm Blast', { ttype: 'Composite blast', kind: 'Sp', level: '', burn: '2', elements: 'air, water', prereq: 'air blast, cold blast', associated: '', save: '', blastType: 'energy', damage: 'electricity' }, 'Lightning.', 'air'),
+  ];
+  const back = importPack(forgeToPack(kin), []);
+  const bk = new Map(back.map((e) => [`${e.type}|${e.name}`, e]));
+  eq(bk.get('wildTalent|Aerial Evasion')?.fields, kin[1].fields, 'a wild talent round-trips its cells');
+  eq(bk.get('wildTalent|Thunderstorm Blast')?.fields.elements, 'air, water', 'a multi-element talent keeps its list');
+  eq(back.find((e) => e.id === bk.get('wildTalent|Aerial Evasion').parent)?.name, 'Air', 'and sits under its element');
+  eq(bk.get('element|Air')?.fields.skills, 'Fly', 'the element description comes back onto the element');
+  ok(!bk.get('wildTalent|Thunderstorm Blast').parent, 'a talent of two elements sits under neither');
+
+  const wiki = [
+    { name: 'Aerial Evasion', elements: ['air'], type: 'utility', kind: 'su', level: 3, burn: '1', source: '', prereqText: 'enveloping winds', text: 'You gain evasion.' },
+    { name: 'Sonic Blast (wild talent)', elements: ['sound'], type: 'simple blast', kind: 'sp', level: null, burn: '0', source: 'Kineticists of Porphyra', blastType: 'energy', damage: 'sonic', text: 'A wave of sound.' },
+    { name: 'Esoteric Modification', elements: ['aether', 'time', 'void'], type: 'composite blast', kind: 'sp', level: null, burn: '2', source: '', text: 'Odd.' },
+  ];
+  ok(looksLikeWildTalents(wiki) && !looksLikeWildTalents([{ name: 'x' }]) && !looksLikeWildTalents({}), 'the wiki list is recognised and nothing else is');
+  const got = importWildTalents(wiki, []);
+  const gk = new Map(got.map((e) => [`${e.type}|${e.name}`, e]));
+  eq(got.filter((e) => e.type === 'element').map((e) => e.name).sort(), ['Aether', 'Air', 'Sound'], 'one element per first-named element, capitalised');
+  eq(gk.get('wildTalent|Sonic Blast')?.fields.ttype, 'Simple blast', 'the (wild talent) suffix comes off the name');
+  eq(gk.get('wildTalent|Sonic Blast')?.tags, ['Kineticists of Porphyra'], 'the source becomes a tag');
+  eq(gk.get('wildTalent|Esoteric Modification')?.fields.elements, 'aether, time, void', 'three elements kept on the talent');
+  eq(got.find((e) => e.id === gk.get('wildTalent|Esoteric Modification').parent)?.name, 'Aether', 'and filed under the first');
+  eq(importWildTalents(wiki, got).length, 0, 'importing the list again adds nothing');
+}
+
 console.log(`forge: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
