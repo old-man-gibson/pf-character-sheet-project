@@ -49,6 +49,14 @@ export const TYPES = {
     { k: 'level', l: 'Level', t: 'number' }, { k: 'mtype', l: 'Type', t: 'select', o: ['Strike', 'Boost', 'Counter', 'Stance', 'Other'] },
     { k: 'action', l: 'Initiation action', t: 'select', o: ACTIONS }, { k: 'range', l: 'Range', t: 'text' }, { k: 'target', l: 'Target', t: 'text' },
     { k: 'duration', l: 'Duration', t: 'text' }, { k: 'save', l: 'Saving throw', t: 'text' }, { k: 'dc', l: 'DC', t: 'text' }] },
+  element: { label: 'Element', plural: 'Elements', group: 'Kineticist', bodyLabel: 'Description', children: ['wildTalent'], fields: [
+    { k: 'skills', l: 'Class skills', t: 'text', wide: true }, { k: 'basicUtility', l: 'Basic utility', t: 'text' }, { k: 'blast', l: 'Simple blast', t: 'text' }] },
+  wildTalent: { label: 'Wild talent', plural: 'Wild talents', group: 'Kineticist', bodyLabel: 'Description', parent: ['element'], fields: [
+    { k: 'ttype', l: 'Type', t: 'select', o: ['Simple blast', 'Composite blast', 'Defense', 'Form infusion', 'Substance infusion', 'Utility'] },
+    { k: 'kind', l: 'Kind', t: 'select', o: ['Sp', 'Su', 'Ex', '—'] }, { k: 'level', l: 'Level', t: 'number' }, { k: 'burn', l: 'Burn', t: 'text' },
+    { k: 'elements', l: 'Element(s), if not only its own', t: 'text' }, { k: 'prereq', l: 'Prerequisite(s)', t: 'text', wide: true },
+    { k: 'associated', l: 'Associated blast(s)', t: 'text' }, { k: 'save', l: 'Saving throw', t: 'text' },
+    { k: 'blastType', l: 'Blast type', t: 'select', o: ['physical', 'energy', ''] }, { k: 'damage', l: 'Damage', t: 'text' }] },
   campaign: { label: 'Campaign', plural: 'Campaigns', group: 'World', bodyLabel: 'Overview', children: ['session', 'location', 'npc', 'creature'], fields: [
     { k: 'setting', l: 'Setting', t: 'text' }, { k: 'players', l: 'Players', t: 'text' }, { k: 'status', l: 'Status', t: 'select', o: ['Planning', 'Running', 'Paused', 'Finished'] }] },
   session: { label: 'Session', plural: 'Sessions', group: 'World', bodyLabel: 'Notes', parent: ['campaign'], fields: [
@@ -63,7 +71,7 @@ export const TYPES = {
   article: { label: 'Article', plural: 'Articles', group: 'Reference', bodyLabel: 'Text', fields: [] },
 };
 
-export const GROUPS = ['Character options', 'Magic & gear', 'Path of War', 'World', 'Reference'];
+export const GROUPS = ['Character options', 'Magic & gear', 'Path of War', 'Kineticist', 'World', 'Reference'];
 
 /*
  * Every kind can hold entries of its own kind, on top of the containers it
@@ -172,6 +180,27 @@ export const BASE = {
   Counter: { a: [0.6, 1.3, 0.5, 0.8, 0.8, 0.5, 0.6, 0.4, 0.1], lo: [0, 1, 0, 0, 0, 0, 0, 0, 0], hi: [2, 2, 2, 2, 2, 2, 2, 1, 1] },
   Stance: { a: [1.9, 0, 1.0, 0.1, 0.8, 0.9, 0.1, 1.0, 0], lo: [1, 0, 0, 0, 0, 0, 0, 0, 0], hi: [2, 0, 1, 1, 2, 1, 1, 1, 0] },
   total: { a: [6.0, 4.8, 4.1, 4.0, 4.2, 4.3, 3.1, 3.0, 1.0], lo: [5, 4, 4, 4, 3, 3, 3, 3, 1], hi: [7, 5, 5, 4, 5, 5, 4, 4, 1] },
+};
+
+/**
+ * The kineticist baseline: the fourteen elements with a full kit on the
+ * campaign wiki (Paizo's plus the Kineticists of Porphyra ones), 745 wild
+ * talents. Per element: the median count, and the least and most any
+ * element carries -- by type, and by level 1-9 for the leveled types.
+ * Simple blasts, composite blasts and defenses carry no level.
+ */
+export const ELEMENT_BASE = {
+  byType: {
+    'simple blast': { m: 1, lo: 1, hi: 3 }, 'composite blast': { m: 10, lo: 3, hi: 17 }, defense: { m: 1, lo: 1, hi: 1 },
+    'form infusion': { m: 4.5, lo: 2, hi: 8 }, 'substance infusion': { m: 13, lo: 8, hi: 23 }, utility: { m: 42.5, lo: 23, hi: 56 },
+    total: { m: 76.5, lo: 51, hi: 94 },
+  },
+  byLevel: {
+    'form infusion': { m: [1, 0, 1, 1, 0, 0, 1, 0, 0], lo: [0, 0, 0, 0, 0, 0, 0, 0, 0], hi: [2, 1, 3, 2, 1, 2, 2, 1, 1] },
+    'substance infusion': { m: [3, 1, 1, 1, 2, 1, 1, 1, 0], lo: [2, 0, 0, 0, 1, 0, 0, 0, 0], hi: [6, 4, 5, 5, 4, 3, 2, 2, 1] },
+    utility: { m: [7, 5, 7.5, 5, 3.5, 4, 2.5, 1, 1], lo: [4, 3, 6, 2, 2, 1, 0, 0, 1], hi: [13, 10, 14, 11, 6, 7, 6, 4, 3] },
+    total: { m: [12, 7, 11, 7, 6.5, 5.5, 4, 2, 2], lo: [6, 4, 7, 4, 3, 2, 2, 0, 1], hi: [20, 13, 16, 15, 9, 8, 7, 7, 4] },
+  },
 };
 
 /* ---------------- small helpers every module wants ---------------- */

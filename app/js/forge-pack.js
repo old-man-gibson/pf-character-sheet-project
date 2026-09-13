@@ -11,6 +11,7 @@ const FIELD_LABELS = {
   trait: { category: 'Category', prereq: 'Prerequisites' },
   item: { category: 'Category', slot: 'Slot', aura: 'Aura', cl: 'CL', price: 'Price', weight: 'Weight', construction: 'Construction requirements' },
   discipline: { skill: 'Discipline skill', weapons: 'Discipline weapons', tradition: 'Tradition' },
+  element: { skills: 'Class skills', basicUtility: 'Basic utility', blast: 'Simple blast' },
   campaign: { setting: 'Setting', players: 'Players', status: 'Status' },
   session: { number: 'Number', date: 'Date', title: 'Title' },
   location: { kind: 'Kind', region: 'Region' },
@@ -104,6 +105,7 @@ export function forgeToPack(entries, header = {}) {
   const disciplines = [];
   const feats = [];
   const spells = [];
+  const powers = [];
   const blocks = [];
   const catalogues = new Map();
   const catalogue = (kind, e, extraFields = []) => {
@@ -142,6 +144,24 @@ export function forgeToPack(entries, header = {}) {
       case 'maneuver':
         if (!e.parent || byId.get(e.parent)?.type !== 'discipline') catalogue('maneuver', e, [['Level', x.level], ['Type', x.mtype], ['Initiation action', x.action], ['Range', x.range], ['Target', x.target], ['Duration', x.duration], ['Saving throw', x.save], ['DC', x.dc]]);
         break;
+      case 'element':
+        catalogue('element', e);
+        break;
+      case 'wildTalent': {
+        // The sheet's powers catalogue, `kind: "wild talent"`: the element is
+        // the talent's own list or the element it sits under; the type keeps
+        // its (Sp)/(Su) tag the way the wiki prints it.
+        const head = [x.prereq ? `Prerequisite(s): ${plainText(x.prereq)}` : '', x.associated ? `Associated Blast(s): ${plainText(x.associated)}` : ''].filter(Boolean);
+        powers.push({
+          name: e.name, kind: 'wild talent', classes: '',
+          level: Number(x.level) || null,
+          element: str(x.elements) || nameOf(e.parent),
+          type: [str(x.ttype || 'Utility').toLowerCase(), x.kind && x.kind !== '—' ? `(${x.kind})` : ''].filter(Boolean).join(' '),
+          burn: str(x.burn), blastType: str(x.blastType), damage: str(x.damage), save: str(x.save),
+          text: [...head, plainText(e.body)].filter(Boolean).join('\n\n'), source: '',
+        });
+        break;
+      }
       case 'feat': {
         const tail = [x.normal ? `Normal: ${plainText(x.normal)}` : '', x.special ? `Special: ${plainText(x.special)}` : ''].filter(Boolean);
         feats.push({ name: e.name, type: str(x.featType), prerequisites: str(x.prereq), text: [plainText(e.body), ...tail].filter(Boolean).join('\n\n'), source: '' });
@@ -206,6 +226,7 @@ export function forgeToPack(entries, header = {}) {
   if (disciplines.length) provides.maneuvers = { disciplines };
   if (feats.length) provides.feats = { feats };
   if (spells.length) provides.spells = { spells };
+  if (powers.length) provides.powers = { powers };
   if (catalogues.size) provides.catalogues = { catalogues: [...catalogues].map(([kind, list]) => ({ kind, entries: list })) };
   return {
     format: 'character-sheet-extension', formatVersion: 1,
