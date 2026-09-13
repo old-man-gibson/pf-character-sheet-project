@@ -694,14 +694,23 @@ export function setBlended(model, sideKey, index, on) {
     if (at < 0) {
       other.classes = [...(other.classes || []), {
         name: cls.name, type: null, talentsPerLevel: cls.talentsPerLevel,
-        mod1: cls.mod1, mod2: null, levels: [],
+        mod1: cls.mod1, mod2: null, levels: [], addedByBlend: true,
       }];
+    } else {
+      // A block kept after a split carries a copy of the talents; the one
+      // ticked is the one whose rows become the pool again.
+      other.classes[at].levels = cls.levels || [];
+      other.classes[at].blended = true;
     }
+    // Lift the `false` a split left, or pairing would keep them apart.
+    cls.blended = true;
   } else if (at >= 0) {
-    // The talents stay with the block that owns them; the mirror never had
-    // any of its own, so splitting drops it and leaves the pool alone.
+    // The talents stay with the block that owns them. A block that blending
+    // added holds nothing of its own, so splitting drops it; one that was
+    // there before -- the workbook's other half, with its own type and
+    // score -- is kept, with a copy of the talents it was sharing.
     const twin = other.classes[at];
-    if (twin.blendedMirror) other.classes.splice(at, 1);
+    if (twin.addedByBlend) other.classes.splice(at, 1);
     else twin.levels = (twin.levels || []).map((lv) => ({ ...lv }));
     // An explicit false, not a missing flag: the two blocks still share a
     // name, and pairing would otherwise put them straight back together.
