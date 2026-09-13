@@ -73,7 +73,7 @@ export function importPack(data, existing = []) {
     body = body.replace(/^Prerequisite\(s\):\s*([^\n]*)\n*/, (m, t) => { prereq = t.trim(); return ''; }).replace(/^Associated Blast\(s\):\s*([^\n]*)\n*/, (m, t) => { associated = t.trim(); return ''; });
     e.fields = { ttype, kind: kind ? kind[0].toUpperCase() + kind.slice(1) : '—', level: Number(x.level) || '', burn: str(x.burn), elements: elems.length === 1 ? '' : elems.join(', '), prereq, associated, save: str(x.save), blastType: str(x.blastType), damage: str(x.damage) };
     e.body = body.trim();
-    if (elems.length === 1) pending.push([e, elems[0], ['element']]);
+    if (elems.length) pending.push([e, elems[0], ['element']]);
   }
   for (const g of P.catalogues?.catalogues || []) {
     const type = TYPES[g.kind] ? g.kind : 'article';

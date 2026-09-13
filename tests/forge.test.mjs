@@ -156,7 +156,7 @@ eq(Object.keys(TYPES).length, builtinCount, 'none applied is the built-in set');
   eq(bk.get('wildTalent|Thunderstorm Blast')?.fields.elements, 'air, water', 'a multi-element talent keeps its list');
   eq(back.find((e) => e.id === bk.get('wildTalent|Aerial Evasion').parent)?.name, 'Air', 'and sits under its element');
   eq(bk.get('element|Air')?.fields.skills, 'Fly', 'the element description comes back onto the element');
-  ok(!bk.get('wildTalent|Thunderstorm Blast').parent, 'a talent of two elements sits under neither');
+  eq(back.find((e) => e.id === bk.get('wildTalent|Thunderstorm Blast').parent)?.name, 'Air', 'a talent of two elements goes under the first');
 
   const wiki = [
     { name: 'Aerial Evasion', elements: ['air'], type: 'utility', kind: 'su', level: 3, burn: '1', source: '', prereqText: 'enveloping winds', text: 'You gain evasion.' },
