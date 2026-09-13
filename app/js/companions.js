@@ -245,9 +245,16 @@ export const CONJURED_ARCHETYPES = [
   ['warrior', 'Warrior', 'Bipeds only: no natural attacks or multiattack, Battle Creature twice instead.', false],
 ].map(([id, label, note, sums]) => ({ id, label, note, sums }));
 
-/** How a conjured companion's level is found: the caster level, or a class. */
+/**
+ * How a conjured companion's level is found: the caster level, or a class.
+ *
+ * The caster level is the Conjuration sphere's own -- the global caster
+ * level plus whatever that sphere's row on the Magic Spheres table adds, a
+ * typed CL bonus or a forwarded one -- and never another sphere's.
+ */
+export const CONJURED_SPHERE = 'Conjuration';
 export const CONJURED_LEVEL_SOURCES = [
-  ['casterLevel', 'Caster level'],
+  ['casterLevel', 'Conjuration caster level'],
   ['class', 'Levels in a class'],
 ];
 
@@ -702,17 +709,36 @@ const abilityKey = (label) => {
  */
 function rawLevel(kind, b, master) {
   if (kind === 'familiar') return Math.min(20, master.level);
-  if (b.levelOverride !== null && b.levelOverride !== undefined && b.levelOverride !== '') {
-    return clampLevel(b.levelOverride, levelCap(kind));
-  }
+  if (pinnedLevel(b)) return clampLevel(b.levelOverride, levelCap(kind));
   if (kind === 'animalCompanion' && b.levelSource === 'handleAnimal') return clampLevel(master.skillRanks('Handle Animal'));
   if (kind === 'animalCompanion' && b.levelSource === 'ride') return clampLevel(master.skillRanks('Ride'));
-  // The conjured companion grows with its caster's caster level -- the magic
-  // training's global CL -- unless pointed at a class's levels instead.
+  // The conjured companion grows with its caster's caster level *in the
+  // Conjuration sphere* -- the global CL plus that sphere's own bonuses,
+  // which is the level its talents are cast at -- unless pointed at a
+  // class's levels instead. A master with no magic side has no sphere rows,
+  // and the plain caster level (the character's own level) stands in.
   if (kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel') {
-    return clampLevel(master.casterLevel, 40);
+    const sphere = typeof master.sphereCL === 'function' ? master.sphereCL(CONJURED_SPHERE) : null;
+    return clampLevel(sphere ?? master.casterLevel, 40);
   }
   return b.masterClass ? clampLevel(master.classLevelCount(b.masterClass), levelCap(kind)) : 0;
+}
+
+/** A level typed into the override field, which wins over every source. */
+const pinnedLevel = (b) => b.levelOverride !== null && b.levelOverride !== undefined && b.levelOverride !== '';
+
+/**
+ * Where the level came from, in words: the first line of the level's working
+ * (see `companionBreakdown`), and what the override field's placeholder says
+ * it is standing in for.
+ */
+export function levelSourceLabel(kind, b) {
+  if (kind === 'familiar') return 'the master’s level';
+  if (pinnedLevel(b)) return 'the level typed in';
+  if (kind === 'animalCompanion' && b.levelSource === 'handleAnimal') return 'the master’s Handle Animal ranks';
+  if (kind === 'animalCompanion' && b.levelSource === 'ride') return 'the master’s Ride ranks';
+  if (kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel') return 'the Conjuration sphere’s caster level';
+  return b.masterClass ? `the master’s levels in ${b.masterClass}` : 'no class named';
 }
 
 /**
@@ -782,21 +808,32 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   /*
    * The conjured companion's row is worked out rather than looked up, because
    * its archetypes bend the Hit Dice and every column follows the dice: the
-   * familiar archetype grows off half the caster level (still 1 HD at 1st,
-   * on half hit points, as written), the mindless and unwilling add a die at
-   * 4th caster level and every 4 after, and BAB, saves, natural armour and
-   * feats all move with the total. The plain case reproduces CONJURED_TABLE
-   * -- which is the wiki's -- exactly.
+   * familiar archetype has half the normal dice, rounded down -- "still 1 HD
+   * at 1st, on half hit points", as written -- the mindless and unwilling
+   * add a die at 4th caster level and every 4 after, and BAB, saves, natural
+   * armour and feats all move with the total. The plain case reproduces
+   * CONJURED_TABLE -- which is the wiki's -- exactly.
+   *
+   * Half the dice, not the dice of half the level: the two part company at
+   * some levels (15 dice halve to 7; a 10th-level companion has 8), and the
+   * archetype's text leads with the dice. `effLevel` is the caster level
+   * those dice correspond to -- the row a plain companion of that many would
+   * be on -- and is where the Special column's gains are read from, so a
+   * familiar's evasion arrives at its own 2nd die rather than at its
+   * master's 2nd level. The extra mindless and unwilling dice are left out of
+   * it: they bring no specials.
    */
-  let effLevel = level;
+  const normalHD = kind === 'conjured' ? conjuredHD(level) : 0;
+  let ownHD = normalHD;
   let halfHp = false;
   if (arch('familiar')) {
-    effLevel = Math.floor(level / 2);
-    if (level >= 1 && effLevel < 1) { effLevel = 1; halfHp = true; }
+    ownHD = Math.floor(normalHD / 2);
+    if (normalHD === 1) { ownHD = 1; halfHp = true; }
   }
+  const effLevel = arch('familiar') ? Math.min(level, Math.floor((ownHD * 4) / 3)) : level;
   const bonusHD = (arch('mindless') || arch('unwilling')) && level >= 1 ? Math.floor(level / 4) : 0;
   const row = kind === 'conjured'
-    ? conjuredStats(conjuredHD(effLevel) + bonusHD)
+    ? conjuredStats(ownHD + bonusHD)
     : table[Math.max(1, level) - 1] || table[0];
   const hd = kind === 'familiar' ? level : (level >= 1 ? row.hd : 0);
   const form = kind === 'conjured' ? conjuredBaseForm(b.baseForm) : null;
@@ -835,21 +872,24 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     // giant strength reaches the attack, the damage, the CMB, Climb and Swim
     // without any of them having to be named.
     const gear = Math.trunc(Number(fwd.scores[k]) || 0);
-    const total = base + evo + lvlUp + (Number(s.misc) || 0) + gear;
-    scores[k] = { base, evo, lvlUp, gear, total, mod: abilityMod(total) };
+    const misc = Number(s.misc) || 0;
+    const total = base + evo + lvlUp + misc + gear;
+    scores[k] = { base, evo, lvlUp, misc, gear, total, mod: abilityMod(total) };
   }
   const mod = (k) => scores[k]?.mod || 0;
 
   // Hit points: half the master's for a familiar (doubled for a Protector at
-  // 11th), 8 a die plus Con for the others -- the sheet's own numbers. The
-  // conjured mage archetype's d6 is 4 a die by the same two-under-the-die
-  // reading, and the conjured familiar archetype's 1 HD corner halves the
-  // dice-and-Con half, as written, before the typed bonus.
+  // 11th), 8 a die plus Con for the animal companion and the eidolon -- the
+  // worksheets' own numbers. The conjured companion rolls d10s (the mage
+  // archetype's d6) and takes the full die each, the way the character's own
+  // levels are counted; the conjured familiar archetype's 1 HD corner halves
+  // the dice-and-Con half, as written, before the typed bonus.
   const conKey = abilityKey(b.hpAbility) || 'con';
-  const ownDice = hd * (arch('mage') ? 4 : 8) + mod(conKey) * hd;
+  const perDie = kind === 'conjured' ? (arch('mage') ? 6 : 10) : 8;
+  const ownDice = hd * perDie + mod(conKey) * hd;
   const hpMax = (kind === 'familiar'
     ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) + (Number(b.hp?.bonus) || 0)
-    : (halfHp ? Math.floor(ownDice / 2) : ownDice) + (Number(b.hp?.bonus) || 0)) + fwd.hp;
+    : (halfHp ? Math.max(1, Math.floor(ownDice / 2)) : ownDice) + (Number(b.hp?.bonus) || 0)) + fwd.hp;
   const damage = Math.max(0, Number(b.hp?.damage) || 0);
   const temp = Math.max(0, Number(b.hp?.temp) || 0);
 
@@ -977,6 +1017,19 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     hpMax,
     hpCurrent: hpMax - damage,
     hpTemp: temp,
+    // What the working on each number reads (companionBreakdown): the hit
+    // point sum's pieces, where the level came from, and what was forwarded
+    // at each stat -- kept on the block beside the totals they went into.
+    hpPerDie: kind === 'familiar' ? 0 : perDie,
+    hpHalved: halfHp,
+    hpFromMaster: kind === 'familiar'
+      ? Math.floor(master.hp / 2) * (b.protector && master.level >= 11 ? 2 : 1) : 0,
+    hpAbility: conKey,
+    levelFrom: levelSourceLabel(kind, b),
+    levelCap: levelCap(kind),
+    forwarded: {
+      hp: fwd.hp, ac: fwd.ac, touch: fwd.touch, ff: fwd.ff, cmd: fwd.cmd, cmb: fwd.cmb, init: fwd.init, attack: fwd.attack,
+    },
     sizeAC,
     tableNatural,
     ac,
@@ -1083,6 +1136,155 @@ export function companionScope(block) {
   // The conjured companion's summon cost, so a tracker can charge it.
   if (k.summonCost !== undefined) s.summonCost = k.summonCost;
   return s;
+}
+
+/**
+ * How one of a companion's numbers was arrived at, part by part -- the shape
+ * `breakdown()` in model/breakdown.js hands out for the character's own, so
+ * the working that opens on the character's AC opens on a companion's too.
+ *
+ * `stat` is the name the number reads by in the scope, one level down:
+ * `hp`, `ac`, `touch`, `ff`, `cmd`, `ffCmd`, `cmb`, `init`, `attack`, `fort`,
+ * `ref`, `will`, `level`, or an ability for its score. Every list is written
+ * against the sum in `computeCompanion` that produces the number and reads
+ * the `calc` it wrote, so the parts add up by construction -- and the test
+ * suite checks that they do, on every companion of every fixture, rather
+ * than trusting the two to stay in step. Null for a name that is not one.
+ */
+export function companionBreakdown(kind, block, stat) {
+  const b = block;
+  const k = b?.calc;
+  if (!k) return null;
+  const part = (label, value, note = '') => ({ label, value: Number(value) || 0, note });
+  // The number a sum starts from, shown without a sign: "Base 10", then
+  // "+2" for everything laid on it.
+  const plain = (label, value, note = '') => ({ label, value: Number(value) || 0, note, plain: true });
+  const base = (value, note = '') => plain('Base', value, note);
+  const fwd = k.forwarded || {};
+  const mod = (a) => k.scores?.[a]?.mod || 0;
+  const size = Number(k.sizeAC) || 0;
+  const elsewhere = 'a rule written elsewhere on the sheet — see the gold badge';
+  const forwarded = (name) => part('forwarded', fwd[name], elsewhere);
+  // The table's natural armour and, on a conjured companion, the base form's
+  // own under it -- computeCompanion keeps the two summed in `tableNatural`.
+  const natural = () => {
+    const form = Number(k.formNatural) || 0;
+    return [
+      part('natural armour', (Number(k.tableNatural) || 0) - form, 'from the table'),
+      part(`${b.baseForm || 'base form'} natural armour`, form, 'the base form’s own'),
+    ];
+  };
+  const special = () => part('special size', -size, 'the size modifier the other way round');
+  switch (stat) {
+    case 'hp': {
+      let parts;
+      if (kind === 'familiar') {
+        parts = [plain('half the master’s', k.hpFromMaster, k.protectorDoubles ? 'doubled for a Protector from 11th' : '')];
+      } else {
+        const hd = Number(k.hd) || 0;
+        const perDie = Number(k.hpPerDie) || 8;
+        const con = mod(k.hpAbility || 'con');
+        const dice = hd * perDie + con * hd;
+        parts = [
+          plain(`${hd} HD × ${perDie}`, hd * perDie, k.hitDie
+            ? `the full d${k.hitDie} each${k.hitDie === 6 ? ', the mage archetype’s' : ''}` : 'a hit die'),
+          part(`${ABILITY_LABELS[k.hpAbility] || 'Con'} × ${hd}`, con * hd),
+        ];
+        if (k.hpHalved) parts.push(part('halved', Math.max(1, Math.floor(dice / 2)) - dice, 'the familiar archetype’s 1 HD is on half hit points, never under 1'));
+      }
+      return { label: 'Hit points', total: k.hpMax, parts: [...parts, part('bonus max HP', b.hp?.bonus), forwarded('hp')] };
+    }
+    case 'ac': return {
+      label: 'Armour class',
+      total: k.ac,
+      parts: [base(10), part('Dex', mod('dex')), part('size', size),
+        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), part('flat-footed only', b.ac?.ff),
+        ...natural(), forwarded('ac')],
+    };
+    case 'touch': return {
+      label: 'Touch AC',
+      total: k.touch,
+      parts: [base(10), part('Dex', mod('dex')), part('size', size),
+        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), forwarded('touch')],
+    };
+    case 'ff': return {
+      label: 'Flat-footed AC',
+      total: k.flatFooted,
+      parts: [base(10), part('size', size), part('bonus AC (all)', b.ac?.all),
+        part('flat-footed only', b.ac?.ff), ...natural(), forwarded('ff')],
+    };
+    case 'cmd': return {
+      label: 'CMD',
+      total: k.cmd,
+      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
+        part('CMD other', b.cmdOther), forwarded('cmd')],
+    };
+    case 'ffCmd': return {
+      label: 'Flat-footed CMD',
+      total: k.ffCmd,
+      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')), special(),
+        part('CMD other', b.cmdOther), forwarded('cmd')],
+    };
+    case 'cmb': return {
+      label: 'CMB',
+      total: k.cmb,
+      parts: [part('BAB', k.bab), part('Str', mod('str')), special(), part('CMB other', b.cmbOther), forwarded('cmb')],
+    };
+    case 'init': return {
+      label: 'Initiative',
+      total: k.initiative,
+      parts: [part('Dex', mod('dex')), part('initiative bonus', b.initBonus), forwarded('init')],
+    };
+    case 'attack': return {
+      label: 'Attack',
+      total: k.totalAttack,
+      parts: [part('BAB', k.bab), part(k.attackAbility || 'Str', (Number(k.attackMod) || 0) - size), part('size', size),
+        part('attack bonus', b.attackBonus), forwarded('attack')],
+    };
+    case 'fort': case 'ref': case 'will': {
+      const sv = k.saves?.[stat] || {};
+      const name = { fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[stat];
+      const ab = { fort: 'Con', ref: 'Dex', will: 'Wis' }[stat];
+      const how = kind === 'familiar' ? 'the master’s, never below +2'
+        : b.goodSaves?.[stat] ? 'good, from the table' : 'poor, from the table';
+      return {
+        label: name,
+        total: sv.total,
+        parts: [base(sv.base, how), part(ab, sv.mod), part('misc', sv.misc), part('forwarded', sv.gear, elsewhere)],
+      };
+    }
+    case 'level': {
+      const raw = Number(k.rawLevel) || 0;
+      const penalty = Number(k.penalty) || 0;
+      const level = Number(k.level) || 0;
+      const parts = [plain(k.levelFrom || 'the source', raw), part('master level penalty', -penalty)];
+      // clampLevel keeps it between 0 and the table's last row; where it did,
+      // the difference is named rather than left to make the sum wrong.
+      const clamped = level - (raw - penalty);
+      if (clamped) {
+        parts.push(clamped > 0 ? part('no lower than 0', clamped)
+          : part(`capped at ${k.levelCap ?? 20}`, clamped, 'the table stops there'));
+      }
+      return { label: 'Level', total: level, parts };
+    }
+    default: {
+      if (!ABILITIES.includes(stat)) return null;
+      const s = k.scores?.[stat] || {};
+      const typed = b.scores?.[stat]?.base;
+      const auto = kind === 'conjured' && (typed === null || typed === undefined || typed === '');
+      return {
+        label: `${ABILITY_LABELS[stat]} score`,
+        total: s.total,
+        parts: [
+          base(s.base, auto ? `auto, from the ${b.baseForm || 'default'} line` : ''),
+          part('evolutions', s.evo, 'the Ability Increase evolution'),
+          part('level', s.lvlUp, 'the table’s Str/Dex bonus and the +1s at the increase levels'),
+          part('misc', s.misc),
+          part('forwarded', s.gear, elsewhere),
+        ],
+      };
+    }
+  }
 }
 
 /**

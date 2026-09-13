@@ -930,6 +930,18 @@ way round, exactly as CMD already carried it. The worksheet never worked it out 
 a companion that trips or grapples had nothing to read; it now has a line, a **CMB other**
 field and a d20 button of its own.
 
+**The conjured companion** — the Conjuration sphere's, on a fourth tab — never had a
+worksheet; its progression is the wiki's *Table: Companion*, closed-form, and its base
+form adds its own natural armour, good saves and starting scores. It rolls d10 Hit Dice
+(d6 for the mage archetype) and takes the full die each plus Con, the way the character's
+own levels are counted, rather than the worksheets' 8 a die. Its level is the
+**Conjuration sphere's caster level**: the CL on that sphere's row of the Magic Spheres
+table, which is the global caster level plus whatever the row itself adds — a typed CL
+bonus, or one forwarded at `sphere.conjuration.cl` — and never another sphere's. *Level
+from* can point it at a class's levels instead, and the override pins it as on every
+other tab; the *level* badge's working says which source it read and what the
+master-level penalty took off.
+
 ### Equipment, and what it does
 
 Every companion has an **Items** panel: the slots its body type allows (the animal

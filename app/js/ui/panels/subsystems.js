@@ -71,7 +71,7 @@ import { abilitySelect, check, field, num, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
   itemSelect, itemText, line,
-  lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools,
+  lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools, working,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -1467,7 +1467,7 @@ export function companionPanel(model, kind) {
       sn: companionScopeName(kind, b),
       roll: i === 0 ? kind : `${kind}:${i}`,
     };
-    return `<div class="grid">
+    return `<div class="grid companion">
       ${companionSwitchPanel(model, kind, list, i, label)}
       ${companionHeadPanel(model, cc)}
       ${companionHpPanel(cc)}
@@ -1544,7 +1544,7 @@ function companionLevelControls(model, cc) {
     const autoFrom = kind === 'animalCompanion' && b.levelSource === 'handleAnimal' ? 'Handle Animal ranks'
       : kind === 'animalCompanion' && b.levelSource === 'ride' ? 'Ride ranks'
         : kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel'
-          ? 'the magic training’s caster level' : 'the class’s levels in the Planner';
+          ? 'the Conjuration sphere’s caster level on the Magic Spheres tab' : 'the class’s levels in the Planner';
     return `${source}
       ${showClass ? field('Master class', select(`${p}.masterClass`, b.masterClass, classes)) : ''}
       ${field('Level override', `<input type="number" value="${b.levelOverride ?? ''}"
@@ -1558,6 +1558,9 @@ function companionHeadPanel(model, cc) {
     const { kind, p, sn, roll, b, k, label } = cc;
     const saves = k.saves || {};
     const sv = (x) => fmt(saves[x]?.total ?? 0);
+    // Each figure in the strip carries its working -- the same panel the
+    // character's own strip opens, keyed by the name the number reads by.
+    const w = (stat, shown) => working(model, `${sn}.${stat}`, shown);
     const identity = kind === 'familiar' ? `
         ${field('Creature', text(`${p}.creature`, b.creature, 'Owl, cat, thrush…'))}
         ${field('Archetypes', text(`${p}.archetypes`, b.archetypes))}
@@ -1576,7 +1579,7 @@ function companionHeadPanel(model, cc) {
     return `<section class="panel span2">
       <h3>${esc(String(b.name || '').trim() || label)}
         <span class="badge" title="${esc(`The name this companion’s numbers read by in a formula — ${cc.sn}.hp, ${cc.sn}.ac.total — and a bonus is sent to. It stays with the creature through a rename or a reordering.`)}">${esc(cc.sn)}</span>
-        <span class="badge">level ${k.level ?? 0}</span>
+        <span class="badge">${working(model, `${sn}.level`, `level ${k.level ?? 0}`)}</span>
         <span class="badge">${k.hd ?? 0} HD${kind === 'conjured' && k.hitDie ? ` (d${k.hitDie})` : ''}</span>
         ${kind === 'conjured' && k.summonCost !== undefined
     ? `<span class="badge" title="A standard action; one more spell point lets it stay a minute per caster level without concentration">${k.summonCost} sp to summon</span>` : ''}
@@ -1591,23 +1594,23 @@ function companionHeadPanel(model, cc) {
         ${companionLevelControls(model, cc)}
       </div>
       <div class="bigstats" style="margin-top:10px">
-        ${bigStat('HP', `${k.hpCurrent ?? 0} / ${k.hpMax ?? 0}`, k.hpTemp ? `+${k.hpTemp} temp` : '')}
-        ${bigStat('AC', k.ac ?? 10, `touch ${k.touch ?? 10} · flat ${k.flatFooted ?? 10}`)}
-        ${bigStat('Init', fmt(k.initiative ?? 0), 'Dex + bonus', '',
+        ${bigStat('HP', { html: w('hp', esc(`${k.hpCurrent ?? 0} / ${k.hpMax ?? 0}`)) }, k.hpTemp ? `+${k.hpTemp} temp` : '')}
+        ${bigStat('AC', { html: w('ac', String(k.ac ?? 10)) }, `touch ${k.touch ?? 10} · flat ${k.flatFooted ?? 10}`)}
+        ${bigStat('Init', { html: w('init', fmt(k.initiative ?? 0)) }, 'Dex + bonus', '',
     rollButton(model, roll, 'init', `${label.toLowerCase()} initiative`))}
         ${bigStat('BAB', fmt(k.bab ?? 0), kind === 'familiar' ? 'master’s' : 'from the table')}
-        ${bigStat('Attack', fmt(k.totalAttack ?? 0), `${k.attackAbility || 'Str'} + size`)}
-        ${bigStat('CMD', k.cmd ?? 10, `flat ${k.ffCmd ?? 10}`)}
-        ${bigStat('Fort', sv('fort'), kind === 'familiar' ? 'master’s base' : (b.goodSaves?.fort ? 'good' : 'poor'))}
-        ${bigStat('Ref', sv('ref'), kind === 'familiar' ? 'master’s base' : (b.goodSaves?.ref ? 'good' : 'poor'))}
-        ${bigStat('Will', sv('will'), kind === 'familiar' ? 'master’s base' : (b.goodSaves?.will ? 'good' : 'poor'))}
+        ${bigStat('Attack', { html: w('attack', fmt(k.totalAttack ?? 0)) }, `${k.attackAbility || 'Str'} + size`)}
+        ${bigStat('CMD', { html: w('cmd', String(k.cmd ?? 10)) }, `flat ${k.ffCmd ?? 10}`)}
+        ${bigStat('Fort', { html: w('fort', sv('fort')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.fort ? 'good' : 'poor'))}
+        ${bigStat('Ref', { html: w('ref', sv('ref')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.ref ? 'good' : 'poor'))}
+        ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
     ? 'A familiar is its master’s level, uses the master’s BAB and base saves, has half the master’s hit points, and takes its Intelligence and natural armour from the familiar table.'
     : kind === 'animalCompanion'
       ? 'The level is the master’s levels in the class named (or ranks in Handle Animal / Ride for a Spheres companion), less any penalty; HD, BAB, saves, skill ranks, feats, natural armour, the Str/Dex bonus and bonus tricks all follow the animal companion table.'
       : kind === 'conjured'
-        ? 'The level is the caster level (or a class’s levels), less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
+        ? 'The level is the Conjuration sphere’s caster level — the CL on that sphere’s row of the Magic Spheres table, its own bonuses included — or a class’s levels, less any penalty; HD, BAB, saves, skill points, feats and natural armour follow the Conjuration sphere’s companion table, and the base form adds its own natural armour, saves and starting scores. Archetypes that bend the progression are ticked below.'
         : 'The level is the master’s levels in the class named, less any penalty; HD, BAB, saves, feats, natural armour, the Str/Dex bonus, the evolution pool and the attack cap follow the eidolon table.'}
         Readable from a formula as <code>${esc(sn)}.hp</code>, <code>${esc(sn)}.ac</code>, <code>${esc(sn)}.str.mod</code>…</p>
     </section>`;
@@ -1635,7 +1638,9 @@ function companionHpPanel(cc) {
       </div>
       <p class="hint">${kind === 'familiar'
     ? `Half the master’s maximum${k.protectorDoubles ? ', doubled for a Protector' : ''}, plus the bonus.`
-    : `${k.hitDie === 6 ? '4 a hit die (the mage archetype’s d6)' : '8 a hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
+    : `${kind === 'conjured'
+      ? `${k.hpPerDie ?? 10} a hit die — the full d${k.hitDie ?? 10}${k.hitDie === 6 ? ', the mage archetype’s' : ''}, as the character’s own levels are counted —`
+      : '8 a hit die'} plus the ${esc(b.hpAbility || 'Con')} modifier each, plus the bonus. Damage spends temporary points first.`}</p>
     </section>`;
   }
 
@@ -1648,7 +1653,7 @@ function companionScoresPanel(model, cc) {
     const list = `${p}.abilityIncreases`;
     return `<section class="panel">
       <h3>Ability scores</h3>
-      <table class="build"><thead><tr>
+      <div class="tablewrap"><table class="build compact"><thead><tr>
         <th scope="col">Score</th><th scope="col">Base</th>${evo ? '<th scope="col">Evo</th>' : ''}
         <th scope="col" title="The table’s Str/Dex bonus and the +1s at the increase levels">Level</th>
         <th scope="col">Misc</th><th scope="col" class="num">Total</th><th scope="col" class="num">Mod</th>
@@ -1669,12 +1674,12 @@ function companionScoresPanel(model, cc) {
           <td class="num derived">${fmt(s.lvlUp || 0)}</td>
           <td>${num(`${p}.scores.${a}.misc`, b.scores?.[a]?.misc)}${
       forwardedBadge(model, `${sn}.${a}.score`)}</td>
-          <td class="num total">${s.total ?? 10}</td>
+          <td class="num total">${working(model, `${sn}.${a}`, String(s.total ?? 10))}</td>
           <td class="num"><span class="rollpair">${fmt(s.mod ?? 0)}${
       rollButton(model, roll, `ability:${a}`, `a ${ABILITY_LABELS[a]} check`)}</span></td>
         </tr>`;
   }).join('')}
-      </tbody></table>
+      </tbody></table></div>
       ${incs.length ? `<div class="fieldgrid" style="margin-top:8px">
         ${incs.map((inc, i) => field(`+1 at ${kind === 'conjured' ? `${inc.level} HD` : `level ${inc.level}`}${
     (kind === 'conjured' ? (k.hd ?? 0) : (k.level ?? 0)) >= inc.level ? '' : ' (not yet)'}`,
@@ -1692,15 +1697,17 @@ function companionDefensePanel(model, cc) {
     // Every one of these is a destination now, so each says beside itself
     // what has been forwarded to it and from where.
     const fwd = (name) => forwardedBadge(model, `${sn}.${name}`);
+    // ...and each carries its working, opened on the number itself.
+    const w = (stat, shown) => working(model, `${sn}.${stat}`, shown);
     return `<section class="panel">
       <h3>Defences <span class="badge">AC ${k.ac ?? 10}</span></h3>
-      ${lineHtml('Armor class', `${k.ac ?? 10}${fwd('ac.total')}`, true)}
-      ${lineHtml('Touch', `${k.touch ?? 10}${fwd('ac.touch')}`)}
-      ${lineHtml('Flat-footed', `${k.flatFooted ?? 10}${fwd('ac.flatFooted')}`)}
-      ${lineHtml('CMD', `${k.cmd ?? 10} (flat ${k.ffCmd ?? 10})${fwd('cmd')}`)}
-      ${lineHtml('CMB', `<span class="rollpair">${fmt(k.cmb ?? 0)}${
+      ${lineHtml('Armor class', `${w('ac', String(k.ac ?? 10))}${fwd('ac.total')}`, true)}
+      ${lineHtml('Touch', `${w('touch', String(k.touch ?? 10))}${fwd('ac.touch')}`)}
+      ${lineHtml('Flat-footed', `${w('ff', String(k.flatFooted ?? 10))}${fwd('ac.flatFooted')}`)}
+      ${lineHtml('CMD', `${w('cmd', String(k.cmd ?? 10))} (flat ${w('ffCmd', String(k.ffCmd ?? 10))})${fwd('cmd')}`)}
+      ${lineHtml('CMB', `<span class="rollpair">${w('cmb', fmt(k.cmb ?? 0))}${
         rollButton(model, roll, 'cmb', 'a combat maneuver')}</span>${fwd('cmb')}`)}
-      ${lineHtml('Initiative', `<span class="rollpair">${fmt(k.initiative ?? 0)}${
+      ${lineHtml('Initiative', `<span class="rollpair">${w('init', fmt(k.initiative ?? 0))}${
         rollButton(model, roll, 'init', 'initiative')}</span>${fwd('init')}`)}
       <div class="fieldgrid" style="margin-top:8px">
         ${field('Bonus AC (all)', num(`${p}.ac.all`, ac.all))}
@@ -1729,7 +1736,7 @@ function companionSavesPanel(model, cc) {
     const rows = [['fort', 'Fortitude', 'Con'], ['ref', 'Reflex', 'Dex'], ['will', 'Will', 'Wis']];
     return `<section class="panel">
       <h3>Saves</h3>
-      <table class="build"><thead><tr>
+      <div class="tablewrap"><table class="build compact"><thead><tr>
         <th scope="col">Save</th>${kind === 'familiar' ? '' : '<th scope="col">Good</th>'}
         <th scope="col" class="num">Base</th><th scope="col" class="num">Ability</th>
         <th scope="col">Misc</th><th scope="col" class="num">Total</th>
@@ -1741,10 +1748,10 @@ function companionSavesPanel(model, cc) {
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
           <td>${num(`${p}.saves.${key}.misc`, b.saves?.[key]?.misc)}${
             forwardedBadge(model, `${sn}.${key}`)}</td>
-          <td class="num total"><span class="rollpair">${fmt(saves[key]?.total ?? 0)}${
+          <td class="num total"><span class="rollpair">${working(model, `${sn}.${key}`, fmt(saves[key]?.total ?? 0))}${
             rollButton(model, roll, `save:${key}`, `a ${name} save`)}</span></td>
         </tr>`).join('')}
-      </tbody></table>
+      </tbody></table></div>
       <p class="hint">${kind === 'familiar'
     ? 'Base saves are the master’s, never below +2.'
     : kind === 'conjured' && k.formSaves

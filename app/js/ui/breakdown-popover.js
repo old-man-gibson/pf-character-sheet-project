@@ -57,15 +57,45 @@ const MARGIN = 8;
  */
 export function breakdownHtml(b, extra = '') {
   if (!b) return '';
-  const parts = b.parts.map((p) => partRow(fmt(p.value), p.label, p.note));
+  const parts = b.parts.map((p) => partRow(shown(p), p.label, p.note));
   if (b.sum !== b.total) parts.push(partRow(fmt(b.total - b.sum), 'unaccounted for', '', ' odd'));
+  /*
+   * Two halves. The permanent parts, which add up to the permanent total
+   * under the heading; then the temporary half -- what the ticked buffs and
+   * conditions are doing to it -- headed by its own net, "Buffs and
+   * conditions +1", with one entry a source under that: what it did to the
+   * number outright on its own line, and what it did through an ability on a
+   * line under that, indented, so the two read as one and still add down the
+   * column. The heading is then the number the sheet is showing: the
+   * permanent total and the net together. Each figure is coloured the way
+   * the sheet colours a number that moved -- green up, red down -- and the
+   * net wears a third colour when what is ticked cancels out to nothing, so
+   * that a 0 reads as "two things, evenly matched" and not as "nothing".
+   */
+  const moved = Array.isArray(b.adjustments) && b.adjustments.length > 0;
+  if (moved) {
+    const net = Number(b.delta) || 0;
+    parts.push(partRow(net ? fmt(net) : '0', 'Buffs and conditions', '', ` bdtemp${dir(net) || ' even'}`));
+    for (const p of b.adjustments) {
+      const lines = [partRow(fmt(p.value), p.label, p.note, dir(p.value))];
+      for (const l of p.lines || []) lines.push(partRow(fmt(l.value), l.label, '', ` sub${dir(l.value)}`));
+      parts.push(lines.length > 1 ? `<div class="bdentry">${lines.join('')}</div>` : lines[0]);
+    }
+  }
   return `<div class="bdhead"><span class="bdname">${esc(b.label)}</span>`
-    + `<span class="bdtotal">${esc(String(b.total))}</span></div>`
-    + (extra ? `<div class="bdsub">${esc(extra)}</div>` : '')
+    + `<span class="bdtotal">${esc(String(moved ? b.adjusted : b.total))}</span></div>`
+    + (moved ? `<div class="bdsub">Permanent total ${esc(String(b.total))}</div>`
+      : extra ? `<div class="bdsub">${esc(extra)}</div>` : '')
     + (parts.length
       ? `<div class="bdparts">${parts.join('')}</div>`
       : '<div class="bdsub">Nothing is adding to it.</div>');
 }
+
+/** A part's figure: signed, because it is something added -- unless it is the number the sum starts from. */
+const shown = (p) => (p.plain ? String(p.value) : fmt(p.value));
+
+/** Which way a share moved the number, as the class that colours it. */
+const dir = (value) => (value > 0 ? ' up' : value < 0 ? ' down' : '');
 
 function partRow(value, label, note, cls = '') {
   return `<div class="bdrow${cls}">`

@@ -143,13 +143,16 @@
   .picker[slot="rail"] .chip.fold { justify-content: flex-start; padding: 5px 10px; }
   .picker[slot="rail"] .chip.import:first-of-type,
   .picker[slot="rail"] .chip.fold { margin-top: 8px; }
-  /* The bar layout centres the sheet in 1500px, which on a wide screen leaves a
-     margin either side; with a rail inside the sheet that margin is a column of
-     nothing beside a column of tabs. The side layout takes the whole width. */
+  /* The 1500px column is for the page before a sheet is up -- the welcome
+     card, a banner over nothing. Once the sheet has said how wide it is the
+     cap comes off, so "Full width" is the window and "90%" is 90% of it,
+     whichever layout is up: a share of the window, not of a column that on a
+     wide screen left a fifth of it empty either side. The banner and the
+     note follow the sheet to the edges when it takes them all; under a
+     narrower sheet they keep the column, which is about as wide as it is. */
   html[data-layout="side"] main, html[data-layout="side"] .banner, html[data-layout="side"] .note { max-width: none; }
-  /* A chosen width is a share of the window, not of a 1500px column: the cap
-     comes off so "90%" means 90% of the screen, whichever layout is up. */
-  html[data-width]:not([data-width="100"]) main { max-width: none; }
+  html[data-width] main { max-width: none; }
+  html[data-width="100"] .banner, html[data-width="100"] .note { max-width: none; }
   /* Printing: the sheet does its own print styling (see app/css/sheet.css).
      All this page has to do is get out of the way -- the picker, the roster
      chrome and the dark backdrop are for choosing a character, not for the
