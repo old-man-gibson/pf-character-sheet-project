@@ -174,6 +174,67 @@ export function sizeNow(model) {
 }
 
 /**
+ * What a set of counted conditions and buffs does to the numbers *through the
+ * ability scores*: the modifier each ability is left with, and the share of
+ * each headline number that follows from that -- a save's slot, an attack's,
+ * the AC's (capped by the armour either way, and dropped outright by a
+ * condition that takes the Dexterity bonus: a penalty is not a bonus, so a
+ * negative modifier stays), CMD's Dexterity, initiative's.
+ *
+ * Kept apart from the direct channels, and taking the totals rather than
+ * reading them off the model, for one reason: the working. `breakdown()` runs
+ * this over the sources one at a time to say whose Dexterity bonus moved the
+ * AC and by how much, and it has to be the same arithmetic `conditionState`
+ * adds into the deltas below, or the shares would not add up to the move.
+ *
+ * `scores` are the ability scores as the conditions leave them, against the
+ * temporary score every derived stat is already built from; `deltas` the
+ * change to each modifier; `byKey` the ability-borne share of every key in
+ * `delta`, zero for the ones no ability reaches.
+ */
+export function abilityMoves(c, totals) {
+  const deltas = {};
+  const scores = {};
+  for (const key of ABILITIES) {
+    const a = c.abilities[key];
+    const base = Number(a?.tempScore) || 0;
+    let score = base + (totals.ability[key] || 0);
+    if (totals.abilitySet[key] !== undefined) score = Math.min(score, totals.abilitySet[key]);
+    score = Math.max(0, score);
+    scores[key] = score;
+    deltas[key] = abilityMod(score) - (Number(a?.totalMod) || 0);
+  }
+  const slot = (stat1, stat2) => statModDelta(deltas, stat1, stat2);
+
+  const armor = armorParts(c);
+  const acAbility = Math.min(armor.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2));
+  const acAbilityAfter = Math.min(armor.maxDex,
+    statMod(c, c.defenses.acStat1, c.defenses.acStat2) + slot(c.defenses.acStat1, c.defenses.acStat2));
+  const acAbilityDelta = (totals.losesDex ? Math.min(0, acAbilityAfter) : acAbilityAfter) - acAbility;
+
+  const dexMod = Number(c.abilities.dex?.totalMod) || 0;
+  const dexAfter = dexMod + (deltas.dex || 0);
+  const cmdDexDelta = (totals.losesDex ? Math.min(0, dexAfter) : dexAfter) - dexMod;
+
+  const mode = (key) => c.attack.modes?.[key] || {};
+  const atk = (key) => slot(mode(key).stat1, mode(key).stat2);
+  const sv = (key) => slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
+  return {
+    deltas,
+    scores,
+    byKey: {
+      melee: atk('melee'), altMelee: atk('altMelee'), ranged: atk('ranged'), altRanged: atk('altRanged'),
+      cmb: atk('cmb'), altCmb: atk('altCmb'),
+      ac: acAbilityDelta, touch: acAbilityDelta, flatFooted: c.defenses.uncannyDodge ? acAbilityDelta : 0,
+      cmd: cmdDexDelta, ffCmd: 0,
+      fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
+      initiative: deltas.dex || 0,
+      hp: 0,
+    },
+  };
+}
+
+/**
  * What the ticked conditions are doing to the character, right now.
  *
  * These are deliberately a layer *over* the sheet's own totals rather than
@@ -272,38 +333,12 @@ export function conditionState(model) {
   }
   const totals = conditionTotals([...active, ...buffsOn]);
   const { mods } = totals;
+  const through = abilityMoves(c, totals);
+  const { deltas, scores } = through;
+  const via = through.byKey;
 
-  // Ability modifiers as the conditions leave them, against the temporary
-  // score every derived stat is already built from.
-  const deltas = {};
-  const scores = {};
-  for (const key of ABILITIES) {
-    const a = c.abilities[key];
-    const base = Number(a?.tempScore) || 0;
-    let score = base + (totals.ability[key] || 0);
-    if (totals.abilitySet[key] !== undefined) score = Math.min(score, totals.abilitySet[key]);
-    score = Math.max(0, score);
-    scores[key] = score;
-    deltas[key] = abilityMod(score) - (Number(a?.totalMod) || 0);
-  }
-  const slot = (stat1, stat2) => statModDelta(deltas, stat1, stat2);
-
-  // The ability bonus to AC, before and after -- capped by armour either way,
-  // and dropped entirely when a condition takes it. A penalty is not a bonus,
-  // so a negative modifier stays even when the bonus is lost.
-  const armor = armorParts(c);
-  const acAbility = Math.min(armor.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2));
-  const acAbilityAfter = Math.min(armor.maxDex,
-    statMod(c, c.defenses.acStat1, c.defenses.acStat2) + slot(c.defenses.acStat1, c.defenses.acStat2));
-  const acAbilityDelta = (totals.losesDex ? Math.min(0, acAbilityAfter) : acAbilityAfter) - acAbility;
-
-  const dexMod = Number(c.abilities.dex?.totalMod) || 0;
-  const dexAfter = dexMod + (deltas.dex || 0);
-  const cmdDexDelta = (totals.losesDex ? Math.min(0, dexAfter) : dexAfter) - dexMod;
-
-  const mode = (key) => c.attack.modes?.[key] || {};
-  const atk = (key) => mods.attack + slot(mode(key).stat1, mode(key).stat2);
-  const sv = (key) => mods.saves + (mods[key] || 0) + slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
+  const atk = (key) => mods.attack + via[key];
+  const sv = (key) => mods.saves + (mods[key] || 0) + via[key];
 
   const delta = {
     melee: atk('melee') + mods.melee,
@@ -312,21 +347,21 @@ export function conditionState(model) {
     altRanged: atk('altRanged') + mods.ranged,
     cmb: atk('cmb') + mods.cmb,
     altCmb: atk('altCmb') + mods.cmb,
-    ac: mods.ac + acAbilityDelta,
-    touch: mods.ac + acAbilityDelta,
-    flatFooted: mods.ac + (c.defenses.uncannyDodge ? acAbilityDelta : 0),
+    ac: mods.ac + via.ac,
+    touch: mods.ac + via.touch,
+    flatFooted: mods.ac + via.flatFooted,
     // Every AC penalty among the ticked conditions and buffs reaches CMD too
     // (see conditionTotals' acPenalty), on top of whatever they say about CMD
     // outright -- so blinded is −2 to both, and a flat-footed character's
     // lost Dexterity comes off both.
-    cmd: cmdDexDelta + mods.cmd + totals.acPenalty,
+    cmd: via.cmd + mods.cmd + totals.acPenalty,
     // Flat-footed CMD has no Dexterity in it to lose, so it takes everything
     // else: what a condition says about CMD outright, and every AC penalty.
     ffCmd: mods.cmd + totals.acPenalty,
     fortitude: sv('fortitude'),
     reflex: sv('reflex'),
     will: sv('will'),
-    initiative: mods.initiative + (deltas.dex || 0),
+    initiative: mods.initiative + via.initiative,
     skills: mods.skills,
     abilityChecks: mods.abilityChecks,
     damage: mods.damage,

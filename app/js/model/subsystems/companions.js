@@ -280,13 +280,25 @@ export function companionMaster(model) {
   };
   return {
     level: Number(c.identity?.level) || 0,
-    // The conjured companion grows with this rather than a class's levels:
-    // the magic training's global caster level, or the character's own level
+    // The magic training's global caster level, or the character's own level
     // for a caster with no sphere block behind it -- the same number the
     // wallet charges material casting against. Temporary caster-level boosts
     // never land in globalCL, which is exactly the sphere's own rule that a
     // companion gains nothing from them.
     casterLevel: Number(model.casterLevel) || 0,
+    // The caster level in one sphere, which is what the conjured companion
+    // grows with rather than a class's levels: the global one plus that
+    // sphere's own row on the Magic Spheres table -- a typed CL bonus, a
+    // forwarded one -- and never another sphere's. Null when the master has
+    // no magic side at all, so the caller falls back to the plain caster
+    // level above. The sphere rows are recomputed before the companions are,
+    // so what this reads is current.
+    sphereCL: (name) => {
+      const rows = model.data.training?.magic?.sphereRows;
+      if (!Array.isArray(rows)) return null;
+      const row = rows.find((r) => String(r.sphere ?? '').trim() === name);
+      return row ? Number(row.cl) || 0 : Number(model.casterLevel) || 0;
+    },
     bab: Number(c.attack?.bab) || 0,
     hp: model.hpMax,
     baseSaves: {

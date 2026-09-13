@@ -42,14 +42,14 @@ import {
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
-  AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES,
+  AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, unarmedDice,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import {
-  CONJURED_TABLE, defaultCompanion, normalizeCompanion, splitAbilities,
+  CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
   setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
@@ -64,7 +64,7 @@ import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
-import { movedInline } from '../app/js/ui/rows.js';
+import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 
@@ -708,7 +708,7 @@ for (const id of IDS) {
   }
   check(`${id} every breakdown adds up to the number it explains`, off, []);
   const ac = c.breakdown('ac');
-  check(`${id} AC starts at 10`, ac.parts[0], { label: 'base', value: 10, note: '' });
+  check(`${id} AC starts at 10, a number rather than a bonus`, ac.parts[0], { label: 'Base', value: 10, note: '', plain: true });
   check(`${id} and is the number the sheet shows`, ac.total, c.data.defenses.ac);
   check(`${id} a zero part is not shown`, ac.parts.every((p) => p.value !== 0), true);
   check(`${id} an unknown key has no working`, c.breakdown('nonsense'), null);
@@ -719,6 +719,144 @@ for (const id of IDS) {
   check(`${id} a forwarded bonus is one of the parts`,
     will.parts.find((p) => p.label === 'forwarded')?.value, 3);
   check(`${id} and the parts still add up`, will.sum, will.total);
+}
+
+console.log('the working -- a companion\'s numbers carry theirs too');
+{
+  const STATS = ['hp', 'ac', 'touch', 'ff', 'cmd', 'ffCmd', 'cmb', 'init', 'attack', 'fort', 'ref', 'will', 'level', ...ABILITIES];
+  for (const id of IDS) {
+    const c = new Character(load(id));
+    // Every companion of every kind, shaped enough to have numbers: a level
+    // and a form, so the sums have something in them to disagree about.
+    for (const kind of COMPANION_KINDS) {
+      const b = c.data[kind]?.[0];
+      if (!b) continue;
+      b.name = `Test ${kind}`;   // in use, so a bonus has somewhere to land
+      if (kind !== 'familiar') b.levelOverride = 8;
+      if (kind === 'conjured') b.baseForm = 'Quadruped';
+      b.ac = { all: 1, touch: 2, ff: 3 };
+      b.saves = { fort: { misc: 1 }, ref: { misc: 0 }, will: { misc: 2 } };
+    }
+    c.data.notes = [{ body: '{eidolon.fort += 3} {animalCompanion.ac += 2} {familiar.str.score += 4}' }];
+    c.recompute();
+    const off = [];
+    for (const kind of COMPANION_KINDS) {
+      for (const b of c.data[kind] || []) {
+        const sn = companionScopeName(kind, b);
+        for (const stat of STATS) {
+          const w = c.breakdown(`${sn}.${stat}`);
+          if (!w) off.push(`${sn}.${stat} has no working`);
+          else if (w.sum !== w.total) off.push(`${sn}.${stat}: parts ${w.sum}, total ${w.total}`);
+        }
+      }
+    }
+    check(`${id} every companion working adds up to the number it explains`, off, []);
+    check(`${id} a forwarded bonus is one of the parts`,
+      c.breakdown('eidolon.fort').parts.find((p) => p.label === 'forwarded')?.value, 3);
+    check(`${id} and reaches every AC it was aimed at`,
+      ['ac', 'touch', 'ff'].map((s) => c.breakdown(`animalCompanion.${s}`).parts.find((p) => p.label === 'forwarded')?.value), [2, 2, 2]);
+    check(`${id} the score's working names what was forwarded at it`,
+      c.breakdown('familiar.str').parts.find((p) => p.label === 'forwarded')?.value, 4);
+    check(`${id} the level's working says where the level came from`,
+      c.breakdown('eidolon.level').parts[0].label, 'the level typed in');
+    check(`${id} a stat nobody reads by has no working`, c.breakdown('eidolon.nonsense'), null);
+    check(`${id} nor has a name that is no companion's`, c.breakdown('imp.ac'), null);
+    // The panel hook: the same span the character's own numbers wear.
+    const html = working(c, 'eidolon.ac', '42');
+    check(`${id} a companion's number carries its key`, html.includes('data-bd="eidolon.ac"'), true);
+    check(`${id} and the plain working on its title`,
+      html.includes(`title="Armour class ${c.data.eidolon[0].calc.ac}\n`), true);
+    check(`${id} a number with no working goes out as it came in`, working(c, 'eidolon.nonsense', '42'), '42');
+  }
+}
+
+console.log('the working -- what the buffs and conditions did, one row each');
+for (const id of IDS) {
+  const c = new Character(load(id));
+  const keys = ['ac', 'touch', 'flatFooted', 'cmd', 'fortitude', 'reflex', 'will', 'melee', 'ranged', 'cmb', 'initiative', 'hp'];
+  check(`${id} nothing ticked, nothing to list`, keys.map((k) => c.breakdown(k).adjustments), keys.map(() => undefined));
+  // Two buffs and three conditions, between them every road into a number:
+  // a dial, a targeted row, an ability, a size step, a ladder condition, a
+  // counted one, and blindness taking the Dexterity bonus away.
+  c.data.buffs = [
+    { name: 'Haste', on: true, attack: 1, ac: 1, bonuses: [{ target: 'reflex', value: 1 }, { target: 'dex', value: 4 }] },
+    { name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }, { target: 'size', value: 1 }] },
+  ];
+  c.set('conditions.Shaken', true);
+  c.set('conditions.Blinded', true);
+  c.set('conditions.Negative levels', 2);
+  c.recompute();
+  const cs = c.conditionState;
+  const off = [];
+  for (const key of keys) {
+    const w = c.breakdown(key);
+    const d = cs.delta[key] || 0;
+    const sum = (w.adjustments || []).reduce((t, p) => t + p.value + (p.lines || []).reduce((s, l) => s + l.value, 0), 0);
+    if (sum !== d) off.push(`${key}: rows ${sum}, moved ${d}`);
+    if ((w.adjustments || []).some((p) => p.label === 'unaccounted for')) off.push(`${key}: a share nobody owns`);
+    if (d && w.adjusted !== cs.adjusted[key]) off.push(`${key}: adjusted ${w.adjusted}, sheet ${cs.adjusted[key]}`);
+    if (d && w.total !== cs.base[key]) off.push(`${key}: total ${w.total}, base ${cs.base[key]}`);
+  }
+  check(`${id} the rows add up to the move on every number`, off, []);
+  const ac = c.breakdown('ac');
+  const row = (b, label) => b.adjustments.find((p) => p.label === label);
+  check(`${id} a buff's dial is a row under the buff's name`, row(ac, 'Haste')?.value, 1);
+  check(`${id} marked as a buff`, row(ac, 'Haste')?.note, 'buff');
+  check(`${id} a condition's penalty is a row under the condition's name`, row(ac, 'Blinded')?.value, -2);
+  check(`${id} a size step is a row of its own`, row(ac, '1 size larger')?.value, -1);
+  const ref = c.breakdown('reflex');
+  check(`${id} a share that came by a wider road says which`, row(ref, 'Shaken')?.note, 'condition — every save');
+  check(`${id} a counted condition says how many`, row(ref, 'Energy Drain ×2')?.value, -2);
+  check(`${id} a targeted row lands on its own save alone`,
+    [row(ref, 'Haste')?.value, row(c.breakdown('will'), 'Haste')?.value], [1, undefined]);
+  check(`${id} what a buff did through an ability is a line under its own, and no further broken down`,
+    row(ref, 'Haste')?.lines, [{ label: 'through Dex', value: 2, note: '' }]);
+  check(`${id} a source with only that to show gets it as its own line`,
+    [row(c.breakdown('melee'), 'Bull')?.value, row(c.breakdown('melee'), 'Bull')?.note], [2, 'buff — through Str']);
+  const cmd = c.breakdown('cmd');
+  check(`${id} an AC penalty's second life on CMD is said out loud`,
+    row(cmd, 'Blinded')?.note, 'condition — an AC penalty applies to CMD too');
+  // ...where there was a Dexterity bonus to lose: a +0 modifier moves nothing,
+  // and a line that adds nothing is not drawn. Blinded is counted before the
+  // Dexterity buff, so the bonus it takes is the one the character had.
+  const dexMod = c.data.abilities.dex.totalMod;
+  if (dexMod > 0) {
+    check(`${id} the lost Dexterity bonus is a line under the condition that took it`,
+      row(cmd, 'Blinded')?.lines, [{ label: 'through Dex', value: -dexMod, note: '' }]);
+    check(`${id} and the buff that would have raised it gets nothing, since it was taken anyway`,
+      row(cmd, 'Haste'), undefined);
+  }
+  check(`${id} the moved number is the heading, the base the total`,
+    [ac.adjusted, ac.total], [cs.adjusted.ac, c.data.defenses.ac]);
+  check(`${id} and the sources are named the way the sheet names them`, ac.moved, 'conditions and buffs');
+  // The tooltip, which a browser with no popover API is left with.
+  const title = workingTitle(ac, 'Base 40 — with conditions and buffs applied');
+  check(`${id} the title leads with the moved number, then the permanent total`,
+    title.startsWith(`Armor Class ${cs.adjusted.ac}\nPermanent total ${c.data.defenses.ac}\n`), true);
+  const net = cs.delta.ac;
+  check(`${id} heads the temporary half with its net`,
+    title.includes(`\n\n  ${net > 0 ? '+' : ''}${net}  Buffs and conditions\n`), true);
+  check(`${id} and lists the entries after it`,
+    title.indexOf('\n  +1  Haste — buff') > title.indexOf('Buffs and conditions'), true);
+  check(`${id} a base is a number in the title too`, title.includes('\n  10  Base\n'), true);
+  const refTitle = workingTitle(c.breakdown('reflex'));
+  check(`${id} a share through an ability is a line under its source, set in further`,
+    refTitle.includes('\n  +1  Haste — buff\n    +2  through Dex'), true);
+  // Two things ticked that cancel are still two entries, under a net of 0:
+  // the working says what is evenly matched rather than nothing at all.
+  c.data.buffs = [{ name: 'Steady', on: true, attack: 2 }];
+  c.set('conditions.Blinded', 0);
+  c.set('conditions.Negative levels', 0);
+  c.recompute();
+  const melee = c.breakdown('melee');
+  check(`${id} a buff and a condition that cancel are listed under a net of 0`,
+    [melee.delta, melee.adjustments?.map((p) => [p.label, p.value]), melee.adjusted === melee.total],
+    [0, [['Shaken', -2], ['Steady', 2]], true]);
+  check(`${id} and the title says so`, workingTitle(melee).includes('\n\n  0  Buffs and conditions\n  -2  Shaken — condition — every attack\n  +2  Steady — buff — every attack'), true);
+  // A companion has no condition layer, and its working says nothing about one.
+  c.data.eidolon[0].levelOverride = 8;
+  c.recompute();
+  check(`${id} a companion's number is not moved by the master's buffs`, c.breakdown('eidolon.ac').adjustments, undefined);
 }
 
 console.log('the working, as the panel draws it');
@@ -757,6 +895,47 @@ console.log('the working, as the panel draws it');
   check('nothing adding up is said out loud',
     breakdownHtml({ label: 'Will', total: 0, sum: 0, parts: [] }).includes('Nothing is adding to it'), true);
   check('and no breakdown at all draws nothing', breakdownHtml(null), '');
+
+  // Moved by a buff: the heading is the moved number, a subtotal rules off
+  // the base, and each source is a row in the colour of its direction.
+  const moved = {
+    ...b,
+    sum: 43,
+    delta: 1,
+    adjusted: 44,
+    moved: 'conditions and buffs',
+    adjustments: [
+      { label: 'Haste', value: 1, note: 'buff', lines: [{ label: 'through Dex', value: 2, note: '' }] },
+      { label: 'Shaken', value: -2, note: 'condition' },
+    ],
+  };
+  const html2 = breakdownHtml(moved, 'Base 43 — with conditions and buffs applied');
+  check('the heading is the number as it stands', /<span class="bdtotal">44<\/span>/.test(html2), true);
+  check('the subheading is the permanent total, and only that', html2.includes('<div class="bdsub">Permanent total 43</div>'), true);
+  check('the sentence handed in is not repeated under it', html2.includes('Base 43 — with'), false);
+  check('the temporary half is headed by its net, ruled off from the parts',
+    html2.includes('<div class="bdrow bdtemp up"><span class="k">Buffs and conditions</span><span class="v">+1</span></div>'), true);
+  check('a buff is a row, up, and what it did through an ability is a line under it in one entry',
+    html2.includes('<div class="bdentry"><div class="bdrow up"><span class="k">Haste<span class="bdnote">buff</span></span><span class="v">+1</span></div>'
+      + '<div class="bdrow sub up"><span class="k">through Dex</span><span class="v">+2</span></div></div>'), true);
+  check('a condition is a row, down', html2.includes('<div class="bdrow down"><span class="k">Shaken<span class="bdnote">condition</span></span><span class="v">-2</span></div>'), true);
+  check('the parts come first', html2.indexOf('base</span><span class="v">+10') < html2.indexOf('bdtemp'), true);
+  check('and the entries come after the net', html2.indexOf('bdtemp') < html2.indexOf('Haste'), true);
+  check('nothing moved, no temporary half', breakdownHtml({ ...b, sum: 43 }).includes('bdtemp'), false);
+  // Two things ticked that cancel: still two entries, under a net of 0 in the
+  // third colour -- evenly matched, not nothing.
+  const even = breakdownHtml({
+    ...moved, delta: 0, adjusted: 43,
+    adjustments: [{ label: 'Steady', value: 2, note: 'buff' }, { label: 'Shaken', value: -2, note: 'condition' }],
+  });
+  check('a net of nothing is a plain 0 in its own colour',
+    even.includes('<div class="bdrow bdtemp even"><span class="k">Buffs and conditions</span><span class="v">0</span></div>'), true);
+  check('with the entries that cancelled still listed', even.includes('Steady') && even.includes('Shaken'), true);
+  check('and a net down wears red', breakdownHtml({ ...moved, delta: -2, adjusted: 41 }).includes('<div class="bdrow bdtemp down"><span class="k">Buffs and conditions</span><span class="v">-2</span>'), true);
+  // The number a sum starts from is a number, not a bonus.
+  const plain = breakdownHtml({ ...b, sum: 43, parts: [{ label: 'Base', value: 10, note: '', plain: true }, ...b.parts.slice(1)] });
+  check('a base is drawn without a sign', plain.includes('<span class="k">Base</span><span class="v">10</span>'), true);
+  check('and the parts laid on it keep theirs', plain.includes('<span class="v">+6</span>'), true);
 }
 
 console.log('...and where the panel stands');
@@ -933,7 +1112,7 @@ console.log('companions -- the conjured companion follows the Conjuration sphere
     ['str', 'dex', 'con', 'int', 'wis', 'cha'].map((a) => k.scores[a].total), [14, 14, 13, 7, 10, 11]);
   check('good Fort and Ref off the table at 7 HD',
     [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [5, 5, 2]);
-  check('hit points are 8 a d10 plus Con, by HD', k.hpMax, 7 * 8 + 1 * 7);
+  check('hit points are the full d10 plus Con, by HD', k.hpMax, 7 * 10 + 1 * 7);
   check('a spell point to summon', k.summonCost, 1);
 
   c.set('conjured.0.scores.int.base', 10);
@@ -958,19 +1137,27 @@ console.log('companions -- the conjured companion follows the Conjuration sphere
   // The archetypes the sums act on.
   c.set('conjured.0.archetypes.familiar', true);
   k = c.data.conjured[0].calc;
-  check('the familiar archetype grows off half the caster level, 2 points cheaper',
+  check('the familiar archetype has half the dice, rounded down, 2 points cheaper',
     [k.hd, k.summonCost], [3, 0]);
-  check('and its gains follow the halved level', k.gains.map((g) => g.level), [2]);
+  check('and its gains sit where a companion of that many dice has them', k.gains.map((g) => g.level), [2]);
+  // Half the dice, not the dice of half the level: at 20th a companion has 15
+  // dice, which halve to 7, where a 10th-level companion would have 8.
+  c.set('conjured.0.levelOverride', 20);
+  k = c.data.conjured[0].calc;
+  check('half of 15 dice is 7, not the 8 of a 10th-level companion', [k.hd, k.bab, k.featsAllowed], [7, 7, 4]);
+  check('and its specials are the ones 7 dice bring', k.gains.map((g) => g.level), [2, 5, 6, 9]);
+  c.set('conjured.0.levelOverride', 4);
+  check('at 4th, 3 dice halve to 1', c.data.conjured[0].calc.hd, 1);
   c.set('conjured.0.levelOverride', 1);
   k = c.data.conjured[0].calc;
-  check('at 1st it keeps 1 HD on half hit points', [k.hd, k.hpMax], [1, Math.floor((8 + 1) / 2)]);
+  check('at 1st it keeps 1 HD on half hit points', [k.hd, k.hpMax], [1, Math.floor((10 + 1) / 2)]);
   c.set('conjured.0.levelOverride', 9);
   c.set('conjured.0.archetypes.familiar', false);
 
   c.set('conjured.0.archetypes.mage', true);
   k = c.data.conjured[0].calc;
   // Con is 14 by now -- the 4-HD increase above landed on it -- so +2 a die.
-  check('the mage archetype is a d6 with poor BAB', [k.hitDie, k.bab, k.hpMax], [6, 3, 7 * 4 + 2 * 7]);
+  check('the mage archetype is a d6, in full, with poor BAB', [k.hitDie, k.bab, k.hpMax], [6, 3, 7 * 6 + 2 * 7]);
   c.set('conjured.0.archetypes.mage', false);
 
   c.set('conjured.0.archetypes.mindless', true);

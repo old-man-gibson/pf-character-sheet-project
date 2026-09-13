@@ -29,6 +29,10 @@
   --cs-formula-strong: rgba(212, 162, 74, 0.85);
   --cs-good: #6bbf7b;
   --cs-bad: #e0635f;
+  /* Neither up nor down: what a working's temporary half nets to when the
+     buffs and the conditions ticked cancel each other out. A third colour,
+     so a 0 reads as "two things, evenly matched" rather than as nothing. */
+  --cs-even: #7fb3f5;
   --cs-edit: #6ea8fe;
   /* Formula source, wherever it is shown. A name is the same gold a computed
      value wears, so one colour keeps meaning "a value the character supplies";
@@ -139,6 +143,7 @@
      values @media print already reached for when it hit the same wall. */
   --cs-good: #1a6b2c;
   --cs-bad: #a32320;
+  --cs-even: #1d5db8;
   --fx-number: #1f7a43;
   --fx-string: #6b3fa0;
   --fx-nest-0: #226b82;
@@ -189,6 +194,7 @@
   --cs-edit: #7a5a18;
   --cs-good: #2f6b3a;
   --cs-bad: #a83232;
+  --cs-even: #2a5aa8;
   --fx-number: #1f6b3a;
   --fx-string: #6b3fa0;
   --fx-nest-0: #226b82;
@@ -222,6 +228,7 @@
   --cs-edit: #d3a655;
   --cs-good: #6dba7a;
   --cs-bad: #df6b6b;
+  --cs-even: #8ab4f8;
   --fx-number: #8fcf9d;
   --fx-string: #c9a3e0;
   --fx-nest-0: #7fb7c9;
@@ -255,6 +262,7 @@
   --cs-edit: #245c7a;
   --cs-good: #3b6a2a;
   --cs-bad: #9b2f22;
+  --cs-even: #2a4f8a;
   --fx-number: #1f6b3a;
   --fx-string: #6b3fa0;
   --fx-nest-0: #226b82;
@@ -288,6 +296,7 @@
   --cs-edit: #8ab4f8;
   --cs-good: #67c587;
   --cs-bad: #f0716b;
+  --cs-even: #7fb0f0;
   --fx-number: #8fcf9d;
   --fx-string: #c9a3e0;
   --fx-nest-0: #d99ac0;
@@ -319,6 +328,7 @@
   --cs-edit: #6a1b9a;
   --cs-good: #1a6b2c;
   --cs-bad: #a32320;
+  --cs-even: #1d5db8;
   --fx-number: #1f7a43;
   --fx-string: #8a3d00;
   --fx-nest-0: #226b82;
@@ -505,6 +515,26 @@
 /* The sheet's total and the parts shown disagree. Said in the colour the sheet
    uses for a number that is wrong, because that is what this is. */
 .bdpop .bdrow.odd .k, .bdpop .bdrow.odd .v { color: var(--cs-bad); }
+/* The temporary half, under the permanent parts it moves: a row that heads
+   it with its net -- "Buffs and conditions +1" -- ruled off from the parts,
+   then one entry a source, its share in the colour the sheet gives the
+   number it moved: green up, red down, and the third colour on a net of 0,
+   which is two things ticked that cancel and not nothing. The heading above
+   is the moved number, and the two halves between say how it came to be. */
+.bdpop .bdrow.bdtemp { border-top: 1px solid var(--cs-line); margin-top: 4px; padding-top: 5px; }
+.bdpop .bdrow.bdtemp .k { font-style: italic; }
+.bdpop .bdrow.bdtemp .v { font-weight: 700; }
+.bdpop .bdrow.up .v { color: var(--cs-good); }
+.bdpop .bdrow.down .v { color: var(--cs-bad); }
+.bdpop .bdrow.even .v { color: var(--cs-even); }
+/* One source, two shares: what a buff did to the number outright and what it
+   did through an ability are one entry, the second on a line under the first,
+   indented and unruled, so they read as one and still add down the column. */
+.bdpop .bdentry { border-bottom: 1px dotted color-mix(in srgb, var(--cs-line) 70%, transparent); }
+.bdpop .bdentry:last-child { border-bottom: 0; }
+.bdpop .bdentry .bdrow { border-bottom: 0; }
+.bdpop .bdrow.sub { padding-left: 14px; padding-top: 0; }
+.bdpop .bdrow.sub .k { font-size: 0.72rem; }
 /* It arrives from the side it is standing on, which is the one cue that says
    which number it belongs to when two sit close together. */
 .bdpop.below { animation: bdIn 0.13s ease-out; }
@@ -3327,6 +3357,25 @@ input[type="color"] {
 .compskills th:not(.cname), .compskills td:not(.cname) { width: 1%; white-space: nowrap; }
 .compskills select { width: auto; min-width: 3.6rem; }
 .compskills td.mid { text-align: center; }
+
+/* ---------- a companion's tab ----------
+   Five panels across the top -- hit points, scores, defences, saves and, for
+   the conjured companion, the contract -- and two of them hold a table wider
+   than the 310px floor every other grid shares: the saves at six columns
+   (355px), the eidolon's scores at seven (376px). On a wide window five
+   panels shared the row at 354px each and both tables ran past their
+   panel's edge, cutting the Total column off; at 90% it was worse. The floor
+   goes up to what the widest of them needs, so four panels share the row
+   and the fifth wraps, and the two tables sit in scroll boxes all the same,
+   so a width between the floors scrolls a column rather than cutting it off.
+   `compact` takes the 26rem floor off them: that floor is for the character's
+   own build tables, and would force the scrollbar these are wrapped to avoid. */
+.grid.companion { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+.tablewrap > table.build.compact { min-width: 0; }
+/* A hair narrower than the build tables' boxes: three of them in a row is
+   what put the eidolon's seven columns two pixels over a 400px panel. */
+table.build.compact input[type="number"] { width: 3rem; }
+@container (max-width: 560px) { .grid.companion { grid-template-columns: minmax(0, 1fr); } }
 @container (min-width: 900px) {
   .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   /* The ledger takes the width it is worth and the buffs take the rest -- with
@@ -4441,6 +4490,7 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
     --cs-formula-strong: #7a5500 !important;
     --cs-good: #1a6b2c;
     --cs-bad: #a32320;
+    --cs-even: #1d5db8;
     --cs-edit: #14448c;
     color-scheme: light;
   }

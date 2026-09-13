@@ -53,7 +53,7 @@ function paletteBlock(id) {
 const REQUIRED = [
   'color-scheme', '--cs-bg', '--cs-panel', '--cs-panel-2', '--cs-line', '--cs-text', '--cs-muted',
   '--cs-accent', '--cs-accent-soft', '--cs-formula', '--cs-formula-strong', '--cs-edit',
-  '--cs-good', '--cs-bad', '--fx-number', '--fx-string', '--fx-nest-0', '--fx-nest-1',
+  '--cs-good', '--cs-bad', '--cs-even', '--fx-number', '--fx-string', '--fx-nest-0', '--fx-nest-1',
   '--fx-match', '--fx-match-bad', '--ab-wash', '--ab-edge', '--ab-ink',
 ];
 const blocks = {};
@@ -85,7 +85,7 @@ const PAIRS = [
   ['--cs-muted', '--cs-panel'], ['--cs-muted', '--cs-panel-2'],
   ['--cs-accent', '--cs-panel'], ['--cs-accent', '--cs-panel-2'],
   ['--cs-edit', '--cs-panel-2'],
-  ['--cs-good', '--cs-panel'], ['--cs-bad', '--cs-panel'],
+  ['--cs-good', '--cs-panel'], ['--cs-bad', '--cs-panel'], ['--cs-even', '--cs-panel-2'],
 ];
 for (const p of PALETTES) {
   const b = blocks[p.id];

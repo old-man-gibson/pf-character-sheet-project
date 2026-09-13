@@ -870,6 +870,25 @@ part was typed in, and a Dexterity bonus the armour has capped says so where it 
 capped. The parts are checked against the number they explain, so a working that does not
 add up says what is unaccounted for rather than quietly disagreeing.
 
+The number a sum starts from — the 10 under every AC, a save's base off the Classes table
+— is drawn as a number, *Base 10*, and everything laid on it wears its sign.
+
+When a ticked buff or condition has moved the number, the working carries that too, in
+two halves. The heading is the number as it stands — the one the sheet is showing in green
+or red — with the permanent total under it, and the parts above add up to that. Then
+*Buffs and conditions ±N*, the net of the temporary half, heads one entry a source:
+*Haste +1*, *Shaken −2 (every save)*, a counted condition with its count, a size step on
+its own. What a source did through an ability rather than straight at the number — a
+Dexterity buff reaching the AC as a larger modifier, blindness taking the modifier away —
+is a line under that source's own, *through Dex*, and is not broken down any further. The
+entries add up to the net, and a net of 0 — two things ticked that cancel — is shown in
+blue rather than left out, so it reads as evenly matched and not as nothing.
+
+A companion's numbers carry the same working: the strip on its tab, its ability totals,
+the defence lines and the save totals each open on their parts — the table's natural
+armour, the base form's own, what was forwarded at it — and the *level* badge says where
+the level came from and what the master-level penalty took off.
+
 ---
 
 ## The Stats tab

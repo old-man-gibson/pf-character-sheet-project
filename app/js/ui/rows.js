@@ -180,9 +180,39 @@ export function proseText(model, text) {
  */
 export function workingTitle(b, extra = '') {
   if (!b) return extra;
-  const lines = b.parts.map((p) => `  ${fmt(p.value)}  ${p.label}${p.note ? ` — ${p.note}` : ''}`);
+  // A part is something added and wears its sign; the number a sum starts
+  // from -- the 10 under an AC -- is a number, and does not.
+  const figure = (p) => (p.plain ? String(p.value) : fmt(p.value));
+  const row = (p, indent = '  ') => `${indent}${figure(p)}  ${p.label}${p.note ? ` — ${p.note}` : ''}`;
+  const lines = b.parts.map((p) => row(p));
   if (b.sum !== b.total) lines.push(`  ${fmt(b.total - b.sum)}  unaccounted for`);
-  return `${b.label} ${b.total}\n${lines.join('\n')}${extra ? `\n\n${extra}` : ''}`;
+  const moved = Array.isArray(b.adjustments) && b.adjustments.length > 0;
+  if (!moved) return `${b.label} ${b.total}\n${lines.join('\n')}${extra ? `\n\n${extra}` : ''}`;
+  // Moved by a buff or a condition: the heading is the number as it stands,
+  // the parts add up to the permanent total, and the temporary half follows
+  // under its own net, one entry a source -- what one did through an ability
+  // on a line under its own.
+  const net = Number(b.delta) || 0;
+  const tail = [`  ${net ? fmt(net) : '0'}  Buffs and conditions`];
+  for (const p of b.adjustments) {
+    tail.push(row(p));
+    for (const l of p.lines || []) tail.push(row(l, '    '));
+  }
+  return `${b.label} ${b.adjusted}\nPermanent total ${b.total}\n${lines.join('\n')}\n\n${tail.join('\n')}`;
+}
+
+/**
+ * A number with its working behind it, where nothing is moving it: the
+ * companion's AC, its saves, its ability totals. The same span `movedInline`
+ * writes -- the key for the panel, the plain working on the title -- without
+ * the condition layer, which a companion has none of. The number itself
+ * comes in already formatted, and goes out untouched when there is no
+ * working to open on it.
+ */
+export function working(model, key, shown) {
+  const b = model?.breakdown?.(key);
+  if (!b) return shown;
+  return `<span class="working" title="${esc(workingTitle(b))}" data-bd="${esc(key)}">${shown}</span>`;
 }
 
 /**
