@@ -7118,6 +7118,23 @@ console.log('blended training -- one class, one pool, two progressions');
   check('and the talents stay where they were',
     (n.data.training.magic.classes[0].levels || []).filter((l) => l.talent).length, 9);
   check('two blocks kept apart are not re-paired', n.blendedClasses().length, 0);
+  n.setBlended('magic', 0, true);
+  check('but ticking the box again does pair them', n.blendedClasses().map((p) => p.name), ['Hedgewitch']);
+
+  // A pair that came from the workbook has a real block on each side, with its
+  // own type and score. Splitting keeps both; the box then ticks back on.
+  const b = new Character(load('angou'));
+  const monk = b.blendedClasses()[0];
+  b.setBlended(monk.owner.side, monk.owner.index, false);
+  const half = b.data.training.magic.classes.find((x) => x.name === monk.name);
+  check('splitting a workbook pair keeps the other half and its casting type',
+    [half?.type, half?.mod1, (half?.levels || []).filter((l) => l.talent).length], ['High', 'Wis', 20]);
+  b.setBlended(monk.owner.side, monk.owner.index, true);
+  check('and re-blending pairs the same two blocks again',
+    [b.blendedClasses().map((p) => p.name), b.data.training.magic.classes.filter((x) => x.name === monk.name).length],
+    [[monk.name], 1]);
+  const again = b.blendedClasses()[0];
+  check('back to one shared pool', again.owner.cls.levels === again.twin.cls.levels, true);
 }
 
 console.log('tradition boons -- one pool of steps, split between points and essence');
