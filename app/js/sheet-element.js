@@ -97,6 +97,7 @@ import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
+import { bindSessionBoard } from './ui/panels/session.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
@@ -5260,6 +5261,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #bind() {
     const root = this.shadowRoot;
+    bindSessionBoard(root, this.#model, () => this.#render());
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
       b.addEventListener('click', () => {

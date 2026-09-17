@@ -14,6 +14,7 @@
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc } from '../html.js';
+import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
 import { collapsible, foldButton, isCollapsed } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
@@ -227,13 +228,23 @@ export function renderDashboardPanel(model, ctx) {
       effects: () => dashEffectsCard(model),
       quick: () => dashQuickCard(model, ctx),
     };
-    return `<div class="grid dashboard">
+    const ids = dashCardIds(model);
+    const support = new Set(['quick', 'resources', 'conditions', 'buffs', 'effects', 'vancian', 'psionics', 'spheres']);
+    return `<div class="dashboard session-dashboard">
       <div class="dashtools span2">
         <button class="linkish" data-action="dash-arrange" aria-expanded="${ctx.dashArrange}">
           ${ctx.dashArrange ? 'Done arranging' : 'Arrange cards'}</button>
       </div>
       ${ctx.dashArrange ? dashArrangePanel(model) : ''}
-      ${dashCardIds(model).map((id) => render[id]?.() || '').join('')}
+      <div class="session-workspace">
+        ${renderSessionBoard(model)}
+        <aside class="session-support" aria-label="Health, resources and effects">
+          ${ids.filter(id => support.has(id)).map(id => render[id]?.() || '').join('')}
+        </aside>
+      </div>
+      <details class="session-reference" open><summary>Character reference</summary>
+        <div class="grid">${ids.filter(id => !support.has(id)).map(id => render[id]?.() || '').join('')}</div>
+      </details>
     </div>`;
   }
 
@@ -257,7 +268,7 @@ function dashDefaultCards(model) {
     const inUse = model.systemTabsInUse();
     const tagged = model.taggedSystemTabs();
     const on = (id) => inUse[id] || tagged.has(id);
-    const out = ['quick', 'conditions', 'buffs', 'resources'];
+    const out = ['quick', 'resources', 'conditions', 'buffs'];
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
     if (on('combat') && model.data.training?.magic) out.push('spheres');

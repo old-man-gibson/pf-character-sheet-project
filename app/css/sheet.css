@@ -375,6 +375,63 @@
 /* Cards over panels: the same .panel chrome, but each card leads with the
    one line that answers the common question, and Expand brings the full
    build-view panel up in place. */
+.session-dashboard { display: grid; gap: 18px; }
+.session-workspace { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+.session-board, .session-support { min-width: 0; }
+.session-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.session-eyebrow { color: var(--cs-accent); font-size: .75rem; letter-spacing: .12em; font-weight: 700; }
+.session-heading h2 { font-size: 1.6rem; margin: 4px 0 0; }
+.session-heading h2 small { font-size: .85rem; color: var(--cs-muted); font-weight: 400; margin-left: 8px; }
+.session-budget { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.session-pool { background: var(--cs-panel-2); border-top: 3px solid var(--cs-accent); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.session-pool > span { font-size: .8rem; min-height: 2.5em; }
+.session-pool strong { font-size: 1.7rem; font-variant-numeric: tabular-nums; }
+.session-pool strong small { font-size: .85rem; color: var(--cs-muted); font-weight: 400; }
+.session-pool.spent { border-top-color: var(--cs-line); }
+.session-pool.spent strong { color: var(--cs-muted); }
+.session-pool button { min-width: 30px; margin-right: 4px; }
+.session-rule { font-size: .8rem; color: var(--cs-muted); margin: 10px 0; }
+.session-settings { margin-bottom: 22px; }
+.session-settings > summary, .session-reference > summary { padding: 10px 0; cursor: pointer; color: var(--cs-muted); }
+.session-settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.session-settings label, .session-editor label { display: grid; gap: 5px; margin: 10px 0; font-size: .85rem; }
+.session-settings input, .session-editor input, .session-editor textarea, .session-editor select { width: 100%; min-width: 0; box-sizing: border-box; }
+.session-groups { display: grid; gap: 12px; }
+.session-group { border-bottom: 1px solid var(--cs-line); padding-bottom: 12px; }
+.session-group > summary { cursor: pointer; padding: 8px 0; font-size: 1.05rem; font-weight: 650; }
+.session-group > summary small { float: right; font-size: .8rem; font-weight: 400; color: var(--cs-muted); }
+.session-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; align-items: start; }
+.session-option { background: var(--cs-panel); border: 1px solid var(--cs-line); border-radius: 8px; overflow: hidden; }
+.session-option > details > summary { cursor: pointer; padding: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.session-option summary small { display: block; color: var(--cs-muted); font-weight: 400; margin-top: 6px; }
+.session-option-use { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; }
+.session-option-use small { color: var(--cs-muted); font-size: .78rem; }
+.session-option-use button { border-color: var(--cs-accent); min-width: 52px; }
+.session-option.unavailable .session-option-use button { border-color: var(--cs-line); }
+.session-description { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 14px; line-height: 1.6; }
+.session-source { color: var(--cs-muted); padding: 0 14px; font-size: .8rem; }
+.session-editor { padding: 12px 14px; }
+.session-editor > summary { cursor: pointer; color: var(--cs-muted); }
+.session-add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.session-add select { max-width: 100%; min-width: 0; flex: 1; }
+.session-support { display: grid; gap: 12px; }
+.session-support > .span2 { grid-column: auto; }
+.session-support .dashtrackers { grid-template-columns: 1fr; gap: 12px; }
+.session-support .dashtracker { grid-template-columns: 1fr auto; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--cs-line); }
+.session-support .dashtracker .tname { max-width: none; white-space: normal; font-size: .9rem; }
+.session-support .dashmeter { grid-column: 1 / -1; grid-row: 2; }
+.session-support .dashtracker .tracker-controls { grid-column: 2; grid-row: 1; }
+.session-reference .grid { align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); }
+.session-reference > summary { font-size: 1rem; border-top: 1px solid var(--cs-line); }
+@media (max-width: 1050px) {
+  .session-workspace { grid-template-columns: minmax(0, 1fr); }
+  .session-support { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); align-items: start; }
+}
+@media (max-width: 550px) {
+  .session-budget { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .session-heading h2 { font-size: 1.3rem; }
+  .session-group > summary small { float: none; margin-left: 8px; }
+}
 .dashboard .dashconds { display: flex; flex-wrap: wrap; gap: 6px; }
 .dashboard .cond-pill { font-size: 0.85rem; padding: 3px 6px 3px 10px; gap: 5px; }
 .dashboard .cond-pill input { width: 3rem; }

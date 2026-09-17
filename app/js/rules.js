@@ -2909,6 +2909,11 @@ export const FORWARD_STATS = [
  * See `forwardTargets` for the matching.
  */
 export const FORWARD_LATE = [
+  ['actions.standard', 'Standard actions per turn'],
+  ['actions.move', 'Move actions per turn'],
+  ['actions.swift', 'Swift actions per turn'],
+  ['actions.immediate', 'Immediate actions'],
+  ['actions.aoo', 'Attacks of opportunity per round'],
   ['defenses.sr', 'Spell resistance'],
   ['defenses.dr', 'Damage reduction, every kind'],
   ['defenses.resistance', 'Energy resistance, every kind'],

@@ -283,6 +283,9 @@ console.log('a weapon the model has costed');
 {
   const c = built({ weapons: [{ ...GREATSWORD }] });
   const spec = weaponRollSpec(c.data, 0, c.conditionState);
+  const single = rollSpec(c.data, 'weapon-single', 0, c.conditionState);
+  check('a session single attack does not include iteratives', single.rolls.filter(r => r.label.startsWith('Attack')).length, 1);
+  check('a single attack keeps damage and critical rolls', single.rolls.filter(r => !r.label.startsWith('Attack')), spec.rolls.filter(r => !r.label.startsWith('Attack')));
   const by = (label) => spec.rolls.find((r) => r.label.startsWith(label))?.formula;
   // BAB 11 + Str 4 + enhancement 1; damage 2d6 + floor(4 × 1.5) + 1.
   check('the attack carries the threat range', by('Attack 1'), '1d20cs>19+16');

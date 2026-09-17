@@ -604,7 +604,7 @@ const iterates = (modeKey) => !!MODE_ROLLS[modeKey]?.iteratives;
  * base x mult, plus the untagged [[...]] riders once, plus [[... Crit]] damage
  * multiplied, plus the bonus crit damage column once.
  */
-export function weaponRollSpec(c, index, cs = null, answers = null) {
+export function weaponRollSpec(c, index, cs = null, answers = null, single = false) {
   const w = c?.equipment?.weapons?.[index];
   if (!w) return null;
   const { calc } = w;
@@ -646,7 +646,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null) {
   // before the terms go in, or the ordinary case would be counted twice.
   const atkOpts = { dice: rollDice(calc.tokAtk), critRange, terms: atkTerms };
   const atkTotal = calc.totalAtk - (calc.tokAtk?.termFlat || 0) + atkDelta;
-  const rolls = iterates(modeKey)
+  const rolls = !single && iterates(modeKey)
     ? iterativeRolls(c.attack?.bab, atkTotal, 'Attack', atkOpts)
     : [{ label: 'Attack', formula: d20(atkTotal, atkOpts) }];
   rolls.push({
@@ -747,6 +747,7 @@ export function rollSpec(c, kind, ref, cs = null, answers = null) {
     case 'mode': return attackRollSpec(c, ref, cs);
     case 'skill': return skillRollSpec(c, Number(ref), cs);
     case 'weapon': return weaponRollSpec(c, Number(ref), cs, answers);
+    case 'weapon-single': return weaponRollSpec(c, Number(ref), cs, answers, true);
     case 'initiative': return initiativeRollSpec(c, cs);
     case 'concentration': return concentrationRollSpec(c, ref);
     case 'familiar':
