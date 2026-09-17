@@ -144,6 +144,7 @@ export class Character {
     this.imported = {};
     for (const d of DERIVED) this.imported[d.key] = Number(getPath(this.data, d.key) ?? 0);
     this.imported['initiative'] = Number(this.data.hp?.initiative ?? 0);
+    this.imported['hp.total'] = Number(this.data.hp?.total);
 
     this.offsets = {};
     this.#normalise();

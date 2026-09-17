@@ -837,6 +837,7 @@ export function proseSources(model) {
   // the moment it was typed, and a talent taken at 16 must not be adding to
   // anything at 15.
   const level = Number(d.identity?.level) || 0;
+  for (const feature of d.progression?.actionFeatures || []) push(`actionFeature:${feature.id}`,feature.note);
   for (const [cls, g] of Object.entries(d.progression?.classFeatures || {})) {
     for (const [lvl, row] of Object.entries(g.byLevel || {})) {
       const future = Number(lvl) > level ? { future: true } : null;

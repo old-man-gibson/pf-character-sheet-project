@@ -11,6 +11,7 @@
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc } from '../html.js';
+import { classActionsPanel } from '../class-actions.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
@@ -42,6 +43,7 @@ export function renderProgressionPanel(model, ctx) {
     };
 
     return `<div class="grid">
+      ${classActionsPanel(model)}
       ${collapsible(model, 'prog-levels', `<section class="panel span2">
         <h3>Level progression
           <button data-action="add-track" title="Tristalt and beyond">+ Class track</button>

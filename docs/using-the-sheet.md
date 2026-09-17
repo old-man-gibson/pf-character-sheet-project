@@ -122,9 +122,19 @@ game has whether or not it uses a character sheet:
 ```
 
 The card that appears after a copy shows what was taken and carries a switch for the
-other shape — a bare `/roll 1d20+41 Angou — Perception` — and remembers which you
-chose. That is a fact about your Roll20 game rather than about the character, so it is
-kept per browser rather than in the document, and it applies to every character in it.
+other shapes — a bare `/roll 1d20+41 Angou — Perception`, or the **Pathfinder
+Community sheet**'s own templates — and remembers which you chose. That is a fact
+about your Roll20 game rather than about the character, so it is kept per browser
+rather than in the document, and it applies to every character in it.
+
+The Pathfinder Community sheet shape is for a game that uses that sheet. Its
+`pf_attack` template lists each attack of a routine with its own damage, and shows
+the crit confirmation and crit damage rows only for an attack whose die threatened,
+so nothing needs a second copy after a 19. Nine attacks fit on a card; a longer
+routine continues on a second card in the same paste, each subtitled with the
+attacks it carries. Skills, saves and checks use its `pf_generic`
+box. The built-in default template cannot hide rows conditionally, so with it the
+crit lines are always shown and simply ignored on a miss.
 
 | Where | What it copies |
 |---|---|

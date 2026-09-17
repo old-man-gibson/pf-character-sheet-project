@@ -268,7 +268,45 @@ const finished = (tx) => new Promise((resolve, reject) => {
  */
 export function historyFor(id, { storageKey = null } = {}) {
   const wKey = storageKey || workingKey(id);
+  const recoveryKey = `${wKey}:recovery`;
   const stamp = () => new Date().toISOString();
+
+  const readableWorking = (raw) => {
+    try {
+      const saved = JSON.parse(raw);
+      return saved?.data?.schemaVersion === SCHEMA_VERSION ? saved : null;
+    } catch { return null; }
+  };
+
+  // Keep the original bytes, including malformed JSON. Never overwrite an
+  // incompatible working copy unless its recovery archive was written first.
+  function archivedRecoveries() {
+    const rows = JSON.parse(localStorage.getItem(recoveryKey) || '[]');
+    if (!Array.isArray(rows) || rows.some((row) => typeof row?.raw !== 'string')) {
+      throw new Error('The recovery archive could not be read.');
+    }
+    return rows;
+  }
+
+  function readRecoveries() {
+    try {
+      const rows = archivedRecoveries();
+      const raw = localStorage.getItem(wKey);
+      if (raw !== null && !readableWorking(raw) && !rows.some((row) => row.raw === raw)) {
+        rows.push({ raw, savedAt: null });
+      }
+      return rows;
+    } catch { return []; }
+  }
+
+  function preserveWorking() {
+    const raw = localStorage.getItem(wKey);
+    if (raw === null || readableWorking(raw)) return;
+    const rows = archivedRecoveries();
+    if (rows.some((row) => row.raw === raw)) return;
+    rows.push({ raw, savedAt: stamp() });
+    localStorage.setItem(recoveryKey, JSON.stringify(rows));
+  }
 
   /* ---- working state: synchronous, so a closed tab cannot lose it ---- */
 
@@ -278,12 +316,9 @@ export function historyFor(id, { storageKey = null } = {}) {
       if (!raw) return null;
       const saved = JSON.parse(raw);
       if (!saved?.data) return null;
-      // An older schema is missing whatever sections have been added since;
-      // loading it would quietly drop them.
-      if (saved.data.schemaVersion !== SCHEMA_VERSION) {
-        localStorage.removeItem(wKey);
-        return null;
-      }
+      // Preserve unsupported versions in place until a later write archives
+      // them. A future app version's document must not be normalized by this one.
+      if (saved.data.schemaVersion !== SCHEMA_VERSION) return null;
       return saved;
     } catch {
       return null;                       // corrupt entry: fall back to source
@@ -292,6 +327,7 @@ export function historyFor(id, { storageKey = null } = {}) {
 
   function writeWorking(doc) {
     try {
+      preserveWorking();
       localStorage.setItem(wKey, JSON.stringify({ savedAt: stamp(), data: doc }));
       return true;
     } catch {
@@ -300,7 +336,7 @@ export function historyFor(id, { storageKey = null } = {}) {
   }
 
   function clearWorking() {
-    try { localStorage.removeItem(wKey); } catch { /* nothing to undo */ }
+    try { preserveWorking(); localStorage.removeItem(wKey); } catch { /* keep the original */ }
   }
 
   /* ---- canonical version and history: IndexedDB ---- */
@@ -324,13 +360,14 @@ export function historyFor(id, { storageKey = null } = {}) {
    * why the save it was expecting did not come back, and a player may want to
    * export it before it goes.
    */
-  async function readSaved() {
+  async function readSaved({ includeStale = false } = {}) {
     try {
       const db = await openDb();
       const store = db.transaction(STORE, 'readonly').objectStore(STORE);
       const row = await result(store.get(recordKey('saved')));
       if (!row) return null;
-      if (row.schemaVersion !== SCHEMA_VERSION) return { ...meta(row), data: null };
+      // includeStale is for downloading the original, never for adopting it.
+      if (row.schemaVersion !== SCHEMA_VERSION && !includeStale) return { ...meta(row), data: null };
       return { ...meta(row), data: await unpack(row.bytes) };
     } catch {
       return null;
@@ -367,6 +404,14 @@ export function historyFor(id, { storageKey = null } = {}) {
       schemaVersion: doc?.schemaVersion ?? SCHEMA_VERSION,
       bytes,
     };
+    // A new save must not destroy the only copy from another app version.
+    // Keep it as a named checkpoint in the same transaction as replacement.
+    const previousSaved = kind === 'saved' && mine.find((row) => row.kind === 'saved');
+    if (previousSaved && previousSaved.schemaVersion !== SCHEMA_VERSION) {
+      const recoverySeq = Math.max(0, ...mine.map((row) => row.seq || 0)) + 1;
+      store.put({ ...previousSaved, kind: 'checkpoint', seq: recoverySeq,
+        key: recordKey('checkpoint', recoverySeq), label: 'Saved version before app update' });
+    }
     store.put(record);
     if (kind === 'auto') {
       for (const key of evictable([...mine, record])) store.delete(key);
@@ -378,6 +423,7 @@ export function historyFor(id, { storageKey = null } = {}) {
   return {
     id,
     readWorking,
+    readRecoveries,
     writeWorking,
     clearWorking,
     readSaved,
@@ -401,12 +447,12 @@ export function historyFor(id, { storageKey = null } = {}) {
     },
 
     /** One stored document, by record key. */
-    async load(key) {
+    async load(key, { includeStale = false } = {}) {
       const db = await openDb();
       const store = db.transaction(STORE, 'readonly').objectStore(STORE);
       const row = await result(store.get(key));
       if (!row) throw new Error('that snapshot is no longer stored');
-      if (row.schemaVersion !== SCHEMA_VERSION) {
+      if (row.schemaVersion !== SCHEMA_VERSION && !includeStale) {
         throw new Error(`that snapshot was written for schema ${row.schemaVersion},`
           + ` and this app reads schema ${SCHEMA_VERSION}`);
       }
@@ -458,7 +504,8 @@ export function historyFor(id, { storageKey = null } = {}) {
  * so there is nothing left for them to be checkpoints of.
  */
 export async function forget(id, { storageKey = null } = {}) {
-  try { localStorage.removeItem(storageKey || workingKey(id)); } catch { /* ignore */ }
+  const key = storageKey || workingKey(id);
+  try { localStorage.removeItem(key); localStorage.removeItem(`${key}:recovery`); } catch { /* ignore */ }
   try {
     const db = await openDb();
     const tx = db.transaction(STORE, 'readwrite');

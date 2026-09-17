@@ -312,14 +312,14 @@ function customizationPanel(model, blocks) {
       <h3>Customized weapons <span class="badge">${blocks.length}</span></h3>
       ${blocks.map((block, bi) => {
     const list = `training.combat.customizations.${bi}.sets`;
-    const rule = (key, label) => `<label class="fld"><span>${label}</span>
+    const rule = (key, label) => `<label class="fld"><span>${esc(label)}</span>
         <span class="pair">
-          <input type="number" min="0" value="${block.spec?.[key]?.start ?? 1}" style="width:3.2rem"
-            data-custrule="${bi}|${key}|start" aria-label="${label} to begin with">
+          <input type="number" min="0" value="${esc(block.spec?.[key]?.start ?? 1)}" style="width:3.2rem"
+            data-custrule="${bi}|${key}|start" aria-label="${esc(label)} to begin with">
           <span class="hint">then at</span>
           <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
             data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
-            aria-label="Levels ${label.toLowerCase()} goes up at">
+            aria-label="Levels ${esc(label.toLowerCase())} goes up at">
         </span></label>`;
     // What one track is called, so a class that customizes something other
     // than weapons reads as itself: the pack's `unit` names the rows and the

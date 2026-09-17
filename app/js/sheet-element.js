@@ -97,6 +97,10 @@ import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
+import { bindSessionBoard } from './ui/panels/session.js';
+import { bindClassActions } from './ui/class-actions.js';
+import { bindChains } from './ui/session-chains.js';
+import { sessionRollSpec } from './model/session-rolls.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
@@ -570,6 +574,8 @@ export class CharacterSheetElement extends HTMLElement {
   #changes = 0;
   #snapshotAt = 0;
   #resume = null;
+  #recoveries = [];
+  #staleSaved = false;
   #showHistory = false;
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
@@ -1100,15 +1106,10 @@ export class CharacterSheetElement extends HTMLElement {
      * already have.
      */
     const working = this.isPublished ? null : this.#history.readWorking();
+    this.#recoveries = this.isPublished ? [] : this.#history.readRecoveries();
     const canonical = this.isPublished ? null : await this.#history.readSaved();
     this.#savedDoc = canonical?.data ?? null;
-
-    // A canonical version written for an older schema cannot be loaded, but the
-    // player is told rather than left wondering where their save went.
-    if (canonical && !canonical.data) {
-      this.#historyNote = `The saved version was written for schema ${canonical.schemaVersion}`
-        + ' and cannot be opened by this build. The sheet has opened where you left off instead.';
-    }
+    this.#staleSaved = !!canonical && !canonical.data;
 
     const open = this.isPublished ? doc : (this.#savedDoc ?? working?.data ?? doc);
     let drifted = false;
@@ -1365,17 +1366,28 @@ export class CharacterSheetElement extends HTMLElement {
    */
   async #save() {
     if (!this.#model || !this.#history) return;
-    const doc = this.#model.toJSON();
+    const model = this.#model;
+    const history = this.#history;
+    // Snapshot before the asynchronous write: later typing must not mutate
+    // the baseline of the version that actually reached the database.
+    const doc = structuredClone(model.toJSON());
     try {
-      await this.#history.save(doc);
+      await history.save(doc);
+      if (this.#model !== model) return;
       // Cloned for the same reason as in `#adoptDocument`: what `toJSON()`
       // returns still points into the live model.
       this.#savedDoc = structuredClone(doc);
-      this.#changes = 0;
+      this.#staleSaved = false;
+      await this.#refreshSnapshots();
+      if (this.#model !== model) return;
+      this.#changes = countChanges(doc, model.toJSON());
       this.#snapshotAt = 0;
       this.#resume = null;
-      this.#historyNote = 'Saved. This is the version the sheet will open on.';
+      this.#historyNote = this.#changes
+        ? 'Saved. Newer edits are still unsaved.'
+        : 'Saved. This is the version the sheet will open on.';
     } catch (err) {
+      if (this.#model !== model) return;
       this.#historyNote = `Could not save — ${err.message}.`
         + ' Your edits are still here and still restored on reload.';
     }
@@ -2167,6 +2179,16 @@ export class CharacterSheetElement extends HTMLElement {
     return `<div class="notices">
         ${this.#themeMenu ? this.#themeMenuHtml() : ''}
         ${this.#resumeBanner()}
+        ${this.#staleSaved ? `<div class="histnote" role="status">
+          <span><strong>Saved version kept for recovery.</strong>
+          This build cannot open it. Download it here, or find it in History after saving again.</span>
+          <button data-action="export-saved-recovery">Download saved version</button>
+        </div>` : ''}
+        ${this.#recoveries.length ? `<div class="histnote" role="status">
+          <span><strong>Earlier edits kept for recovery.</strong>
+          This build could not read them. Download a copy before continuing in another version.</span>
+          ${this.#recoveries.map((_, i) => `<button data-action="export-recovery" data-index="${i}">Download recovery${this.#recoveries.length > 1 ? ` ${i + 1}` : ''}</button>`).join('')}
+        </div>` : ''}
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
@@ -2351,7 +2373,8 @@ export class CharacterSheetElement extends HTMLElement {
                ${s.label ? '' : `<span class="histsize">${(s.size / 1024).toFixed(0)} KB</span>`}
              </span>
              ${s.stale
-               ? '<span class="histsize">written for an older schema</span>'
+               ? `<span class="histsize">from another app version</span>
+                  <button data-action="export-snapshot-recovery" data-key="${esc(s.key)}">Download</button>`
                : `<button data-action="restore" data-key="${esc(s.key)}">Open</button>`}
              ${s.kind === 'checkpoint'
                ? `<button data-action="rename-start" data-key="${esc(s.key)}"
@@ -3936,7 +3959,8 @@ export class CharacterSheetElement extends HTMLElement {
    * the toast selected, which is the same thing one keystroke later.
    */
   async #copyRoll(kind, ref, what, answers = null) {
-    const spec = rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
+    const spec = kind === 'session' ? sessionRollSpec(this.#model, ref, answers)
+      : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
     // A roll with a question in it is not a roll yet. Asking here rather than
     // copying a `?{…}` for Roll20 to ask is the difference between a number
     // the player has settled and one the table is still owed -- and the only
@@ -5241,6 +5265,14 @@ export class CharacterSheetElement extends HTMLElement {
 
   #bind() {
     const root = this.shadowRoot;
+    bindClassActions(root,this.#model,()=>this.#render());
+    bindChains(root,this.#model,()=>{this.#rollToast=null;this.#render();});
+    bindSessionBoard(root, this.#model, () => {
+      // Roll references contain card positions. Dismiss before a layout edit
+      // can make the toast's format switch refer to a different option.
+      this.#rollToast = null;
+      this.#render();
+    });
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
       b.addEventListener('click', () => {
@@ -7149,6 +7181,37 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         this.shadowRoot.querySelector('[data-fx-draft]')?.focus();
         break;
+      case 'export-saved-recovery':
+      case 'export-snapshot-recovery':
+        (button.dataset.key
+          ? this.#history.load(button.dataset.key, { includeStale: true }).then((data) => ({ data }))
+          : this.#history.readSaved({ includeStale: true })).then((saved) => {
+          if (!saved?.data) throw new Error('The saved version could not be read.');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([JSON.stringify(saved.data, null, 2)], { type: 'application/json' }));
+          a.download = `${this.#model.data.id}-saved-recovery.json`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }).catch((error) => {
+          this.#historyNote = error.message;
+          this.#renderHeader();
+        });
+        break;
+      case 'export-recovery': {
+        const recovery = this.#recoveries[Number(button.dataset.index)];
+        if (!recovery) break;
+        let content = recovery.raw;
+        try {
+          const saved = JSON.parse(content);
+          if (saved?.data) content = JSON.stringify(saved.data, null, 2);
+        } catch { /* malformed JSON is still worth recovering byte for byte */ }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+        a.download = `${this.#model.data.id}-recovery-${Number(button.dataset.index) + 1}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        break;
+      }
       case 'export': {
         const blob = new Blob([JSON.stringify(this.#model.toJSON(), null, 1)], { type: 'application/json' });
         const a = document.createElement('a');
