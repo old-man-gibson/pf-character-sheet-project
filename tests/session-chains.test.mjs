@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { Character } from '../app/js/model.js';
+import { blankDocument } from '../app/js/convert.js';
+import { useSessionAction,sessionState,advanceTurn } from '../app/js/model/session.js';
+import { effectiveAction } from '../app/js/model/action-features.js';
+import { executeChainAction,followupChoices,previewChainUse,dismissFollowup } from '../app/js/model/session-chains.js';
+import { renderSessionBoard } from '../app/js/ui/panels/session.js';
+const m = new Character(blankDocument({name:'Chains',level:5}));
+m.trackers.push({id:'power',name:'Power',current:0,max:8,maxFormula:'8',min:0,minFormula:'0',source:'player'});
+m.set('progression.actionFeatures', [{id:'music',className:'Warlord',title:'Infernal Musician',type:'standard',resource:'power',cost:'1',damageFormula:'2d6',links:[{target:'card:totems',action:'free',note:'Granted by a feat',required:false}]},
+  {id:'finish',className:'Warlord',title:'Finish',type:'swift',links:[]}]);
+m.set('session.cards',[
+  {id:'music-card',source:'class-feature:music',type:'standard'},
+  {id:'totems',kind:'choice',title:'Totems',type:'standard'},
+  {id:'fire',title:'Fire totem',type:'standard',groupId:'totems',resource:'power',cost:'2',links:[{target:'feature:finish',action:'free',required:true}]},
+  {id:'ice',title:'Ice totem',type:'standard',groupId:'totems',resource:'power',cost:'3'}]);
+const card = id=>m.data.session.cards.find(c=>c.id===id);
+assert.equal(effectiveAction(m,card('music-card')).damageFormula,'2d6');
+m.set('progression.actionFeatures.0.damageFormula','3d6');
+assert.equal(effectiveAction(m,card('music-card')).damageFormula,'3d6','source updates shortcut');
+assert.equal(useSessionAction(m,card('music-card')),'');
+assert.equal(m.trackers.find(t=>t.id==='power').current,1);
+assert.equal(m.data.session.spent.standard,1);
+assert.match(useSessionAction(m,{type:'free'}),/pending chain/);
+let p = m.data.session.pendingFollowups[0];
+assert.equal(followupChoices(m,p).length,2);
+assert.equal(previewChainUse(m,card('fire'),p.id).error,'');
+assert.equal(executeChainAction(m,card('fire'),p.id),'');
+assert.equal(m.trackers.find(t=>t.id==='power').current,3,'free action retains resource cost');
+assert.equal(card('fire').type,'standard','override is not permanent');
+assert.equal(m.data.session.spent.standard,1);
+assert.equal(m.data.session.cards.find(c=>c.id==='totems').selectedId,'fire');
+p = m.data.session.pendingFollowups[0];
+assert.equal(dismissFollowup(m,p.id),false,'required link cannot skip');
+const saved = new Character(JSON.parse(JSON.stringify(m.toJSON())));
+assert.deepEqual(sessionState(saved),sessionState(m));
+const turn = m.data.session.turn;
+advanceTurn(m,true); assert.equal(m.data.session.turn,turn,'pending chain blocks next turn');
+assert.equal(executeChainAction(m,followupChoices(m,p)[0],p.id),'');
+assert.equal(m.data.session.pendingFollowups.length,0);
+m.undo(); assert.equal(m.data.session.pendingFollowups.length,1,'undo restores consumed offer');
+m.undo(); assert.equal(m.trackers.find(t=>t.id==='power').current,1,'undo restores followup resource cost');
+p=m.data.session.pendingFollowups[0];
+assert.equal(dismissFollowup(m,p.id),true);
+advanceTurn(m,true);
+m.set('progression.actionFeatures.0.links',[{target:'card:music-card',action:'free'}]);
+assert.equal(useSessionAction(m,card('music-card')),'');
+p=m.data.session.pendingFollowups[0];
+assert.match(previewChainUse(m,card('music-card'),p.id).error,/Cycle/);
+const before=m.trackers.find(t=>t.id==='power').current;
+assert.match(executeChainAction(m,card('music-card'),p.id),/Cycle/);
+assert.equal(m.trackers.find(t=>t.id==='power').current,before);
+assert.ok(renderSessionBoard(m).includes('Cycle stopped'));
+m.set('session.pendingFollowups',[]);advanceTurn(m,true);
+m.set('progression.actionFeatures.0.links',[{target:'card:ice',action:'free',waiveResource:true}]);
+useSessionAction(m,card('music-card'));p=m.data.session.pendingFollowups[0];
+const cost=m.trackers.find(t=>t.id==='power').current;
+assert.equal(executeChainAction(m,card('ice'),p.id),'');assert.equal(m.trackers.find(t=>t.id==='power').current,cost);
+assert.ok(renderSessionBoard(m).includes('session-width-2'),'linked cards grow automatically');
+console.log('Ability chains: class sources, multi-step groups, one-use overrides, resources, undo, cycles and persistence passed');

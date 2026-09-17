@@ -98,6 +98,8 @@ import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import { bindSessionBoard } from './ui/panels/session.js';
+import { bindClassActions } from './ui/class-actions.js';
+import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
@@ -5263,6 +5265,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   #bind() {
     const root = this.shadowRoot;
+    bindClassActions(root,this.#model,()=>this.#render());
+    bindChains(root,this.#model,()=>{this.#rollToast=null;this.#render();});
     bindSessionBoard(root, this.#model, () => {
       // Roll references contain card positions. Dismiss before a layout edit
       // can make the toast's format switch refer to a different option.

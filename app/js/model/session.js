@@ -1,6 +1,8 @@
 import { evaluateFormula } from '../formula.js';
 import { forwarded } from './scope.js';
 import { maneuverDetails } from './subsystems/maneuvers.js';
+import { executeChainAction } from './session-chains.js';
+import { actionFeatures } from './action-features.js';
 
 export const ACTION_TYPES = [['standard', 'Standard'], ['move', 'Movement'], ['swift', 'Swift'],
   ['immediate', 'Immediate'], ['aoo', 'Attacks of opportunity'], ['full', 'Full round'], ['free', 'Free']];
@@ -65,16 +67,12 @@ export function planAction(model, card, state = sessionState(model), budget = ac
 }
 
 export function useSessionAction(model, card) {
-  const plan = planAction(model, card);
-  if (plan.error) return plan.error;
-  model.markUndo(`Used ${card.title || card.type}`);
-  if (plan.tracker) plan.tracker.current = Number(plan.tracker.current) + plan.amount;
-  model.set('session', plan.next);
-  return '';
+  return executeChainAction(model,card);
 }
 
 export function advanceTurn(model, start) {
   const state = sessionState(model);
+  if (state.pendingFollowups?.length) return;
   model.markUndo(start ? 'Started next turn' : 'Ended turn');
   if (start) {
     state.turn = count(state.turn) + 1;
@@ -95,6 +93,7 @@ export function advanceTurn(model, start) {
 // an existing card at a different attack. Duplicate names require a custom card.
 export function sessionShortcuts(model) {
   const out = [];
+  for (const f of actionFeatures(model)) out.push({key:`class-feature:${f.id}`,title:f.title || 'Class feature',note:f.note || '',kind:'class feature',range:f.range,targets:f.targets,save:f.save,duration:f.duration});
   const add = (kind, name, note, extra = {}) => {
     if (typeof name !== 'string' || !name.trim()) return;
     out.push({ key: `${kind}:${name}`, title: name, note: typeof note === 'string' ? note : '', kind, ...extra });

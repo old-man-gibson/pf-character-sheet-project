@@ -2,9 +2,11 @@ import { evaluateFormula } from '../formula.js';
 import { diceString } from '../rules.js';
 import { d20, weaponRollSpec, queryText } from '../roll20.js';
 import { sessionShortcuts, sessionState } from './session.js';
+import { effectiveAction } from './action-features.js';
 
 /** Resolve user rolls without executing dice or allowing chat commands. */
 export function sessionRolls(model, card, answers = null) {
+  card = effectiveAction(model,card);
   const source = card.source ? sessionShortcuts(model).find(s => s.key === card.source) : null;
   const inherited = source?.kind === 'attack'
     ? weaponRollSpec(model.data, source.index, model.conditionState, answers, card.type !== 'full') : null;

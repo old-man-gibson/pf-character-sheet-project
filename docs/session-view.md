@@ -82,7 +82,39 @@ so rearranging the source list does not silently change a shortcut. If a source 
 removed, renamed or ambiguous, the card is disabled; **Make custom** retains its
 title and any available details. Duplicate source names are omitted from the picker.
 
-## Checks
+## Class features and ability chains
+
+Progression has a **Class features · abilities & actions** area for each class.
+Define an ability's description, rolls, resource cost and follow-ups there, then
+**Pin to session**. The session shortcut uses the same definition, so edits stay
+connected. Its placement and card width remain independent.
+
+In an ability or choice group's editor, **Link ability or group** selects what
+becomes available after **Use**. A link can point to a class feature, a session
+card, or a choice group. Selecting one option in a linked group uses only that
+option; its own links (and the group's links) can continue the chain.
+
+For example, link Infernal Musician to a Totems choice group, set the follow-up's
+action cost to **Free**, and record the feat granting it in the reminder.
+Free changes only the action cost. **Waive resource cost too** is a separate,
+explicit setting. Neither override permanently changes the target ability.
+
+Pending follow-ups appear above the action board with their details and values.
+Optional steps can be skipped. Resolve or cancel the chain before other actions
+or a new turn. Cancel keeps costs already paid; Undo reverses the last activation.
+Pending steps survive saving and reloading. Missing targets and cycles cannot
+spend costs, and can be recovered through editing, Undo, or cancellation.
+These links record player-configured rules; they do not interpret feat text.
+
+Cards use one column by default, two for choice groups or linked abilities, and
+three for multiple links. The card editor can override this with **1, 2, or 3
+columns**. Spans shrink automatically when the available screen space is narrow.
+
+## Chain checks
+
+Run `node tests/session-chains.test.mjs` for costs, chaining, cycle prevention,
+undo and persistence. Open `tests/session-chains-browser.html` through the local
+server for class-feature editing, pinning, widths and linked choice interactions.
 
 Run `node tests/session.test.mjs` for action relationships, formulas, atomic costs,
 undo, persistence and shortcut resolution. Serve the repository and open

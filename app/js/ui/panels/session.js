@@ -4,7 +4,10 @@ import { sessionRolls } from '../../model/session-rolls.js';
 import { renderedProse } from '../prose.js';
 import { editableSession, choiceParent, moveSessionCard, removeSessionCard } from '../../model/session-layout.js';
 import { bindSessionDrag } from '../session-drag.js';
-import { ACTION_TYPES, ACTION_POOLS, sessionState, actionBudget, planAction, useSessionAction,
+import { actionFeatures, linkedFeature, effectiveAction } from '../../model/action-features.js';
+import { previewChainUse } from '../../model/session-chains.js';
+import { linkEditor, pendingChains } from '../session-chains.js';
+import { ACTION_TYPES, ACTION_POOLS, sessionState, actionBudget, useSessionAction,
   advanceTurn, sessionShortcuts } from '../../model/session.js';
 
 const button = (command, text, attrs = '') => `<button data-session-command="${command}" ${attrs}>${text}</button>`;
@@ -14,17 +17,21 @@ export function renderSessionBoard(model) {
   const state = sessionState(model), budget = actionBudget(model, state), shortcuts = sessionShortcuts(model);
   const types = (selected) => ACTION_TYPES.map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('');
   const handle = (index, title) => `<button class="session-drag" draggable="true" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
+  const width = card => Math.max(1,Math.min(3,Number(card.width) || (card.links?.length>1?3:(card.links?.length || card.kind==='choice')?2:1)));
+  const widthPicker = (card,index) => `<label>Card width<select data-session-field="cards.${index}.width"><option value="">Automatic</option>${[1,2,3].map(n=>`<option value="${n}" ${Number(card.width)===n?'selected':''}>${n} column${n===1?'':'s'}</option>`).join('')}</select></label>`;
   const cardHtml = (card, index) => {
+    card = effectiveAction(model,card);
     if (card.kind === 'choice') {
       const members = state.cards.map((c, i) => ({c, i})).filter(({c}) => c.kind !== 'choice' && choiceParent(state, c) === card);
       const chosen = members.find(({c}) => c.id === card.selectedId) || members[0];
-      return `<article class="session-choice" data-session-drop="${index}">
+      return `<article class="session-choice session-width-${width(card)}" data-session-drop="${index}">
         <header>${handle(index, card.title || 'Choice group')}<strong>${esc(card.title || 'Choice group')}</strong><small>${members.length} choices</small></header>
-        ${members.length ? `<details class="session-choice-picker" data-session-fold="choices:${esc(card.id)}" ${state.folded[`choices:${card.id}`] ? '' : 'open'}><summary>Choices</summary><div class="session-choice-buttons" role="group" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<button data-session-choice="${index}" data-choice-index="${i}" aria-pressed="${chosen.i === i}">${esc(c.title || 'Untitled option')}</button>`).join('')}</div></details>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
+        ${members.length ? `<details class="session-choice-picker" data-session-fold="choices:${esc(card.id)}" ${state.folded[`choices:${card.id}`] ? '' : 'open'}><summary>Choices</summary><div class="session-choice-buttons" role="group" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<button data-session-choice="${index}" data-choice-index="${i}" aria-pressed="${chosen.i === i}">${esc(effectiveAction(model,c).title || 'Untitled option')}</button>`).join('')}</div></details>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
         <div class="session-choice-drop" data-session-group-drop="${index}">Drop an option into this group</div>
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit choice group</summary>
           <label>Group title ${input(`cards.${index}.title`, card.title)}</label>
           <label>Action <select data-session-field="cards.${index}.type">${types(card.type)}</select></label>
+          ${widthPicker(card,index)}${linkEditor(model,card,`card:${index}`)}
           ${button('up','Move earlier',`data-index="${index}"`)} ${button('down','Move later',`data-index="${index}"`)}
           ${button('group-add','+ Custom choice',`data-index="${index}"`)}
           ${button('remove','Ungroup (keep options)',`data-index="${index}"`)}
@@ -33,7 +40,7 @@ export function renderSessionBoard(model) {
     }
     const source = card.source ? shortcuts.find(x => x.key === card.source) : null;
     const title = card.title || source?.title || 'Untitled option';
-    const plan = planAction(model, card, state, budget);
+    const plan = previewChainUse(model,card);
     const missing = card.source && !source;
     const reason = missing ? 'Source missing or renamed; edit this shortcut before using it' : plan.error;
     const tracker = model.trackers.find(t => t.id === card.resource);
@@ -44,17 +51,19 @@ export function renderSessionBoard(model) {
       ${values.attack ? `<span><small>Attack</small><strong>${esc(values.attack)}</strong>${copy('attack', 'attack')}</span>` : ''}
       ${values.damage ? `<span><small>Damage</small><strong>${esc(values.damage)}</strong>${copy('damage', 'damage')}</span>` : ''}
       </div>`;
-    return `<article class="session-option ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
+    return `<article class="session-option session-width-${width(card)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
       ${handle(index, title)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
         <summary>${esc(title)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
         ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}</p>` : ''}
-        ${source?.note ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
+        ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
         ${values.spec.rolls.length ? `<div class="session-source">Copy all rolls ${copy('all', 'all')}</div>` : ''}
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
           <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
+          ${widthPicker(card,index)}
+          ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and links below edit the linked class feature in Progression.</p>':''}
           <label>Choice group <select data-session-membership="${index}"><option value="">Standalone option</option>${state.cards.filter(g => g.kind === 'choice' && g.type === card.type).map(g => `<option value="${esc(g.id)}" ${choiceParent(state,card) === g ? 'selected' : ''}>${esc(g.title || 'Choice group')}</option>`).join('')}</select></label>
           <div class="session-settings-grid">
             <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}</label>
@@ -68,6 +77,7 @@ export function renderSessionBoard(model) {
             ${model.trackers.map(t => `<option value="${esc(t.id)}" ${card.resource === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
           <label>Cost (number or formula) ${input(`${edit}.cost`, card.cost ?? '1')}</label>
           <p class="hint">Using adds this cost to the resource’s spent / accumulated amount.</p>
+          ${linkEditor(model,card,linkedFeature(model,card)?`feature:${actionFeatures(model).indexOf(linkedFeature(model,card))}`:`card:${index}`)}
           ${button('up', 'Move earlier', `data-index="${index}"`)}
           ${button('down', 'Move later', `data-index="${index}"`)}
           ${card.source ? button('unlink', 'Make custom', `data-index="${index}"`) : ''}
@@ -83,10 +93,11 @@ export function renderSessionBoard(model) {
   };
   return `<section class="session-board" aria-label="Session action board">
     <header class="session-heading"><div><span class="session-eyebrow">YOUR NEXT MOVE</span><h2>Turn ${Number(state.turn) || 1} <small>${state.onTurn ? 'Your turn' : 'Between turns'}</small></h2></div>
-      <div>${state.onTurn ? button('end', 'End turn') : ''} ${button('next', state.onTurn ? 'Next turn' : 'Start my turn')}</div></header>
+      <div>${state.onTurn ? button('end', 'End turn',state.pendingFollowups?.length?'disabled':'') : ''} ${button('next', state.onTurn ? 'Next turn' : 'Start my turn',state.pendingFollowups?.length?'disabled':'')}</div></header>
+    ${pendingChains(model)}
     <div class="session-budget">${ACTION_POOLS.map(([key, label]) => `<div class="session-pool ${!budget[key].remaining ? 'spent' : ''}">
       <span>${label}</span><strong>${budget[key].remaining}<small> / ${budget[key].max}</small></strong>
-      <div>${button('spend', '−', `data-kind="${key}" aria-label="Spend one ${label}" ${planAction(model, {type:key}, state, budget).error ? 'disabled' : ''}`)}${button('restore', '+', `data-kind="${key}" aria-label="Restore one ${label}"`)}</div>
+      <div>${button('spend', '−', `data-kind="${key}" aria-label="Spend one ${label}" ${previewChainUse(model, {type:key}).error ? 'disabled' : ''}`)}${button('restore', '+', `data-kind="${key}" aria-label="Restore one ${label}"`)}</div>
       ${budget[key].error ? `<small role="alert">${esc(budget[key].error)}</small>` : ''}</div>`).join('')}</div>
     <p class="session-rule">${state.pendingSwift ? `${state.pendingSwift} swift reserved for your next turn. ` : ''}Movement can use an unused standard. Immediate shares your swift on your turn. − spends with these rules; + restores only that counter.</p>
     <details class="session-settings" data-session-fold="settings" ${state.folded.settings === false ? 'open' : ''}><summary>Action limits & manual adjustments</summary>
@@ -142,7 +153,7 @@ export function bindSessionBoard(root, model, render) {
     }
     model.markUndo(`Session: ${command}`);
     if (command === 'restore') state.spent[key] = Math.max(0, (Number(state.spent[key]) || 0) - 1);
-    if (command === 'reset') Object.assign(state, { spent: {}, pendingSwift: 0, turn: 1, onTurn: true });
+    if (command === 'reset') Object.assign(state, { spent: {}, pendingSwift: 0, turn: 1, onTurn: true, pendingFollowups:[] });
     if (command === 'add') {
       state.folded[`card:${state.cards.length}`] = false;
       state.folded[`editor:${state.cards.length}`] = false;
@@ -150,13 +161,19 @@ export function bindSessionBoard(root, model, render) {
     }
     if (command === 'unlink') {
       const source = sessionShortcuts(model).find(s => s.key === state.cards[i].source);
-      state.cards[i] = { ...state.cards[i], source: '', note: [source?.note, state.cards[i].note].filter(Boolean).join('\n') };
+      const card = effectiveAction(model,state.cards[i]);
+      state.cards[i] = { ...card, source: '', note: [...new Set([source?.note,card.note].filter(Boolean))].join('\n') };
     }
     update(state);
   }));
   root.querySelectorAll('[data-session-field]').forEach(el => el.addEventListener('change', () => {
     const typeChange = el.dataset.sessionField.match(/^cards\.(\d+)\.type$/);
     if (typeChange) { moveSessionCard(model, Number(typeChange[1]), {type:el.value}); render(); return; }
+    const featureField = el.dataset.sessionField.match(/^cards\.(\d+)\.([a-zA-Z]+)$/);
+    const feature = featureField && linkedFeature(model,sessionState(model).cards[Number(featureField[1])]);
+    if (feature && featureField[2]!=='width') {
+      model.set(`progression.actionFeatures.${actionFeatures(model).indexOf(feature)}.${featureField[2]}`,el.value);render();return;
+    }
     model.set(`session.${el.dataset.sessionField}`, el.type === 'number' ? Math.max(0, Number(el.value) || 0) : el.value);
     render();
   }));

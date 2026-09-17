@@ -400,7 +400,29 @@
 .session-group { border-bottom: 1px solid var(--cs-line); padding-bottom: 12px; }
 .session-group > summary { cursor: pointer; padding: 8px 0; font-size: 1.05rem; font-weight: 650; }
 .session-group > summary small { float: right; font-size: .8rem; font-weight: 400; color: var(--cs-muted); }
-.session-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; align-items: start; }
+.session-board { container-type: inline-size; }
+.session-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.session-options > .session-width-2 { grid-column: span 2; }
+.session-options > .session-width-3 { grid-column: span 3; }
+@container (max-width: 780px) {
+  .session-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .session-options > .session-width-3 { grid-column: span 2; }
+}
+@container (max-width: 520px) {
+  .session-options { grid-template-columns: minmax(0,1fr); }
+  .session-options > .session-width-2, .session-options > .session-width-3 { grid-column: span 1; }
+}
+.session-chain-pending { border: 1px solid var(--cs-accent); border-radius: 8px; padding: 16px; margin-bottom: 18px; background: var(--cs-panel); }
+.session-chain-step, .session-link-row { padding: 12px 0; border-bottom: 1px solid var(--cs-line); }
+.session-chain-step p { font-size: .85rem; color: var(--cs-muted); }
+.session-chain-option { padding: 10px; margin: 8px 0; background: var(--cs-panel-2); border-radius: 6px; }
+.session-chain-option span { display: inline-block; margin-left: 8px; font-size: .85rem; }
+.session-chain-option details { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-links select, .session-links input:not([type=checkbox]) { width: 100%; }
+.session-links input[type=checkbox] { width: auto; }
+.session-links label:has(input[type=checkbox]) { display: flex; align-items: center; gap: 8px; }
+.class-actions > details > summary { font-weight: 650; padding: 12px 0; cursor: pointer; }
+.class-actions > details { border-top: 1px solid var(--cs-line); padding-bottom: 12px; }
 .session-option { background: var(--cs-panel); border: 1px solid var(--cs-line); border-radius: 8px; overflow: hidden; }
 .session-drag { float: right; margin: 7px; cursor: grab; touch-action: none; user-select: none; color: var(--cs-muted); padding: 3px 8px; font-size: 1.2rem; }
 .session-drag:active { cursor: grabbing; }
