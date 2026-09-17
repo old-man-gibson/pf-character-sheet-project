@@ -20,8 +20,9 @@ selector provide keyboard alternatives.
 
 **+ Choice group** creates a compact collection such as Kinetic blasts or Full
 attack variants. Give it a title, then drag options into its marked drop area,
-or assign them using **Choice group** in each option's editor. The group's selector
-shows one option at a time with that option's own rolls, details and Use button.
+or assign them using **Choice group** in each option's editor. The group displays
+all choice titles as buttons. Clicking one highlights it and opens that option's
+rolls, details and Use button beneath the choices.
 Switching choices spends nothing. Edit choice group can add a custom choice or
 ungroup while keeping all options. A group dragged to another action type moves
 all its choices together. Groups cannot be nested. Selection, grouping and order

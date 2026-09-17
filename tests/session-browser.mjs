@@ -105,13 +105,14 @@ run.onclick = async () => {
       await drag(indexOf('Training sword'), `[data-session-group-drop="${indexOf('New choice group')}"]`);
       const group = find('.session-choice');
       assert(group.querySelectorAll('.session-option').length === 1,'Group renders all choices');
-      assert(group.querySelector('[data-session-choice]').options.length === 2,'Choices missing');
+      assert(group.querySelectorAll('[data-session-choice]').length === 2,'Choice buttons missing');
     });
     await test('Choosing an alternative changes the displayed card without spending', async () => {
       const before = JSON.stringify(sheet.model.data.session.spent);
-      const select = find('[data-session-choice]');
-      select.value = String(indexOf('Training sword')); select.dispatchEvent(new Event('change')); await pause();
+      await click(`[data-session-choice][data-choice-index="${indexOf('Training sword')}"]`);
       assert(find('.session-choice .session-option').textContent.includes('Training sword'),'Selected card not displayed');
+      assert(find(`[data-session-choice][data-choice-index="${indexOf('Training sword')}"]`).getAttribute('aria-pressed') === 'true','Selection not highlighted');
+      assert(find(`[data-session-fold="card:${indexOf('Training sword')}"]`).open,'Choice details not opened');
       assert(JSON.stringify(sheet.model.data.session.spent) === before,'Choosing spent an action');
     });
     await test('Groups drag as a unit, and ungrouping keeps their cards', async () => {

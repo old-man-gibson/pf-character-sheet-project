@@ -20,7 +20,7 @@ export function renderSessionBoard(model) {
       const chosen = members.find(({c}) => c.id === card.selectedId) || members[0];
       return `<article class="session-choice" data-session-drop="${index}">
         <header>${handle(index, card.title || 'Choice group')}<strong>${esc(card.title || 'Choice group')}</strong><small>${members.length} choices</small></header>
-        ${members.length ? `<select data-session-choice="${index}" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<option value="${i}" ${chosen.i === i ? 'selected' : ''}>${esc(c.title || 'Untitled option')}</option>`).join('')}</select>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
+        ${members.length ? `<div class="session-choice-buttons" role="group" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<button data-session-choice="${index}" data-choice-index="${i}" aria-pressed="${chosen.i === i}">${esc(c.title || 'Untitled option')}</button>`).join('')}</div>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
         <div class="session-choice-drop" data-session-group-drop="${index}">Drop an option into this group</div>
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit choice group</summary>
           <label>Group title ${input(`cards.${index}.title`, card.title)}</label>
@@ -160,10 +160,13 @@ export function bindSessionBoard(root, model, render) {
     model.set(`session.${el.dataset.sessionField}`, el.type === 'number' ? Math.max(0, Number(el.value) || 0) : el.value);
     render();
   }));
-  root.querySelectorAll('[data-session-choice]').forEach(el => el.addEventListener('change', () => {
+  root.querySelectorAll('[data-session-choice]').forEach(el => el.addEventListener('click', () => {
     const state = editableSession(model);
-    state.cards[Number(el.dataset.sessionChoice)].selectedId = state.cards[Number(el.value)].id;
+    const index = Number(el.dataset.choiceIndex);
+    state.cards[Number(el.dataset.sessionChoice)].selectedId = state.cards[index].id;
+    state.folded[`card:${index}`] = false;
     update(state);
+    root.querySelector(`[data-session-choice="${el.dataset.sessionChoice}"][data-choice-index="${index}"]`)?.focus({preventScroll:true});
   }));
   root.querySelectorAll('[data-session-membership]').forEach(el => el.addEventListener('change', () => {
     const i = Number(el.dataset.sessionMembership);

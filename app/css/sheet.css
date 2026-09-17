@@ -408,7 +408,9 @@
 .session-choice > header { display: flex; align-items: center; gap: 8px; padding: 6px; }
 .session-choice > header strong { overflow-wrap: anywhere; flex: 1; }
 .session-choice > header small { color: var(--cs-muted); padding-right: 6px; }
-.session-choice > select { display: block; width: calc(100% - 24px); margin: 6px 12px 12px; }
+.session-choice-buttons { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px 12px; }
+.session-choice-buttons button { flex: 1 1 110px; min-width: 0; white-space: normal; overflow-wrap: anywhere; padding: 9px 10px; text-align: left; }
+.session-choice-buttons button[aria-pressed="true"] { border-color: var(--cs-accent); background: var(--cs-accent-soft); color: var(--cs-text); box-shadow: inset 0 -2px var(--cs-accent); }
 .session-choice > .session-option { border-radius: 0; border-width: 1px 0; }
 .session-choice-drop { border: 1px dashed var(--cs-line); margin: 10px; padding: 8px; color: var(--cs-muted); font-size: .75rem; text-align: center; }
 .session-type-drop { display: none; }
