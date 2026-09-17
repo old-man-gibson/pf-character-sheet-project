@@ -37,7 +37,7 @@ export function renderSessionBoard(model) {
       const members = state.cards.map((c, i) => ({c, i})).filter(({c}) => c.kind !== 'choice' && choiceParent(state, c) === card);
       const chosen = members.find(({c}) => c.id === card.selectedId) || members[0];
       return `<article class="session-choice session-width-${width(card)}" data-session-drop="${index}">
-        <header>${handle(index, card.title || 'Choice group')}<strong>${esc(card.title || 'Choice group')}</strong><small>${members.length} choices</small></header>
+        <header>${handle(index, card.title || 'Choice group')}<strong>${esc(card.title || 'Choice group')}</strong><small>${state.folded[`choices:${card.id}`] && chosen ? `${esc(effectiveAction(model,chosen.c).title || 'Untitled option')} · ` : ''}${members.length} choices</small></header>
         ${members.length ? `<details class="session-choice-picker" data-session-fold="choices:${esc(card.id)}" ${state.folded[`choices:${card.id}`] ? '' : 'open'}><summary>Choices</summary><div class="session-choice-buttons" role="group" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<button data-session-choice="${index}" data-choice-index="${i}" aria-pressed="${chosen.i === i}">${esc(effectiveAction(model,c).title || 'Untitled option')}</button>`).join('')}</div></details>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
         <div class="session-choice-drop" data-session-group-drop="${index}">Drop an option into this group</div>
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit choice group</summary>
@@ -62,15 +62,23 @@ export function renderSessionBoard(model) {
     const rollSummary = `<div class="session-roll-values">
       ${values.attack ? `<span><small>Attack</small><strong title="${esc(values.attack)}">${esc(values.attackSummary)}</strong>${copy('attack', 'attack')}</span>` : ''}
       ${values.damage ? `<span><small>Damage</small><strong>${esc(values.damage)}</strong>${copy('damage', 'damage')}</span>` : ''}
+      ${values.spec.rolls.length > 1 ? `<button class="d20 session-copy-all" data-roll="session|${index}:all" data-rollwhat="${esc(title)}" aria-label="Copy all rolls for ${esc(title)}" title="Copy every roll on this card for Roll20" ${values.errors.length ? 'disabled' : ''}>${D20_ICON} All rolls</button>` : ''}
       </div>`;
+    // One muted line under the title: what it is, its facts, and what it costs.
+    const facts = [['range','Range'],['targets','Targets'],['save','Save'],['duration','Duration']].filter(([key]) => values[key])
+      .map(([key,label]) => `<span><small>${label}</small> ${renderedProse(model, String(values[key]))}</span>`);
+    const subtitle = [
+      source?.detail ? `<span>${esc(source.detail)}</span>` : '',
+      ...facts,
+      card.resource ? `<span><small>Cost</small> ${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</span>` : '',
+    ].filter(Boolean).join(' · ');
     return `<article class="session-option session-width-${width(card, values.attackCount)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
       ${handle(index, title)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
-        <summary>${esc(title)}${typeTag(card)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
-        ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}${source.detail ? ` — ${esc(source.detail)}` : ''}${source.actionType && source.actionType !== card.type ? ` <em>(normally a ${esc((ACTION_TYPES.find(([k]) => k === source.actionType)?.[1] || source.actionType).toLowerCase())} action)</em>` : ''}</p>` : ''}
+        <summary>${esc(title)}${typeTag(card)}${subtitle ? `<small class="session-card-facts">${subtitle}</small>` : ''}</summary>
+        ${source && (source.title !== title || (source.actionType && source.actionType !== card.type)) ? `<p class="session-source">Linked ${esc(source.kind)}${source.title !== title ? ` · ${esc(source.title)}` : ''}${source.actionType && source.actionType !== card.type ? ` <em>(normally a ${esc((ACTION_TYPES.find(([k]) => k === source.actionType)?.[1] || source.actionType).toLowerCase())} action)</em>` : ''}</p>` : ''}
         ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
-        ${values.spec.rolls.length ? `<div class="session-source">Copy all rolls ${copy('all', 'all')}</div>` : ''}
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
           ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and links below edit the linked class feature in Progression.</p>':''}
@@ -118,7 +126,6 @@ export function renderSessionBoard(model) {
         </details>
       </details>
       ${values.attack || values.damage ? rollSummary : ''}
-      <div class="session-card-facts">${[['range','Range'],['targets','Targets'],['save','Save'],['duration','Duration']].filter(([key]) => values[key]).map(([key,label]) => `<span><small>${label}</small> ${renderedProse(model, String(values[key]))}</span>`).join('')}</div>
       ${values.errors.map(error => `<p class="session-roll-error" role="alert">${esc(error)}</p>`).join('')}
       <div class="session-option-use">${button('use', 'Use', `data-index="${index}" ${reason ? 'disabled' : ''}`)}
         <small>${esc(reason || (card.type === 'move' && !budget.move.remaining ? 'Uses a standard action' : card.type === 'full' ? 'Standard + movement' : card.type === 'immediate' && !state.onTurn ? 'Reserves next turn’s swift' : 'Ready'))}</small></div>

@@ -464,8 +464,11 @@
 .session-roll-values > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .session-roll-values strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .session-roll-values small, .session-card-facts small { color: var(--cs-muted); font-size: .75rem; }
-.session-card-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 14px 12px; font-size: .85rem; overflow-wrap: anywhere; }
+/* The muted line under a title: kind, facts and cost, on closed cards too. */
+.session-card-facts { font-size: .8rem; line-height: 1.5; overflow-wrap: anywhere; }
+.session-card-facts > span { white-space: nowrap; }
 .session-card-facts:empty { display: none; }
+.session-copy-all { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; padding: 3px 9px; }
 .session-roll-error { padding: 0 14px; color: var(--cs-bad); font-size: .85rem; }
 .session-option-use small { color: var(--cs-muted); font-size: .78rem; }
 .session-option-use button { border-color: var(--cs-accent); min-width: 52px; }
