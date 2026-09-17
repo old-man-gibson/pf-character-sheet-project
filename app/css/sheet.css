@@ -448,6 +448,16 @@
 .session-type-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: 600;
   letter-spacing: .04em; text-transform: uppercase; color: var(--cs-accent); background: var(--cs-accent-soft); vertical-align: 2px; white-space: nowrap; }
 .session-field-error { color: var(--cs-bad); font-size: .75rem; line-height: 1.35; }
+/* The editor in three named groups -- Rolls, Details, Cost -- with placement
+   (type, width, group) folded above them and the formula notes behind a line. */
+.session-fields { border: 0; border-top: 1px solid var(--cs-line); margin: 14px 0 0; padding: 4px 0 0; min-width: 0; }
+.session-fields > legend { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--cs-muted); padding: 0 8px 0 0; }
+.session-placement { margin-top: 6px; }
+.session-placement > summary, .session-help > summary { cursor: pointer; color: var(--cs-muted); font-size: .85rem; padding: 4px 0; }
+.session-placement > summary small { color: var(--cs-muted); font-size: .8rem; margin-left: 6px; }
+.session-help { margin-top: 4px; }
+.session-help > summary { font-size: .78rem; }
+.session-help .hint { margin: 6px 0 0; }
 .session-editor label:has(.session-field-error) input { border-color: var(--cs-bad); }
 .session-option-use { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; }
 .session-roll-values { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 0 14px 12px; }

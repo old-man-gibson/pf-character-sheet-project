@@ -9,8 +9,10 @@ The automatic arrangement puts resources immediately below health.
 
 Add custom options or link attacks, feats, talents, veils and known maneuvers from
 the selectors under each action group. Choose the action type yourself; unusual
-abilities and house rules can change it. Titles open details; **Edit option** sets
-the title, notes, action type and optional tracker cost (a number or formula).
+abilities and house rules can change it. Titles open details; **Edit option** groups
+the fields as Rolls, Details and Cost, with Placement (action type, card width,
+choice group) folded above them and the formula notes behind *How the roll fields
+work*. The tracker cost is a number or formula.
 Move earlier/later orders cards within a group. Each group can be collapsed.
 
 Drag an option by its ⠿ handle to reorder it. Drop above or below another card,

@@ -73,26 +73,43 @@ export function renderSessionBoard(model) {
         ${values.spec.rolls.length ? `<div class="session-source">Copy all rolls ${copy('all', 'all')}</div>` : ''}
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
-          <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
-          ${widthPicker(card,index)}
           ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and links below edit the linked class feature in Progression.</p>':''}
-          <label>Choice group <select data-session-membership="${index}"><option value="">Standalone option</option>${state.cards.filter(g => g.kind === 'choice' && g.type === card.type).map(g => `<option value="${esc(g.id)}" ${choiceParent(state,card) === g ? 'selected' : ''}>${esc(g.title || 'Choice group')}</option>`).join('')}</select></label>
-          <div class="session-settings-grid">
-            <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}${fieldError(values, 'attackFormula')}</label>
-            <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}${fieldError(values, 'damageFormula')}</label>
-            <label>Extra attacks (count, or count @ modifier) ${input(`${edit}.extraAttacks`, card.extraAttacks, 'placeholder="e.g. 3, or 1 @ -2, 2 @ -6"')}${fieldError(values, 'extraAttacks')}</label>
-            <label>Attack modifier on every attack ${input(`${edit}.attackModifier`, card.attackModifier, 'placeholder="e.g. -2"')}${fieldError(values, 'attackModifier')}</label>
-            <label>Extra damage on each hit ${input(`${edit}.extraDamage`, card.extraDamage, 'placeholder="e.g. 4d6"')}${fieldError(values, 'extraDamage')}</label>
-            <label>Attack set <select data-session-field="${edit}.attackSet"><option value="">Normal (iteratives on a full round)</option><option value="top" ${card.attackSet === 'top' ? 'selected' : ''}>Highest bonus only (flurry)</option></select></label>
-            ${[['range', 'Range'], ['targets', 'Targets / area'], ['save', 'Save / DC'], ['duration', 'Duration']].map(([key,label]) => `<label>${label} ${input(`${edit}.${key}`, card[key], `placeholder="${esc(String(values[key] || ''))}"`)}</label>`).join('')}
-          </div>
-          <p class="hint">Leave blank to follow the linked source. Attack takes a number or formula. Damage accepts dice plus a formula, such as <code>2d6 + str.mod</code> or <code>{floor(level / 2)}d6</code>, and values defined as dice text, such as <code>kinetic.fist.simple</code>. Text fields accept inline values such as <code>{caster.dc}</code>. Custom rolls do not add other bonuses automatically; <code>attack.melee</code> and <code>attack.ranged</code> include current conditions. Overrides omit the linked weapon’s critical rolls. Extra attacks repeat the card’s highest attack — a linked weapon’s, or the Attack field’s — each group at its own modifier (<code>1 @ -2, 2 @ -max(0, 4 - essence.shoulders)</code>); counts and modifiers are formulas too. The attack modifier shifts every attack and crit confirmation; extra damage is a rider, added to the Damage roll and once, unmultiplied, to the crit damage. <em>Highest bonus only</em> drops the reduced-bonus iteratives, as a flurry requires.</p>
-          <label>Notes <textarea data-session-field="${edit}.note">${esc(card.note || '')}</textarea></label>
-          <label>Resource <select data-session-field="${edit}.resource"><option value="">No resource cost</option>
-            ${card.resource && !tracker ? `<option value="${esc(card.resource)}" selected>Missing resource — choose another</option>` : ''}
-            ${model.trackers.map(t => `<option value="${esc(t.id)}" ${card.resource === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-          <label>Cost (number or formula) ${input(`${edit}.cost`, card.cost ?? '1')}</label>
-          <p class="hint">Using adds this cost to the resource’s spent / accumulated amount.</p>
+          <details class="session-placement"><summary>Placement <small>${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || 'Standard')} · ${Number(card.width) ? `${card.width} column${Number(card.width) === 1 ? '' : 's'}` : 'automatic width'} · ${esc(choiceParent(state,card)?.title || 'standalone')}</small></summary>
+            <div class="session-settings-grid">
+              <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
+              ${widthPicker(card,index)}
+              <label>Choice group <select data-session-membership="${index}"><option value="">Standalone option</option>${state.cards.filter(g => g.kind === 'choice' && g.type === card.type).map(g => `<option value="${esc(g.id)}" ${choiceParent(state,card) === g ? 'selected' : ''}>${esc(g.title || 'Choice group')}</option>`).join('')}</select></label>
+            </div>
+          </details>
+          <fieldset class="session-fields"><legend>Rolls</legend>
+            <div class="session-settings-grid">
+              <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}${fieldError(values, 'attackFormula')}</label>
+              <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}${fieldError(values, 'damageFormula')}</label>
+              <label>Extra attacks (count, or count @ modifier) ${input(`${edit}.extraAttacks`, card.extraAttacks, 'placeholder="e.g. 3, or 1 @ -2, 2 @ -6"')}${fieldError(values, 'extraAttacks')}</label>
+              <label>Attack modifier on every attack ${input(`${edit}.attackModifier`, card.attackModifier, 'placeholder="e.g. -2"')}${fieldError(values, 'attackModifier')}</label>
+              <label>Extra damage on each hit ${input(`${edit}.extraDamage`, card.extraDamage, 'placeholder="e.g. 4d6 or kinetic.fist.simple"')}${fieldError(values, 'extraDamage')}</label>
+              <label>Attack set <select data-session-field="${edit}.attackSet"><option value="">Normal (iteratives on a full round)</option><option value="top" ${card.attackSet === 'top' ? 'selected' : ''}>Highest bonus only (flurry)</option></select></label>
+            </div>
+            <details class="session-help"><summary>How the roll fields work</summary>
+              <p class="hint">Leave a field blank to follow the linked source. Attack takes a number or formula; <code>attack.melee</code> and <code>attack.ranged</code> include current conditions, and custom rolls add nothing else on their own. Damage takes dice plus a formula, such as <code>2d6 + str.mod</code> or <code>{floor(level / 2)}d6</code>, and values defined as dice text. Overrides of either omit the linked weapon’s critical rolls.</p>
+              <p class="hint">Extra attacks repeat the card’s highest attack, each group at its own modifier (<code>1 @ -2, 2 @ -max(0, 4 - essence.shoulders)</code>); counts and modifiers are formulas too. The attack modifier shifts every attack and crit confirmation. Extra damage is a rider: on the Damage roll, and once, unmultiplied, on the crit damage. <em>Highest bonus only</em> drops the reduced-bonus iteratives, as a flurry requires.</p>
+            </details>
+          </fieldset>
+          <fieldset class="session-fields"><legend>Details</legend>
+            <div class="session-settings-grid">
+              ${[['range', 'Range'], ['targets', 'Targets / area'], ['save', 'Save / DC'], ['duration', 'Duration']].map(([key,label]) => `<label>${label} ${input(`${edit}.${key}`, card[key], `placeholder="${esc(String(values[key] || ''))}"`)}</label>`).join('')}
+            </div>
+            <label>Notes <textarea data-session-field="${edit}.note" placeholder="Inline values such as {caster.dc} work here">${esc(card.note || '')}</textarea></label>
+          </fieldset>
+          <fieldset class="session-fields"><legend>Cost</legend>
+            <div class="session-settings-grid">
+              <label>Resource <select data-session-field="${edit}.resource"><option value="">No resource cost</option>
+                ${card.resource && !tracker ? `<option value="${esc(card.resource)}" selected>Missing resource — choose another</option>` : ''}
+                ${model.trackers.map(t => `<option value="${esc(t.id)}" ${card.resource === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+              <label>Cost (number or formula) ${input(`${edit}.cost`, card.cost ?? '1')}</label>
+            </div>
+            <p class="hint">Using adds this cost to the resource’s spent / accumulated amount.</p>
+          </fieldset>
           ${linkEditor(model,card,linkedFeature(model,card)?`feature:${actionFeatures(model).indexOf(linkedFeature(model,card))}`:`card:${index}`)}
           ${button('up', 'Move earlier', `data-index="${index}"`)}
           ${button('down', 'Move later', `data-index="${index}"`)}
