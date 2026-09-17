@@ -23,6 +23,8 @@ attack variants. Give it a title, then drag options into its marked drop area,
 or assign them using **Choice group** in each option's editor. The group displays
 all choice titles as buttons. Clicking one highlights it and opens that option's
 rolls, details and Use button beneath the choices.
+The **Choices** heading collapses the buttons while keeping the selected action
+visible. This setting is saved per group and follows it when dragged.
 Switching choices spends nothing. Edit choice group can add a custom choice or
 ungroup while keeping all options. A group dragged to another action type moves
 all its choices together. Groups cannot be nested. Selection, grouping and order

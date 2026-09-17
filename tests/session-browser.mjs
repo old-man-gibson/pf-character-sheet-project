@@ -115,8 +115,17 @@ run.onclick = async () => {
       assert(find(`[data-session-fold="card:${indexOf('Training sword')}"]`).open,'Choice details not opened');
       assert(JSON.stringify(sheet.model.data.session.spent) === before,'Choosing spent an action');
     });
+    await test('Choice buttons collapse independently and stay collapsed after edits', async () => {
+      find('.session-choice-picker').open = false; await pause();
+      await click('[data-session-command="restore"][data-kind="aoo"]');
+      assert(!find('.session-choice-picker').open,'Choices reopened after edit');
+      assert(find('.session-choice .session-option').textContent.includes('Training sword'),'Selected action disappeared');
+      const button = find('[data-session-choice]');
+      assert(!button.checkVisibility(),'Choice button still visible');
+    });
     await test('Groups drag as a unit, and ungrouping keeps their cards', async () => {
       await drag(indexOf('New choice group'), 'summary[data-session-type-drop="full"]');
+      assert(!find('.session-choice-picker').open,'Dragging lost collapsed choice state');
       assert(sheet.model.data.session.cards[indexOf('Strike')].type === 'full','Child action type not moved');
       assert(sheet.model.data.session.cards[indexOf('Training sword')].type === 'full','Second child not moved');
       await click(`[data-session-command="remove"][data-index="${indexOf('New choice group')}"]`);
