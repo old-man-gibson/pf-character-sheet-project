@@ -141,11 +141,16 @@ export function sessionRolls(model, card, answers = null) {
   attacks.forEach((r, i) => { r.label = attacks.length > 1 ? `Attack ${i + 1}` : 'Attack'; });
   const spec = { name: `${model.data.identity.name} — ${card.title || source?.title || 'Action'}`,
     rolls, notes: (inherited?.notes || []).filter(n => !attack || n.label !== 'Threat'), queries: inherited?.queries || [] };
-  const attackText = attacks.map(r => {
-    const bonus = r.formula.replace(/^1d20(?:cs>\d+)?/, '');
-    return bonus || '+0';
-  }).join(' / ');
-  return { spec, errors, attack: attackText, damage: rolls.find(r => r.label === 'Damage')?.formula || '',
+  const bonuses = attacks.map(r => r.formula.replace(/^1d20(?:cs>\d+)?/, '') || '+0');
+  const attackText = bonuses.join(' / ');
+  // The closed card reads "16 attacks · +40 ×9 · +38 ×2 · +35 · +30 · +25":
+  // equal bonuses gathered, highest first, with how many there are of each.
+  const counts = new Map();
+  bonuses.forEach(b => counts.set(b, (counts.get(b) || 0) + 1));
+  const lead = b => Number(b.match(/^[+-]\d+/)?.[0]) || 0;
+  const grouped = [...counts].sort((a, b) => lead(b[0]) - lead(a[0])).map(([b, n]) => (n > 1 ? `${b} ×${n}` : b)).join(' · ');
+  const attackSummary = attacks.length > 1 ? `${attacks.length} attacks · ${grouped}` : attackText;
+  return { spec, errors, attack: attackText, attackSummary, attackCount: attacks.length, damage: rolls.find(r => r.label === 'Damage')?.formula || '',
     range: card.range || source?.range || '', targets: card.targets || source?.targets || '',
     save: card.save || source?.save || '', duration: card.duration || source?.duration || '' };
 }

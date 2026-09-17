@@ -17,7 +17,19 @@ export function renderSessionBoard(model) {
   const state = sessionState(model), budget = actionBudget(model, state), shortcuts = sessionShortcuts(model);
   const types = (selected) => ACTION_TYPES.map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('');
   const handle = (index, title) => `<button class="session-drag" draggable="true" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
-  const width = card => Math.max(1,Math.min(3,Number(card.width) || (card.links?.length>1?3:(card.links?.length || card.kind==='choice')?2:1)));
+  // Automatic width: one column, two for a choice group, a linked ability or a
+  // routine of more than four attacks (so the attack line does not wrap into a
+  // paragraph), three for several links.
+  const width = (card, attackCount = 0) => Math.max(1,Math.min(3,Number(card.width) || (card.links?.length>1?3:(card.links?.length || card.kind==='choice' || attackCount>4)?2:1)));
+  const typeLabel = { standard: 'Standard', move: 'Move', swift: 'Swift', immediate: 'Immediate', aoo: 'AoO', full: 'Full round', free: 'Free' };
+  const typeTag = card => `<span class="session-type-tag" title="${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || card.type || '')}">${esc(typeLabel[card.type] || card.type || '')}</span>`;
+  // "Attack: …" errors belong under the field they name as well as at the foot of the card.
+  const FIELD_ERRORS = [['attackFormula', 'Attack'], ['damageFormula', 'Damage'], ['extraAttacks', 'Extra attacks'], ['attackModifier', 'Attack modifier'], ['extraDamage', 'Extra damage']];
+  const fieldError = (values, key) => {
+    const prefix = FIELD_ERRORS.find(([k]) => k === key)?.[1];
+    const message = prefix && values.errors.find(e => e.startsWith(`${prefix}:`));
+    return message ? `<small class="session-field-error" role="alert">${esc(message.slice(prefix.length + 1).trim())}</small>` : '';
+  };
   const widthPicker = (card,index) => `<label>Card width<select data-session-field="cards.${index}.width"><option value="">Automatic</option>${[1,2,3].map(n=>`<option value="${n}" ${Number(card.width)===n?'selected':''}>${n} column${n===1?'':'s'}</option>`).join('')}</select></label>`;
   const cardHtml = (card, index) => {
     card = effectiveAction(model,card);
@@ -48,13 +60,13 @@ export function renderSessionBoard(model) {
     const values = sessionRolls(model, card);
     const copy = (part, label) => `<button class="d20" data-roll="session|${index}:${part}" data-rollwhat="${esc(title)}" aria-label="Copy ${label} roll for ${esc(title)}" title="Copy ${label} roll for Roll20" ${values.errors.length ? 'disabled' : ''}>${D20_ICON}</button>`;
     const rollSummary = `<div class="session-roll-values">
-      ${values.attack ? `<span><small>Attack</small><strong>${esc(values.attack)}</strong>${copy('attack', 'attack')}</span>` : ''}
+      ${values.attack ? `<span><small>Attack</small><strong title="${esc(values.attack)}">${esc(values.attackSummary)}</strong>${copy('attack', 'attack')}</span>` : ''}
       ${values.damage ? `<span><small>Damage</small><strong>${esc(values.damage)}</strong>${copy('damage', 'damage')}</span>` : ''}
       </div>`;
-    return `<article class="session-option session-width-${width(card)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
+    return `<article class="session-option session-width-${width(card, values.attackCount)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
       ${handle(index, title)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
-        <summary>${esc(title)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
+        <summary>${esc(title)}${typeTag(card)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
         ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}</p>` : ''}
         ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
@@ -66,11 +78,11 @@ export function renderSessionBoard(model) {
           ${linkedFeature(model,card)?'<p class="hint">Rolls, costs, notes and links below edit the linked class feature in Progression.</p>':''}
           <label>Choice group <select data-session-membership="${index}"><option value="">Standalone option</option>${state.cards.filter(g => g.kind === 'choice' && g.type === card.type).map(g => `<option value="${esc(g.id)}" ${choiceParent(state,card) === g ? 'selected' : ''}>${esc(g.title || 'Choice group')}</option>`).join('')}</select></label>
           <div class="session-settings-grid">
-            <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}</label>
-            <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}</label>
-            <label>Extra attacks (count, or count @ modifier) ${input(`${edit}.extraAttacks`, card.extraAttacks, 'placeholder="e.g. 3, or 1 @ -2, 2 @ -6"')}</label>
-            <label>Attack modifier on every attack ${input(`${edit}.attackModifier`, card.attackModifier, 'placeholder="e.g. -2"')}</label>
-            <label>Extra damage on each hit ${input(`${edit}.extraDamage`, card.extraDamage, 'placeholder="e.g. 4d6"')}</label>
+            <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}${fieldError(values, 'attackFormula')}</label>
+            <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}${fieldError(values, 'damageFormula')}</label>
+            <label>Extra attacks (count, or count @ modifier) ${input(`${edit}.extraAttacks`, card.extraAttacks, 'placeholder="e.g. 3, or 1 @ -2, 2 @ -6"')}${fieldError(values, 'extraAttacks')}</label>
+            <label>Attack modifier on every attack ${input(`${edit}.attackModifier`, card.attackModifier, 'placeholder="e.g. -2"')}${fieldError(values, 'attackModifier')}</label>
+            <label>Extra damage on each hit ${input(`${edit}.extraDamage`, card.extraDamage, 'placeholder="e.g. 4d6"')}${fieldError(values, 'extraDamage')}</label>
             <label>Attack set <select data-session-field="${edit}.attackSet"><option value="">Normal (iteratives on a full round)</option><option value="top" ${card.attackSet === 'top' ? 'selected' : ''}>Highest bonus only (flurry)</option></select></label>
             ${[['range', 'Range'], ['targets', 'Targets / area'], ['save', 'Save / DC'], ['duration', 'Duration']].map(([key,label]) => `<label>${label} ${input(`${edit}.${key}`, card[key], `placeholder="${esc(String(values[key] || ''))}"`)}</label>`).join('')}
           </div>

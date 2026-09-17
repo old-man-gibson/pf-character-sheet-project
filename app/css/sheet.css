@@ -443,6 +443,12 @@
 .session-drop-inside { outline: 2px solid var(--cs-accent); outline-offset: -2px; background: var(--cs-accent-soft); }
 .session-option > details > summary { cursor: pointer; padding: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .session-option summary small { display: block; color: var(--cs-muted); font-weight: 400; margin-top: 6px; }
+/* The action type on the card itself, in the counter tiles' colour, so a
+   folded card and a card inside a choice group still say what they spend. */
+.session-type-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--cs-accent); background: var(--cs-accent-soft); vertical-align: 2px; white-space: nowrap; }
+.session-field-error { color: var(--cs-bad); font-size: .75rem; line-height: 1.35; }
+.session-editor label:has(.session-field-error) input { border-color: var(--cs-bad); }
 .session-option-use { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; }
 .session-roll-values { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 0 14px 12px; }
 .session-roll-values > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }

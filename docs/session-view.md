@@ -31,7 +31,10 @@ all its choices together. Groups cannot be nested. Selection, grouping and order
 are saved with the character; layout edits can be undone.
 
 Attack and damage values stay visible on closed cards, with separate Roll20 copy
-buttons. Linked weapons use the same condition-adjusted rolls as the sheet. Any
+buttons. A routine of several attacks is summarised by bonus, highest first
+(`16 attacks · +40 ×9 · +38 ×2 · +35 · +30 · +25`); the full list is the tooltip
+and what the copy contains. Each card carries its action type as a tag, and a
+formula error appears under the field it belongs to as well as on the card. Linked weapons use the same condition-adjusted rolls as the sheet. Any
 option can have an attack formula (`attack.melee`, `bab + dex.mod`, or `12`) and a
 damage expression (`2d6 + str.mod`, or `{floor(level / 2)}d6`). Add dice with plus
 or minus; put calculated dice counts in braces. A value the character defines as
@@ -132,8 +135,8 @@ Pending steps survive saving and reloading. Missing targets and cycles cannot
 spend costs, and can be recovered through editing, Undo, or cancellation.
 These links record player-configured rules; they do not interpret feat text.
 
-Cards use one column by default, two for choice groups or linked abilities, and
-three for multiple links. The card editor can override this with **1, 2, or 3
+Cards use one column by default, two for choice groups, linked abilities or a
+routine of more than four attacks, and three for multiple links. The card editor can override this with **1, 2, or 3
 columns**. Spans shrink automatically when the available screen space is narrow.
 
 ## Chain checks
