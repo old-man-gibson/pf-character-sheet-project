@@ -104,6 +104,8 @@ export function describeSource(path) {
     case 'other': return `gear ${nth(a)}`;
     case 'gearNote':
     case 'otherNote': return `gear ${nth(a)}, description`;
+    case 'gearBonus':
+    case 'otherBonus': return `gear ${nth(a)}, bonus ${nth(b)}`;
     case 'talent':
     case 'bonusTalent': return `a ${a} talent`;
     case 'tradition': return `${a} tradition`;

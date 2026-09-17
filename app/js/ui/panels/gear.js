@@ -23,7 +23,7 @@ import { group, pct, round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
   CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
-  CRAFT_TIME_BASES, GEAR_BONUS_TYPES, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
+  CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt,
 } from '../../rules.js';
@@ -35,7 +35,7 @@ import {
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
-import { itemArea } from '../prose.js';
+import { itemArea, prose } from '../prose.js';
 
 export function renderGearPanel(model, ctx) {
     const c = model.data;
@@ -47,6 +47,7 @@ export function renderGearPanel(model, ctx) {
       ${gearSlotsPanel(model, ctx, e)}
       ${otherItemsPanel(model, ctx, e)}
       ${loadPanel(model, e)}
+      ${gearTargetList(model)}
     </div>`;
   }
 
@@ -347,6 +348,7 @@ function armorPanel(e) {
       <td data-stack="head">${esc(piece.kind || 'Armor')}</td>
       <td data-stack="name">${text(`${path}.name`, piece.name)}</td>
       <td class="num" data-label="AC">${num(`${path}.acBonus`, piece.acBonus, 'style="width:3.2rem"')}</td>
+      <td class="num" data-label="Enhancement">${num(`${path}.enhancement`, piece.enhancement, 'style="width:3.2rem"')}</td>
       <td class="num" data-label="Max Dex"><input type="number" value="${piece.maxDex ?? ''}" placeholder="—"
         data-set="${path}.maxDex" data-kind="number-or-null" style="width:3.2rem"></td>
       <td class="num" data-label="Armor check penalty">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
@@ -360,7 +362,9 @@ function armorPanel(e) {
       <h3>Armor &amp; shields</h3>
       <div class="tablewrap"><table class="armor stacked">
         <thead><tr><th title="Worn — counts toward AC">On</th><th></th><th>Name</th>
-          <th class="num">AC</th><th class="num">Max Dex</th><th class="num">ACP</th>
+          <th class="num" title="The piece's own bonus">AC</th>
+          <th class="num" title="Its enhancement bonus: a +1 breastplate is AC 6, Enh. 1">Enh.</th>
+          <th class="num">Max Dex</th><th class="num">ACP</th>
           <th>Type</th><th>Ghost</th><th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>
         <tbody>
           ${row(e.armor || {}, 'equipment.armor')}
@@ -369,28 +373,78 @@ function armorPanel(e) {
         </tbody>
       </table></div>
       <div style="margin-top:8px">${addButton('equipment.shields', 'Add shield', {
-        kind: 'Shield', name: '', acBonus: 0, maxDex: null, acp: 0, type: '',
+        kind: 'Shield', name: '', acBonus: 0, enhancement: 0, maxDex: null, acp: 0, type: '',
         ghostTouch: false, others: [], weight: 0, cost: 0, active: false,
       })}</div>
       <p class="hint">
         Worn pieces feed AC, cap the AC stat at the lowest Max Dex, and apply their
-        armor check penalty to flagged skills — all live.
+        armor check penalty to flagged skills — all live. A piece's enhancement adds to
+        its own bonus, so a +1 breastplate is AC 6 and Enh. 1.
       </p>
     </section>`;
+  }
+
+/** The bonus types as the row prints them: short in the cell, whole on hover. */
+const GEAR_TYPE_OPTIONS = GEAR_BONUS_TYPES.map((t) => [t, GEAR_BONUS_TYPE_SHORT[t] || t, t]);
+
+/** Which prose-source family a list's bonuses are read under. */
+const bonusHead = (list) => (list === 'equipment.gear' ? 'gearBonus' : 'otherBonus');
+
+/**
+ * What one bonus came to, and what is wrong with it if anything: the amount
+ * as the model worked it out (see gearBonusCalc in stats/attacks.js), and a
+ * destination the resolver could not place, told apart so each complaint sits
+ * on the cell it is about.
+ */
+function bonusStatus(model, list, i, bi) {
+    const path = `${bonusHead(list)}:${i}:${bi}`;
+    const calc = model.gearBonusCalc?.get?.(path) || null;
+    const targetError = (model.contributions?.errors || [])
+      .find((er) => er.path === path && er.target)?.error || null;
+    return {
+      value: calc?.value ?? null,
+      error: calc?.error && calc.error !== targetError ? calc.error : null,
+      targetError,
+    };
+  }
+
+/** The raw amount as text for its box: a number as itself, a formula as written. */
+const bonusSource = (v) => (v === null || v === undefined ? '' : String(v));
+
+/**
+ * The three cells of one bonus: how much, what kind, where it goes.
+ *
+ * The amount takes a formula, and shows what it came to the way every other
+ * formula field does. The destination is any name a forwarded bonus can be
+ * aimed at -- the same list the Formulas tab offers -- so "AC", "Will" and
+ * "skill.bluff" all land, and one that does not is marked on the cell.
+ */
+function bonusCells(model, list, i, bi, g, { wide = false } = {}) {
+    const b = g.bonuses?.[bi] || {};
+    const st = bonusStatus(model, list, i, bi);
+    const target = String(b.target ?? '');
+    return `
+      <td class="num bval" data-label="Bonus ${bi + 1}">${exprField(`data-item="${list}|${i}|bonuses.${bi}.value"`,
+    bonusSource(b.value), {
+      kind: 'expr-or-null', width: wide ? '4.4rem' : '3.6rem', placeholder: '—',
+      value: st.value, error: st.error, title: 'A number, or a formula like floor(level / 4)',
+    })}</td>
+      <td class="btype" data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, b.type, GEAR_TYPE_OPTIONS)}</td>
+      <td class="bto" data-label="Bonus ${bi + 1} to"><input type="text" class="target${st.targetError ? ' invalid' : ''}"
+        value="${esc(target)}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
+        list="gear-targets" placeholder="AC, Will…" title="${esc(st.targetError
+    || (target.trim() ? `Forwarded to ${target.trim()}` : 'Where the bonus goes: AC, a save, a skill, an ability score…'))}"></td>`;
   }
 
 /**
  * One item, as a row.
  *
  * The bonus and Other columns are as many as the table has, not the three and
- * four the workbook happened to be wide -- see gearColumnCount. The caret in
- * the first cell opens the row's detail card underneath it.
+ * four the workbook happened to be wide -- see gearColumnCount. Each bonus is
+ * three cells -- amount, type, destination -- and the caret in the first cell
+ * opens the row's detail card underneath it.
  */
 function gearRow(model, ctx, list, i, g, cols, tools) {
-    const bonus = (bi) => `
-      <td class="num" data-label="Bonus ${bi + 1}"><input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
-        data-item="${list}|${i}|bonuses.${bi}.value" data-kind="number-or-null" style="width:3rem"></td>
-      <td data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</td>`;
     const key = `${list}|${i}`;
     const open = ctx.openGear === key;
     const label = String(g.name || '').trim() || g.slot || 'this item';
@@ -399,14 +453,27 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
         title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
         aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
         >${esc(g.slot ?? '')}</td>
-      <td data-stack="name">${itemText(list, i, 'name', g.name)}</td>
-      ${Array.from({ length: cols.bonuses }, (_, bi) => bonus(bi)).join('')}
-      ${Array.from({ length: cols.others }, (_, oi) => `<td data-label="Other ${oi + 1}">${itemText(list, i, `others.${oi}`, g.others?.[oi])}</td>`).join('')}
-      <td class="num" data-label="Weight">${itemNum(list, i, 'weight', g.weight)}</td>
-      <td class="num" data-label="Cost">${itemNum(list, i, 'cost', g.cost)}</td>
+      <td class="name" data-stack="name">${itemText(list, i, 'name', g.name, '', true)}</td>
+      ${Array.from({ length: cols.bonuses }, (_, bi) => bonusCells(model, list, i, bi, g)).join('')}
+      ${Array.from({ length: cols.others }, (_, oi) => `<td class="other" data-label="Other ${oi + 1}">${itemText(list, i, `others.${oi}`, g.others?.[oi], '', true)}</td>`).join('')}
+      <td class="num wt" data-label="Weight">${itemNum(list, i, 'weight', g.weight)}</td>
+      <td class="num cost" data-label="Cost">${itemNum(list, i, 'cost', g.cost)}</td>
       ${tools || '<td></td>'}
     </tr>
     ${open ? gearCard(model, list, i, g, cols) : ''}`;
+  }
+
+/** How many cells a row of this width has, so a full-width row can span them. */
+const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others;
+
+/**
+ * Every destination a bonus can be aimed at, as the `<datalist>` the To
+ * cells pick from. One per tab rather than one per cell: a datalist is found
+ * by id, and both gear tables point at the same one.
+ */
+function gearTargetList(model) {
+    return `<datalist id="gear-targets">${(model.forwardTargetList || [])
+      .map((t) => `<option value="${esc(t.name)}">${esc(t.label || '')}</option>`).join('')}</datalist>`;
   }
 
 /**
@@ -435,7 +502,7 @@ function gearHead(list, cols, inUse, armed) {
     const bonusHeads = Array.from({ length: cols.bonuses }, (_, bi) => {
       const last = bi === cols.bonuses - 1;
       return `
-      <th class="num">B${bi + 1}</th><th${last ? ' class="colhead"' : ''}>Type${last ? step('bonuses', 'bonus') : ''}</th>`;
+      <th class="num" title="Bonus ${bi + 1}: how much — a number or a formula">B${bi + 1}</th><th title="What kind of bonus">Type</th><th${last ? ' class="colhead"' : ''} title="Where it goes">To${last ? step('bonuses', 'bonus') : ''}</th>`;
     }).join('');
     const otherHeads = Array.from({ length: cols.others }, (_, oi) => {
       const last = oi === cols.others - 1;
@@ -464,15 +531,15 @@ function gearCols(rows) {
  * wants to record -- what the item *is*, what it does, where it came from.
  * So the row stays the index and this is the entry: the same fields at a
  * legible size, every bonus and Other column labelled rather than numbered,
- * and a description that takes formulas like the rest of the sheet's prose.
+ * and a description that takes formulas like the rest of the sheet's prose
+ * and grows to hold whatever is written in it.
  *
  * It is a row of the same table, pushing the items below it down, so the
  * item stays where it was in the list while it is open.
  */
 function gearCard(model, list, i, g, cols) {
-    const span = 4 + cols.bonuses * 2 + cols.others;
     const label = String(g.name || '').trim() || g.slot || 'this item';
-    return `<tr class="gearcardrow"><td colspan="${span}">
+    return `<tr class="gearcardrow"><td colspan="${gearSpan(cols)}">
       <div class="gearcard">
         <div class="gearcardhead">
           <h4>${esc(label)}</h4>
@@ -486,23 +553,22 @@ function gearCard(model, list, i, g, cols) {
           ${field('Cost', itemNum(list, i, 'cost', g.cost))}
         </div>
         <h5>Bonuses</h5>
-        <div class="fieldgrid gearbonuses">
-          ${Array.from({ length: cols.bonuses }, (_, bi) => field(`Bonus ${bi + 1}`, `<span class="pair">
-            <input type="number" value="${g.bonuses?.[bi]?.value ?? ''}" placeholder="—"
-              data-item="${list}|${i}|bonuses.${bi}.value" data-kind="number-or-null" style="width:3.4rem"
-              aria-label="Bonus ${bi + 1} value">
-            ${itemSelect(list, i, `bonuses.${bi}.type`, g.bonuses?.[bi]?.type, GEAR_BONUS_TYPES)}</span>`)).join('')}
-        </div>
+        <table class="gearbonuses"><thead><tr>
+          <th></th><th class="num">Amount</th><th>Type</th><th>To</th></tr></thead>
+        <tbody>${Array.from({ length: cols.bonuses }, (_, bi) => `<tr>
+          <th scope="row">Bonus ${bi + 1}</th>${bonusCells(model, list, i, bi, g, { wide: true })}</tr>`).join('')}
+        </tbody></table>
         <h5>Other properties</h5>
         <div class="fieldgrid">
           ${Array.from({ length: cols.others }, (_, oi) => field(`Other ${oi + 1}`,
     itemText(list, i, `others.${oi}`, g.others?.[oi]))).join('')}
         </div>
         <h5>Description</h5>
-        ${itemArea(model, list, i, 'note', g.note, 4)}
+        ${prose(model, `data-item="${list}|${i}|note"`, g.note, 3, 'grow')}
         <p class="hint">The description resolves <code>{name = expr}</code> like any other prose
           on the sheet, so an item that grants a pool can define it here — and the Other
-          columns read formulas too.</p>
+          columns read formulas too. A bonus with an amount, a type and a To is forwarded
+          there: it stacks with other bonuses the way its type says.</p>
       </div>
     </td></tr>`;
   }
@@ -527,11 +593,12 @@ function gearSlotsPanel(model, ctx, e) {
     bonuses: gearColumnInUse(e.gear, 'bonuses'), others: gearColumnInUse(e.gear, 'others'),
   }, ctx.armedGearCol)}
         <tbody>${rows.map(({ g, i }) => gearRow(model, ctx, 'equipment.gear', i, g, cols)).join('')
-    || `<tr><td colspan="${4 + cols.bonuses * 2 + cols.others}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
+    || `<tr><td colspan="${gearSpan(cols)}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
       </table></div>
-      <p class="hint">Typed bonuses (value + bonus type) and freeform properties, as many
-        columns of each as you need — the ± on the last of each family adds or drops one
-        across every row. Click an item's ▸ to open it out with room to describe it.</p>
+      <p class="hint">Typed bonuses (amount, type, and where it goes — the amount takes a
+        formula) and freeform properties, as many columns of each as you need — the ± on
+        the last of each family adds or drops one across every row. Click an item's ▸ to
+        open it out with room to describe it.</p>
     </section>`;
   }
 
@@ -549,7 +616,7 @@ function otherItemsPanel(model, ctx, e) {
       <div style="margin-top:8px">${addButton('equipment.other', 'Add item', {
         slot: 'Other',
         name: '',
-        bonuses: Array.from({ length: cols.bonuses }, () => ({ value: null, type: null })),
+        bonuses: Array.from({ length: cols.bonuses }, () => ({ value: null, type: null, target: null })),
         others: Array.from({ length: cols.others }, () => null),
         weight: 0,
         cost: 0,

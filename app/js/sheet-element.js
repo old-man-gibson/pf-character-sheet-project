@@ -389,6 +389,14 @@ function readControl(input) {
     if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
     return raw;
   }
+  if (kind === 'expr-or-null') {
+    // The same, where an empty box means "nothing here" rather than zero: a
+    // gear bonus left blank is a column not in use, not a bonus of 0.
+    const raw = String(input.value).trim();
+    if (raw === '') return null;
+    if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
+    return raw;
+  }
   return input.value;
 }
 

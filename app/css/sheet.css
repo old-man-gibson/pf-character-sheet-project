@@ -2466,9 +2466,38 @@ table.gear tr.gearcardrow > td { padding: 0; }
   letter-spacing: 0.08em; color: var(--cs-accent); font-weight: 650;
 }
 .gearcard .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
-.gearcard .gearbonuses .pair { gap: 5px; }
-.gearcard .gearbonuses select { flex: 1; min-width: 0; }
+/* The card's bonuses as a small table of their own: amount, type, To, one
+   row each, the row label where the column number was. */
+.gearcard table.gearbonuses { width: auto; margin-bottom: 4px; }
+.gearcard table.gearbonuses th[scope="row"] {
+  text-align: left; font-size: 0.72rem; color: var(--cs-muted); white-space: nowrap;
+  text-transform: none; letter-spacing: 0;
+}
+.gearcard table.gearbonuses td.btype select { width: auto; min-width: 7rem; }
+.gearcard table.gearbonuses td.bto input.target { width: 12rem; }
 .gearcard textarea { width: 100%; }
+/* The description grows with what is written (see the `.prose.grow` binding
+   in sheet-element.js), and starts at three lines so an empty one still
+   reads as a place to write. */
+.gearcard .prose.grow textarea { min-height: 66px; }
+.gearcard .prose.grow .prose-view { min-height: 66px; font-size: 0.85rem; padding: 4px 7px; }
+
+/* The row's cells, sized to what they hold. Nothing weighs more than a
+   thousand pounds or costs more than a million, an item's name is read in
+   full on its card, and a bonus type is a short word -- so none of these
+   needs the width an unsized box takes in an auto-layout table. */
+table.gear td.name input { width: 9rem; min-width: 7rem; }
+table.gear td.other input { width: 7rem; min-width: 5rem; }
+table.gear td.wt input { width: 3.6rem; }
+table.gear td.cost input { width: 5rem; }
+table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
+table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
+table.gear td.bto input.target { width: 6.5rem; min-width: 5rem; }
+table.gear th.num, table.gear td.bval { text-align: center; }
+/* A destination the sheet cannot place: said on the cell, and on its tooltip. */
+table.gear input.target.invalid, .gearcard input.target.invalid {
+  border-color: var(--cs-bad); color: var(--cs-bad);
+}
 /* The ± that widens or narrows a family of columns, tucked into the last
    header cell of that family so the control stands where the column would.
    Small and quiet: it is furniture, not one of the row's own fields. */

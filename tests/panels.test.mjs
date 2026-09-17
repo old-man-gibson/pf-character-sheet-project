@@ -368,6 +368,38 @@ console.log('\nthe unarmed practitioner table folds, and the shared increases do
   ok('the shared increases were never inside the fold', seen().shared);
 }
 
+console.log('\nthe gear table: three cells a bonus, and the card grows with its description');
+{
+  const c = new Character(blankDocument('Gear Test'));
+  c.setItem('equipment.gear', 0, 'name', 'Ring of protection');
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 'floor(level / 4) + 1');
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Deflection');
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', 'ac.total');
+  c.setItem('equipment.gear', 0, 'bonuses.1.value', 1);
+  c.setItem('equipment.gear', 0, 'bonuses.1.target', 'nowhere.at.all');
+  const html = gear.renderGearPanel(c, { showAllGear: false });
+  const at = html.indexOf('<table class="gear');
+  const head = html.slice(at, html.indexOf('<tbody>', at));
+  ok('the header reads B1, Type, To for each bonus', (head.match(/>To</g) || []).length === 3 && /B1<\/th>/.test(head));
+  ok('the amount is a formula field showing what it came to',
+    /data-item="equipment\.gear\|0\|bonuses\.0\.value" data-kind="expr-or-null"/.test(html)
+      && /class="xf-view"[^>]*>1</.test(html));
+  ok('the type picker shows the short form and keeps the whole name',
+    /<option value="Deflection" title="Deflection"[^>]*selected>Defl\.</.test(html));
+  ok('the To cell picks from the destinations list', /list="gear-targets"/.test(html)
+    && /<datalist id="gear-targets">.*<option value="ac\.total">/.test(html));
+  ok('a destination the sheet cannot place is marked on its cell',
+    /class="target invalid"[^>]*value="nowhere\.at\.all"/.test(html));
+  ok('and a placed one is not', /class="target"[^>]*value="ac\.total"/.test(html));
+
+  const open = gear.renderGearPanel(c, { showAllGear: false, openGear: 'equipment.gear|0' });
+  ok('the open card lists the bonuses as rows of amount, type, To', /<table class="gearbonuses">/.test(open)
+    && (open.match(/<th scope="row">Bonus \d<\/th>/g) || []).length === 3);
+  ok('and its description is a growing prose field', /<span class="prose  grow"[^>]*>\s*<textarea data-item="equipment\.gear\|0\|note"/.test(open));
+  const span = Number(open.match(/gearcardrow"><td colspan="(\d+)"/)?.[1]);
+  ok('the card spans exactly the row’s cells', span === 5 + 3 * 3 + 4);
+}
+
 if (hasFixtures()) {
   console.log('\nevery character on the roster, every panel');
   for (const id of fixtureIds()) sweep(id, new Character(loadCharacter(id)));

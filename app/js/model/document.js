@@ -1290,12 +1290,16 @@ export function normalise(model) {
   }
   if (!Array.isArray(e.shields)) e.shields = e.shield ? [e.shield] : [];
   delete e.shield;
-  if (!e.armor) e.armor = { kind: 'Armor', name: null, acBonus: 0, maxDex: null, acp: 0, others: [], weight: 0, cost: 0 };
+  if (!e.armor) e.armor = { kind: 'Armor', name: null, acBonus: 0, enhancement: 0, maxDex: null, acp: 0, others: [], weight: 0, cost: 0 };
   if (!Array.isArray(e.weapons)) e.weapons = [];
-  // Worn pieces count toward AC; extra shields start stowed.
+  // Worn pieces count toward AC; extra shields start stowed. Every piece
+  // takes an enhancement bonus beside its own: a document from before the
+  // column existed reads +0.
   if (e.armor.active === undefined) e.armor.active = !!(e.armor.name || e.armor.acBonus);
+  if (e.armor.enhancement === undefined) e.armor.enhancement = 0;
   e.shields.forEach((s, i) => {
     if (s.active === undefined) s.active = i === 0 && !!(s.name || s.acBonus);
+    if (s.enhancement === undefined) s.enhancement = 0;
   });
   for (const w of e.weapons) {
     if (w.useUnarmedDice === undefined) {

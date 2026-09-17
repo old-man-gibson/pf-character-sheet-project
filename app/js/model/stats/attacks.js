@@ -477,6 +477,49 @@ export function recomputeEquipment(model) {
     ].filter(Boolean).join('');
   }
 
+  // What each gear bonus comes to, keyed the way its prose source is
+  // (`gearBonus:3:0`), on the model rather than the row: it is worked out,
+  // not written, and a saved document has no business carrying it.
+  //
+  // A bonus that is aimed somewhere has already been read as a forwarded
+  // bonus (see proseSources), so its amount and any complaint about it are
+  // taken from there -- the number shown in the row has to be the number
+  // that arrived, or the row lies. One aimed nowhere is worked out here so
+  // the row can still show what a formula in it comes to.
+  const calc = new Map();
+  const byPath = new Map((model.contributions?.entries || []).map((en) => [en.path, en]));
+  const bonusErrors = new Map();
+  for (const er of model.contributions?.errors || []) {
+    if (er.path && !bonusErrors.has(er.path)) bonusErrors.set(er.path, er.error);
+  }
+  for (const [head, rows] of [['gearBonus', e.gear], ['otherBonus', e.other]]) {
+    (rows || []).forEach((g, i) => (g?.bonuses || []).forEach((b, bi) => {
+      const path = `${head}:${i}:${bi}`;
+      const raw = b?.value;
+      const expr = raw === null || raw === undefined ? '' : String(raw).trim();
+      if (!expr) return;
+      const entry = byPath.get(path);
+      if (entry) {
+        calc.set(path, { value: entry.value, error: entry.error || bonusErrors.get(path) || null });
+        return;
+      }
+      if (/[{}]/.test(expr)) {
+        calc.set(path, { value: null, error: 'Braces do not belong in an amount: write the formula bare.' });
+        return;
+      }
+      if (/^-?\d+(\.\d+)?$/.test(expr)) {
+        calc.set(path, { value: Number(expr), error: null });
+        return;
+      }
+      try {
+        calc.set(path, { value: Math.trunc(Number(evalFormula(expr)) || 0), error: null });
+      } catch (err) {
+        calc.set(path, { value: null, error: err.message });
+      }
+    }));
+  }
+  model.gearBonusCalc = calc;
+
   // Carried weight: every section's weights, plus a manual adjustment that
   // reconciles the imported figure.
   const sum = (arr, key = 'weight') => (arr || []).reduce((t, x) => t + (Number(x[key]) || 0), 0);
@@ -508,7 +551,7 @@ export function recomputeEquipment(model) {
  * ------------------------------------------------------------------ */
 
 /** An empty cell of each kind, so adding a column adds the right shape. */
-const GEAR_COLUMN_BLANK = { bonuses: () => ({ value: null, type: null }), others: () => null };
+const GEAR_COLUMN_BLANK = { bonuses: () => ({ value: null, type: null, target: null }), others: () => null };
 
 /** The floor: a table with no columns at all has nothing to fill in. */
 const GEAR_COLUMN_MIN = { bonuses: 1, others: 1 };
@@ -530,8 +573,11 @@ export function gearColumnInUse(rows, kind) {
   return (rows || []).some((g) => {
     const cell = g?.[kind]?.[at];
     if (cell === null || cell === undefined || cell === '') return false;
-    // A bonus is two boxes; either one written on is the column being used.
-    if (kind === 'bonuses') return cell.value != null && cell.value !== '' ? true : !!cell.type;
+    // A bonus is three boxes; any one written on is the column being used.
+    if (kind === 'bonuses') {
+      return (cell.value != null && cell.value !== '') || !!cell.type
+        || !!String(cell.target ?? '').trim();
+    }
     return true;
   });
 }
