@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Character } from '../app/js/model.js';
+import { Character, setManeuverCatalogue, setVeilCatalogue } from '../app/js/model.js';
 import { blankDocument } from '../app/js/convert.js';
 import { actionBudget, sessionState, useSessionAction, advanceTurn, sessionShortcuts } from '../app/js/model/session.js';
 import { renderSessionBoard } from '../app/js/ui/panels/session.js';
@@ -74,4 +74,28 @@ m.set('featGroups', [{ name: 'Level Up', entries: [{ name: 'Power Attack', detai
 const abilityTitles = sessionShortcuts(m).filter(s => s.kind === 'ability').map(s => s.title);
 assert.ok(abilityTitles.includes('Power Attack'), 'feats are linkable');
 assert.ok(!abilityTitles.includes('Level Up'), 'feat group names are slots, not abilities');
+// Maneuvers and veils take their card from the catalogues, and a maneuver is offered under its own action.
+setManeuverCatalogue({ disciplines: [{ name: 'Black Seraph', entries: [
+  { level: 1, kind: 'maneuver', name: 'Gutstrike', type: 'Strike', action: 'Standard', range: 'Melee attack', target: 'One creature', duration: '1 round', save: 'Fortitude negates', dc: '{= 11 + wis.mod}', text: 'Make an attack.' },
+  { level: 1, kind: 'stance', name: 'Savage Stance', type: 'Stance', action: 'Swift', range: 'Personal', target: 'You', duration: 'Stance', text: 'A stance.' },
+  { level: 2, kind: 'maneuver', name: 'Odd Trick', type: 'Boost', action: 'See text', text: 'Read it.' }] }] });
+setVeilCatalogue({ veils: [{ name: "Marilith's Aspect", slot: 'Shoulders', descriptor: 'Fleshwarp', text: 'Grow two arms.' }] });
+m.set('maneuvers.disciplines', [{ name: 'Black Seraph', known: ['Gutstrike', 'Savage Stance', 'Odd Trick'] }]);
+m.set('akashic.slots', [{ slot: 'Shoulders', veils: [{ name: "Marilith's Aspect", essence: 2 }] }]);
+const byKey = key => sessionShortcuts(m).find(s => s.key === key);
+assert.deepEqual([byKey('maneuver:Gutstrike').actionType, byKey('maneuver:Savage Stance').actionType, byKey('maneuver:Odd Trick').actionType], ['standard', 'swift', ''], 'the catalogue action decides the group');
+assert.equal(byKey('maneuver:Gutstrike').note, 'Make an attack.', 'the card carries the rules text alone; the facts have their own row');
+assert.equal(byKey('maneuver:Gutstrike').detail, 'Strike · Standard action · Black Seraph');
+assert.equal(byKey('maneuver:Gutstrike').save, 'Fortitude negates · DC {= 11 + wis.mod}');
+assert.equal(byKey("veil:Marilith's Aspect").note, 'Grow two arms.', 'a shaped veil reads from the veil catalogue');
+assert.equal(byKey("veil:Marilith's Aspect").detail, 'Shoulders · Fleshwarp');
+assert.ok(!sessionShortcuts(m).some(s => s.key === "ability:Marilith's Aspect"), 'and is not also listed as a bare ability');
+const pickers = Object.fromEntries([...renderSessionBoard(m).matchAll(/<select data-session-shortcut="(\w+)"[^>]*>(.*?)<\/select>/gs)].map(x => [x[1], x[2]]));
+assert.ok(pickers.standard.includes('maneuver:Gutstrike') && !pickers.swift.includes('maneuver:Gutstrike'), 'a standard strike is offered under Standard only');
+assert.ok(pickers.swift.includes('maneuver:Savage Stance') && !pickers.standard.includes('maneuver:Savage Stance'), 'a stance under Swift only');
+assert.ok(pickers.standard.includes('maneuver:Odd Trick') && pickers.free.includes('maneuver:Odd Trick'), 'an unplaceable action is offered everywhere');
+assert.ok(pickers.standard.includes("veil:Marilith") && pickers.swift.includes("veil:Marilith"), 'a veil is offered everywhere');
+m.set('session.cards', [{ title: 'Gutstrike', type: 'swift', source: 'maneuver:Gutstrike' }]);
+assert.match(renderSessionBoard(m), /normally a standard action/, 'a moved maneuver says what it normally costs');
+setManeuverCatalogue({ disciplines: [] }); setVeilCatalogue({ veils: [] });
 console.log('Session actions: relationships, formulas, costs, undo, persistence and shortcuts passed');

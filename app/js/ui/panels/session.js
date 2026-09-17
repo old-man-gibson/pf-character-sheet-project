@@ -67,7 +67,7 @@ export function renderSessionBoard(model) {
       ${handle(index, title)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
         <summary>${esc(title)}${typeTag(card)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
-        ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}</p>` : ''}
+        ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}${source.detail ? ` — ${esc(source.detail)}` : ''}${source.actionType && source.actionType !== card.type ? ` <em>(normally a ${esc((ACTION_TYPES.find(([k]) => k === source.actionType)?.[1] || source.actionType).toLowerCase())} action)</em>` : ''}</p>` : ''}
         ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
         ${values.spec.rolls.length ? `<div class="session-source">Copy all rolls ${copy('all', 'all')}</div>` : ''}
@@ -148,7 +148,7 @@ export function renderSessionBoard(model) {
         <div class="session-options" data-session-type-drop="${key}">${cards.map(({ c, i }) => cardHtml(c, i)).join('')}<div class="session-type-drop">Drop here to place an option at the end</div></div>
         <div class="session-add">${button('add', '+ Custom option', `data-kind="${key}"`)}
           ${button('choice-add', '+ Choice group', `data-kind="${key}"`)}
-          <select data-session-shortcut="${key}" aria-label="Add ${label} shortcut"><option value="">+ Link an attack or ability…</option>${shortcuts.map(s => `<option value="${esc(s.key)}">${esc(s.kind)} · ${esc(s.title)}</option>`).join('')}</select></div>
+          <select data-session-shortcut="${key}" aria-label="Add ${label} shortcut"><option value="">+ Link an attack or ability…</option>${shortcuts.filter(s => !s.actionType || s.actionType === key).map(s => `<option value="${esc(s.key)}">${esc(s.kind)} · ${esc(s.title)}${s.detail ? ` (${esc(s.detail)})` : ''}</option>`).join('')}</select></div>
       </details>`;
     }).join('')}</div>
     <p class="hint">Drag by ⠿ to reorder, move between action types, or drop into a choice group. A group shows only the selected option; choosing it spends nothing. Use spends that option’s action and resource. Undo restores edits.</p>

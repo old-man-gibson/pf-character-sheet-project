@@ -8,8 +8,13 @@ The automatic arrangement puts resources immediately below health.
 ## Options and turns
 
 Add custom options or link attacks, feats, talents, veils and known maneuvers from
-the selectors under each action group. Choose the action type yourself; unusual
-abilities and house rules can change it. Titles open details; **Edit option** groups
+the selectors under each action group. A known maneuver or stance is offered only
+under the action its catalogue entry initiates with (a Standard strike under
+Standard, a stance under Swift), and the card takes the entry's type, discipline,
+range, target, duration, save and rules text; a veil takes its chakra, descriptor
+and text from the veil catalogue. Everything else asks you to choose the action
+type yourself; unusual abilities and house rules can still move a card, and a
+moved maneuver says which action it is normally initiated with. Titles open details; **Edit option** groups
 the fields as Rolls, Details and Cost, with Placement (action type, card width,
 choice group) folded above them and the formula notes behind *How the roll fields
 work*. The tracker cost is a number or formula.

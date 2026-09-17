@@ -1,6 +1,12 @@
 import { evaluateFormula } from '../formula.js';
 import { forwarded } from './scope.js';
 import { maneuverDetails } from './subsystems/maneuvers.js';
+import { veilEntry } from './subsystems/akashic.js';
+
+// A maneuver's catalogue "Action" as the session's action type. Anything else
+// ("See text") leaves the card free to be placed by hand.
+const MANEUVER_ACTION_TYPES = { 'full-round': 'full', standard: 'standard', move: 'move', swift: 'swift', immediate: 'immediate', free: 'free' };
+export const maneuverActionType = action => MANEUVER_ACTION_TYPES[String(action || '').trim().toLowerCase().replace(/\s+action$/, '')] || '';
 import { executeChainAction } from './session-chains.js';
 import { actionFeatures } from './action-features.js';
 
@@ -125,12 +131,29 @@ export function sessionShortcuts(model) {
   };
   // Feat groups are slots ("Level Up", "Class"), not abilities: only their entries count.
   for (const group of model.data.featGroups || []) walk(group.entries);
-  for (const key of ['grantedFeats', 'akashic', 'templates', 'training']) walk(model.data[key]);
+  // A shaped veil is its own kind, read from the veil catalogue: the slot row
+  // holds only a name and essence, the catalogue holds the text.
+  const { slots: veilSlots, ...akashicRest } = model.data.akashic || {};
+  for (const slot of veilSlots || []) {
+    for (const veil of slot.veils || []) {
+      const entry = veilEntry(veil?.name);
+      add('veil', veil?.name, entry?.text || '', { detail: [slot.slot, entry?.descriptor].filter(Boolean).join(' · ') });
+    }
+  }
+  for (const key of ['grantedFeats', 'templates', 'training']) walk(model.data[key]);
+  walk(akashicRest);
+  // A known maneuver or stance carries its catalogue card: the action it is
+  // initiated with decides which group offers it, and the rest fills the card.
   for (const discipline of model.data.maneuvers?.disciplines || []) {
     for (const name of discipline.known || []) {
       const entry = maneuverDetails(discipline, name);
-      const note = [entry.action, entry.range, entry.target, entry.duration, entry.text].filter(Boolean).join('\n');
-      add('maneuver', name, note || 'See the Maneuvers tab for the full rules.', { range: entry.range, targets: entry.target, duration: entry.duration, save: [entry.save, entry.dc && `DC ${entry.dc}`].filter(Boolean).join(' · ') });
+      const action = String(entry.action || '').trim();
+      add('maneuver', name, entry.text || 'See the Maneuvers tab for the full rules.', {
+        range: entry.range, targets: entry.target, duration: entry.duration,
+        save: [entry.save, entry.dc && `DC ${entry.dc}`].filter(Boolean).join(' · '),
+        actionType: maneuverActionType(action),
+        detail: [entry.type, action && `${action} action`, discipline.name].filter(Boolean).join(' · '),
+      });
     }
   }
   const counts = new Map();
