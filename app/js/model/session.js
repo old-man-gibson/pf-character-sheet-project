@@ -98,7 +98,7 @@ export function sessionShortcuts(model) {
     if (typeof name !== 'string' || !name.trim()) return;
     out.push({ key: `${kind}:${name}`, title: name, note: typeof note === 'string' ? note : '', kind, ...extra });
   };
-  (model.data.equipment?.weapons || []).forEach((w, i) => add('attack', w.name, w.notes || w.note, { index: i }));
+  (model.data.equipment?.weapons || []).forEach((w, i) => add('attack', w.name, w.notes || w.note, { index: i, range: w.range }));
   // Named feature entries across optional systems share this small shape.
   const walk = (value, path = '', depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 7) return;
@@ -110,7 +110,7 @@ export function sessionShortcuts(model) {
     for (const name of discipline.known || []) {
       const entry = maneuverDetails(discipline, name);
       const note = [entry.action, entry.range, entry.target, entry.duration, entry.text].filter(Boolean).join('\n');
-      add('maneuver', name, note || 'See the Maneuvers tab for the full rules.');
+      add('maneuver', name, note || 'See the Maneuvers tab for the full rules.', { range: entry.range, targets: entry.target, duration: entry.duration, save: [entry.save, entry.dc && `DC ${entry.dc}`].filter(Boolean).join(' · ') });
     }
   }
   const counts = new Map();

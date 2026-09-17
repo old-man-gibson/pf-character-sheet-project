@@ -405,6 +405,13 @@
 .session-option > details > summary { cursor: pointer; padding: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .session-option summary small { display: block; color: var(--cs-muted); font-weight: 400; margin-top: 6px; }
 .session-option-use { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; }
+.session-roll-values { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 0 14px 12px; }
+.session-roll-values > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.session-roll-values strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.session-roll-values small, .session-card-facts small { color: var(--cs-muted); font-size: .75rem; }
+.session-card-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 14px 12px; font-size: .85rem; overflow-wrap: anywhere; }
+.session-card-facts:empty { display: none; }
+.session-roll-error { padding: 0 14px; color: var(--cs-bad); font-size: .85rem; }
 .session-option-use small { color: var(--cs-muted); font-size: .78rem; }
 .session-option-use button { border-color: var(--cs-accent); min-width: 52px; }
 .session-option.unavailable .session-option-use button { border-color: var(--cs-line); }

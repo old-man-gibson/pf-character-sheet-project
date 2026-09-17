@@ -64,6 +64,28 @@ run.onclick = async () => {
       const group = find('[data-session-fold="aoo"]');
       assert(group.textContent.includes('Training sword'), 'Shortcut not displayed');
     });
+    await test('General actions accept roll formulas and show them while closed', async () => {
+      find('[data-session-fold="move"]').open = true; await pause();
+      for (const [key, value] of Object.entries({attackFormula:'12', damageFormula:'2d6 + 3', range:'30 ft.', targets:'One creature'})) {
+        const field = find(`[data-session-field="cards.1.${key}"]`);
+        field.value = value; field.dispatchEvent(new Event('change')); await pause();
+      }
+      find('[data-session-fold="card:1"]').open = false; await pause();
+      const card = find('[data-session-fold="card:1"]').closest('.session-option');
+      assert(card.querySelector('.session-roll-values').textContent.includes('+12'), 'Attack summary missing');
+      assert(card.querySelector('.session-roll-values').textContent.includes('2d6+3'), 'Damage summary missing');
+      assert(card.querySelector('.session-card-facts').textContent.includes('30 ft.'), 'Range missing');
+      assert(card.querySelector('[data-roll="session|1:damage"]'), 'Damage copy button missing');
+      assert(!find('[data-session-fold="card:1"]').open, 'Summary requires open details');
+    });
+    await test('Damage copying uses the custom formula without spending an action', async () => {
+      const before = JSON.stringify(sheet.model.data.session.spent);
+      await click('[data-roll="session|1:damage"]');
+      for (let i = 0; i < 100 && !find('.rolltext'); i++) await pause();
+      assert(find('.rolltext')?.value.includes('2d6+3'), 'Copied damage not shown');
+      assert(!find('.rolltext').value.includes('1d20'), 'Damage-only button included an attack');
+      assert(JSON.stringify(sheet.model.data.session.spent) === before, 'Copying spent an action');
+    });
     status.textContent = 'All session browser checks passed';
   } catch (error) { status.textContent = `FAIL: ${error.message}`; }
   finally { await forget(doc.id); run.disabled = false; }

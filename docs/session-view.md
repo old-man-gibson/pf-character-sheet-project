@@ -13,6 +13,19 @@ abilities and house rules can change it. Titles open details; **Edit option** se
 the title, notes, action type and optional tracker cost (a number or formula).
 Move earlier/later orders cards within a group. Each group can be collapsed.
 
+Attack and damage values stay visible on closed cards, with separate Roll20 copy
+buttons. Linked weapons use the same condition-adjusted rolls as the sheet. Any
+option can have an attack formula (`attack.melee`, `bab + dex.mod`, or `12`) and a
+damage expression (`2d6 + str.mod`, or `{floor(level / 2)}d6`). Add dice with plus
+or minus; put calculated dice counts in braces. Invalid expressions show an error
+and disable roll copying. Custom rolls do not automatically add other bonuses;
+`attack.melee`, `attack.ranged` and `attack.cmb` include current conditions.
+
+Range, targets/area, save/DC, duration and notes are editable and accept inline
+values such as `{caster.dc}`. Blank fields inherit available linked details.
+An attack or damage override replaces that part of the linked roll and omits its
+critical rolls. Clearing the override restores the linked calculation.
+
 **Use** spends the action and configured tracker cost together. If either is
 unavailable, neither is spent. Resource costs increase the tracker's spent or
 accumulated count; draining meters therefore show less remaining. Undo restores

@@ -1,5 +1,6 @@
 import { esc } from '../html.js';
-import { rollButton } from '../roll.js';
+import { D20_ICON } from '../roll.js';
+import { sessionRolls } from '../../model/session-rolls.js';
 import { renderedProse } from '../prose.js';
 import { ACTION_TYPES, ACTION_POOLS, sessionState, actionBudget, planAction, useSessionAction,
   advanceTurn, sessionShortcuts } from '../../model/session.js';
@@ -18,16 +19,28 @@ export function renderSessionBoard(model) {
     const reason = missing ? 'Source missing or renamed; edit this shortcut before using it' : plan.error;
     const tracker = model.trackers.find(t => t.id === card.resource);
     const edit = `cards.${index}`;
+    const values = sessionRolls(model, card);
+    const copy = (part, label) => `<button class="d20" data-roll="session|${index}:${part}" data-rollwhat="${esc(title)}" aria-label="Copy ${label} roll for ${esc(title)}" title="Copy ${label} roll for Roll20" ${values.errors.length ? 'disabled' : ''}>${D20_ICON}</button>`;
+    const rollSummary = `<div class="session-roll-values">
+      ${values.attack ? `<span><small>Attack</small><strong>${esc(values.attack)}</strong>${copy('attack', 'attack')}</span>` : ''}
+      ${values.damage ? `<span><small>Damage</small><strong>${esc(values.damage)}</strong>${copy('damage', 'damage')}</span>` : ''}
+      </div>`;
     return `<article class="session-option ${reason ? 'unavailable' : ''}">
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
         <summary>${esc(title)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
         ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}</p>` : ''}
         ${source?.note ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
-        ${card.note ? `<p class="session-description">${esc(card.note)}</p>` : ''}
-        ${source?.kind === 'attack' ? `<div class="session-source">Copy ${card.type === 'full' ? 'full attack' : 'single attack'} roll ${rollButton(model, card.type === 'full' ? 'weapon' : 'weapon-single', source.index, source.title)}</div>` : ''}
+        ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}
+        ${values.spec.rolls.length ? `<div class="session-source">Copy all rolls ${copy('all', 'all')}</div>` : ''}
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
           <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
+          <div class="session-settings-grid">
+            <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}</label>
+            <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}</label>
+            ${[['range', 'Range'], ['targets', 'Targets / area'], ['save', 'Save / DC'], ['duration', 'Duration']].map(([key,label]) => `<label>${label} ${input(`${edit}.${key}`, card[key], `placeholder="${esc(String(values[key] || ''))}"`)}</label>`).join('')}
+          </div>
+          <p class="hint">Leave blank to follow the linked source. Attack takes a number or formula. Damage accepts dice plus a formula, such as <code>2d6 + str.mod</code> or <code>{floor(level / 2)}d6</code>. Text fields accept inline values such as <code>{caster.dc}</code>. Custom rolls do not add other bonuses automatically; <code>attack.melee</code> and <code>attack.ranged</code> include current conditions. Overrides omit the linked weapon’s critical rolls.</p>
           <label>Notes <textarea data-session-field="${edit}.note">${esc(card.note || '')}</textarea></label>
           <label>Resource <select data-session-field="${edit}.resource"><option value="">No resource cost</option>
             ${card.resource && !tracker ? `<option value="${esc(card.resource)}" selected>Missing resource — choose another</option>` : ''}
@@ -40,6 +53,9 @@ export function renderSessionBoard(model) {
           ${button('remove', 'Remove', `data-index="${index}"`)}
         </details>
       </details>
+      ${values.attack || values.damage ? rollSummary : ''}
+      <div class="session-card-facts">${[['range','Range'],['targets','Targets'],['save','Save'],['duration','Duration']].filter(([key]) => values[key]).map(([key,label]) => `<span><small>${label}</small> ${renderedProse(model, String(values[key]))}</span>`).join('')}</div>
+      ${values.errors.map(error => `<p class="session-roll-error" role="alert">${esc(error)}</p>`).join('')}
       <div class="session-option-use">${button('use', 'Use', `data-index="${index}" ${reason ? 'disabled' : ''}`)}
         <small>${esc(reason || (card.type === 'move' && !budget.move.remaining ? 'Uses a standard action' : card.type === 'full' ? 'Standard + movement' : card.type === 'immediate' && !state.onTurn ? 'Reserves next turn’s swift' : 'Ready'))}</small></div>
     </article>`;

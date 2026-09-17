@@ -98,6 +98,7 @@ import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
 import * as overview from './ui/panels/overview.js';
 import { bindSessionBoard } from './ui/panels/session.js';
+import { sessionRollSpec } from './model/session-rolls.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
@@ -3956,7 +3957,8 @@ export class CharacterSheetElement extends HTMLElement {
    * the toast selected, which is the same thing one keystroke later.
    */
   async #copyRoll(kind, ref, what, answers = null) {
-    const spec = rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
+    const spec = kind === 'session' ? sessionRollSpec(this.#model, ref, answers)
+      : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
     // A roll with a question in it is not a roll yet. Asking here rather than
     // copying a `?{…}` for Roll20 to ask is the difference between a number
     // the player has settled and one the table is still owed -- and the only
