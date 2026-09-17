@@ -2536,8 +2536,14 @@ table.gear th.colhead { white-space: nowrap; }
    a formula calls it by. Side by side while there is room, and the handle
    drops under the name when there is not -- it is the shorter of the two and
    the one a reader can do without at a glance. */
-.wnames { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; flex: 1 1 10rem; min-width: 0; }
-.wnames > input[type="text"] { flex: 1 1 10rem; min-width: 0; }
+/* The name is as wide as a name, not as wide as the panel: on a two-column
+   panel the box used to grow into every free inch of the head and push the
+   attack and damage to the far edge, a long walk from the name they belong
+   to. Now it holds a long name and no more, the numbers sit beside it, and
+   only the × is kept at the far edge. It still shrinks on a narrow screen. */
+.wnames { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; flex: 0 1 auto; min-width: 0; }
+.wnames > input[type="text"] { flex: 0 1 15rem; width: 15rem; min-width: 7rem; }
+.weaponhead > button.danger { margin-left: auto; }
 .whandle { display: flex; align-items: center; gap: 1px; flex: 0 1 auto; }
 .whandle > span { font-family: var(--cs-mono); font-size: 0.68rem; color: var(--cs-muted); }
 .weaponhead .whandle input[type="text"] {
