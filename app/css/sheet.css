@@ -1455,17 +1455,17 @@ button.mname {
   color: var(--cs-accent); z-index: 1;
 }
 
-/* Fifteen slots, most empty on any day: narrow cards, not fifteen blocks.
-   The --veil-track property pins how many go on a row; without it they
-   auto-fill. (No backticks in here: the whole sheet is one template literal.) */
-.veils {
-  display: grid; gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(var(--veil-track, 250px), 1fr));
-  align-items: start;
-}
+/* Fifteen slots, most empty on any day: narrow cards, not fifteen blocks. */
+/* Columns rather than a grid, so that opening one card pushes down only the
+   cards under it. A grid row is as tall as its tallest card, and opening a
+   veil shoved the whole next row down and left the rest of its own row
+   floating over nothing. The count is pinned inline (see veilGridStyle),
+   and the width floor still drops columns on a narrow window. */
+.veils { column-width: 250px; column-gap: 8px; }
 .veilslot {
   border: 1px solid var(--cs-line); border-radius: 6px;
   background: var(--cs-panel-2); min-width: 0;
+  break-inside: avoid; page-break-inside: avoid; margin: 0 0 8px;
 }
 .veilslot-head {
   display: flex; align-items: center; gap: 4px;
