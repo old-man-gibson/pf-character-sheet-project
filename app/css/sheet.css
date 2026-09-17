@@ -2525,6 +2525,27 @@ table.gear th.colhead { white-space: nowrap; }
    of the tab order too rather than becoming a trap for a keyboard. */
 .weapon.collapsed > *:not(.weaponhead) { display: none; }
 .weapon.collapsed .weaponhead { margin-bottom: 0; }
+/* Weapons as cards, as many to a row as the panel has room for: eight of
+   them one under another, each the width of the page, was a page of mostly
+   nothing with a name at the left of every line. A card is wide enough for
+   the head on one line and the fields on two or three, and the grid packs
+   them; on a narrow sheet it is one column, which is the list it was. */
+.weaponcards { columns: 34rem; column-gap: 9px; }
+/* Columns rather than a grid: a grid row is as tall as its tallest card, so
+   one weapon opened for editing left the collapsed ones beside it floating
+   over a row of nothing. Columns pack a short card under the last, the way
+   the deck manipulations do (`.manipgrid`). */
+.weaponcards > .weapon { break-inside: avoid; page-break-inside: avoid; margin: 0 0 9px; min-width: 0; }
+/* The same for the rest of the tab: each panel takes the width its table
+   needs and no more, and the next one sits beside it while there is room.
+   Hints and descriptions are capped, or a long sentence would set a panel's
+   width the way its table was meant to. */
+.flow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.flow.span2 { grid-column: 1 / -1; }
+.flow > .panel { flex: 0 1 auto; min-width: min(100%, 20rem); max-width: 100%; }
+.flow > .panel p.hint, .flow > .panel p.empty { max-width: 64ch; }
+.gearcard .prose, .gearcard p.hint { max-width: 80ch; }
+@container (max-width: 620px) { .flow > .panel { flex: 1 1 100%; } }
 .wfold {
   flex: 0 0 auto; width: 1.7rem; min-height: 1.7rem; padding: 0;
   font-size: 0.82rem; color: var(--cs-muted);

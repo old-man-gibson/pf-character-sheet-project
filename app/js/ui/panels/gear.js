@@ -40,13 +40,20 @@ import { itemArea, prose } from '../prose.js';
 export function renderGearPanel(model, ctx) {
     const c = model.data;
     const e = c.equipment;
+    // Each section takes the width it needs and no more, and sits beside
+    // the next one where the sheet is wide enough (see `.flow`). A page-wide
+    // panel holding a two-row table was empty to the right of it.
     return `<div class="grid">
       ${weaponsPanel(model, e)}
-      ${unarmedPanel(model)}
-      ${armorPanel(e)}
-      ${gearSlotsPanel(model, ctx, e)}
-      ${otherItemsPanel(model, ctx, e)}
-      ${loadPanel(model, e)}
+      <div class="flow span2">
+        ${armorPanel(e)}
+        ${unarmedPanel(model)}
+        ${loadPanel(model, e)}
+      </div>
+      <div class="flow span2">
+        ${gearSlotsPanel(model, ctx, e)}
+        ${otherItemsPanel(model, ctx, e)}
+      </div>
     </div>`;
   }
 
@@ -203,7 +210,7 @@ export function weaponsPanel(model, e) {
     const cs = model.conditionState;
     return `<section class="panel span2">
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
-      ${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
+      <div class="weaponcards">${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
         <div class="weaponhead">
           <button class="wfold" data-action="toggle-weapon" data-index="${i}"
             aria-expanded="${!w.collapsed}"
@@ -326,7 +333,7 @@ export function weaponsPanel(model, e) {
         </div>` : ''}
         ${w.sheetTotalDamage && String(w.sheetTotalDamage) !== w.damageTotal
     ? `<p class="hint">Sheet noted: ${esc(w.sheetTotalDamage)}</p>` : ''}
-      </div>`).join('') || '<p class="empty">No weapons yet.</p>'}
+      </div>`).join('') || '<p class="empty">No weapons yet.</p>'}</div>
       <div style="margin-top:8px">${addButton('equipment.weapons', 'Add weapon', {
         name: '', attackType: 'Melee', dice: '', damageAbility: 'Str', abilityMult: 1,
         miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2',
