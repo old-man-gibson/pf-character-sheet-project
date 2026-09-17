@@ -98,14 +98,34 @@ export function sessionShortcuts(model) {
     if (typeof name !== 'string' || !name.trim()) return;
     out.push({ key: `${kind}:${name}`, title: name, note: typeof note === 'string' ? note : '', kind, ...extra });
   };
-  (model.data.equipment?.weapons || []).forEach((w, i) => add('attack', w.name, w.notes || w.note, { index: i, range: w.range }));
+  // Attack rows that share a name (a workbook's "Alt Melee" variants of one
+  // weapon) are told apart by attack type, and rows of the same name and type
+  // by their order among themselves -- the smallest set position can affect.
+  const weapons = model.data.equipment?.weapons || [];
+  const named = new Map();
+  weapons.forEach(w => named.set(w.name, (named.get(w.name) || 0) + 1));
+  const ordinals = new Map();
+  weapons.forEach((w, i) => {
+    let title = w.name;
+    if (typeof w.name === 'string' && named.get(w.name) > 1) {
+      const type = String(w.attackType || '').trim() || 'attack';
+      const tie = `${w.name} · ${type}`;
+      const n = (ordinals.get(tie) || 0) + 1;
+      ordinals.set(tie, n);
+      const ties = weapons.filter(x => x.name === w.name && (String(x.attackType || '').trim() || 'attack') === type).length;
+      title = `${w.name} (${type}${ties > 1 ? ` ${n}` : ''})`;
+    }
+    add('attack', title, w.notes || w.note, { index: i, range: w.range });
+  });
   // Named feature entries across optional systems share this small shape.
   const walk = (value, path = '', depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 7) return;
     if (value.name || value.talent) add('ability', value.name || value.talent, value.text || value.description || value.note || value.notes);
     for (const [key, v] of Object.entries(value)) if (typeof v === 'object') walk(v, `${path}.${key}`, depth + 1);
   };
-  for (const key of ['featGroups', 'grantedFeats', 'akashic', 'templates', 'training']) walk(model.data[key]);
+  // Feat groups are slots ("Level Up", "Class"), not abilities: only their entries count.
+  for (const group of model.data.featGroups || []) walk(group.entries);
+  for (const key of ['grantedFeats', 'akashic', 'templates', 'training']) walk(model.data[key]);
   for (const discipline of model.data.maneuvers?.disciplines || []) {
     for (const name of discipline.known || []) {
       const entry = maneuverDetails(discipline, name);

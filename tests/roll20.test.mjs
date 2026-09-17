@@ -79,6 +79,49 @@ console.log('the two shapes a spec comes out in');
   // inline rolls -- which do.
   check('several rolls, plain', rollText(many, 'plain'),
     'Greatsword: Attack [[1d20+16]], Damage [[2d6+7]]');
+  check('pf: a check is a pf_generic box', rollText(noted, 'pf'),
+    '&{template:pf_generic} {{name=Perception}} {{check=[[1d20+12]]}} {{description=Note: +2 in dim light}}');
+  const routine = {
+    name: 'Flurry',
+    rolls: [
+      { label: 'Attack 1', formula: '1d20cs>19+40' }, { label: 'Damage 1', formula: '12d8+26' },
+      { label: 'Attack 2', formula: '1d20cs>19+40' }, { label: 'Damage 2', formula: '12d8+26' },
+      { label: 'Crit confirm', formula: '1d20+40' }, { label: 'Crit damage (x4)', formula: '48d8+104' },
+    ],
+    notes: [{ label: 'Threat', text: '19–20' }],
+  };
+  check('pf: attacks fill pf_attack with their own crit rows', rollText(routine, 'pf'),
+    '&{template:pf_attack} {{name=Flurry}} '
+    + '{{attack=[[1d20cs>19+40]]}} {{damage=[[12d8+26]]}} {{crit_confirm=[[1d20+40]]}} {{crit_damage=[[36d8+78]]}} '
+    + '{{attack2=[[1d20cs>19+40]]}} {{damage2=[[12d8+26]]}} {{crit_confirm2=[[1d20+40]]}} {{crit_damage2=[[36d8+78]]}} '
+    + '{{description=Threat: 19–20}}');
+  const asked = { name: 'Q', notes: [], rolls: [
+    { label: 'Attack', formula: '1d20+16+?{Power Attack|0|-3}' }, { label: 'Damage', formula: '2d6+7' },
+    { label: 'Crit damage (x2)', formula: '4d6+14+?{Power Attack|0|9}' }] };
+  check('pf: a crit line with a question stays whole, as text', rollText(asked, 'pf'),
+    '&{template:pf_attack} {{name=Q}} {{attack=[[1d20+16+?{Power Attack|0|-3}]]}} {{damage=[[2d6+7]]}} '
+    + '{{description=Crit damage (x2) [[4d6+14+?{Power Attack|0|9}]]}}');
+  check('pf: one damage line serves every attack', rollText(many, 'pf'),
+    '&{template:pf_attack} {{name=Greatsword}} {{attack=[[1d20+16]]}} {{damage=[[2d6+7]]}}');
+  const typed = { ...many, notes: [{ label: 'Damage type', text: 'Slashing' }, { label: 'Threat', text: '19–20' }] };
+  check('pf: the damage type takes its own column, not the description', rollText(typed, 'pf'),
+    '&{template:pf_attack} {{name=Greatsword}} {{attack=[[1d20+16]]}} {{damage=[[2d6+7]]}} {{type=Slashing}} {{description=Threat: 19–20}}');
+  const iterative = { name: 'Full', notes: [], rolls: [
+    { label: 'Attack 1', formula: '1d20+16' }, { label: 'Attack 2', formula: '1d20+11' },
+    { label: 'Damage', formula: '2d6+7' }, { label: 'Crit confirm', formula: '1d20+18' }] };
+  check('pf: each attack confirms at its own bonus', rollText(iterative, 'pf'),
+    '&{template:pf_attack} {{name=Full}} {{attack=[[1d20+16]]}} {{damage=[[2d6+7]]}} {{crit_confirm=[[1d20+18]]}} '
+    + '{{attack2=[[1d20+11]]}} {{damage2=[[2d6+7]]}} {{crit_confirm2=[[1d20+13]]}}');
+  const tooMany = { name: 'Arms', notes: [{ label: 'Threat', text: '20' }], rolls: [
+    ...Array.from({ length: 10 }, (_, i) => ({ label: `Attack ${i + 1}`, formula: `1d20+${20 - i}` })),
+    { label: 'Damage', formula: '1d6+2' }, { label: 'Crit confirm', formula: '1d20+20' }] };
+  const cards = rollText(tooMany, 'pf').split('\n');
+  check('pf: more attacks than the template holds continue on a second card', cards.length, 2);
+  check('pf: the first card carries nine attacks and says so',
+    cards[0].startsWith('&{template:pf_attack} {{name=Arms}} {{subtitle=Attacks 1–9}} {{attack=[[1d20+20]]}}')
+      && cards[0].includes('{{attack9=[[1d20+12]]}}') && !cards[0].includes('attack10') && !cards[0].includes('description'), true);
+  check('pf: the second card starts again at attack, confirms at its own bonus, and ends with the notes', cards[1],
+    '&{template:pf_attack} {{name=Arms}} {{subtitle=Attacks 10–10}} {{attack=[[1d20+11]]}} {{damage=[[1d6+2]]}} {{crit_confirm=[[1d20+11]]}} {{description=Threat: 20}}');
   check('nothing to roll is nothing to paste', rollText({ name: 'x', rolls: [] }), '');
   check('no spec at all', rollText(null), '');
   check('every advertised format is one rollText knows',

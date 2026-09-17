@@ -65,4 +65,13 @@ assert.equal(sessionShortcuts(m).find(s => s.key === 'attack:Sword').index, 0);
 m.set('equipment.weapons', [{ name: 'Bow' }, { name: 'Sword' }]);
 assert.equal(sessionShortcuts(m).find(s => s.key === 'attack:Sword').index, 1);
 assert.match(use(m, 'standard', { source: 'attack:Missing' }), /missing/);
+m.set('equipment.weapons', [{ name: 'Blade', attackType: 'Melee' }, { name: 'Blade', attackType: 'Alt Melee' }, { name: 'Blade', attackType: 'Alt Melee' }, { name: 'Bow' }]);
+assert.deepEqual(sessionShortcuts(m).filter(s => s.kind === 'attack').map(s => [s.key, s.index]),
+  [['attack:Blade (Melee)', 0], ['attack:Blade (Alt Melee 1)', 1], ['attack:Blade (Alt Melee 2)', 2], ['attack:Bow', 3]],
+  'same-named attack rows stay linkable, told apart by type and order');
+assert.equal(use(m, 'standard', { source: 'attack:Blade (Alt Melee 2)' }), '', 'a disambiguated attack resolves');
+m.set('featGroups', [{ name: 'Level Up', entries: [{ name: 'Power Attack', detail: '', note: '' }] }]);
+const abilityTitles = sessionShortcuts(m).filter(s => s.kind === 'ability').map(s => s.title);
+assert.ok(abilityTitles.includes('Power Attack'), 'feats are linkable');
+assert.ok(!abilityTitles.includes('Level Up'), 'feat group names are slots, not abilities');
 console.log('Session actions: relationships, formulas, costs, undo, persistence and shortcuts passed');

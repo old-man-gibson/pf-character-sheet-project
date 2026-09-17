@@ -15,6 +15,11 @@
  *              have somewhere to go.
  *   plain      /roll 1d20+12 Perception
  *              One line, no template, for a game that wants the bare roll.
+ *   pf         &{template:pf_attack} {{name=…}} {{attack=[[1d20cs>19+40]]}} {{damage=[[…]]}} {{crit_confirm=[[…]]}} {{crit_damage=[[…]]}}
+ *              The Pathfinder Community sheet's templates, for a game that has
+ *              that sheet: the crit rows only appear when the attack threatened,
+ *              and a multi-attack routine is one card with a row per attack.
+ *              Skills, saves and checks go through its pf_generic box.
  *
  * Everything here is a pure function of an already-computed character, which is
  * what makes it testable off the page: tests/roll20.test.mjs builds characters
@@ -47,7 +52,17 @@ import { evaluateFormula } from './formula.js';
 export const ROLL_FORMATS = [
   ['template', 'Roll template'],
   ['plain', 'Plain /roll'],
+  ['pf', 'Pathfinder Community sheet'],
 ];
+
+/**
+ * The Pathfinder Community sheet's templates. `pf_attack` takes up to nine
+ * attacks as attack, attack2 … attack9, each with its own damage, crit_confirm
+ * and crit_damage, and shows the two crit rows only when that attack's die
+ * threatened ({{#rollWasCrit() attack}} in the template) -- so a routine pastes
+ * as one card that confirms on its own. `pf_generic` is the one-roll box.
+ */
+const PF_ATTACKS_MAX = 9;
 
 export const DEFAULT_ROLL_FORMAT = 'template';
 
@@ -266,10 +281,99 @@ export function rollText(spec, format = DEFAULT_ROLL_FORMAT) {
     return `${name}: ${rolls.map((r) => `${escapeRoll20(r.label)} [[${r.formula}]]`).join(', ')}${tail}`;
   }
 
+  if (format === 'pf') {
+    const pf = pfText(spec, name);
+    if (pf) return pf;
+  }
+
   return ['&{template:default}', `{{name=${name}}}`,
     ...rolls.map((r) => `{{${escapeRoll20(r.label)}=[[${r.formula}]]}}`),
     ...notes.map((n) => `{{${escapeRoll20(n.label)}=${escapeRoll20(n.text)}}}`),
   ].join(' ');
+}
+
+/** Shift the flat bonus of a "1d20cs>19+40+…" formula, folding it into the number. */
+export function shiftD20(formula, by) {
+  const m = String(formula).match(/^(1d20(?:cs>\d+)?)([+-]\d+)?(.*)$/);
+  if (!m || !by) return formula;
+  const total = (Number(m[2]) || 0) + by;
+  return `${m[1]}${total ? fmt(total) : ''}${m[3]}`;
+}
+const d20Bonus = (formula) => Number(String(formula).match(/^1d20(?:cs>\d+)?([+-]\d+)?/)?.[1]) || 0;
+
+/**
+ * The sheet's `crit_damage` row is what a crit adds on top of the damage row
+ * (it prints as "+…"), where the app's crit line is the whole multiplied
+ * total. The difference is the row; a formula with a question or a bracket in
+ * it cannot be subtracted safely, and then there is no row.
+ */
+function critExtra(crit, damage) {
+  if (/[?\[\]]/.test(crit + damage)) return null;
+  const a = parseDiceExpr(crit, Number);
+  const b = parseDiceExpr(damage, Number);
+  if (a.error || b.error) return null;
+  return diceString(subDice(a.dice, b.dice), a.flat - b.flat);
+}
+
+/** The Pathfinder Community sheet's own templates; null when the spec does not fit them. */
+function pfText(spec, name) {
+  const rolls = spec.rolls || [];
+  // The damage type has a column of its own on the sheet's card (type, type2 …).
+  const typeNote = (spec.notes || []).find((n) => n.label === 'Damage type');
+  const notes = (spec.notes || []).filter((n) => n !== typeNote);
+  const description = notes.map((n) => `${escapeRoll20(n.label)}: ${escapeRoll20(n.text)}`).join('; ');
+  const allAttacks = rolls.filter((r) => r.label.startsWith('Attack'));
+  // One damage line serves every attack; a routine that already carries a
+  // damage per attack (Damage 1, Damage 2 …) hands each its own.
+  const allDamages = rolls.filter((r) => r.label.startsWith('Damage'));
+  const confirm = rolls.find((r) => r.label === 'Crit confirm');
+  const critDamage = rolls.find((r) => r.label.startsWith('Crit damage'));
+  const others = rolls.filter((r) => !allAttacks.includes(r) && !allDamages.includes(r) && r !== confirm && r !== critDamage);
+  if (allAttacks.length) {
+    // The template holds nine attacks. A longer routine continues on further
+    // cards -- Roll20 sends each template line as its own message -- with a
+    // subtitle saying which attacks each card carries.
+    const cards = [];
+    for (let from = 0; from < allAttacks.length; from += PF_ATTACKS_MAX) {
+      cards.push({
+        attacks: allAttacks.slice(from, from + PF_ATTACKS_MAX),
+        damages: allDamages.length > 1 ? allDamages.slice(from, from + PF_ATTACKS_MAX) : allDamages,
+        subtitle: allAttacks.length > PF_ATTACKS_MAX ? `Attacks ${from + 1}–${Math.min(from + PF_ATTACKS_MAX, allAttacks.length)}` : '',
+      });
+    }
+    return cards.map((card, c) => pfAttackCard(card, c === cards.length - 1)).join('\n');
+  }
+  const [first, ...rest] = rolls;
+  const parts = ['&{template:pf_generic}', `{{name=${name}}}`, `{{check=[[${first.formula}]]}}`];
+  rest.slice(0, 10).forEach((r, i) => {
+    parts.push(`{{lefttext_${i + 1}=${escapeRoll20(r.label)}}}`, `{{righttext_${i + 1}=[[${r.formula}]]}}`);
+  });
+  if (description) parts.push(`{{description=${description}}}`);
+  return parts.join(' ');
+
+  function pfAttackCard({ attacks, damages, subtitle }, last) {
+    const parts = ['&{template:pf_attack}', `{{name=${name}}}`];
+    if (subtitle) parts.push(`{{subtitle=${subtitle}}}`);
+    attacks.forEach((a, i) => {
+      const n = i ? String(i + 1) : '';
+      parts.push(`{{attack${n}=[[${a.formula}]]}}`);
+      const d = damages[i] || damages[0];
+      if (d) parts.push(`{{damage${n}=[[${d.formula}]]}}`);
+      if (d && typeNote) parts.push(`{{type${n}=${escapeRoll20(typeNote.text)}}}`);
+      // The confirmation is that attack again, so an iterative or a penalised
+      // arm confirms at its own bonus, not the first attack's.
+      if (confirm) parts.push(`{{crit_confirm${n}=[[${shiftD20(confirm.formula, d20Bonus(a.formula) - d20Bonus(allAttacks[0].formula))}]]}}`);
+      const extra = critDamage && d ? critExtra(critDamage.formula, d.formula) : null;
+      if (extra) parts.push(`{{crit_damage${n}=[[${extra}]]}}`);
+    });
+    if (!last) return parts.join(' ');
+    // A crit line that could not become a "+…" row still travels, as text.
+    const unrowed = critDamage && !(damages[0] && critExtra(critDamage.formula, damages[0].formula)) ? [critDamage] : [];
+    const extra = [...others, ...unrowed].map((r) => `${escapeRoll20(r.label)} [[${r.formula}]]`);
+    const desc = [...extra, description].filter(Boolean).join('; ');
+    if (desc) parts.push(`{{description=${desc}}}`);
+    return parts.join(' ');
+  }
 }
 
 /* ------------------------------------------------------------------ *

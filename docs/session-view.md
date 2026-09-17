@@ -34,7 +34,10 @@ Attack and damage values stay visible on closed cards, with separate Roll20 copy
 buttons. Linked weapons use the same condition-adjusted rolls as the sheet. Any
 option can have an attack formula (`attack.melee`, `bab + dex.mod`, or `12`) and a
 damage expression (`2d6 + str.mod`, or `{floor(level / 2)}d6`). Add dice with plus
-or minus; put calculated dice counts in braces. Invalid expressions show an error
+or minus; put calculated dice counts in braces. A value the character defines as
+dice text, such as `{kinetic.fist.simple = dice(4, 6)}` in a description, can be
+named in a damage field directly (`2d6 + kinetic.fist.simple`) and is spliced in
+as written; a number field rejects it and says so. Invalid expressions show an error
 and disable roll copying. Custom rolls do not automatically add other bonuses;
 `attack.melee`, `attack.ranged` and `attack.cmb` include current conditions.
 
@@ -42,6 +45,27 @@ Range, targets/area, save/DC, duration and notes are editable and accept inline
 values such as `{caster.dc}`. Blank fields inherit available linked details.
 An attack or damage override replaces that part of the linked roll and omits its
 critical rolls. Clearing the override restores the linked calculation.
+
+Four more fields build multi-attack routines without retyping the weapon.
+**Extra attacks** repeats the highest attack: a count (`3`, or a formula) for a
+flurry, Haste or Rapid Shot, or comma-separated groups with their own modifier
+(`1 @ -2, 2 @ -6`) for off hands and grown arms at different penalties. Extras
+land after the weapon's own iteratives. **Attack modifier** shifts every attack
+roll and crit confirmation, such as `-2` for a two-weapon style. **Extra damage**
+adds dice and a formula to each hit as a rider: on the Damage roll, and once,
+unmultiplied, on the crit damage line, the way the weapon's own riders behave. **Attack set** as *Highest bonus only* drops the
+reduced-bonus iteratives, as a legendary monk's flurry requires. A monk's routine
+is then one choice group: *Full attack* (the linked unarmed strike, full round),
+*Flurry of blows* (the same link, highest bonus only, extra attacks `3` from 16th
+level, plus `1` while hasted), an *Elemental flurry* that adds the kinetic fist as
+extra damage, and a veil's special attack action as a standard action with extra
+attacks `1` and attack modifier `-2`, one card per arm count. A multiweapon
+routine with grown arms is one card too: the primary hand keeps its iteratives
+at the two-weapon penalty in the attack modifier, and each further arm is a
+group, such as `1 @ 0, 2 @ -max(0, 4 - essence.shoulders), 2 @ -8`. Every field
+accepts inline values such as `{class.legendary_monk.level}`; a veil's essence
+reads by its slot, `essence.hands` or `essence.shoulders`. The fields also apply
+to a custom attack formula and to class features defined in Progression.
 
 **Use** spends the action and configured tracker cost together. If either is
 unavailable, neither is spent. Resource costs increase the tracker's spent or
@@ -80,7 +104,9 @@ The `session` property saves card choices, folds, turn state, spent counts and
 maximum formulas in the character export. Linked entries resolve by kind and name
 so rearranging the source list does not silently change a shortcut. If a source is
 removed, renamed or ambiguous, the card is disabled; **Make custom** retains its
-title and any available details. Duplicate source names are omitted from the picker.
+title and any available details. Attack rows that share a name are listed by
+attack type, and rows of the same name and type by their order among themselves
+(`Blade (Alt Melee 2)`). Other duplicate source names are omitted from the picker.
 
 ## Class features and ability chains
 
