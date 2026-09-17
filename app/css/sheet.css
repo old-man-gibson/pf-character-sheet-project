@@ -1376,6 +1376,9 @@ button.mname {
 }
 .ak-pool table.build th[scope="row"] { font-weight: 500; color: var(--cs-muted); }
 .ak-pool input[type="number"] { width: 100%; }
+/* A class's name is a word or two; the box took the width of the panel. */
+.ak-classes td:first-child input[type="text"] { width: 12rem; min-width: 7rem; }
+.ak-classes select { width: auto; min-width: 5rem; }
 
 /* ---------- the essence header ----------
    What moves during play is how much of the pool is still free, and that is a

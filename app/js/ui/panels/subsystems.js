@@ -205,10 +205,15 @@ export function akashicPanel(model, ctx) {
     const a = model.data.akashic;
     if (!a) return '<div class="grid"><p class="empty">No akashic data.</p></div>';
 
+    // The essence gauge and the veilweaving classes each take the width they
+    // need and share a row where the sheet is wide enough (see `.flow`); a
+    // page-wide panel around a two-row table was empty to the right of it.
     return `<div class="grid">
       ${veilDatalists(a)}
-      ${essencePanel(ctx, model, a)}
-      ${akashicClassesPanel(a)}
+      <div class="flow span2">
+        ${essencePanel(ctx, model, a)}
+        ${akashicClassesPanel(a)}
+      </div>
       ${akashicSlotsPanel(model, ctx, a)}
       ${akashicKheshigPanel(model, ctx, a)}
       ${akashicReceptaclesPanel(model, a)}
