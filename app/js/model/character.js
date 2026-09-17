@@ -77,11 +77,11 @@ import {
   addCustomization, applyBudget, blendedClasses, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
   setTalentEntry,
-  removeCustomization, setBlended, setCustomizationActive, setCustomizationRule, setSphereBonus,
+  removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setCustomizationRule, setSphereBonus,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
 import {
-  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
+  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileLadders, recomputeGuileSpheres,
 } from './subsystems/guile.js';
 import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
@@ -241,6 +241,9 @@ export class Character {
     c.carry = { ...c.carry, ...tiers };
 
     this.#recomputeSpeeds();
+    // A guile class blended into the sphere sides spends talents there, so its
+    // ladders are known before either side is counted.
+    this.#recomputeGuileLadders();
     this.#recomputeTraining();
     this.#recomputeGuile();
 
@@ -542,6 +545,8 @@ export class Character {
   #sphereTally(...a) { return sphereTally(this, ...a); }
   #pairBlended(...a) { return pairBlended(this, ...a); }
   setBlended(...a) { return setBlended(this, ...a); }
+  setBlendedSkill(...a) { return setBlendedSkill(this, ...a); }
+  setGuileBlend(...a) { return setGuileBlend(this, ...a); }
   setTalentEntry(...a) { return setTalentEntry(this, ...a); }
   blendedClasses(...a) { return blendedClasses(this, ...a); }
   #recomputeTraining(...a) { return recomputeTraining(this, ...a); }
@@ -551,6 +556,7 @@ export class Character {
 
   // subsystems/guile.js
   #recomputeGuile(...a) { return recomputeGuile(this, ...a); }
+  #recomputeGuileLadders(...a) { return recomputeGuileLadders(this, ...a); }
   #guileRanksBySkill(...a) { return guileRanksBySkill(this, ...a); }
   #recomputeGuileSpheres(...a) { return recomputeGuileSpheres(this, ...a); }
   addGuileClass(...a) { return addGuileClass(this, ...a); }

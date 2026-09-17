@@ -5716,6 +5716,22 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
       });
     });
+    // Reaching skill talents adds no block, but it moves the class into the
+    // blended group and puts it on the guile tab, so the same full redraw.
+    root.querySelectorAll('[data-blendskill]').forEach((box) => {
+      box.addEventListener('change', () => {
+        const [side, index] = box.dataset.blendskill.split('|');
+        this.#model.setBlendedSkill(side, Number(index), box.checked);
+        this.#render();
+      });
+    });
+    root.querySelectorAll('[data-blendguile]').forEach((box) => {
+      box.addEventListener('change', () => {
+        const [index, side] = box.dataset.blendguile.split('|');
+        this.#model.setGuileBlend(Number(index), side, box.checked);
+        this.#render();
+      });
+    });
 
     // Drawing a weapon moves every sphere number on the tab, so the tab is
     // redrawn rather than the radio.
@@ -5913,6 +5929,24 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => {
         this.#model.data.uiPrefs.collapsed[b.dataset.collapse] = b.dataset.collapseTo === 'true';
         this.#model.recompute();
+        this.#render();
+      });
+    });
+
+    // A two-ladder table's headings: the one pressed gets the room, pressed
+    // again it gives it back. Kept with the character, like a fold. The key
+    // is everything before the last "|", since a class name may hold one.
+    root.querySelectorAll('[data-ladderfocus]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const raw = b.dataset.ladderfocus;
+        const cut = raw.lastIndexOf('|');
+        const key = raw.slice(0, cut);
+        const which = raw.slice(cut + 1);
+        const prefs = this.#model.data.uiPrefs;
+        if (!prefs.ladderFocus || typeof prefs.ladderFocus !== 'object') prefs.ladderFocus = {};
+        if (prefs.ladderFocus[key] === which) delete prefs.ladderFocus[key];
+        else prefs.ladderFocus[key] = which;
+        this.#persist();
         this.#render();
       });
     });

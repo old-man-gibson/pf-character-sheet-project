@@ -31,9 +31,13 @@ const TEMPLATE_TYPE_HINTS = {
 const NEW_TEMPLATE_TABLE = () => ({
   caption: '', columns: ['', ''], rows: [{ cells: [null, null] }],
 });
-import { TEMPLATE_TYPES, classForwardKey, sphereForwardKey, sphereNames } from '../../model.js';
 import {
-  ABILITIES, ABILITY_LABELS, BLENDED_SPHERES,
+  SYSTEM_NOUNS, TEMPLATE_TYPES, TRAINING_SYSTEMS, classForwardKey, poolMode, poolSpheres, sphereForwardKey,
+  sphereNames, talentLandsOn,
+} from '../../model.js';
+import { guileClassBlock, ladderTable, operativeField, poolCounts, poolField } from './guile.js';
+import {
+  ABILITIES, ABILITY_LABELS,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
@@ -90,7 +94,7 @@ export function renderMartialPanel(model) {
     // anything -- a caster with no martial side has none of these, and an
     // empty strip would still spend the grid's gap on itself.
     const groups = [
-      blendedSection(model, wrap),
+      blendedSection(model, wrap, 'combat'),
       side ? wrap('combat-training', trainingSide(model, 'combat', side)) : '',
       side && (side.customizations || []).length
         ? wrap('customized-weapons', customizationPanel(model, side.customizations)) : '',
@@ -111,7 +115,7 @@ export function renderMagicPanel(model) {
     const t = model.data.training || {};
     const wrap = (key, html) => collapsible(model, key, html);
     const groups = [
-      blendedSection(model, wrap),
+      blendedSection(model, wrap, 'magic'),
       t.magic ? wrap('magic-training', trainingSide(model, 'magic', t.magic)) : '',
       t.magic ? wrap('magic-bonus', bonusTalentPanel(model, 'magic', t.magic)) : '',
     ].filter(Boolean).join('');
@@ -127,16 +131,48 @@ export function renderMagicPanel(model) {
   }
 
   /**
-   * The blended classes, at the head of both sphere tabs.
+   * The blended classes, at the head of every tab their talents reach.
    *
-   * One group, drawn twice: the same fold key, so it opens and shuts on both
-   * at once, and the same `data-item` paths, so a talent typed in on the
-   * martial tab is the one the magic tab is showing. Neither tab holds a copy
-   * -- both are looking at the same rows of the same class.
+   * One group, drawn on each of those tabs: the same fold key, so it opens and
+   * shuts on all of them at once, and the same `data-item` paths, so a talent
+   * typed in on the martial tab is the one the guile tab is showing. No tab
+   * holds a copy -- each is looking at the same rows of the same class. A
+   * class shows on a tab only if its pool reaches that tab's kind, so a
+   * martial-and-skill class stays off Magic Spheres.
    */
-function blendedSection(model, wrap) {
-    const blended = model.blendedClasses();
+export function blendedSection(model, wrap, tab) {
+    const blended = model.blendedClasses().filter((p) => p.systems.includes(tab));
     return blended.length ? wrap('blended-training', blendedPanel(model, blended)) : '';
+  }
+
+  /**
+   * The ticks that say which kinds of talent a class's pool counts as.
+   *
+   * The class's own kind is always one of them, so that tick is drawn ticked
+   * and fixed; each of the other two toggles through `attr`, which names the
+   * control that does it. `counts`, when given, puts how many talents so far
+   * went each way beside the kinds the pool reaches.
+   */
+export function blendTicks(systems, home, attr, counts = null) {
+    const where = { combat: 'Martial Spheres', magic: 'Magic Spheres', guile: 'Guile Spheres' };
+    const ticks = TRAINING_SYSTEMS.map((sys) => {
+      const on = systems.includes(sys);
+      const noun = SYSTEM_NOUNS[sys];
+      const n = counts && on && systems.length > 1 ? ` <span class="num">${counts[sys] || 0}</span>` : '';
+      const title = sys === home
+        ? `This class's own talents, which always count as ${noun}.`
+        : `${on ? 'Untick to stop' : 'Tick to let'} this class's talents count as ${noun} as well — `
+          + `a row whose sphere is on the ${where[sys]} tab counts there${sys === 'guile' ? ' and buys skill ranks' : ''}.`;
+      return `<label class="chk" title="${esc(title)}">
+              <input type="checkbox"${on ? ' checked' : ''}${sys === home ? ' disabled' : ` ${attr(sys)}`}>
+              <span class="hint">${noun}${n}</span></label>`;
+    }).join('');
+    // Talents in a sphere of a kind the class does not reach count nowhere;
+    // said here as well as on their rows, so a class folded shut still shows it.
+    const lost = counts?.none
+      ? `<span class="hint bad" title="${esc('A talent whose sphere is of a kind this class does not count as is counted nowhere. Tick that kind, or change the sphere.')}">${counts.none} not counted</span>`
+      : '';
+    return `<label class="fld blendticks"><span>Counts as</span><span class="pair">${ticks}${lost}</span></label>`;
   }
 
   /**
@@ -184,9 +220,10 @@ function trainingSide(model, sideKey, side) {
     const list = `training.${sideKey}.classes`;
     // A blended class trains both ways off one pool of talents; it has a group
     // of its own above, and appears here only as the note that says so.
-    const classes = (side.classes || []).filter((x) => !x.extended && !x.blended);
-    const extended = (side.classes || []).filter((x) => x.extended && !x.blended);
-    const blended = (side.classes || []).filter((x) => x.blended);
+    const inBlend = (x) => x.blended || x.blendedSkill;
+    const classes = (side.classes || []).filter((x) => !x.extended && !inBlend(x));
+    const extended = (side.classes || []).filter((x) => x.extended && !inBlend(x));
+    const blended = (side.classes || []).filter(inBlend);
 
     return `<section class="panel span2">
       <h3>${title}</h3>
@@ -209,10 +246,8 @@ function trainingSide(model, sideKey, side) {
               ${forwardedBadge(model, classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
-          <label class="fld"><span>Blended</span>
-            <label class="chk" title="This class learns ${isMagic ? 'martial' : 'magical'} talents from the same pool — give it a group of its own that draws on both sphere lists.">
-              <input type="checkbox" data-blend="${sideKey}|${ci}">
-              <span class="hint">also ${isMagic ? 'martial' : 'magical'}</span></label></label>
+          ${blendTicks([sideKey], sideKey, (sys) => (sys === 'guile'
+    ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`))}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
         <div class="tablewrap"><table class="talents stacked">
@@ -401,15 +436,21 @@ function blendedPanel(model, pairs) {
           ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
         ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
     };
+    const guile = model.data.training?.guile;
 
     return `<section class="panel span2">
       <h3>Blended training <span class="badge">${pairs.length}</span></h3>
-      ${pairs.map(({ name, owner, twin }) => {
+      ${pairs.map(({ kind, systems, owner, twin }) => {
+    // A skill class's pool is its two ladders, drawn the way the guile tab
+    // draws them; it brings its ticks with it.
+    if (kind === 'guile') return guileClassBlock(model, guile, owner.cls, owner.index);
     const list = `training.${owner.side}.classes`;
     const cls = owner.cls;
     const martial = owner.side === 'combat' ? owner : twin;
     const casting = owner.side === 'magic' ? owner : twin;
-    const counts = blendedCounts(cls);
+    const skill = systems.includes('guile');
+    const counts = poolCounts(cls, systems);
+    const spheres = poolSpheres(systems);
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld classpick"><span>Class</span>
@@ -417,32 +458,36 @@ function blendedPanel(model, pairs) {
           ${/* The pool is one, sized the way the base class -- the block the
                 pair was made from -- grants talents, so the rates offered are
                 that side's and not both sides' at once. */''}
-          <label class="fld ratepick"><span>Talents / level</span>
-            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, TALENT_RATE_OPTIONS[owner.side])}</label>
-          ${head(martial, 'Practitioner', PRACTITIONER_TYPES)}
-          ${head(casting, 'Casting', CASTING_TYPES)}
+          ${/* Reaching skill talents makes the pool two ladders, and how they grow is
+                its own setting; the rate is still the any ladder's under the default. */''}
+          ${!skill || poolMode(cls, owner.side) === 'rate' ? `<label class="fld ratepick"><span>Talents / level</span>
+            ${itemSelect(list, owner.index, 'talentsPerLevel', cls.talentsPerLevel, TALENT_RATE_OPTIONS[owner.side])}</label>` : ''}
+          ${skill ? poolField(list, owner.index, cls, owner.side) : ''}
+          ${systems.includes('combat') ? head(martial, 'Practitioner', PRACTITIONER_TYPES) : ''}
+          ${systems.includes('magic') ? head(casting, 'Casting', CASTING_TYPES) : ''}
+          ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
                 data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
               ${forwardedBadge(model, classForwardKey(cls.name))}
-              <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
+              <span class="hint">${skill ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`
+                : `talents: ${cls.totalTalents ?? 0}`}</span>
             </span></label>
-          <label class="fld"><span>Blended</span>
-            <label class="chk" title="Untick to split this back into separate combat and magic classes.">
-              <input type="checkbox" checked data-blend="${owner.side}|${owner.index}">
-              <span class="hint">${counts.combat} martial · ${counts.magic} magical</span></label></label>
+          ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
+    ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts)}
         </div>
-        <div class="tablewrap"><table class="talents stacked">
+        ${skill ? ladderTable(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
           <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
           <tbody>${(cls.levels || []).map((lv, li) => {
       const on = !!lv.granted;
       const slots = `${list}.${owner.index}.levels`;
       const state = on ? 'slot-on' : 'slot-off';
-      const side = on ? sphereSide(lv.sphere) : null;
+      const side = on && String(lv.sphere || '').trim() ? (talentLandsOn(lv.sphere, systems) ?? 'none') : null;
       const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
-        side ? ` — counts as ${side === 'magic' ? 'magical' : 'martial'}` : ''}`
+        side === 'none' ? ` — ${lv.sphere} is not a sphere this class's talents count as, so it counts nowhere`
+          : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
         : `Level ${lv.level} grants no talent`;
       return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
               <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
@@ -450,36 +495,32 @@ function blendedPanel(model, pairs) {
         `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
         on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}${side ? ` side-${side}` : ''}" data-label="Sphere">
-                ${on ? itemSelect(slots, li, 'sphere', lv.sphere, BLENDED_SPHERES)
+                ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
         : '<select disabled><option></option></select>'}
               </td>
               <td class="${state}" data-label="Notes">${prose(model,
         `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
             </tr>`;
     }).join('')}</tbody>
-        </table></div>
+        </table></div>`}
       </div>`;
   }).join('')}
       <p class="hint">
-        One pool of talents, spent either way: the sphere on each row decides whether the
-        talent counts toward Sphere BAB / DC or Sphere CL / DC. Each side keeps its own
-        type and ability score above, because a blended class rarely advances at the same
-        rate as both. This group heads <strong>Martial Spheres</strong> and
-        <strong>Magic Spheres</strong> alike, and is the same on either: what you type
-        on one tab is what the other is showing.
+        One pool of talents, spent any of the ways ticked under <strong>Counts as</strong>: the
+        sphere on each row decides whether a talent is martial (Sphere BAB / DC), magical
+        (Sphere CL / DC) or a skill talent (ranks in the sphere's associated skill). Martial
+        and magical each keep their own type and ability score, because a blended class rarely
+        advances at the same rate as both; skill talents read the one operative modifier. A skill
+        class keeps both its ladders here, and either can be spent on any kind it reaches. A class
+        that reaches skill talents gains a [utility] ladder too: by default its any talents keep the
+        class's Talents / level and its [utility] talents come at the levels you write (even, odd,
+        "2, +2"), or choose a tier from the book's table, or Custom rules for both. Unticking skill
+        hides that ladder and the setting without losing them. A talent in a sphere of a kind the
+        class does not reach is counted nowhere and marked on its row. This group heads the tab of
+        every kind a class reaches and is the same on each: what you type on one tab is what the
+        others are showing.
       </p>
     </section>`;
-  }
-
-  /** How a blended class's talents so far divide between the two sides. */
-function blendedCounts(cls) {
-    const counts = { combat: 0, magic: 0 };
-    for (const lv of cls.levels || []) {
-      if (!lv.granted || lv.future) continue;
-      const side = sphereSide(lv.sphere);
-      if (side) counts[side] += 1;
-    }
-    return counts;
   }
 
   /* ----- traditions ----- */

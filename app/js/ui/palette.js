@@ -586,13 +586,20 @@ function spheres(model, add) {
       }
     }
     for (const cl of s.classes || []) {
+      // A blended pair's mirror shares its owner's rows; they are listed once.
+      if (cl.blendedMirror) continue;
       for (const lv of cl.levels || []) {
-        if (!text(lv.talent)) continue;
-        add({
-          kind: 'talent', title: text(lv.talent), tab,
-          sub: bits(text(lv.sphere), text(cl.name), lv.level ? `level ${lv.level}` : ''),
-          keys: 'talent',
-        });
+        // A pool that reaches skill talents has a [utility] ladder beside the
+        // any one, found like a guile class's.
+        for (const [talent, sphere, kind] of [[lv.talent, lv.sphere, ''],
+          ...(cl.blendedSkill ? [[lv.utilityTalent, lv.utilitySphere, '[utility]']] : [])]) {
+          if (!text(talent)) continue;
+          add({
+            kind: 'talent', title: text(talent), tab,
+            sub: bits(text(sphere), kind, text(cl.name), lv.level ? `level ${lv.level}` : ''),
+            keys: 'talent',
+          });
+        }
       }
     }
     for (const [field, what] of [['drawbacks', 'Tradition drawback'], ['boughtOff', 'Bought off'],

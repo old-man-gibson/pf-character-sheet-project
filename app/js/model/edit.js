@@ -287,10 +287,14 @@ export function systemTabsInUse(model) {
   const cr = d.crafting;
   const trainingSide = (side) => !!side
     && ((side.classes || []).some((x) => x?.name) || !!side.tradition?.name);
+  // A blended pool that reaches a side puts that side in use, though no
+  // class of its own sits there.
+  const reached = (flag, sides) => sides.some((key) => (d.training?.[key]?.classes || [])
+    .some((x) => x?.name && x[flag]));
   const out = {
-    martial: trainingSide(d.training?.combat),
-    magic: trainingSide(d.training?.magic),
-    guile: guileInUse(d.training?.guile),
+    martial: trainingSide(d.training?.combat) || reached('blendedCombat', ['guile']),
+    magic: trainingSide(d.training?.magic) || reached('blendedMagic', ['guile']),
+    guile: guileInUse(d.training?.guile) || reached('blendedSkill', ['combat', 'magic']),
     crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
       || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
     // Not `slots.length`: the workbook's Akashic tab prints the chakra rows

@@ -1452,7 +1452,7 @@ export function normalise(model) {
   // level rows at all, which an extended block never does; empty is empty
   // either way.
   const emptyTrainingClass = (cls) => !cls.type && !cls.talentsPerLevel && !cls.mod1 && !cls.mod2
-    && !cls.blended && cls.classLevelsOverride == null
+    && !cls.blended && !cls.blendedSkill && cls.classLevelsOverride == null
     && (cls.levels || []).every((lv) => !lv.talent && !lv.sphere && !lv.notes);
   // Spheres of Guile: a third training side, and the only one no workbook
   // ever had a tab for. It is conjured empty rather than imported, so every

@@ -2243,6 +2243,18 @@ td.slot-off input, td.slot-off select, td.slot-off textarea { opacity: 0.25; bac
    a talent" fill still reads as itself. */
 td.side-magic select { border-left: 3px solid var(--cs-accent); }
 td.side-combat select { border-left: 3px solid var(--cs-good); }
+td.side-guile select { border-left: 3px solid var(--cs-even); }
+/* A sphere of a kind the class does not reach: a pick that counts nowhere. */
+td.side-none select { border: 1px dashed var(--cs-bad); border-left: 3px solid var(--cs-bad); }
+/* A ladder's level rule: a few characters, and a warning when it does not parse. */
+.trainhead > label.fld.rulepick { flex: 0 1 8.5rem; }
+.trainhead .rulepick.bad input { border-color: var(--cs-bad); }
+.blendticks .hint.bad, .rulepick .hint.bad { color: var(--cs-bad); }
+/* Three ticks in one field, as wide as the three of them on a line rather
+   than a share of the row that stacks them. */
+.trainhead > label.fld.blendticks { flex: 0 1 auto; }
+.trainhead .blendticks .pair { gap: 4px 10px; }
+.trainhead .blendticks .num { font-variant-numeric: tabular-nums; color: var(--cs-text); }
 table.talents.pools input[type="number"] { width: 100%; text-align: right; }
 table.talents.pools th[colspan] { text-align: right; }
 tr.future td { opacity: 0.55; }
@@ -2311,9 +2323,29 @@ td.needsbase .prose-view, td.needsbase textarea {
    see that a level lit one, the other, or both. The rule down the middle is
    the whole point of the layout: it says the two halves are separate ladders
    and not two columns of one. */
-table.guileladder col.notes { width: 16%; }
-table.guileladder th.util, table.guileladder td.util:first-of-type { border-left: 1px solid var(--cs-line); }
+table.guileladder th.util, table.guileladder td.ustart { border-left: 1px solid var(--cs-line); }
 table.guileladder th.util { color: var(--cs-muted); }
+/* Every column width is on the table's own <col>s, because they are worked out
+   per table: the sphere column fits the longest sphere picked in it, and the
+   talent and its notes share the rest one part to two. See ladderLayout in
+   ui/panels/guile.js. */
+/* Each ladder's heading is the switch that gives it the room: read as the
+   heading it is, marked when it is the one holding the room. */
+table.guileladder button.ladderfocus {
+  padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit;
+  text-transform: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+table.guileladder button.ladderfocus:hover { color: var(--cs-text); text-decoration-style: solid; }
+table.guileladder button.ladderfocus[aria-pressed="true"] { color: var(--cs-accent); }
+table.guileladder button.ladderfocus[aria-pressed="true"]::after { content: " ◂▸"; }
+/* The narrowed ladder: a box to click into, not a column to read. Its text is
+   clipped rather than wrapped, so a row does not grow three lines tall. */
+table.guileladder th.shrunk { opacity: 0.75; }
+table.guileladder.focus-any td.util :is(.prose-view, textarea),
+table.guileladder.focus-utility td:not(.util):not(.num) :is(.prose-view, textarea) {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* The sphere table: a wide row of choices on the left and derived numbers on
    the right, so the two dropdowns get the width and everything after them is
