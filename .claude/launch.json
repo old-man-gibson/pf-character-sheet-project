@@ -5,10 +5,10 @@
       "name": "sheets",
       "runtimeExecutable": "node",
       "runtimeArgs": [
-        "tools/serve.mjs",
-        "8777"
+        "tools/serve.mjs"
       ],
-      "port": 8777
+      "port": 8777,
+      "autoPort": true
     },
     {
       "name": "sheets-alt",
