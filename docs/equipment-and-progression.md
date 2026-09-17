@@ -98,8 +98,10 @@ The worksheet's four systems, separated and computed:
   of each family adds or drops one across every row), plus an **Other items** list.
   A typed bonus is three cells: **amount, type, To**. The amount takes a formula
   (`floor(level / 4)`), the type is the stacking key, and To is where it goes — AC,
-  a save, a skill, an ability score, anything a forwarded bonus can be aimed at (the
-  To cell offers the same list the Formulas tab does). Filled in, the row *is*
+  a save, a skill, an ability score, anything a forwarded bonus can be aimed at. The To
+  cell is a picker of plain names grouped the way the sheet is — Armour class, Saves,
+  Attacks, Skills, Weapons, Spheres… — and the open card adds a box for one it does not
+  list, such as `resistance.fire`. Filled in, the row *is*
   `{ac.total += 2 as deflection}` written on the item: the same resolver reads it,
   two deflection bonuses are the larger one, and the Formulas tab lists it as
   "gear 3, bonus 1". Leave To blank and the bonus is a note. Click the ▸ on a row to

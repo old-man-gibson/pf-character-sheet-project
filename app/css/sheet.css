@@ -2474,7 +2474,8 @@ table.gear tr.gearcardrow > td { padding: 0; }
   text-transform: none; letter-spacing: 0;
 }
 .gearcard table.gearbonuses td.btype select { width: auto; min-width: 7rem; }
-.gearcard table.gearbonuses td.bto input.target { width: 12rem; }
+.gearcard table.gearbonuses td.bto select.target { width: auto; min-width: 12rem; max-width: 18rem; }
+.gearcard table.gearbonuses td.bto input.target-free { display: block; width: 14rem; margin-top: 4px; font-size: 0.78rem; }
 .gearcard textarea { width: 100%; }
 /* The description grows with what is written (see the `.prose.grow` binding
    in sheet-element.js), and starts at three lines so an empty one still
@@ -2492,10 +2493,10 @@ table.gear td.wt input { width: 3.6rem; }
 table.gear td.cost input { width: 5rem; }
 table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
 table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
-table.gear td.bto input.target { width: 6.5rem; min-width: 5rem; }
+table.gear td.bto select.target { width: 7.5rem; min-width: 6rem; padding: 3px 4px; }
 table.gear th.num, table.gear td.bval { text-align: center; }
 /* A destination the sheet cannot place: said on the cell, and on its tooltip. */
-table.gear input.target.invalid, .gearcard input.target.invalid {
+table.gear select.target.invalid, .gearcard select.target.invalid {
   border-color: var(--cs-bad); color: var(--cs-bad);
 }
 /* The ± that widens or narrows a family of columns, tucked into the last

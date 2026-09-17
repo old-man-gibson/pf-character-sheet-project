@@ -386,15 +386,20 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
       && /class="xf-view"[^>]*>1</.test(html));
   ok('the type picker shows the short form and keeps the whole name',
     /<option value="Deflection" title="Deflection"[^>]*selected>Defl\.</.test(html));
-  ok('the To cell picks from the destinations list', /list="gear-targets"/.test(html)
-    && /<datalist id="gear-targets">.*<option value="ac\.total">/.test(html));
-  ok('a destination the sheet cannot place is marked on its cell',
-    /class="target invalid"[^>]*value="nowhere\.at\.all"/.test(html));
-  ok('and a placed one is not', /class="target"[^>]*value="ac\.total"/.test(html));
+  const to = html.match(/<select class="target"[^>]*bonuses\.0\.target[\s\S]*?<\/select>/)?.[0] || '';
+  ok('the To cell is a grouped picker showing plain names',
+    /<optgroup label="Armour class">/.test(to) && /<option value="ac\.total" selected title="ac\.total">AC</.test(to)
+      && /<optgroup label="Skills">[\s\S]*<option value="skill\.bluff"[^>]*>Bluff</.test(to));
+  ok('the working scores stay off it', !/dex\.temp/.test(to));
+  const bad = html.match(/<select class="target invalid"[^>]*bonuses\.1\.target[\s\S]*?<\/select>/)?.[0] || '';
+  ok('a destination the sheet cannot place is marked on its cell, and kept',
+    /is not something a bonus can be forwarded to/.test(bad) && /<option value="nowhere\.at\.all" selected>nowhere\.at\.all \*</.test(bad));
 
   const open = gear.renderGearPanel(c, { showAllGear: false, openGear: 'equipment.gear|0' });
   ok('the open card lists the bonuses as rows of amount, type, To', /<table class="gearbonuses">/.test(open)
     && (open.match(/<th scope="row">Bonus \d<\/th>/g) || []).length === 3);
+  ok('the card adds a free box for a destination the list has not got',
+    /<input type="text" class="target-free"[^>]*bonuses\.0\.target/.test(open));
   ok('and its description is a growing prose field', /<span class="prose  grow"[^>]*>\s*<textarea data-item="equipment\.gear\|0\|note"/.test(open));
   const span = Number(open.match(/gearcardrow"><td colspan="(\d+)"/)?.[1]);
   ok('the card spans exactly the row’s cells', span === 5 + 3 * 3 + 4);

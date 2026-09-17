@@ -47,7 +47,6 @@ export function renderGearPanel(model, ctx) {
       ${gearSlotsPanel(model, ctx, e)}
       ${otherItemsPanel(model, ctx, e)}
       ${loadPanel(model, e)}
-      ${gearTargetList(model)}
     </div>`;
   }
 
@@ -430,10 +429,78 @@ function bonusCells(model, list, i, bi, g, { wide = false } = {}) {
       value: st.value, error: st.error, title: 'A number, or a formula like floor(level / 4)',
     })}</td>
       <td class="btype" data-label="Bonus ${bi + 1} type">${itemSelect(list, i, `bonuses.${bi}.type`, b.type, GEAR_TYPE_OPTIONS)}</td>
-      <td class="bto" data-label="Bonus ${bi + 1} to"><input type="text" class="target${st.targetError ? ' invalid' : ''}"
-        value="${esc(target)}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
-        list="gear-targets" placeholder="AC, Will…" title="${esc(st.targetError
-    || (target.trim() ? `Forwarded to ${target.trim()}` : 'Where the bonus goes: AC, a save, a skill, an ability score…'))}"></td>`;
+      <td class="bto" data-label="Bonus ${bi + 1} to">${targetSelect(model, list, i, bi, target, st.targetError)}${wide ? `
+        <input type="text" class="target-free" value="${esc(target)}" data-item="${list}|${i}|bonuses.${bi}.target"
+          data-kind="text" placeholder="or type one: resistance.fire"
+          title="Anything a forwarded bonus can be aimed at, by name — for a destination the list has not got">` : ''}</td>`;
+  }
+
+/**
+ * The groups the To picker sorts destinations into, in the order a player
+ * looks for them, each with the test that claims a name. The first group to
+ * claim a name keeps it; whatever nothing claims goes last.
+ */
+const TARGET_GROUPS = [
+  ['Armour class', (n) => n === 'ac' || n.startsWith('ac.')],
+  ['Saves', (n) => n === 'saves' || n.startsWith('saves.')],
+  ['Attacks & initiative', (n) => n === 'attack' || n.startsWith('attack.') || n === 'initiative'],
+  ['Hit points', (n) => n.startsWith('hp.')],
+  ['Ability scores', (n) => /^(str|dex|con|int|wis|cha)\.score$/.test(n)],
+  ['Skills', (n) => n === 'skill' || n.startsWith('skill.')],
+  ['Weapons', (n) => n.startsWith('weapon.') || n === 'damage' || n.startsWith('damage.')],
+  ['Defences', (n) => n.startsWith('defenses.') || /^(dr|resistance|weakness|immune)\./.test(n)],
+  ['Spheres', (n) => n.startsWith('sphere.')],
+  ['Speeds', (n) => n === 'speed' || n.startsWith('speed.')],
+];
+// The working-score variants are the same six abilities said for a bonus
+// that lasts a fight, which is not what an item on a body slot grants. They
+// stay reachable from the card's free box; listing them beside the scores
+// only made the picker read every ability twice.
+const TARGET_HIDDEN = (n) => /\.temp$/.test(n);
+
+/** The option groups, built once per target list and kept beside it. */
+const targetOptionCache = new WeakMap();
+
+function targetOptions(model) {
+    const targets = model.forwardTargetList || [];
+    const hit = targetOptionCache.get(targets);
+    if (hit) return hit;
+    const groups = TARGET_GROUPS.map(([label]) => ({ label, rows: [] }));
+    const rest = { label: 'Everything else', rows: [] };
+    for (const t of targets) {
+      if (TARGET_HIDDEN(t.name)) continue;
+      const g = groups.find(({ label }, gi) => TARGET_GROUPS[gi][1](t.name)) || rest;
+      g.rows.push(t);
+    }
+    const html = [...groups, rest].filter((g) => g.rows.length).map((g) => `<optgroup label="${esc(g.label)}">${
+      g.rows.map((t) => `<option value="${esc(t.name)}" title="${esc(t.name)}">${esc(t.label || t.name)}</option>`).join('')
+    }</optgroup>`).join('');
+    const names = new Set(targets.map((t) => t.name));
+    const out = { html, names };
+    targetOptionCache.set(targets, out);
+    return out;
+  }
+
+/**
+ * Where a bonus goes, picked by the name a player knows it by -- "Will",
+ * "Bluff", "Flat-footed AC" -- grouped the way the sheet is. The stored
+ * value is the destination's own name, the one a `{… += …}` token would
+ * use, so the two spellings of one rule can never disagree.
+ *
+ * A destination the list has not got -- typed into the card's free box, or
+ * a resistance the sheet grants on demand -- is shown as itself with a mark,
+ * the way every picker on the sheet keeps a value it does not know.
+ */
+function targetSelect(model, list, i, bi, value, error) {
+    const { html, names } = targetOptions(model);
+    const v = String(value ?? '').trim();
+    const known = !v || names.has(v);
+    return `<select class="target${error ? ' invalid' : ''}" data-item="${list}|${i}|bonuses.${bi}.target" data-kind="text"
+        title="${esc(error || (v ? `Forwarded to ${v}` : 'Where the bonus goes: AC, a save, a skill, an ability score…'))}">
+        <option value=""${v ? '' : ' selected'}>—</option>${
+      html.replace(`<option value="${esc(v)}"`, `<option value="${esc(v)}" selected`)}${
+      known ? '' : `<optgroup label="Not on the list"><option value="${esc(v)}" selected>${esc(v)} *</option></optgroup>`}
+      </select>`;
   }
 
 /**
@@ -465,16 +532,6 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
 
 /** How many cells a row of this width has, so a full-width row can span them. */
 const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others;
-
-/**
- * Every destination a bonus can be aimed at, as the `<datalist>` the To
- * cells pick from. One per tab rather than one per cell: a datalist is found
- * by id, and both gear tables point at the same one.
- */
-function gearTargetList(model) {
-    return `<datalist id="gear-targets">${(model.forwardTargetList || [])
-      .map((t) => `<option value="${esc(t.name)}">${esc(t.label || '')}</option>`).join('')}</datalist>`;
-  }
 
 /**
  * The header, and the buttons that widen or narrow the table.
@@ -568,7 +625,9 @@ function gearCard(model, list, i, g, cols) {
         <p class="hint">The description resolves <code>{name = expr}</code> like any other prose
           on the sheet, so an item that grants a pool can define it here — and the Other
           columns read formulas too. A bonus with an amount, a type and a To is forwarded
-          there: it stacks with other bonuses the way its type says.</p>
+          there: it stacks with other bonuses the way its type says. To offers every
+          destination the sheet knows; the box under it takes one it does not list, such
+          as <code>resistance.fire</code>.</p>
       </div>
     </td></tr>`;
   }
