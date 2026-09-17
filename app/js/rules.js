@@ -2690,7 +2690,12 @@ export const DERIVED = [
     label: 'Initiative',
     deps: ['dex.mod'],
     reconcile: true,
-    compute: (c) => c.abilities.dex.totalMod,
+    // The ability the row names -- Dex unless something says otherwise, the
+    // workbook's own column for it -- plus a second one where a rule adds
+    // it, plus the player's own flat bonus. Everything the workbook summed
+    // that this cannot see stays in the offset, as it always did.
+    compute: (c) => statMod(c, c.hp.initAbility || 'Dex', c.hp.initAbility2)
+      + (Number(c.hp.initMisc) || 0),
   },
   {
     key: 'saves.fortitude.total',

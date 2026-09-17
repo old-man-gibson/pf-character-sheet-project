@@ -1044,6 +1044,12 @@ export function normalise(model) {
   }
   if (d.hp.ability === undefined) d.hp.ability = null;
   if (d.hp.ability2 === undefined) d.hp.ability2 = null;
+  // Initiative's own row: the ability it runs on (Dex unless the sheet said
+  // otherwise), a second one, and a flat bonus of the player's own. Older
+  // saves carried the first two from the import and no box for the third.
+  if (!d.hp.initAbility) d.hp.initAbility = 'Dex';
+  if (d.hp.initAbility2 === undefined) d.hp.initAbility2 = null;
+  if (d.hp.initMisc === undefined || d.hp.initMisc === null) d.hp.initMisc = 0;
   if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
   // How the built-in meters are painted. Empty on a sheet nobody has
   // restyled, and only the meters that differ from the default are in it.

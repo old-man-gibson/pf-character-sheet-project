@@ -3951,6 +3951,37 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   })(), true);
 }
 
+console.log('initiative -- the ability it runs on, a second one, and a misc bonus');
+{
+  const c = new Character(load('nico'));
+  const init = () => c.data.hp.initiative;
+  const mod = (k) => c.data.abilities[k].totalMod;
+  const init0 = init();
+  check('the import still matches with the row in front of it', init0, c.imported.initiative);
+  check('and reads as Dex by default', c.data.hp.initAbility, 'Dex');
+
+  c.set('hp.initMisc', 4);
+  check('a misc bonus adds', init(), init0 + 4);
+  check('and is a line of the breakdown', c.breakdown('initiative').parts.some((p) => p.label === 'misc' && p.value === 4), true);
+  c.set('hp.initMisc', 0);
+
+  c.set('hp.initAbility', 'Wis');
+  check('the ability can be changed', init(), init0 - mod('dex') + mod('wis'));
+  c.set('hp.initAbility2', 'Int');
+  check('and a second one adds its modifier', init(), init0 - mod('dex') + mod('wis') + mod('int'));
+  check('the breakdown names both', c.breakdown('initiative').parts[0].label, 'Wis + Int');
+  c.set('hp.initAbility', 'Dex');
+  c.set('hp.initAbility2', null);
+  check('back to Dex, back to where it was', init(), init0);
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  delete saved.hp.initMisc;
+  delete saved.hp.initAbility;
+  const back = new Character(saved);
+  check('a document from before the row reads Dex and no misc', [back.data.hp.initAbility, back.data.hp.initMisc], ['Dex', 0]);
+  check('and comes to the same initiative', back.data.hp.initiative, init0);
+}
+
 console.log('armour and shields take an enhancement bonus');
 {
   const c = new Character(load('nico'));
