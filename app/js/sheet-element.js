@@ -389,6 +389,14 @@ function readControl(input) {
     if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
     return raw;
   }
+  if (kind === 'expr-or-null') {
+    // The same, where an empty box means "nothing here" rather than zero: a
+    // gear bonus left blank is a column not in use, not a bonus of 0.
+    const raw = String(input.value).trim();
+    if (raw === '') return null;
+    if (/^-?\d+(\.\d+)?$/.test(raw)) return Number(raw);
+    return raw;
+  }
   return input.value;
 }
 
@@ -590,6 +598,10 @@ export class CharacterSheetElement extends HTMLElement {
    * way of looking at the list, not a fact about what they are carrying.
    */
   #openGear = null;
+  /** The last press on the sheet ({ target, at }); see `#rerender`. */
+  #lastPress = null;
+  /** The last Tab keystroke ({ at, back }); see `#rerender`. */
+  #lastTab = null;
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
   #armedGearCol = null;
   #confirmDelete = null;
@@ -753,6 +765,9 @@ export class CharacterSheetElement extends HTMLElement {
    * and `hotkeys="off"` turns it off outright (see docs/embedding.md).
    */
   #onDocumentKey = (e) => {
+    // A Tab on the way out of a cell, for `#rerender`: the re-render a
+    // change fires rebuilds the control the browser was about to move to.
+    if (e.key === 'Tab') this.#lastTab = { at: Date.now(), back: !!e.shiftKey };
     if (e.defaultPrevented || !this.#model) return;
     if (this.getAttribute('hotkeys') === 'off') return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -1527,7 +1542,41 @@ export class CharacterSheetElement extends HTMLElement {
   #rerender(activeInput) {
     const key = controlKey(activeInput);
     const caret = activeInput?.selectionStart ?? null;
+    /*
+     * Was this change the player leaving the cell? A press on something else
+     * fires the cell's `change` on the way out, and the re-render that
+     * follows rebuilds the panel under the press -- so the thing pressed is
+     * gone before it can take focus, and restoring focus to the edited cell
+     * put the caret straight back where the player had just clicked out of.
+     * A formula cell showed it worst: it re-opened to its source every time.
+     * So when the last press was a moment ago and not on this field, focus
+     * goes to the pressed control's replacement if it was one, and to
+     * nothing otherwise.
+     */
+    const press = this.#lastPress;
+    const pressedTarget = press && Date.now() - press.at < 150 ? press.target : null;
+    const sameField = (t) => !t || !activeInput || t === activeInput
+      || !!activeInput.closest?.('.xf, .prose')?.contains(t);
+    const leaving = pressedTarget && !sameField(pressedTarget);
+    const pressedKey = leaving
+      ? controlKey(pressedTarget.closest?.('input, select, textarea, button') || null) : null;
+    // Read before the render, which can take longer than the window.
+    const tab = this.#lastTab && Date.now() - this.#lastTab.at < 150 ? this.#lastTab : null;
     this.#render();
+    if (leaving) {
+      if (!pressedKey) return;
+      const [pk, pref] = [pressedKey.slice(0, pressedKey.indexOf(':')), pressedKey.slice(pressedKey.indexOf(':') + 1)];
+      const pattr = {
+        set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
+        spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search',
+      }[pk];
+      const landed = pattr && this.shadowRoot.querySelector(`[${pattr}="${CSS.escape(pref)}"]`);
+      if (landed) {
+        landed.closest('.xf')?.classList.add('editing');
+        landed.focus();
+      }
+      return;
+    }
     if (!key) return;
     const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
     const attr = {
@@ -1539,6 +1588,28 @@ export class CharacterSheetElement extends HTMLElement {
     // A formula field that regains focus keeps showing its source. Set that
     // here rather than leaning on the focus event, which a browser window that
     // is not itself focused never fires.
+    /*
+     * The same leaving, by keyboard. A Tab fires the cell's change before the
+     * browser moves focus, and the move lands on a control the re-render has
+     * just replaced -- so nothing takes it and the cell keeps the caret. When
+     * the last keystroke was a Tab, focus goes to the rebuilt cell's
+     * neighbour instead: the next control in document order that can take
+     * focus, or the previous one for Shift+Tab.
+     */
+    if (tab) {
+      const focusable = [...this.shadowRoot.querySelectorAll('input, select, textarea, button, [tabindex]')]
+        .filter((el) => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
+      const at = focusable.indexOf(next);
+      const to = at >= 0 ? focusable[at + (tab.back ? -1 : 1)] : null;
+      if (to) {
+        to.closest('.xf')?.classList.add('editing');
+        to.focus();
+        if (typeof to.select === 'function' && CARET_TYPES.has(to.type)) {
+          try { to.select(); } catch { /* not a text control */ }
+        }
+        return;
+      }
+    }
     next.closest('.xf')?.classList.add('editing');
     next.focus();
     if (caret !== null && typeof next.setSelectionRange === 'function' && CARET_TYPES.has(next.type)) {
@@ -4739,6 +4810,10 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #onPointerDownAway = (e) => {
     const path = e.composedPath?.() || [];
+    // Where the last press landed, for `#rerender`: a change that fires
+    // because the player clicked somewhere else must not hand focus back to
+    // the cell they were leaving.
+    this.#lastPress = { target: path[0] || null, at: Date.now() };
     // The `⋯` menu shuts on a press outside it the same way, and on the same
     // listener -- one for the element's life rather than one per render.
     // Its own toggle is excluded, or the press that opens it would also be the

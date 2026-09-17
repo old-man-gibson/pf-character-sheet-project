@@ -598,8 +598,10 @@ Top to bottom, the Overview reads: **At a glance** (the eight numbers a table as
 for), **Details** (what the player writes about the character) beside the ability
 scores, **Specialty** beside **Languages**, the **Classes** table — the levels every
 number below it comes out of — then two supergroups: **Defenses** (hit points, armor
-class, saving throws) and **Offenses** (attack, speed and proficiencies, three panels
-to a row where the width is there). Last come conditions beside carrying capacity, the
+class, saving throws, initiative) and **Offenses** (attack, speed and proficiencies,
+three panels to a row where the width is there). **Initiative** is its own row: the
+ability it runs on (Dex unless a rule says otherwise), a second ability where one adds,
+a Misc box of your own, and the Other column every reconciled number carries. Last come conditions beside carrying capacity, the
 wallet, and traits.
 
 **Conditions** are switches, not number boxes: all of them are on or off except

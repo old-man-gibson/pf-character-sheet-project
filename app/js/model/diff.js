@@ -326,6 +326,7 @@ function addGear(out, doc) {
   if (armor && armor.name) {
     entry(out, 'armor.name', 'Gear', 'Armour worn', armor.name);
     entry(out, 'armor.acBonus', 'Gear', 'Armour AC bonus', armor.acBonus ?? null);
+    entry(out, 'armor.enhancement', 'Gear', 'Armour enhancement', armor.enhancement ?? null);
     entry(out, 'armor.maxDex', 'Gear', 'Armour max Dex', armor.maxDex ?? null);
     entry(out, 'armor.acp', 'Gear', 'Armour check penalty', armor.acp ?? null);
     entry(out, 'armor.active', 'Gear', 'Armour worn now', armor.active ?? null);

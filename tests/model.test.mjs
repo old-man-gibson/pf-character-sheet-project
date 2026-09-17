@@ -179,9 +179,10 @@ for (const id of IDS) {
   // Armour and shield, split the way the equipment rows are: only what is
   // ticked active counts, and the two together are what AC was already using.
   const worn = armorParts(c.data);
-  const armorAc = c.data.equipment?.armor?.active ? (Number(c.data.equipment.armor.acBonus) || 0) : 0;
+  const pieceAc = (p) => (Number(p.acBonus) || 0) + (Number(p.enhancement) || 0);
+  const armorAc = c.data.equipment?.armor?.active ? pieceAc(c.data.equipment.armor) : 0;
   const shieldAc = (c.data.equipment?.shields || [])
-    .filter((sh) => sh.active).reduce((t, sh) => t + (Number(sh.acBonus) || 0), 0);
+    .filter((sh) => sh.active).reduce((t, sh) => t + pieceAc(sh), 0);
   check(`${id} ac.armor is the armour worn`, s.ac.armor, armorAc);
   check(`${id} ac.shield is the shields carried`, s.ac.shield, shieldAc);
   check(`${id} the two still come to the AC bonus`, worn.armor + worn.shield, worn.ac);
@@ -195,7 +196,7 @@ for (const id of IDS) {
   check(`${id} no name for a row that is not there`, s.ac[`shield${rows.length + 1}`], undefined);
   check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), s.ac.shield);
   check(`${id} a row that is not held contributes nothing`,
-    rows.map((sh, i) => (sh.active ? (Number(sh.acBonus) || 0) : 0)), numbered);
+    rows.map((sh) => (sh.active ? pieceAc(sh) : 0)), numbered);
   check(`${id} ACBonusShield<n> names the same row`,
     rows.map((_, i) => resolvePath(s, `ACBonusShield${i + 1}`)), numbered);
   check(`${id} ac.ability is capped by the armour`, s.ac.ability,
@@ -3831,8 +3832,8 @@ console.log('gear -- the table is as wide as it needs to be, and every item open
   c.setGearColumns('equipment.gear', 'bonuses', 1);
   check('a fourth bonus lands on every row',
     [gearColumnCount(gear(), 'bonuses'), new Set(gear().map((g) => g.bonuses.length)).size], [4, 1]);
-  check('and it is an empty pair, not a hole',
-    gear()[0].bonuses[3], { value: null, type: null });
+  check('and it is an empty triple, not a hole',
+    gear()[0].bonuses[3], { value: null, type: null, target: null });
 
   // The two lists are two tables: widening one leaves the other alone.
   check('other items keep their own width', gearColumnCount(other(), 'bonuses'), 3);
@@ -3864,6 +3865,149 @@ console.log('gear -- the table is as wide as it needs to be, and every item open
   const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('the widened table survives a save', gearColumnCount(saved.data.equipment.gear, 'bonuses'), 3);
   check('and so does the description', saved.scope().circlet.cha, 3);
+}
+
+console.log('gear bonuses -- amount, type and destination, read as a forwarded bonus');
+{
+  /*
+   * A row's bonus is three cells, and once all three are filled it is
+   * `{ac.total += 2 as deflection}` written in a class feature: the same
+   * resolver reads it, the same stacking settles it, the same audit lists
+   * it. The amount takes a formula, since that is what the token takes.
+   */
+  const c = new Character(load('nico'));
+  const ac = () => c.data.defenses.ac;
+  const ac0 = ac();
+  const level = Number(c.data.identity.level) || 0;
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 2);
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Deflection');
+  check('an amount and a type with nowhere to go change nothing', ac(), ac0);
+  check('but the amount is still worked out for the row', c.gearBonusCalc.get('gearBonus:0:0'), { value: 2, error: null });
+
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', 'ac.total');
+  check('aimed at AC, it lands', ac(), ac0 + 2);
+  const entry = c.contributions.entries.find((e) => e.path === 'gearBonus:0:0');
+  check('as a forwarded bonus of its type', [entry?.type, entry?.value, entry?.targets], ['deflection', 2, ['ac.total']]);
+  check('that says which item it came from', describeSource(entry.path), 'gear 1, bonus 1');
+
+  // The destination answers to the same spellings a formula does.
+  c.setItem('equipment.gear', 0, 'bonuses.0.target', 'AC');
+  check('and the workbook’s name for it is the same place', ac(), ac0 + 2);
+
+  // Stacking: a second deflection bonus is one deflection bonus.
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 1);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Deflection');
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', 'ac.total');
+  check('two deflection bonuses are the larger one', ac(), ac0 + 2);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Untyped');
+  check('an untyped one adds', ac(), ac0 + 3);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Natural Armor');
+  check('a two-word type is one stacking key', c.contributions.entries.find((e) => e.path === 'gearBonus:1:0').type, 'natural_armor');
+
+  // The amount as a formula.
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 'floor(level / 4)');
+  check('the amount may be a formula', ac(), ac0 + Math.floor(level / 4) + 1);
+  check('and the row shows what it came to', c.gearBonusCalc.get('gearBonus:0:0'), { value: Math.floor(level / 4), error: null });
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 'no_such_name * 2');
+  check('a name that does not exist is reported on the amount',
+    /Unknown value/.test(c.gearBonusCalc.get('gearBonus:0:0').error || ''), true);
+  c.setItem('equipment.gear', 0, 'bonuses.0.value', 2);
+
+  // A destination the sheet has not got is reported on the To cell, and the
+  // bonus goes nowhere rather than somewhere surprising.
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', 'nowhere.at.all');
+  check('a destination the sheet cannot place lands nowhere', ac(), ac0 + 2);
+  check('and is reported against the cell', c.contributions.errors.some((e) => e.path === 'gearBonus:1:0' && e.target === 'nowhere.at.all'), true);
+
+  // Aimed nowhere, a formula still shows its value: the row is being
+  // written, and the number is worth seeing before the To is filled in.
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', '');
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 'level');
+  check('aimed nowhere, a formula still shows its value', c.gearBonusCalc.get('gearBonus:1:0'), { value: level, error: null });
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', '{level}');
+  check('braces in an amount are refused rather than read as nothing',
+    /Braces/.test(c.gearBonusCalc.get('gearBonus:1:0').error || ''), true);
+
+  // Other items forward the same way, under their own family.
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 3);
+  c.setItem('equipment.other', 0, 'bonuses.0.type', 'Resistance');
+  c.setItem('equipment.other', 0, 'bonuses.0.target', 'saves');
+  const will = c.data.saves.will.total;
+  check('an Other item forwards too', c.contributions.entries.find((e) => e.path === 'otherBonus:0:0')?.lands,
+    ['saves.fortitude', 'saves.reflex', 'saves.will']);
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 5);
+  check('and moves the number', c.data.saves.will.total, will + 2);
+
+  // What is worked out is not what is saved.
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('the working is not written into the document', saved.gearBonusCalc, undefined);
+  check('the three cells are', saved.equipment.gear[0].bonuses[0], { value: 2, type: 'Deflection', target: 'AC' });
+  const back = new Character(saved);
+  check('and a reopened character has the same AC', back.data.defenses.ac, ac());
+  check('a filled To alone counts the column as in use', (() => {
+    const d = new Character(load('nico'));
+    d.setItem('equipment.gear', 0, 'bonuses.2.target', 'ac.total');
+    return gearColumnInUse(d.data.equipment.gear, 'bonuses');
+  })(), true);
+}
+
+console.log('initiative -- the ability it runs on, a second one, and a misc bonus');
+{
+  const c = new Character(load('nico'));
+  const init = () => c.data.hp.initiative;
+  const mod = (k) => c.data.abilities[k].totalMod;
+  const init0 = init();
+  check('the import still matches with the row in front of it', init0, c.imported.initiative);
+  check('and reads as Dex by default', c.data.hp.initAbility, 'Dex');
+
+  c.set('hp.initMisc', 4);
+  check('a misc bonus adds', init(), init0 + 4);
+  check('and is a line of the breakdown', c.breakdown('initiative').parts.some((p) => p.label === 'misc' && p.value === 4), true);
+  c.set('hp.initMisc', 0);
+
+  c.set('hp.initAbility', 'Wis');
+  check('the ability can be changed', init(), init0 - mod('dex') + mod('wis'));
+  c.set('hp.initAbility2', 'Int');
+  check('and a second one adds its modifier', init(), init0 - mod('dex') + mod('wis') + mod('int'));
+  check('the breakdown names both', c.breakdown('initiative').parts[0].label, 'Wis + Int');
+  c.set('hp.initAbility', 'Dex');
+  c.set('hp.initAbility2', null);
+  check('back to Dex, back to where it was', init(), init0);
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  delete saved.hp.initMisc;
+  delete saved.hp.initAbility;
+  const back = new Character(saved);
+  check('a document from before the row reads Dex and no misc', [back.data.hp.initAbility, back.data.hp.initMisc], ['Dex', 0]);
+  check('and comes to the same initiative', back.data.hp.initiative, init0);
+}
+
+console.log('armour and shields take an enhancement bonus');
+{
+  const c = new Character(load('nico'));
+  const ac = () => c.data.defenses.ac;
+  c.set('equipment.armor.active', true);
+  c.set('equipment.armor.acBonus', 6);
+  c.set('equipment.armor.enhancement', 0);
+  const ac0 = ac();
+  c.set('equipment.armor.enhancement', 2);
+  check('a +2 breastplate is two more AC', ac(), ac0 + 2);
+  check('and ac.armor reads the whole piece', c.scope().ac.armor, 8);
+  c.set('equipment.armor.active', false);
+  check('taken off, the enhancement goes with it', ac(), ac0 - 6);
+  c.set('equipment.armor.active', true);
+
+  c.listAdd('equipment.shields', { kind: 'Shield', name: 'Heavy steel shield', acBonus: 2, enhancement: 1, active: true });
+  const rows = c.data.equipment.shields;
+  const last = rows.length - 1;
+  check('a shield’s enhancement adds to its own bonus', c.scope().ac[`shield${last + 1}`], 3);
+  c.setItem('equipment.shields', last, 'active', false);
+  check('and a stowed shield counts nothing', c.scope().ac[`shield${last + 1}`], 0);
+
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('the enhancement is saved with the piece', saved.equipment.armor.enhancement, 2);
+  delete saved.equipment.armor.enhancement;
+  check('and a document from before the column reads +0', new Character(saved).data.equipment.armor.enhancement, 0);
 }
 {
   // Carried weight reconciles and follows item weights.

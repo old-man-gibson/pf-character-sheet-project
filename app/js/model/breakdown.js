@@ -257,7 +257,11 @@ export const BREAKDOWNS = new Map([
   ['cmb', { label: 'CMB', build: (m) => attackBreakdown(m, 'cmb'), total: (m) => m.data.attack.totalCmb }],
   ['initiative', {
     label: 'Initiative',
-    build: (m) => [part('Dex', m.data.abilities.dex.totalMod), ...extras(m, 'initiative', 'initiative')],
+    build: (m) => [
+      abilityPart(m.data, m.data.hp.initAbility || 'Dex', m.data.hp.initAbility2),
+      part('misc', Number(m.data.hp.initMisc) || 0),
+      ...extras(m, 'initiative', 'initiative'),
+    ],
     total: (m) => m.data.hp.initiative,
   }],
   ['hp', { label: 'Hit points', build: hpBreakdown, total: (m) => m.hpMax }],

@@ -90,9 +90,23 @@ The worksheet's four systems, separated and computed:
   the lowest Max Dex — the sheet's `MIN(MaxDex, stat)` rule, which is why Bryva's
   Str-based AC doesn't move with Str while her breastplate is on — and apply their
   armor check penalty to flagged skills. Multiple shields supported (Bryva's Cutting
-  Board and Wok); extra ones start stowed.
-- **Slotted gear** — the 14 body slots with three typed bonuses (value + type) and
-  four freeform ones each, plus an **Other items** list.
+  Board and Wok); extra ones start stowed. Each piece has an **Enh.** column beside its
+  AC: a +1 breastplate is AC 6, Enh. 1, and the two add into the one armour (or shield)
+  bonus that `ac.armor` and `ac.shield` read.
+- **Slotted gear** — the 14 body slots, each with typed bonuses and freeform
+  properties (as many columns of each as the table needs — the ± on the last header
+  of each family adds or drops one across every row), plus an **Other items** list.
+  A typed bonus is three cells: **amount, type, To**. The amount takes a formula
+  (`floor(level / 4)`), the type is the stacking key, and To is where it goes — AC,
+  a save, a skill, an ability score, anything a forwarded bonus can be aimed at. The To
+  cell is a picker of plain names grouped the way the sheet is — Armour class, Saves,
+  Attacks, Skills, Weapons, Spheres… — and the open card adds a box for one it does not
+  list, such as `resistance.fire`. Filled in, the row *is*
+  `{ac.total += 2 as deflection}` written on the item: the same resolver reads it,
+  two deflection bonuses are the larger one, and the Formulas tab lists it as
+  "gear 3, bonus 1". Leave To blank and the bonus is a note. Click the ▸ on a row to
+  open the item out — the same cells at a legible size, and a description that grows
+  with what you write.
 - **Load & value** — weights per section, a reconciling adjustment, total carried
   against light load, and total value. Item weights flow into carry live.
 

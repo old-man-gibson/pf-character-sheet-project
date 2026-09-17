@@ -205,10 +205,15 @@ export function akashicPanel(model, ctx) {
     const a = model.data.akashic;
     if (!a) return '<div class="grid"><p class="empty">No akashic data.</p></div>';
 
+    // The essence gauge and the veilweaving classes each take the width they
+    // need and share a row where the sheet is wide enough (see `.flow`); a
+    // page-wide panel around a two-row table was empty to the right of it.
     return `<div class="grid">
       ${veilDatalists(a)}
-      ${essencePanel(ctx, model, a)}
-      ${akashicClassesPanel(a)}
+      <div class="flow span2">
+        ${essencePanel(ctx, model, a)}
+        ${akashicClassesPanel(a)}
+      </div>
       ${akashicSlotsPanel(model, ctx, a)}
       ${akashicKheshigPanel(model, ctx, a)}
       ${akashicReceptaclesPanel(model, a)}
@@ -422,14 +427,14 @@ function veilColumns(model) {
   }
 
   /**
-   * A pinned count as a track size rather than `repeat(N, …)`, so a narrow
-   * window still drops to fewer columns instead of overflowing. The half pixel
-   * keeps rounding from fitting one column more than was asked for.
+   * A pinned count as a column count with a width floor kept, so a narrow
+   * window still drops to fewer columns instead of squeezing the cards: the
+   * count used is the smaller of the two.
    */
 function veilGridStyle(model) {
     const n = veilColumns(model);
     if (!n) return '';
-    return ` style="--veil-track:max(230px, calc((100% - ${(n - 1) * 8}px) / ${n} - 0.5px))"`;
+    return ` style="column-count:${n};column-width:230px"`;
   }
 
 

@@ -168,7 +168,8 @@ export function renderOverviewPanel(model, ctx) {
       ${supergroup(model, 'defenses', 'Defenses', '', `
           ${hitPointsPanel(ctx, model, model)}
           ${acPanel(model)}
-          ${savesPanel(model)}`)}
+          ${savesPanel(model)}
+          ${initiativePanel(model)}`)}
 
       ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
           ${attackPanel(model)}
@@ -1464,6 +1465,39 @@ function savesPanel(model) {
       </table></div>
       <p class="hint">Base saves follow the Classes table.</p>
       ${sheetBonusHint('Resistance bonuses, ABP and traits')}
+    </section>`;
+  }
+
+
+/**
+ * Initiative, as a row of its own: the ability it runs on, a second one
+ * where a rule adds it, a Misc box, and the Other column every reconciled
+ * number carries. It had a big number on the Overview and nothing to edit
+ * behind it -- the ability came from the import and the rest was offset.
+ */
+function initiativePanel(model) {
+    const c = model.data;
+    const cs = model.conditionState;
+    return `<section class="panel">
+      <h3>Initiative</h3>
+      <div class="tablewrap"><table class="saves stacked" data-fold="shut">
+        <thead><tr><th></th><th class="num">Total</th>
+          <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
+          <th class="num" title="Your own flat bonus: a trait, a feat, a familiar">Misc</th>
+          ${sheetBonusHead()}</tr></thead>
+        <tbody>
+          <tr>
+            <td data-stack="name">Initiative</td>
+            <td class="num total" data-stack="head"><span class="rollpair">${movedInline(cs, 'initiative', c.hp.initiative, fmt, model)}${
+  rollButton(model, 'initiative', 'self', 'initiative', cs)}</span></td>
+            <td data-label="Ability">${abilitySelect('hp.initAbility', c.hp.initAbility || 'Dex')}</td>
+            <td data-label="2nd ability">${abilitySelect('hp.initAbility2', c.hp.initAbility2)}</td>
+            <td class="num" data-label="Misc">${num('hp.initMisc', c.hp.initMisc, 'style="width:3.6rem"')}</td>
+            ${sheetBonusCell(model, 'initiative')}
+          </tr>
+        </tbody>
+      </table></div>
+      ${sheetBonusHint('Improved Initiative, a trait, a familiar’s Alertness')}
     </section>`;
   }
 

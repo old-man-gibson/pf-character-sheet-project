@@ -1044,6 +1044,12 @@ export function normalise(model) {
   }
   if (d.hp.ability === undefined) d.hp.ability = null;
   if (d.hp.ability2 === undefined) d.hp.ability2 = null;
+  // Initiative's own row: the ability it runs on (Dex unless the sheet said
+  // otherwise), a second one, and a flat bonus of the player's own. Older
+  // saves carried the first two from the import and no box for the third.
+  if (!d.hp.initAbility) d.hp.initAbility = 'Dex';
+  if (d.hp.initAbility2 === undefined) d.hp.initAbility2 = null;
+  if (d.hp.initMisc === undefined || d.hp.initMisc === null) d.hp.initMisc = 0;
   if (!d.uiPrefs.colWidths) d.uiPrefs.colWidths = {};
   // How the built-in meters are painted. Empty on a sheet nobody has
   // restyled, and only the meters that differ from the default are in it.
@@ -1290,12 +1296,16 @@ export function normalise(model) {
   }
   if (!Array.isArray(e.shields)) e.shields = e.shield ? [e.shield] : [];
   delete e.shield;
-  if (!e.armor) e.armor = { kind: 'Armor', name: null, acBonus: 0, maxDex: null, acp: 0, others: [], weight: 0, cost: 0 };
+  if (!e.armor) e.armor = { kind: 'Armor', name: null, acBonus: 0, enhancement: 0, maxDex: null, acp: 0, others: [], weight: 0, cost: 0 };
   if (!Array.isArray(e.weapons)) e.weapons = [];
-  // Worn pieces count toward AC; extra shields start stowed.
+  // Worn pieces count toward AC; extra shields start stowed. Every piece
+  // takes an enhancement bonus beside its own: a document from before the
+  // column existed reads +0.
   if (e.armor.active === undefined) e.armor.active = !!(e.armor.name || e.armor.acBonus);
+  if (e.armor.enhancement === undefined) e.armor.enhancement = 0;
   e.shields.forEach((s, i) => {
     if (s.active === undefined) s.active = i === 0 && !!(s.name || s.acBonus);
+    if (s.enhancement === undefined) s.enhancement = 0;
   });
   for (const w of e.weapons) {
     if (w.useUnarmedDice === undefined) {

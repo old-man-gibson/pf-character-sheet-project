@@ -1760,6 +1760,48 @@ export const GEAR_BONUS_TYPES = ['Enhancement', 'Armor', 'Shield', 'Deflection',
   'Natural Armor', 'Dodge', 'Resistance', 'Competence', 'Insight', 'Luck', 'Morale',
   'Sacred', 'Profane', 'Alchemical', 'Circumstance', 'Size', 'Inherent', 'Untyped'];
 
+/**
+ * The same types as a gear row prints them: a column of "Enhancement" is
+ * wider than the number beside it three times over, so the picker shows the
+ * short form and says the whole word on hover. The stored value is still the
+ * full name -- these are labels, not a second vocabulary.
+ */
+export const GEAR_BONUS_TYPE_SHORT = {
+  Enhancement: 'Enh.', Armor: 'Armor', Shield: 'Shield', Deflection: 'Defl.',
+  'Natural Armor': 'Nat.', Dodge: 'Dodge', Resistance: 'Resist.', Competence: 'Comp.',
+  Insight: 'Insight', Luck: 'Luck', Morale: 'Morale', Sacred: 'Sacred', Profane: 'Profane',
+  Alchemical: 'Alch.', Circumstance: 'Circ.', Size: 'Size', Inherent: 'Inher.', Untyped: 'Untyped',
+};
+
+/**
+ * A gear bonus as the forwarded-bonus token it amounts to, or null when it
+ * is not one yet.
+ *
+ * A row's bonus is three cells -- how much, what kind, and where it goes --
+ * and once all three are filled it is exactly `{ac.total += 2 as deflection}`
+ * written in a class feature: the same resolver reads it, the same stacking
+ * settles it against every other deflection bonus aimed at AC, and the same
+ * audit lists it. So rather than a second path for "a bonus from an item",
+ * the row is turned into that sentence and read as prose is. The amount may
+ * be a formula, since that is what the token takes.
+ *
+ * Untyped is no type at all: two untyped bonuses stack, and saying "as
+ * untyped" would make them a type that does not. A brace in the amount would
+ * end the token early, so that is refused here and reported where the amount
+ * is shown rather than read as a bonus of nothing.
+ */
+export function gearBonusToken(bonus) {
+  if (!bonus || typeof bonus !== 'object') return null;
+  const target = String(bonus.target ?? '').trim();
+  const raw = bonus.value;
+  const expr = raw === null || raw === undefined ? '' : String(raw).trim();
+  if (!target || !expr || /[{}]/.test(expr) || /[{}]/.test(target)) return null;
+  const type = String(bonus.type ?? '').trim();
+  const key = type && type !== 'Untyped'
+    ? type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') : '';
+  return `{${target} += ${expr}${key ? ` as ${key}` : ''}}`;
+}
+
 export const WEAPON_ATTACK_TYPES = ['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged', 'CMB', 'Alt CMB'];
 
 /** Fighter weapon groups (plus the ones these sheets actually use). */
@@ -2243,11 +2285,15 @@ export function diceAverage(dice, flat = 0) {
 export function armorParts(c) {
   const armor = c.equipment?.armor?.active ? c.equipment.armor : null;
   const rows = c.equipment?.shields || [];
-  const shieldAcs = rows.map((s) => (s?.active ? (Number(s.acBonus) || 0) : 0));
+  // A piece's bonus is what it is made of plus what it is enchanted to: a +1
+  // breastplate is a +7 armour bonus, not a +6 with a +1 beside it, so the
+  // enhancement goes into the same part and stacks with nothing but itself.
+  const pieceAc = (p) => (Number(p?.acBonus) || 0) + (Number(p?.enhancement) || 0);
+  const shieldAcs = rows.map((s) => (s?.active ? pieceAc(s) : 0));
   const shields = rows.filter((s) => s?.active);
   const pieces = armor ? [armor, ...shields] : shields;
   const maxDexes = pieces.map((p) => p.maxDex).filter((v) => v !== null && v !== undefined && v !== '');
-  const armorAc = Number(armor?.acBonus) || 0;
+  const armorAc = armor ? pieceAc(armor) : 0;
   const shieldAc = shieldAcs.reduce((t, n) => t + n, 0);
   return {
     ac: armorAc + shieldAc,
@@ -2682,7 +2728,12 @@ export const DERIVED = [
     label: 'Initiative',
     deps: ['dex.mod'],
     reconcile: true,
-    compute: (c) => c.abilities.dex.totalMod,
+    // The ability the row names -- Dex unless something says otherwise, the
+    // workbook's own column for it -- plus a second one where a rule adds
+    // it, plus the player's own flat bonus. Everything the workbook summed
+    // that this cannot see stays in the offset, as it always did.
+    compute: (c) => statMod(c, c.hp.initAbility || 'Dex', c.hp.initAbility2)
+      + (Number(c.hp.initMisc) || 0),
   },
   {
     key: 'saves.fortitude.total',

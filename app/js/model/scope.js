@@ -10,7 +10,8 @@
 
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
-  FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, skillLabel, statMod,
+  FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
+  statMod,
 } from '../rules.js';
 import {
   COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
@@ -975,13 +976,22 @@ export function proseSources(model) {
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
   // An item's Other columns and the description on its card: a ring that
   // grants a pool can size it where the ring is written down.
+  // A typed bonus with a destination is a forwarded bonus the row spelt out
+  // in three cells instead of one token -- see gearBonusToken -- and it is
+  // read here exactly as one written in prose would be, so the same
+  // stacking settles it and the same audit lists it. Not `forwardsOnly`: a
+  // token holding a push and nothing else defines no name, and staying on
+  // the ordinary list is what gets a misspelt name in the amount reported
+  // as one.
   (d.equipment?.gear || []).forEach((g, i) => {
     (g.others || []).forEach((o, j) => push(`gear:${i}:${j}`, o));
     push(`gearNote:${i}`, g.note);
+    (g.bonuses || []).forEach((b, j) => push(`gearBonus:${i}:${j}`, gearBonusToken(b)));
   });
   (d.equipment?.other || []).forEach((g, i) => {
     (g.others || []).forEach((o, j) => push(`other:${i}:${j}`, o));
     push(`otherNote:${i}`, g.note);
+    (g.bonuses || []).forEach((b, j) => push(`otherBonus:${i}:${j}`, gearBonusToken(b)));
   });
   // Everything a player writes on a training side reads {…}: the talent
   // itself, the note beside it, the talents a tradition or a feat handed

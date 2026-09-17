@@ -228,7 +228,8 @@ export function abilityMoves(c, totals) {
       ac: acAbilityDelta, touch: acAbilityDelta, flatFooted: c.defenses.uncannyDodge ? acAbilityDelta : 0,
       cmd: cmdDexDelta, ffCmd: 0,
       fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
-      initiative: deltas.dex || 0,
+      // Initiative follows whatever ability its row names, Dex by default.
+      initiative: slot(c.hp.initAbility || 'Dex', c.hp.initAbility2),
       hp: 0,
     },
   };

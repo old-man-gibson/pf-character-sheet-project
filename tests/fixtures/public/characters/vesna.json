@@ -482,6 +482,7 @@
   "initiative": 6,
   "initAbility": "Dex",
   "initAbility2": null,
+  "initMisc": 0,
   "base": 120,
   "current": 78
  },
@@ -3061,7 +3062,8 @@
    "others": [],
    "weight": 12.5,
    "cost": 1100,
-   "active": true
+   "active": true,
+   "enhancement": 0
   },
   "shields": [
    {
@@ -3076,7 +3078,8 @@
     "others": [],
     "weight": 2.5,
     "cost": 205,
-    "active": false
+    "active": false,
+    "enhancement": 0
    }
   ],
   "weapons": [
