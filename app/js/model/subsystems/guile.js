@@ -40,12 +40,12 @@
  */
 
 import {
-  EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT, TRADE_RANKS,
-  expertiseTalents, guilePackages, guileRanges, leveragePool, skillLabel, statMod,
+  EXPERTISE_CHOICES, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT, TRADE_RANKS,
+  guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { sphereTalent } from '../spheres.js';
+import { poolStepper, poolSystems, sphereTalent, talentLandsOn } from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
@@ -98,10 +98,22 @@ export function normalizeGuileTraining(raw) {
   out.classes = (Array.isArray(g.classes) ? g.classes : []).map((c) => {
     const cls = { ...blankGuileClass(), ...(c && typeof c === 'object' ? c : {}) };
     cls.name = String(cls.name || '');
-    cls.expertise = oneOf(cls.expertise, EXPERTISE_TIERS);
+    cls.expertise = oneOf(cls.expertise, EXPERTISE_CHOICES);
+    // The two ladders' level rules, for a Custom tier. Kept whatever the tier,
+    // so switching to a book tier and back does not lose them.
+    for (const key of ['anyRule', 'utilityRule']) {
+      if (cls[key] == null || cls[key] === '') delete cls[key];
+      else cls[key] = String(cls[key]);
+    }
     cls.classLevelsOverride = cls.classLevelsOverride == null ? null : int(cls.classLevelsOverride);
     const rows = Array.isArray(cls.levels) ? cls.levels : [];
     cls.levels = blankLevels().map((blank, i) => ({ ...blank, ...(rows[i] || {}), level: i + 1 }));
+    // Blended into the other sides: kept only when on, as the sphere sides
+    // keep theirs.
+    for (const key of ['blendedCombat', 'blendedMagic']) {
+      if (cls[key]) cls[key] = true;
+      else delete cls[key];
+    }
     return cls;
   });
 
@@ -175,19 +187,41 @@ export const GUILE_DERIVED = [
  * class ladder's picks, the tradition's, and any bonus talent not ticked
  * *free*. `free` rows are the ones a base sphere or a drawback handed over,
  * which the rulebook says are not talents spent.
+ *
+ * Blended pools cross the border both ways. Given `training`, a martial or
+ * magic class that reaches skill talents adds the rows whose sphere is a
+ * skill sphere, on both its ladders -- spent, since the class spent them --
+ * and only in the slots its pool has granted. A guile class that reaches the
+ * other sides keeps only the rows that land here. A row whose sphere belongs
+ * to a system its class does not reach is counted nowhere (talentLandsOn).
  */
-export function guileTalentRows(side) {
+export function guileTalentRows(side, training = null) {
   const out = [];
   (side?.classes || []).forEach((cls, ci) => {
+    const systems = poolSystems(cls, 'guile');
     (cls.levels || []).forEach((lv, li) => {
-      if (lv.granted) {
+      if (lv.granted && talentLandsOn(lv.sphere, systems) === 'guile') {
         out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `class:${ci}:${li}` });
       }
-      if (lv.utilityGranted) {
+      if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
         out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `class:${ci}:${li}:u` });
       }
     });
   });
+  for (const key of ['combat', 'magic']) {
+    (training?.[key]?.classes || []).forEach((cls, ci) => {
+      if (!cls.blendedSkill || cls.blendedMirror) return;
+      const systems = poolSystems(cls, key);
+      (cls.levels || []).forEach((lv, li) => {
+        if (lv.granted && talentLandsOn(lv.sphere, systems) === 'guile') {
+          out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `${key}:${ci}:${li}` });
+        }
+        if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
+          out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `${key}:${ci}:${li}:u` });
+        }
+      });
+    });
+  }
   (side?.bonusTalents || []).forEach((b, bi) => {
     out.push({ talent: b.talent, sphere: b.sphere, utility: !!b.utility, spent: !b.free, from: `bonus:${bi}` });
   });
@@ -205,9 +239,9 @@ export function guileTalentRows(side) {
  * pick in a sphere *is* the sphere, and a player who has chosen where a
  * talent went before deciding which talent it was has still spent it.
  */
-export function guileTally(side, { spentOnly = false } = {}) {
+export function guileTally(side, { spentOnly = false, training = null } = {}) {
   const tally = {};
-  for (const row of guileTalentRows(side)) {
+  for (const row of guileTalentRows(side, training)) {
     if (spentOnly && !row.spent) continue;
     const s = String(row.sphere || '').trim();
     if (s) tally[s] = (tally[s] || 0) + 1;
@@ -220,50 +254,62 @@ export function guileTally(side, { spentOnly = false } = {}) {
  * ------------------------------------------------------------------ */
 
 /**
- * Class ladders, tallies, the sphere rows' rank entitlements, and the two
- * pools. Everything that does not need the skill totals, which do not exist
- * yet.
+ * Which rungs of each class's two ladders are reached, level by level.
+ *
+ * Its own pass, run ahead of the martial and magic sides, because a guile
+ * class blended into either spends talents there and those sides count only
+ * the slots this has opened.
+ */
+export function recomputeGuileLadders(model) {
+  const g = model.data.training?.guile;
+  if (!g) return;
+  const level = Number(model.data.identity.level) || 0;
+  for (const cls of g.classes || []) {
+    cls.side = 'guile';
+    const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
+    // A book tier grants a slot where the running total printed for this
+    // class level passes the one before it; a Custom tier grants where its
+    // level rules say. The stepper answers both (spheres.js).
+    const step = poolStepper(cls, 'guile');
+    let classLevels = 0;
+    let classLevelsCurrent = 0;
+    let pool = { count: 0, utilityCount: 0 };
+    for (const lv of cls.levels || []) {
+      const has = override != null
+        ? lv.level <= override
+        : plannerHasClass(model, cls.name, lv.level);
+      if (has) {
+        classLevels += 1;
+        if (lv.level <= level) classLevelsCurrent += 1;
+      }
+      pool = step(has, classLevels, lv.level);
+      lv.count = pool.count;
+      lv.utilityCount = pool.utilityCount;
+      lv.granted = pool.granted;
+      lv.utilityGranted = pool.utilityGranted;
+      lv.future = lv.level > level;
+    }
+    cls.classLevels = classLevels;
+    cls.classLevelsCurrent = classLevelsCurrent;
+    cls.totalTalents = pool.count;
+    cls.totalUtility = pool.utilityCount;
+  }
+}
+
+/**
+ * Tallies, the sphere rows' rank entitlements, and the two pools. Everything
+ * that does not need the skill totals, which do not exist yet. The ladders
+ * are already worked out (recomputeGuileLadders).
  */
 export function recomputeGuile(model) {
   const g = model.data.training?.guile;
   if (!g) return;
   const c = model.data;
   const level = Number(c.identity.level) || 0;
+  const training = model.data.training;
 
-  for (const cls of g.classes || []) {
-    cls.side = 'guile';
-    const tier = cls.expertise;
-    const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
-    let classLevels = 0;
-    let classLevelsCurrent = 0;
-    for (const lv of cls.levels || []) {
-      const has = override != null
-        ? lv.level <= override
-        : plannerHasClass(model, cls.name, lv.level);
-      // The rung reached before this class level and after it: a slot is
-      // granted where the two differ, which is how a table printed as
-      // running totals says "and here is another one".
-      const before = expertiseTalents(tier, classLevels);
-      if (has) {
-        classLevels += 1;
-        if (lv.level <= level) classLevelsCurrent += 1;
-      }
-      const now = expertiseTalents(tier, classLevels);
-      lv.count = now.any;
-      lv.utilityCount = now.utility;
-      lv.granted = now.any > before.any;
-      lv.utilityGranted = now.utility > before.utility;
-      lv.future = lv.level > level;
-    }
-    cls.classLevels = classLevels;
-    cls.classLevelsCurrent = classLevelsCurrent;
-    const total = expertiseTalents(tier, classLevels);
-    cls.totalTalents = total.any;
-    cls.totalUtility = total.utility;
-  }
-
-  g.tally = guileTally(g);
-  g.tallySpent = guileTally(g, { spentOnly: true });
+  g.tally = guileTally(g, { training });
+  g.tallySpent = guileTally(g, { spentOnly: true, training });
 
   // A sphere is on the table because a talent went into it, or because the
   // player put it there to choose its skill before spending anything. Rows
@@ -303,7 +349,7 @@ function recomputeGuilePools(model, g, level) {
   let plan = 0;
   let utilityPlan = 0;
   const unnamedPlans = [];
-  for (const row of guileTalentRows(g)) {
+  for (const row of guileTalentRows(g, model.data.training)) {
     const hit = sphereTalent(row.sphere, row.talent);
     if (!hit) {
       if (String(row.talent || '').trim()) unnamedPlans.push(row.talent);

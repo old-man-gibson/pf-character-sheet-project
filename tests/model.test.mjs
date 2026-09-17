@@ -7137,6 +7137,233 @@ console.log('blended training -- one class, one pool, two progressions');
   check('back to one shared pool', again.owner.cls.levels === again.twin.cls.levels, true);
 }
 
+console.log('blended guile training -- a pool that reaches skill talents, and a skill class that reaches out');
+{
+  const blankLevels = () => Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  const fresh = () => {
+    const c = new Character(blankDocument({ name: 'Blend' }));
+    c.data.identity.level = 10;
+    c.listAdd('training.combat.classes', {
+      name: 'Champion', type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null,
+      classLevelsOverride: 10, levels: blankLevels(),
+    });
+    for (const [i, sphere] of [[0, 'Boxing'], [1, 'Study'], [2, 'Nature']]) c.set(`training.combat.classes.0.levels.${i}.sphere`, sphere);
+    return c;
+  };
+  const tallies = (c) => [c.data.training.combat.tally, c.data.training.magic?.tally || {}, c.data.training.guile.tally];
+  const champ = (c) => c.data.training.combat.classes[0];
+  const rows = (c, key) => champ(c).levels.filter((lv) => lv[key]).map((lv) => lv.level);
+
+  /* ----- a martial class that reaches skill talents ----- */
+  const c = fresh();
+  check('unblended, every row counts on its own side, whatever its sphere', tallies(c),
+    [{ Boxing: 1, Study: 1, Nature: 1 }, {}, {}]);
+  check('and the guile tab is not in use', c.systemTabsInUse().guile, false);
+
+  c.setBlendedSkill('combat', 0, true);
+  check('ticking skill changes no count of the any ladder: the class keeps its own rate',
+    [champ(c).totalTalents, champ(c).totalUtility, rows(c, 'granted').length], [10, 0, 10]);
+  check('the skill sphere moves to the guile side; the magic one, unreached, counts nowhere',
+    tallies(c), [{ Boxing: 1 }, {}, { Study: 1 }]);
+  check('as a spent talent, which buys ranks', c.data.training.guile.tallySpent, { Study: 1 });
+  check('the guile side gains a row for the sphere', c.data.training.guile.spheres.map((r) => r.sphere), ['Study']);
+  check('and the guile tab is in use', c.systemTabsInUse().guile, true);
+  check('one blended class, reaching martial and skill',
+    c.blendedClasses().map((p) => [p.name, p.kind, p.systems, p.twin]), [['Champion', 'sphere', ['combat', 'guile'], null]]);
+  check('what went where, and the one that went nowhere',
+    guilePanels.poolCounts(champ(c), ['combat', 'guile']), { combat: 1, magic: 0, guile: 1, none: 1 });
+  const martialHtml = combatPanels.renderMartialPanel(c);
+  check('the unreached pick is marked on its row and in the ticks',
+    [martialHtml.includes('side-none'), martialHtml.includes('1 not counted')], [true, true]);
+  check('drawn on the martial and guile tabs, not the magic one',
+    [martialHtml, combatPanels.renderMagicPanel(c), guilePanels.renderGuilePanel(c)]
+      .map((html) => html.includes('Blended training')), [true, false, true]);
+  check('as two ladders, with the rate kept and a rule box for [utility]',
+    ['guileladder', 'training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule',
+      'training.combat.classes|0|anyRule'].map((x) => martialHtml.includes(x)), [true, true, true, false]);
+
+  // [utility] talents at the levels a rule names: the book's "1 a level, and a
+  // bonus utility talent at 2nd and every 2 levels thereafter".
+  c.set('training.combat.classes.0.utilityRule', '2, +2');
+  check('a [utility] rule opens a slot at each level it names',
+    [rows(c, 'utilityGranted'), champ(c).totalUtility], [[2, 4, 6, 8, 10], 5]);
+  c.set('training.combat.classes.0.levels.1.utilitySphere', 'Investigation');
+  c.set('training.combat.classes.0.levels.3.utilitySphere', 'Boxing');
+  c.set('training.combat.classes.0.levels.4.utilitySphere', 'Investigation');
+  check('a [utility] talent counts where its sphere lands; a slot not granted counts nothing',
+    tallies(c), [{ Boxing: 2 }, {}, { Study: 1, Investigation: 1 }]);
+  c.set('training.combat.classes.0.utilityRule', 'odd');
+  check('parity works too -- and moving the rule moves which slots count', [rows(c, 'utilityGranted'), tallies(c)[2]],
+    [[1, 3, 5, 7, 9], { Study: 1, Investigation: 1 }]);
+  c.set('training.combat.classes.0.utilityRule', 'every other');
+  check('a rule that does not parse grants nothing rather than everything',
+    [champ(c).totalUtility, combatPanels.renderMartialPanel(c).includes('not a rule')], [0, true]);
+  c.set('training.combat.classes.0.utilityRule', 'char: 6-10');
+  check('char: counts character levels', rows(c, 'utilityGranted'), [6, 7, 8, 9, 10]);
+
+  // A book tier: both ladders off the table, and the rate put away.
+  c.set('training.combat.classes.0.utilityRule', 'even');
+  c.set('training.combat.classes.0.expertise', 'Trained');
+  check('a tier sizes both ladders off the table', [champ(c).totalTalents, champ(c).totalUtility], [2, 5]);
+  // Trained grants its any talents at 4th and 8th and its [utility] ones on odd
+  // levels, so neither Boxing pick -- the 1st-level any, the 4th-level utility --
+  // is a slot it grants any more.
+  check('and the rows it no longer grants stop counting', [rows(c, 'granted'), tallies(c)[0].Boxing], [[4, 8], undefined]);
+  const tierHtml = combatPanels.renderMartialPanel(c);
+  check('with the rate picker and the rule boxes put away',
+    ['training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule'].map((x) => tierHtml.includes(x)),
+    [false, false]);
+
+  // Custom: both ladders written out.
+  c.set('training.combat.classes.0.expertise', 'Custom');
+  c.set('training.combat.classes.0.anyRule', 'all, -5');
+  check('custom rules for both ladders', [champ(c).totalTalents, champ(c).totalUtility, rows(c, 'granted')],
+    [9, 5, [1, 2, 3, 4, 6, 7, 8, 9, 10]]);
+  c.set('training.combat.classes.0.anyRule', '');
+  check('an any ladder with no rule grants nothing', champ(c).totalTalents, 0);
+  c.set('training.combat.classes.0.expertise', '');
+  check('and back to the rate', [champ(c).totalTalents, champ(c).totalUtility], [10, 5]);
+
+  // Unticking skill hides the [utility] ladder and keeps what was in it.
+  c.setBlendedSkill('combat', 0, false);
+  check('unticked: one ladder again, every row read the old way',
+    [champ(c).totalUtility, rows(c, 'utilityGranted'), tallies(c)], [undefined, [], [{ Boxing: 1, Study: 1, Nature: 1 }, {}, {}]]);
+  check('the [utility] picks and the pool setting are kept, not counted',
+    [champ(c).levels[1].utilitySphere, champ(c).utilityRule], ['Investigation', 'even']);
+  c.setBlendedSkill('combat', 0, true);
+  check('and come back when it is ticked again', tallies(c)[2], { Study: 1, Investigation: 1 });
+
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('it all survives saving',
+    [back.data.training.combat.classes[0].blendedSkill, back.data.training.combat.classes[0].utilityRule,
+      back.data.training.guile.tally],
+    [true, 'even', { Study: 1, Investigation: 1 }]);
+
+  /* ----- all three, and a pair's two halves ----- */
+  c.setBlended('combat', 0, true);
+  check('all three: the magic sphere now lands magically (Boxing twice: the 1st-level pick and the 4th-level [utility] one)',
+    tallies(c), [{ Boxing: 2 }, { Nature: 1 }, { Study: 1, Investigation: 1 }]);
+  const magicHalf = c.data.training.magic.classes.findIndex((x) => x.name === 'Champion');
+  c.setBlendedSkill('magic', magicHalf, false);
+  check('unticking skill on the mirror reaches the owner that carries it',
+    [champ(c).blendedSkill, tallies(c)[2]], [undefined, {}]);
+  c.setBlendedSkill('magic', magicHalf, true);
+  check('and ticking it there lands on the owner too',
+    [champ(c).blendedSkill, c.data.training.magic.classes[magicHalf].blendedSkill], [true, undefined]);
+  c.data.training.magic.classes[magicHalf].utilityRule = 'odd';
+  c.data.training.combat.classes[0].utilityRule = '';
+  c.recompute();
+  check('a pool setting found on the mirror moves to the owner',
+    [champ(c).utilityRule, c.data.training.magic.classes[magicHalf].utilityRule], ['odd', undefined]);
+  c.setBlended('combat', 0, false);
+  check('splitting from magic keeps the skill reach', c.blendedClasses().map((p) => p.systems), [['combat', 'guile']]);
+
+  // A pool owned on the magic side (its martial block has no rows of its own)
+  // that spends [utility] talents martially is counted right on the very first
+  // pass: every class is worked out before either side is tallied.
+  const doc = blankDocument({ name: 'Magic owned' });
+  doc.identity.level = 4;
+  const hybridLevels = blankLevels();
+  hybridLevels[1].utilitySphere = 'Boxing';
+  doc.training = {
+    ...(doc.training || {}),
+    magic: { classes: [{ name: 'Hybrid', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 4,
+      blendedSkill: true, utilityRule: 'even', levels: hybridLevels }] },
+    combat: { classes: [{ name: 'Hybrid', type: 'Expert', classLevelsOverride: 4, levels: [] }] },
+  };
+  const h = new Character(doc);
+  check('magic-owned, martial, magical and skill', h.blendedClasses().map((p) => [p.owner.side, p.systems]),
+    [['magic', ['magic', 'combat', 'guile']]]);
+  check('its martial [utility] talent counts on the martial side from the start', h.data.training.combat.tally, { Boxing: 1 });
+
+  /* ----- a skill class whose ladders reach out ----- */
+  const s = fresh();
+  s.addGuileClass('Shifter');
+  s.set('training.guile.classes.0.expertise', 'Virtuoso');
+  s.set('training.guile.classes.0.classLevelsOverride', 6);
+  const g = () => s.data.training.guile.classes[0];
+  const anyAt = g().levels.findIndex((lv) => lv.granted);
+  const anyAt2 = g().levels.findIndex((lv, i) => i > anyAt && lv.granted);
+  const utilAt = g().levels.findIndex((lv) => lv.utilityGranted);
+  s.set(`training.guile.classes.0.levels.${anyAt}.sphere`, 'Boxing');
+  s.set(`training.guile.classes.0.levels.${anyAt2}.sphere`, 'Infiltration');
+  s.set(`training.guile.classes.0.levels.${utilAt}.utilitySphere`, 'Nature');
+  check('unblended, a skill class counts only its skill spheres; the rest count nowhere',
+    [tallies(s)[2], guilePanels.poolCounts(g(), ['guile']).none], [{ Infiltration: 1 }, 2]);
+  check('which its block says', guilePanels.renderGuilePanel(s).includes('2 not counted'), true);
+
+  s.setGuileBlend(0, 'combat', true);
+  check('reaching martial: the martial sphere counts martially',
+    [tallies(s)[0].Boxing, tallies(s)[2].Boxing], [2, undefined]);
+  check('the magic sphere still counts nowhere', [tallies(s)[1].Nature, tallies(s)[2].Nature], [undefined, undefined]);
+  s.setGuileBlend(0, 'magic', true);
+  check('reaching magical as well: its [utility] slot lands magically', tallies(s)[1].Nature, 1);
+  check('the skill sphere never leaves', tallies(s)[2].Infiltration, 1);
+  check('a blended skill class is its own kind of blended class',
+    s.blendedClasses().filter((p) => p.kind === 'guile').map((p) => [p.name, p.systems]),
+    [['Shifter', ['guile', 'combat', 'magic']]]);
+  const guileHtml = guilePanels.renderGuilePanel(s);
+  check('it moves out of Skill expertise into Blended training',
+    [guileHtml.includes('data-blendguile="0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
+  check('and heads the martial tab with its ladders', combatPanels.renderMartialPanel(s).includes('guileladder'), true);
+  check('which puts the martial and magic tabs in use for a character with no classes there',
+    (() => { const x = fresh(); x.data.training.combat.classes = []; x.addGuileClass('Only');
+      x.setGuileBlend(0, 'magic', true); return [x.systemTabsInUse().martial, x.systemTabsInUse().magic]; })(),
+    [false, true]);
+
+  // A guile class may be Custom as well, blended or not.
+  s.set('training.guile.classes.0.expertise', 'Custom');
+  s.set('training.guile.classes.0.anyRule', 'all');
+  s.set('training.guile.classes.0.utilityRule', 'even');
+  check('a custom skill class', [g().totalTalents, g().totalUtility], [6, 3]);
+  s.set('training.guile.classes.0.expertise', 'Nonsense');
+  const reread = new Character(JSON.parse(JSON.stringify(s.toJSON())));
+  check('an expertise no picker offers is dropped on load, and grants nothing',
+    [reread.data.training.guile.classes[0].expertise, reread.data.training.guile.classes[0].totalTalents], [null, 0]);
+  check('while the rules written for Custom are kept for when it comes back',
+    reread.data.training.guile.classes[0].utilityRule, 'even');
+  s.set('training.guile.classes.0.expertise', 'Custom');
+  s.setGuileBlend(0, 'combat', false);
+  s.setGuileBlend(0, 'magic', false);
+  check('unticking both leaves only the skill picks counting', tallies(s)[2], { Infiltration: 1 });
+
+  /* ----- how the two ladders share the width ----- */
+  const L = fresh();
+  L.setBlendedSkill('combat', 0, true);
+  const key = 'ladder:training.combat.classes:Champion';
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const lay = () => guilePanels.ladderLayout(L, key, champ(L), ['Boxing', 'Study', 'Nature']);
+  check('a pool with no [utility] rule: nothing to choose between, that ladder drawn narrow',
+    [lay().toggles, lay().focus, lay().utility.shrunk, lay().any.shrunk], [false, 'any', true, false]);
+  check('and no switch on its headings', combatPanels.renderMartialPanel(L).includes('data-ladderfocus'), false);
+  L.set('training.combat.classes.0.utilityRule', 'even');
+  const normal = lay();
+  check('both ladders granting: a switch, and both halves given the same shares',
+    [normal.toggles, normal.focus, normal.any.talent === normal.utility.talent, normal.any.notes === normal.utility.notes],
+    [true, null, true, true]);
+  check('side by side, both sphere columns fit the longest pick of either -- Nature, six letters',
+    [normal.any.sphere, normal.utility.sphere], [6, 6]);
+  check('so the two halves are the same width', [normal.any.talent + normal.any.notes, normal.utility.talent + normal.utility.notes]
+    .map(r2).reduce((a, b) => a === b), true);
+  check('the notes get twice the talent name, so what the sphere column saves splits 1:2 as well',
+    [normal.any.notes / normal.any.talent, normal.utility.notes / normal.utility.talent].map(r2), [2, 2]);
+  check('the shares add up past what a table holds, so fixed columns keep their width',
+    Math.round(normal.any.talent + normal.any.notes + normal.utility.talent + normal.utility.notes), 400);
+  check('the headings are switches', combatPanels.renderMartialPanel(L).includes(`data-ladderfocus="${key}|utility"`), true);
+  L.data.uiPrefs.ladderFocus = { [key]: 'utility' };
+  const focused = lay();
+  check('focusing [utility] narrows the any ladder to a quarter of its shares and a short dropdown',
+    [focused.focus, focused.any.shrunk, r2(focused.utility.talent / focused.any.talent), focused.any.sphere,
+      r2(focused.utility.notes / focused.utility.talent)],
+    ['utility', true, 4, 4.5, 2]);
+  L.set('training.combat.classes.0.levels.1.utilitySphere', 'Homebrewed Sphere');
+  check('a focused ladder fits its own picks: none on the narrowed side counts, and " *" gets room',
+    lay().utility.sphere, 3 + 0.5 * ('Homebrewed Sphere'.length + 2));
+  L.set('training.combat.classes.0.utilityRule', '');
+  check('a focus stored for a ladder that no longer grants is ignored, not obeyed',
+    [lay().toggles, lay().focus], [false, 'any']);
+}
+
 console.log('tradition boons -- one pool of steps, split between points and essence');
 {
   // Every effective drawback is a boon, and they are one pool on one ladder:

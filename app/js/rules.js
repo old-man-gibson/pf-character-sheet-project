@@ -488,6 +488,44 @@ export function expertiseTalents(tier, level) {
 }
 
 /**
+ * The tier that is not one of the book's: both ladders written out as level
+ * rules. Blended classes print progressions no tier matches -- a talent a
+ * level with a [utility] one every other level is faster than Virtuoso -- and
+ * a homebrew operative can be anything, so the rules are the escape hatch
+ * rather than a fourth, fifth and sixth hard-coded row.
+ */
+export const EXPERTISE_CUSTOM = 'Custom';
+
+/** Every value an expertise picker stores, the book's three first. */
+export const EXPERTISE_CHOICES = [...EXPERTISE_TIERS, EXPERTISE_CUSTOM];
+
+/**
+ * A talent ladder's level rule, read once: `null` when nothing is written,
+ * which on a ladder means *no* talents -- unlike a feature's level rule, where
+ * a blank means every level. A rule that does not parse also grants nothing,
+ * and says why in `error`, because a typo that handed out twenty talents would
+ * be read as twenty talents.
+ */
+export function parseLadderRule(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return { parsed: null, error: null };
+  const parsed = parseLevelRule(raw);
+  return parsed.kind === 'error'
+    ? { parsed: null, error: parsed.error || `"${raw}" is not a level rule` }
+    : { parsed, error: null };
+}
+
+/**
+ * Does a ladder gain a talent at this class level? Asked only on a level the
+ * class was actually taken at: `classLevel` is that level's count, `charLevel`
+ * the row's character level (a `char:` rule reads it).
+ */
+export function ladderGrants(rule, classLevel, charLevel) {
+  const { parsed } = typeof rule === 'object' && rule !== null && 'parsed' in rule ? rule : parseLadderRule(rule);
+  return !!parsed && levelRuleGrants(parsed, classLevel, charLevel);
+}
+
+/**
  * The two trade ranks, and what each gets from a trade tradition. A
  * competent operative takes the automatic talents and the tradition's skill
  * sphere; an adroit one also takes the bonus talents listed for it.

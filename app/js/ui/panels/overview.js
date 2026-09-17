@@ -20,6 +20,7 @@ import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
+import { poolHasUtility, poolSystems, talentLandsOn } from '../../model.js';
 import { formulaMeta, isDraining, meterStyleButton, meterStyleEditor, meterVisual, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
 
@@ -1014,17 +1015,32 @@ function dashTalentsCard(model) {
     const t = model.data.training || {};
     const line = (text) => `<div class="dashtalent" title="${esc(text)}">${hasTokens(text)
       ? renderedProse(model, text) : esc(text)}</div>`;
+    // A class's talents are filed under the kind they count as: a blended
+    // pool's skill talent reads under Skill wherever the class sits, and a
+    // pool with a [utility] ladder lists those too. A talent that counts
+    // nowhere is still one the player wrote, so it stays with its class.
+    const byKind = { combat: [], magic: [], guile: [] };
+    for (const home of ['combat', 'magic', 'guile']) {
+      for (const cls of t[home]?.classes || []) {
+        if (cls.blendedMirror) continue;
+        const systems = poolSystems(cls, home);
+        const slots = poolHasUtility(cls, home);
+        for (const lv of cls.levels || []) {
+          const picks = [[lv.talent, lv.sphere]];
+          if (slots) picks.push([lv.utilityTalent, lv.utilitySphere]);
+          for (const [talent, sphere] of picks) {
+            const v = String(talent || '').trim();
+            if (!v) continue;
+            const kind = systems.length > 1 && String(sphere || '').trim() ? talentLandsOn(sphere, systems) : null;
+            byKind[kind || home].push(v);
+          }
+        }
+      }
+    }
     const side = (key, label) => {
       const s = t[key];
       if (!s) return '';
-      const texts = [];
-      for (const cls of s.classes || []) {
-        if (cls.blendedMirror) continue;
-        for (const lv of cls.levels || []) {
-          const v = String(lv.talent || '').trim();
-          if (v) texts.push(v);
-        }
-      }
+      const texts = [...byKind[key]];
       for (const b of s.bonusTalents || []) {
         const v = String(b.talent || '').trim();
         if (v) texts.push(v);
@@ -1037,11 +1053,11 @@ function dashTalentsCard(model) {
       return `<h4 class="subhead">${label} <span class="badge">${texts.length}</span></h4>
         ${texts.map(line).join('')}`;
     };
-    const body = `${side('combat', 'Combat')}${side('magic', 'Magic')}`;
+    const body = `${side('combat', 'Combat')}${side('magic', 'Magic')}${side('guile', 'Skill')}`;
     return `<section class="panel">
       <h3>Talents</h3>
-      ${body || '<p class="empty">No talents yet — they are written on Martial and Magic Spheres.</p>'}
-      ${body ? '<p class="hint">Hover a line for its full text; the training grids are on Martial and Magic Spheres.</p>' : ''}
+      ${body || '<p class="empty">No talents yet — they are written on Martial, Magic and Guile Spheres.</p>'}
+      ${body ? '<p class="hint">Hover a line for its full text; the training grids are on Martial, Magic and Guile Spheres.</p>' : ''}
     </section>`;
   }
 
@@ -1063,6 +1079,7 @@ export function dashSystemCards(model) {
     if (on('vancian')) out.push(dashVancianCard(model));
     if (on('psionics')) out.push(dashPsionicsCard(model));
     if (on('magic') || on('martial')) out.push(dashSpheresCard(model), dashTalentsCard(model));
+    else if (on('guile')) out.push(dashTalentsCard(model));
     if (on('akashic')) out.push(dashVeilsCard(model));
     if (on('maneuvers')) out.push(dashManeuversCard(model));
     return out.join('');

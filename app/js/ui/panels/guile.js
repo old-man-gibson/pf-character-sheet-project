@@ -20,11 +20,13 @@ import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { talentCell } from '../talents.js';
-import { sphereForwardKey, sphereNames } from '../../model.js';
+import {
+  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn,
+} from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
   ABILITY_LABELS, EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT,
-  TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, expertiseTalents, fmt,
+  EXPERTISE_CUSTOM, TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, fmt, parseLadderRule,
   guilePackages, guileSkillHint, skillLabel,
 } from '../../rules.js';
 import { DAILY_LEVERAGE_EXTRA } from '../../model.js';
@@ -33,7 +35,7 @@ import {
   addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line,
   rowRemove, rowTools,
 } from '../rows.js';
-import { classNames } from './combat.js';
+import { blendTicks, blendedSection, classNames } from './combat.js';
 
 /** What a sphere asks its associated skill to be, when it never said. */
 const DEFAULT_GUILE_SKILL_HINT = 'Any skill the sphere names';
@@ -69,6 +71,7 @@ export function renderGuilePanel(model) {
     // `.foldstrip`.
     return `<div class="grid">
       <div class="foldstrip">
+        ${blendedSection(model, wrap, 'guile')}
         ${wrap('guile-training', guileTrainingPanel(model, g))}
         ${wrap('guile-spheres', guileSpherePanel(model, g))}
         ${wrap('guile-bonus', guileBonusPanel(model, g))}
@@ -94,77 +97,18 @@ export function renderGuilePanel(model) {
    * So each level is one row with two halves, each lighting up on its own.
    */
 function guileTrainingPanel(model, g) {
-    const list = 'training.guile.classes';
-    const spheres = guileSphereList();
     const classes = g.classes || [];
+    // A class blended into the sphere sides is drawn once, under Blended
+    // training at the head of this tab, and only named here.
+    const blended = classes.filter(isBlended);
+    const own = classes.length - blended.length;
     return `<section class="panel span2">
-      <h3>Skill expertise ${classes.length ? `<span class="badge">${classes.length}</span>` : ''}</h3>
-      ${classes.map((cls, ci) => {
-        const at = expertiseTalents(cls.expertise, cls.classLevels || 0);
-        return `<div class="trainclass">
-        <div class="trainhead">
-          <label class="fld classpick"><span>Class</span>
-            ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld ratepick"><span>Expertise tier</span>
-            ${itemSelect(list, ci, 'expertise', cls.expertise, EXPERTISE_TIERS)}</label>
-          ${/* Where the other two tabs put the class's casting score or
-                practitioner modifier. It is one choice for the whole
-                character rather than one per class, so every block here
-                shows the same field bound to the same path; the hint under
-                the panel says so. */''}
-          <label class="fld abmod"><span>Operative modifier</span>
-            <span class="pair abmod">
-              ${select('training.guile.operativeMod', g.operativeMod,
-    OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k))}
-              <span class="hint">${g.operativeMod ? fmt(g.operativeAbilityMod || 0) : ''}</span>
-            </span></label>
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
-              <span class="hint">${at.any} any · ${at.utility} utility</span>
-            </span></label>
-          <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
-        </div>
-        <div class="tablewrap"><table class="talents guileladder">
-          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes">
-            <col class="talent"><col class="sphere"><col class="notes"></colgroup>
-          <thead><tr><th class="num">Lvl</th>
-            <th colspan="3">Any talent</th>
-            <th colspan="3" class="util">[utility] talent</th></tr></thead>
-          <tbody>${(cls.levels || []).map((lv, li) => {
-            const slots = `${list}.${ci}.levels`;
-            const on = !!lv.granted;
-            const uOn = !!lv.utilityGranted;
-            const state = on ? 'slot-on' : 'slot-off';
-            const uState = uOn ? 'slot-on' : 'slot-off';
-            const count = [
-              on ? `Talent #${lv.count} at level ${lv.level}` : '',
-              uOn ? `Utility talent #${lv.utilityCount}` : '',
-            ].filter(Boolean).join(' · ') || `Level ${lv.level} grants nothing`;
-            return `<tr class="${lv.future ? 'future' : ''}">
-              <td class="num" title="${esc(count)}">${lv.level}</td>
-              <td class="${state}">${talentCell(model,
-    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
-    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
-              <td class="${state}">${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
-                  : '<select disabled><option></option></select>'}</td>
-              <td class="${state}">${prose(model,
-    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
-              <td class="${uState} util">${talentCell(model,
-    `data-item="${slots}|${li}|utilityTalent"${uOn ? ' placeholder="[utility]…"' : ' disabled'}`,
-    lv.utilityTalent, lv.utilitySphere,
-    uOn ? { sphere: 'utilitySphere', notes: 'utilityNotes' } : null)}</td>
-              <td class="${uState} util">${uOn ? itemSelect(slots, li, 'utilitySphere', lv.utilitySphere, spheres)
-                  : '<select disabled><option></option></select>'}</td>
-              <td class="${uState} util">${prose(model,
-    `data-item="${slots}|${li}|utilityNotes"${uOn ? '' : ' disabled'}`, lv.utilityNotes, 1, 'grow')}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>
-      </div>`;
-      }).join('')}
-      ${classes.length ? '' : '<p class="empty">No operative classes yet.</p>'}
+      <h3>Skill expertise ${own ? `<span class="badge">${own}</span>` : ''}</h3>
+      ${classes.map((cls, ci) => (isBlended(cls) ? '' : guileClassBlock(model, g, cls, ci))).join('')}
+      ${own ? '' : `<p class="empty">${blended.length ? 'No other operative classes.' : 'No operative classes yet.'}</p>`}
+      ${blended.length ? `<p class="hint">Also operative classes:
+        ${blended.map((x) => esc(x.name)).join(', ')} — blended, so their ladders are listed once
+        under <strong>Blended training</strong> and their skill talents counted here by sphere.</p>` : ''}
       <div style="margin-top:8px">
         <button class="primary" data-action="add-guile-class">+ Add class</button>
       </div>
@@ -180,8 +124,294 @@ function guileTrainingPanel(model, g) {
         the whole character, and every skill sphere's save DC is built on it: the field
         appears on each class block and they are the one setting. A class that traded its
         spellcasting for a progression uses whichever score its casting used.
+        For a class no tier matches, <strong>Custom rules</strong> writes both ladders out as the
+        class levels they gain at — <code>all</code>, <code>even</code>, <code>2, +2</code>,
+        <code>char: 6-10</code>; hover a rule box for the rest.
+        Tick <strong>martial</strong> or <strong>magical</strong> under Counts as for a class
+        whose talents may be spent on those spheres too; a pick in a sphere of a kind the class
+        does not reach counts nowhere and is marked on its row.
       </p>
     </section>`;
+  }
+
+/** Whether a skill class's ladders reach the sphere sides. */
+const isBlended = (cls) => !!(cls.blendedCombat || cls.blendedMagic);
+
+  /**
+   * The operative modifier, where the other two tabs put a class's casting
+   * score or practitioner modifier. It is one choice for the whole character
+   * rather than one per class, so every block that shows it shows the same
+   * field bound to the same path.
+   */
+export function operativeField(model, g) {
+    return `<label class="fld abmod"><span>Operative modifier</span>
+            <span class="pair abmod">
+              ${select('training.guile.operativeMod', g.operativeMod,
+    OPERATIVE_ABILITIES.map((k) => ABILITY_LABELS[k.toLowerCase()] || k))}
+              <span class="hint">${g.operativeMod ? fmt(g.operativeAbilityMod || 0) : ''}</span>
+            </span></label>`;
+  }
+
+  /**
+   * One skill class: its head and its two ladders.
+   *
+   * Drawn in the Skill expertise group, or under Blended training when its
+   * ladders reach the sphere sides -- then every slot picks from each list it
+   * reaches, and the sphere says where the talent counts.
+   */
+export function guileClassBlock(model, g, cls, ci) {
+    const list = 'training.guile.classes';
+    const systems = poolSystems(cls, 'guile');
+    const spheres = systems.length > 1 ? poolSpheres(systems) : guileSphereList();
+    return `<div class="trainclass">
+        <div class="trainhead">
+          <label class="fld classpick"><span>Class</span>
+            ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
+          ${poolField(list, ci, cls, 'guile')}
+          ${operativeField(model, g)}
+          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+            <span class="pair">
+              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
+                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              <span class="hint">${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility</span>
+            </span></label>
+          ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems))}
+          <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
+        </div>
+        ${ladderTable(model, list, ci, cls, systems, spheres)}
+      </div>`;
+  }
+
+/** The syntax a ladder rule takes, for the tooltip on each rule box. */
+const LADDER_RULE_HELP = 'The class levels this ladder gains a talent at: all, odd, even, 3, 5-10, '
+  + '"2, +2" (2nd and every 2 levels thereafter), -7 to leave a level out. Start with char: to '
+  + 'count character levels instead. A formula of classLevel and charLevel works too. Blank is none.';
+
+  /**
+   * How a two-ladder pool gains talents, and the rules a setting needs.
+   *
+   * A martial or magic class that reaches skill talents keeps its own
+   * Talents / level for the any ladder by default -- ticking skill changes no
+   * count until someone chooses to -- with a rule box for its [utility]
+   * talents. That is also how the book's blended classes print theirs: a
+   * talent a level, or a caster level, plus a [utility] one on even or odd
+   * levels. The three tiers are the book's table, and Custom writes both
+   * ladders out for anything else. A guile class has no rate of its own, so
+   * it chooses a tier or Custom.
+   */
+export function poolField(list, ci, cls, home) {
+    const mode = poolMode(cls, home);
+    const options = [
+      ...(home === 'guile' ? [] : [['', 'Talents / level rate',
+        'Any talents at the class\'s own Talents / level; [utility] talents at the levels written beside it']]),
+      ...EXPERTISE_TIERS.map((t) => [t, t, 'As the Skill Talents by Expertise Tier table']),
+      [EXPERTISE_CUSTOM, 'Custom rules', 'Both ladders at the levels written beside it'],
+    ];
+    const rule = (field, label, placeholder) => {
+      const { error } = parseLadderRule(cls[field]);
+      return `<label class="fld rulepick${error ? ' bad' : ''}" title="${esc(error ? `${error}. ${LADDER_RULE_HELP}` : LADDER_RULE_HELP)}">
+            <span>${label}</span>
+            ${itemText(list, ci, field, cls[field], placeholder)}
+            ${error ? '<span class="hint bad">not a rule — grants nothing</span>' : ''}</label>`;
+    };
+    return `<label class="fld ratepick"><span>${home === 'guile' ? 'Expertise tier' : 'Talent pool'}</span>
+            ${itemSelect(list, ci, 'expertise', cls.expertise ?? '', options, home === 'guile' ? '—' : null)}</label>
+          ${mode === 'custom' ? rule('anyRule', 'Any talent at', 'all') : ''}
+          ${mode === 'custom' || mode === 'rate' ? rule('utilityRule', '[utility] talent at', 'e.g. even') : ''}`;
+  }
+
+  /**
+   * Where each granted talent of a pool went so far: a count per system, and
+   * `none` for talents in a sphere of a system the class does not reach,
+   * which count nowhere until the class is ticked for it or the sphere
+   * changed. Levels still to come are left out, as the other tabs do.
+   */
+export function poolCounts(cls, systems) {
+    const counts = { combat: 0, magic: 0, guile: 0, none: 0 };
+    const slots = systems.includes('guile');
+    for (const lv of cls.levels || []) {
+      if (lv.future) continue;
+      const picks = [[lv.granted, lv.sphere]];
+      if (slots) picks.push([lv.utilityGranted, lv.utilitySphere]);
+      for (const [on, sphere] of picks) {
+        if (!on || !String(sphere || '').trim()) continue;
+        counts[talentLandsOn(sphere, systems) ?? 'none'] += 1;
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * How wide each column of a pool's two ladders is drawn, and which ladder
+   * has the room.
+   *
+   * Three things decide it.
+   *
+   * The sphere column is only as wide as the longest sphere picked in it --
+   * a dropdown needs about half a rem a character plus its padding and arrow
+   * -- rather than the 8.75rem every talent table gives it. Side by side the
+   * two ladders share the longer fit, so the halves are the same width.
+   *
+   * Everything else is shares, the talent one part and its notes two: a
+   * talent is a name, and the notes are where a player writes. What the
+   * sphere column no longer takes is split the same way without anything
+   * further, since the shares are of whatever width is left.
+   *
+   * A focused ladder keeps its shares; the other is drawn narrow -- a quarter
+   * of the shares and a short dropdown -- and what it gives up goes to the
+   * focused side. A ladder that grants nothing at all on this pool (a pool
+   * with no [utility] rule, a Trained operative's any ladder before 4th)
+   * cannot be chosen between: it is drawn narrow on its own and there is no
+   * switch.
+   */
+export function ladderLayout(model, key, cls, spheres = []) {
+    const levels = cls.levels || [];
+    const featured = { any: levels.some((lv) => lv.granted), utility: levels.some((lv) => lv.utilityGranted) };
+    const toggles = featured.any && featured.utility;
+    const stored = model.data.uiPrefs?.ladderFocus?.[key];
+    const focus = toggles
+      ? (stored === 'any' || stored === 'utility' ? stored : null)
+      : featured.any !== featured.utility ? (featured.any ? 'any' : 'utility') : null;
+    const known = new Set(spheres.map(String));
+    // A value the list does not offer is drawn with " *" after it (itemSelect).
+    const longest = (field, flag) => Math.max(1, ...levels.filter((lv) => lv[flag]).map((lv) => {
+      const name = String(lv[field] || '').trim();
+      return name.length + (name && !known.has(name) ? 2 : 0);
+    }));
+    const fits = {
+      any: Math.max(SPHERE_MIN_REM, SPHERE_CHROME_REM + SPHERE_REM_PER_CHAR * longest('sphere', 'granted')),
+      utility: Math.max(SPHERE_MIN_REM, SPHERE_CHROME_REM + SPHERE_REM_PER_CHAR * longest('utilitySphere', 'utilityGranted')),
+    };
+    // Side by side, both dropdowns are as wide as the longer of the two, so
+    // the halves come out the same width; a focused ladder fits its own.
+    if (!focus) fits.any = fits.utility = Math.max(fits.any, fits.utility);
+    const half = (which, shrunk) => {
+      const fit = fits[which];
+      const scale = shrunk ? SHRUNK_SCALE : 1;
+      return {
+        talent: TALENT_SHARE * scale,
+        sphere: shrunk ? Math.min(fit, SHRUNK_SPHERE_REM) : fit,
+        notes: NOTES_SHARE * scale,
+        shrunk,
+      };
+    };
+    const any = half('any', focus === 'utility');
+    const utility = half('utility', focus === 'any');
+    // Shares, not percentages of the table: a fixed-layout table whose
+    // percentage columns add up past 100% gives the fixed columns their width
+    // first and scales the percentages down to what is left, in proportion.
+    // Under 100% it does the opposite and spreads the rest over every column,
+    // the fixed ones included -- the level column went from 46px to 103px the
+    // first time a ladder was narrowed. So the shares are scaled to add up to
+    // SHARE_TOTAL, far past anything a table can hold.
+    const sum = any.talent + any.notes + utility.talent + utility.notes;
+    for (const h of [any, utility]) {
+      h.talent = Math.round((h.talent / sum) * SHARE_TOTAL * 100) / 100;
+      h.notes = Math.round((h.notes / sum) * SHARE_TOTAL * 100) / 100;
+    }
+    return { focus, toggles, any, utility };
+  }
+
+/** What a dropdown needs for each character of its name, and for its padding, arrow and cell. */
+const SPHERE_REM_PER_CHAR = 0.5;
+const SPHERE_CHROME_REM = 3;
+/** Never narrower than an empty dropdown's dash. */
+const SPHERE_MIN_REM = 4.5;
+/** A narrowed ladder's dropdown: its first few letters, and the arrow. */
+const SHRUNK_SPHERE_REM = 4.5;
+/** A talent is a name; its notes are where the writing goes. */
+const TALENT_SHARE = 1;
+const NOTES_SHARE = 2;
+/** A narrowed ladder keeps this much of its shares: still a box to click into. */
+const SHRUNK_SCALE = 0.25;
+/** What the four shares are scaled to add up to, in percent; see ladderLayout. */
+const SHARE_TOTAL = 400;
+
+/** The `<col>`s for one ladder. */
+const ladderCols = (h, util) => {
+    const c = util ? ' util' : '';
+    return `<col class="talent${c}" style="width:${h.talent}%">`
+      + `<col class="sphere${c}" style="width:${Math.round(h.sphere * 100) / 100}rem">`
+      + `<col class="notes${c}" style="width:${h.notes}%">`;
+  };
+
+  /**
+   * A pool's two ladders, one row a level: the any talent and the [utility]
+   * talent side by side, each lighting up on its own. The same table for a
+   * guile class and for a martial or magic class that reaches skill talents,
+   * which is what reaching them makes its pool. Each heading is also the
+   * switch that gives its ladder the room (ladderLayout).
+   */
+export function ladderTable(model, list, ci, cls, systems, spheres) {
+    const blended = systems.length > 1;
+    const key = `ladder:${list}:${String(cls.name || '').trim() || ci}`;
+    const layout = ladderLayout(model, key, cls, spheres);
+    // Only a blended pool marks which way each talent went; any pool marks a
+    // sphere it cannot count, since that is a pick going nowhere.
+    const landed = (on, sphere) => {
+      if (!on || !String(sphere || '').trim()) return null;
+      const side = talentLandsOn(sphere, systems);
+      if (side === null) return 'none';
+      return blended ? side : null;
+    };
+    const why = (side, sphere) => (side === 'none'
+      ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
+      : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+    const heading = (which, label, other) => {
+      const shrunk = layout[which].shrunk;
+      if (!layout.toggles) {
+        const title = shrunk ? `This pool grants no ${label.toLowerCase()}s, so the ladder is drawn narrow` : '';
+        return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}"${
+          title ? ` title="${esc(title)}"` : ''}>${label}</th>`;
+      }
+      const on = layout.focus === which;
+      const title = on ? 'Back to both ladders side by side'
+        : `Give the ${label.toLowerCase()} ladder the room and narrow the ${other} one`;
+      return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}">
+              <button type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
+                aria-pressed="${on}" title="${esc(title)}">${label}</button></th>`;
+    };
+    // Sized here and nowhere else: a drag on the level column's edge used to
+    // freeze every column at an even split of the headings over them, which
+    // no focus could undo. Opted out of hand-sizing (ui/column-widths.js).
+    return `<div class="tablewrap"><table class="talents guileladder${layout.focus ? ` focus-${layout.focus}` : ''}" data-colresize="off">
+          <colgroup><col class="lvl">${ladderCols(layout.any, false)}${ladderCols(layout.utility, true)}</colgroup>
+          <thead><tr><th class="num">Lvl</th>
+            ${heading('any', 'Any talent', '[utility]')}
+            ${heading('utility', '[utility] talent', 'any')}</tr></thead>
+          <tbody>${(cls.levels || []).map((lv, li) => {
+            const slots = `${list}.${ci}.levels`;
+            const on = !!lv.granted;
+            const uOn = !!lv.utilityGranted;
+            const state = on ? 'slot-on' : 'slot-off';
+            const uState = uOn ? 'slot-on' : 'slot-off';
+            const side = landed(on, lv.sphere);
+            const uSide = landed(uOn, lv.utilitySphere);
+            const count = [
+              on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${why(side, lv.sphere)}` : '',
+              uOn ? `Utility talent #${lv.utilityCount}${why(uSide, lv.utilitySphere)}` : '',
+            ].filter(Boolean).join(' · ') || `Level ${lv.level} grants nothing`;
+            const cellTitle = (s, sphere) => (s === 'none' ? ` title="${esc(why(s, sphere).slice(3))}"` : '');
+            return `<tr class="${lv.future ? 'future' : ''}">
+              <td class="num" title="${esc(count)}">${lv.level}</td>
+              <td class="${state}">${talentCell(model,
+    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
+              <td class="${state}${side ? ` side-${side}` : ''}"${cellTitle(side, lv.sphere)}>${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
+                  : '<select disabled><option></option></select>'}</td>
+              <td class="${state}">${prose(model,
+    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
+              <td class="${uState} util ustart">${talentCell(model,
+    `data-item="${slots}|${li}|utilityTalent"${uOn ? ' placeholder="[utility]…"' : ' disabled'}`,
+    lv.utilityTalent, lv.utilitySphere,
+    uOn ? { sphere: 'utilitySphere', notes: 'utilityNotes' } : null)}</td>
+              <td class="${uState} util${uSide ? ` side-${uSide}` : ''}"${cellTitle(uSide, lv.utilitySphere)}>${uOn ? itemSelect(slots, li, 'utilitySphere', lv.utilitySphere, spheres)
+                  : '<select disabled><option></option></select>'}</td>
+              <td class="${uState} util">${prose(model,
+    `data-item="${slots}|${li}|utilityNotes"${uOn ? '' : ' disabled'}`, lv.utilityNotes, 1, 'grow')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
   }
 
   /* ----- the sphere table: ranks, DCs and ranges in one ----- */
