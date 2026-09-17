@@ -2536,6 +2536,14 @@ table.gear th.colhead { white-space: nowrap; }
    over a row of nothing. Columns pack a short card under the last, the way
    the deck manipulations do (`.manipgrid`). */
 .weaponcards > .weapon { break-inside: avoid; page-break-inside: avoid; margin: 0 0 9px; min-width: 0; }
+/* A collapsed card is one line: the name, the attack, the damage, the roll.
+   The formula handle is an editing detail and comes back with the fields;
+   with it on the line the head wrapped and every closed card was two lines
+   of which the second held a button. The name gives way before the numbers
+   do, and never below eight characters' worth. */
+.weaponcards .wnames > input[type="text"] { flex: 1 1 8rem; width: auto; min-width: 8rem; max-width: 15rem; }
+.weaponcards .wnames { flex: 1 1 8rem; }
+.weaponcards .weapon.collapsed .whandle { display: none; }
 /* The same for the rest of the tab: each panel takes the width its table
    needs and no more, and the next one sits beside it while there is room.
    Hints and descriptions are capped, or a long sentence would set a panel's
