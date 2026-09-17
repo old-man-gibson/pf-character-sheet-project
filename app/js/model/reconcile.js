@@ -166,6 +166,15 @@ export function reconcile(model) {
   // bonus landed on something it is built from (an ability score, a class
   // level) and cascaded in. See the `balanced` set in Character's constructor.
   model.bare = model.bare || {};
+  // HP is computed by the class pass rather than DERIVED, but needs the same
+  // second measurement after prose bonuses have changed its ability score.
+  // Otherwise each reload absorbs that ability bonus into Other, then adds it
+  // again. Always use the original total, never the first pass's answer.
+  model.bare['hp.total'] = model.data.hp?.base;
+  if (model.data.hp && typeof model.offsets['hp.total'] !== 'string'
+      && Number.isFinite(model.imported['hp.total'])) {
+    model.offsets['hp.total'] = model.imported['hp.total'] - model.data.hp.base;
+  }
   for (const d of DERIVED) {
     if (!d.reconcile) continue;
     const bare = safe(() => d.compute(model.data), 0);

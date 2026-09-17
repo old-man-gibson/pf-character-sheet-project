@@ -323,9 +323,18 @@ imported character restores the document as imported, since there is no URL to r
 Local edits are unaffected by re-conversion until you press **Reset** on a character.
 Saved edits, saved versions, snapshots and imported files all carry the document's
 `schemaVersion` (currently 9, declared as `SCHEMA_VERSION` in `model.js` and written by
-the converter); if the schema changes, stale working state is discarded, stale imports
-refused, and a stale snapshot is listed but not openable — struck through, saying what it
-was written for — rather than loaded with sections missing.
+the converter). If the schema changes, incompatible working state is kept and offered
+as a **Download recovery** file. Before newer edits replace that working slot, its
+original bytes are archived locally. If that archive cannot be written, the new working
+copy is not written either and the storage warning appears. Malformed working JSON is
+preserved in the same way. Recovery copies remain through Reset; removing the character
+and its history removes them too.
+
+An incompatible saved version can be downloaded with **Download saved version**. Saving
+again preserves that earlier version as a named recovery checkpoint in the same database
+transaction. Incompatible snapshots have a **Download** button in History. They are not
+adopted into the current model; use a compatible app version to open them. Stale imports
+are still refused rather than loaded with sections missing.
 
 `tests/model.test.mjs` asserts that every converted character passes the import gate,
 that what the app exports imports back with its edits intact, and that each refusal

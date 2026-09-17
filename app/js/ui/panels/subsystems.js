@@ -1666,11 +1666,11 @@ function companionScoresPanel(model, cc) {
         ${ABILITIES.map((a) => {
     const s = sc[a] || {};
     const base = kind === 'familiar' && a === 'int'
-      ? `<input type="number" value="${b.scores?.int?.base ?? ''}" placeholder="${k.tableInt ?? ''}"
+      ? `<input type="number" value="${esc(b.scores?.int?.base ?? '')}" placeholder="${esc(k.tableInt ?? '')}"
             data-set="${p}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
       : kind === 'conjured'
-        ? `<input type="number" value="${b.scores?.[a]?.base ?? ''}" placeholder="${s.base ?? 10}"
-            data-set="${p}.scores.${a}.base" data-kind="number-or-null" title="Auto: ${s.base ?? 10} from ${b.baseForm ? `the ${b.baseForm} base form` : 'the default line'}${b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.">`
+        ? `<input type="number" value="${esc(b.scores?.[a]?.base ?? '')}" placeholder="${esc(s.base ?? 10)}"
+            data-set="${p}.scores.${a}.base" data-kind="number-or-null" title="Auto: ${esc(s.base ?? 10)} from ${b.baseForm ? `the ${esc(b.baseForm)} base form` : 'the default line'}${b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.">`
         : num(`${p}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
           <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>

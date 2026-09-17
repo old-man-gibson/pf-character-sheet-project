@@ -148,6 +148,23 @@ public fixture; `convert.test` needs the source workbooks and so still says what
 skipped and exits 0, as do the checks written against a named character. See the next
 section for where they look.
 
+For browser checks, start the local server and open
+<http://localhost:8777/tests/browser.html>, then press **Run browser checks**.
+These use disposable test characters to exercise real IndexedDB saves, unsaved-edit
+recovery, checkpoints, version recovery, tab rendering and print CSS. They do not
+replace a visual print-preview check for pagination.
+
+To check character exports for values that drift each time they are reopened:
+
+```bash
+node tools/check-characters.mjs private/review-characters
+```
+
+The checker reads the files without rewriting them and tests five export/reload cycles.
+It uses the content carried in the exports; it does not load private catalogue packs.
+The focused `hp-roundtrip`, `storage-recovery` and `companion-html` test suites run
+automatically in CI alongside the existing suites.
+
 ---
 
 ## Your characters, and the fixtures

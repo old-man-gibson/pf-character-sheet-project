@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character sheet browser checks</title>
+<style>
+  body { margin: 20px; font: 16px system-ui; background: #f6f7f9; color: #16202b; }
+  button { padding: 8px 14px; cursor: pointer; }
+  #results { line-height: 1.7; } .pass { color: #176034; } .fail { color: #a02020; }
+  character-sheet { display: block; margin-top: 24px; }
+</style>
+<h1>Character sheet browser checks</h1>
+<p>Exercises real browser storage, editing, saving, recovery and panel rendering.
+Uses temporary test characters; your library is not changed.</p>
+<button id="run">Run browser checks</button>
+<p id="status" role="status">Ready</p>
+<ol id="results"></ol>
+<div id="mount"></div>
+<script type="module" src="./browser.mjs"></script>
+</html>
