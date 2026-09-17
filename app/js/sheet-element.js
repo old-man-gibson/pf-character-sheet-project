@@ -5263,7 +5263,12 @@ export class CharacterSheetElement extends HTMLElement {
 
   #bind() {
     const root = this.shadowRoot;
-    bindSessionBoard(root, this.#model, () => this.#render());
+    bindSessionBoard(root, this.#model, () => {
+      // Roll references contain card positions. Dismiss before a layout edit
+      // can make the toast's format switch refer to a different option.
+      this.#rollToast = null;
+      this.#render();
+    });
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
       b.addEventListener('click', () => {

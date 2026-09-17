@@ -41,6 +41,7 @@ export function planAction(model, card, state = sessionState(model), budget = ac
     next.spent[key] = count(next.spent[key]) + 1;
   };
   try {
+    if (card.kind === 'choice') throw new Error('Select an option from the choice group');
     if (!ACTION_TYPES.some(([k]) => k === type)) throw new Error('Choose an action type');
     if (card.source && !sessionShortcuts(model).some(s => s.key === card.source)) throw new Error('The linked source is missing or renamed');
     if (!state.onTurn && !['immediate', 'aoo', 'free'].includes(type)) throw new Error('Start your turn to use this action');

@@ -2,6 +2,8 @@ import { esc } from '../html.js';
 import { D20_ICON } from '../roll.js';
 import { sessionRolls } from '../../model/session-rolls.js';
 import { renderedProse } from '../prose.js';
+import { editableSession, choiceParent, moveSessionCard, removeSessionCard } from '../../model/session-layout.js';
+import { bindSessionDrag } from '../session-drag.js';
 import { ACTION_TYPES, ACTION_POOLS, sessionState, actionBudget, planAction, useSessionAction,
   advanceTurn, sessionShortcuts } from '../../model/session.js';
 
@@ -11,7 +13,24 @@ const input = (field, value, attrs = '') => `<input data-session-field="${field}
 export function renderSessionBoard(model) {
   const state = sessionState(model), budget = actionBudget(model, state), shortcuts = sessionShortcuts(model);
   const types = (selected) => ACTION_TYPES.map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('');
+  const handle = (index, title) => `<button class="session-drag" draggable="true" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
   const cardHtml = (card, index) => {
+    if (card.kind === 'choice') {
+      const members = state.cards.map((c, i) => ({c, i})).filter(({c}) => c.kind !== 'choice' && choiceParent(state, c) === card);
+      const chosen = members.find(({c}) => c.id === card.selectedId) || members[0];
+      return `<article class="session-choice" data-session-drop="${index}">
+        <header>${handle(index, card.title || 'Choice group')}<strong>${esc(card.title || 'Choice group')}</strong><small>${members.length} choices</small></header>
+        ${members.length ? `<select data-session-choice="${index}" aria-label="Choose an option in ${esc(card.title || 'Choice group')}">${members.map(({c,i}) => `<option value="${i}" ${chosen.i === i ? 'selected' : ''}>${esc(c.title || 'Untitled option')}</option>`).join('')}</select>${cardHtml(chosen.c, chosen.i)}` : '<p class="hint">Drag options here, or choose this group in an option’s editor.</p>'}
+        <div class="session-choice-drop" data-session-group-drop="${index}">Drop an option into this group</div>
+        <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit choice group</summary>
+          <label>Group title ${input(`cards.${index}.title`, card.title)}</label>
+          <label>Action <select data-session-field="cards.${index}.type">${types(card.type)}</select></label>
+          ${button('up','Move earlier',`data-index="${index}"`)} ${button('down','Move later',`data-index="${index}"`)}
+          ${button('group-add','+ Custom choice',`data-index="${index}"`)}
+          ${button('remove','Ungroup (keep options)',`data-index="${index}"`)}
+        </details>
+      </article>`;
+    }
     const source = card.source ? shortcuts.find(x => x.key === card.source) : null;
     const title = card.title || source?.title || 'Untitled option';
     const plan = planAction(model, card, state, budget);
@@ -25,7 +44,8 @@ export function renderSessionBoard(model) {
       ${values.attack ? `<span><small>Attack</small><strong>${esc(values.attack)}</strong>${copy('attack', 'attack')}</span>` : ''}
       ${values.damage ? `<span><small>Damage</small><strong>${esc(values.damage)}</strong>${copy('damage', 'damage')}</span>` : ''}
       </div>`;
-    return `<article class="session-option ${reason ? 'unavailable' : ''}">
+    return `<article class="session-option ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
+      ${handle(index, title)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
         <summary>${esc(title)}${card.resource ? `<small>${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</small>` : ''}</summary>
         ${source ? `<p class="session-source">Linked ${esc(source.kind)} · ${esc(source.title)}</p>` : ''}
@@ -35,6 +55,7 @@ export function renderSessionBoard(model) {
         <details class="session-editor" data-session-fold="editor:${index}" ${state.folded[`editor:${index}`] === false ? 'open' : ''}><summary>Edit option</summary>
           <label>Title ${input(`${edit}.title`, card.title, 'aria-label="Option title"')}</label>
           <label>Action <select data-session-field="${edit}.type">${types(card.type)}</select></label>
+          <label>Choice group <select data-session-membership="${index}"><option value="">Standalone option</option>${state.cards.filter(g => g.kind === 'choice' && g.type === card.type).map(g => `<option value="${esc(g.id)}" ${choiceParent(state,card) === g ? 'selected' : ''}>${esc(g.title || 'Choice group')}</option>`).join('')}</select></label>
           <div class="session-settings-grid">
             <label>Attack bonus or formula ${input(`${edit}.attackFormula`, card.attackFormula, 'placeholder="e.g. attack.melee or bab + dex.mod"')}</label>
             <label>Damage roll ${input(`${edit}.damageFormula`, card.damageFormula, 'placeholder="e.g. 2d6 + str.mod"')}</label>
@@ -77,26 +98,48 @@ export function renderSessionBoard(model) {
       ${button('reset', 'Reset encounter')}
     </details>
     <div class="session-groups">${ACTION_TYPES.map(([key, label]) => {
-      const cards = state.cards.map((c, i) => ({ c, i })).filter(({ c }) => c.type === key);
+      const cards = state.cards.map((c, i) => ({ c, i })).filter(({ c }) => c.type === key && !choiceParent(state,c));
       return `<details class="session-group" data-session-fold="${key}" ${state.folded[key] ? '' : 'open'}>
-        <summary><span>${label}</span><small>${cards.length} option${cards.length === 1 ? '' : 's'}${budget[key] ? ` · ${budget[key].remaining} left` : ''}</small></summary>
-        <div class="session-options">${cards.map(({ c, i }) => cardHtml(c, i)).join('')}</div>
+        <summary data-session-type-drop="${key}"><span>${label}</span><small>${cards.length} option${cards.length === 1 ? '' : 's'}${budget[key] ? ` · ${budget[key].remaining} left` : ''}</small></summary>
+        <div class="session-options" data-session-type-drop="${key}">${cards.map(({ c, i }) => cardHtml(c, i)).join('')}<div class="session-type-drop">Drop here to place an option at the end</div></div>
         <div class="session-add">${button('add', '+ Custom option', `data-kind="${key}"`)}
+          ${button('choice-add', '+ Choice group', `data-kind="${key}"`)}
           <select data-session-shortcut="${key}" aria-label="Add ${label} shortcut"><option value="">+ Link an attack or ability…</option>${shortcuts.map(s => `<option value="${esc(s.key)}">${esc(s.kind)} · ${esc(s.title)}</option>`).join('')}</select></div>
       </details>`;
     }).join('')}</div>
-    <p class="hint">Choose your go-to options above. Titles open details; Use spends the action and configured resource. Undo restores both.</p>
+    <p class="hint">Drag by ⠿ to reorder, move between action types, or drop into a choice group. A group shows only the selected option; choosing it spends nothing. Use spends that option’s action and resource. Undo restores edits.</p>
   </section>`;
 }
 
 export function bindSessionBoard(root, model, render) {
   const update = state => { model.set('session', state); render(); };
+  bindSessionDrag(root, model, render);
   root.querySelectorAll('[data-session-command]').forEach(el => el.addEventListener('click', () => {
     const state = sessionState(model), key = el.dataset.kind, i = Number(el.dataset.index);
     const command = el.dataset.sessionCommand;
     if (command === 'use') { useSessionAction(model, state.cards[i]); render(); return; }
     if (command === 'spend') { useSessionAction(model, {type:key}); render(); return; }
     if (command === 'next' || command === 'end') { advanceTurn(model, command === 'next'); render(); return; }
+    if (command === 'remove') { removeSessionCard(model, i); render(); return; }
+    if (command === 'up' || command === 'down') {
+      const card = state.cards[i], parent = choiceParent(state, card);
+      const indices = state.cards.map((c,n) => c.type === card.type && choiceParent(state,c) === parent ? n : -1).filter(n => n >= 0);
+      const j = indices[indices.indexOf(i) + (command === 'up' ? -1 : 1)];
+      if (j !== undefined) moveSessionCard(model, i, {type:card.type, groupId:parent?.id || '', target:j, after:command === 'down'});
+      render(); return;
+    }
+    if (command === 'choice-add' || command === 'group-add') {
+      const next = editableSession(model);
+      const id = crypto.randomUUID();
+      const group = next.cards[i];
+      next.folded[`editor:${next.cards.length}`] = false;
+      next.folded[`card:${next.cards.length}`] = false;
+      next.cards.push(command === 'choice-add'
+        ? {id, kind:'choice', title:'New choice group', type:key}
+        : {id, title:'New choice', type:group.type, groupId:group.id});
+      if (command === 'group-add') group.selectedId = id;
+      model.markUndo('Added session choice'); update(next); return;
+    }
     model.markUndo(`Session: ${command}`);
     if (command === 'restore') state.spent[key] = Math.max(0, (Number(state.spent[key]) || 0) - 1);
     if (command === 'reset') Object.assign(state, { spent: {}, pendingSwift: 0, turn: 1, onTurn: true });
@@ -105,21 +148,26 @@ export function bindSessionBoard(root, model, render) {
       state.folded[`editor:${state.cards.length}`] = false;
       state.cards = [...state.cards, { title: 'New option', type: key, note: '', cost: '1' }];
     }
-    if (command === 'remove') state.cards = state.cards.filter((_, n) => n !== i);
     if (command === 'unlink') {
       const source = sessionShortcuts(model).find(s => s.key === state.cards[i].source);
       state.cards[i] = { ...state.cards[i], source: '', note: [source?.note, state.cards[i].note].filter(Boolean).join('\n') };
     }
-    if (command === 'up' || command === 'down') {
-      const indices = state.cards.map((c, n) => c.type === state.cards[i].type ? n : -1).filter(n => n >= 0);
-      const j = indices[indices.indexOf(i) + (command === 'up' ? -1 : 1)];
-      if (j !== undefined) [state.cards[i], state.cards[j]] = [state.cards[j], state.cards[i]];
-    }
     update(state);
   }));
   root.querySelectorAll('[data-session-field]').forEach(el => el.addEventListener('change', () => {
+    const typeChange = el.dataset.sessionField.match(/^cards\.(\d+)\.type$/);
+    if (typeChange) { moveSessionCard(model, Number(typeChange[1]), {type:el.value}); render(); return; }
     model.set(`session.${el.dataset.sessionField}`, el.type === 'number' ? Math.max(0, Number(el.value) || 0) : el.value);
     render();
+  }));
+  root.querySelectorAll('[data-session-choice]').forEach(el => el.addEventListener('change', () => {
+    const state = editableSession(model);
+    state.cards[Number(el.dataset.sessionChoice)].selectedId = state.cards[Number(el.value)].id;
+    update(state);
+  }));
+  root.querySelectorAll('[data-session-membership]').forEach(el => el.addEventListener('change', () => {
+    const i = Number(el.dataset.sessionMembership);
+    moveSessionCard(model, i, {type:sessionState(model).cards[i].type, groupId:el.value}); render();
   }));
   root.querySelectorAll('[data-session-shortcut]').forEach(el => el.addEventListener('change', () => {
     const source = sessionShortcuts(model).find(s => s.key === el.value);

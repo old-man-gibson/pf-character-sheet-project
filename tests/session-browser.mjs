@@ -86,6 +86,42 @@ run.onclick = async () => {
       assert(!find('.rolltext').value.includes('1d20'), 'Damage-only button included an attack');
       assert(JSON.stringify(sheet.model.data.session.spent) === before, 'Copying spent an action');
     });
+    const indexOf = title => sheet.model.data.session.cards.findIndex(c => c.title === title);
+    const drag = async (index, selector) => {
+      const handle = find(`[data-session-drag="${index}"]`), target = find(selector);
+      assert(handle && target, 'Drag source or destination missing');
+      const transfer = new DataTransfer(), rect = target.getBoundingClientRect();
+      handle.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));
+      target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+2}));
+      target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+2}));
+      handle.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:transfer}));
+      await pause();
+    };
+    await test('Drag cards between action types and into a choice group', async () => {
+      await click('[data-session-command="choice-add"][data-kind="standard"]');
+      await drag(indexOf('Strike'), `[data-session-group-drop="${indexOf('New choice group')}"]`);
+      await drag(indexOf('Training sword'), 'summary[data-session-type-drop="standard"]');
+      assert(sheet.model.data.session.cards[indexOf('Training sword')].type === 'standard','Action type not changed');
+      await drag(indexOf('Training sword'), `[data-session-group-drop="${indexOf('New choice group')}"]`);
+      const group = find('.session-choice');
+      assert(group.querySelectorAll('.session-option').length === 1,'Group renders all choices');
+      assert(group.querySelector('[data-session-choice]').options.length === 2,'Choices missing');
+    });
+    await test('Choosing an alternative changes the displayed card without spending', async () => {
+      const before = JSON.stringify(sheet.model.data.session.spent);
+      const select = find('[data-session-choice]');
+      select.value = String(indexOf('Training sword')); select.dispatchEvent(new Event('change')); await pause();
+      assert(find('.session-choice .session-option').textContent.includes('Training sword'),'Selected card not displayed');
+      assert(JSON.stringify(sheet.model.data.session.spent) === before,'Choosing spent an action');
+    });
+    await test('Groups drag as a unit, and ungrouping keeps their cards', async () => {
+      await drag(indexOf('New choice group'), 'summary[data-session-type-drop="full"]');
+      assert(sheet.model.data.session.cards[indexOf('Strike')].type === 'full','Child action type not moved');
+      assert(sheet.model.data.session.cards[indexOf('Training sword')].type === 'full','Second child not moved');
+      await click(`[data-session-command="remove"][data-index="${indexOf('New choice group')}"]`);
+      assert(indexOf('Strike') >= 0 && indexOf('Training sword') >= 0,'Ungroup deleted children');
+      assert(!sheet.model.data.session.cards[indexOf('Strike')].groupId,'Child still grouped');
+    });
     status.textContent = 'All session browser checks passed';
   } catch (error) { status.textContent = `FAIL: ${error.message}`; }
   finally { await forget(doc.id); run.disabled = false; }

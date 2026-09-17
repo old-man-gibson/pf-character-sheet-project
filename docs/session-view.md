@@ -13,6 +13,20 @@ abilities and house rules can change it. Titles open details; **Edit option** se
 the title, notes, action type and optional tracker cost (a number or formula).
 Move earlier/later orders cards within a group. Each group can be collapsed.
 
+Drag an option by its ⠿ handle to reorder it. Drop above or below another card,
+or on an action-type heading to move it there (including a collapsed section).
+The highlighted edge shows where it will land. Move earlier/later and the Action
+selector provide keyboard alternatives.
+
+**+ Choice group** creates a compact collection such as Kinetic blasts or Full
+attack variants. Give it a title, then drag options into its marked drop area,
+or assign them using **Choice group** in each option's editor. The group's selector
+shows one option at a time with that option's own rolls, details and Use button.
+Switching choices spends nothing. Edit choice group can add a custom choice or
+ungroup while keeping all options. A group dragged to another action type moves
+all its choices together. Groups cannot be nested. Selection, grouping and order
+are saved with the character; layout edits can be undone.
+
 Attack and damage values stay visible on closed cards, with separate Roll20 copy
 buttons. Linked weapons use the same condition-adjusted rolls as the sheet. Any
 option can have an attack formula (`attack.melee`, `bab + dex.mod`, or `12`) and a
