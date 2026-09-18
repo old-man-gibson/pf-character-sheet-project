@@ -72,10 +72,10 @@ export function renderSessionBoard(model) {
       ...facts,
       card.resource ? `<span><small>Cost</small> ${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</span>` : '',
     ].filter(Boolean).join(' · ');
-    return `<article class="session-option session-width-${width(card, values.attackCount)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}">
-      ${handle(index, title)}
+    return `<article class="session-option session-width-${width(card, values.attackCount)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}" data-type="${esc(card.type || '')}">
+      ${handle(index, title)}${typeTag(card)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
-        <summary>${esc(title)}${typeTag(card)}${subtitle ? `<small class="session-card-facts">${subtitle}</small>` : ''}</summary>
+        <summary>${esc(title)}${subtitle ? `<small class="session-card-facts">${subtitle}</small>` : ''}</summary>
         ${source && (source.title !== title || (source.actionType && source.actionType !== card.type)) ? `<p class="session-source">Linked ${esc(source.kind)}${source.title !== title ? ` · ${esc(source.title)}` : ''}${source.actionType && source.actionType !== card.type ? ` <em>(normally a ${esc((ACTION_TYPES.find(([k]) => k === source.actionType)?.[1] || source.actionType).toLowerCase())} action)</em>` : ''}</p>` : ''}
         ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}

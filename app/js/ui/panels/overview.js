@@ -591,7 +591,7 @@ function dashOffenseCard(model, ctx, openNow) {
       const shown = delta
         ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(value)} — with ${cs.sources} applied`)}">${fmt(cs.adjusted[nowKey])}</strong>`
         : `<strong>${fmt(value)}</strong>`;
-      return `<span class="dashstat">${esc(label)} ${shown}${rollButton(model, kind, ref, rollLabel, cs)}</span>`;
+      return `<span class="dashstat"><span class="k">${esc(label)}</span><span class="v">${shown}${rollButton(model, kind, ref, rollLabel, cs)}</span></span>`;
     };
     const wrow = (w, i) => {
       const { calc } = w;
@@ -630,7 +630,7 @@ function dashOffenseCard(model, ctx, openNow) {
     };
     return `<section class="panel">
       <h3>Offense ${dashExpand('offense', openNow)}</h3>
-      <div class="dashstats">
+      <div class="dashstats dashstats-grid">
         ${stat('Melee', c.attack.totalMelee, 'melee', 'mode', 'melee', 'a melee attack')}
         ${stat('Ranged', c.attack.totalRanged, 'ranged', 'mode', 'ranged', 'a ranged attack')}
         ${stat('CMB', c.attack.totalCmb, 'cmb', 'mode', 'cmb', 'a combat maneuver')}
@@ -674,11 +674,15 @@ function dashDefenseCard(model, openNow) {
     const moved = (key, base) => movedSub(cs, key, base, String);
     return `<section class="panel">
       <h3>Defense ${dashExpand('defense', openNow)}</h3>
-      ${lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
-      ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${moved('ffCmd', d.ffCmd)}</span>`, true)}
-      ${save('fortitude', 'Fortitude')}
-      ${save('reflex', 'Reflex')}
-      ${save('will', 'Will')}
+      <div class="dashcols dashcols-2">
+        ${lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
+        ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${moved('ffCmd', d.ffCmd)}</span>`, true)}
+      </div>
+      <div class="dashcols dashcols-3">
+        ${save('fortitude', 'Fort')}
+        ${save('reflex', 'Ref')}
+        ${save('will', 'Will')}
+      </div>
       <p class="hint">Expand for the armour and save breakdowns by bonus type.</p>
     </section>`;
   }
@@ -932,7 +936,7 @@ function dashAbilitiesCard(model) {
     };
     return `<section class="panel">
       <h3>Ability checks</h3>
-      <div class="rowlist">${ABILITIES.map(row).join('')}</div>
+      <div class="rowlist dashabilities">${ABILITIES.map(row).join('')}</div>
     </section>`;
   }
 
