@@ -684,6 +684,13 @@
   border-bottom: 1px solid var(--cs-line);
 }
 .bdpop .bdname { font-weight: 650; color: var(--cs-accent); }
+/* What a feature does, one block per note the cell names. Long text scrolls
+   inside the panel, as a long breakdown does. */
+.bdpop .peek + .peek { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--cs-line); }
+.bdpop .peektext {
+  white-space: pre-wrap; max-height: min(15rem, 45svh); overflow-y: auto; scrollbar-width: thin;
+}
+.bdpop .peektext .empty { color: var(--cs-muted); font-style: italic; }
 .bdpop .bdtotal { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .bdpop .bdsub { color: var(--cs-muted); font-size: 0.72rem; margin-bottom: 5px; }
 .bdpop .bdrow {
@@ -3142,6 +3149,35 @@ table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-ba
 .cfnote > .pair { gap: 4px; }
 .cfnote .notename { flex: 1; min-width: 0; font-weight: 600; }
 .cfnote select { flex: none; width: 4rem; }
+/* The fold and the grip sit at the front of the name row, small and quiet:
+   the name is the thing to read. A folded note is just that row. */
+.cfnote > .pair > [data-collapse] {
+  flex: none; padding: 0 3px; background: transparent; border: 0; color: var(--cs-muted);
+}
+.cfnote > .pair > [data-collapse]:hover { color: var(--cs-text); }
+.cfnote.collapsed { margin-bottom: 2px; }
+/* Dragging a note: the same marks the template cards draw. */
+.cfnote.dragging { opacity: 0.45; }
+.cfnote.drop-before { box-shadow: 0 -3px 0 -1px var(--cs-accent); }
+.cfnote.drop-after { box-shadow: 0 3px 0 -1px var(--cs-accent); }
+
+/* A ladder cell naming a feature that has text: a small ⓘ in its corner opens
+   that text in a popover. Faint until the cell is pointed at, so a ladder
+   full of written-up features does not become a ladder full of buttons. */
+table.featgrid td .ffield.peekable { position: relative; }
+table.featgrid td .ffield.peekable textarea.cfeat,
+table.featgrid td .ffield.peekable input.cfeat,
+table.featgrid td .ffield.peekable .prose-view { padding-right: 1.25rem; }
+table.featgrid td .cfpeek {
+  position: absolute; top: 1px; right: 1px; z-index: 1;
+  padding: 0 3px; line-height: 1.2; font-size: 0.8rem;
+  background: transparent; border: 0; color: var(--cs-muted); opacity: 0.55;
+  cursor: pointer;
+}
+table.featgrid td .ffield.peekable:hover .cfpeek,
+table.featgrid td .ffield.peekable:focus-within .cfpeek,
+table.featgrid td .cfpeek:focus-visible { opacity: 1; }
+table.featgrid td .cfpeek:hover { color: var(--cs-accent); }
 
 /* The block shelf's find bar: the kind buttons, then a box to type in. */
 .extfind { flex-wrap: wrap; gap: 4px; }

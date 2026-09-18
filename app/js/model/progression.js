@@ -651,19 +651,60 @@ export function classFeatureNoteLevel(model, className, name) {
   const key = featureKey(name);
   if (!key) return null;
   const byLevel = model.data.progression?.classFeatures?.[className]?.byLevel || {};
-  const names = (cell) => (cell && typeof cell === 'object' ? Object.values(cell) : [cell])
-    .flatMap((v) => String(v ?? '').split(/,\s*(?![^()]*\))/));
-  const matches = (cellName) => {
-    const k = featureKey(cellName);
-    return k === key || k.startsWith(`${key} `);
-  };
   const levels = Object.keys(byLevel).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   for (const level of levels) {
     for (const cell of Object.values(byLevel[level] || {})) {
-      if (names(cell).some(matches)) return level;
+      if (cellFeatureNames(cell).some((n) => sameFeature(n, key))) return level;
     }
   }
   return null;
+}
+
+/**
+ * The feature names a ladder cell holds: a comma list, commas inside
+ * parentheses kept. A cell shared by two rule groups is a map of one text per
+ * group, and every one of them counts.
+ */
+function cellFeatureNames(cell) {
+  return (cell && typeof cell === 'object' ? Object.values(cell) : [cell])
+    .flatMap((v) => String(v ?? '').split(/,\s*(?![^()]*\))/))
+    .map((s) => s.trim()).filter(Boolean);
+}
+
+/** Whether a cell's spelling of a feature is the one `key` names. */
+function sameFeature(cellName, key) {
+  const k = featureKey(cellName);
+  return k === key || k.startsWith(`${key} `);
+}
+
+/**
+ * The notes a ladder cell is about, in the notes' own order and each with
+ * its index: what a click on the cell has to show. A cell naming a feature
+ * nobody has written up yet is about nothing, and offers nothing.
+ */
+export function classFeatureNotesInCell(model, className, text) {
+  const notes = classFeatureNotes(model, className);
+  if (!notes.length) return [];
+  const names = cellFeatureNames(text);
+  return notes
+    .map((note, index) => ({ note, index, key: featureKey(note.name) }))
+    .filter(({ key }) => key && names.some((n) => sameFeature(n, key)))
+    .map(({ note, index }) => ({ note, index }));
+}
+
+/**
+ * Reorder a class's notes. `to` is the position the note should end up
+ * at, counted before the move, which is what a drop between two cards means.
+ */
+export function moveClassFeatureNote(model, className, from, to) {
+  const notes = featureGroup(model, className)?.notes;
+  if (!Array.isArray(notes) || !notes[from]) return model;
+  const target = Math.max(0, Math.min(notes.length - 1, to > from ? to - 1 : to));
+  if (target === from) return model;
+  const [item] = notes.splice(from, 1);
+  notes.splice(target, 0, item);
+  model.recompute();
+  return model;
 }
 
 export function addClassFeatureNote(model, className, { name, type = null, text = '' } = {}) {

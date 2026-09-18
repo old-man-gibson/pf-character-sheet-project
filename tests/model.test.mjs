@@ -2106,6 +2106,22 @@ console.log('what a class feature does is prose the sheet reads');
   check('and the scaling note has scaled with the level', c.inlineNames['trap.sense'], 2);
   c.set('identity.level', 3);
   check('stepping back turns it off again', ac(), acBefore);
+
+  // The notes are the player's list, in the player's order, and the ladder
+  // above can ask which of them a cell is about.
+  const order = () => c.classFeatureNotes(cls).map((n) => n.name);
+  check('four notes, in the order they were written', order().length, 4);
+  c.moveClassFeatureNote(cls, 3, 0);
+  check('a note dragged to the front', order()[0], 'Nothing on the ladder');
+  c.moveClassFeatureNote(cls, 0, 4);
+  check('and back to the end', order()[3], 'Nothing on the ladder');
+  c.moveClassFeatureNote(cls, 9, 0);
+  check('a move from nowhere moves nothing', order()[3], 'Nothing on the ladder');
+  check('a cell names the notes it is about, in their order',
+    c.classFeatureNotesInCell(cls, 'Trap sense +2 (Ex), Uncanny dodge').map((x) => x.note.name),
+    ['Trap sense', 'Uncanny dodge']);
+  check('and a cell about nothing written names none',
+    c.classFeatureNotesInCell(cls, 'Improved uncanny dodge'), []);
 }
 
 console.log('which ability an attack mode is read as running on');

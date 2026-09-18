@@ -56,7 +56,7 @@ import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
-  classFeatureParked,
+  classFeatureNotesInCell, classFeatureParked, moveClassFeatureNote,
   classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
@@ -474,6 +474,8 @@ export class Character {
   removeClassFeatureRuleGroup(...a) { return removeClassFeatureRuleGroup(this, ...a); }
   classFeatureNotes(...a) { return classFeatureNotes(this, ...a); }
   classFeatureNoteLevel(...a) { return classFeatureNoteLevel(this, ...a); }
+  classFeatureNotesInCell(...a) { return classFeatureNotesInCell(this, ...a); }
+  moveClassFeatureNote(...a) { return moveClassFeatureNote(this, ...a); }
   addClassFeatureNote(...a) { return addClassFeatureNote(this, ...a); }
   setClassFeatureNote(...a) { return setClassFeatureNote(this, ...a); }
   removeClassFeatureNote(...a) { return removeClassFeatureNote(this, ...a); }
