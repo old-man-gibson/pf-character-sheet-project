@@ -470,8 +470,20 @@
   background: color-mix(in srgb, var(--act) var(--ab-wash), var(--cs-panel-2));
   border-left: 3px solid var(--act); border-radius: 3px; }
 .session-pool[data-type]:not(.spent) { border-top-color: var(--act); }
-/* The card wears its type on its left edge too, inside a choice group as well. */
+/* The card wears its type as colour too, inside a choice group as well. Which
+   of tag and colour show, and how much colour, are the player's (the
+   action-marks and action-tint attributes, from Theme & layout). */
 .session-option[data-type]:not([data-type=""]) { border-left: 3px solid var(--act); }
+:host([action-tint="gentle"]) .session-option[data-type]:not([data-type=""]) {
+  background: color-mix(in srgb, var(--act) 9%, var(--cs-panel)); }
+:host([action-tint="intense"]) .session-option[data-type]:not([data-type=""]) {
+  background: color-mix(in srgb, var(--act) 22%, var(--cs-panel));
+  border-color: color-mix(in srgb, var(--act) 55%, var(--cs-line)); border-left-color: var(--act); }
+:host([action-marks="tag"]) .session-option[data-type], :host([action-marks="none"]) .session-option[data-type] {
+  border-left-width: 1px; border-left-color: var(--cs-line); border-color: var(--cs-line); background: var(--cs-panel); }
+:host([action-marks="tag"]) .session-choice > .session-option[data-type],
+:host([action-marks="none"]) .session-choice > .session-option[data-type] { border-left-width: 0; }
+:host([action-marks="colour"]) .session-type-tag, :host([action-marks="none"]) .session-type-tag { display: none; }
 /* Reference cards: figures in columns rather than a run of text, so the eye
    finds a value where it expects one. */
 .dashstats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; }

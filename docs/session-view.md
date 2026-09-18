@@ -40,8 +40,11 @@ are saved with the character; layout edits can be undone.
 Attack and damage values stay visible on closed cards, with separate Roll20 copy
 buttons. A routine of several attacks is summarised by bonus, highest first
 (`16 attacks · +40 ×9 · +38 ×2 · +35 · +30 · +25`); the full list is the tooltip
-and what the copy contains. Each card carries its action type as a tag in that type's
-hue, the same hue as the counter tile it spends, then one muted
+and what the copy contains. Each card carries its action type as a tag beside its drag
+handle and as colour on the card, both in that type's hue, the same hue as the
+counter tile it spends. **Theme & layout** chooses which of the two to show
+(tag, colour, both or neither) and how much colour: a left edge, a gentle wash
+or a strong one. Then comes one muted
 line with what it is, its range, targets, save and duration, and its resource
 cost; **All rolls** sits in the roll row beside the attack and damage buttons.
 A formula error appears under the field it belongs to as well as on the card.
