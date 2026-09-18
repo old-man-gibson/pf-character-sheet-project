@@ -226,7 +226,11 @@ unmarked and fills nothing, which is what every talent on every sheet did before
 
 A class's own feature text lands **under the class**, on the Progression tab beneath its
 ladder — *What they do*, one entry per distinct feature however many levels grant it, an
-archetype's among them, each editable like anything typed in. The Template tab is for
+archetype's among them, each editable like anything typed in, `{…}` formulas and all: a
+name defined there is known across the sheet, and a bonus forwarded there lands once the
+character reaches the first level the ladder names the feature on. A feature that scales
+("Trap sense +1", then "+2") is gated once, at its first step; its note's formula does the
+scaling from `level`. The Template tab is for
 templates. A sheet written by an earlier version, which put a class's text there, moves it
 across on its next load: a group named for a class, carrying no template link, every one of
 its features named on that class's ladder, and the class holding no text of its own yet.

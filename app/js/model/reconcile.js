@@ -80,6 +80,7 @@ export function describeSource(path) {
   const nth = (i) => Number(i) + 1;
   switch (head) {
     case 'feature': return `${a} class feature, level ${b}`;
+    case 'featureNote': return `${parts.slice(2).join(':') || 'a feature'}, under ${a} features`;
     case 'template': return 'a template feature';
     case 'note': return `note ${nth(a)} on Lore`;
     case 'approvalNotes': return 'the approvals notes';

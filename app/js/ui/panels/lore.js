@@ -219,23 +219,45 @@ function groupDelete(name, g, arming) {
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
+    const charLevel = Number(model.data.identity.level) || 0;
+    // Where the ladder says the feature arrives; a note it never names has
+    // no level and no badge. Past that level the badge is just a fact; before
+    // it, the note is a plan and any bonus in it is greyed, as on the ladder.
+    const arrival = (f) => {
+      const at = model.classFeatureNoteLevel(className, f.name);
+      if (at === null) return { at, future: false, badge: '' };
+      const future = at > charLevel;
+      return {
+        at, future,
+        badge: `<span class="badge${future ? ' due' : ''}" title="${future
+          ? `Arrives at level ${at}. A bonus written here is not applying yet.`
+          : `Arrived at level ${at}`}">Lv ${at}</span>`,
+      };
+    };
     return `<div class="cfnotes">
       <button class="notehead" data-collapse="cfnotes-${esc(className)}"
         data-collapse-to="${open}" aria-expanded="${open}">
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
       </button>
-      ${open ? `${notes.map((f, i) => `<div class="cfnote">
+      ${open ? `${notes.map((f, i) => {
+        const when = arrival(f);
+        return `<div class="cfnote">
         <span class="pair">
           <input type="text" class="notename" value="${esc(f.name)}" spellcheck="false"
             data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'name' }))}">
           <select data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'type' }))}">
             ${['', 'Ex', 'Su', 'Sp'].map((t) => `<option value="${t}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('')}
           </select>
+          ${when.badge}
           <button class="danger" data-action="remove-cfnote" data-class="${esc(className)}" data-index="${i}"
             title="Remove ${esc(f.name)}">×</button>
         </span>
-        ${prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow')}
-      </div>`).join('') || '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
+        ${prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow', null, {
+    inactive: when.future,
+    inactiveTitle: `This feature arrives at level ${when.at}, so the bonus is not applying yet.`,
+  })}
+      </div>`;
+      }).join('') || '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
       <div style="margin-top:6px">
         <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
       </div>` : ''}

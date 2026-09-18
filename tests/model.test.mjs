@@ -2035,6 +2035,79 @@ console.log('the attack totals carry a reconciliation offset, and it is reachabl
     [again.data.attack.totalMelee, again.offsetOf('attack.totalMelee')], [13, 0]);
 }
 
+console.log('what a class feature does is prose the sheet reads');
+{
+  /*
+   * The notes under a class's ladder -- "What they do" -- are where a pack's
+   * feature text lands and where a player writes a feature's rule. They used
+   * to live on the Template tab, where every {…} was collected; once they
+   * moved under the class, a name defined in one showed its value in the box
+   * and was known nowhere else.
+   */
+  const c = new Character(blankDocument({ id: 'cfn', name: 'Cfn' }));
+  const cls = 'Barbarian';
+  const before = c.data.attack.totalMelee;
+  c.addClassFeatureNote(cls, {
+    name: 'Rage: the long form', type: 'Ex',
+    text: 'Rage for {rage.rounds.max = 4 + 3} rounds, {attack.melee += 2} while raging.',
+  });
+  check('the note is a prose source, named after the feature',
+    c.proseSources().some((f) => f.path === `featureNote:${cls}:Rage: the long form`), true);
+  check('a name defined there is known everywhere',
+    c.inlineNames['rage.rounds.max'], 7);
+  check('a bonus forwarded there lands', c.data.attack.totalMelee, before + 2);
+  check('the audit says where it was written, colon and all',
+    describeSource(`featureNote:${cls}:Rage: the long form`), `Rage: the long form, under ${cls} features`);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and it survives a reopen', [back.inlineNames['rage.rounds.max'], back.data.attack.totalMelee],
+    [7, before + 2]);
+  c.setClassFeatureNote(cls, c.classFeatureNotes(cls).length - 1, { text: 'Rage.' });
+  check('and leaves when the text does', ['rage.rounds.max' in c.inlineNames, c.data.attack.totalMelee],
+    [false, before]);
+
+  /*
+   * A note waits on the level the ladder gives its feature. The ladder spells
+   * the feature the way a class table does -- with a type tag, a size that
+   * grows -- and the note is named once for all of those; only the first
+   * arrival gates it, and the note's own formula scales from there.
+   */
+  c.set('identity.level', 3);
+  c.addClassFeatureColumn(cls, 'Features');
+  c.setClassFeature(cls, 6, 'Features', 'Trap sense +2 (Ex), Uncanny dodge');
+  c.setClassFeature(cls, 3, 'Features', 'Trap sense +1 (Ex)');
+  c.setClassFeature(cls, 5, 'Features', 'Improved uncanny dodge');
+  c.addClassFeatureNote(cls, {
+    name: 'Trap sense', type: 'Ex',
+    text: '{trap.sense = floor(level / 3)} to Reflex saves against traps: {save.ref += trap.sense}',
+  });
+  c.addClassFeatureNote(cls, { name: 'Uncanny dodge', text: 'Keeps Dex to AC: {ac += 1}' });
+  c.addClassFeatureNote(cls, { name: 'Nothing on the ladder', text: 'A house rule: {attack.melee += 1}' });
+  check('the first level naming the feature is where it arrives',
+    [c.classFeatureNoteLevel(cls, 'Trap sense'), c.classFeatureNoteLevel(cls, 'Uncanny dodge'),
+      c.classFeatureNoteLevel(cls, 'Nothing on the ladder')], [3, 6, null]);
+  check('a scaling feature is gated once, at its first step',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Trap sense`).future, undefined);
+  check('a feature not yet reached is future',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Uncanny dodge`).future, true);
+  check('a note the ladder never names is not gated',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Nothing on the ladder`).future, undefined);
+  const ac = () => c.data.defenses.ac;
+  const acBefore = ac();
+  check('a name written in a future note still reads', c.inlineNames['trap.sense'], 1);
+  // The level itself moves AC (attunement arrives on the way to 6th), so the
+  // bonus is read as the difference the note makes at that level, not the
+  // difference the level makes.
+  c.set('identity.level', 6);
+  const at6 = ac();
+  const dodge = c.classFeatureNotes(cls).findIndex((n) => n.name === 'Uncanny dodge');
+  c.setClassFeatureNote(cls, dodge, { text: 'Keeps Dex to AC.' });
+  check('reaching the level turns its bonus on', at6 - ac(), 1);
+  c.setClassFeatureNote(cls, dodge, { text: 'Keeps Dex to AC: {ac += 1}' });
+  check('and the scaling note has scaled with the level', c.inlineNames['trap.sense'], 2);
+  c.set('identity.level', 3);
+  check('stepping back turns it off again', ac(), acBefore);
+}
+
 console.log('which ability an attack mode is read as running on');
 {
   // A weapon's Base says "Alt Melee"; which stat that runs on is set on the

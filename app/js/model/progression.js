@@ -616,6 +616,56 @@ export function classFeatureNotes(model, className) {
   return model.data.progression?.classFeatures?.[className]?.notes || [];
 }
 
+/**
+ * A feature's name as the ladder and the notes both spell it, for matching
+ * one against the other.
+ *
+ * The ladder writes a feature the way a class table does -- "Rage (Ex)",
+ * "Trap sense +2", "Sneak attack +3d6", "Bravery (2/day)" -- and a note is
+ * named once for all of those. The type tag, the trailing size and the
+ * trailing parenthesis all go, so a scaling feature's every step answers to
+ * the one note.
+ */
+function featureKey(name) {
+  return normalizeName(name)
+    .replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '')
+    .replace(/\s*[+\-–]\s*\d+[a-z0-9/+\-–—]*\s*$/, '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The character level at which a class feature first arrives, read off the
+ * ladder: the lowest level whose cells name it. Null when the ladder does
+ * not name it at all -- a note a player wrote for something the grid never
+ * lists is not gated on a level it does not have.
+ *
+ * Only the first arrival counts. A feature that scales ("Trap sense +1" at
+ * 3rd, "+2" at 6th) is named again at every step and comes online once, at
+ * the first; what it comes to at each level is the note's formula's business,
+ * written in terms of `level` like everything else.
+ */
+export function classFeatureNoteLevel(model, className, name) {
+  const key = featureKey(name);
+  if (!key) return null;
+  const byLevel = model.data.progression?.classFeatures?.[className]?.byLevel || {};
+  const names = (cell) => (cell && typeof cell === 'object' ? Object.values(cell) : [cell])
+    .flatMap((v) => String(v ?? '').split(/,\s*(?![^()]*\))/));
+  const matches = (cellName) => {
+    const k = featureKey(cellName);
+    return k === key || k.startsWith(`${key} `);
+  };
+  const levels = Object.keys(byLevel).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  for (const level of levels) {
+    for (const cell of Object.values(byLevel[level] || {})) {
+      if (names(cell).some(matches)) return level;
+    }
+  }
+  return null;
+}
+
 export function addClassFeatureNote(model, className, { name, type = null, text = '' } = {}) {
   const g = featureGroup(model, className);
   const n = String(name ?? '').trim();
