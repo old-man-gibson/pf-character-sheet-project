@@ -63,6 +63,16 @@
   --ab-int: #ffe599;
   --ab-wis: #c27ba0;
   --ab-cha: #a4c2f4;
+  /* The seven action types, in the same pastel register as the abilities and
+     worn the same way (the wash and ink knobs below): a card's type tag and
+     the counter tile it spends share a hue, so a glance pairs them. */
+  --act-standard: #f6b26b;
+  --act-move: #9fc5e8;
+  --act-swift: #76c7c0;
+  --act-immediate: #b4a7d6;
+  --act-aoo: #e8918f;
+  --act-full: #b6d7a8;
+  --act-free: #cfcfcf;
   /* How much of that hue each part takes. The fills are pastels drawn for
      black text on white paper, so the dark theme wears them thin and inks the
      word in the hue itself; the light theme washes them heavier and darkens
@@ -443,10 +453,23 @@
 .session-drop-inside { outline: 2px solid var(--cs-accent); outline-offset: -2px; background: var(--cs-accent-soft); }
 .session-option > details > summary { cursor: pointer; padding: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .session-option summary small { display: block; color: var(--cs-muted); font-weight: 400; margin-top: 6px; }
-/* The action type on the card itself, in the counter tiles' colour, so a
-   folded card and a card inside a choice group still say what they spend. */
-.session-type-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: 600;
-  letter-spacing: .04em; text-transform: uppercase; color: var(--cs-accent); background: var(--cs-accent-soft); vertical-align: 2px; white-space: nowrap; }
+/* The action type on the card itself, in that type's hue, so a folded card and
+   a card inside a choice group still say what they spend -- and the counter
+   tile it spends wears the same hue on its top edge. */
+.session-type-tag { --act: var(--cs-accent); }
+[data-type="standard"] { --act: var(--act-standard); }
+[data-type="move"] { --act: var(--act-move); }
+[data-type="swift"] { --act: var(--act-swift); }
+[data-type="immediate"] { --act: var(--act-immediate); }
+[data-type="aoo"] { --act: var(--act-aoo); }
+[data-type="full"] { --act: var(--act-full); }
+[data-type="free"] { --act: var(--act-free); }
+.session-type-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: .68rem; font-weight: 650;
+  letter-spacing: .04em; text-transform: uppercase; vertical-align: 2px; white-space: nowrap;
+  color: color-mix(in srgb, var(--act), var(--cs-text) var(--ab-ink));
+  background: color-mix(in srgb, var(--act) var(--ab-wash), var(--cs-panel-2));
+  border-left: 3px solid var(--act); border-radius: 3px; }
+.session-pool[data-type]:not(.spent) { border-top-color: var(--act); }
 .session-field-error { color: var(--cs-bad); font-size: .75rem; line-height: 1.35; }
 /* The editor in three named groups -- Rolls, Details, Cost -- with placement
    (type, width, group) folded above them and the formula notes behind a line. */

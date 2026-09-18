@@ -22,7 +22,7 @@ export function renderSessionBoard(model) {
   // paragraph), three for several links.
   const width = (card, attackCount = 0) => Math.max(1,Math.min(3,Number(card.width) || (card.links?.length>1?3:(card.links?.length || card.kind==='choice' || attackCount>4)?2:1)));
   const typeLabel = { standard: 'Standard', move: 'Move', swift: 'Swift', immediate: 'Immediate', aoo: 'AoO', full: 'Full round', free: 'Free' };
-  const typeTag = card => `<span class="session-type-tag" title="${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || card.type || '')}">${esc(typeLabel[card.type] || card.type || '')}</span>`;
+  const typeTag = card => `<span class="session-type-tag" data-type="${esc(card.type || '')}" title="${esc(ACTION_TYPES.find(([k]) => k === card.type)?.[1] || card.type || '')}">${esc(typeLabel[card.type] || card.type || '')}</span>`;
   // "Attack: …" errors belong under the field they name as well as at the foot of the card.
   const FIELD_ERRORS = [['attackFormula', 'Attack'], ['damageFormula', 'Damage'], ['extraAttacks', 'Extra attacks'], ['attackModifier', 'Attack modifier'], ['extraDamage', 'Extra damage']];
   const fieldError = (values, key) => {
@@ -135,7 +135,7 @@ export function renderSessionBoard(model) {
     <header class="session-heading"><div><span class="session-eyebrow">YOUR NEXT MOVE</span><h2>Turn ${Number(state.turn) || 1} <small>${state.onTurn ? 'Your turn' : 'Between turns'}</small></h2></div>
       <div>${state.onTurn ? button('end', 'End turn',state.pendingFollowups?.length?'disabled':'') : ''} ${button('next', state.onTurn ? 'Next turn' : 'Start my turn',state.pendingFollowups?.length?'disabled':'')}</div></header>
     ${pendingChains(model)}
-    <div class="session-budget">${ACTION_POOLS.map(([key, label]) => `<div class="session-pool ${!budget[key].remaining ? 'spent' : ''}">
+    <div class="session-budget">${ACTION_POOLS.map(([key, label]) => `<div class="session-pool ${!budget[key].remaining ? 'spent' : ''}" data-type="${key}">
       <span>${label}</span><strong>${budget[key].remaining}<small> / ${budget[key].max}</small></strong>
       <div>${button('spend', '−', `data-kind="${key}" aria-label="Spend one ${label}" ${previewChainUse(model, {type:key}).error ? 'disabled' : ''}`)}${button('restore', '+', `data-kind="${key}" aria-label="Restore one ${label}"`)}</div>
       ${budget[key].error ? `<small role="alert">${esc(budget[key].error)}</small>` : ''}</div>`).join('')}</div>
