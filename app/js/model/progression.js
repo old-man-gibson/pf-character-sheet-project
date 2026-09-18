@@ -618,22 +618,47 @@ export function classFeatureNotes(model, className) {
 
 /**
  * A feature's name as the ladder and the notes both spell it, for matching
- * one against the other.
+ * one against the other: two keys, the specific and the general.
  *
  * The ladder writes a feature the way a class table does -- "Rage (Ex)",
  * "Trap sense +2", "Sneak attack +3d6", "Bravery (2/day)" -- and a note is
- * named once for all of those. The type tag, the trailing size and the
- * trailing parenthesis all go, so a scaling feature's every step answers to
- * the one note.
+ * named once for all of those. The type tag and the trailing size go from
+ * both keys. The general key drops a trailing parenthesis too, so a scaling
+ * feature's every step answers to the one note; the specific key keeps it,
+ * because "Metalkinesis (Death Growl)" may be a feature of its own, written
+ * up under exactly that name.
  */
-function featureKey(name) {
-  return normalizeName(name)
+function featureKeys(name) {
+  const base = normalizeName(name)
     .replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '')
-    .replace(/\s*[+\-–]\s*\d+[a-z0-9/+\-–—]*\s*$/, '')
-    .replace(/\s*\([^)]*\)\s*$/, '')
-    .replace(/[^a-z0-9 ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\s*[+\-–]\s*\d+[a-z0-9/+\-–—]*\s*$/, '');
+  const clean = (s) => s.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return { specific: clean(base), general: clean(base.replace(/\s*\([^)]*\)\s*$/, '')) };
+}
+
+/**
+ * Which of a class's notes a cell's spelling of a feature is about.
+ *
+ * The specific name wins: a cell saying "Metalkinesis (Death Growl)" is about
+ * the note written up under that name, when there is one. Failing that it is
+ * about the general note, "Metalkinesis", if that is written -- a
+ * specification nobody has written up separately reads as the feature it
+ * specialises. A general cell never reads a specialised note: "Metalkinesis"
+ * alone is not about Death Growl.
+ */
+function notesFor(cellName, keyed) {
+  const cell = featureKeys(cellName);
+  if (!cell.general) return [];
+  const specific = keyed.filter((k) => k.specific && k.specific === cell.specific);
+  if (specific.length) return specific;
+  return keyed.filter((k) => k.general && k.specific === k.general
+    && (cell.general === k.general || cell.general.startsWith(`${k.general} `)));
+}
+
+/** Every note with its keys worked out once, for a walk over the ladder. */
+function keyedNotes(model, className) {
+  return classFeatureNotes(model, className)
+    .map((note, index) => ({ note, index, ...featureKeys(note.name) }));
 }
 
 /**
@@ -648,13 +673,21 @@ function featureKey(name) {
  * written in terms of `level` like everything else.
  */
 export function classFeatureNoteLevel(model, className, name) {
-  const key = featureKey(name);
-  if (!key) return null;
+  const keyed = keyedNotes(model, className);
+  // Asked by name, so the note may be one not on the list; it is matched as
+  // though it were, beside the others, so a specialised note on the list
+  // still takes its cells away from a general one asked about.
+  let me = keyed.find((k) => normalizeName(k.note.name) === normalizeName(name));
+  if (!me) {
+    me = { note: { name }, index: -1, ...featureKeys(name) };
+    keyed.push(me);
+  }
+  if (!me.general) return null;
   const byLevel = model.data.progression?.classFeatures?.[className]?.byLevel || {};
   const levels = Object.keys(byLevel).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   for (const level of levels) {
     for (const cell of Object.values(byLevel[level] || {})) {
-      if (cellFeatureNames(cell).some((n) => sameFeature(n, key))) return level;
+      if (cellFeatureNames(cell).some((n) => notesFor(n, keyed).includes(me))) return level;
     }
   }
   return null;
@@ -671,25 +704,17 @@ function cellFeatureNames(cell) {
     .map((s) => s.trim()).filter(Boolean);
 }
 
-/** Whether a cell's spelling of a feature is the one `key` names. */
-function sameFeature(cellName, key) {
-  const k = featureKey(cellName);
-  return k === key || k.startsWith(`${key} `);
-}
-
 /**
  * The notes a ladder cell is about, in the notes' own order and each with
  * its index: what a click on the cell has to show. A cell naming a feature
  * nobody has written up yet is about nothing, and offers nothing.
  */
 export function classFeatureNotesInCell(model, className, text) {
-  const notes = classFeatureNotes(model, className);
-  if (!notes.length) return [];
-  const names = cellFeatureNames(text);
-  return notes
-    .map((note, index) => ({ note, index, key: featureKey(note.name) }))
-    .filter(({ key }) => key && names.some((n) => sameFeature(n, key)))
-    .map(({ note, index }) => ({ note, index }));
+  const keyed = keyedNotes(model, className);
+  if (!keyed.length) return [];
+  const hit = new Set();
+  for (const n of cellFeatureNames(text)) for (const k of notesFor(n, keyed)) hit.add(k);
+  return keyed.filter((k) => hit.has(k)).map(({ note, index }) => ({ note, index }));
 }
 
 /**

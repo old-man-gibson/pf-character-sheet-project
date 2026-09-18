@@ -2122,6 +2122,32 @@ console.log('what a class feature does is prose the sheet reads');
     ['Trap sense', 'Uncanny dodge']);
   check('and a cell about nothing written names none',
     c.classFeatureNotesInCell(cls, 'Improved uncanny dodge'), []);
+
+  /*
+   * A feature specified in parentheses -- "Metalkinesis (Death Growl)" beside
+   * "Metalkinesis" -- is its own feature when a note is written up under
+   * exactly that name, and reads as the general one when it is not. The
+   * general cell never reads a specialised note.
+   */
+  c.addClassFeatureNote(cls, { name: 'Metalkinesis', text: 'Bend metal.' });
+  c.addClassFeatureNote(cls, { name: 'Metalkinesis (Death Growl)', text: 'Shriek through it.' });
+  c.setClassFeature(cls, 2, 'Features', 'Metalkinesis');
+  c.setClassFeature(cls, 4, 'Features', 'Metalkinesis (Death Growl)');
+  c.setClassFeature(cls, 7, 'Features', 'Metalkinesis (Iron Skin)');
+  const about = (text) => c.classFeatureNotesInCell(cls, text).map((x) => x.note.name);
+  check('a specified feature written up under its name is that note alone',
+    about('Metalkinesis (Death Growl)'), ['Metalkinesis (Death Growl)']);
+  check('one not written up reads as the general feature',
+    about('Metalkinesis (Iron Skin)'), ['Metalkinesis']);
+  check('and the general cell is about the general note only', about('Metalkinesis'), ['Metalkinesis']);
+  check('each arrives where its own spelling first appears',
+    [c.classFeatureNoteLevel(cls, 'Metalkinesis'), c.classFeatureNoteLevel(cls, 'Metalkinesis (Death Growl)')],
+    [2, 4]);
+  check('a specialised note written up alone arrives at its own cell, not the general one',
+    [c.classFeatureNoteLevel(cls, 'Metalkinesis (Iron Skin)')], [7]);
+  c.removeClassFeatureNote(cls, c.classFeatureNotes(cls).findIndex((n) => n.name === 'Metalkinesis (Death Growl)'));
+  check('without its own note, the specified cell falls back to the general one',
+    about('Metalkinesis (Death Growl)'), ['Metalkinesis']);
 }
 
 console.log('which ability an attack mode is read as running on');

@@ -232,7 +232,10 @@ character reaches the first level the ladder names the feature on. A feature tha
 ("Trap sense +1", then "+2") is gated once, at its first step; its note's formula does the
 scaling from `level`. The notes fold one by one to their name row, drag by their grip into
 whatever order reads best, and a ladder cell naming a feature with text carries an ⓘ that
-shows it in place, formulas worked out. The Template tab is for
+shows it in place, formulas worked out. A feature specified in parentheses — *Metalkinesis
+(Death Growl)* beside *Metalkinesis* — is its own feature when a note is written up under
+exactly that name, with its own arrival level, and reads as the general one when it is
+not; the general cell never reads a specialised note. The Template tab is for
 templates. A sheet written by an earlier version, which put a class's text there, moves it
 across on its next load: a group named for a class, carrying no template link, every one of
 its features named on that class's ladder, and the class holding no text of its own yet.
