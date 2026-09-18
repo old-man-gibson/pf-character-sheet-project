@@ -13,10 +13,10 @@
 import { esc } from '../html.js';
 import { classActionsPanel } from '../class-actions.js';
 import { collapsible } from '../rows.js';
-import { prose } from '../prose.js';
+import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
-import { addButton, itemText, rowTools } from '../rows.js';
+import { addButton, foldButton, isCollapsed, itemText, rowTools } from '../rows.js';
 import { same } from '../format.js';
 import { optionCatalogues } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
@@ -215,27 +215,57 @@ function groupDelete(name, g, arming) {
    * One entry per distinct feature however many levels grant it, an archetype's
    * among them. This is where a pack's rules text lands: the Template tab is
    * for templates, and a class is not one.
+   *
+   * The list is the player's: each note folds to its name row, and the grip
+   * drags it into whatever order reads best -- a pack lands them in table
+   * order, which is not always the order a player thinks in.
    */
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
+    const charLevel = Number(model.data.identity.level) || 0;
+    // Where the ladder says the feature arrives; a note it never names has
+    // no level and no badge. Past that level the badge is just a fact; before
+    // it, the note is a plan and any bonus in it is greyed, as on the ladder.
+    const arrival = (f) => {
+      const at = model.classFeatureNoteLevel(className, f.name);
+      if (at === null) return { at, future: false, badge: '' };
+      const future = at > charLevel;
+      return {
+        at, future,
+        badge: `<span class="badge${future ? ' due' : ''}" title="${future
+          ? `Arrives at level ${at}. A bonus written here is not applying yet.`
+          : `Arrived at level ${at}`}">Lv ${at}</span>`,
+      };
+    };
     return `<div class="cfnotes">
       <button class="notehead" data-collapse="cfnotes-${esc(className)}"
         data-collapse-to="${open}" aria-expanded="${open}">
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
       </button>
-      ${open ? `${notes.map((f, i) => `<div class="cfnote">
+      ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
+        const when = arrival(f);
+        const foldKey = `cfnote-${className}-${f.name}`;
+        const shut = isCollapsed(model, foldKey);
+        return `<div class="cfnote${shut ? ' collapsed' : ''}" data-cfndrop="${esc(JSON.stringify({ c: className, i }))}">
         <span class="pair">
+          <span class="grip" data-cfngrip title="Drag to reorder">⠿</span>
+          ${foldButton(model, foldKey, shut)}
           <input type="text" class="notename" value="${esc(f.name)}" spellcheck="false"
             data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'name' }))}">
           <select data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'type' }))}">
             ${['', 'Ex', 'Su', 'Sp'].map((t) => `<option value="${t}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('')}
           </select>
+          ${when.badge}
           <button class="danger" data-action="remove-cfnote" data-class="${esc(className)}" data-index="${i}"
             title="Remove ${esc(f.name)}">×</button>
         </span>
-        ${prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow')}
-      </div>`).join('') || '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
+        ${shut ? '' : prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow', null, {
+    inactive: when.future,
+    inactiveTitle: `This feature arrives at level ${when.at}, so the bonus is not applying yet.`,
+  })}
+      </div>`;
+      }).join('')}</div>` : '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
       <div style="margin-top:6px">
         <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
       </div>` : ''}
@@ -371,9 +401,47 @@ function featureField(ctx, model, className, col, row, field, multi) {
       ? menuField(ctx, ref, field, menu, placeholder, row.classLevel)
       : prose(model, `class="cfeat" data-cfeat="${ref}"${field.on ? '' : ' disabled'}${placeholder}`, field.text, 1, 'grow');
 
-    return `<span class="ffield ${state}"${colour ? ` style="--gc:${esc(colour)};--gc-soft:${rgba(colour, 0.13)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>
-      ${tag}${body}
+    // A cell naming a feature that has text under "What they do" offers it
+    // here, one click away, without leaving the ladder. The button carries
+    // only the cell's text: the notes are looked up at the click, so the
+    // popover shows them as they stand and never a render old.
+    const linked = model.classFeatureNotesInCell(className, field.text);
+    const peek = linked.length
+      ? `<button type="button" class="cfpeek" data-cfpeek="${esc(JSON.stringify({ c: className, t: field.text }))}"
+          title="What ${esc(linked.map(({ note }) => note.name).join(', '))} does" aria-label="Show what this feature does">ⓘ</button>`
+      : '';
+
+    return `<span class="ffield ${state}${peek ? ' peekable' : ''}"${colour ? ` style="--gc:${esc(colour)};--gc-soft:${rgba(colour, 0.13)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>
+      ${tag}${body}${peek}
     </span>`;
+  }
+
+  /**
+   * What a ladder cell's features do, for the popover its ⓘ opens.
+   *
+   * Every note the cell names, in the notes' own order: the name, the type
+   * and the level the ladder gives it, then the text with its formulas worked
+   * out -- the same rendering the note itself shows while it is not being
+   * edited. Empty when the cell names nothing written, which is also when
+   * the ladder draws no button.
+   */
+export function featurePeekHtml(model, className, text) {
+    const linked = model.classFeatureNotesInCell(className, text);
+    if (!linked.length) return '';
+    const charLevel = Number(model.data.identity.level) || 0;
+    return linked.map(({ note }) => {
+      const at = model.classFeatureNoteLevel(className, note.name);
+      const sub = [note.type, at !== null ? `${at > charLevel ? 'arrives' : 'arrived'} at level ${at}` : '']
+        .filter(Boolean).join(' · ');
+      const body = String(note.text || '').trim();
+      return `<div class="peek">
+        <div class="bdhead"><span class="bdname">${esc(note.name)}</span></div>
+        ${sub ? `<div class="bdsub">${esc(sub)}</div>` : ''}
+        <div class="peektext">${body
+    ? (hasTokens(body) ? renderedProse(model, body) : esc(body))
+    : '<span class="empty">Nothing written yet.</span>'}</div>
+      </div>`;
+    }).join('');
   }
 
   /**

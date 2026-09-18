@@ -850,6 +850,29 @@ export function proseSources(model) {
         } else push(`feature:${cls}:${lvl}:${col}`, value, null, future);
       }
     }
+    /*
+     * What the class's features do -- the notes under the ladder -- are prose
+     * too, and the natural place for a feature's rule: "Rage: {rage.rounds.max
+     * = 4 + con.mod + 2 * (level - 1)}". A sheet written by an earlier version
+     * kept this text on the Template tab, where it was walked; when it moved
+     * under the class, the walk did not follow, so a name defined there
+     * displayed its value and reached nothing.
+     *
+     * A note is one entry per feature, not per level, so the level it waits
+     * on is read off the ladder: the first cell that names the feature. Until
+     * the character is there, the note is future exactly as that cell is --
+     * a name defined in it still reads, a bonus written in it does not apply.
+     * A feature that scales is named on the ladder at every step and comes
+     * online at the first; the note's own formula does the scaling from
+     * `level`. A note the ladder never names is not gated at all.
+     *
+     * The name goes last in the path, as a maneuver's does, because it is the
+     * part that may hold a colon.
+     */
+    for (const n of g.notes || []) {
+      const at = model.classFeatureNoteLevel(cls, n?.name);
+      push(`featureNote:${cls}:${n?.name ?? ''}`, n?.text, null, at !== null && at > level ? { future: true } : null);
+    }
   }
   // A template feature, its sub-abilities and the cells of their tables:
   // everything a player writes on that tab reads {…} the way prose does.

@@ -2035,6 +2035,121 @@ console.log('the attack totals carry a reconciliation offset, and it is reachabl
     [again.data.attack.totalMelee, again.offsetOf('attack.totalMelee')], [13, 0]);
 }
 
+console.log('what a class feature does is prose the sheet reads');
+{
+  /*
+   * The notes under a class's ladder -- "What they do" -- are where a pack's
+   * feature text lands and where a player writes a feature's rule. They used
+   * to live on the Template tab, where every {…} was collected; once they
+   * moved under the class, a name defined in one showed its value in the box
+   * and was known nowhere else.
+   */
+  const c = new Character(blankDocument({ id: 'cfn', name: 'Cfn' }));
+  const cls = 'Barbarian';
+  const before = c.data.attack.totalMelee;
+  c.addClassFeatureNote(cls, {
+    name: 'Rage: the long form', type: 'Ex',
+    text: 'Rage for {rage.rounds.max = 4 + 3} rounds, {attack.melee += 2} while raging.',
+  });
+  check('the note is a prose source, named after the feature',
+    c.proseSources().some((f) => f.path === `featureNote:${cls}:Rage: the long form`), true);
+  check('a name defined there is known everywhere',
+    c.inlineNames['rage.rounds.max'], 7);
+  check('a bonus forwarded there lands', c.data.attack.totalMelee, before + 2);
+  check('the audit says where it was written, colon and all',
+    describeSource(`featureNote:${cls}:Rage: the long form`), `Rage: the long form, under ${cls} features`);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and it survives a reopen', [back.inlineNames['rage.rounds.max'], back.data.attack.totalMelee],
+    [7, before + 2]);
+  c.setClassFeatureNote(cls, c.classFeatureNotes(cls).length - 1, { text: 'Rage.' });
+  check('and leaves when the text does', ['rage.rounds.max' in c.inlineNames, c.data.attack.totalMelee],
+    [false, before]);
+
+  /*
+   * A note waits on the level the ladder gives its feature. The ladder spells
+   * the feature the way a class table does -- with a type tag, a size that
+   * grows -- and the note is named once for all of those; only the first
+   * arrival gates it, and the note's own formula scales from there.
+   */
+  c.set('identity.level', 3);
+  c.addClassFeatureColumn(cls, 'Features');
+  c.setClassFeature(cls, 6, 'Features', 'Trap sense +2 (Ex), Uncanny dodge');
+  c.setClassFeature(cls, 3, 'Features', 'Trap sense +1 (Ex)');
+  c.setClassFeature(cls, 5, 'Features', 'Improved uncanny dodge');
+  c.addClassFeatureNote(cls, {
+    name: 'Trap sense', type: 'Ex',
+    text: '{trap.sense = floor(level / 3)} to Reflex saves against traps: {save.ref += trap.sense}',
+  });
+  c.addClassFeatureNote(cls, { name: 'Uncanny dodge', text: 'Keeps Dex to AC: {ac += 1}' });
+  c.addClassFeatureNote(cls, { name: 'Nothing on the ladder', text: 'A house rule: {attack.melee += 1}' });
+  check('the first level naming the feature is where it arrives',
+    [c.classFeatureNoteLevel(cls, 'Trap sense'), c.classFeatureNoteLevel(cls, 'Uncanny dodge'),
+      c.classFeatureNoteLevel(cls, 'Nothing on the ladder')], [3, 6, null]);
+  check('a scaling feature is gated once, at its first step',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Trap sense`).future, undefined);
+  check('a feature not yet reached is future',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Uncanny dodge`).future, true);
+  check('a note the ladder never names is not gated',
+    c.proseSources().find((f) => f.path === `featureNote:${cls}:Nothing on the ladder`).future, undefined);
+  const ac = () => c.data.defenses.ac;
+  const acBefore = ac();
+  check('a name written in a future note still reads', c.inlineNames['trap.sense'], 1);
+  // The level itself moves AC (attunement arrives on the way to 6th), so the
+  // bonus is read as the difference the note makes at that level, not the
+  // difference the level makes.
+  c.set('identity.level', 6);
+  const at6 = ac();
+  const dodge = c.classFeatureNotes(cls).findIndex((n) => n.name === 'Uncanny dodge');
+  c.setClassFeatureNote(cls, dodge, { text: 'Keeps Dex to AC.' });
+  check('reaching the level turns its bonus on', at6 - ac(), 1);
+  c.setClassFeatureNote(cls, dodge, { text: 'Keeps Dex to AC: {ac += 1}' });
+  check('and the scaling note has scaled with the level', c.inlineNames['trap.sense'], 2);
+  c.set('identity.level', 3);
+  check('stepping back turns it off again', ac(), acBefore);
+
+  // The notes are the player's list, in the player's order, and the ladder
+  // above can ask which of them a cell is about.
+  const order = () => c.classFeatureNotes(cls).map((n) => n.name);
+  check('four notes, in the order they were written', order().length, 4);
+  c.moveClassFeatureNote(cls, 3, 0);
+  check('a note dragged to the front', order()[0], 'Nothing on the ladder');
+  c.moveClassFeatureNote(cls, 0, 4);
+  check('and back to the end', order()[3], 'Nothing on the ladder');
+  c.moveClassFeatureNote(cls, 9, 0);
+  check('a move from nowhere moves nothing', order()[3], 'Nothing on the ladder');
+  check('a cell names the notes it is about, in their order',
+    c.classFeatureNotesInCell(cls, 'Trap sense +2 (Ex), Uncanny dodge').map((x) => x.note.name),
+    ['Trap sense', 'Uncanny dodge']);
+  check('and a cell about nothing written names none',
+    c.classFeatureNotesInCell(cls, 'Improved uncanny dodge'), []);
+
+  /*
+   * A feature specified in parentheses -- "Metalkinesis (Death Growl)" beside
+   * "Metalkinesis" -- is its own feature when a note is written up under
+   * exactly that name, and reads as the general one when it is not. The
+   * general cell never reads a specialised note.
+   */
+  c.addClassFeatureNote(cls, { name: 'Metalkinesis', text: 'Bend metal.' });
+  c.addClassFeatureNote(cls, { name: 'Metalkinesis (Death Growl)', text: 'Shriek through it.' });
+  c.setClassFeature(cls, 2, 'Features', 'Metalkinesis');
+  c.setClassFeature(cls, 4, 'Features', 'Metalkinesis (Death Growl)');
+  c.setClassFeature(cls, 7, 'Features', 'Metalkinesis (Iron Skin)');
+  const about = (text) => c.classFeatureNotesInCell(cls, text).map((x) => x.note.name);
+  check('a specified feature written up under its name is that note alone',
+    about('Metalkinesis (Death Growl)'), ['Metalkinesis (Death Growl)']);
+  check('one not written up reads as the general feature',
+    about('Metalkinesis (Iron Skin)'), ['Metalkinesis']);
+  check('and the general cell is about the general note only', about('Metalkinesis'), ['Metalkinesis']);
+  check('each arrives where its own spelling first appears',
+    [c.classFeatureNoteLevel(cls, 'Metalkinesis'), c.classFeatureNoteLevel(cls, 'Metalkinesis (Death Growl)')],
+    [2, 4]);
+  check('a specialised note written up alone arrives at its own cell, not the general one',
+    [c.classFeatureNoteLevel(cls, 'Metalkinesis (Iron Skin)')], [7]);
+  c.removeClassFeatureNote(cls, c.classFeatureNotes(cls).findIndex((n) => n.name === 'Metalkinesis (Death Growl)'));
+  check('without its own note, the specified cell falls back to the general one',
+    about('Metalkinesis (Death Growl)'), ['Metalkinesis']);
+}
+
 console.log('which ability an attack mode is read as running on');
 {
   // A weapon's Base says "Alt Melee"; which stat that runs on is set on the

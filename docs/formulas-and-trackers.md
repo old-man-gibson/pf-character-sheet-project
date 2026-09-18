@@ -277,7 +277,9 @@ everything and the count beside it can be trusted.
 
 ## Inline formulas in prose
 
-Any descriptive field — class features, template features, notes, background,
+Any descriptive field — class features (the ladder's cells and the *What they do* notes
+under it, each waiting on the first level the ladder names its feature), template features,
+notes, background,
 traits, the mythic ladder's two Effect columns and the mythic tradition, weapon
 special properties, gear notes,
 sphere talents, crafting resources and notes — can carry formulas inside the text:

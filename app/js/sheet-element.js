@@ -327,7 +327,7 @@ function loadTablesFor(el) {
  */
 const READERS_KEEP = [
   '[data-tab]', '[data-collapse]', '[data-foldcell]', '[data-wiki]',
-  '[data-mopen]', '[data-mclose]', '[data-gearopen]',
+  '[data-mopen]', '[data-mclose]', '[data-gearopen]', '[data-cfpeek]',
   '[data-action="palette"]', '[data-action="view-mode"]', '[data-action="formulas"]',
   '[data-action="theme"]', '[data-action="export"]', '[data-action="copy-text"]',
   '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
@@ -723,6 +723,10 @@ export class CharacterSheetElement extends HTMLElement {
   #bdAnchor = null;
   #bdTitle = null;
   #bdTimer = null;
+  // True while the panel was opened by a click rather than a hover -- what a
+  // ladder cell's ⓘ does -- so that the mouse moving off it is not what closes
+  // it. A click anywhere else, Escape, or the sheet scrolling still is.
+  #bdPinned = false;
   #paletteIndex = null;
   #paletteRows = [];
   #paletteAt = 0;
@@ -1946,16 +1950,26 @@ export class CharacterSheetElement extends HTMLElement {
       return t?.closest?.('[data-bd]') ?? null;
     };
     root.addEventListener('pointerover', (e) => {
-      if (e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'mouse' || this.#bdPinned) return;
       const el = at(e);
       if (el) this.#openBreakdown(el);
       else this.#closeBreakdown(BREAKDOWN_GRACE);
     });
     root.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse') return;
+      // A tap on a ladder cell's ⓘ is handled by the click that follows it.
+      if (e.target?.closest?.('[data-cfpeek]')) return;
       const el = at(e);
       if (el && el !== this.#bdAnchor) this.#openBreakdown(el);
       else this.#closeBreakdown();
+    });
+    // A ladder cell's ⓘ: press to open what the feature does, press again or
+    // anywhere else to put it away. The panel itself is not "anywhere else",
+    // so a formula in the text can still be pointed at.
+    root.addEventListener('click', (e) => {
+      const btn = e.target?.closest?.('[data-cfpeek]');
+      if (btn) { e.preventDefault(); this.#togglePeek(btn); return; }
+      if (this.#bdPinned && !this.#bdPop?.contains(e.target)) this.#closeBreakdown();
     });
     root.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.#closeBreakdown(); });
     // A table scrolling under an open panel. The document-level listener in
@@ -2033,6 +2047,35 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Open the panel on a ladder cell's ⓘ, with what the cell's features do.
+   *
+   * The same panel the breakdowns use, pinned: it was asked for, so it stays
+   * until it is dismissed. The content is looked up now, from the cell's text,
+   * so it is the notes as they stand.
+   */
+  #togglePeek(el) {
+    if (el === this.#bdAnchor) { this.#closeBreakdown(); return; }
+    let html = '';
+    try {
+      const { c, t } = JSON.parse(el.dataset.cfpeek);
+      html = lore.featurePeekHtml(this.#model, c, t);
+    } catch { html = ''; }
+    if (!html) { this.#closeBreakdown(); return; }
+    const pop = this.#breakdownPanel();
+    if (typeof pop.showPopover !== 'function') return;
+    this.#closeBreakdown();
+    pop.innerHTML = html;
+    try {
+      if (!pop.matches(':popover-open')) pop.showPopover();
+    } catch { return; }
+    this.#bdTitle = el.getAttribute('title');
+    if (this.#bdTitle !== null) el.removeAttribute('title');
+    this.#bdAnchor = el;
+    this.#bdPinned = true;
+    this.#placeBreakdown();
+  }
+
+  /**
    * Put it away -- after `delay` ms, so that crossing the gap between the
    * number and the panel is not the thing that closes it. Any open call in the
    * meantime cancels the wait.
@@ -2043,6 +2086,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#bdTimer = setTimeout(() => this.#closeBreakdown(), delay);
       return;
     }
+    this.#bdPinned = false;
     const el = this.#bdAnchor;
     // A render may have replaced the node this was standing on. Handing its
     // title back is then pointless rather than harmful, and the node it goes
@@ -5893,6 +5937,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindTemplateDrag(root);
+    this.#bindNoteDrag(root);
     this.#bindLanguageDrag(root);
     this.#bindFeatDrag(root);
     this.#bindGrantedDrag(root);
@@ -7056,6 +7101,77 @@ export class CharacterSheetElement extends HTMLElement {
         clear();
         from = null;
         this.#model.listMoveInto(entries(g), i, entries(t.g), t.to);
+        this.#render();
+      });
+    });
+  }
+
+  /**
+   * Reordering a class's "What they do" notes by their grip.
+   *
+   * The same shape as the template cards below: the grip arms the card, the
+   * list it sits in takes the drop, and a note only ever moves among its own
+   * class's notes. The card's key is JSON because a class name is free text.
+   */
+  #bindNoteDrag(root) {
+    const parse = (el) => JSON.parse(el.dataset.cfndrop);
+    const clear = () => root.querySelectorAll('.cfnote.drop-before, .cfnote.drop-after')
+      .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+    let from = null;                       // { c: class, i: index } being dragged
+
+    root.querySelectorAll('[data-cfngrip]').forEach((grip) => {
+      const card = grip.closest('[data-cfndrop]');
+      if (!card) return;
+      grip.addEventListener('pointerdown', () => { card.draggable = true; });
+      grip.addEventListener('pointerup', () => { card.draggable = false; });
+    });
+
+    root.querySelectorAll('[data-cfndrop]').forEach((card) => {
+      card.addEventListener('dragstart', (e) => {
+        from = parse(card);
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag with nothing on the transfer.
+        e.dataTransfer.setData('text/plain', card.dataset.cfndrop);
+        card.classList.add('dragging');
+        e.stopPropagation();
+      });
+      card.addEventListener('dragend', () => {
+        card.draggable = false;
+        card.classList.remove('dragging');
+        from = null;
+        clear();
+      });
+    });
+
+    /** Where a drop at this point would land, or null if it cannot land. */
+    const targetOf = (e) => {
+      if (!from) return null;
+      const card = e.target.closest?.('[data-cfndrop]');
+      if (!card || card.classList.contains('dragging')) return null;
+      const t = parse(card);
+      if (t.c !== from.c) return null;     // one class at a time
+      const box = card.getBoundingClientRect();
+      const after = e.clientY > box.top + box.height / 2;
+      return { to: t.i + (after ? 1 : 0), card, after };
+    };
+
+    root.querySelectorAll('[data-cfnotes]').forEach((list) => {
+      list.addEventListener('dragover', (e) => {
+        const t = targetOf(e);
+        if (!t) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clear();
+        t.card.classList.add(t.after ? 'drop-after' : 'drop-before');
+      });
+      list.addEventListener('dragleave', (e) => { if (e.target === list) clear(); });
+      list.addEventListener('drop', (e) => {
+        const t = targetOf(e);
+        clear();
+        if (!t) return;
+        e.preventDefault();
+        this.#model.moveClassFeatureNote(from.c, from.i, t.to);
+        from = null;
         this.#render();
       });
     });

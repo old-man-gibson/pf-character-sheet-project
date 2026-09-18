@@ -55,7 +55,8 @@ import { markUndo, undo, undoLabel, clearUndo } from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
-  classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNotes, classFeatureParked,
+  classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
+  classFeatureNotesInCell, classFeatureParked, moveClassFeatureNote,
   classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
@@ -472,6 +473,9 @@ export class Character {
   setClassFeatureRuleGroup(...a) { return setClassFeatureRuleGroup(this, ...a); }
   removeClassFeatureRuleGroup(...a) { return removeClassFeatureRuleGroup(this, ...a); }
   classFeatureNotes(...a) { return classFeatureNotes(this, ...a); }
+  classFeatureNoteLevel(...a) { return classFeatureNoteLevel(this, ...a); }
+  classFeatureNotesInCell(...a) { return classFeatureNotesInCell(this, ...a); }
+  moveClassFeatureNote(...a) { return moveClassFeatureNote(this, ...a); }
   addClassFeatureNote(...a) { return addClassFeatureNote(this, ...a); }
   setClassFeatureNote(...a) { return setClassFeatureNote(this, ...a); }
   removeClassFeatureNote(...a) { return removeClassFeatureNote(this, ...a); }

@@ -616,6 +616,122 @@ export function classFeatureNotes(model, className) {
   return model.data.progression?.classFeatures?.[className]?.notes || [];
 }
 
+/**
+ * A feature's name as the ladder and the notes both spell it, for matching
+ * one against the other: two keys, the specific and the general.
+ *
+ * The ladder writes a feature the way a class table does -- "Rage (Ex)",
+ * "Trap sense +2", "Sneak attack +3d6", "Bravery (2/day)" -- and a note is
+ * named once for all of those. The type tag and the trailing size go from
+ * both keys. The general key drops a trailing parenthesis too, so a scaling
+ * feature's every step answers to the one note; the specific key keeps it,
+ * because "Metalkinesis (Death Growl)" may be a feature of its own, written
+ * up under exactly that name.
+ */
+function featureKeys(name) {
+  const base = normalizeName(name)
+    .replace(/\((?:ex|su|sp)(?: or (?:ex|su|sp))?\)/g, '')
+    .replace(/\s*[+\-–]\s*\d+[a-z0-9/+\-–—]*\s*$/, '');
+  const clean = (s) => s.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return { specific: clean(base), general: clean(base.replace(/\s*\([^)]*\)\s*$/, '')) };
+}
+
+/**
+ * Which of a class's notes a cell's spelling of a feature is about.
+ *
+ * The specific name wins: a cell saying "Metalkinesis (Death Growl)" is about
+ * the note written up under that name, when there is one. Failing that it is
+ * about the general note, "Metalkinesis", if that is written -- a
+ * specification nobody has written up separately reads as the feature it
+ * specialises. A general cell never reads a specialised note: "Metalkinesis"
+ * alone is not about Death Growl.
+ */
+function notesFor(cellName, keyed) {
+  const cell = featureKeys(cellName);
+  if (!cell.general) return [];
+  const specific = keyed.filter((k) => k.specific && k.specific === cell.specific);
+  if (specific.length) return specific;
+  return keyed.filter((k) => k.general && k.specific === k.general
+    && (cell.general === k.general || cell.general.startsWith(`${k.general} `)));
+}
+
+/** Every note with its keys worked out once, for a walk over the ladder. */
+function keyedNotes(model, className) {
+  return classFeatureNotes(model, className)
+    .map((note, index) => ({ note, index, ...featureKeys(note.name) }));
+}
+
+/**
+ * The character level at which a class feature first arrives, read off the
+ * ladder: the lowest level whose cells name it. Null when the ladder does
+ * not name it at all -- a note a player wrote for something the grid never
+ * lists is not gated on a level it does not have.
+ *
+ * Only the first arrival counts. A feature that scales ("Trap sense +1" at
+ * 3rd, "+2" at 6th) is named again at every step and comes online once, at
+ * the first; what it comes to at each level is the note's formula's business,
+ * written in terms of `level` like everything else.
+ */
+export function classFeatureNoteLevel(model, className, name) {
+  const keyed = keyedNotes(model, className);
+  // Asked by name, so the note may be one not on the list; it is matched as
+  // though it were, beside the others, so a specialised note on the list
+  // still takes its cells away from a general one asked about.
+  let me = keyed.find((k) => normalizeName(k.note.name) === normalizeName(name));
+  if (!me) {
+    me = { note: { name }, index: -1, ...featureKeys(name) };
+    keyed.push(me);
+  }
+  if (!me.general) return null;
+  const byLevel = model.data.progression?.classFeatures?.[className]?.byLevel || {};
+  const levels = Object.keys(byLevel).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  for (const level of levels) {
+    for (const cell of Object.values(byLevel[level] || {})) {
+      if (cellFeatureNames(cell).some((n) => notesFor(n, keyed).includes(me))) return level;
+    }
+  }
+  return null;
+}
+
+/**
+ * The feature names a ladder cell holds: a comma list, commas inside
+ * parentheses kept. A cell shared by two rule groups is a map of one text per
+ * group, and every one of them counts.
+ */
+function cellFeatureNames(cell) {
+  return (cell && typeof cell === 'object' ? Object.values(cell) : [cell])
+    .flatMap((v) => String(v ?? '').split(/,\s*(?![^()]*\))/))
+    .map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * The notes a ladder cell is about, in the notes' own order and each with
+ * its index: what a click on the cell has to show. A cell naming a feature
+ * nobody has written up yet is about nothing, and offers nothing.
+ */
+export function classFeatureNotesInCell(model, className, text) {
+  const keyed = keyedNotes(model, className);
+  if (!keyed.length) return [];
+  const hit = new Set();
+  for (const n of cellFeatureNames(text)) for (const k of notesFor(n, keyed)) hit.add(k);
+  return keyed.filter((k) => hit.has(k)).map(({ note, index }) => ({ note, index }));
+}
+
+/**
+ * Reorder a class's notes. `to` is the position the note should end up
+ * at, counted before the move, which is what a drop between two cards means.
+ */
+export function moveClassFeatureNote(model, className, from, to) {
+  const notes = featureGroup(model, className)?.notes;
+  if (!Array.isArray(notes) || !notes[from]) return model;
+  const target = Math.max(0, Math.min(notes.length - 1, to > from ? to - 1 : to));
+  if (target === from) return model;
+  const [item] = notes.splice(from, 1);
+  notes.splice(target, 0, item);
+  model.recompute();
+  return model;
+}
+
 export function addClassFeatureNote(model, className, { name, type = null, text = '' } = {}) {
   const g = featureGroup(model, className);
   const n = String(name ?? '').trim();

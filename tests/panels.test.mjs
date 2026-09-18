@@ -434,6 +434,34 @@ if (hasFixtures()) {
  * double- or single-quoted attribute, inside a <textarea>, or as element text,
  * and each leaves by a different door.
  */
+console.log('\nthe ladder offers a peek at what a feature does, once something is written');
+{
+  const c = new Character(blankDocument({ id: 'peek', name: 'Peek' }));
+  c.set('identity.level', 3);
+  c.addClassFeatureColumn('Monk', 'Features');
+  c.setClassFeature('Monk', 3, 'Features', 'Fast movement (Ex), Maneuver training');
+  c.data.uiPrefs.collapsed = {};
+  const draw = () => lore.renderProgressionPanel(c, { menuLists: new Map() });
+  check('no note, no peek', draw().includes('data-cfpeek'), false);
+  c.addClassFeatureNote('Monk', {
+    name: 'Fast movement', type: 'Ex', text: 'Faster by {fast = 10 * floor(level / 3)} ft.',
+  });
+  const html = draw();
+  check('a cell naming a written feature gets one', html.includes('data-cfpeek'), true);
+  check('the notes can be dragged and folded',
+    [html.includes('data-cfngrip'), html.includes('data-collapse="cfnote-Monk-Fast movement"')], [true, true]);
+  check('open, a note binds its name, its type and its text', html.split('data-cfnote=').length - 1, 3);
+  const peek = lore.featurePeekHtml(c, 'Monk', 'Fast movement (Ex), Maneuver training');
+  check('the peek shows the note, its type and its level, with the formula worked out',
+    [peek.includes('Fast movement'), peek.includes('Ex · arrived at level 3'), /class="tok[^"]*"[^>]*>10</.test(peek)],
+    [true, true, true]);
+  check('a cell about nothing written peeks at nothing', lore.featurePeekHtml(c, 'Monk', 'Maneuver training'), '');
+  c.data.uiPrefs.collapsed['cfnote-Monk-Fast movement'] = true;
+  const shut = draw();
+  check('a folded note keeps its name row and drops its text',
+    [shut.includes('class="cfnote collapsed"'), shut.split('data-cfnote=').length - 1], [true, 2]);
+}
+
 console.log('\nno character text reaches the page as markup');
 {
   const SHAPES = {
