@@ -75,6 +75,7 @@ import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
   PALETTES, LAYOUTS, WIDTHS, AUTO, paletteOf, isPalette, isLayout, isWidth, resolvePalette, schemeOf,
   flipped, readThemePrefs, writeThemePrefs,
+  ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS, DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
 import {
   esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
@@ -922,6 +923,8 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.#themePref?.palette) this.setAttribute('theme', this.#resolvedPalette());
     if (this.#themePref?.layout) this.setAttribute('layout', this.#themePref.layout);
     if (this.#themePref?.width) this.setAttribute('width', this.#themePref.width);
+    this.setAttribute('action-marks', this.#themePref?.actionMarks || DEFAULT_ACTION_MARKS);
+    this.setAttribute('action-tint', this.#themePref?.actionTint || DEFAULT_ACTION_TINT);
     // Whatever the theme came from, the scheme has to match it.
     this.setAttribute('scheme', schemeOf(this.getAttribute('theme')));
     if (typeof matchMedia === 'function' && !this.#schemeQuery) {
@@ -948,15 +951,19 @@ export class CharacterSheetElement extends HTMLElement {
    * the host page as a `theme-change` event so the page's own chrome can
    * follow the sheet.
    */
-  #setTheme({ palette, layout, width } = {}) {
+  #setTheme({ palette, layout, width, actionMarks, actionTint } = {}) {
     const next = { ...(this.#themePref || {}) };
     if (isPalette(palette)) next.palette = palette;
     if (isLayout(layout)) next.layout = layout;
     if (isWidth(width)) next.width = String(width);
+    if (isActionMarks(actionMarks)) next.actionMarks = actionMarks;
+    if (isActionTint(actionTint)) next.actionTint = actionTint;
     this.#themePref = writeThemePrefs(next) || next;
     if (next.palette) this.setAttribute('theme', this.#resolvedPalette());
     if (next.layout) this.setAttribute('layout', next.layout);
     if (next.width) this.setAttribute('width', next.width);
+    if (next.actionMarks) this.setAttribute('action-marks', next.actionMarks);
+    if (next.actionTint) this.setAttribute('action-tint', next.actionTint);
     // The rail's height follows the sheet's edges; a narrower sheet is not a
     // re-render, so it is measured here.
     this.#fitRail();
@@ -988,6 +995,8 @@ export class CharacterSheetElement extends HTMLElement {
     const pref = this.#themePref?.palette ?? theme;
     const layout = this.getAttribute('layout') || 'top';
     const width = this.getAttribute('width') || '100';
+    const marks = this.getAttribute('action-marks') || DEFAULT_ACTION_MARKS;
+    const tint = this.getAttribute('action-tint') || DEFAULT_ACTION_TINT;
     const card = (p) => `
         <button type="button" class="preset" data-action="set-theme"
           data-palette="${p.id}" data-layout="${p.layout}"
@@ -1018,10 +1027,21 @@ export class CharacterSheetElement extends HTMLElement {
               ${WIDTHS.map((w) => opt(w.id, w.name, width === w.id)).join('')}
             </select>
           </label>
+          <label>Action cards
+            <select data-themepick="actionMarks" aria-label="How a session card shows its action type">
+              ${ACTION_MARKS.map((m) => opt(m.id, m.name, marks === m.id)).join('')}
+            </select>
+          </label>
+          <label>Card colour
+            <select data-themepick="actionTint" aria-label="How much of a session card takes its action's colour">
+              ${ACTION_TINTS.map((t) => opt(t.id, t.name, tint === t.id)).join('')}
+            </select>
+          </label>
           <button type="button" class="close" data-action="theme-close">Done</button>
         </div>
         <p class="hint">Remembered in this browser, for every character. The side rail needs a wide window
-          and falls back to the bar on a narrow one.</p>
+          and falls back to the bar on a narrow one. Action cards can show their type as a tag, as colour,
+          both or neither; the colour can be a left edge or a wash across the card.</p>
       </section>`;
   }
 

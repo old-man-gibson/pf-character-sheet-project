@@ -97,6 +97,25 @@ export const WIDTHS = [
   { id: '70', name: '70%' },
 ];
 
+/**
+ * How a session card shows its action type: the tag beside its drag handle,
+ * the colour on the card, both, or neither -- and, when the card is coloured,
+ * how much of it: a left edge, a gentle wash, or a strong one.
+ */
+export const ACTION_MARKS = [
+  { id: 'both', name: 'Tag and colour' },
+  { id: 'tag', name: 'Tag only' },
+  { id: 'colour', name: 'Colour only' },
+  { id: 'none', name: 'Neither' },
+];
+export const ACTION_TINTS = [
+  { id: 'edge', name: 'Left edge' },
+  { id: 'gentle', name: 'Gentle wash' },
+  { id: 'intense', name: 'Strong wash' },
+];
+export const DEFAULT_ACTION_MARKS = 'both';
+export const DEFAULT_ACTION_TINT = 'edge';
+
 /** The palettes by id. */
 const BY_ID = new Map(PALETTES.map((p) => [p.id, p]));
 
@@ -107,6 +126,10 @@ export function isPalette(id) { return id === AUTO || BY_ID.has(id); }
 export function isLayout(id) { return LAYOUTS.some((l) => l.id === id); }
 
 export function isWidth(id) { return WIDTHS.some((w) => w.id === String(id)); }
+
+export function isActionMarks(id) { return ACTION_MARKS.some((m) => m.id === id); }
+
+export function isActionTint(id) { return ACTION_TINTS.some((t) => t.id === id); }
 
 /**
  * The palette `auto` stands for right now. `prefersDark` is the media query's
@@ -142,6 +165,8 @@ export function normalizePrefs(raw) {
   if (isPalette(raw.palette)) out.palette = raw.palette;
   if (isLayout(raw.layout)) out.layout = raw.layout;
   if (isWidth(raw.width)) out.width = String(raw.width);
+  if (isActionMarks(raw.actionMarks)) out.actionMarks = raw.actionMarks;
+  if (isActionTint(raw.actionTint)) out.actionTint = raw.actionTint;
   return Object.keys(out).length ? out : null;
 }
 

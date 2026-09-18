@@ -63,6 +63,16 @@
   --ab-int: #ffe599;
   --ab-wis: #c27ba0;
   --ab-cha: #a4c2f4;
+  /* The seven action types, in the same pastel register as the abilities and
+     worn the same way (the wash and ink knobs below): a card's type tag and
+     the counter tile it spends share a hue, so a glance pairs them. */
+  --act-standard: #f6b26b;
+  --act-move: #9fc5e8;
+  --act-swift: #76c7c0;
+  --act-immediate: #b4a7d6;
+  --act-aoo: #e8918f;
+  --act-full: #b6d7a8;
+  --act-free: #cfcfcf;
   /* How much of that hue each part takes. The fills are pastels drawn for
      black text on white paper, so the dark theme wears them thin and inks the
      word in the hue itself; the light theme washes them heavier and darkens
@@ -443,13 +453,85 @@
 .session-drop-inside { outline: 2px solid var(--cs-accent); outline-offset: -2px; background: var(--cs-accent-soft); }
 .session-option > details > summary { cursor: pointer; padding: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .session-option summary small { display: block; color: var(--cs-muted); font-weight: 400; margin-top: 6px; }
+/* The action type on the card itself, in that type's hue, so a folded card and
+   a card inside a choice group still say what they spend -- and the counter
+   tile it spends wears the same hue on its top edge. */
+.session-type-tag { --act: var(--cs-accent); }
+[data-type="standard"] { --act: var(--act-standard); }
+[data-type="move"] { --act: var(--act-move); }
+[data-type="swift"] { --act: var(--act-swift); }
+[data-type="immediate"] { --act: var(--act-immediate); }
+[data-type="aoo"] { --act: var(--act-aoo); }
+[data-type="full"] { --act: var(--act-full); }
+[data-type="free"] { --act: var(--act-free); }
+.session-type-tag { float: right; margin: 12px 2px 0 6px; padding: 1px 7px; font-size: .68rem; font-weight: 650;
+  letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  color: color-mix(in srgb, var(--act), var(--cs-text) var(--ab-ink));
+  background: color-mix(in srgb, var(--act) var(--ab-wash), var(--cs-panel-2));
+  border-left: 3px solid var(--act); border-radius: 3px; }
+.session-pool[data-type]:not(.spent) { border-top-color: var(--act); }
+/* The card wears its type as colour too, inside a choice group as well. Which
+   of tag and colour show, and how much colour, are the player's (the
+   action-marks and action-tint attributes, from Theme & layout). */
+.session-option[data-type]:not([data-type=""]) { border-left: 3px solid var(--act); }
+:host([action-tint="gentle"]) .session-option[data-type]:not([data-type=""]) {
+  background: color-mix(in srgb, var(--act) 9%, var(--cs-panel)); }
+:host([action-tint="intense"]) .session-option[data-type]:not([data-type=""]) {
+  background: color-mix(in srgb, var(--act) 22%, var(--cs-panel));
+  border-color: color-mix(in srgb, var(--act) 55%, var(--cs-line)); border-left-color: var(--act); }
+:host([action-marks="tag"]) .session-option[data-type], :host([action-marks="none"]) .session-option[data-type] {
+  border-left-width: 1px; border-left-color: var(--cs-line); border-color: var(--cs-line); background: var(--cs-panel); }
+:host([action-marks="tag"]) .session-choice > .session-option[data-type],
+:host([action-marks="none"]) .session-choice > .session-option[data-type] { border-left-width: 0; }
+:host([action-marks="colour"]) .session-type-tag, :host([action-marks="none"]) .session-type-tag { display: none; }
+/* Reference cards: figures in columns rather than a run of text, so the eye
+   finds a value where it expects one. */
+.dashstats-grid { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 1fr) auto; gap: 3px 6px; align-items: center; }
+.dashstats-grid .dashstat { display: contents; }
+.dashstats-grid .dashstat .k { color: var(--cs-text); font-size: .88rem; }
+.dashstats-grid .dashstat .n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; font-size: .95rem; }
+.dashstats-grid .dashstat .r { display: inline-flex; }
+.dashstats-grid .dashstat:nth-child(odd) .k { padding-right: 2px; }
+.dashstats-grid .dashstat:nth-child(even) .k { padding-left: 10px; }
+/* One type scale for every reference card: names in the text colour, figures
+   one step larger and bold, tabular; the small print stays small. */
+.dashboard .panel .statline .label { color: var(--cs-text); font-size: .88rem; }
+.dashboard .panel .statline .value { font-size: .95rem; font-weight: 650; color: var(--cs-text); }
+.dashboard .panel .statline .value .dim, .dashboard .panel .statline .label .dim { font-size: .75rem; font-weight: 400; color: var(--cs-muted); }
+.dashboard .panel .statline .value strong { font-weight: 650; }
+.dashboard .panel .dashdmg { font-size: .95rem; }
+.dashcols { display: grid; gap: 0 14px; border-bottom: 1px dotted var(--cs-line); }
+.dashcols:last-of-type { border-bottom: 0; }
+.dashcols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dashcols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dashcols .statline { border-bottom: 0; min-width: 0; align-items: flex-start; }
+.dashcols .statline .value { text-align: right; white-space: nowrap; }
+.dashcols .statline .label .abmark { min-width: 0; }
+/* "touch 45 · FF 36" under the AC figure rather than trailing it into the next cell. */
+.dashcols-2 .statline .value .dim { display: block; white-space: normal; font-size: .72rem; line-height: 1.3; }
+.dashabilities { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 2px 14px; }
+.session-field-error { color: var(--cs-bad); font-size: .75rem; line-height: 1.35; }
+/* The editor in three named groups -- Rolls, Details, Cost -- with placement
+   (type, width, group) folded above them and the formula notes behind a line. */
+.session-fields { border: 0; border-top: 1px solid var(--cs-line); margin: 14px 0 0; padding: 4px 0 0; min-width: 0; }
+.session-fields > legend { font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--cs-muted); padding: 0 8px 0 0; }
+.session-placement { margin-top: 6px; }
+.session-placement > summary, .session-help > summary { cursor: pointer; color: var(--cs-muted); font-size: .85rem; padding: 4px 0; }
+.session-placement > summary small { color: var(--cs-muted); font-size: .8rem; margin-left: 6px; }
+.session-help { margin-top: 4px; }
+.session-help > summary { font-size: .78rem; }
+.session-help .hint { margin: 6px 0 0; }
+.session-editor label:has(.session-field-error) input { border-color: var(--cs-bad); }
 .session-option-use { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; }
 .session-roll-values { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 0 14px 12px; }
 .session-roll-values > span { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .session-roll-values strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .session-roll-values small, .session-card-facts small { color: var(--cs-muted); font-size: .75rem; }
-.session-card-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 14px 12px; font-size: .85rem; overflow-wrap: anywhere; }
+/* The muted line under a title: kind, facts and cost, on closed cards too. */
+.session-card-facts { font-size: .8rem; line-height: 1.5; overflow-wrap: anywhere; }
+.session-card-facts > span { white-space: nowrap; }
 .session-card-facts:empty { display: none; }
+.session-copy-all { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; padding: 3px 9px; }
 .session-roll-error { padding: 0 14px; color: var(--cs-bad); font-size: .85rem; }
 .session-option-use small { color: var(--cs-muted); font-size: .78rem; }
 .session-option-use button { border-color: var(--cs-accent); min-width: 52px; }

@@ -50,6 +50,8 @@ assert.deepEqual(flurryAttacks.map(r => r.formula), Array(4).fill(single[0].form
 assert.equal(flurryAttacks.map(r => r.label).join(','), 'Attack 1,Attack 2,Attack 3,Attack 4');
 assert.ok(flurry.spec.rolls.some(r => r.label === 'Crit confirm'), 'extra attacks keep the crit lines');
 assert.equal(flurry.attack.split(' / ').length, 4);
+assert.equal(flurry.attackSummary, `4 attacks · ${single[0].formula.replace(/^1d20(?:cs>\d+)?/, '') || '+0'} ×4`, 'the closed card gathers equal bonuses');
+assert.equal(flurry.attackCount, 4);
 assert.deepEqual(sessionRolls(m, { ...linked, type: 'full' }).spec.rolls,
   weaponRollSpec(m.data, 0, m.conditionState, null, false).rolls, 'a full-round card still takes the iteratives');
 const banded = sessionRolls(m, { ...linked, extraAttacks: '1', attackModifier: '-2', extraDamage: '4d6 + 1' });
@@ -82,6 +84,8 @@ assert.match(sessionRolls(m, { attackFormula: 'fist.simple' }).errors[0], /is te
 assert.ok(sessionRolls(m, { ...linked, extraAttacks: '-1' }).errors.length, 'negative extra attacks are rejected');
 assert.ok(sessionRolls(m, { ...linked, extraDamage: '2 * 1d6' }).errors.length, 'extra damage is validated like damage');
 assert.equal(sessionRolls(m, { attackFormula: '10', extraAttacks: '{floor(level / 5)}', attackModifier: '-1' }).attack, '+9 / +9 / +9', 'custom attacks take extras and modifiers');
+assert.equal(sessionRolls(m, { attackFormula: '10', extraAttacks: '2 @ -5, 1' }).attackSummary, '4 attacks · +10 ×2 · +5 ×2', 'the summary sorts bonuses highest first with counts');
+assert.equal(sessionRolls(m, { attackFormula: '10' }).attackSummary, '+10', 'a single attack is just its bonus');
 const html = renderSessionBoard(m);
 assert.ok(html.includes('session-roll-values'));
 assert.ok(html.includes('5d6'));

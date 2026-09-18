@@ -168,6 +168,10 @@ check('normalizePrefs keeps only known values',
   normalizePrefs({ palette: 'slate', layout: 'sideways', extra: 1 }), { palette: 'slate' });
 check('normalizePrefs keeps auto', normalizePrefs({ palette: AUTO }), { palette: AUTO });
 check('normalizePrefs keeps a width, as a string', normalizePrefs({ width: 80 }), { width: '80' });
+check('normalizePrefs keeps the action card marks and tint',
+  normalizePrefs({ actionMarks: 'colour', actionTint: 'gentle' }), { actionMarks: 'colour', actionTint: 'gentle' });
+check('normalizePrefs drops unknown marks and tints',
+  normalizePrefs({ actionMarks: 'loud', actionTint: 'neon', width: 90 }), { width: '90' });
 check('normalizePrefs drops an odd width', normalizePrefs({ width: '75' }), null);
 check('normalizePrefs on nothing usable', normalizePrefs({ palette: 'sepia' }), null);
 check('normalizePrefs on garbage', normalizePrefs('slate'), null);
