@@ -591,7 +591,8 @@ function dashOffenseCard(model, ctx, openNow) {
       const shown = delta
         ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(value)} — with ${cs.sources} applied`)}">${fmt(cs.adjusted[nowKey])}</strong>`
         : `<strong>${fmt(value)}</strong>`;
-      return `<span class="dashstat"><span class="k">${esc(label)}</span><span class="v">${shown}${rollButton(model, kind, ref, rollLabel, cs)}</span></span>`;
+      // Three cells -- name, figure, die -- so the grid lines them up in columns.
+      return `<span class="dashstat"><span class="k">${esc(label)}</span><span class="n">${shown}</span><span class="r">${rollButton(model, kind, ref, rollLabel, cs)}</span></span>`;
     };
     const wrow = (w, i) => {
       const { calc } = w;
@@ -669,19 +670,22 @@ function dashDefenseCard(model, openNow) {
     // The same working the build Overview shows, on the card a table reads
     // mid-fight: "why is my AC 50" is asked oftener here than anywhere.
     const shown = (key, base, format = String) => `<strong>${movedInline(cs, key, base, format, model)}</strong>`;
-    const save = (key, label) => lineHtml(label,
-      `${shown(key, s[key].total, fmt)}${rollButton(model, 'save', key, `a ${label} save`, cs)}`, true);
+    // A save wears the hue of the ability behind it, as the ability checks do.
+    const save = (key, label, ability) => `<div class="statline">
+        <span class="label"><span class="abmark" data-ab="${ability}">${label}</span></span>
+        <span class="value">${shown(key, s[key].total, fmt)}${rollButton(model, 'save', key, `a ${label} save`, cs)}</span>
+      </div>`;
     const moved = (key, base) => movedSub(cs, key, base, String);
     return `<section class="panel">
       <h3>Defense ${dashExpand('defense', openNow)}</h3>
       <div class="dashcols dashcols-2">
-        ${lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`, true)}
-        ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${moved('ffCmd', d.ffCmd)}</span>`, true)}
+        ${lineHtml('AC', `${shown('ac', d.ac)} <span class="dim">touch ${moved('touch', d.touch)} · FF ${moved('flatFooted', d.flatFooted)}</span>`)}
+        ${lineHtml('CMD', `${shown('cmd', d.cmd)} <span class="dim">FF ${moved('ffCmd', d.ffCmd)}</span>`)}
       </div>
       <div class="dashcols dashcols-3">
-        ${save('fortitude', 'Fort')}
-        ${save('reflex', 'Ref')}
-        ${save('will', 'Will')}
+        ${save('fortitude', 'Fort', 'con')}
+        ${save('reflex', 'Ref', 'dex')}
+        ${save('will', 'Will', 'wis')}
       </div>
       <p class="hint">Expand for the armour and save breakdowns by bonus type.</p>
     </section>`;
