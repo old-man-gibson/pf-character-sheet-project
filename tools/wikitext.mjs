@@ -98,6 +98,13 @@ const NAMED = {
    */
   aonlist: (a) => a.join(', '),
   aalist: (a) => a.join(', '),
+  /*
+   * `{{pl|Alteration|sphere}}` links the page "Alteration sphere" and shows
+   * "Alteration": the second argument is the page title's disambiguator, not
+   * a label. The default rule showed it, so a talent read
+   * "possesses the (subtype)" where the page says "possesses the elf".
+   */
+  pl: (a) => a[0] ?? '',
 };
 
 /**
