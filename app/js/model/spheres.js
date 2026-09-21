@@ -83,8 +83,12 @@ export function setSphereCatalogue(doc) {
       kind: ['combat', 'magic', 'guile'].includes(s.kind) ? s.kind : '',
       description: String(s.description || ''),
       abilities: (s.abilities || []).map((a) => ({
-        name: String(a.name || ''), text: String(a.text || ''),
+        name: String(a.name || ''), text: String(a.text || ''), option: !!a.option,
+        // The ability's text divided by sphere, where a page divides it.
+        bySphere: (a.bySphere || []).map((x) => ({ sphere: String(x.sphere || ''), text: String(x.text || '') })),
       })),
+      // What the page says about choosing among its packages, when it has any.
+      choose: String(s.choose || ''),
       talents: dedupeTalents((s.talents || []).map((t) => ({
         name: String(t.name || ''),
         group: String(t.group || ''),
@@ -318,16 +322,236 @@ export function poolStepper(cls, home) {
  * parentheses before looking for the word -- so the label counts as one for
  * the sphere tallies the moment it is written.
  */
-export function sphereBasePick(sphere) {
+/**
+ * The sphere's own abilities and packages that a row's parenthesis names.
+ *
+ * "Nature Sphere (Water)", "Boxing (Counter Punch)", "Expanded Geomancing
+ * (Fire, Plant)" -- each part is tried against what the sphere has, and a part
+ * that names nothing (a tag, "from a feat") is simply not an answer. Rules a
+ * page never named sit under the sphere's own name and are never pointed at.
+ */
+function pointedAbilities(s, typed) {
+  const named = [...String(typed ?? '').matchAll(/\(([^)]*)\)/g)]
+    .flatMap((m) => m[1].split(/,|\/|;|\bor\b|\band\b/i)).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  // A row may also *be* the ability, with no sphere in front of it: a sheet
+  // that lists "Alternate Divinations" among its Divination talents means the
+  // part of the sphere's base ability that goes by that name.
+  const whole = abilityKey(String(typed ?? '').replace(/\([^)]*\)/g, ' '));
+  if (!named.length && !whole) return [];
+  const bare = (x) => x.replace(/\s+package$/, '');
+  return (s?.abilities || []).filter((a) => a.name.toLowerCase() !== s.name.toLowerCase()
+    && (named.some((n) => bare(n) === bare(a.name.toLowerCase())) || (whole && abilityKey(a.name) === whole)));
+}
+
+/**
+ * One named entry inside an ability's share, when a row names it.
+ *
+ * An alternate divination is not a talent and not the whole ability either:
+ * it is "Divine Undead", one line of the Death sphere's share of Alternate
+ * Divinations, and a sheet that lists what its diviner can do writes it by
+ * that name. Each share is a run of `Name: text` entries (with whatever
+ * tables belong to them underneath), so a row is tried against those names.
+ */
+function shareEntry(s, typed) {
+  const want = abilityKey(String(typed ?? '').replace(/\([^)]*\)/g, ' '));
+  if (!want) return null;
+  for (const a of s?.abilities || []) {
+    for (const share of a.bySphere || []) {
+      const entries = [];
+      for (const line of share.text.split('\n')) {
+        const m = line.match(/^([A-Z][^:\t\n]{2,40}):\s+(.*)$/);
+        if (m) entries.push({ name: m[1].trim(), text: [m[2]] });
+        else if (entries.length) entries[entries.length - 1].text.push(line);
+      }
+      const hit = entries.find((e) => abilityKey(e.name) === want);
+      if (hit) return { name: hit.name, text: hit.text.join('\n').trim(), ability: a.name, share: share.sphere };
+    }
+  }
+  return null;
+}
+
+/** An ability's name as typed by hand: case, spacing and a plural's `s` do not count. */
+const abilityKey = (name) => String(name ?? '').replace(/\s+/g, ' ').trim().toLowerCase().replace(/s$/, '');
+
+/**
+ * The spheres a character has anything in, on any side.
+ *
+ * Asked by the abilities whose answer depends on it -- see `abilityText`. A
+ * sphere counts once a row names it: a talent, a base pick, a tradition's
+ * grant, the Alternate Training technique's own.
+ */
+export function possessedSpheres(model) {
+  const out = new Set();
+  const put = (s) => { const k = String(s ?? '').trim().toLowerCase(); if (k) out.add(k); };
+  for (const side of Object.values(model?.data?.training || {})) {
+    if (!side || typeof side !== 'object') continue;
+    for (const cls of side.classes || []) for (const lv of cls.levels || []) { put(lv.sphere); put(lv.utilitySphere); }
+    for (const b of side.bonusTalents || []) put(b.sphere);
+    for (const e of side.tradition?.entries || []) put(e.sphere);
+    for (const c of side.customizations || []) for (const t of c.talents || []) put(t.sphere);
+  }
+  put(model?.data?.altTraining?.calc?.talents?.sphere);
+  return out;
+}
+
+/**
+ * What an ability says -- to this character, when that matters.
+ *
+ * Most abilities say one thing to everybody. One that is divided by sphere
+ * (Divination's Alternate Divinations has an entry for every other sphere a
+ * caster might have) is only as long as the character's own list: the shares
+ * for the spheres she possesses, under a line saying that is what they are.
+ * Without a character to ask about -- a catalogue being browsed -- it is all
+ * of them.
+ */
+function abilityText(a, model = null) {
+  if (!a?.bySphere?.length) return a?.text || '';
+  if (!model) return [a.text, ...a.bySphere.map((s) => `${s.sphere}: ${s.text}`)].filter(Boolean).join('\n\n');
+  const has = possessedSpheres(model);
+  const mine = a.bySphere.filter((s) => has.has(s.sphere.toLowerCase()));
+  const head = mine.length
+    ? `From the spheres you possess — ${mine.map((s) => s.sphere).join(', ')}:`
+    : `None of the spheres you possess adds one yet. (${a.bySphere.map((s) => s.sphere).join(', ')} each would.)`;
+  return [a.text, head, ...mine.map((s) => `${s.sphere}: ${s.text}`)].filter(Boolean).join('\n\n');
+}
+
+/**
+ * A talent that is a way of taking one of its sphere's packages.
+ *
+ * Expanded Geomancing says "you gain an additional Nature package", and the
+ * row says which: "Expanded Geomancing (Fire)". What that row is *for* is the
+ * fire package, exactly as "Nature Sphere (Fire)" would be, so it is shown the
+ * same thing -- the package it named, rather than a sentence saying that it
+ * gets one. Null for every other talent, whose own text is the answer.
+ */
+export function talentPackage(hit, typed) {
+  if (!hit) return null;
+  /*
+   * Only a package, and never one the talent is merely *tagged* with. A
+   * talent's parenthesis is usually its tag -- "Prowess (boast)", an Alchemy
+   * talent marked "(poison)" -- and those share their names with the very
+   * abilities and packages they build on. Prowess is not the boast, so a part
+   * that is one of the talent's own tags is not a choice the player made.
+   */
+  const tags = new Set((hit.tags || []).map((t) => String(t).trim().toLowerCase()));
+  const pointed = pointedAbilities(sphereEntry(hit.sphere), typed)
+    .filter((a) => a.option && !tags.has(a.name.toLowerCase()));
+  if (!pointed.length) return null;
+  return {
+    names: pointed.map((a) => a.name),
+    text: pointed.map((a) => (pointed.length > 1 ? `${a.name}: ${a.text}` : a.text)).join('\n\n'),
+  };
+}
+
+/** What a matched talent's note says: the package it names, or else its own text. */
+export const talentNoteText = (hit, typed) => talentPackage(hit, typed)?.text || hit?.text || '';
+
+export function sphereBasePick(sphere, picked = '', model = null) {
   const s = sphereEntry(sphere);
   if (!s || !s.abilities.length) return null;
+  /*
+   * Some spheres give everything they have on the first pick; some give a
+   * base ability *and* a choice of package -- Nature's geomancing and one of
+   * six terrains, Guardian's pool and either Challenge or Patrol. A row says
+   * which in its parenthesis, "Nature Sphere (Water)", and is shown that (see
+   * `pointed` below). A row that names none is shown all of them under the
+   * page's own words about choosing, because it is the row of somebody who
+   * has yet to.
+   */
+  const always = s.abilities.filter((a) => !a.option);
+  const options = s.abilities.filter((a) => a.option);
+  // An ability the page never named is filed under the sphere's own name,
+  // and saying "Guardian Sphere (Guardian)" would be saying nothing.
+  const own = (a) => a.name.toLowerCase() === s.name.toLowerCase();
+  /*
+   * A parenthesis that names something the sphere has is the row saying what
+   * it is *for*: "Boxing (Counter Punch)" is the counter punch, "Nature Sphere
+   * (Water)" is the water package, and the note under it is that and nothing
+   * else -- not Improved Unarmed Strike and geomancing as well, which the
+   * player knows they have and did not write down. The whole sphere is still
+   * what a row with no parenthesis, or one naming nothing the sphere has
+   * ("from a feat"), is shown.
+   */
+  const pointed = pointedAbilities(s, picked);
+  if (pointed.length) {
+    return {
+      sphere: s.name,
+      label: `${s.name} Sphere (${pointed.map((a) => a.name).join(', ')})`,
+      text: pointed.map((a) => (pointed.length > 1 ? `${a.name}: ${abilityText(a, model)}` : abilityText(a, model))).join('\n\n'),
+    };
+  }
+  // A label is a name, and a name lists what it opened only while that is a
+  // short thing to say: "Destruction Sphere (Destructive Blast)". Creation's
+  // page heads thirteen sections before its talents, and a row reading
+  // "Creation Sphere (Alter, Destroy, Repair, Create, Clarifications, …)" is
+  // a paragraph where a name should be, so past three it is just the sphere.
+  const opened = always.filter((a) => !own(a)).map((a) => a.name);
+  /*
+   * Or the bracket names a *talent* of the sphere. Some spheres hand one over
+   * with the sphere itself -- "When you first gain the Tech sphere, you may
+   * learn any one (gadget) talent" -- and the row that records taking Tech
+   * records which: "Tech Sphere (Anatomical Structure)". That is what the row
+   * is for, the same as a package would be, so that is what it is shown.
+   */
+  const bracketed = [...String(picked ?? '').matchAll(/\(([^)]*)\)/g)]
+    .flatMap((m) => m[1].split(/,|;/)).map((x) => x.trim()).filter(Boolean);
+  const taken = bracketed.map((n) => sphereTalent(s.name, n)).filter(Boolean);
+  if (taken.length) {
+    return {
+      sphere: s.name,
+      label: `${s.name} Sphere (${taken.map((t) => t.name).join(', ')})`,
+      text: taken.map((t) => (taken.length > 1 ? `${t.name}: ${t.text}` : t.text)).join('\n\n'),
+    };
+  }
+  // One entry of a share, named outright: "Divine Undead". Tried last, so
+  // that a sphere, an ability or a package of that name is what it means.
+  const entry = isBasePick(picked) ? null : shareEntry(s, picked);
+  if (entry) {
+    return {
+      sphere: s.name,
+      label: `${s.name} Sphere (${entry.name})`,
+      text: `${entry.text}\n\n${entry.ability} — granted by also possessing the ${entry.share} sphere.`,
+    };
+  }
+  const names = opened.length <= 3 ? opened : [];
+  // Each ability under its own name: with one it reads as a heading, and
+  // with several it is the only thing telling them apart.
+  const say = (a) => (own(a) ? abilityText(a, model) : `${a.name}: ${abilityText(a, model)}`);
+  const choosing = options.length
+    ? [s.choose || `Choose one: ${options.map((o) => o.name).join(', ')}.`] : [];
   return {
     sphere: s.name,
-    label: `${s.name} Sphere (${s.abilities.map((a) => a.name).join(', ')})`,
-    // Each ability under its own name: with one it reads as a heading, and
-    // with several it is the only thing telling them apart.
-    text: s.abilities.map((a) => `${a.name}: ${a.text}`).join('\n\n'),
+    label: names.length ? `${s.name} Sphere (${names.join(', ')})` : `${s.name} Sphere`,
+    text: [...always.map(say), ...choosing, ...options.map(say)].join('\n\n'),
   };
+}
+
+/**
+ * `isBasePick`, with the catalogue's help.
+ *
+ * The rule in `rules.js` wants the word -- "Boxing Sphere" -- because without
+ * a catalogue that is all there is to go on. Plenty of sheets write the pick
+ * as the sphere's bare name, "Boxing (Counter Punch)" or just "Veilweaving",
+ * and once a pack says Boxing *is* a sphere that reads as one too. Only for
+ * the mark and the note: what counts toward a tally is still the sheet's own
+ * rule, which no pack should be able to move.
+ */
+export function isBasePickOf(talent, sphere = null) {
+  if (isBasePick(talent)) return true;
+  const bare = String(talent ?? '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!bare) return false;
+  if (sphereEntry(bare)) return true;
+  /*
+   * Or the row names one of its sphere's base abilities outright --
+   * "Alternate Divinations" among a diviner's talents. Only with the row's
+   * sphere to look in, and only when no talent answers to the name: abilities
+   * are called things like Create, Sense and Summon, and a talent of the same
+   * name is what a talent row more likely means.
+   */
+  const s = sphere ? sphereEntry(sphere) : null;
+  if (!s || sphereTalent(sphere, talent)) return false;
+  return s.abilities.some((a) => a.name.toLowerCase() !== s.name.toLowerCase() && abilityKey(a.name) === abilityKey(bare))
+    || !!shareEntry(s, bare);
 }
 
 /**
@@ -382,11 +606,18 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
    * somebody who wrote "Destruction Sphere (from the feat)" said something,
    * and it is not ours to replace.
    */
-  const base = isBasePick(row[talentField])
-    ? sphereBasePick(basePickSphere(row[talentField], sphereField ? row[sphereField] : null))
+  const base = isBasePickOf(row[talentField], sphereField ? row[sphereField] : null)
+    ? sphereBasePick(basePickSphere(row[talentField], sphereField ? row[sphereField] : null), row[talentField], model)
     : null;
   if (base) {
-    if (!/\(/.test(row[talentField])) { row[talentField] = base.label; filled.push('talent'); }
+    // Only a pick the sheet's own rule already reads as one is relabelled. A
+    // bare "Boxing" is recognised with the catalogue's help, and writing the
+    // word "Sphere" into it would make it count toward the tally -- which is
+    // a number moving because a pack was switched on.
+    if (isBasePick(row[talentField]) && !/\(/.test(row[talentField]) && base.label !== row[talentField]) {
+      row[talentField] = base.label;
+      filled.push('talent');
+    }
     if (sphereField && !String(row[sphereField] ?? '').trim()) {
       row[sphereField] = base.sphere;
       filled.push('sphere');
@@ -403,8 +634,8 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
       row[sphereField] = hit.sphere;
       filled.push('sphere');
     }
-    if (notesField && !String(row[notesField] ?? '').trim() && hit.text) {
-      row[notesField] = hit.text;
+    if (notesField && !String(row[notesField] ?? '').trim() && talentNoteText(hit, row[talentField])) {
+      row[notesField] = talentNoteText(hit, row[talentField]);
       filled.push('notes');
     }
   }
@@ -426,6 +657,161 @@ export function talentTagCounts() {
   }
   return [...out.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([tag, count]) => ({ tag, count }));
+}
+
+/**
+ * Every talent on a side that has a notes cell beside it, as `[row, fields]`.
+ *
+ * A guile level is two talents on one row -- the free pick and the [utility]
+ * one -- each with a sphere and a note of its own, which is why the columns
+ * are named per entry rather than assumed.
+ */
+const PLAIN_COLUMNS = { talent: 'talent', sphere: 'sphere', notes: 'notes' };
+const UTILITY_COLUMNS = { talent: 'utilityTalent', sphere: 'utilitySphere', notes: 'utilityNotes' };
+function notedTalentRows(model, sideKey) {
+  const side = model.data?.training?.[sideKey];
+  const out = [];
+  for (const cls of side?.classes || []) {
+    // A blended class's twin shares its levels; once is enough.
+    if (cls.blendedMirror) continue;
+    for (const lv of cls.levels || []) {
+      out.push([lv, PLAIN_COLUMNS]);
+      if (sideKey === 'guile') out.push([lv, UTILITY_COLUMNS]);
+    }
+  }
+  for (const b of side?.bonusTalents || []) out.push([b, PLAIN_COLUMNS]);
+  return out;
+}
+
+/** What the catalogue would put in a row's note, or '' when it knows nothing. */
+function noteFromCatalogue(model, row, f) {
+  const talent = row?.[f.talent];
+  if (!String(talent ?? '').trim()) return '';
+  if (isBasePickOf(talent, row[f.sphere])) return sphereBasePick(basePickSphere(talent, row[f.sphere]), talent, model)?.text || '';
+  return talentNoteText(sphereTalent(row[f.sphere], talent), talent);
+}
+
+/**
+ * What an Alternate Training row is, put the way a sphere tab's row would
+ * write it -- so the one lookup serves both.
+ *
+ * A technique with a sphere hands out that sphere's talents, but says so in
+ * its own ways. Light Body's 1st level is the Athletics sphere with a choice
+ * of package, and the ladder's cell holds only "(leap)"; Keen Mind's is
+ * "Divination sphere" outright; 3rd and 5th are talents the rules name; from
+ * 7th the player types one. Each of those is a row a sphere tab would have
+ * written as "Athletics Sphere (leap)", "Divination Sphere", "Wall Stunt" --
+ * and that is what this returns. '' for a level that grants no talent: its
+ * feat, spell or power has a catalogue of its own and is not this one's to
+ * answer for.
+ */
+export function altTrainingLookup(model, row) {
+  const sphere = model.data.altTraining?.calc?.talents?.sphere;
+  const grant = (row?.grants || []).find((g) => g.talent);
+  if (!sphere || !grant) return '';
+  const typed = String(row.text ?? '').trim();
+  // What was typed wins, as it does in the cell. Failing that, the name the
+  // rules gave *this* grant -- not the row's joined name, which at a level
+  // that also hands over a feat is the feat's.
+  const said = typed || String(grant.name ?? '').trim();
+  if (!said) return '';
+  // A bare "(leap)" is the package of the technique's own sphere.
+  return /^\([^)]*\)$/.test(said) ? `${sphere} Sphere ${said}` : said;
+}
+
+/** What the catalogue says about that row, or ''. */
+function altTrainingNoteText(model, row) {
+  const typed = altTrainingLookup(model, row);
+  if (!typed) return '';
+  const sphere = model.data.altTraining?.calc?.talents?.sphere;
+  if (isBasePickOf(typed, sphere)) return sphereBasePick(basePickSphere(typed, sphere), typed, model)?.text || '';
+  // The technique's own sphere first; a talent it may take from elsewhere is
+  // still found, by the whole catalogue.
+  return talentNoteText(sphereTalent(sphere, typed) || sphereTalent(null, typed), typed);
+}
+
+/** The rows of the ladder whose note is empty and could be filled, as `[level, text]`. */
+function blankAltTrainingNotes(model) {
+  const p = model.data.altTraining;
+  return (p?.calc?.rows || [])
+    .filter((row) => !String(p.rowNotes?.[row.level] ?? '').trim())
+    .map((row) => [row.level, altTrainingNoteText(model, row)])
+    .filter(([, text]) => text);
+}
+
+/**
+ * Write an Alternate Training pick, and fill its note the way a sphere tab's
+ * talent cell would: only when the note is empty, only from a name the
+ * catalogue knows.
+ */
+export function setAltTrainingPick(model, level, value) {
+  const p = model.data.altTraining;
+  if (!p) return model;
+  if (!p.picks || typeof p.picks !== 'object') p.picks = {};
+  p.picks[level] = String(value ?? '');
+  // The rows are worked out at recompute, and the lookup reads the row.
+  model.recompute();
+  const filled = [];
+  const hit = blankAltTrainingNotes(model).find(([lvl]) => String(lvl) === String(level));
+  if (hit) {
+    if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+    p.rowNotes[level] = hit[1];
+    filled.push('notes');
+    model.recompute();
+  }
+  emit(model, { type: 'set', path: `altTraining.picks.${level}`, value: p.picks[level], filled });
+  return model;
+}
+
+/**
+ * How many talents on a side the catalogue knows and whose note is empty.
+ *
+ * `setTalentEntry` fills a note at the moment a talent is typed, which is no
+ * help to the sheet that was filled in first and given its packs second: every
+ * talent on it is marked, none has its text, and retyping forty names to ask
+ * for them is not an answer. This is the count behind the button that asks
+ * once for the lot.
+ */
+export function blankTalentNotes(model, sideKey) {
+  // The Alternate Training ladder keeps its picks and notes by level rather
+  // than as rows of a list, so it is counted by its own reader.
+  if (sideKey === 'altTraining') return blankAltTrainingNotes(model).length;
+  return notedTalentRows(model, sideKey)
+    .filter(([row, f]) => !String(row[f.notes] ?? '').trim() && noteFromCatalogue(model, row, f)).length;
+}
+
+/**
+ * Fill those notes. The rule is `setTalentEntry`'s and is not loosened: only a
+ * note that is empty, only from a name the catalogue knows, and a sphere the
+ * row already chose still decides which talent that is.
+ */
+export function fillTalentNotes(model, sideKey) {
+  let filled = 0;
+  if (sideKey === 'altTraining') {
+    const p = model.data.altTraining;
+    for (const [level, text] of blankAltTrainingNotes(model)) {
+      if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+      p.rowNotes[level] = text;
+      filled++;
+    }
+  }
+  for (const [row, f] of notedTalentRows(model, sideKey)) {
+    if (String(row[f.notes] ?? '').trim()) continue;
+    const text = noteFromCatalogue(model, row, f);
+    if (!text) continue;
+    row[f.notes] = text;
+    // An empty sphere is settled the same way it would have been on typing.
+    if (!String(row[f.sphere] ?? '').trim()) {
+      const hit = isBasePickOf(row[f.talent]) ? sphereBasePick(basePickSphere(row[f.talent], null), row[f.talent]) : sphereTalent(null, row[f.talent]);
+      if (hit?.sphere) row[f.sphere] = hit.sphere;
+    }
+    filled++;
+  }
+  if (filled) {
+    model.recompute();
+    emit(model, { type: 'talent-notes', side: sideKey, filled });
+  }
+  return filled;
 }
 
 /** A talent row nobody has written anything into. */

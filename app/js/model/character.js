@@ -77,7 +77,7 @@ import {
 import {
   addCustomization, applyBudget, blendedClasses, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
-  setTalentEntry,
+  setTalentEntry, blankTalentNotes, fillTalentNotes, setAltTrainingPick, altTrainingLookup,
   removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setCustomizationRule, setSphereBonus,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
@@ -553,6 +553,10 @@ export class Character {
   setBlendedSkill(...a) { return setBlendedSkill(this, ...a); }
   setGuileBlend(...a) { return setGuileBlend(this, ...a); }
   setTalentEntry(...a) { return setTalentEntry(this, ...a); }
+  blankTalentNotes(...a) { return blankTalentNotes(this, ...a); }
+  fillTalentNotes(...a) { return fillTalentNotes(this, ...a); }
+  setAltTrainingPick(...a) { return setAltTrainingPick(this, ...a); }
+  altTrainingLookup(...a) { return altTrainingLookup(this, ...a); }
   blendedClasses(...a) { return blendedClasses(this, ...a); }
   #recomputeTraining(...a) { return recomputeTraining(this, ...a); }
   #sphereTalentKnowledge(...a) { return sphereTalentKnowledge(this, ...a); }

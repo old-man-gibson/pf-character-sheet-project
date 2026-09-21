@@ -1030,15 +1030,53 @@ export function mergeTables(extensions) {
     list[i] = { ...list[i], ...group, entries };
   };
 
+  /**
+   * A sphere joins one already there, talent by talent.
+   *
+   * It used to replace it outright, on the reasoning that one page is the
+   * whole sphere and a later pack carrying it is a corrected copy. That held
+   * while a pack was a page. A pack can also be a *book*, and a sphere is
+   * spread over as many books as wrote talents for it: a sphere is in one
+   * pack, and five more of its talents are in another -- which, replacing,
+   * left a caster with those five and nothing else, depending on which pack
+   * happened to load second.
+   *
+   * A correction still works, one entry at a time: a talent or base ability
+   * of the same name is the later pack's. What a later pack cannot do is take
+   * a talent away, which no pack has wanted to.
+   */
+  const upsertSphere = (list, sphere) => {
+    const k = lower(sphere?.name);
+    if (!k) return;
+    const i = at(list, 'name', k);
+    if (i === -1) { list.push(sphere); noteAdded(list, 'name', k); return; }
+    const had = list[i];
+    const merged = { ...had };
+    for (const [key, value] of Object.entries(sphere)) {
+      if (key === 'name' || key === 'talents' || key === 'abilities') continue;
+      if (value === null || value === undefined || value === '') continue;
+      merged[key] = value;
+    }
+    const byName = (a, b) => {
+      const outList = [...arr(a)];
+      const where = new Map(outList.map((e, j) => [lower(e?.name), j]));
+      for (const e of arr(b)) {
+        const j = where.get(lower(e?.name));
+        if (j === undefined) { where.set(lower(e?.name), outList.length); outList.push(e); } else outList[j] = e;
+      }
+      return outList;
+    };
+    merged.talents = byName(had.talents, sphere.talents);
+    merged.abilities = byName(had.abilities, sphere.abilities);
+    list[i] = merged;
+  };
+
   /** A discipline joins one already there rather than replacing it. */
   const upsertDiscipline = (list, disc) => upsertGroup(list, disc, 'name');
   for (const ext of arr(extensions)) {
     const p = obj(ext?.provides);
     for (const d of arr(p.maneuvers?.disciplines)) upsertDiscipline(out.maneuvers.disciplines, d);
-    // A sphere replaces a sphere of the same name outright: unlike a
-    // discipline it arrives whole -- one page is the whole sphere -- so a
-    // later pack carrying it means a corrected copy of all of it.
-    for (const x of arr(p.spheres?.spheres)) upsert(out.spheres.spheres, x);
+    for (const x of arr(p.spheres?.spheres)) upsertSphere(out.spheres.spheres, x);
     // A veil is one fact under its own name, so the ordinary later-wins rule
     // applies -- and it is what dissolves the duplicate question, since a veil
     // shapeable in five chakras is on five of the wiki's slot pages with the

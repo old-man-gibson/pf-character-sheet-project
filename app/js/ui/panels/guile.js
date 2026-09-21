@@ -19,7 +19,7 @@
 import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
-import { talentCell } from '../talents.js';
+import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
 import {
   SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn,
 } from '../../model.js';
@@ -111,7 +111,9 @@ function guileTrainingPanel(model, g) {
         under <strong>Blended training</strong> and their skill talents counted here by sphere.</p>` : ''}
       <div style="margin-top:8px">
         <button class="primary" data-action="add-guile-class">+ Add class</button>
+        ${fillNotesButton(model, 'guile')}
       </div>
+      ${talentLegend()}
       <p class="hint">
         A tier grants the talents in <strong>Any</strong> <em>in addition to</em> those in
         <strong>[utility]</strong> — they are two ladders, not two halves of one, which is why a
@@ -399,16 +401,16 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
               <td class="${state}${side ? ` side-${side}` : ''}"${cellTitle(side, lv.sphere)}>${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}</td>
-              <td class="${state}">${prose(model,
-    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
+              <td class="${state}">${talentNote(model,
+    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
               <td class="${uState} util ustart">${talentCell(model,
     `data-item="${slots}|${li}|utilityTalent"${uOn ? ' placeholder="[utility]…"' : ' disabled'}`,
     lv.utilityTalent, lv.utilitySphere,
     uOn ? { sphere: 'utilitySphere', notes: 'utilityNotes' } : null)}</td>
               <td class="${uState} util${uSide ? ` side-${uSide}` : ''}"${cellTitle(uSide, lv.utilitySphere)}>${uOn ? itemSelect(slots, li, 'utilitySphere', lv.utilitySphere, spheres)
                   : '<select disabled><option></option></select>'}</td>
-              <td class="${uState} util">${prose(model,
-    `data-item="${slots}|${li}|utilityNotes"${uOn ? '' : ' disabled'}`, lv.utilityNotes, 1, 'grow')}</td>
+              <td class="${uState} util">${talentNote(model,
+    `data-item="${slots}|${li}|utilityNotes"${uOn ? '' : ' disabled'}`, lv.utilityNotes, `${slots}|${li}|utilityNotes`)}</td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`;
@@ -567,7 +569,7 @@ function guileBonusPanel(model, g) {
     { sphere: 'sphere', notes: 'notes' })}</td>
           <td>${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
           <td>${itemText(list, i, 'source', e.source, 'Feat, archetype…')}</td>
-          <td>${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
+          <td>${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
           <td class="mid">${itemCheck(list, i, 'utility', e.utility)}</td>
           <td class="mid">${itemCheck(list, i, 'free', e.free)}</td>
           ${rowTools(list, i)}
