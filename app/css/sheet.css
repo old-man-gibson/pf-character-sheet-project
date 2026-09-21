@@ -1835,6 +1835,9 @@ option[data-ab]:not([data-ab=""]) {
     linear-gradient(to left, rgba(0, 0, 0, 0.30), transparent) 100% 0 / 14px 100% no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
+/* A table only just over the cap: the script lifts it rather than leave a
+   scroll box with a few pixels of travel. See `#fitTableWraps`. */
+.tablewrap.nocap { max-height: none; }
 :host([scheme="light"]) .tablewrap {
   background:
     linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,

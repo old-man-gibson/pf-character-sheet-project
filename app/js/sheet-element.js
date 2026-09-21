@@ -583,6 +583,7 @@ export class CharacterSheetElement extends HTMLElement {
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
+  #tableWrapObserver = null; // watches the table scroll boxes that may shed their cap
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -834,9 +835,13 @@ export class CharacterSheetElement extends HTMLElement {
    * for the element's life and free when nothing is open, like the press-away
    * handler above.
    */
-  #onViewportChange = () => {
+  #onViewportChange = (e) => {
     if (this.#bdAnchor) this.#closeBreakdown();
     this.#fitRail();
+    // The table cap is a share of the window, so which tables only just miss
+    // it changes with the window -- and an uncapped one no longer resizes
+    // with it, so its own observer would never hear.
+    if (e?.type === 'resize') this.#fitTableWraps();
   };
 
   /**
@@ -4695,6 +4700,44 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Let a table that only just misses its cap run to its full height.
+   *
+   * `--cs-table-max` is a share of the window, so whether a table fits is an
+   * accident of the viewport -- and a table a row or two over the cap gets a
+   * scroll box with ten pixels of travel in it, which is a scrollbar to find
+   * and a wheel-trap for no gain. A box is worth having when it hides a good
+   * part of the table; under a fifth of the cap it is not, and the table is
+   * given the page instead. It gives up its sticky headings while it is, which
+   * it barely needed: nearly all of it is on screen with them.
+   *
+   * Measured rather than styled because CSS cannot ask how far content
+   * overshoots a max-height. Watched as well as run after a render: a wrap
+   * inside a shut `<details>` measures nothing until it is opened.
+   */
+  #fitTableWraps(root = this.shadowRoot) {
+    for (const w of root.querySelectorAll('.tablewrap')) this.#fitTableWrap(w);
+  }
+
+  #fitTableWrap(w) {
+    w.classList.remove('nocap');
+    const over = w.scrollHeight - w.clientHeight;
+    if (over > 0 && over <= Math.max(96, w.clientHeight * 0.2)) w.classList.add('nocap');
+  }
+
+  #bindTableWraps(root) {
+    this.#fitTableWraps(root);
+    if (typeof ResizeObserver !== 'function') return;
+    // One observer for the element, as with the read-only boxes. Refitting is
+    // itself a resize, but it settles: the second pass measures the same
+    // overshoot, lands on the same class, and changes nothing.
+    this.#tableWrapObserver?.disconnect();
+    this.#tableWrapObserver = new ResizeObserver((entries) => {
+      for (const e of entries) this.#fitTableWrap(e.target);
+    });
+    for (const w of root.querySelectorAll('.tablewrap')) this.#tableWrapObserver.observe(w);
+  }
+
+  /**
    * The colour picker for one tab: a small panel, opened two ways.
    *
    * Right-clicking a tab is the fast way and the one nobody discovers, so the
@@ -5717,6 +5760,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindReadOnlyBoxes(root);
+    this.#bindTableWraps(root);
 
     // Generated Discord posts, and the folded language list: hand the text to
     // the clipboard, or select it when the browser refuses (a page served over
