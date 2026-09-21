@@ -92,7 +92,9 @@ export function renderProgressionPanel(model, ctx) {
         <p class="hint">
           <strong>Several rules can share one column</strong> — give a kineticist's Wild Talent
           column <code>{Infusions, odd}</code> and <code>{Utility, even}</code> and each level
-          is tinted and tagged by whichever grants it. Typing the whole braced form into either
+          is tinted and tagged by whichever grants it. A lone group goes untagged; <em>+ names</em> /
+          <em>− names</em> under the column overrides either way, and the ▾ beside the column's
+          name folds its groups down to their coloured names. Typing the whole braced form into either
           box fills both. Levels count the <em>class's</em> own levels; start a rule with
           <code>char:</code> to count character levels instead. Anything that isn't a level
           list is treated as a formula over <code>classLevel</code> / <code>charLevel</code>,
@@ -173,7 +175,7 @@ function classFeatureGroups(model, ctx) {
             <td class="num"${name === 'General' ? ''
     : ` title="Character level ${row.level} — ${esc(name)} level ${row.classLevel}"`}>${row.level}</td>
             ${g.columns.map((col) => featureCell(ctx, model, name, col, row,
-    (g.rules?.[col] || []).length > 1)).join('')}
+    groupNamesShown(model, name, col, (g.rules?.[col] || []).length))).join('')}
           </tr>`).join('')}</tbody>
         </table></div>
         <div style="margin-top:6px">
@@ -304,6 +306,18 @@ function menuListMarkup(ctx) {
   }
 
   /**
+   * Whether a column's cells wear their rule group's name.
+   *
+   * Left alone, one group goes unnamed (the heading says it) and two or more
+   * are named. The heading's toggle overrides that either way, and is kept
+   * with the character like a fold: true hides, false shows, unset is auto.
+   */
+function groupNamesShown(model, className, col, groupCount) {
+    const pref = model.data.uiPrefs.collapsed?.[`cftags-${className}-${col}`];
+    return typeof pref === 'boolean' ? !pref : groupCount > 1;
+  }
+
+  /**
    * A feature column's header: its name, its level rule, and the drag handle.
    *
    * The rule box is deliberately plain text rather than a builder -- what a
@@ -313,13 +327,28 @@ function menuListMarkup(ctx) {
 function featureColumnHead(model, className, col, index, tableKey) {
     const groups = model.classFeatureRuleGroups(className, col);
     const due = model.classFeatureDue(className)[col] || 0;
+    const named = groupNamesShown(model, className, col, groups.length);
 
-    const groupRow = (grp, gi) => {
-      const rule = parseLevelRule(grp.rule || '');
+    // Folded, the groups are only their names, side by side: the schedules are
+    // set once and read rarely, and a row of boxes per group above every column
+    // is a lot of heading. Kept with the character, like any fold.
+    const foldKey = `cfrules-${className}-${col}`;
+    const folded = groups.length > 0 && isCollapsed(model, foldKey);
+
+    const ruleTitle = (rule) => {
       const basis = rule.basis === 'char' ? 'character' : 'class';
-      const title = rule.kind === 'error' ? `Rule not understood — ${rule.error}. Granting every level.`
+      return rule.kind === 'error' ? `Rule not understood — ${rule.error}. Granting every level.`
         : rule.kind === 'formula' ? `Formula over ${basis} level: ${rule.expr}`
           : `Grants at ${basis} levels ${summariseLevels(levelRuleLevels(rule))}`;
+    };
+    const groupChip = (grp) => {
+      const rule = parseLevelRule(grp.rule || '');
+      return `<span class="rulechip${rule.kind === 'error' ? ' bad' : ''}" style="--gc:${esc(grp.color)}"
+        title="${esc(ruleTitle(rule))}">${esc(grp.name || grp.rule || col)}</span>`;
+    };
+    const groupRow = (grp, gi) => {
+      const rule = parseLevelRule(grp.rule || '');
+      const title = ruleTitle(rule);
       return `<span class="rulegroup" style="--gc:${esc(grp.color)}">
         <input type="color" value="${esc(grp.color)}" data-cfgcolor="${esc(className)}|${index}|${gi}"
           aria-label="Colour for ${esc(grp.name || col)}" title="Group colour">
@@ -337,13 +366,17 @@ function featureColumnHead(model, className, col, index, tableKey) {
       <span class="pair">
         <input type="text" class="colname" value="${esc(col)}" data-cfcol="${esc(className)}|${index}">
         ${due ? `<span class="badge due" title="${due} level${due === 1 ? '' : 's'} reached with nothing filled in">${due}</span>` : ''}
+        ${groups.length ? foldButton(model, foldKey, folded) : ''}
         <button class="danger" data-action="remove-cf-column" data-class="${esc(className)}" data-col="${index}" title="Remove column">×</button>
       </span>
-      ${groups.map(groupRow).join('')}
+      ${folded ? `<span class="rulechips">${groups.map(groupChip).join('')}</span>` : `${groups.map(groupRow).join('')}
       ${featureColumnMenu(model, className, col, index)}
       <button class="addgroup" data-action="add-rule-group" data-class="${esc(className)}" data-col="${index}"
         title="${groups.length ? 'Another schedule sharing this column'
     : 'Limit this column to certain levels — try "odd", "even", "2, +4"'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
+      ${groups.length ? `<button class="addgroup" data-collapse="cftags-${esc(className)}-${esc(col)}"
+        data-collapse-to="${named}" aria-pressed="${named}"
+        title="${named ? 'Stop naming the rule group on each cell' : 'Name the rule group on each cell'}">${named ? '− names' : '+ names'}</button>` : ''}`}
       <div class="col-resizer" data-resize-table="${esc(tableKey)}" data-resize-col="${esc(col)}"
         title="Drag to resize"></div>
     </th>`;
@@ -381,9 +414,9 @@ function featureField(ctx, model, className, col, row, field, multi) {
           : `No ${col} at this level.`)
           : `${label}${field.due ? ' — nothing chosen yet' : field.planned ? ' — not reached yet' : ''}`;
 
-    // With one rule group the column heading already names it; a tag earns its
-    // space once two schedules share a column, or two fields share a level.
-    const tagged = (multi || cell.fields.length > 1) && field.group;
+    // Whether the column names its groups is groupNamesShown's call. Text left
+    // behind by a group since removed is always named: nothing else says whose.
+    const tagged = (multi || field.group?.orphan) && field.group;
     const tag = tagged
       ? `<span class="ftag${field.group.orphan ? ' orphan' : ''}">${esc(label)}</span>` : '';
     const placeholder = field.due || field.planned ? ` placeholder="${esc(label)}…"` : '';
