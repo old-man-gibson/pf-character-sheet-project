@@ -154,8 +154,10 @@ A whole sphere — its description, its base abilities and every talent in it �
 table too, under `provides.spheres.spheres`. There is no form for one: a sphere is forty
 talents deep and arrives whole off a wiki page, so **Paste text…** is how one gets in, and
 the editor's **Spheres** list is for seeing what a pack holds and taking a sphere back out.
-Unlike a discipline, a later pack naming the same sphere **replaces** it: one page is the
-whole sphere, so a corrected copy is a copy of all of it.
+Like a discipline, a later pack naming the same sphere **joins** it, talent by talent and
+base ability by base ability: a pack may be one book, and a sphere is spread over every
+book that wrote talents for it. An entry of the same name is the later pack's, which is how
+a correction gets in.
 
 ```json
 { "name": "Boxing", "kind": "combat",
@@ -591,8 +593,9 @@ not take, and there are 183 of those across the akashic veils.
 The panel reads one document, which is right when a player has copied a page. A scraper
 that has just walked a wiki hands over a directory, and pasting sixteen files of up to a
 megabyte each is not that. `tools/scrape-pack.mjs` runs **the same reader** over a
-directory and writes the packs, so what happens in the browser is one **Import a pack…**
-each:
+directory and writes the packs, so what happens in the browser is one **Import packs…**
+for the lot — the file box takes as many as are selected, stores each in turn, rebuilds the
+tables once at the end, and says by name which files it could not take and why:
 
 ```bash
 node tools/scrape-pack.mjs <scrape-dir> --match '*_veils.md' --out private/extensions/veils
@@ -664,6 +667,41 @@ Detection is deliberately narrow: a "copy as markdown" browser extension also pr
 headings and bold, and those pages must keep going to the readers that know their shape.
 What only a tool writes is the **field list** — three or more `* **Key:** value` lines. That
 is the whole test.
+
+## Read a PDF… — a document of your own
+
+The third way into the same reader, for material a group keeps as a PDF: a homebrew
+document, a campaign handout, house rules laid out like a book. **Read a
+PDF…** sits beside **Read it** in the paste box. The file is read in the page by pdf.js,
+which is served with the app (`app/vendor/pdfjs`) and fetched only when somebody chooses a
+PDF; nothing is uploaded.
+
+A PDF has no headings, paragraphs or columns — only pieces of text with a position, a size
+and a font. `app/js/pdf-import.js` gets an outline back out of that by the one thing a
+layout is consistent about, which is type: whatever most of the book is set in is body
+(more than one style may be — a justified book is often two cuts of one face); the style
+most headings are in is the *entries'*; larger headings are *sections*; smaller ones stay
+inside their entry as bold lines. Columns are read left then right, the right one starting
+at the leftmost margin past the middle that several lines share, and the gutter's position
+is learned from the whole book so that a page with little evidence is told by the rest.
+Text at the same place on most pages is furniture and is dropped — running heads, footers,
+page numbers.
+
+It stops there, on purpose. "Iron Grip (stance)" and "Craft Wondrous Trinket (item
+creation)" are set identically; only their section says one is a talent and the other a
+feat, in words no two documents share. So the next screen lists the sections with a guess
+beside each — *Sphere talents* (and which sphere), *a sphere's own page*, *Feats*, *Class,
+archetype or race*, *Reference entries*, or *Leave out* — for a person to correct. Each
+chosen section is then written as the document it was said to be and read by
+`readStructured`, or handed to `parsePaste` as a page, and the ordinary review follows.
+Feats, spells, powers and reference entries found this way are filed in the pack's tables
+(shown in the review as **Picked by name**), which the paste box could read but never
+store before.
+
+It produces a draft to check, not a finished pack. Tables come through roughly, a page
+set round artwork may still come out of order, and a scanned document is pictures and has no
+text to read. `tests/pdf-import.test.mjs` covers everything but pdf.js itself, on pages
+written out by hand.
 
 ## Paste text — reading a copied rules page
 
