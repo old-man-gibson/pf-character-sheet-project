@@ -691,6 +691,25 @@
   white-space: pre-wrap; max-height: min(15rem, 45svh); overflow-y: auto; scrollbar-width: thin;
 }
 .bdpop .peektext .empty { color: var(--cs-muted); font-style: italic; }
+/* A sphere talent in the panel. Rules text is paragraphs, not a column of
+   modifiers, so it gets a reading measure and more of the window's height. */
+.bdpop.wide { max-width: min(32rem, calc(100vw - 16px)); }
+.bdpop.wide .peektext { max-height: min(24rem, 60svh); line-height: 1.45; }
+.bdpop .peeklead { font-style: italic; }
+/* A table out of a talent's text, in the panel and in a note's read view.
+   `white-space` is put back to normal inside it: the text around it is
+   pre-wrap in both places, and a cell is not. */
+.peektable {
+  white-space: normal; border-collapse: collapse; margin: 6px 0; width: 100%;
+  font-size: 0.74rem; font-variant-numeric: tabular-nums;
+}
+.peektable caption { text-align: left; font-weight: 600; padding-bottom: 3px; color: var(--cs-muted); }
+.peektable th, .peektable td {
+  text-align: left; vertical-align: top; padding: 2px 8px 2px 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--cs-line) 70%, transparent);
+}
+.peektable th { font-weight: 600; border-bottom: 1px solid var(--cs-line); }
+.bdpop .peeksource { margin: 6px 0 0; padding-top: 5px; border-top: 1px dotted var(--cs-line); }
 .bdpop .bdtotal { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .bdpop .bdsub { color: var(--cs-muted); font-size: 0.72rem; margin-bottom: 5px; }
 .bdpop .bdrow {
@@ -1835,6 +1854,9 @@ option[data-ab]:not([data-ab=""]) {
     linear-gradient(to left, rgba(0, 0, 0, 0.30), transparent) 100% 0 / 14px 100% no-repeat;
   background-attachment: local, local, scroll, scroll;
 }
+/* A table only just over the cap: the script lifts it rather than leave a
+   scroll box with a few pixels of travel. See `#fitTableWraps`. */
+.tablewrap.nocap { max-height: none; }
 :host([scheme="light"]) .tablewrap {
   background:
     linear-gradient(to right, var(--cs-tablebg) 40%, transparent) 0 0 / 22px 100% no-repeat,
@@ -2405,14 +2427,26 @@ table.talents td { padding: 2px 4px; vertical-align: top; }
 .tcell { position: relative; display: block; }
 .tcell .tmark {
   position: absolute; top: 0; right: 3px; font-style: normal; font-size: 0.6rem;
-  line-height: 1.6; color: var(--cs-accent); opacity: 0.55; cursor: help;
+  line-height: 1.6; color: var(--cs-muted); opacity: 0.7; cursor: help;
   pointer-events: auto;
 }
 .tcell:hover .tmark, .tcell .tmark:hover { opacity: 1; }
-/* One that came from a named third-party source reads a shade quieter, so a
-   table that cares can pick them out without opening anything. */
-.tcell .tmark.third { color: var(--cs-muted); }
-.tcell .tmark.third:hover { color: var(--cs-accent); }
+/* Four things a mark can be, and a colour each, so a table can be read for
+   them without opening anything -- the legend under the tables says which is
+   which. The sphere itself takes the accent because it is the row the rest
+   hang from; an ordinary talent is the quiet one, being nearly every row. */
+.tlegend .tmark { color: var(--cs-muted); }
+.tcell .tmark.base, .tlegend .tmark.base { color: var(--cs-accent); }
+.tcell .tmark.pkg, .tlegend .tmark.pkg { color: var(--cs-even); }
+.tcell .tmark.third, .tlegend .tmark.third { color: var(--cs-good); }
+/* One meaning a line: each says what the mark is *and* what it shows, which
+   is a sentence, and four sentences run together in a row read as one. */
+.tlegend {
+  display: grid; gap: 1px; margin: 8px 0 0;
+  font-size: 0.78rem; color: var(--cs-muted);
+}
+.tlegend .tmark { font-style: normal; font-size: 0.8rem; opacity: 1; display: inline-block; width: 1.1em; }
+.tlegend-hint { font-style: italic; }
 table.talents th { vertical-align: bottom; }
 table.talents input, table.talents select, table.talents textarea { min-width: 0; }
 table.talents col.lvl { width: 2.9rem; }
@@ -4987,3 +5021,15 @@ table.stacked .catface { margin-left: 0; }
 }
 .catfold:hover { color: var(--cs-accent); background: var(--cs-panel); }
 .catfold:focus-visible { color: var(--cs-accent); }
+/* A folded talent note: one line of what the box says, in the box's place.
+   A button because the whole line opens it -- the caret is a small target
+   for the thing a reader does most on a filled table. */
+.notepeek {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: left; font: inherit; color: var(--cs-muted);
+  background: none; border: 0; border-radius: 4px;
+  padding: 3px 4px; cursor: pointer;
+}
+.notepeek:hover { color: inherit; background: var(--cs-panel); }
+.notepeek:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: -2px; }

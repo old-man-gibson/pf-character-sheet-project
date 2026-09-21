@@ -506,5 +506,43 @@ console.log('\nno character text reaches the page as markup');
   }
 }
 
+/*
+ * A talent's text in the panel. A pack keeps a table as tab-separated rows,
+ * which is all a string can do; the panel is markup, so there it is drawn as
+ * one. And it is pack text going into `innerHTML`, so every cell is escaped.
+ */
+{
+  const { richText } = await import('../app/js/ui/talents.js');
+  console.log('\nrules text in the panel -- tables drawn, and nothing let through');
+  const html = richText('Fire grows.\n\nTable: Fire Size\nLevel\tSize\n1st\tFine\n3rd\t<svg/onload=x>\n\nAfter it.');
+  check('a run of tabbed rows is a table, its first row the header',
+    [html.includes('<thead><tr><th>Level</th><th>Size</th></tr></thead>'), html.includes('<td>1st</td><td>Fine</td>')], [true, true]);
+  check('the line above it is the caption, and not said twice',
+    [html.includes('<caption>Table: Fire Size</caption>'), html.split('Table: Fire Size').length], [true, 2]);
+  check('the text either side is still there', [html.startsWith('Fire grows.'), html.endsWith('After it.')], [true, true]);
+  check('a cell is escaped', [html.includes('<svg'), html.includes('&lt;svg/onload=x&gt;')], [false, true]);
+  check('one line with a tab in it is a line', richText('a\tb').includes('<table'), false);
+  // An earlier build of the wiki packs wrote a table as rows of pipes, and a
+  // note filled from one keeps them; markdown writes them the same way.
+  const piped = richText('Teleport capacity:\n\n| Creature Size | Equivalent |\n|---|:-:|\n| Fine | 1/16 |\n| Colossal | 16 |');
+  check('rows of pipes are a table too, and markdown\'s rule is not a row',
+    [piped.includes('<th>Creature Size</th><th>Equivalent</th>'), piped.includes('<td>Fine</td><td>1/16</td>'),
+      piped.includes('---'), piped.includes('| Fine')],
+    [true, true, false, false]);
+  check('a lone piped line is left as it was written', richText('| not a table |').includes('<table'), false);
+
+  // A Notes box is a text box and has no tables in it, so a note with one is
+  // read through a rendered view and edited in the box underneath -- the
+  // bargain formula fields already strike. A note without one is the plain
+  // box, and one with a formula keeps the formula view, which computes.
+  const { talentNote } = await import('../app/js/ui/talents.js');
+  const noteModel = new Character(blankDocument({ name: 'Reader', level: 1 }));
+  const tabled = talentNote(noteModel, 'data-item="x|0|notes"', 'Sizes.\n\nLevel\tSize\n1st\tFine\n3rd\tSmall', 'x|0|notes');
+  check('a note with a table is read as a table and still edited as text',
+    [tabled.includes('<table class="peektable">'), tabled.includes('prose-view rich'), tabled.includes('<textarea data-item="x|0|notes"'), tabled.includes('Level\tSize')],
+    [true, true, true, true]);
+  check('a note without one is the plain box', talentNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('prose-view'), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

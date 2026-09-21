@@ -17,7 +17,7 @@ import { esc, val } from '../html.js';
 import { collapsible } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
-import { talentCell } from '../talents.js';
+import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
 import { rollButton } from '../roll.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
@@ -270,8 +270,8 @@ function trainingSide(model, sideKey, side) {
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
                   : '<select disabled><option></option></select>'}
               </td>
-              <td class="${state}" data-label="Notes">${prose(model,
-    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
+              <td class="${state}" data-label="Notes">${talentNote(model,
+    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -286,7 +286,9 @@ function trainingSide(model, sideKey, side) {
         <button class="primary" data-action="add-training-class" data-side="${sideKey}">+ Add class</button>
         ${isMagic ? '' : `<button data-action="add-customization"
           title="For a class whose talents arrive on several tracks at once, one of them live — an armiger's customized weapons">+ Customized weapons</button>`}
+        ${fillNotesButton(model, sideKey)}
       </div>
+      ${talentLegend()}
       <p class="hint">
         A level's talent fields unlock when that level grants a talent — from the class's
         levels in the Planner and the Talents/level rate (Type drives ${isMagic ? 'caster level' : 'practitioner level'}
@@ -498,8 +500,8 @@ function blendedPanel(model, pairs) {
                 ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
         : '<select disabled><option></option></select>'}
               </td>
-              <td class="${state}" data-label="Notes">${prose(model,
-        `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, 1, 'grow')}</td>
+              <td class="${state}" data-label="Notes">${talentNote(model,
+        `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
             </tr>`;
     }).join('')}</tbody>
         </table></div>`}
@@ -569,7 +571,7 @@ function bonusTalentPanel(model, sideKey, side) {
     { sphere: 'sphere', notes: 'notes' })}</td>
           <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
           <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
-          <td data-label="Notes">${prose(model, `data-item="${list}|${i}|notes"`, e.notes, 1, 'grow')}</td>
+          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
           ${rowTools(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>

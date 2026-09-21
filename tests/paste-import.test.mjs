@@ -1566,6 +1566,54 @@ This website uses cookies. See the Legal & OGL page for important information.`;
     r.leftovers.map((l) => l.text), ['site-name']);
 }
 
+console.log('a sphere page with a levelled table and a "This replaces" in it -- still one sphere, from the top');
+{
+  /*
+   * Illusion has a table of sizes by caster level between its contents and
+   * its talents, and Conjuration's companion talents say "This replaces…".
+   * The first read as the foot of a class's progression and stopped the
+   * reach back from the first `X Talents` heading, so the segment began
+   * *below* the table of contents and the reader found nothing to cut on; the
+   * second began an archetype halfway down. Either way a whole sphere came
+   * back as a name with nothing in it.
+   */
+  const MIRAGE = `Mirage
+Spheres of Power Wiki Home Page » Spheres Of Power » Mirage
+Fold
+Table of Contents
+Figment
+Mirage Talents
+Bigger Figment
+Borrowed Shape
+You make things that are not there.
+
+Figment
+You may create a figment, of a size set by your caster level.
+
+Caster Level\tSize\tVolume
+1st\tSmall\t5-ft. cube
+5th\tMedium\t10-ft. cube
+10th\tLarge\t20-ft. cube
+
+Mirage Talents
+
+Bigger Figment
+
+Your figments are one size larger.
+
+Borrowed Shape
+
+Your figment may take a companion's shape. This replaces the companion's own appearance for the duration.
+`;
+  const r = parsePaste(MIRAGE);
+  const s = r.spheres[0];
+  check('one sphere, by its own name', [r.spheres.length, s?.name], [1, 'Mirage']);
+  check('its base ability, table and all', [s?.abilities.map((a) => a.name), /10th\tLarge/.test(s?.abilities[0]?.text || '')], [['Figment'], true]);
+  check('both talents, the second whole', [s?.talents.map((t) => t.name), /This replaces/.test(s?.talents[1]?.text || '')],
+    [['Bigger Figment', 'Borrowed Shape'], true]);
+  check('and no archetype started halfway down it', r.blocks.length, 0);
+}
+
 console.log('a skill sphere page -- no section in the breadcrumb to go by');
 {
   /*

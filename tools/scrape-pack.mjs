@@ -17,10 +17,18 @@
  *     --out <dir>     where the packs are written (required)
  *     --match <glob>  only files whose name matches, e.g. '*_veils.md'
  *     --one <name>    one pack of everything, under this name, deduplicated
+ *     --id <id>       with `--one`: the pack's id, when the name's own slug
+ *                     would not be unique -- an id is cut at sixty characters,
+ *                     and a publisher's series can share that many
  *     --sort <how>    'name' (default) or 'bind': by the chakra a veil binds
  *                     to first, then by name
  *     --bind-order <list>  the chakra sequence `--sort bind` uses, e.g.
  *                     'Hands,Feet,Head,…'; alphabetical when not given
+ *     --structured    the files are scraper documents, so skip the guess.
+ *                     `parsePaste` decides that by counting field lines, and
+ *                     wants three: right for a paste of unknown origin, wrong
+ *                     for a book that adds one talent to a sphere, whose whole
+ *                     document is two. A tool that wrote the documents knows.
  *     --author <s>    stamped on each pack
  *     --dry           report what it would write, write nothing
  *
@@ -30,7 +38,7 @@
 
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
-import { parsePaste } from '../app/js/paste-import.js';
+import { parsePaste, readStructured } from '../app/js/paste-import.js';
 import { convertPack } from './veils-to-table.mjs';
 
 /* ---------------- arguments ---------------- */
@@ -41,15 +49,17 @@ const opt = (name, fallback = null) => {
   return i === -1 ? fallback : (argv[i + 1] ?? true);
 };
 const flag = (name) => argv.includes(`--${name}`);
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|match|one|author|sort|bind-order)$/.test(argv[i - 1])));
+const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|match|one|id|author|sort|bind-order)$/.test(argv[i - 1])));
 
 const out = opt('out');
 const match = opt('match');
 const one = opt('one');
+const oneId = opt('id');
 const author = opt('author', 'Scraped');
 const sort = String(opt('sort', 'name'));
 const bindOrder = opt('bind-order');
 const dry = flag('dry');
+const structured = flag('structured');
 
 if (!inputs.length || !out) {
   console.error('usage: node tools/scrape-pack.mjs <dir-or-file>… --out <dir> [--match "*_veils.md"] [--one "Name"] [--sort name|bind] [--bind-order "Hands,Feet,…"] [--author X] [--dry]');
@@ -82,7 +92,7 @@ const now = new Date().toISOString().slice(0, 19);
 const read = [];
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
-  const r = parsePaste(text);
+  const r = structured ? readStructured(text) : parsePaste(text);
   read.push({ file, name: titleOf(file), result: r });
   const kinds = new Map();
   for (const b of r.blocks) kinds.set(b.kind, (kinds.get(b.kind) || 0) + 1);
@@ -257,7 +267,7 @@ if (one) {
     console.log(`\nSorted by first chakra bind${order ? '' : ', alphabetically'}:`);
     for (const [k, n] of groups) console.log(`  ${String(n).padStart(5)}  ${k}`);
   }
-  write(pack(slugId(one), one, blocks, provisions(read.map((r) => r.result)), read.map((r) => basename(r.file))));
+  write(pack(oneId ? slugId(oneId) : slugId(one), one, blocks, provisions(read.map((r) => r.result)), read.map((r) => basename(r.file))));
 } else {
   for (const { file, name, result } of read) {
     write(pack(slugId(name), name, ordered(result.blocks), provisions([result]), [basename(file)]));

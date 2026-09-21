@@ -17,13 +17,14 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
-  setSphereCatalogue, sphereBasePick, sphereEntry, sphereNames, sphereTalent, talentsTagged,
+  setSphereCatalogue, sphereBasePick, isBasePickOf, talentNoteText, setAltTrainingTables, sphereEntry, sphereNames, sphereTalent, talentsTagged,
   setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
   veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
 import { storageMedium, indexedDbMedium, packMedium, PACK_STORE } from '../app/js/pack-storage.js';
 import { convertPack, liftClassAccess } from '../tools/veils-to-table.mjs';
 import { isBasePick } from '../app/js/rules.js';
+import { splitBaseAbilities } from '../app/js/paste-import.js';
 import { blankDocument } from '../app/js/convert.js';
 
 let pass = 0;
@@ -712,17 +713,32 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   check('a talent knows its sphere', talentsTagged('counter')[0].sphere, 'Boxing');
 
   /*
-   * A sphere replaces a sphere of the same name outright -- unlike a
-   * discipline, which joins. One page is the whole sphere, so a later pack
-   * carrying it means a corrected copy of all of it, not an addition to it.
+   * A sphere joins a sphere of the same name, talent by talent. A pack may be
+   * one book, and a sphere is spread over every book that wrote talents for
+   * it -- so a handbook's five must add to the core book's fifty rather than
+   * stand in for them. A talent of the same name is still the later pack's,
+   * which is how a correction gets in.
    */
-  const fixed = normalizeExtension({
-    id: 'fix',
-    name: 'Fix',
-    provides: { spheres: { spheres: [{ ...sphere, talents: [sphere.talents[0]] }] } },
+  const handbook = normalizeExtension({
+    id: 'handbook',
+    name: 'Handbook',
+    provides: {
+      spheres: {
+        spheres: [{
+          name: 'boxing',
+          abilities: [],
+          talents: [{ ...sphere.talents[0], text: 'Grapple, corrected.' }, { name: 'Haymaker', text: 'Hit harder.' }],
+        }],
+      },
+    },
   });
-  check('a later pack replaces the sphere whole',
-    mergeTables([pack, fixed]).spheres.spheres[0].talents.map((t) => t.name), ['Clinch']);
+  const joined = mergeTables([pack, handbook]).spheres.spheres;
+  check('a later pack adds its talents to the sphere',
+    [joined.length, joined[0].talents.map((t) => t.name)],
+    [1, [...sphere.talents.map((t) => t.name), 'Haymaker']]);
+  check('and corrects the ones it shares', joined[0].talents[0].text, 'Grapple, corrected.');
+  check('without losing the name or the base abilities it did not restate',
+    [joined[0].name, joined[0].abilities.length], [sphere.name, sphere.abilities.length]);
 
   /*
    * Matching a talent somebody typed on their sheet against the catalogue.
@@ -799,6 +815,20 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   check('a cleared note stays cleared', row(0).notes, '');
 
   /*
+   * The sheet that was written first and given its packs second: every talent
+   * is known and none has its text, because nothing was typed after the
+   * catalogue arrived. One ask fills the lot, under the same rule as typing.
+   */
+  row(3).talent = 'Clinch';
+  check('two talents are known and blank', c.blankTalentNotes('combat'), 2);
+  check('and both are filled', c.fillTalentNotes('combat'), 2);
+  check('from the catalogue, sphere and all', [row(0).notes, row(3).sphere, row(3).notes], ['Grapple.', 'Boxing', 'Grapple.']);
+  check('a written note is still left alone', row(1).notes, 'my own ruling');
+  check('a sphere that misses still fills nothing', row(2).notes, '');
+  check('nothing is left to fill', [c.blankTalentNotes('combat'), c.fillTalentNotes('combat')], [0, 0]);
+  row(3).talent = 'Nothing Known'; row(3).sphere = null; row(3).notes = '';
+
+  /*
    * Taking the sphere itself is not taking a talent in it: what it grants is
    * the sphere's base abilities. The row reads as the sphere and what it
    * opened, which is the name a player scanning their own list wants, and the
@@ -842,6 +872,177 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     [mrow(1).sphere, !!mrow(1).notes], ['Destruction', true]);
   d.setTalentEntry(M, 2, 'Destruction Sphere', cols);
   check('and a note already written is never overwritten', mrow(2).notes, 'my own ruling');
+
+  /*
+   * A sphere that offers a choice. Guardian gives a pool to everybody and
+   * either Challenge or Patrol; the row says which in its parenthesis, and is
+   * shown the base and that package rather than both. The document marks the
+   * choice with a `Packages` label, and rules the page never named sit under
+   * the sphere's own name -- which the label does not repeat.
+   */
+  const guardian = splitBaseAbilities([
+    'Guardians protect.', '*Guardian:* A delayed damage pool.',
+    '*Packages:* Choose one of the following.', '*Challenge:* Issue a challenge.', '*Patrol:* Threaten more.',
+  ].join('\n'));
+  check('a Packages label makes what follows a choice',
+    [guardian.abilities.map((a) => [a.name, !!a.option]), guardian.choose, guardian.description],
+    [[['Guardian', false], ['Challenge', true], ['Patrol', true]], 'Choose one of the following.', 'Guardians protect.']);
+  setSphereCatalogue({ spheres: [{ name: 'Guardian', kind: 'combat', ...guardian, talents: [] }] });
+  // The parenthesis is the row saying what it is for, so that is all the note
+  // holds -- not the pool every Guardian has and nobody wrote down.
+  check('a row that names its package is shown that package and nothing else',
+    [sphereBasePick('Guardian', 'Guardian Sphere (Patrol)').label, sphereBasePick('Guardian', 'Guardian Sphere (Patrol)').text],
+    ['Guardian Sphere (Patrol)', 'Threaten more.']);
+  check('two named are each said under their name',
+    sphereBasePick('Guardian', 'Guardian Sphere (Patrol, Challenge)').text,
+    'Challenge: Issue a challenge.\n\nPatrol: Threaten more.');
+  check('a parenthesis naming nothing the sphere has changes nothing',
+    sphereBasePick('Guardian', 'Guardian Sphere (from a feat)').text, sphereBasePick('Guardian', 'Guardian Sphere').text);
+  check('a row that names none is shown them all, and told to choose',
+    sphereBasePick('Guardian', 'Guardian Sphere').text,
+    'A delayed damage pool.\n\nChoose one of the following.\n\nChallenge: Issue a challenge.\n\nPatrol: Threaten more.');
+  // Plenty of sheets write the pick as the bare name. The catalogue knowing
+  // Guardian *is* a sphere is enough for the mark and the note -- but not for
+  // the tally, which is the sheet's own rule and no pack's to move.
+  check('a bare sphere name reads as a base pick once a pack knows the sphere',
+    [isBasePickOf('Guardian (Patrol)'), isBasePickOf('Guardian'), isBasePickOf('Patrol'), isBasePick('Guardian (Patrol)')],
+    [true, true, false, false]);
+  /*
+   * A talent that is a way of taking a package: "Expanded Geomancing (Fire)"
+   * is the fire package, as "Nature Sphere (Fire)" would be, so that is its
+   * note. A talent merely *tagged* with a package's name is not -- the tag is
+   * the book's, not a choice the player made.
+   */
+  const NATURE = {
+    spheres: [{
+      name: 'Nature',
+      kind: 'magic',
+      abilities: [{ name: 'Geomancing', text: 'Command terrain.' },
+        { name: 'Fire', text: 'Affect fire.', option: true }, { name: 'Water', text: 'Create water.', option: true }],
+      talents: [
+        { name: 'Expanded Geomancing', tags: [], sources: [], text: 'You gain an additional package.' },
+        { name: 'Fire Wielder', tags: ['fire'], sources: [], text: 'Hold fire.' },
+      ],
+    }],
+  };
+  setSphereCatalogue(NATURE);
+  const tp = (typed) => talentNoteText(sphereTalent('Nature', typed), typed);
+  check('a talent that names a package is shown the package', tp('Expanded Geomancing (Fire)'), 'Affect fire.');
+  check('two packages, each under its name', tp('Expanded Geomancing (Fire, Water)'), 'Fire: Affect fire.\n\nWater: Create water.');
+  check('naming none, it is shown its own text', tp('Expanded Geomancing'), 'You gain an additional package.');
+  check('a base ability in the brackets is not a package', tp('Expanded Geomancing (Geomancing)'), 'You gain an additional package.');
+  check('and a tag that shares a package\'s name is only a tag', tp('Fire Wielder (fire)'), 'Hold fire.');
+  // Some spheres hand over a talent with the sphere itself, and the row that
+  // records taking the sphere says which: that talent is what it is shown.
+  check('a base pick whose bracket names a talent of the sphere is shown that talent',
+    [sphereBasePick('Nature', 'Nature Sphere (Expanded Geomancing)').label, sphereBasePick('Nature', 'Nature Sphere (Expanded Geomancing)').text],
+    ['Nature Sphere (Expanded Geomancing)', 'You gain an additional package.']);
+
+  /*
+   * An ability divided by sphere. Divination's Alternate Divinations has an
+   * entry for each *other* sphere a caster might possess, so what it grants is
+   * a fact about the character: she is shown the shares for the spheres she
+   * has, and a catalogue with nobody to ask about is shown them all. A row may
+   * name the ability outright, plural or not, with its sphere beside it.
+   */
+  const seer = splitBaseAbilities([
+    'You see.', '*Divine:* Divine for magic.',
+    '*Alternate Divinations:* With other spheres you may divine for other things.',
+    'Death sphere:', 'Divine Undead: You may divine for undead.',
+    'Time sphere:', 'Divine Time: You may divine for haste.',
+    'Warp sphere:', 'Divine Warp: You may divine for teleports.',
+  ].join('\n'));
+  check('lines that are only "X sphere:" divide an ability',
+    [seer.abilities[1].text, seer.abilities[1].bySphere.map((x) => x.sphere), seer.abilities[0].bySphere],
+    ['With other spheres you may divine for other things.', ['Death', 'Time', 'Warp'], undefined]);
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Divination', kind: 'magic', ...seer,
+      talents: [{ name: 'Sense', tags: [], sources: [], text: 'A talent.' }],
+    }],
+  });
+  const nico = new Character(blankDocument({ name: 'Seer', level: 6 }));
+  nico.data.training.magic.bonusTalents = [
+    { talent: 'Alternate Divination', sphere: 'Divination', source: '', notes: '' },
+    { talent: 'Corpse Bomb', sphere: 'Death', source: '', notes: '' },
+  ];
+  check('a row naming the ability reads as a base pick, given its sphere',
+    [isBasePickOf('Alternate Divination', 'Divination'), isBasePickOf('Alternate Divination'), isBasePickOf('Sense', 'Divination')],
+    [true, false, false]);
+  const shown = sphereBasePick('Divination', 'Alternate Divination', nico);
+  check('and is shown the shares for the spheres she has, and no others',
+    [shown.label, /Death: Divine Undead/.test(shown.text), /Divine Time|Divine Warp/.test(shown.text), /Death:$/m.test(shown.text.split('\n\n')[1])],
+    ['Divination Sphere (Alternate Divinations)', true, false, true]);
+  // One alternate divination, named outright -- not a talent, and not the
+  // whole ability either.
+  const one = sphereBasePick('Divination', 'Divine Undead', nico);
+  check('a row naming one entry of a share is shown that entry, and where it comes from',
+    [isBasePickOf('Divine Undead', 'Divination'), one.label, one.text.startsWith('You may divine for undead.'), /Death sphere/.test(one.text), /Divine Time/.test(one.text)],
+    [true, 'Divination Sphere (Divine Undead)', true, true, false]);
+  check('nobody to ask about is shown every share', (sphereBasePick('Divination', 'Alternate Divinations').text.match(/Divine (Undead|Time|Warp)/g) || []).length, 3);
+  nico.data.training.magic.bonusTalents.pop();
+  check('and a character with none of them is told which would',
+    /None of the spheres you possess.*Death, Time, Warp/.test(sphereBasePick('Divination', 'Alternate Divination', nico).text), true);
+  check('the note it fills is hers too', [nico.fillTalentNotes('magic'), /None of the spheres/.test(nico.data.training.magic.bonusTalents[0].notes)], [1, true]);
+  setSphereCatalogue(NATURE);
+
+  /*
+   * The Alternate Training ladder hands out a sphere's talents too, and says
+   * so in its own ways: a package chosen from a dropdown ("(fire)"), a talent
+   * the rules name, a talent the player types. Each is looked up as the row a
+   * sphere tab would have written, and fills its empty note the same way. A
+   * level that grants a feat is not this catalogue's to answer for.
+   */
+  setAltTrainingTables({
+    levels: [1, 3, 5, 7],
+    repeatFrom: 7,
+    techniques: [{
+      name: 'Green Thumb',
+      talents: { side: 'magic', sphere: 'Nature' },
+      grants: {
+        1: [{ text: 'Nature sphere, taking a package', talent: true, pick: { label: 'Package', options: ['(fire)', '(water)'] } },
+          { text: 'A feat', feat: true, name: 'Fire Wielder' }],
+        3: [{ text: 'Expanded Geomancing as a bonus talent', talent: true, name: 'Expanded Geomancing' }],
+        5: [{ text: 'A feat', feat: true, name: 'Fire Wielder' }],
+      },
+      repeat: { text: 'A Nature talent', talent: true, pick: { label: 'Talent' } },
+    }],
+  });
+  const at = new Character(blankDocument({ name: 'Gardener', level: 8 }));
+  at.data.altTraining.technique = 'Green Thumb';
+  at.recompute();
+  const arow = (lvl) => at.data.altTraining.calc.rows.find((r) => r.level === lvl);
+  check('a named talent reads as itself, and a package not yet chosen as nothing',
+    [at.altTrainingLookup(arow(3)), at.altTrainingLookup(arow(1))], ['Expanded Geomancing', '']);
+  check('a level that grants only a feat is not looked up, though the feat shares a talent\'s name',
+    at.altTrainingLookup(arow(5)), '');
+  check('one talent is known and blank', at.blankTalentNotes('altTraining'), 1);
+  at.setAltTrainingPick(1, '(water)');
+  check('a chosen package reads as the sphere with that package, and fills its note',
+    [at.altTrainingLookup(arow(1)), at.data.altTraining.rowNotes[1]], ['Nature Sphere (water)', 'Create water.']);
+  at.data.altTraining.rowNotes[7] = 'my own ruling';
+  at.setAltTrainingPick(7, 'Expanded Geomancing (Fire)');
+  check('a note already written is left alone', at.data.altTraining.rowNotes[7], 'my own ruling');
+  check('the rest are filled at one ask, and then there is nothing left',
+    [at.fillTalentNotes('altTraining'), at.data.altTraining.rowNotes[3], at.blankTalentNotes('altTraining')],
+    [1, 'You gain an additional package.', 0]);
+  setAltTrainingTables({});
+  setSphereCatalogue({ spheres: [{ name: 'Guardian', kind: 'combat', ...guardian, talents: [] }] });
+
+  const g = new Character(blankDocument({ name: 'Warden', level: 4 }));
+  g.data.training.combat.bonusTalents = [{ talent: '', sphere: null, source: '', notes: '' }];
+  g.setTalentEntry('training.combat.bonusTalents', 0, 'Guardian (Patrol)', cols);
+  check('and is filled without being renamed into one the tally counts',
+    [g.data.training.combat.bonusTalents[0].talent, g.data.training.combat.bonusTalents[0].sphere,
+      g.data.training.combat.bonusTalents[0].notes],
+    ['Guardian (Patrol)', 'Guardian', 'Threaten more.']);
+  setSphereCatalogue({
+    spheres: [{
+      name: 'Destruction', kind: 'magic', description: '',
+      abilities: [{ name: 'Destructive Blast', text: 'You deliver a burst of blunt magical force.' }],
+      talents: [{ name: 'Acid Blast', group: 'Basic', tags: [], sources: [], prerequisites: '', text: 'Acid.' }],
+    }],
+  });
 
   /*
    * Which three columns, though. A guile class's level row holds two talents

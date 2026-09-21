@@ -362,7 +362,10 @@ export function findSegments(lines, pre = [], pageStarts = []) {
       if (/\(class\)$/i.test(near[0] || '') || near.some((l) => /^Options?$/i.test(l))) {
         anchors.push({ kind: 'archetype', at: i });
       }
-    } else if (SWAP_SENTENCE.test(t)) {
+    } else if (SWAP_SENTENCE.test(t) && !onSpherePage(i)) {
+      // (Not on a sphere page: a talent may say "This replaces the companion's
+      // …" -- Conjuration's do -- and that is a talent talking, not an
+      // archetype beginning halfway down somebody's sphere.)
       // a plain archetype document -- homebrew in a text file, say -- has no
       // info box, but its features each say what they replace or alter. The
       // first such sentence since the last boundary anchors it; a class page
@@ -391,6 +394,17 @@ export function findSegments(lines, pre = [], pageStarts = []) {
     // sign-in links over it -- belongs to this thing, not the one before.
     while (start - 1 >= floor && (pre[start - 1] || !lines[start - 1].trim())) start--;
     while (start < a.at && !lines[start].trim() && !pre[start]) start++;
+    /*
+     * A sphere page is one sphere from its title down, and its reader finds
+     * its way by the table of contents at the top. Reaching back from the
+     * first `X Talents` heading is the wrong way to find that top: the reach
+     * stops at the first thing that looks like a boundary, and Illusion has a
+     * table of examples and Conjuration a companion's statistics between the
+     * contents and the talents -- so the segment began below the contents,
+     * the reader found no headings to cut on, and a whole sphere came back as
+     * a name with nothing in it. The page's own start is the answer.
+     */
+    if (a.kind === 'sphere') start = floor;
     segments.push({ kind: a.kind, at: a.at, start, end: lines.length });
     if (n > 0) segments[n - 1].end = start;
     floor = a.at + 1;
@@ -1775,21 +1789,67 @@ const BASE_ABILITY = /^\*([A-Z][^*\n:]{1,40})(?::\*|\*:)\s*(.*)$/;
  * how the prose runs: the paragraphs after `*Destructive Blast:*` are all
  * about the destructive blast.
  */
+/**
+ * An ability whose text is divided by sphere.
+ *
+ * Divination's Alternate Divinations is one ability with an entry for each
+ * *other* sphere a caster might possess -- divine shapechangers if you have
+ * Alteration, divine undead if you have Death -- so what it grants is not a
+ * fact about the sphere but about the character, and the sheet can only say
+ * which entries are hers if they arrive apart. A line that is nothing but
+ * "Alteration sphere:" heads that sphere's share; what stands before the
+ * first of them is the ability's own text. Two at least, because one such
+ * line is a sentence that happened to end in a colon.
+ */
+const SPHERE_SHARE = /^([A-Z][\w' -]{1,40}?)\s+sphere:$/;
+function bySphere(text) {
+  const lines = String(text ?? '').split('\n');
+  if (lines.filter((l) => SPHERE_SHARE.test(l.trim())).length < 2) return { text };
+  const lead = [];
+  const shares = [];
+  for (const line of lines) {
+    const m = line.trim().match(SPHERE_SHARE);
+    if (m) shares.push({ sphere: m[1].trim(), text: [] });
+    else if (shares.length) shares[shares.length - 1].text.push(line);
+    else lead.push(line);
+  }
+  const tidy = (l) => l.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { text: tidy(lead), bySphere: shares.map((s) => ({ sphere: s.sphere, text: tidy(s.text) })).filter((s) => s.text) };
+}
+
 export function splitBaseAbilities(description) {
   const lead = [];
   const abilities = [];
+  /*
+   * A label reading `Packages` is not an ability: it is the page saying that
+   * what follows is a choice -- Nature's terrains, Guardian's Challenge or
+   * Patrol -- and everything under it is one of the options. Its own text is
+   * what the page says about choosing, kept so a sheet can say it too.
+   */
+  let choosing = null;
   for (const line of String(description ?? '').split('\n')) {
     const m = line.match(BASE_ABILITY);
-    if (m) { abilities.push({ name: m[1].trim(), text: m[2].trim() ? [m[2].trim()] : [] }); continue; }
-    if (abilities.length) abilities[abilities.length - 1].text.push(line);
+    if (m && /^(?:.*\s)?packages?$/i.test(m[1].trim())) {
+      choosing = { text: m[2].trim() ? [m[2].trim()] : [] };
+      continue;
+    }
+    if (m) {
+      abilities.push({ name: m[1].trim(), text: m[2].trim() ? [m[2].trim()] : [], option: !!choosing });
+      continue;
+    }
+    if (choosing && !abilities.some((a) => a.option)) choosing.text.push(line);
+    else if (abilities.length) abilities[abilities.length - 1].text.push(line);
     else lead.push(line);
   }
+  const tidy = (lines) => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   return {
     description: lead.join('\n').trim(),
     abilities: abilities.map((a) => ({
       name: a.name,
-      text: a.text.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+      ...bySphere(tidy(a.text)),
+      ...(a.option ? { option: true } : {}),
     })),
+    ...(choosing && tidy(choosing.text) ? { choose: tidy(choosing.text) } : {}),
   };
 }
 
@@ -1825,7 +1885,12 @@ const sphereTitle = (title) => {
 
 function structuredSphere(doc) {
   const talents = doc.entries.map((e) => {
-    const { name, tags, sources } = splitTalentName(e.name);
+    const split = splitTalentName(e.name);
+    const { name, sources } = split;
+    // A book may put several tags in one bracket -- "Turret (drone, gadget)" --
+    // where the wikis give each its own. They are still several tags: a player
+    // filtering for gadgets means that one too.
+    const tags = split.tags.flatMap((t) => String(t).split(',')).map((t) => t.trim()).filter(Boolean);
     // `Tags: Blast Type, Acid` -- the groups a talent belongs to, which is
     // what a caster filters on when looking for one.
     for (const t of pick(e.fields, 'tags', 'tag').split(',')) {
@@ -1854,10 +1919,10 @@ function structuredSphere(doc) {
       text: e.text,
     };
   });
-  const { description, abilities } = splitBaseAbilities(doc.intro.join('\n'));
+  const { description, abilities, choose } = splitBaseAbilities(doc.intro.join('\n'));
   const name = sphereTitle(doc.title);
   return {
-    name, kind: sphereSide(name, ''), description, abilities, talents,
+    name, kind: sphereSide(name, ''), description, abilities, ...(choose ? { choose } : {}), talents,
   };
 }
 

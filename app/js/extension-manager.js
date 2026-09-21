@@ -27,7 +27,8 @@ import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter,
 } from './extensions.js';
-import { parsePaste, splitChunk } from './paste-import.js';
+import { parsePaste, readStructured, splitChunk } from './paste-import.js';
+import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
 import { MANEUVER_FIELDS } from './rules.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -251,13 +252,13 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
       <div class="actions">
         <button class="primary" data-action="new">+ New extension</button>
-        <button data-action="import" title="A .json extension pack">Import a pack…</button>
+        <button data-action="import" title="One .json extension pack, or as many as you select at once">Import packs…</button>
         <button data-action="paste" aria-pressed="${showPaste}">Paste JSON</button>
         <button data-action="from-character" title="Lift the open character's classes, race, feature groups and trackers into a new pack"
           ${currentCharacter() ? '' : 'disabled'}>From this character…</button>
         <span class="spacer"></span>
         <button data-action="close">Close</button>
-        <input type="file" accept="application/json,.json" data-file hidden>
+        <input type="file" accept="application/json,.json" data-file multiple hidden>
       </div>
       ${showPaste ? `<div class="paste">
         <textarea rows="6" data-paste placeholder='{"format": "character-sheet-extension", "name": "…", …}'></textarea>
@@ -342,9 +343,15 @@ Hit Die: d12.
 …">${esc(paste.text)}</textarea>
         <div class="actions">
           <button class="primary" data-action="paste-read">Read it</button>
+          <button data-action="pdf-pick" title="Read a document you have as a PDF. It is read here in the page — nothing is uploaded.">Read a PDF…</button>
           <button data-action="paste-cancel">Back to the form</button>
+          <input type="file" accept="application/pdf,.pdf" data-pdf-file hidden>
         </div>`;
     }
+    if (paste.stage === 'pdf-reading') {
+      return `<p class="hint">Reading ${esc(paste.pdfName || 'the PDF')}… ${esc(paste.progress || '')}</p>`;
+    }
+    if (paste.stage === 'pdf') return pdfHtml();
     const { result, keep, mkeep, mdisc, skeep, ssec, tags } = paste;
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'class' && keep[i]);
     const races = result.blocks.map((b, i) => [b, i]).filter(([b, i]) => b.kind === 'race' && keep[i]);
@@ -419,6 +426,11 @@ Hit Die: d12.
       </div>`;
   }).join('')}` : ''}
 
+      ${catalogueCount(result) ? `<h3>Picked by name <span class="count">${catalogueCount(result)}</span></h3>
+      <p class="hint">${esc(catalogueSummary(result))} — filed in the pack's catalogue tables, where a
+        character picks them by name and reads the text where it stands. They are not blocks, so there is
+        nothing to tick: they all go in.</p>` : ''}
+
       <h3>Not placed — tag it, or leave it</h3>
       <p class="hint">${result.leftovers.length
     ? 'Stretches of the paste nothing claimed. Say what each is — a feature of the class above it, a race trait, a note — or leave it out. Page chrome and tables of ages and heights are the usual leftovers.'
@@ -458,8 +470,94 @@ Hit Die: d12.
   }
 
   /** Read the pasted text and open the review stage. */
-  function pasteRead() {
-    const result = parsePaste(paste.text);
+  function pasteRead() { pasteReview(parsePaste(paste.text)); }
+
+  /* ---------------- a PDF, by way of its sections ---------------- */
+
+  /**
+   * Read a PDF into an outline and ask what each section is.
+   *
+   * The library is fetched here, the first time anybody chooses a PDF, and the
+   * file is read in the page: nothing is uploaded. What comes back is sections
+   * of entries with no idea what the entries *are* -- see `pdf-import.js` for
+   * why that cannot be worked out -- so the next screen is the question.
+   */
+  async function pdfRead(file) {
+    paste = { ...paste, stage: 'pdf-reading', pdfName: file.name, progress: '' };
+    error = null;
+    render();
+    try {
+      const { readPdf, outlineOf } = await import('./pdf-import.js');
+      const pages = await readPdf(new Uint8Array(await file.arrayBuffer()), {
+        onProgress: (n, of) => { if (n % 5 === 0 || n === of) { paste.progress = `page ${n} of ${of}`; render(); } },
+      });
+      const title = file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const outline = outlineOf(pages, { title });
+      if (!outline.sections.some((s) => s.entries.length || s.lead.length > 200)) {
+        throw new Error('no text was found in it. A scanned document is pictures of pages, and needs OCR first.');
+      }
+      // Guesses, from the headings: each one is a dropdown on the next screen.
+      paste = { ...paste, stage: 'pdf', pdf: { title, outline, tags: guessTags(outline) } };
+    } catch (err) {
+      paste = { ...paste, stage: 'text' };
+      error = `Could not read ${file.name} — ${err.message}`;
+    }
+    render();
+  }
+
+  function pdfHtml() {
+    const { title, outline, tags } = paste.pdf;
+    const kinds = (now) => SECTION_KINDS.map(([v, label]) => `<option value="${v}"${v === now ? ' selected' : ''}>${esc(label)}</option>`).join('');
+    const chosen = tags.filter((t) => t.kind !== 'skip').length;
+    return `
+      <p class="hint">Read <strong>${outline.sections.length}</strong> sections out of the PDF, by the type its headings
+        are set in. A PDF cannot say what a section <em>is</em> — a talent and a feat are set the same — so say
+        it here. The guesses are from the headings; change any of them. Then the usual reader takes over and
+        shows you what it found before anything is added. Tables come through roughly, and a page whose text
+        runs round a picture may come out of order: read those entries once they are in.</p>
+      <label class="fld"><span>Book</span>
+        <input type="text" data-pdf-title value="${esc(title)}" title="Written on every entry as its source"></label>
+      <div class="pdfsecs">${outline.sections.map((sec, i) => {
+    const t = tags[i];
+    const size = sec.entries.length
+      ? `${sec.entries.length} entr${sec.entries.length === 1 ? 'y' : 'ies'}` : `${Math.round(sec.lead.length / 100) / 10}k of text`;
+    const peek = sec.entries.length
+      ? sec.entries.slice(0, 4).map((e) => e.heading).join(', ') + (sec.entries.length > 4 ? '…' : '')
+      : sec.lead.slice(0, 110);
+    return `<div class="found ${t.kind === 'skip' ? 'off' : ''}">
+          <span class="kind">p. ${sec.page}</span>
+          <span class="what"><strong>${esc(sec.heading)}</strong>
+            <span class="d">${esc(size)} — ${esc(peek)}</span></span>
+          <select data-pdf-kind="${i}">${kinds(t.kind)}</select>
+          ${t.kind === 'talents' || t.kind === 'sphere' ? `<input type="text" data-pdf-sphere="${i}" value="${esc(t.sphere)}"
+            placeholder="Sphere" title="The sphere these belong to" style="width:9rem"${t.sphere ? '' : ' class="needs"'}>` : ''}
+          ${t.kind === 'reference' ? `<input type="text" data-pdf-entrykind="${i}" value="${esc(t.entryKind)}"
+            placeholder="${esc(sec.heading.toLowerCase())}" title="What kind of thing these are — trait, equipment, drawback…" style="width:9rem">` : ''}
+        </div>`;
+  }).join('')}</div>
+      <div class="actions">
+        <button class="primary" data-action="pdf-go" ${chosen ? '' : 'disabled'}>Read ${chosen} section${chosen === 1 ? '' : 's'}</button>
+        <button data-action="paste-back">Back</button>
+        <button data-action="paste-cancel">Back to the form</button>
+      </div>`;
+  }
+
+  /**
+   * The chosen sections, each through the reader it suits, as one result.
+   *
+   * A class or an archetype is a *page* and goes to `parsePaste`. Talents,
+   * feats and reference entries are written out as the scraper's own document
+   * and go straight to `readStructured`: the panel knows what it made, and the
+   * guess `parsePaste` makes first wants three field lines, which a section
+   * holding a single talent does not have.
+   */
+  function pdfGo() {
+    const { title, outline, tags } = paste.pdf;
+    pasteReview(readSections(outline, tags, { book: title, parsePaste, readStructured }));
+  }
+
+  /** What the reader found, set up for the review screen. */
+  function pasteReview(result) {
     const classes = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'class');
     const races = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'race');
     const archs = result.blocks.map((b, i) => [b, i]).filter(([b]) => b.kind === 'archetype' && !b.single);
@@ -560,6 +658,51 @@ Hit Die: d12.
     return n;
   }
 
+  /* Feats, spells, powers and reference entries: tables, not blocks. */
+  const CATALOGUE_TABLES = [['feats', 'feat'], ['spells', 'spell'], ['powers', 'power']];
+  const catalogueCount = (r) => CATALOGUE_TABLES.reduce((n, [k]) => n + (r[k]?.length || 0), 0) + (r.catalogue?.length || 0);
+  const catalogueSummary = (r) => [
+    ...CATALOGUE_TABLES.map(([k, word]) => [r[k]?.length || 0, word]),
+    [r.catalogue?.length || 0, 'reference entr'],
+  ].filter(([n]) => n).map(([n, word]) => `${n} ${word}${word.endsWith('entr') ? (n === 1 ? 'y' : 'ies') : (n === 1 ? '' : 's')}`).join(', ');
+
+  /**
+   * File what a structured document held into the pack's own tables.
+   *
+   * The paste panel was built when a paste meant a page and a page meant
+   * blocks, so a document of feats read here found its feats and then had
+   * nowhere to put them -- only `scrape-pack.mjs` ever wrote these tables. A
+   * PDF is mostly this kind of thing, so they are filed here the way that
+   * tool files them: by name, a later one replacing an earlier of the same.
+   */
+  function applyCatalogues() {
+    const { result } = paste;
+    let n = 0;
+    const upsert = (list, item) => {
+      const at = list.findIndex((x) => lower(x.name) === lower(item.name));
+      if (at === -1) list.push(item); else list[at] = item;
+      n++;
+    };
+    for (const [key] of CATALOGUE_TABLES) {
+      if (!result[key]?.length) continue;
+      if (!draft.provides[key] || typeof draft.provides[key] !== 'object') draft.provides[key] = {};
+      if (!Array.isArray(draft.provides[key][key])) draft.provides[key][key] = [];
+      for (const item of result[key]) upsert(draft.provides[key][key], item);
+    }
+    if (result.catalogue?.length) {
+      if (!draft.provides.catalogues || typeof draft.provides.catalogues !== 'object') draft.provides.catalogues = {};
+      if (!Array.isArray(draft.provides.catalogues.catalogues)) draft.provides.catalogues.catalogues = [];
+      const groups = draft.provides.catalogues.catalogues;
+      for (const { kind, ...entry } of result.catalogue) {
+        if (!kind) continue;
+        let group = groups.find((g) => lower(g.kind) === lower(kind));
+        if (!group) { group = { kind, entries: [] }; groups.push(group); }
+        upsert(group.entries, entry);
+      }
+    }
+    return n;
+  }
+
   function pasteApply() {
     const { result, keep, tags } = paste;
     const taken = result.blocks.map((b) => structuredClone(b));
@@ -587,7 +730,7 @@ Hit Die: d12.
     const fresh = [...taken.filter((b, i) => keep[i]).map((b) => normalizeBlock(b)), ...extra].filter(Boolean);
     const first = draft.blocks.length;
     draft.blocks.push(...fresh);
-    const filed = applyManeuvers() + applySpheres();
+    const filed = applyManeuvers() + applySpheres() + applyCatalogues();
     notice = null;
     error = fresh.length || filed ? null
       : 'Nothing was added — every block was unticked and every leftover left out.';
@@ -1013,9 +1156,11 @@ Hit Die: d12.
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
       q('[data-action="import"]')?.addEventListener('click', () => q('[data-file]').click());
       q('[data-file]')?.addEventListener('change', (e) => {
-        const file = e.target.files?.[0];
+        // Copied out before the box is cleared: `files` is live, and clearing
+        // the box (so that choosing the same files twice still fires) empties it.
+        const files = [...(e.target.files || [])];
         e.target.value = '';
-        if (file) importFile(file);
+        if (files.length) importFiles(files);
       });
       q('[data-action="paste"]')?.addEventListener('click', () => { showPaste = !showPaste; render(); });
       q('[data-action="paste-go"]')?.addEventListener('click', () => importText(q('[data-paste]').value));
@@ -1043,6 +1188,17 @@ Hit Die: d12.
       dialog.querySelector('[data-paste-text]')?.focus();
     });
     q('[data-paste-text]')?.addEventListener('input', (e) => { paste.text = e.target.value; });
+    q('[data-action="pdf-pick"]')?.addEventListener('click', () => q('[data-pdf-file]')?.click());
+    q('[data-pdf-file]')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (file) pdfRead(file);
+    });
+    q('[data-pdf-title]')?.addEventListener('input', (e) => { paste.pdf.title = e.target.value; });
+    qa('[data-pdf-kind]').forEach((el) => el.addEventListener('change', () => { paste.pdf.tags[Number(el.dataset.pdfKind)].kind = el.value; render(); }));
+    qa('[data-pdf-sphere]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfSphere)].sphere = el.value; }));
+    qa('[data-pdf-entrykind]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfEntrykind)].entryKind = el.value; }));
+    q('[data-action="pdf-go"]')?.addEventListener('click', pdfGo);
     q('[data-action="paste-read"]')?.addEventListener('click', () => {
       if (!paste.text.trim()) { error = 'Paste something first.'; render(); return; }
       pasteRead();
@@ -1339,6 +1495,58 @@ Hit Die: d12.
     return importDoc(doc, file.name);
   }
 
+  /**
+   * Several packs chosen at once.
+   *
+   * A book split into packs is a folder of them -- nine hundred, for one wiki
+   * -- and choosing them one at a time through a file dialog is not a way to
+   * load a folder. One file still goes the way it always has, message and
+   * all. More than one are each checked and stored in turn, and said once at
+   * the end: how many went in, and by name which did not and why, because a
+   * bad file among forty should cost that file and not the other thirty-nine.
+   *
+   * The tables are rebuilt once, after the last, rather than after each: a
+   * refresh re-reads every stored pack, and doing that per file is what would
+   * make a large folder slow.
+   */
+  async function importFiles(files) {
+    if (files.length === 1) return importFile(files[0]);
+    const done = [];
+    const failed = [];
+    for (const file of files) {
+      let doc;
+      try { doc = JSON.parse(await file.text()); } catch (err) { failed.push(`${file.name} is not valid JSON`); continue; }
+      const verdict = inspectExtension(doc);
+      if (!verdict.ok) { failed.push(`${file.name}: ${verdict.error}`); continue; }
+      if (runtime.bundled.some((e) => e.id === verdict.summary.id)) {
+        failed.push(`${file.name} has the same id as the bundled pack “${verdict.summary.name}”`);
+        continue;
+      }
+      try {
+        done.push(await runtime.store.save(doc, { origin: 'import' }));
+      } catch (err) {
+        failed.push(err.name === 'QuotaExceededError'
+          ? `${file.name}: this browser is out of space` : `${file.name}: ${err.message}`);
+        // Out of room is out of room for every file after it, too.
+        if (err.name === 'QuotaExceededError') break;
+      }
+    }
+    runtime.refresh();
+    const updated = done.filter((r) => r.replaced).length;
+    const names = done.slice(0, 4).map((r) => r.name).join(', ') + (done.length > 4 ? `, and ${done.length - 4} more` : '');
+    notice = done.length
+      ? `Imported ${done.length} pack${done.length === 1 ? '' : 's'}${updated ? ` (${updated} updated)` : ''}: ${names}.`
+      : null;
+    error = failed.length
+      ? `${failed.length} file${failed.length === 1 ? ' was' : 's were'} not imported — ${failed.slice(0, 6).join('; ')}${failed.length > 6 ? `; and ${failed.length - 6} more` : ''}.`
+      : null;
+    if (notice) say('ok', notice);
+    if (error) say('err', error);
+    showPaste = false;
+    render();
+    return { ok: !failed.length, imported: done.length, failed };
+  }
+
   function importText(text) {
     let doc;
     try { doc = JSON.parse(text); } catch (err) { error = `That is not valid JSON — ${err.message}`; render(); return { ok: false, error }; }
@@ -1358,6 +1566,7 @@ Hit Die: d12.
     open() { view = 'list'; error = null; notice = null; confirmRemove = null; render(); if (!dialog.open) dialog.showModal(); },
     close() { dialog.close(); },
     importFile(file) { this.open(); return importFile(file); },
+    importFiles(files) { this.open(); return importFiles([...files]); },
     importText(text) { this.open(); return importText(text); },
     importDoc(doc) { this.open(); return importDoc(doc); },
     render,

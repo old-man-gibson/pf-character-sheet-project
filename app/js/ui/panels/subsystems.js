@@ -13,6 +13,7 @@
  */
 import { esc, val } from '../html.js';
 import { itemArea, prose, renderedProse } from '../prose.js';
+import { fillNotesButton, talentLegend, talentMark, talentNote } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { meterStyleButton, meterStyleEditor, meterVisual } from './trackers.js';
@@ -1240,11 +1241,14 @@ function altTrainingLadder(model, k) {
               <span>already had the feat, so this level grants ${esc(g.base.alt.text
     .replace(/^One /, 'a ').replace(/ added to your spells known$/, ''))} instead</span></label>` : ''}
           `).join('')}</td>
-          <td class="choice${state}" data-stack="name">${altTrainingPick(model, row)}</td>
-          <td class="picknote" data-label="Notes">${prose(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note, 1, 'grow')}</td>
+          <td class="choice${state}" data-stack="name">${altTrainingPick(model, row, k.talents?.sphere)}</td>
+          <td class="picknote" data-label="Notes">${talentNote(model, `data-set="altTraining.rowNotes.${row.level}"`, row.note,
+    `altTraining.rowNotes.${row.level}`, row.name)}</td>
         </tr>`;
   }).join('')}</tbody>
       </table></div>
+      ${fillNotesButton(model, 'altTraining') ? `<div style="margin-top:8px">${fillNotesButton(model, 'altTraining')}</div>` : ''}
+      ${k.talents?.sphere ? talentLegend() : ''}
       ${k.repeat ? `<p class="hint repeatrule">
         <strong>From ${k.repeatFrom}th, every two levels:</strong> ${esc(k.repeat.text)}${citeTag(k.repeat.cite)}
       </p>` : ''}
@@ -1266,19 +1270,32 @@ function altTrainingLadder(model, k) {
    * and BAB boxes on the Overview make. Typing over it wins, which is what an
    * archetype that swaps the grant needs.
    */
-function altTrainingPick(model, row) {
+function altTrainingPick(model, row, sphere = null) {
     const path = `altTraining.picks.${row.level}`;
+    /*
+     * A level that grants a talent is looked up the way a sphere tab's row
+     * is: the model says what the row would read as there -- "(leap)" is
+     * "Athletics Sphere (leap)" -- and the mark goes beside whatever control
+     * this cell turns out to be. The technique's own sphere first; a talent
+     * taken from elsewhere is still found by the whole catalogue.
+     */
+    const lookup = model.altTrainingLookup(row);
+    const mark = lookup ? (talentMark(sphere, lookup, undefined, model) || talentMark(null, lookup, undefined, model)) : '';
+    const marked = (html) => (mark ? `<span class="tcell">${html}${mark}</span>` : html);
+    // `data-altpick` hands the write to `setAltTrainingPick`, which fills the
+    // row's empty note from the catalogue as a talent cell would.
+    const pickAttr = row.grants.some((g) => g.talent) ? ` data-altpick="${row.level}"` : '';
     const options = row.pick?.options;
-    if (options) return select(path, row.text, options);
+    if (options) return marked(select(path, row.text, options).replace('<select ', `<select${pickAttr} `));
     const placeholder = row.pick?.placeholder || row.auto || '—';
     const auto = !row.text.trim() && row.auto;
     // A pick carrying an inline formula shows what it comes to, the same way a
     // progression feature cell does.
-    return hasTokens(row.text)
-      ? prose(model, `data-set="${path}"`, row.text, 1, 'grow')
+    return marked(hasTokens(row.text)
+      ? prose(model, `data-set="${path}"${pickAttr}`, row.text, 1, 'grow')
       : `<input type="text" class="autotext${auto ? ' auto' : ''}" value="${esc(row.text)}"
-          data-set="${path}" data-kind="text" placeholder="${esc(placeholder)}"${auto
-  ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`;
+          data-set="${path}"${pickAttr} data-kind="text" placeholder="${esc(placeholder)}"${auto
+  ? ` title="${esc(`${row.auto} — the technique's own. Type to put something else here.`)}"` : ''}>`);
   }
 
   /** With no technique taken, the catalogue on offer and what each asks for. */

@@ -94,6 +94,7 @@ const DATALIST_MAX = 40;
 import * as rows from './ui/rows.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
 import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
+import { talentPopHtml } from './ui/talents.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -583,6 +584,7 @@ export class CharacterSheetElement extends HTMLElement {
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
+  #tableWrapObserver = null; // watches the table scroll boxes that may shed their cap
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -834,9 +836,13 @@ export class CharacterSheetElement extends HTMLElement {
    * for the element's life and free when nothing is open, like the press-away
    * handler above.
    */
-  #onViewportChange = () => {
+  #onViewportChange = (e) => {
     if (this.#bdAnchor) this.#closeBreakdown();
     this.#fitRail();
+    // The table cap is a share of the window, so which tables only just miss
+    // it changes with the window -- and an uncapped one no longer resizes
+    // with it, so its own observer would never hear.
+    if (e?.type === 'resize') this.#fitTableWraps();
   };
 
   /**
@@ -1947,7 +1953,10 @@ export class CharacterSheetElement extends HTMLElement {
     const at = (e) => {
       const t = e.target;
       if (t && this.#bdPop && (t === this.#bdPop || this.#bdPop.contains(t))) return this.#bdAnchor;
-      return t?.closest?.('[data-bd]') ?? null;
+      // A sphere talent's ✦ and a folded talent note open the same panel: it
+      // wraps and scrolls, which a native tooltip holding a page of rules
+      // text does neither of.
+      return t?.closest?.('[data-bd], [data-tpop]') ?? null;
     };
     root.addEventListener('pointerover', (e) => {
       if (e.pointerType !== 'mouse' || this.#bdPinned) return;
@@ -1959,6 +1968,10 @@ export class CharacterSheetElement extends HTMLElement {
       if (e.pointerType === 'mouse') return;
       // A tap on a ladder cell's ⓘ is handled by the click that follows it.
       if (e.target?.closest?.('[data-cfpeek]')) return;
+      // A tap on a folded note opens the note itself, which on a phone is the
+      // better way to read it; a panel as well would be left standing on a
+      // line the render that follows has already replaced.
+      if (e.target?.closest?.('.notepeek')) return;
       const el = at(e);
       if (el && el !== this.#bdAnchor) this.#openBreakdown(el);
       else this.#closeBreakdown();
@@ -2024,12 +2037,18 @@ export class CharacterSheetElement extends HTMLElement {
   #openBreakdown(el) {
     clearTimeout(this.#bdTimer);
     if (el === this.#bdAnchor) return;
-    const b = this.#model?.breakdown?.(el.dataset.bd);
-    if (!b) { this.#closeBreakdown(); return; }
+    // What goes in it depends on what was pointed at: a number's working, or
+    // what the sphere catalogue says about a talent. Both are asked for now.
+    const talent = el.dataset.tpop !== undefined;
+    const b = talent ? null : this.#model?.breakdown?.(el.dataset.bd);
+    const html = talent ? talentPopHtml(this.#model, el.dataset.tpop) : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
+    if (!html) { this.#closeBreakdown(); return; }
     const pop = this.#breakdownPanel();
     if (typeof pop.showPopover !== 'function') return;
     this.#closeBreakdown();
-    pop.innerHTML = breakdownHtml(b, el.dataset.bdx || '');
+    // Rules text wants a wider measure than a column of modifiers does.
+    pop.classList.toggle('wide', talent);
+    pop.innerHTML = html;
     try {
       if (!pop.matches(':popover-open')) pop.showPopover();
     } catch { return; }
@@ -2064,6 +2083,7 @@ export class CharacterSheetElement extends HTMLElement {
     const pop = this.#breakdownPanel();
     if (typeof pop.showPopover !== 'function') return;
     this.#closeBreakdown();
+    pop.classList.remove('wide');
     pop.innerHTML = html;
     try {
       if (!pop.matches(':popover-open')) pop.showPopover();
@@ -4695,6 +4715,44 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Let a table that only just misses its cap run to its full height.
+   *
+   * `--cs-table-max` is a share of the window, so whether a table fits is an
+   * accident of the viewport -- and a table a row or two over the cap gets a
+   * scroll box with ten pixels of travel in it, which is a scrollbar to find
+   * and a wheel-trap for no gain. A box is worth having when it hides a good
+   * part of the table; under a fifth of the cap it is not, and the table is
+   * given the page instead. It gives up its sticky headings while it is, which
+   * it barely needed: nearly all of it is on screen with them.
+   *
+   * Measured rather than styled because CSS cannot ask how far content
+   * overshoots a max-height. Watched as well as run after a render: a wrap
+   * inside a shut `<details>` measures nothing until it is opened.
+   */
+  #fitTableWraps(root = this.shadowRoot) {
+    for (const w of root.querySelectorAll('.tablewrap')) this.#fitTableWrap(w);
+  }
+
+  #fitTableWrap(w) {
+    w.classList.remove('nocap');
+    const over = w.scrollHeight - w.clientHeight;
+    if (over > 0 && over <= Math.max(96, w.clientHeight * 0.2)) w.classList.add('nocap');
+  }
+
+  #bindTableWraps(root) {
+    this.#fitTableWraps(root);
+    if (typeof ResizeObserver !== 'function') return;
+    // One observer for the element, as with the read-only boxes. Refitting is
+    // itself a resize, but it settles: the second pass measures the same
+    // overshoot, lands on the same class, and changes nothing.
+    this.#tableWrapObserver?.disconnect();
+    this.#tableWrapObserver = new ResizeObserver((entries) => {
+      for (const e of entries) this.#fitTableWrap(e.target);
+    });
+    for (const w of root.querySelectorAll('.tablewrap')) this.#tableWrapObserver.observe(w);
+  }
+
+  /**
    * The colour picker for one tab: a small panel, opened two ways.
    *
    * Right-clicking a tab is the fast way and the one nobody discovers, so the
@@ -5394,8 +5452,21 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindActions(root);
 
     // Generic field -> model path. data-kind decides the coercion.
+    /*
+     * An Alternate Training pick that is a sphere talent. Like a talent cell
+     * on a sphere tab it writes more than itself -- a name the catalogue knows
+     * fills the row's empty note -- so it goes through the model's own setter
+     * and is skipped by the generic writer below.
+     */
+    root.querySelectorAll('[data-altpick]').forEach((input) => {
+      input.addEventListener('change', () => {
+        this.#model.setAltTrainingPick(input.dataset.altpick, readControl(input));
+        this.#rerender(input);
+      });
+    });
+
     root.querySelectorAll('[data-set]').forEach((input) => {
-      if (input.dataset.build || input.dataset.pick) return;
+      if (input.dataset.build || input.dataset.pick || input.dataset.altpick) return;
       input.addEventListener('change', () => {
         const path = input.dataset.set;
         this.#model.set(path, readControl(input));
@@ -5717,6 +5788,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     this.#bindReadOnlyBoxes(root);
+    this.#bindTableWraps(root);
 
     // Generated Discord posts, and the folded language list: hand the text to
     // the clipboard, or select it when the browser refuses (a page served over
@@ -7272,6 +7344,12 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'add-guile-class':
         this.#model.addGuileClass();
+        this.#render();
+        break;
+      case 'fill-talent-notes':
+        // The button only exists while there is something to fill, so the
+        // render that follows is also what takes it away.
+        this.#model.fillTalentNotes(button?.dataset.side);
         this.#render();
         break;
       case 'add-guile-sphere':

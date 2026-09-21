@@ -11,8 +11,10 @@
  *   node tools/wiki-docs.mjs <pages.jsonl> --out <dir> [options]
  *
  *     --out <dir>     where the documents are written (required)
- *     --by <how>      'kind' (default), 'source', 'kind-source', or
- *                     'field:<name>' to group on an infobox field
+ *     --by <how>      'kind' (default), 'source', 'kind-source', 'system',
+ *                     'book', or 'field:<name>' to group on an infobox field
+ *     --min <n>       with `--by system`: a system of fewer than n entries
+ *                     (default 20) joins the general third-party group
  *     --kind <list>   only these infobox kinds, e.g. 'veil,talent'
  *     --skip <list>   every kind but these -- the other half of `--kind`,
  *                     for the run that does everything else
@@ -26,6 +28,25 @@
  * only the books somebody owns. Neither is baked in, and re-grouping costs a
  * pass over 94 MB rather than another walk of the export.
  *
+ * `--by system` is the shape a *player* thinks in -- Path of War, Spheres of
+ * Power, Akashic -- and it writes a folder per system rather than a file,
+ * because a system is several documents: its talents one sphere at a time
+ * (see `SECTION`), everything else by kind. `wiki-systems.mjs` decides which
+ * system a page is in, and `wiki-system-packs.mjs` turns each folder into a
+ * pack:
+ *
+ *   node tools/wiki-system-packs.mjs <dir> --out <packs>
+ *
+ * `--by book` writes the same kind of folder per source book, which is
+ * `--by source` done properly: that one puts a book in a single document, and
+ * a document of mixed kinds cannot say its talents are a sphere. A page more
+ * than one book prints goes into each of them, and `_author` beside `_name`
+ * is the book's publisher, which the pack is stamped with.
+ *
+ * `_name` in each folder is the system's name as the books spell it, which
+ * the folder's slug has lost. It has no extension because `scrape-pack` reads
+ * `.txt` as well as markdown, and this is not a document.
+ *
  * Documents are content, and content is a publisher's: write them somewhere
  * git-ignored (`private/`) rather than into `data/`, which ships.
  */
@@ -36,6 +57,7 @@ import { join } from 'node:path';
 import {
   unwrapTemplates, delist, stripMarkers, emphasis, delink, collapseFamilies,
 } from './wikitext.mjs';
+import { systemClassifier, GENERAL } from './wiki-systems.mjs';
 
 /* ---------------- arguments ---------------- */
 
@@ -45,7 +67,7 @@ const opt = (name, fallback = null) => {
   return i === -1 ? fallback : (argv[i + 1] ?? true);
 };
 const flag = (name) => argv.includes(`--${name}`);
-const VALUED = /^--(out|by|kind|skip|source|max)$/;
+const VALUED = /^--(out|by|kind|skip|source|max|min)$/;
 const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUED.test(argv[i - 1])));
 
 const out = opt('out');
@@ -61,10 +83,11 @@ const onlyKinds = opt('kind') ? new Set(String(opt('kind')).split(',').map((s) =
 const skipKinds = opt('skip') ? new Set(String(opt('skip')).split(',').map((s2) => s2.trim().toLowerCase())) : null;
 const onlySource = opt('source') ? String(opt('source')).toLowerCase() : null;
 const max = Number(opt('max', 0)) || Infinity;
+const min = Number(opt('min', 20)) || 0;
 const dry = flag('dry');
 
 if (inputs.length !== 1 || (!out && !dry)) {
-  console.error('usage: node tools/wiki-docs.mjs <pages.jsonl> --out <dir> [--by kind|source|kind-source|field:sphere] [--kind veil] [--source "Ultimate Psionics"] [--max 1500] [--dry]');
+  console.error('usage: node tools/wiki-docs.mjs <pages.jsonl> --out <dir> [--by kind|source|kind-source|system|book|field:sphere] [--min 20] [--kind veil] [--source "Ultimate Psionics"] [--max 1500] [--dry]');
   process.exit(2);
 }
 /**
@@ -74,8 +97,8 @@ if (inputs.length !== 1 || (!out && !dry)) {
  * whole -- and that document is one sphere, not all 3,256 talents at once.
  */
 const byField = String(by).startsWith('field:') ? by.slice(6).trim().toLowerCase() : null;
-if (!byField && !['kind', 'source', 'kind-source'].includes(by)) {
-  console.error(`--by takes 'kind', 'source', 'kind-source' or 'field:<name>', not ${by}`);
+if (!byField && !['kind', 'source', 'kind-source', 'system', 'book'].includes(by)) {
+  console.error(`--by takes 'kind', 'source', 'kind-source', 'system', 'book' or 'field:<name>', not ${by}`);
   process.exit(2);
 }
 
@@ -212,8 +235,23 @@ const COMPOSE = {
     const category = (f.get('category') || [])[0] || 'Maneuver';
     const type = (f.get('type') || [])[0] || '';
     const paren = type && type !== category ? `${category} [${type}]` : category;
-    return { lines: [['Level', level ? `${level} (${paren})` : paren]], used: ['level', 'category', 'type'] };
+    /*
+     * The reader knows a maneuver by its discipline *and* its initiation
+     * action, and one page -- Strike of Silver Exorcism -- never filled the
+     * action in. It is still a maneuver, so the line is written with nothing
+     * claimed on it, the way a power with no stated cost is.
+     */
+    const lines = [['Level', level ? `${level} (${paren})` : paren]];
+    if (!f.has('action')) lines.push(['Initiation Action', '—']);
+    return { lines, used: ['level', 'category', 'type'] };
   },
+  /*
+   * A veil is known by its shapeable slot, and some have none to state: the
+   * style veils of Tai Lin and the Akashic Construct are shaped without taking
+   * a chakra. "None" is what the book would say, and it keeps them out of
+   * every chakra's picker while the catalogue still knows them by name.
+   */
+  veil: (f) => ({ lines: f.has('slot') ? [] : [['Shapeable Slot(s)', 'None']], used: [] }),
   /*
    * The three below each state the field that *identifies* the entry, and
    * each has a default, because `STRUCTURED_KINDS` matches on a field being
@@ -339,6 +377,10 @@ function entryDoc(rec, unknown) {
    * out as `- Benefit:**`.
    */
   let body = emphasis(delist(stripMarkers(unwrapTemplates(rec.body, rec.title, unknown))))
+    // MediaWiki's `----` rule, and the `---` some pages type instead. To the
+    // reader a line of dashes ends the entry, and everything one page wrote
+    // under its rule arrived as hundreds of loose lines.
+    .replace(/^-{3,}[ \t]*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   const prereq = body.match(/^Prerequisites?:[ \t]*(.+)$/m);
@@ -352,6 +394,129 @@ function entryDoc(rec, unknown) {
   if (summary) lines.push('', `**Summary:** *${emphasis(unwrapTemplates(summary, rec.title, unknown)).replace(/\s+/g, ' ').trim()}*`);
   if (body) lines.push('', body);
   return lines.join('\n');
+}
+
+/* ---------------- a sphere's own page ---------------- */
+
+/**
+ * A `{| … |}` table as tab-separated rows -- the form the reader's own
+ * `unwikiTables` leaves a talent's table in, so that a sphere's base
+ * abilities and its talents arrive with one kind of table between them and
+ * the sheet has one thing to draw as a table.
+ */
+function tables(text) {
+  return String(text ?? '').replace(/^\{\|[^\n]*\n([\s\S]*?)^\|\}[ \t]*$/gm, (_, inner) => {
+    const rows = inner.split(/^\|-[^\n]*$/m).map((row) => row.split('\n')
+      .filter((l) => /^[|!]/.test(l) && !/^\|\+/.test(l))
+      .flatMap((l) => l.slice(1).split(/\|\||!!/))
+      .map((c) => c.replace(/^[^|\[\]{}]*\|(?!\|)/, '').trim()))
+      .filter((cells) => cells.length);
+    return rows.map((cells) => cells.join('\t')).join('\n');
+  });
+}
+
+/** Headings under which a sphere's page stops describing the sphere and starts listing things. */
+const PAST_THE_SPHERE = /\btalents?\b|drawbacks?|\brelated\b|variant|variation|\btags?$|\bgroups?$|\bfeats?$|rule notes|conflicting|archetypes|sphere-specific|handbook/i;
+/** Bold run-ins that are an aside, not something the sphere grants. */
+const ASIDE = /^(?:note|special|.*\bnote|level\b.*)$/i;
+/** A definition term naming a sphere, `;{{pl|Alteration|sphere}}`: the head of that sphere's share of a section. */
+const BY_SPHERE_TERM = /^;[ \t]*\{\{\s*pl\s*\|\s*([^}|]+?)\s*\|\s*sphere\s*\}\}[ \t]*$/gim;
+/** `*Label:*`, or `**Label**` with or without its colon, heading a paragraph. */
+const RUN_IN = /^(?:\*([A-Z][^*\n:]{1,40})(?::\*|\*:)|\*\*([A-Z][^*\n:]{1,40}):?\*\*:?)[ \t]*(.*)$/;
+
+/**
+ * What taking the sphere itself gets you, written the way the reader finds it.
+ *
+ * `structuredSphere` reads a sphere's base abilities out of the document's
+ * opening, as `*Destructive Blast:* As a standard action…` -- one label a
+ * line, everything under it belonging to it. The talents' documents had no
+ * opening at all, because a talent's page does not know what its sphere
+ * grants; the sphere's own page does, and this is that page put in those
+ * terms.
+ *
+ * The wiki marks a base ability three ways and all three are read: an italic
+ * or bold run-in (`''Sweep:''`, `'''Geomancing'''`), a heading of its own
+ * (Protection's Aegis and Ward), and -- for a sphere that offers a choice --
+ * a `… Packages` heading with one heading per package under it. That last is
+ * written as a `*Packages:*` label, which is how the reader knows that what
+ * follows is a choice rather than a list of things granted together. Rules
+ * the page never names (Guardian's delayed damage pool is three paragraphs
+ * under no label) go under the sphere's own name rather than being lost to
+ * the description.
+ */
+function sphereIntro(rec, unknown) {
+  const name = rec.title.replace(/\s+sphere\b.*$/i, '').trim();
+  const tidy = (t) => emphasis(delist(stripMarkers(unwrapTemplates(tables(t), rec.title, unknown))))
+    .replace(/^-{3,}[ \t]*$/gm, '').replace(/^#+[ \t]*/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  // Inside an ability a run-in is part of its text, and must not read as the next one.
+  const nested = (t) => tidy(t).replace(/^\*([A-Z][^*\n:]{1,40})(?::\*|\*:)/gm, '**$1:**');
+  const label = (s) => delink(String(s)).replace(/<[^>]+>/g, '').replace(/['*:]/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/^./, (c) => c.toUpperCase()).slice(0, 40);
+
+  const parts = [{ level: 0, head: '', lines: [] }];
+  for (const line of String(rec.body ?? '').split('\n')) {
+    const h = line.match(/^(={2,5})\s*(.+?)\s*\1\s*$/);
+    if (h) parts.push({ level: h[1].length, head: label(h[2]), lines: [] });
+    else parts[parts.length - 1].lines.push(line);
+  }
+
+  let description = '';
+  const abilities = [];
+  let choose = null;
+  let packagesAt = 0;
+  let abilityAt = 0;
+  const add = (n, text, option = false) => abilities.push({ name: n, text: [text], option });
+  const append = (text) => { if (abilities.length && text) abilities[abilities.length - 1].text.push(text); };
+
+  for (const part of parts) {
+    if (part.level && PAST_THE_SPHERE.test(part.head) && !/packages?$/i.test(part.head)) break;
+    const raw = part.lines.join('\n');
+    if (!part.level) {
+      // The opening: a line of what the sphere is, then what it grants.
+      const paras = tidy(raw).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      for (const para of paras) {
+        const m = para.match(RUN_IN);
+        const named = m && (m[1] || m[2]);
+        if (named && !ASIDE.test(named.trim())) add(label(named), m[3]);
+        else if (abilities.length) append(para.replace(/^\*([A-Z][^*\n:]{1,40})(?::\*|\*:)/, '**$1:**'));
+        else if (!description) description = para;
+        else add(name, para);
+      }
+      continue;
+    }
+    if (/packages?$/i.test(part.head)) { packagesAt = part.level; choose = nested(raw); continue; }
+    if (packagesAt && part.level > packagesAt) {
+      if (part.level === packagesAt + 1) add(part.head.replace(/\s+package$/i, ''), nested(raw), true);
+      else append(`**${part.head}**\n\n${nested(raw)}`);
+      continue;
+    }
+    packagesAt = 0;
+    /*
+     * A section divided by sphere -- Divination's Alternate Divinations, which
+     * has an entry for each *other* sphere a caster might possess -- is an
+     * ability of its own even when the page nests it under another, because
+     * what it says depends on the character reading it and the sheet has to be
+     * able to find it to answer. Its `;Alteration` terms are written out as
+     * "Alteration sphere:" lines, which is how the reader knows the division.
+     */
+    const terms = raw.match(BY_SPHERE_TERM) || [];
+    if (terms.length >= 2) { add(part.head, nested(raw.replace(BY_SPHERE_TERM, ';$1 sphere'))); continue; }
+    if (!abilityAt || part.level <= abilityAt) { abilityAt = part.level; add(part.head, nested(raw)); }
+    else append(`**${part.head}**\n\n${nested(raw)}`);
+  }
+
+  const out = [];
+  if (description) out.push(description);
+  const say = (a) => `*${a.name}:* ${a.text.filter(Boolean).join('\n\n')}`.trim();
+  for (const a of abilities.filter((x) => !x.option)) out.push(say(a));
+  if (abilities.some((x) => x.option)) {
+    out.push(`*Packages:* ${choose || ''}`.trim());
+    for (const a of abilities.filter((x) => x.option)) out.push(say(a));
+  }
+  // A blockquote, because that is where the scraper puts a page's own
+  // description and so the only opening the reader takes as one; anything
+  // else above the first entry is a stray line to it.
+  return out.join('\n\n').split('\n').map((l) => (l ? `> ${l}` : '>')).join('\n');
 }
 
 /* ---------------- grouping ---------------- */
@@ -368,10 +533,34 @@ const unknown = new Map();
 let read = 0;
 let skipped = 0;
 
+/*
+ * Everything is read before anything is grouped. Three of the four groupings
+ * could decide a record as it goes by, but a system is judged on evidence
+ * spread over the whole wiki -- a feat by its book, the book by its veils --
+ * and that has to see the pages a `--kind` filter is about to drop.
+ */
+const records = [];
 const rl = createInterface({ input: createReadStream(inputs[0], { encoding: 'utf8' }), crlfDelay: Infinity });
 for await (const line of rl) {
-  if (!line.trim()) continue;
-  const rec = JSON.parse(line);
+  if (line.trim()) records.push(JSON.parse(line));
+}
+
+const systems = by === 'system' ? systemClassifier(records) : null;
+/** How each page found its system, for the report. */
+const placedBy = new Map();
+/** Systems too small to be a pack of their own, which join the general group. */
+const folded = new Map();
+if (systems) {
+  const size = new Map();
+  for (const rec of records) if (rec.kind) size.set(systems.of(rec)[0], (size.get(systems.of(rec)[0]) || 0) + 1);
+  for (const [name, n] of size) if (n < min && name !== GENERAL) folded.set(name, n);
+}
+
+/** `--by book`: who published each book, and how many pages more than one book prints. */
+const publisher = new Map();
+let reprinted = 0;
+
+for (const rec of records) {
   read++;
   if (!rec.kind) { skipped++; continue; }
   if (onlyKinds && !onlyKinds.has(rec.kind)) { skipped++; continue; }
@@ -380,12 +569,43 @@ for await (const line of rl) {
   const book = (fam.get('sourcebook') || [])[0] || 'Unsourced';
   if (onlySource && !book.toLowerCase().includes(onlySource)) { skipped++; continue; }
 
-  const key = byField ? ((fam.get(byField) || [])[0] || `No ${byField}`)
-    : by === 'kind' ? plural(rec.kind)
-      : by === 'source' ? book
-        : `${plural(rec.kind)} — ${book}`;
-  if (!groups.has(key)) groups.set(key, []);
-  groups.get(key).push(rec);
+  /*
+   * Inside a system a talent is still grouped by its sphere, for the reason
+   * `SECTION` gives: a document may only call itself a sphere when it is one.
+   */
+  let homes = [''];
+  if (systems) {
+    const [found, why] = systems.of(rec);
+    homes = [folded.has(found) ? GENERAL : found];
+    placedBy.set(why, (placedBy.get(why) || 0) + 1);
+  }
+  /*
+   * A page that names two books as its source is in *both* folders: a group
+   * that uses only the later collection still expects the entry to be in it,
+   * whichever book the page happens to list first. The tables merge by name,
+   * so importing both does not make two of it.
+   */
+  if (by === 'book') {
+    const all = fam.get('sourcebook') || [];
+    const pubs = fam.get('sourcepub') || [];
+    homes = [...new Set(all.map((b) => field(b)).filter(Boolean))];
+    // A book's own page names no source, being one; it goes in with the book.
+    if (rec.kind === 'publication') homes = [field(rec.title)];
+    if (!homes.length) homes = ['Unsourced'];
+    all.forEach((b, i) => { if (pubs[i] && !publisher.has(field(b))) publisher.set(field(b), field(pubs[i])); });
+    if (homes.length > 1) reprinted++;
+  }
+  const perSphere = (systems || by === 'book') && rec.kind === 'talent';
+  const name = byField ? ((fam.get(byField) || [])[0] || `No ${byField}`)
+    : perSphere ? (field((fam.get('sphere') || [])[0]) || 'No sphere')
+      : by === 'kind' || by === 'system' || by === 'book' ? plural(rec.kind)
+        : by === 'source' ? book
+          : `${plural(rec.kind)} — ${book}`;
+  for (const dir of homes) {
+    const key = `${dir}\n${name}`;
+    if (!groups.has(key)) groups.set(key, { dir, name, perSphere, recs: [] });
+    groups.get(key).recs.push(rec);
+  }
 }
 
 /* ---------------- writing ---------------- */
@@ -393,8 +613,32 @@ for await (const line of rl) {
 if (!dry) mkdirSync(out, { recursive: true });
 const wrote = [];
 
-for (const [name, recs] of [...groups].sort((a, b) => b[1].length - a[1].length)) {
+/** Each sphere's own page, by the name its talents call it. The first of two pages of one name wins. */
+const spherePages = new Map();
+for (const rec of records) {
+  if (rec.kind !== 'sphere') continue;
+  const key = rec.title.replace(/\s+sphere\b.*$/i, '').trim().toLowerCase();
+  if (!/\(/.test(rec.title) || !spherePages.has(key)) spherePages.set(key, rec);
+}
+
+const dirs = new Map();
+const slugs = new Set();
+for (const { dir, name, perSphere, recs } of [...groups.values()].sort((a, b) => b.recs.length - a.recs.length)) {
   recs.sort((a, b) => a.title.localeCompare(b.title));
+  if (dir && !dirs.has(dir)) {
+    // A slug is cut at sixty characters, and a publisher's series can share
+    // that many: the second such book gets a number rather than the first's folder.
+    let s = slug(dir);
+    for (let n = 2; slugs.has(s); n++) s = `${slug(dir)}-${n}`;
+    slugs.add(s);
+    dirs.set(dir, { slug: s, entries: 0, bytes: 0 });
+    if (!dry) {
+      mkdirSync(join(out, s), { recursive: true });
+      writeFileSync(join(out, s, '_name'), dir, 'utf8');
+      if (publisher.has(dir)) writeFileSync(join(out, s, '_author'), publisher.get(dir), 'utf8');
+    }
+  }
+  const folder = dir ? join(out ?? '', dirs.get(dir).slug) : out;
   // A group past `--max` is written in parts rather than as one document, so
   // that a pack stays a size a browser will take. The parts are named, not
   // numbered blindly: "Feats (1 of 6)" is what the import list shows.
@@ -404,11 +648,23 @@ for (const [name, recs] of [...groups].sort((a, b) => b[1].length - a[1].length)
     const title = parts === 1 ? name : `${name} (${p + 1} of ${parts})`;
     const kinds = new Set(slice.map((r) => r.kind));
     const section = kinds.size === 1 ? SECTION[[...kinds][0]] : null;
-    const head = section && section.by === by ? `## ${section.head}\n\n` : '';
-    const text = `# ${title}\n\n${head}${slice.map((r) => entryDoc(r, unknown)).join('\n\n')}\n`;
-    const file = join(out, `${slug(title)}.md`);
+    const head = section && (section.by === by || perSphere) ? `## ${section.head}\n\n` : '';
+    /*
+     * A sphere's document opens with what the sphere itself grants. In a
+     * book's folder that is only said by a book the sphere's page names as a
+     * source: a handbook adds talents to Destruction without reprinting the
+     * destructive blast, and the packs join by name, so it is said once by
+     * the book that does print it.
+     */
+    const page = head && p === 0 ? spherePages.get(name.toLowerCase()) : null;
+    const prints = page && (by !== 'book' || (collapseFamilies(page.fields).get('sourcebook') || []).some((b) => field(b) === dir));
+    const intro = prints ? sphereIntro(page, unknown) : '';
+    const text = `# ${title}\n\n${intro ? `${intro}\n\n` : ''}${head}${slice.map((r) => entryDoc(r, unknown)).join('\n\n')}\n`;
+    // A sphere and a kind can share a name -- Alchemy is both -- so a sphere's file says which it is.
+    const file = join(folder ?? '', `${perSphere ? 'sphere-' : ''}${slug(title)}.md`);
     if (!dry) writeFileSync(file, text, 'utf8');
     wrote.push({ file, entries: slice.length, bytes: Buffer.byteLength(text) });
+    if (dir) { dirs.get(dir).entries += slice.length; dirs.get(dir).bytes += Buffer.byteLength(text); }
   }
 }
 
@@ -416,11 +672,25 @@ for (const [name, recs] of [...groups].sort((a, b) => b[1].length - a[1].length)
 
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 console.log(`${read} records read, ${skipped} filtered out, ${wrote.length} document(s) ${dry ? 'would be written' : `written to ${out}`}:\n`);
-for (const w of wrote.slice(0, 40)) {
-  console.log(`  ${kb(w.bytes).padStart(9)}  ${String(w.entries).padStart(5)} entries  ${w.file.split(/[\\/]/).pop()}`);
+if (dirs.size) {
+  const rows = [...dirs].sort((a, b) => b[1].entries - a[1].entries);
+  for (const [name, d] of rows.slice(0, 40)) {
+    console.log(`  ${kb(d.bytes).padStart(9)}  ${String(d.entries).padStart(5)} entries  ${name}`);
+  }
+  if (rows.length > 40) console.log(`  … and ${rows.length - 40} more folders`);
+} else {
+  for (const w of wrote.slice(0, 40)) {
+    console.log(`  ${kb(w.bytes).padStart(9)}  ${String(w.entries).padStart(5)} entries  ${w.file.split(/[\\/]/).pop()}`);
+  }
+  if (wrote.length > 40) console.log(`  … and ${wrote.length - 40} more`);
 }
-if (wrote.length > 40) console.log(`  … and ${wrote.length - 40} more`);
 console.log(`  ${kb(wrote.reduce((n, w) => n + w.bytes, 0)).padStart(9)}  total`);
+
+if (systems) {
+  console.log(`\nPlaced by: ${[...placedBy].sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${n}`).join(', ')}`);
+  if (folded.size) console.log(`Too small for a pack of their own (--min ${min}), so in ${GENERAL}: ${[...folded].map(([n, c]) => `${n} ${c}`).join(', ')}`);
+}
+if (by === 'book') console.log(`\n${dirs.size} books; ${reprinted} pages are printed in more than one and were written into each.`);
 
 /*
  * The templates it had to guess at.
