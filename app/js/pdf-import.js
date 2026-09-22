@@ -336,6 +336,7 @@ export const SECTION_KINDS = [
   ['sphere', 'A sphere’s own page (base abilities)'],
   ['feats', 'Feats'],
   ['text', 'Class, archetype or race'],
+  ['options', 'A class feature’s menu (what a column picks from)'],
   ['reference', 'Reference entries'],
 ];
 
@@ -420,13 +421,53 @@ export function sectionText(section, { kind, sphere = '', entryKind = '', book =
 
 /* ---------------- the whole book ---------------- */
 
+/**
+ * One section as the menu a class feature picks from: an `options` block.
+ *
+ * A list of things a class takes one of at a time -- each entry a name and
+ * what it does -- is set in a book exactly as a list of talents is, so only
+ * being told makes it one. The class and the feature are what a feature
+ * column is matched on, which is how the menu finds its column unasked.
+ *
+ * Built directly rather than written out for a reader: there is no page
+ * shape to recognise here, only entries.
+ */
+export function sectionOptions(section, { className = '', feature = '', book = '' } = {}) {
+  const cls = String(className).trim();
+  const feat = String(feature).trim() || section.heading;
+  const options = section.entries.map((e) => {
+    const typed = e.heading.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
+    // "Level 2; Burn 1" in an entry's opening lines is what a player chooses
+    // on, so it rides beside the name in the list.
+    const opening = String(e.text).split(/\n{2,}/).slice(0, 2).join(' ');
+    const facts = [...opening.matchAll(/\b(Level|Burn)\s+(\d+|[-–—])/g)].map((m) => `${m[1]} ${m[2]}`);
+    return {
+      name: (typed ? typed[1] : e.heading).trim(),
+      type: typed ? typed[2] : '',
+      category: [...new Set(facts)].join(', '),
+      text: e.text,
+      source: [book, e.page ? `p. ${e.page}` : ''].filter(Boolean).join(' '),
+    };
+  }).filter((o) => o.name);
+  if (!options.length) return null;
+  return {
+    kind: 'options',
+    name: [cls, feat].filter(Boolean).join(' '),
+    class: cls,
+    feature: feat,
+    text: section.lead,
+    source: [book, section.page ? `p. ${section.page}` : ''].filter(Boolean).join(' '),
+    options,
+  };
+}
+
 /** A first guess for every section, in order. "Legendary Talents" names no sphere, and takes the one whose page came before it. */
 export function guessTags(outline) {
   let sphere = '';
   return outline.sections.map((sec) => {
     const kind = guessKind(sec);
     if (kind === 'sphere') sphere = guessSphere(sec, sphere);
-    return { kind, sphere: kind === 'talents' || kind === 'sphere' ? guessSphere(sec, '') || sphere : '', entryKind: '' };
+    return { kind, sphere: kind === 'talents' || kind === 'sphere' ? guessSphere(sec, '') || sphere : '', entryKind: '', className: '', feature: '' };
   });
 }
 
@@ -453,6 +494,15 @@ export function readSections(outline, tags, { book = '', parsePaste, readStructu
   outline.sections.forEach((sec, i) => {
     const t = tags[i];
     if (!t || t.kind === 'skip' || t.kind === 'sphere') return;
+    if (t.kind === 'options') {
+      const block = sectionOptions(sec, { ...t, book });
+      if (block) {
+        merged.blocks.push(block);
+        merged.report.push(`Option menu ${block.name}: ${block.options.length} option(s)`
+          + `${block.class ? ` for ${block.class}'s ${block.feature}` : ''}.`);
+      }
+      return;
+    }
     const text = sectionText(sec, { ...t, book }, intros);
     if (!text) return;
     const r = t.kind === 'text' ? parsePaste(text) : readStructured(text);

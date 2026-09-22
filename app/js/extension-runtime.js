@@ -23,7 +23,7 @@ import {
 } from './model.js';
 import {
   extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
-  optionCataloguesFrom, namedTextFrom, isPackKey, packsWorthMoving,
+  optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
 // re-export this one -- companions.js is beside the model, not inside it.
@@ -80,11 +80,14 @@ class ExtensionRuntime extends EventTarget {
   /** Re-merge and re-register; fires `change` unless told to be quiet. */
   refresh({ silent = false } = {}) {
     const active = this.active();
-    registerTables(mergeTables(active), REGISTRARS);
+    const tables = mergeTables(active);
+    registerTables(tables, REGISTRARS);
     // The option menus a pack carries as blocks, so a feature column pointing
     // at one by name finds it as soon as its pack is switched on.
     const blocks = activeBlocks(active);
-    setOptionCatalogues(optionCataloguesFrom(blocks));
+    // A catalogue pack's class options and wild talents are menus too, though
+    // nothing in it says so. A block of the same name is the one meant.
+    setOptionCatalogues([...classFeatureTextFromTables(tables), ...optionCataloguesFromTables(tables), ...optionCataloguesFrom(blocks)]);
     // And the rules text behind a companion ability the table grants by name.
     setCompanionAbilityText(namedTextFrom(blocks));
     if (!silent) this.dispatchEvent(new CustomEvent('change', { detail: { active: this.active() } }));

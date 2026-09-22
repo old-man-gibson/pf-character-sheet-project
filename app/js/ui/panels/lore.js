@@ -222,8 +222,36 @@ function groupDelete(name, g, arming) {
    * drags it into whatever order reads best -- a pack lands them in table
    * order, which is not always the order a player thinks in.
    */
+  /**
+   * What the ladder names that a pack can explain, to read and then take.
+   *
+   * Each is shut until opened: the text is there to be looked at before it is
+   * added, and a wild-talent column can offer a dozen at once.
+   */
+function packOffers(className, offers) {
+    if (!offers.length) return '';
+    return `<div class="cfoffers">
+      <div class="offerhead">
+        <span>In your packs</span>
+        <span class="hint">Named on the ladder and carried by a pack. Open one to read it; adding copies its text here, yours to edit.</span>
+        ${offers.length > 1 ? `<button data-action="add-cfnote-pack" data-class="${esc(className)}">+ Add all ${offers.length}</button>` : ''}
+      </div>
+      ${offers.map((o) => `<details class="cfoffer">
+        <summary>
+          <span class="oname">${esc(o.name)}${o.type ? ` <span class="otype">(${esc(o.type)})</span>` : ''}</span>
+          <span class="osrc">${esc([o.category, o.source].filter(Boolean).join(' · '))}</span>
+          <span class="badge">Lv ${o.level}</span>
+          <button data-action="add-cfnote-pack" data-class="${esc(className)}" data-name="${esc(o.name)}"
+            title="Copy this text into ${esc(className)}'s notes">+ Add</button>
+        </summary>
+        <div class="peektext">${esc(o.text)}</div>
+      </details>`).join('')}
+    </div>`;
+  }
+
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
+    const offers = model.classFeatureNoteSuggestions(className);
     const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
     const charLevel = Number(model.data.identity.level) || 0;
     // Where the ladder says the feature arrives; a note it never names has
@@ -244,6 +272,7 @@ function classFeatureNotes(model, className) {
       <button class="notehead" data-collapse="cfnotes-${esc(className)}"
         data-collapse-to="${open}" aria-expanded="${open}">
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
+        ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written up here, and carried by a pack you have switched on">${offers.length} in your packs</span>` : ''}
       </button>
       ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
         const when = arrival(f);
@@ -268,6 +297,7 @@ function classFeatureNotes(model, className) {
   })}
       </div>`;
       }).join('')}</div>` : '<p class="empty">Nothing yet — a class added from a pack brings its features\' text here.</p>'}
+      ${packOffers(className, offers)}
       <div style="margin-top:6px">
         <button data-action="add-cfnote" data-class="${esc(className)}">+ Add feature text</button>
       </div>` : ''}
@@ -346,9 +376,29 @@ function featureColumnHead(model, className, col, index, tableKey) {
       return `<span class="rulechip${rule.kind === 'error' ? ' bad' : ''}" style="--gc:${esc(grp.color)}"
         title="${esc(ruleTitle(rule))}">${esc(grp.name || grp.rule || col)}</span>`;
     };
+    // Two schedules in one column are as often two lists -- infusions on the
+    // odd levels, utility talents on the even -- so each may pick from a menu
+    // of its own. One group has the column's, and needs no second dropdown.
+    const menuNames = groups.length > 1 ? optionCatalogues().map((c) => c.name) : [];
+    const groupMenu = (grp, gi) => {
+      const chosen = grp.optionsFrom || '';
+      if (!menuNames.length && !chosen) return '';
+      const names = chosen && !menuNames.some((n) => same(n, chosen)) ? [...menuNames, chosen] : menuNames;
+      const missing = chosen && !menuNames.some((n) => same(n, chosen));
+      return `<select class="colmenu gmenu${missing ? ' bad' : ''}" style="--gc:${esc(grp.color)}"
+        data-cfgmenu="${esc(className)}|${index}|${gi}"
+        title="${esc(missing ? `“${chosen}” is not switched on — its pack is off or not installed.`
+    : `What ${grp.name || 'this group'}'s cells pick from. Left alone, the column's menu.`)}">
+        <option value=""${chosen ? '' : ' selected'}>— column's menu —</option>
+        ${names.map((n) => `<option value="${esc(n)}"${same(n, chosen) ? ' selected' : ''}>${esc(n)}</option>`).join('')}
+      </select>`;
+    };
     const groupRow = (grp, gi) => {
       const rule = parseLevelRule(grp.rule || '');
       const title = ruleTitle(rule);
+      return `${groupRowFields(grp, gi, rule, title)}${groupMenu(grp, gi)}`;
+    };
+    const groupRowFields = (grp, gi, rule, title) => {
       return `<span class="rulegroup" style="--gc:${esc(grp.color)}">
         <input type="color" value="${esc(grp.color)}" data-cfgcolor="${esc(className)}|${index}|${gi}"
           aria-label="Colour for ${esc(grp.name || col)}" title="Group colour">

@@ -9,7 +9,7 @@ import {
   blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
   isPackKey, packsWorthMoving,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
-  ruleForLevels, repeatColumns, optionCataloguesFrom, parseOptionReplaces, applyArchetype, swapsMeet,
+  ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
@@ -1582,6 +1582,124 @@ console.log('a menu names its class and its feature, so a column of that name pi
       c.classFeatureColumnOptionsChosen('Legendary Samurai', 'Iaijutsu technique'),
       new Character(JSON.parse(JSON.stringify(c.toJSON()))).classFeatureColumnOptions('Legendary Samurai', 'Iaijutsu technique')],
     [[], true, []]);
+  setOptionCatalogues([]);
+}
+
+console.log('a catalogue pack\'s tables are menus too: class options, and powers of another kind');
+{
+  const opt = (name, cls, option, text = 'x') => ({ name, fields: [['Class', cls], ['Option', option]], text, source: 'Book p. 1' });
+  const tables = {
+    catalogues: { catalogues: [
+      { kind: 'class option', entries: [
+        opt('Ash Stance', 'Stancer', 'Stance'), opt('Bog Stance', 'Stancer', 'Stance'),
+        opt('Stancer Art', 'Stancer', 'Art', 'Crane Step (Ex)\n*Prerequisites:* 6th level.\n\n1 point\n\nMoves.\n\nIron Root (Su)\nStays.\n\nOpen Palm (Ex)\nPushes.'),
+        opt('Lone Vow', 'Stancer', 'Vow', 'Just the one.'),
+      ] },
+      { kind: 'feat', entries: [opt('Not A Menu', 'Stancer', 'Stance')] },
+    ] },
+    powers: { powers: [
+      { name: 'Mind Thrust', kind: 'power', type: 'Telepathy' },
+      { name: 'Ember Coat', kind: 'knack', type: 'Form Shaping (Su)', level: 2, burn: '1', element: 'Fire' },
+      { name: 'Ember Edge', kind: 'knack', type: 'Substance Shaping (Su)', level: 1 },
+      { name: 'Warm Hands', kind: 'knack', type: 'Utility (Sp)', level: 1 },
+    ] },
+  };
+  const menus = optionCataloguesFromTables(tables);
+  const named = (n) => menus.find((m) => m.name === n);
+  check('entries sharing a class and an option are one menu; one entry that is a list is its list',
+    [named('Stancer Stance').options.map((o) => o.name), named('Stancer Art').options.map((o) => [o.name, o.type, o.minLevel]),
+      named('Stancer Vow').options.map((o) => o.name)],
+    [['Ash Stance', 'Bog Stance'], [['Crane Step', 'Ex', 6], ['Iron Root', 'Su', null], ['Open Palm', 'Ex', null]], ['Lone Vow']]);
+  check('a short line inside an entry is not the next entry', named('Stancer Art').options[0].text.includes('1 point'), true);
+  check('powers of another kind are offered whole, by type, and by the word types share — plain powers are not',
+    menus.filter((m) => !m.class).map((m) => [m.name, m.options.length]),
+    [['Knack', 3], ['Knack: Form Shaping', 1], ['Knack: Substance Shaping', 1], ['Knack: Utility', 1], ['Knack: Shaping', 2]]);
+  check('what a player chooses on rides beside the name',
+    named('Knack').options[0].category, 'Form Shaping, level 2, burn 1, Fire');
+  setOptionCatalogues(menus);
+  check('a column the class table heads "Stancer Art" finds the class\'s "Art", and no other class\'s column does',
+    [optionCatalogueFor('Stancer', 'Stancer Art')?.name, optionCatalogueFor('Rogue', 'Stancer Art')], ['Stancer Art', null]);
+
+  // A list already cut into entries: typed names, and the list's own rules kept apart.
+  const cut = optionCataloguesFromTables({ catalogues: { catalogues: [{ kind: 'class option', entries: [
+    opt('Stancer Trick', 'Stancer', 'Trick', 'A stancer learns one trick at every level.'),
+    opt('Low Sweep (Ex)', 'Stancer', 'Trick', 'Trips.'), opt('High Guard (Su)', 'Stancer', 'Trick', 'Blocks.'),
+  ] }] } })[0];
+  check('an entry named for the list is the menu\'s own text, and the rest are typed options',
+    [cut.text, cut.options.map((o) => [o.name, o.type])],
+    ['A stancer learns one trick at every level.', [['Low Sweep', 'Ex'], ['High Guard', 'Su']]]);
+  const pack = (id, cls) => normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id, name: id,
+    provides: { catalogues: { catalogues: [{ kind: 'class option', entries: [opt('Evasion', cls, 'Talent', `${cls}'s`)] }] } } });
+  check('two classes\' options of one name are two entries, whichever pack loads second',
+    mergeTables([pack('a', 'Rogue'), pack('b', 'Stancer')]).catalogues.catalogues[0].entries.map((e) => e.text),
+    ["Rogue's", "Stancer's"]);
+
+  // A class's own page is text to look its features up in, and nobody else's.
+  const pages = { catalogues: { catalogues: [
+    { kind: 'class', entries: [{ name: 'Stancer', fields: [['Hit Die', 'd8']], source: 'Book p. 2',
+      text: 'Role: Front line.\n\nHit Die: d8.\n\nRooted Stance (Ex): At 1st level she plants her feet.\n\nShe cannot be moved while she does.\n\nEvasion (Ex): The stancer\'s.' }] },
+    { kind: 'archetype', entries: [{ name: 'Drifter', fields: [['Class', 'Stancer, Rogue']], source: 'Book p. 9', text: 'Rooted Stance (Ex): The drifter\'s instead.\n\nWander (Su): She drifts.' }] },
+  ] } };
+  const pageText = classFeatureTextFromTables(pages);
+  check('a class page reads as its features, front matter left out and later paragraphs kept; an archetype is each of its classes\'',
+    pageText.map((m) => [m.class, m.hidden, m.options.map((o) => o.name)]),
+    [['Stancer', true, ['Rooted Stance', 'Evasion']], ['Stancer', true, ['Rooted Stance', 'Wander']], ['Rogue', true, ['Rooted Stance', 'Wander']]]);
+  check('with the paragraphs that follow a feature', pageText[0].options[0].text.includes('cannot be moved'), true);
+  // And the class entry is a building block, made when the packs are gathered.
+  const asPack = (id, blocks = []) => normalizeExtension({ format: 'character-sheet-extension', formatVersion: 1, id, name: id, blocks,
+    provides: { catalogues: { catalogues: [{ kind: 'class', entries: [{ name: 'Stancer (Class)', source: 'Book p. 2',
+      fields: [['Hit Die', 'd10'], ['Skill Ranks', '4'], ['Base attack bonus', '1'], ['Fort save', '2'], ['Ref save', '1'], ['Will save', '1']],
+      text: 'Hit Die: d10.\n\nClass Skills: The stancer\'s class skills are Acrobatics (Dex), Climb (Str), and Knowledge (all) (Int).\n\nRooted Stance (Ex): She plants her feet.\n\nIron Root (Su): At 4th level she cannot be moved.' }] }] } } });
+  const derived = activeBlocks([asPack('cat')]).find((b) => b.kind === 'class');
+  check('a catalogue\'s class entry is offered as a class block: its numbers from the fields, its skills from the sentence, each feature at the level its text names',
+    [derived.name, derived.extId, derived.index, derived.hd, derived.bab, derived.goodFort, derived.goodRef, derived.skillRanks, derived.classSkills,
+      derived.features.map((f) => [f.level, f.name])],
+    ['Stancer', 'cat', 0, 10, 1, true, false, 4, ['Acrobatics', 'Climb', 'Knowledge (all)'], [[1, 'Rooted Stance (Ex)'], [4, 'Iron Root (Su)']]]);
+  check('a class somebody wrote as a block is the one offered, in whichever pack',
+    activeBlocks([asPack('cat'), asPack('hand', [{ kind: 'class', name: 'Stancer', hd: 8 }])]).filter((b) => b.kind === 'class').map((b) => [b.extId, b.hd]),
+    [['hand', 8]]);
+  {
+    const s = new Character(blankDocument({ name: 'Stan', level: 4 }));
+    for (let l = 1; l <= 4; l++) s.setProgressionClass(l, 0, 'Stancer');
+    applyBlock(s, derived);
+    check('and added, it lands like any class block: ladder, notes and class skills',
+      [s.data.progression.classFeatures.Stancer.byLevel[4].Special, s.classFeatureNotes('Stancer').map((n) => n.name)],
+      ['Iron Root (Su)', ['Rooted Stance (Ex)', 'Iron Root (Su)']]);
+  }
+
+  setOptionCatalogues(pageText);
+  check('none of it is a menu a column picks from', optionCatalogues().length, 0);
+  {
+    const s = new Character(blankDocument({ name: 'Stan', level: 3 }));
+    for (let l = 1; l <= 3; l++) { s.setProgressionClass(l, 0, 'Stancer'); s.setProgressionClass(l, 1, 'Monk'); }
+    s.addClassFeatureColumn('Stancer', 'Special');
+    s.setClassFeature('Stancer', 1, 'Special', 'Rooted Stance 2, Evasion, Wander (North (True))');
+    s.addClassFeatureColumn('Monk', 'Special');
+    s.setClassFeature('Monk', 2, 'Special', 'Evasion');
+    check('the class\'s own wording beats an archetype\'s, a step number or a nested choice falls away, and another class\'s Evasion is not offered',
+      [s.classFeatureNoteSuggestions('Stancer').map((o) => [o.name, o.category]), s.classFeatureNoteSuggestions('Monk')],
+      [[['Rooted Stance', 'Stancer'], ['Evasion', 'Stancer'], ['Wander', 'Drifter archetype']], []]);
+  }
+  setOptionCatalogues(menus);
+
+  // What the ladder names and a pack can explain is offered under "What they do".
+  const c = new Character(blankDocument({ name: 'Stan', level: 4 }));
+  for (let l = 1; l <= 4; l++) c.setProgressionClass(l, 0, 'Stancer');
+  c.addClassFeatureColumn('Stancer', 'Knack');
+  c.setClassFeature('Stancer', 1, 'Knack', 'Warm Hands');
+  c.setClassFeature('Stancer', 2, 'Knack', 'Crane Step (Ex), Something Homemade');
+  c.setClassFeature('Stancer', 3, 'Knack', 'Ember Coat');
+  c.addClassFeatureNote('Stancer', { name: 'Ember Coat', text: 'mine' });
+  const offered = () => c.classFeatureNoteSuggestions('Stancer').map((s) => [s.name, s.level]);
+  check('a cell naming a pack entry is offered its text, at the level it sits; one already written up, or nobody carries, is not',
+    offered(), [['Crane Step', 2]]);
+  tables.powers.powers[3].text = 'Warms them.';
+  setOptionCatalogues(optionCataloguesFromTables(tables));
+  check('an entry with no text is nothing to offer, and one with text is', offered(), [['Warm Hands', 1], ['Crane Step', 2]]);
+  c.addClassFeatureNoteFromPack('Stancer', 'Crane Step');
+  check('taking one copies its name, type and text into the notes, and it is offered no more',
+    [c.classFeatureNotes('Stancer').map((n) => [n.name, n.type, n.text.includes('Moves.')]), offered()],
+    [[['Ember Coat', null, false], ['Crane Step', 'Ex', true]], [['Warm Hands', 1]]]);
   setOptionCatalogues([]);
 }
 

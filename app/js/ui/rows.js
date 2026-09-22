@@ -327,9 +327,10 @@ export function editLine(label, path, value) {
  * it, so a collapsed panel is the same header in the same place -- nothing
  * moves when it folds, which is the point of folding it.
  */
-export function collapsible(model, key, panelHtml) {
-  const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
-  const btn = foldButton(model, key);
+export function collapsible(model, key, panelHtml, defaultCollapsed = false) {
+  // A panel that is setup rather than reading starts folded; see `isCollapsed`.
+  const collapsed = isCollapsed(model, key, defaultCollapsed);
+  const btn = foldButton(model, key, collapsed);
   if (!collapsed) return panelHtml.replace('</h3>', ` ${btn}</h3>`);
   // Collapsed: keep only the header line of the panel.
   const m = panelHtml.match(/<h3[\s\S]*?<\/h3>/);
