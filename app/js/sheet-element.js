@@ -439,7 +439,8 @@ function controlKey(input) {
         : input.dataset.offset ? `offset:${input.dataset.offset}`
           : input.dataset.pick ? `pick:${input.dataset.pick}`
             : input.dataset.sphereBonus ? `spherebonus:${input.dataset.sphereBonus}`
-              : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}` : null;
+              : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}`
+                : input.dataset.cfeat ? `cfeat:${input.dataset.cfeat}` : null;
   return attr;
 }
 
@@ -1610,7 +1611,7 @@ export class CharacterSheetElement extends HTMLElement {
       const [pk, pref] = [pressedKey.slice(0, pressedKey.indexOf(':')), pressedKey.slice(pressedKey.indexOf(':') + 1)];
       const pattr = {
         set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
-        spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search',
+        spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search', cfeat: 'data-cfeat',
       }[pk];
       const landed = pattr && this.shadowRoot.querySelector(`[${pattr}="${CSS.escape(pref)}"]`);
       if (landed) {
@@ -1623,7 +1624,7 @@ export class CharacterSheetElement extends HTMLElement {
     const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
     const attr = {
       set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
-      spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search',
+      spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search', cfeat: 'data-cfeat',
     }[kind];
     const next = this.shadowRoot.querySelector(`[${attr}="${CSS.escape(ref)}"]`);
     if (!next) return;
@@ -1733,6 +1734,16 @@ export class CharacterSheetElement extends HTMLElement {
     // computed-style lookup, and the answer cannot change inside one render.
     const surface = this.#surface();
 
+    /*
+     * A long table scrolls inside its own box, and the markup below replaces
+     * the box: without this, committing one cell half way down a twenty-level
+     * grid sends the grid back to level 1. Kept by position among the panel's
+     * boxes and by the tab they were on -- a render that changes tab, or
+     * changes how many tables there are, has nothing to put back.
+     */
+    const scrolled = { tab: this.#tab, at: [...this.shadowRoot.querySelectorAll('.body .tablewrap')]
+      .map((w) => [w.scrollTop, w.scrollLeft]) };
+
     this.shadowRoot.innerHTML = `
       ${SHEET_LINK}
       <div class="wrap">
@@ -1791,6 +1802,15 @@ export class CharacterSheetElement extends HTMLElement {
     applyColumnWidths(this.shadowRoot, readColumnWidths(), { stacked: this.clientWidth <= 620 });
     this.#clampHints();
     this.#fitRail();
+    // Last of the layout, since every step above can change a box's height.
+    const wraps = [...this.shadowRoot.querySelectorAll('.body .tablewrap')];
+    if (scrolled.tab === this.#tab && wraps.length === scrolled.at.length) {
+      wraps.forEach((w, i) => {
+        const [top, left] = scrolled.at[i];
+        if (top) w.scrollTop = top;
+        if (left) w.scrollLeft = left;
+      });
+    }
     if (this.isPublished) this.#lockPublished();
     // The palette outlives the markup around it: innerHTML dropped it, and the
     // node (with its listeners) is still here to be put back.
@@ -6052,9 +6072,9 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // A column's rule groups: name, levels and colour. Each re-renders,
+    // A column's rule groups: name, levels, colour and menu. Each re-renders,
     // because a rule decides which cells in the whole column are live.
-    for (const [attr, field] of [['cfgname', 'name'], ['cfgrule', 'rule'], ['cfgcolor', 'color']]) {
+    for (const [attr, field] of [['cfgname', 'name'], ['cfgrule', 'rule'], ['cfgcolor', 'color'], ['cfgmenu', 'optionsFrom']]) {
       root.querySelectorAll(`[data-${attr}]`).forEach((input) => {
         input.addEventListener('change', () => {
           const parts = input.dataset[attr].split('|');
@@ -8030,6 +8050,14 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'add-cfnote':
         this.#model.addClassFeatureNote(button?.dataset.class, { name: 'New feature' });
+        this.#render();
+        return;
+      case 'add-cfnote-pack':
+        // One, or every one the panel is offering for this class.
+        for (const s of button?.dataset.name !== undefined
+          ? [{ name: button.dataset.name }] : this.#model.classFeatureNoteSuggestions(button?.dataset.class)) {
+          this.#model.addClassFeatureNoteFromPack(button?.dataset.class, s.name);
+        }
         this.#render();
         return;
       case 'remove-cfnote':

@@ -105,6 +105,14 @@ const NAMED = {
    * "possesses the (subtype)" where the page says "possesses the elf".
    */
   pl: (a) => a[0] ?? '',
+  /*
+   * `{{pll|Autumn|Blast}}` is `pl` with the second word shown as well: it
+   * links "Autumn Blast" and says "Autumn Blast". By the default rule a list
+   * of twenty-seven of them read "Blast, Blast, Blast, …".
+   */
+  pll: (a) => a.join(' '),
+  // The box over an infusion naming the blasts it goes with: a labelled line.
+  'associated blast': (a) => `Associated Blasts: ${a.join(', ')}`,
 };
 
 /**

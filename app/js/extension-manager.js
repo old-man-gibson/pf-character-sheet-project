@@ -144,6 +144,13 @@ const CSS = `
 .extmgr .found .kind { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border: 1px solid var(--line, #444); border-radius: 10px; opacity: 0.8; white-space: nowrap; }
 .extmgr .found .what { flex: 1; min-width: 0; }
 .extmgr .found .what .d { opacity: 0.65; font-size: 0.76rem; }
+/* What a pack's tables hold, to look through: a list per table, an entry per row. */
+.extmgr details.contents { border-top: 1px solid var(--line, #333); padding: 4px 0; }
+.extmgr details.contents > summary { cursor: pointer; text-transform: capitalize; }
+.extmgr details.contents .d { opacity: 0.65; font-size: 0.76rem; font-weight: 400; text-transform: none; }
+.extmgr details.entry { margin-left: 14px; border-top: 1px solid var(--line, #2a2a2a); padding: 2px 0; font-size: 0.84rem; }
+.extmgr details.entry > summary { cursor: pointer; }
+.extmgr details.entry .etext { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.45; padding: 4px 0 8px 14px; max-height: 20rem; overflow: auto; }
 /* One line per section of a scraped sphere page: what to do with it, its name,
    and how many entries it holds. */
 .extmgr .secs { display: flex; flex-direction: column; gap: 2px; margin: 5px 0 2px; }
@@ -266,6 +273,52 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
       </div>` : ''}`;
   }
 
+  /**
+   * The tables a pack carries that have no form of their own, as lists to be
+   * looked through: what "24 reference entries" *are*.
+   *
+   * Names and sources only until an entry is opened -- a wild-talent pack is
+   * nine hundred entries, and their text written out up front is megabytes of
+   * markup nobody asked to read. `bind` fills an entry from the draft when its
+   * row is opened.
+   */
+  function contentLists(tables) {
+    const lists = [];
+    for (const key of tables) {
+      const rows = draft.provides[key]?.[key];
+      if (!Array.isArray(rows)) continue;
+      if (key === 'catalogues') {
+        rows.forEach((cat, ci) => lists.push({
+          label: cat.kind || 'reference', path: [key, ci],
+          entries: Array.isArray(cat.entries) ? cat.entries : [],
+        }));
+      } else lists.push({ label: key, path: [key], entries: rows });
+    }
+    return lists.filter((l) => l.entries.length);
+  }
+
+  function contentsHtml(tables) {
+    const sub = (e) => {
+      const fields = Array.isArray(e?.fields) ? e.fields.map(([k, v]) => `${k}: ${v}`) : [];
+      const facts = [e?.type, e?.level != null && e.level !== '' ? `level ${e.level}` : '', ...fields, e?.source ?? (e?.sources || []).join(', ')];
+      return facts.map((x) => String(x ?? '').trim()).filter(Boolean).join(' · ');
+    };
+    return contentLists(tables).map((l) => `<details class="contents">
+      <summary><strong>${esc(l.label)}</strong> <span class="d">${l.entries.length}</span></summary>
+      ${l.entries.map((e, i) => `<details class="entry" data-entry="${esc(JSON.stringify([...l.path, i]))}">
+        <summary>${esc(e?.name || '(unnamed)')} <span class="d">${esc(sub(e))}</span></summary>
+        <div class="etext"></div>
+      </details>`).join('')}
+    </details>`).join('');
+  }
+
+  /** One entry of a contents list, by the path its row carries. */
+  function entryAt(path) {
+    const [key, ...rest] = path;
+    const rows = draft.provides[key]?.[key];
+    return rest.length === 2 ? rows?.[rest[0]]?.entries?.[rest[1]] : rows?.[rest[0]];
+  }
+
   function editorHtml() {
     const d = draft;
     const s = summarize(d);
@@ -306,8 +359,10 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
 
         <h3>Other shared tables</h3>
         <p class="hint">${otherTables.length
-    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}, edited in the JSON view.`
+    ? `This pack also provides ${esc(describeSummary({ tables: otherCounts, blocks: {} }))}. Open a list to see what is in it, and an entry to read it; they are edited in the JSON view.`
     : `A pack can also carry ${TABLE_KINDS.filter((k) => !OWN_SECTION.has(k)).map((k) => `<code>${k}</code>`).join(', ')} under <code>provides</code> — see the JSON view, or copy a bundled pack to start from one.`}</p>
+
+        ${contentsHtml(otherTables)}
 
         <h3>Blocks</h3>
         <p class="hint">Building blocks a player adds to a character from the sheet's ⚙ manager.</p>
@@ -531,6 +586,10 @@ Hit Die: d12.
           <select data-pdf-kind="${i}">${kinds(t.kind)}</select>
           ${t.kind === 'talents' || t.kind === 'sphere' ? `<input type="text" data-pdf-sphere="${i}" value="${esc(t.sphere)}"
             placeholder="Sphere" title="The sphere these belong to" style="width:9rem"${t.sphere ? '' : ' class="needs"'}>` : ''}
+          ${t.kind === 'options' ? `<input type="text" data-pdf-class="${i}" value="${esc(t.className || '')}"
+            placeholder="Class" title="The class whose feature picks from these — as its name is written in the progression" style="width:9rem"${t.className ? '' : ' class="needs"'}>
+            <input type="text" data-pdf-feature="${i}" value="${esc(t.feature || '')}"
+            placeholder="${esc(sec.heading)}" title="The feature column these are picked in — “Wild Talent”, “Monk Art”. Left empty, the section's heading." style="width:9rem">` : ''}
           ${t.kind === 'reference' ? `<input type="text" data-pdf-entrykind="${i}" value="${esc(t.entryKind)}"
             placeholder="${esc(sec.heading.toLowerCase())}" title="What kind of thing these are — trait, equipment, drawback…" style="width:9rem">` : ''}
         </div>`;
@@ -1194,9 +1253,17 @@ Hit Die: d12.
       e.target.value = '';
       if (file) pdfRead(file);
     });
+    qa('details.entry').forEach((el) => el.addEventListener('toggle', () => {
+      const body = el.querySelector('.etext');
+      if (!el.open || body.textContent) return;
+      const e = entryAt(JSON.parse(el.dataset.entry));
+      body.textContent = String(e?.text ?? e?.benefit ?? e?.description ?? '').trim() || 'No text.';
+    }));
     q('[data-pdf-title]')?.addEventListener('input', (e) => { paste.pdf.title = e.target.value; });
     qa('[data-pdf-kind]').forEach((el) => el.addEventListener('change', () => { paste.pdf.tags[Number(el.dataset.pdfKind)].kind = el.value; render(); }));
     qa('[data-pdf-sphere]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfSphere)].sphere = el.value; }));
+    qa('[data-pdf-class]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfClass)].className = el.value; }));
+    qa('[data-pdf-feature]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfFeature)].feature = el.value; }));
     qa('[data-pdf-entrykind]').forEach((el) => el.addEventListener('input', () => { paste.pdf.tags[Number(el.dataset.pdfEntrykind)].entryKind = el.value; }));
     q('[data-action="pdf-go"]')?.addEventListener('click', pdfGo);
     q('[data-action="paste-read"]')?.addEventListener('click', () => {

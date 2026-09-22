@@ -66,6 +66,9 @@ export function setOptionCatalogues(list) {
       classKey: menuKey(c?.class),
       featureKey: menuKey(c?.feature),
       text: String(c?.text || ''),
+      // Text to look a feature up in, not a list a column picks from.
+      hidden: !!c?.hidden,
+      archetype: !!c?.archetype,
       options: (Array.isArray(c?.options) ? c.options : []).map((o) => ({
         name: String(o?.name || ''),
         type: o?.type ? String(o.type) : null,
@@ -87,7 +90,7 @@ export function optionCatalogue(name) {
 
 /** Every menu registered, for a picker of catalogues. */
 export function optionCatalogues() {
-  return [...OPTION_CATALOGUES.values()];
+  return [...OPTION_CATALOGUES.values()].filter((c) => !c.hidden);
 }
 
 /**
@@ -102,9 +105,15 @@ export function optionCatalogueFor(className, column) {
   const cls = menuKey(className);
   const col = menuKey(column);
   if (!col) return null;
-  const hits = [...OPTION_CATALOGUES.values()].filter((c) => c.featureKey === col && (!c.classKey || c.classKey === cls));
+  const hits = optionCatalogues().filter((c) => c.featureKey === col && (!c.classKey || c.classKey === cls));
   // A menu that names the class is meant more particularly than one that does not.
-  return hits.find((c) => c.classKey) || hits[0] || null;
+  const exact = hits.find((c) => c.classKey) || hits[0];
+  if (exact) return exact;
+  // A catalogue calls the legendary monk's list its "Art" where the class
+  // table heads the column "Monk Art". Only where the class is named and is
+  // this one: the last word of a column is far too little to go on otherwise.
+  return optionCatalogues().find((c) => c.classKey === cls && c.featureKey
+    && col.endsWith(` ${c.featureKey}`)) || null;
 }
 
 /**
@@ -715,6 +724,92 @@ export function classFeatureNotesInCell(model, className, text) {
   const hit = new Set();
   for (const n of cellFeatureNames(text)) for (const k of notesFor(n, keyed)) hit.add(k);
   return keyed.filter((k) => hit.has(k)).map(({ note, index }) => ({ note, index }));
+}
+
+/**
+ * Every entry the active packs' menus carry, by the name a cell would spell
+ * it. Built once per set of menus: a wild-talent pack is a thousand entries,
+ * and the notes panel asks on every render.
+ */
+let PACK_ENTRIES = { of: null, byKey: new Map() };
+function packEntries() {
+  if (PACK_ENTRIES.of !== OPTION_CATALOGUES) {
+    const byKey = new Map();
+    for (const menu of OPTION_CATALOGUES.values()) {
+      for (const o of menu.options) {
+        if (!o.text.trim()) continue;
+        const key = featureKeys(o.name).specific;
+        if (!key) continue;
+        if (!byKey.has(key)) byKey.set(key, []);
+        // A class's own features answer only to that class; a menu's entries to anyone.
+        byKey.get(key).push({ ...o, menu: menu.name, only: menu.hidden ? menu.classKey : null, archetype: menu.archetype });
+      }
+    }
+    PACK_ENTRIES = { of: OPTION_CATALOGUES, byKey };
+  }
+  return PACK_ENTRIES.byKey;
+}
+
+/**
+ * What the ladder names that nobody has written up, and a pack can explain.
+ *
+ * A cell saying "Kinetic Healer" with no note under "What they do" is a
+ * feature whose text the player would have to type -- unless a pack that is
+ * switched on carries it, in which case it is offered: the name as the pack
+ * spells it, where it is from, and the text to read before taking it. Nothing
+ * is copied until the player says so, which is the bargain every pack lookup
+ * is on.
+ *
+ * A cell is tried whole before it is split on its commas, because "Unnatural
+ * Evolution, Improved" is one talent.
+ */
+export function classFeatureNoteSuggestions(model, className) {
+  const entries = packEntries();
+  if (!entries.size) return [];
+  const keyed = keyedNotes(model, className);
+  const byLevel = model.data.progression?.classFeatures?.[className]?.byLevel || {};
+  const levels = Object.keys(byLevel).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  const out = new Map();
+  const cls = menuKey(className);
+  // The class's own text first, then the first menu to carry the name (a
+  // family menu repeats its members, and they are the same entry), and an
+  // archetype's version last: the sheet does not know which archetypes were
+  // taken, and the base feature is the one most cells mean.
+  const find = (key) => {
+    const all = (entries.get(key) || []).filter((o) => o.only === null || o.only === cls);
+    return all.find((o) => o.only && !o.archetype) || all.find((o) => !o.archetype) || all[0] || null;
+  };
+  const offer = (name, level, whole = false) => {
+    if (notesFor(name, keyed).length) return true;
+    const k = featureKeys(name);
+    // "Infusion Specialization 2", "Expanded Element (Air (Electric))": the
+    // step a feature is at and what was chosen for it are the cell's, and the
+    // feature is what comes before them.
+    const bare = featureKeys(String(name).replace(/\s*\(.*$/, '').replace(/\s+\d+$/, '')).specific;
+    const hit = find(k.specific) || find(k.general) || (bare && !whole ? find(bare) : null);
+    if (!hit) return false;
+    const key = featureKeys(hit.name).specific;
+    if (!out.has(key) && !keyed.some((n) => n.specific === key)) out.set(key, { ...hit, level });
+    return true;
+  };
+  for (const level of levels) {
+    for (const cell of Object.values(byLevel[level] || {})) {
+      for (const text of (cell && typeof cell === 'object' ? Object.values(cell) : [cell])) {
+        const whole = String(text ?? '').trim();
+        if (!whole || (whole.includes(',') && offer(whole, level, true))) continue;
+        for (const name of cellFeatureNames(whole)) offer(name, level);
+      }
+    }
+  }
+  return [...out.values()];
+}
+
+/** Take one of those: the pack's text becomes the class's note of that name. */
+export function addClassFeatureNoteFromPack(model, className, name) {
+  const hit = classFeatureNoteSuggestions(model, className)
+    .find((s) => normalizeName(s.name) === normalizeName(name));
+  if (!hit) return model;
+  return addClassFeatureNote(model, className, { name: hit.name, type: hit.type, text: hit.text });
 }
 
 /**

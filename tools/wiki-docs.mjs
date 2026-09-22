@@ -342,6 +342,108 @@ const OWN_READER = new Set(['veil', 'martial ability', 'talent', 'feat', 'spell'
 const field = (v, title = '', unknown = null) => delink(unwrapTemplates(String(v ?? ''), title, unknown))
   .replace(/'{2,5}/g, '').replace(/\s+/g, ' ').trim();
 
+/**
+ * A page several books share, as one of those books prints it.
+ *
+ * A list page -- a class's talents, its arts -- names every book that adds to
+ * it as a source and heads each book's additions `==The Book==`. Written
+ * whole into each book's folder it puts ten books' text in every one of them,
+ * under the first book's citation. Where the headings are the page's own
+ * sources, a book gets what is under its heading, whatever the page says
+ * before the first of them and under headings that are no book's, and its own
+ * citation alone. A page that is not laid out that way is left as it is, and
+ * a book with no section and nothing general to show for it gets nothing.
+ */
+function narrowToBook(rec, book, books) {
+  const key = (s) => field(s).toLowerCase();
+  const mine = key(book);
+  const theirs = new Set(books.map(key));
+  const sections = [{ head: null, lines: [] }];
+  for (const line of String(rec.body ?? '').split('\n')) {
+    const m = line.match(/^==([^=].*?)==\s*$/);
+    if (m) sections.push({ head: m[1].trim(), lines: [line] });
+    else sections[sections.length - 1].lines.push(line);
+  }
+  if (!sections.some((s) => s.head !== null && theirs.has(key(s.head)))) return rec;
+  const kept = sections.filter((s) => s.head === null || key(s.head) === mine || !theirs.has(key(s.head)));
+  if (!kept.some((s) => s.head !== null) && !kept[0].lines.join('').trim()) return null;
+
+  // Its own citation: the numbered family this book is, renumbered to the first.
+  const fields = {};
+  let n = '';
+  for (const [k, v] of Object.entries(rec.fields || {})) {
+    const m = k.match(/^source(book|page|pub)(\d*)$/);
+    if (!m) fields[k] = v;
+    else if (m[1] === 'book' && key(v) === mine) n = m[2];
+  }
+  for (const part of ['book', 'page', 'pub']) {
+    if (rec.fields?.[`source${part}${n}`] !== undefined) fields[`source${part}`] = rec.fields[`source${part}${n}`];
+  }
+  return { ...rec, fields, body: kept.flatMap((s) => (s.head !== null && key(s.head) === mine ? s.lines.slice(1) : s.lines)).join('\n') };
+}
+
+/** A bold line that labels a paragraph of an entry, not the start of the next entry. */
+const INNER_LABEL = /^(?:prerequisites?|requirements?|benefits?|special|normal|notes?|example|table)\b/i;
+
+/**
+ * A page that is a list of a class's options, as the options it lists.
+ *
+ * Most options have a page each -- a wild talent, an element. A class's
+ * talents or arts are as often one page holding all of them, and written out
+ * as one entry that is thirty options in a block nobody can look through,
+ * pick from or cite. The page says it is such a list by being titled for the
+ * class and the option together ("Vigilante Talent" for the Vigilante's
+ * Talent), which a page about one option never is.
+ *
+ * Two layouts cover them: every option under its own `===heading===`, or
+ * every option a paragraph opening with its name in bold or italics and a
+ * colon. A page of headings is cut on headings only, since an option under a
+ * heading has labelled paragraphs of its own. Fewer than three found and the
+ * page is left whole. What comes before the first option is the list's own
+ * rules, kept under the page's title when `intro` asks for it -- once, not
+ * once a book.
+ */
+function splitListPage(rec, { intro = true } = {}) {
+  if (rec.kind !== 'class option') return [rec];
+  const fam = collapseFamilies(rec.fields);
+  const titled = `${field((fam.get('class') || [])[0])} ${field((fam.get('option') || [])[0])}`.trim().toLowerCase();
+  if (!titled.includes(' ') || field(rec.title).toLowerCase() !== titled) return [rec];
+
+  const lines = String(rec.body ?? '').split('\n');
+  const byHeading = lines.filter((l) => /^===[^=].*?===\s*$/.test(l)).length >= 3;
+  const opening = [];
+  const items = [];
+  for (const line of lines) {
+    let name = null;
+    let rest = '';
+    if (byHeading) {
+      const m = line.match(/^===([^=].*?)===\s*$/);
+      if (m) name = field(m[1]);
+    } else {
+      const m = line.match(/^[:*#]*\s*('{2,5})(.+?)\1(:?)\s*(.*)$/);
+      const label = m ? field(m[2]) : '';
+      if (m && (m[3] || /:\s*$/.test(label))) {
+        const n = label.replace(/:\s*$/, '').trim();
+        if (n && n.length <= 70 && !/[.!?]\s/.test(n) && !INNER_LABEL.test(n)) { name = n; rest = m[4]; }
+      }
+    }
+    // "Desperate Shift (requires urgency, warden 4)" is a name and what it asks
+    // for; the second is a prerequisite, and is written where those go.
+    const asks = name && name.match(/^(.*?)\s*\(requires? ([^()]*(?:\([^()]*\)[^()]*)*)\)\s*:?$/i);
+    if (asks) { name = asks[1]; rest = `Prerequisites: ${asks[2]}\n\n${rest}`; }
+    if (name) name = name.replace(/\s*:\s*$/, '').trim();
+    if (name && !/^[A-Z0-9"'“]/.test(name)) name = null;
+    if (name) items.push({ name, lines: rest ? [rest] : [] });
+    else (items.length ? items[items.length - 1].lines : opening).push(line);
+  }
+  if (items.length < 3) return [rec];
+
+  const out = items.map((it) => ({ ...rec, title: it.name, body: it.lines.join('\n').trim() })).filter((r) => r.body);
+  const said = opening.join('\n').replace(/\{\{[^{}]*\}\}/g, '').trim();
+  if (intro && said.length > 150) out.unshift({ ...rec, body: opening.join('\n').trim() });
+  return out;
+}
+
 /* ---------------- one entry ---------------- */
 
 function entryDoc(rec, unknown) {
@@ -559,6 +661,8 @@ if (systems) {
 /** `--by book`: who published each book, and how many pages more than one book prints. */
 const publisher = new Map();
 let reprinted = 0;
+let narrowed = 0;
+let listed = 0;
 
 for (const rec of records) {
   read++;
@@ -601,11 +705,31 @@ for (const rec of records) {
       : by === 'kind' || by === 'system' || by === 'book' ? plural(rec.kind)
         : by === 'source' ? book
           : `${plural(rec.kind)} — ${book}`;
-  for (const dir of homes) {
+  /*
+   * What goes into each home. A book gets its own section of a page it
+   * shares; any other grouping gets the page once, but still a book's section
+   * at a time, so that an option cut out of a list cites the book it is in.
+   */
+  const printedIn = [...new Set((fam.get('sourcebook') || []).map((b) => field(b)).filter(Boolean))];
+  const sectionFor = (book) => (printedIn.length > 1 ? narrowToBook(rec, book, printedIn) : rec);
+  homes.forEach((dir, hi) => {
+    let pieces;
+    if (by === 'book') {
+      const mine = sectionFor(dir);
+      if (!mine) return;
+      if (mine !== rec) narrowed++;
+      pieces = splitListPage(mine, { intro: hi === 0 });
+    } else {
+      const sections = printedIn.map(sectionFor);
+      pieces = sections.some((s) => s && s !== rec)
+        ? sections.flatMap((s, si) => (s ? splitListPage(s, { intro: si === 0 }) : []))
+        : splitListPage(rec);
+    }
+    if (pieces.length > 1) listed += pieces.length;
     const key = `${dir}\n${name}`;
     if (!groups.has(key)) groups.set(key, { dir, name, perSphere, recs: [] });
-    groups.get(key).recs.push(rec);
-  }
+    groups.get(key).recs.push(...pieces);
+  });
 }
 
 /* ---------------- writing ---------------- */
@@ -685,12 +809,14 @@ if (dirs.size) {
   if (wrote.length > 40) console.log(`  … and ${wrote.length - 40} more`);
 }
 console.log(`  ${kb(wrote.reduce((n, w) => n + w.bytes, 0)).padStart(9)}  total`);
+if (listed) console.log(`
+${listed} entries were cut out of pages that list a class's options.`);
 
 if (systems) {
   console.log(`\nPlaced by: ${[...placedBy].sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${n}`).join(', ')}`);
   if (folded.size) console.log(`Too small for a pack of their own (--min ${min}), so in ${GENERAL}: ${[...folded].map(([n, c]) => `${n} ${c}`).join(', ')}`);
 }
-if (by === 'book') console.log(`\n${dirs.size} books; ${reprinted} pages are printed in more than one and were written into each.`);
+if (by === 'book') console.log(`\n${dirs.size} books; ${reprinted} pages are printed in more than one and were written into each (${narrowed} times as that book's own section of a shared page).`);
 
 /*
  * The templates it had to guess at.

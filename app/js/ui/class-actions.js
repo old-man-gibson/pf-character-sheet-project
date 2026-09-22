@@ -1,4 +1,5 @@
 import { esc } from './html.js';
+import { collapsible, collapsibleSub } from './rows.js';
 import { actionFeatures } from '../model/action-features.js';
 import { ACTION_TYPES } from '../model/session.js';
 import { editableSession } from '../model/session-layout.js';
@@ -7,10 +8,15 @@ import { linkEditor } from './session-chains.js';
 export function classActionsPanel(model) {
   const rows = actionFeatures(model);
   const names = [...new Set([...(model.data.classes || []).map(c=>c.name),...model.progressionClasses(),...rows.map(f=>f.className)].filter(Boolean))];
-  return `<section class="panel span2 class-actions"><h3>Class features · abilities & actions</h3>
+  // Setup for the session board, not something read off the sheet: folded
+  // until it is wanted, and each class folded inside it, so that adding one
+  // monk ability does not mean scrolling past the kineticist's.
+  const count = (name) => rows.filter((f) => f.className === name).length;
+  return collapsible(model, 'classactions', `<section class="panel span2 class-actions"><h3>Class features · abilities & actions
+      <span class="badge">${rows.length}</span></h3>
     <p class="hint">Define each ability once here, then pin it to the session board. Rolls, resources, descriptions and links stay connected. Session placement can use a different action type.</p>
-    ${names.map(name=>`<details open><summary>${esc(name)}</summary>
-      ${rows.map((f,i)=>f.className!==name?'':`<details class="session-editor" open><summary>${esc(f.title || 'New class feature')}</summary>
+    ${names.map(name=>collapsibleSub(model, `classactions-${name}`, `${esc(name)} <span class="badge">${count(name)}</span>`, `
+      ${rows.map((f,i)=>f.className!==name?'':collapsibleSub(model, `classactions-feature-${f.id}`, esc(f.title || 'New class feature'), `
         <div class="session-settings-grid">${[['title','Feature name'],['attackFormula','Attack bonus / formula'],['damageFormula','Damage roll'],['extraAttacks','Extra attacks (count, or count @ modifier)'],['attackModifier','Attack modifier'],['extraDamage','Extra damage per hit'],['range','Range'],['targets','Targets / area'],['save','Save / DC'],['duration','Duration'],['cost','Resource cost']].map(([key,label])=>`<label>${label}<input data-class-action="${i}" data-feature-field="${key}" value="${esc(String(f[key] ?? ''))}"></label>`).join('')}
         <label>Action<select data-class-action="${i}" data-feature-field="type">${ACTION_TYPES.map(([k,l])=>`<option value="${k}" ${f.type===k?'selected':''}>${l}</option>`).join('')}</select></label>
         <label>Attack set<select data-class-action="${i}" data-feature-field="attackSet"><option value="">Normal</option><option value="top" ${f.attackSet==='top'?'selected':''}>Highest bonus only (flurry)</option></select></label>
@@ -18,8 +24,8 @@ export function classActionsPanel(model) {
         <label>Description / notes<textarea data-class-action="${i}" data-feature-field="note">${esc(f.note || '')}</textarea></label>
         ${linkEditor(model,f,`feature:${i}`)}
         <button data-feature-pin="${i}">${model.data.session?.cards?.some(c=>c.source===`class-feature:${f.id}`)?'Pinned to session':'Pin to session'}</button>
-        <button data-feature-remove="${i}">Remove feature</button></details>`).join('')}
-      <button data-feature-add="${esc(name)}">+ Class feature</button></details>`).join('') || '<p class="hint">Add a class on Overview to start defining class features.</p>'}</section>`;
+        <button data-feature-remove="${i}">Remove feature</button>`, 'session-editor', true)).join('')}
+      <button data-feature-add="${esc(name)}">+ Class feature</button>`, '', true)).join('') || '<p class="hint">Add a class on Overview to start defining class features.</p>'}</section>`, true);
 }
 
 export function bindClassActions(root,model,render) {

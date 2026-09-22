@@ -11,7 +11,8 @@
  *     --tags <file>   corrections to the guesses, as JSON: { "<section heading>":
  *                     { "kind": "talents", "sphere": "Tech" } , … } with the kinds
  *                     the extension manager offers (skip, talents, sphere, feats,
- *                     text, reference) and "entryKind" for reference entries
+ *                     text, options, reference), "entryKind" for reference
+ *                     entries, and "className" / "feature" for an options menu
  *     --modules <dir> a folder whose node_modules holds `pdfjs-dist`
  *                     (default private/tool-modules; `npm i pdfjs-dist@4` there)
  *
@@ -96,7 +97,7 @@ if (flag('list')) {
   outline.sections.forEach((sec, i) => {
     const t = tags[i];
     const size = sec.entries.length ? `${sec.entries.length} entries` : `${(sec.lead.length / 1000).toFixed(1)}k text`;
-    console.log(`  p.${String(sec.page).padEnd(4)} ${t.kind.padEnd(10)} ${(t.sphere || t.entryKind || '').padEnd(12)} ${size.padStart(12)}  ${sec.heading}`);
+    console.log(`  p.${String(sec.page).padEnd(4)} ${t.kind.padEnd(10)} ${(t.sphere || t.entryKind || t.className || '').padEnd(12)} ${size.padStart(12)}  ${sec.heading}`);
   });
   process.exit(0);
 }

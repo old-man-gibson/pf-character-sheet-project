@@ -1020,12 +1020,19 @@ export function mergeTables(extensions) {
     // The entries inside a group get an index of their own for the same
     // reason: `class option` is 3,003 of them under one kind, and a second
     // pack contributing to that kind would otherwise scan all of them each.
+    // An entry that says whose it is meets only its own: the rogue's Evasion
+    // talent and the monk's Evasion art are two entries of one name, and by
+    // name alone whichever pack loaded second would have erased the other.
+    const whose = (e) => {
+      const f = new Map(arr(e?.fields).map(([k, v]) => [lower(k), lower(v)]));
+      return `${lower(e?.name)}|${f.get('class') || ''}|${f.get('option') || ''}`;
+    };
     const entries = [...arr(list[i].entries)];
     const where = new Map();
-    for (let j = 0; j < entries.length; j++) where.set(lower(entries[j]?.name), j);
+    for (let j = 0; j < entries.length; j++) where.set(whose(entries[j]), j);
     for (const e of arr(group.entries)) {
-      const j = where.get(lower(e?.name));
-      if (j === undefined) { entries.push(e); where.set(lower(e?.name), entries.length - 1); } else entries[j] = e;
+      const j = where.get(whose(e));
+      if (j === undefined) { entries.push(e); where.set(whose(e), entries.length - 1); } else entries[j] = e;
     }
     list[i] = { ...list[i], ...group, entries };
   };
@@ -1168,12 +1175,31 @@ export function activeExtensions(bundled, store) {
 }
 
 /** Every block across the active packs, tagged with the pack it came from. */
+const DERIVED_CLASS = new WeakMap();
 export function activeBlocks(extensions) {
   const out = [];
   for (const ext of arr(extensions)) {
     ext.blocks.forEach((block, index) => {
       out.push({ ...block, extId: ext.id, extName: ext.name, index });
     });
+  }
+  // A catalogue pack's classes are blocks too, made from their entries --
+  // numbered after the pack's own, and never over a class somebody wrote as
+  // a block, which is the better of the two.
+  const written = new Set(out.filter((b) => b.kind === 'class').map((b) => lower(b.name)));
+  for (const ext of arr(extensions)) {
+    let index = arr(ext.blocks).length;
+    for (const cat of arr(ext.provides?.catalogues?.catalogues)) {
+      if (lower(cat?.kind) !== 'class' && lower(cat?.kind) !== 'prestige class') continue;
+      for (const entry of arr(cat.entries)) {
+        // Read once per entry: the blocks are asked for on every render of the list.
+        if (!DERIVED_CLASS.has(entry)) DERIVED_CLASS.set(entry, classBlockFromEntry(entry));
+        const block = DERIVED_CLASS.get(entry);
+        if (!block || written.has(lower(block.name))) continue;
+        written.add(lower(block.name));
+        out.push({ ...block, extId: ext.id, extName: ext.name, index: index++ });
+      }
+    }
   }
   return out;
 }
@@ -1480,6 +1506,207 @@ export function optionCataloguesFrom(blocks) {
     }
   }
   return out.filter((c) => c.name && c.options.length);
+}
+
+/** "6th level" in an entry's prerequisites is the level a cell must be at to offer it. */
+const optionMinLevel = (text) => {
+  const m = str(text).match(/Prerequisites?:?\*{0,2}\s*(?:[^.\n]*?\b)?(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * A page that is a list -- "Advancing Flurry (Ex)" on a line, its text under
+ * it, then the next -- as the entries it lists.
+ *
+ * Only a line ending in its (Ex)/(Su)/(Sp) counts as a name: a short line on
+ * its own is as often "2 qi points" as it is a heading, and a list cut in the
+ * wrong places is worse than one not cut at all. Fewer than three and it was
+ * not a list.
+ */
+function listedOptions(text, source) {
+  const out = [];
+  let open = null;
+  for (const line of str(text).split('\n')) {
+    const m = line.trim().match(/^\*{0,2}([A-Z][^.:;!?]{1,70}?)\*{0,2}\s*\((Ex|Su|Sp)\)\*{0,2}:?$/);
+    if (m) { open = { name: m[1].trim(), type: m[2], lines: [] }; out.push(open); } else if (open) open.lines.push(line);
+  }
+  if (out.length < 3) return [];
+  return out.map((o) => {
+    const body = o.lines.join('\n').trim();
+    return { name: o.name, type: o.type, category: '', text: body, source, minLevel: optionMinLevel(body) };
+  });
+}
+
+/**
+ * The menus the active packs' *tables* amount to, beside the ones written as
+ * blocks.
+ *
+ * A catalogue pack does not say "this is a menu"; it says what each entry is,
+ * and two of the things it says are a menu in all but name:
+ *
+ *  - a `class option` entry names its Class and its Option. Sixteen entries
+ *    that are each a Kineticist's Element are the list an Element column picks
+ *    from; one entry whose text is itself a list of arts is that list.
+ *  - a row of the powers table whose kind is not `power` is something a class
+ *    takes one of at a time. They are offered whole, by their type ("Utility",
+ *    "Substance Infusion"), and by the word types share ("Infusion"), since a
+ *    column is as often ruled by the family as by the kind.
+ *
+ * Looked up by name like any menu, so nothing is copied onto a character.
+ */
+export function optionCataloguesFromTables(tables) {
+  const out = [];
+  const title = (s) => str(s).replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+  const groups = new Map();
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    if (lower(cat?.kind) !== 'class option') continue;
+    for (const e of arr(cat.entries)) {
+      const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+      const feature = fields.get('option');
+      if (!feature || !str(e?.name).trim()) continue;
+      const cls = fields.get('class') || '';
+      const key = `${lower(cls)}|${lower(feature)}`;
+      if (!groups.has(key)) groups.set(key, { class: cls, feature, entries: [] });
+      groups.get(key).entries.push(e);
+    }
+  }
+  for (const g of groups.values()) {
+    const listed = g.entries.length === 1 ? listedOptions(g.entries[0].text, str(g.entries[0].source)) : [];
+    // An entry named for the list itself -- "Vigilante Talent" among the
+    // vigilante's talents -- is the list's own rules, not one more to pick.
+    const menuName = [g.class, g.feature].filter(Boolean).join(' ');
+    const about = g.entries.length > 1 ? g.entries.find((e) => lower(e.name) === lower(menuName)) : null;
+    const options = listed.length ? listed : g.entries.filter((e) => e !== about).map((e) => {
+      const typed = str(e.name).trim().match(/^(.*?)\s*\((Ex|Su|Sp)\)$/i);
+      return {
+        name: typed ? typed[1] : str(e.name).trim(), type: typed ? typed[2] : '',
+        text: str(e.text), source: str(e.source), minLevel: optionMinLevel(e.text),
+      };
+    });
+    out.push({
+      name: menuName, class: g.class, feature: g.feature,
+      text: str(about?.text), options: normalizeOptions(options, g.feature),
+    });
+  }
+
+  const kinds = new Map();
+  for (const row of arr(tables?.powers?.powers)) {
+    const kind = lower(row?.kind);
+    if (!kind || kind === 'power' || !str(row?.name).trim()) continue;
+    if (!kinds.has(kind)) kinds.set(kind, []);
+    const typed = str(row.type).match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
+    const type = (typed ? typed[1] : str(row.type)).trim();
+    const facts = [type, row.level != null && row.level !== '' ? `level ${row.level}` : '',
+      str(row.burn).trim() ? `burn ${str(row.burn).trim()}` : '', str(row.element).trim()];
+    kinds.get(kind).push({
+      family: type,
+      option: { name: str(row.name).trim(), type: typed ? typed[2] : '', category: facts.filter(Boolean).join(', '), text: str(row.text), source: str(row.source) },
+    });
+  }
+  for (const [kind, rows] of kinds) {
+    const menu = (name, list) => out.push({ name, class: '', feature: name, text: '', options: normalizeOptions(list.map((r) => r.option), name) });
+    menu(title(kind), rows);
+    const types = [...new Set(rows.map((r) => r.family).filter(Boolean))];
+    for (const t of types) menu(`${title(kind)}: ${t}`, rows.filter((r) => r.family === t));
+    // "Form Infusion" and "Substance Infusion" are both what an Infusion slot takes.
+    const lastWord = (t) => t.split(/\s+/).pop();
+    for (const w of new Set(types.map(lastWord))) {
+      const sharing = types.filter((t) => lastWord(t) === w);
+      if (sharing.length > 1) menu(`${title(kind)}: ${w}`, rows.filter((r) => sharing.includes(r.family)));
+    }
+  }
+  return out.filter((c) => c.name && c.options.length);
+}
+
+/** What opens a class's page and is about the class, not something it gains at a level. */
+const CLASS_FRONT_MATTER = /^(?:role|alignment|hit dic?e|starting wealth|class skills|skill ranks(?: per level)?|legendary class|table|parent class(?:es)?)\b/i;
+
+/** A page's labelled paragraphs as features: `{name, type, text}`, front matter left out. */
+function pageFeatures(text) {
+  const out = [];
+  let open = null;
+  for (const para of str(text).split(/\n{2,}/)) {
+    const m = para.match(/^\*{0,2}([A-Z][^.:*\n]{1,60}?)(?:\s*\((Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?\))?\*{0,2}:\*{0,2}\s+(\S[\s\S]*)$/);
+    if (m && !CLASS_FRONT_MATTER.test(m[1])) {
+      open = { name: m[1].trim(), type: m[2] || '', text: m[3].trim() };
+      out.push(open);
+    } else if (m) open = null;
+    else if (open) open.text += `\n\n${para.trim()}`;
+  }
+  return out;
+}
+
+/**
+ * A class a catalogue pack carries as a reference entry, as the building
+ * block a player adds.
+ *
+ * The entry has what the block needs: the infobox's hit die, attack bonus,
+ * saves (2 is the good progression) and skill ranks as fields, the class
+ * skills as a sentence, and every feature as a labelled paragraph. What it
+ * does not have is the class table -- the wiki draws that from a template, so
+ * a dump holds no rows -- and the level a feature arrives at is read off its
+ * own text instead: the first "Nth level" it mentions, or 1st. A feature that
+ * repeats lands once, where it starts; the player spreads it from there.
+ */
+export function classBlockFromEntry(entry) {
+  const name = str(entry?.name).replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (!name) return null;
+  const fields = new Map(arr(entry?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+  const hd = Number((fields.get('hit die') || '').replace(/^d/i, ''));
+  const features = pageFeatures(entry.text).map((f) => {
+    const at = f.text.match(/\b(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
+    return { level: at ? Number(at[1]) : 1, name: f.type ? `${f.name} (${f.type})` : f.name, text: f.text };
+  });
+  if (!hd && !features.length) return null;
+  const skills = str(entry.text).match(/^Class Skills:\s*(?:[^\n]*?\bare\s+)?([^\n]+)$/mi)?.[1] || '';
+  return normalizeBlock({
+    kind: 'class', name, source: str(entry.source),
+    hd: hd || 8, bab: fields.get('base attack bonus') || '3/4',
+    goodFort: fields.get('fort save') === '2', goodRef: fields.get('ref save') === '2', goodWill: fields.get('will save') === '2',
+    skillRanks: Number(fields.get('skill ranks')) || 2,
+    classSkills: skills.replace(/\.\s*$/, '').split(/,\s*(?:and\s+)?|\s+and\s+/)
+      .map((x) => x.replace(/\s*\((?:Str|Dex|Con|Int|Wis|Cha)\)\s*$/i, '').trim()).filter((x) => x && x.length < 40),
+    features,
+  });
+}
+
+/**
+ * The features a class's or an archetype's page describes, by name.
+ *
+ * A catalogue pack carries a class as one reference entry: its page, whole.
+ * Inside it every feature is a paragraph opening with its name and a colon --
+ * "Battle Burn (Su): At 5th level…" -- and whatever paragraphs follow before
+ * the next such name are still that feature. Read out, they are what "What
+ * they do" can offer a ladder that names them.
+ *
+ * Marked `hidden`: this is text to look up, not a list a column picks from,
+ * and it answers only to its own class -- half the classes in a library have
+ * an Evasion.
+ */
+export function classFeatureTextFromTables(tables) {
+  const out = [];
+  for (const cat of arr(tables?.catalogues?.catalogues)) {
+    const kind = lower(cat?.kind);
+    if (kind !== 'class' && kind !== 'prestige class' && kind !== 'archetype') continue;
+    for (const e of arr(cat.entries)) {
+      const name = str(e?.name).trim();
+      if (!name) continue;
+      const fields = new Map(arr(e?.fields).map(([k, v]) => [lower(k), str(v).trim()]));
+      // An archetype may be open to several classes, and is each one's.
+      const classes = kind === 'archetype' ? (fields.get('class') || '').split(',').map((s) => s.trim()).filter(Boolean) : [name];
+      if (!classes.length) continue;
+      const category = kind === 'archetype' ? `${name} archetype` : name;
+      const options = pageFeatures(e.text).map((f) => ({ ...f, category, source: str(e.source) }));
+      for (const cls of options.length ? classes : []) {
+        out.push({
+          name: `${name} — features${classes.length > 1 ? ` (${cls})` : ''}`, class: cls, feature: '', text: '',
+          hidden: true, archetype: kind === 'archetype', options: normalizeOptions(options, ''),
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**

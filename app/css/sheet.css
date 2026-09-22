@@ -3179,6 +3179,8 @@ table.featgrid th .colmenu {
   text-transform: none; letter-spacing: 0; color: var(--cs-muted);
   background: transparent; border: 1px dashed var(--cs-line);
 }
+/* A group's own menu sits under its row, behind the same bar. */
+table.featgrid th .colmenu.gmenu { margin-top: 0; border-left: 3px solid var(--gc); }
 table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-bad); }
 /* What a class's features do, folded under its ladder. */
 .cfnotes { margin-top: 10px; border-top: 1px solid var(--cs-line); padding-top: 8px; }
@@ -3188,6 +3190,26 @@ table.featgrid th .colmenu.bad { color: var(--cs-bad); border-color: var(--cs-ba
   background: transparent; border: 0;
 }
 .cfnotes .notehead:hover { color: var(--cs-text); }
+/* What a pack can explain, under the notes: shut rows, each opening to the
+   text it would add. */
+.badge.offer { background: transparent; border-style: dashed; }
+/* A feature panel is as wide as its grid, and this must not be what widens
+   it: no width of its own to offer, and all of the panel's to fill. */
+.cfoffers { margin-top: 8px; border: 1px dashed var(--cs-line); border-radius: 6px; padding: 6px 8px; box-sizing: border-box; width: 0; min-width: 100%; }
+.cfoffer summary { flex-wrap: wrap; }
+.cfoffers .offerhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.72rem; font-weight: 650; color: var(--cs-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.cfoffers .offerhead .hint { flex: 1 1 100%; min-width: 0; margin: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.cfoffer { border-top: 1px solid var(--cs-line); }
+.cfoffer:first-of-type { margin-top: 6px; }
+.cfoffer summary { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; cursor: pointer; }
+.cfoffer .oname { font-weight: 600; }
+.cfoffer .otype { color: var(--cs-muted); font-weight: 400; }
+.cfoffer .osrc { flex: 1; min-width: 0; color: var(--cs-muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfoffer button { flex: none; padding: 1px 8px; font-size: 0.72rem; }
+.cfoffer .peektext { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.45; padding: 2px 0 8px 14px; max-height: 18rem; overflow: auto; }
+/* Nor the notes: a paragraph's natural width is one long line, and a pack's
+   text is paragraphs. */
+.cfnotelist { box-sizing: border-box; width: 0; min-width: 100%; }
 .cfnote { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; }
 .cfnote > .pair { gap: 4px; }
 .cfnote .notename { flex: 1; min-width: 0; font-weight: 600; }

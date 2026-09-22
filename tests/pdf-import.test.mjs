@@ -7,7 +7,7 @@
  *  simply write down.
  *
  *  Run: node tests/pdf-import.test.mjs */
-import { outlineOf, sectionText, guessKind, guessSphere } from '../app/js/pdf-import.js';
+import { outlineOf, sectionText, sectionOptions, readSections, guessKind, guessSphere } from '../app/js/pdf-import.js';
 import { readStructured, parsePaste } from '../app/js/paste-import.js';
 
 let pass = 0;
@@ -113,6 +113,23 @@ check('a section left out writes nothing', sectionText(sec('Feats'), { kind: 'sk
 const asPage = sectionText({ heading: 'Rigger (Technician Archetype)', page: 5, lead: 'Gadgeteer: He gains the Tech sphere.\n\nThis replaces trap specialist.', entries: [] }, { kind: 'text' });
 check('an archetype goes to the page reader under its own name',
   parsePaste(asPage).blocks.map((b) => [b.kind, b.name, b.features.map((f) => f.replaces)]), [['archetype', 'Rigger', [['trap specialist']]]]);
+
+console.log('\na section, as the menu a class feature picks from');
+const artSection = { heading: 'Stance Arts', page: 12, lead: 'A stancer learns one at every even level.', entries: [
+  { heading: 'Crane Step (Ex)', page: 12, text: 'Level 2; Burn 1\n\nThe stancer moves without provoking.' },
+  { heading: 'Iron Root', page: 13, text: 'The stancer cannot be moved.' },
+] };
+const menu = sectionOptions(artSection, { className: 'Stancer', feature: 'Stance Art', book: 'The Test Handbook' });
+check('it is an options block, named for the class and the feature its column is matched on',
+  [menu.kind, menu.name, menu.class, menu.feature], ['options', 'Stancer Stance Art', 'Stancer', 'Stance Art']);
+check('an entry keeps its type out of its name, and what it is chosen on beside it',
+  menu.options.map((o) => [o.name, o.type, o.category, o.source]),
+  [['Crane Step', 'Ex', 'Level 2, Burn 1', 'The Test Handbook p. 12'], ['Iron Root', '', '', 'The Test Handbook p. 13']]);
+check('left unnamed, the feature is the section\'s heading', sectionOptions(artSection, {}).feature, 'Stance Arts');
+const viaSections = readSections({ sections: [artSection] }, [{ kind: 'options', className: 'Stancer', feature: 'Stance Art' }],
+  { book: 'The Test Handbook', parsePaste, readStructured });
+check('and it comes through the whole-book reader as a block, with a line in the report',
+  [viaSections.blocks.map((b) => b.kind), viaSections.report.length], [['options'], 1]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
