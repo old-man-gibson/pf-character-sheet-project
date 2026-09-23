@@ -430,6 +430,20 @@ const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|b
  */
 const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password']);
 
+/**
+ * Put the caret after what a multi-line box already says.
+ *
+ * A box focused by script rather than by a click opens with the caret at 0,
+ * and a re-render always focuses by script: clicking out of one talent cell
+ * into the next rebuilt the panel under the click, and the talent box came
+ * back with the caret in front of its name. Where the click landed in the old
+ * box is gone with it, so the end -- where the next word goes -- stands in.
+ */
+function caretToEnd(el) {
+  if (el?.tagName !== 'TEXTAREA') return;
+  try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* not attached */ }
+}
+
 /** A stable identifier for a control, so focus survives a re-render. */
 function controlKey(input) {
   if (!input) return null;
@@ -1617,6 +1631,7 @@ export class CharacterSheetElement extends HTMLElement {
       if (landed) {
         landed.closest('.xf')?.classList.add('editing');
         landed.focus();
+        caretToEnd(landed);
       }
       return;
     }
@@ -1649,13 +1664,14 @@ export class CharacterSheetElement extends HTMLElement {
         to.focus();
         if (typeof to.select === 'function' && CARET_TYPES.has(to.type)) {
           try { to.select(); } catch { /* not a text control */ }
-        }
+        } else caretToEnd(to);
         return;
       }
     }
     next.closest('.xf')?.classList.add('editing');
     next.focus();
-    if (caret !== null && typeof next.setSelectionRange === 'function' && CARET_TYPES.has(next.type)) {
+    if (caret !== null && typeof next.setSelectionRange === 'function'
+      && (CARET_TYPES.has(next.type) || next.tagName === 'TEXTAREA')) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
     }
   }
