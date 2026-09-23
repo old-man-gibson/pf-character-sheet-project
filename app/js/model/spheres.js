@@ -172,12 +172,18 @@ export function sphereTalent(sphere, talent) {
  * all of them; a pack sphere whose page never said which side it was on is
  * offered on every list, since a name in the wrong one is easier to ignore
  * than one missing from the right one.
+ *
+ * The engine's own lists answer before the pack does. A pack often gives a
+ * skill sphere no side at all -- nothing on its page says which -- and it was
+ * offered on the martial and magic lists as a result, when the engine had
+ * known all along it was a skill sphere.
  */
 export function sphereNames(base, side = null) {
   const have = new Set((base || []).map((s) => String(s).trim().toLowerCase()));
+  const sideOf = (s) => sphereSide(s.name.trim()) ?? (isGuileSphere(s.name) ? 'guile' : null) ?? s.kind;
   const extra = SPHERE_CATALOGUE.spheres
     .filter((s) => s.name && !have.has(s.name.trim().toLowerCase()))
-    .filter((s) => !side || !s.kind || s.kind === side)
+    .filter((s) => !side || !sideOf(s) || sideOf(s) === side)
     .map((s) => s.name)
     .sort((a, b) => a.localeCompare(b));
   // Appended rather than merged in: the built-in lists put their third-party

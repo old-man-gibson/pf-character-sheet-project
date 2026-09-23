@@ -770,6 +770,15 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
     sphereNames(['Alchemy', 'Athletics'], 'combat'), ['Alchemy', 'Athletics', 'Boxing']);
   check('a name the engine already knows is not doubled',
     sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+  // A pack's skill sphere may carry no side, but the engine knows it is one.
+  setSphereCatalogue({ spheres: [...merged.spheres.spheres, { name: 'Spellhacking', kind: '', talents: [] }] });
+  check('a sideless skill sphere stays off the magic picker',
+    sphereNames(['Alteration'], 'magic'), ['Alteration']);
+  check('and off the martial one',
+    sphereNames(['Alchemy', 'Boxing'], 'combat'), ['Alchemy', 'Boxing']);
+  check('but is still offered to a skill list',
+    sphereNames([], 'guile').includes('Spellhacking'), true);
+  setSphereCatalogue(merged.spheres);
 
   /*
    * Typing a talent fills in what the catalogue can answer for free -- the
