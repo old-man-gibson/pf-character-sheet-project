@@ -680,14 +680,14 @@ function magicGlobalsPanel(model, m) {
     return `<section class="panel">
       <h3>Casting numbers</h3>
       <div class="statline"><span class="label">Caster level</span>
-        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}</span></div>
+        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl')}</span></div>
       ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
       <div class="statline"><span class="label">Global DC</span>
-        <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}</span></div>
+        <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}${forwardedBadge(model, 'spheres.dc')}</span></div>
       ${editLine('DC bonus', 'training.magic.dcBonus', m.dcBonus)}
-      <div class="statline"><span class="label">MSB</span><span class="value">${m.msb} ${hint(m.msb, s.totalMSB)}</span></div>
+      <div class="statline"><span class="label">MSB</span><span class="value">${m.msb} ${hint(m.msb, s.totalMSB)}${forwardedBadge(model, 'spheres.msb')}</span></div>
       ${editLine('MSB bonus', 'training.magic.msbBonus', m.msbBonus)}
-      <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}</span></div>
+      <div class="statline"><span class="label">MSD</span><span class="value">${m.msd} ${hint(m.msd, s.totalMSD)}${forwardedBadge(model, 'spheres.msd')}</span></div>
       ${editLine('MSD bonus', 'training.magic.msdBonus', m.msdBonus)}
       ${lineHtml('Concentration', `<span class="rollpair">d20+${m.concentration}${
         rollButton(model, 'concentration', 'magic', 'a concentration check')}</span>`)}

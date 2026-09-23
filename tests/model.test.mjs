@@ -9920,6 +9920,95 @@ console.log('\nthe sphere tables -- a place to send a bonus');
 }
 
 /*
+ * The three casting systems' own levels are destinations too, each under
+ * its own prefix: spheres.cl, vancian.<class>.cl, manifester.<class>.level.
+ * A caster-level bonus moves the caster level and what is built on it, and
+ * never the slots or power points, which are keyed to levels of the class.
+ */
+console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bonus');
+{
+  const c = new Character(blankDocument({ name: 'Casters' }));
+  c.set('identity.level', 8);
+  c.set('training.magic.clBonus', 1);
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
+  c.listAdd('vancian.classes', {
+    name: 'Hedgewitch', slotType: 'Wizard', stat: 'Int', stat2: '', prep: '', source: '',
+    casterLevelOverride: 5, concentration: 0,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  c.listAdd('psionics.classes', {
+    name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 6, powers: [],
+  });
+  const m = () => c.data.training.magic;
+  const dark = () => m().sphereRows.find((r) => r.sphere === 'Dark');
+  const hedge = () => c.data.vancian.classes[0];
+  const psion = () => c.data.psionics.classes[0];
+  const before = {
+    cl: m().globalCL, dc: m().globalDC, msb: m().msb, msd: m().msd, conc: m().concentration,
+    dark: dark().cl, slots: hedge().totalPerDay, pp: psion().points,
+  };
+
+  const names = c.forwardTargets().list.map((t) => t.name);
+  check('each system offers its own names',
+    ['spheres.cl', 'spheres.dc', 'spheres.msb', 'spheres.msd', 'vancian.hedgewitch.cl', 'vancian.cl',
+      'manifester.psion.level', 'manifester.level'].filter((n) => !names.includes(n)), []);
+  check('and reads under them',
+    [c.scope().spheres.cl, c.scope().vancian.hedgewitch.cl, c.scope().vancian.cl,
+      c.scope().manifester.psion.level, c.scope().manifester.level],
+    [before.cl, 5, 5, 6, 6]);
+  check('a system the character has not got is not offered',
+    new Character(blankDocument({ name: 'Plain' })).forwardTargets().list
+      .some((t) => /^(vancian|manifester)\./.test(t.name)), false);
+
+  const note = (text) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Test', body: text });
+    return () => c.listRemove('notes', at);
+  };
+
+  // Spheres: worked out before the prose, so it takes the second pass.
+  let drop = note('Orange prism {spheres.cl += 2}, and {spheres.msb += 1}.');
+  check('a Spheres CL bonus lands beside the typed one',
+    [m().clForwarded, m().clBonus, m().globalCL], [2, 1, before.cl + 2]);
+  check('and carries into the DC, concentration and every sphere',
+    [m().globalDC, m().concentration, dark().cl],
+    [before.dc + Math.floor((before.cl + 2) / 2) - Math.floor(before.cl / 2), before.conc + 2, before.dark + 2]);
+  check('MSB takes one too, and MSD follows it', [m().msb, m().msd], [before.msb + 1, before.msd + 1]);
+  check('the scope reads the new number', [c.scope().spheres.cl, c.scope().caster.level],
+    [before.cl + 2, before.cl + 2]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('reopened, forwarded rather than absorbed',
+    [again.data.training.magic.globalCL, again.data.training.magic.clBonus], [before.cl + 2, 1]);
+  drop();
+  check('gone when the note goes', [m().globalCL, dark().cl], [before.cl, before.dark]);
+
+  // Vancian: caster level only, never the slots.
+  drop = note('Ioun stone {vancian.hedgewitch.cl += 1}.');
+  check('a Vancian CL bonus raises the caster level',
+    [hedge().casterLevel, hedge().casterLevelBase, hedge().casterLevelForwarded], [6, 5, 1]);
+  check('and not the slots', hedge().totalPerDay, before.slots);
+  check('the badge knows where it came from',
+    c.forwardedInto('vancian.hedgewitch.cl')?.from?.[0]?.value, 1);
+  drop();
+  drop = note('{vancian.cl += 2}');
+  check('vancian.cl is every Vancian class', hedge().casterLevel, 7);
+  drop();
+
+  // Manifester: manifester level only, never the power points.
+  drop = note('{manifester.level += 2}');
+  check('a manifester level bonus raises the ML',
+    [psion().manifesterLevel, psion().manifesterLevelBase], [8, 6]);
+  check('and not the power points', psion().points, before.pp);
+  drop();
+
+  check('the saved document carries none of the working',
+    [Object.keys(JSON.parse(JSON.stringify(c.toJSON())).vancian.classes[0])
+      .filter((k) => /casterLevel(Base|Forwarded)/.test(k)),
+    Object.keys(JSON.parse(JSON.stringify(c.toJSON())).psionics.classes[0])
+      .filter((k) => /manifesterLevel(Base|Forwarded)/.test(k))], [[], []]);
+}
+
+/*
  * The sphere tables list the whole catalogue, worked out, whether or not
  * the document stores a row -- a character built here rather than imported
  * has none. A sphere with a talent in it, from any source, is on the table;

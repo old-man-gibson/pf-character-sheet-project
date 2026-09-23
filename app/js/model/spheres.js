@@ -1485,13 +1485,25 @@ export function recomputeTraining(model) {
     // not what m.clBonus would give.
     const effectiveLevels = (x) => (x.classLevelsCurrent ?? 0)
       + forwarded(model, `class.${slug(x.name)}.level`);
+    //
+    // A bonus forwarded to `spheres.cl` (and .dc, .msb, .msd) lands beside the
+    // typed one in the same line, kept apart so the box goes on saying what was
+    // typed in it. Caster level feeds everything under it -- the global DC, the
+    // concentration check, every sphere's own CL -- so a +1 here moves those
+    // too, which is what a bonus to caster level means. A rule that raises
+    // only one sphere forwards to `sphere.<name>.cl` instead.
+    m.clForwarded = forwarded(model, 'spheres.cl');
+    m.dcForwarded = forwarded(model, 'spheres.dc');
+    m.msbForwarded = forwarded(model, 'spheres.msb');
+    m.msdForwarded = forwarded(model, 'spheres.msd');
     m.globalCL = Math.max(0, amtFloor, ...casters.map(
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
-    )) + (Number(m.clBonus) || 0);
-    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0);
+    )) + (Number(m.clBonus) || 0) + m.clForwarded;
+    m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0)
+      + m.dcForwarded;
     m.msb = Math.max(0, ...casters.map(effectiveLevels))
-      + (Number(m.msbBonus) || 0);
-    m.msd = m.msb + 11 + (Number(m.msdBonus) || 0);
+      + (Number(m.msbBonus) || 0) + m.msbForwarded;
+    m.msd = m.msb + 11 + (Number(m.msdBonus) || 0) + m.msdForwarded;
     m.concentration = m.globalCL + bestMod;
 
     // Tradition drawbacks -> spell points and boons.

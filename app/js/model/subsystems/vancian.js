@@ -11,7 +11,8 @@ import {
   prepStyle, spellDC, statMod, statScore,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { closestName } from '../util.js';
+import { forwarded } from '../scope.js';
+import { closestName, vancianForwardKey } from '../util.js';
 
 let VANCIAN_TABLES = { classes: [] };
 
@@ -69,7 +70,8 @@ export const VANCIAN_DERIVED = [
   // and `used` records what has been spent today.
   {
     path: 'classes',
-    keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'tableName',
+    keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
+      'casterLevelForwarded', 'tableName',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -330,7 +332,19 @@ export function recomputeVancian(model) {
     const pinned = c.casterLevelOverride;
     const level = Math.max(0, Math.min(20,
       pinned === null || pinned === undefined ? fromProgression : Math.floor(Number(pinned) || 0)));
-    c.casterLevel = level;
+    /*
+     * A bonus forwarded to `vancian.<class>.cl` raises the caster level and
+     * nothing else. The slots and spells known are still read off `level`,
+     * because a +1 to caster level is not a level of the class -- an orange
+     * ioun stone does not hand out a spell slot. A rule that *is* a level of
+     * the class forwards to `class.<slug>.level`, which the Planner count
+     * above already includes. Nor is it capped at 20: the table stops there,
+     * caster level does not.
+     */
+    const key = vancianForwardKey(c);
+    c.casterLevelBase = level;
+    c.casterLevelForwarded = key ? forwarded(model, key) : 0;
+    c.casterLevel = Math.max(0, level + c.casterLevelForwarded);
 
     c.statMod = mod;
     c.statScore = score;

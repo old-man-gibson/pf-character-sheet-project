@@ -8,7 +8,8 @@
 
 import { statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { closestName } from '../util.js';
+import { forwarded } from '../scope.js';
+import { closestName, manifesterForwardKey } from '../util.js';
 
 let PSIONIC_TABLES = { powerLevels: [], curves: [], classes: [] };
 
@@ -81,7 +82,8 @@ export const PSIONIC_DERIVED = [
   'pool', 'left',
   {
     path: 'classes',
-    keys: ['plannerLevel', 'manifesterLevel', 'curveKnown', 'basePoints',
+    keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelForwarded',
+      'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
 ];
@@ -217,7 +219,13 @@ export function recomputePsionics(model) {
       pinned === null || pinned === undefined
         ? fromProgression : Math.floor(Number(pinned) || 0)));
     c.plannerLevel = fromProgression;
-    c.manifesterLevel = level;
+    // A bonus forwarded to `manifester.<class>.level` raises the manifester
+    // level and not the power points below, which are keyed to levels of the
+    // class; a rule that grants those forwards to `class.<slug>.level`.
+    const key = manifesterForwardKey(c);
+    c.manifesterLevelBase = level;
+    c.manifesterLevelForwarded = key ? forwarded(model, key) : 0;
+    c.manifesterLevel = Math.max(0, level + c.manifesterLevelForwarded);
 
     const base = psionicPoints(c.curveTotal, level);
     c.curveKnown = psionicCurve(c.curveTotal) !== null;

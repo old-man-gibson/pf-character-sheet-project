@@ -31,7 +31,8 @@ import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { trackerFacts } from './trackers.js';
 import {
-  classForwardKey, flatNames, skillForwardKey, slug, speedForwardKey, sphereForwardKey,
+  classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, slug, speedForwardKey,
+  sphereForwardKey, vancianForwardKey,
 } from './util.js';
 
 /**
@@ -41,6 +42,11 @@ import {
  * makes `{skill.bluff += 4}` free.
  */
 const FORWARD_EARLY = new Set(FORWARD_STATS.map(([name]) => name));
+
+/** The Spheres of Power casting numbers a bonus may be sent to, as `spheres.<suffix>`. */
+const SPHERES_TARGETS = [
+  ['cl', 'caster level'], ['dc', 'global DC'], ['msb', 'magic skill bonus'], ['msd', 'magic skill defence'],
+];
 
 /**
  * A typed-bonus block as names, one per column, under the column's own key.
@@ -359,6 +365,38 @@ export function characterScope(model) {
     if (s.class[key] === undefined) s.class[key] = { level: model.classLevelCount(name) };
   }
 
+  // The three casting systems' levels, under the names a bonus is sent to
+  // them by. `spheres.cl` is `caster.level` again, said the way it is
+  // written to; `vancian.cl` and `manifester.level` are the highest of the
+  // kind, which is the number a rule about "your caster level" wants.
+  const magic = c.training?.magic;
+  if (magic) {
+    s.spheres = {
+      cl: Number(magic.globalCL) || 0, dc: Number(magic.globalDC) || 0,
+      msb: Number(magic.msb) || 0, msd: Number(magic.msd) || 0,
+    };
+  }
+  const levelsOf = (rows, keyOf, field, leaf) => {
+    const out = {};
+    let best = 0;
+    for (const r of rows || []) {
+      const key = keyOf(r);
+      if (!key) continue;
+      const short = key.split('.')[1];
+      const value = Number(r[field]) || 0;
+      if (out[short] === undefined) out[short] = { [leaf]: value };
+      best = Math.max(best, value);
+    }
+    if (out[leaf] === undefined) out[leaf] = best;
+    return out;
+  };
+  if (c.vancian?.classes?.length) {
+    s.vancian = levelsOf(c.vancian.classes, vancianForwardKey, 'casterLevel', 'cl');
+  }
+  if (c.psionics?.classes?.length) {
+    s.manifester = levelsOf(c.psionics.classes, manifesterForwardKey, 'manifesterLevel', 'level');
+  }
+
   // The companions, so a tracker or an ability can read them: familiar.hp,
   // eidolon.hd, animalCompanion.str.mod, eidolon.evoLeft. Each block reads
   // under its own id -- the first of a kind is the kind's bare name, the
@@ -552,6 +590,32 @@ export function forwardTargets(model) {
   sphereTargets(sphereTableNames(model, 'magic'), [['cl', 'caster level'], ['dc', 'save DC']]);
   sphereTargets(sphereTableNames(model, 'combat'), [['bab', 'attack bonus'], ['dc', 'save DC']]);
   sphereTargets((training.guile?.spheres || []).map((r) => r.sphere), [['ranks', 'ranks'], ['dc', 'save DC']]);
+
+  // The three casting systems' own levels, each under its own prefix so a
+  // bonus says which it means: `spheres.cl` is the Spheres of Power caster
+  // level every sphere is built on, `vancian.<class>.cl` one Vancian casting
+  // class's, `manifester.<class>.level` one manifesting class's. Each system
+  // is offered only where the character has it, so a bonus to a caster level
+  // nobody has says so rather than landing in a block that is never read.
+  // `vancian.cl` and `manifester.level` are every class of the kind, which is
+  // what "+1 caster level" on an item means to a character casting two ways.
+  if (training.magic) {
+    for (const [suffix, what] of SPHERES_TARGETS) add(`spheres.${suffix}`, `Spheres of Power ${what}`);
+  }
+  const levelFamily = (family, rows, keyOf, label) => {
+    const members = [];
+    for (const r of rows || []) {
+      const name = keyOf(r);
+      if (!name || expand.has(name)) continue;
+      add(name, `${String(r.name || r.slotType).trim()}: ${label}`);
+      members.push(name);
+    }
+    if (!members.length) return;
+    expand.set(family, members);
+    list.push({ name: family, label: `Every ${label}`, family: members });
+  };
+  levelFamily('vancian.cl', model.data.vancian?.classes, vancianForwardKey, 'Vancian caster level');
+  levelFamily('manifester.level', model.data.psionics?.classes, manifesterForwardKey, 'manifester level');
 
   /*
    * The companions, every number of theirs that is rolled or asked for in a
@@ -1174,8 +1238,12 @@ export function forwardsEarly(model) {
   // be written to read it. A skill sphere's ranks are early because they
   // are paid into a skill, and the skills are totalled before the prose;
   // every other sphere number settles after it and costs no second pass.
+  // The Spheres caster level is early because the training pass works it out
+  // before the prose, and every sphere row is built on it; the Vancian and
+  // manifester levels are worked out after the prose and are not.
   return Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value
       && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')
+        || name.startsWith('spheres.')
         || (name.startsWith('sphere.') && name.endsWith('.ranks'))));
 }

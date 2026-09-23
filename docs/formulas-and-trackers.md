@@ -265,6 +265,9 @@ Bonus goes nowhere   caster.level +=
   written in   note 1 on Lore           {caster.level += 1}
 ```
 
+(The one to write there is `spheres.cl`: `caster.level` is kept as a name to read, and
+each casting system takes its bonuses under its own prefix.)
+
 The first is a misspelling, fixed in the token. The second is not the player's mistake at
 all: the name is real and readable, it just has no slot for an arriving bonus, and the
 list of names that do is in [Forwarded bonuses](#forwarded-bonuses--a-rule-written-once).
@@ -372,6 +375,9 @@ recompute have anywhere to *put* an arriving bonus:
 | `sphere.dark.cl`, `sphere.dark.dc` | a magic sphere's caster level and save DC — the CL+ and DC+ columns of Sphere CL / DC, by the sphere's slugged name |
 | `sphere.athletics.bab`, `sphere.athletics.dc` | a combat sphere's attack bonus and save DC — the BAB+ and DC+ columns of Sphere BAB / DC |
 | `sphere.study.ranks`, `sphere.study.dc` | a skill sphere's granted ranks and save DC — the Rank+ and DC+ columns on the Guile tab |
+| `spheres.cl`, `spheres.dc`, `spheres.msb`, `spheres.msd` | the Spheres of Power caster level, global DC, MSB and MSD — beside the typed bonus on each line of Casting numbers. Caster level carries into the DC, concentration and every sphere's own CL |
+| `vancian.<class>.cl`, `vancian.cl` | one Vancian casting class's caster level, by the block's name (or its slot table's, if it has none), or every one of them. Caster level only: the slots are keyed to levels of the class, which is `class.<name>.level` |
+| `manifester.<class>.level`, `manifester.level` | one manifesting class's manifester level, or every one. Not the power points, for the same reason |
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
