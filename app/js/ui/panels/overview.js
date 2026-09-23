@@ -1285,9 +1285,9 @@ function languagesPanel(model) {
           title: 'A number, or a formula — e.g. floor(level / 2)',
         }))}
       </div>
-      <div class="langlist" data-langlist>
-        ${langs.map((l, li) => `<span class="lang" data-langdrop="${li}">
-          <span class="grip" data-langgrip title="Drag to reorder">&#10495;</span>
+      <div class="langlist">
+        ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
+          <span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span>
           ${itemText('identity.languages', li, 'self', l, 'Language')}
           <button class="danger tiny" data-remove="identity.languages|${li}" aria-label="Remove">×</button>
         </span>`).join('')}

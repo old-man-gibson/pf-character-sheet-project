@@ -90,11 +90,18 @@ run.onclick = async () => {
     const drag = async (index, selector) => {
       const handle = find(`[data-session-drag="${index}"]`), target = find(selector);
       assert(handle && target, 'Drag source or destination missing');
-      const transfer = new DataTransfer(), rect = target.getBoundingClientRect();
-      handle.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));
-      target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+2}));
-      target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+2}));
-      handle.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:transfer}));
+      // The drag follows the pointer (ui/drag.js) and finds what it is over by
+      // position. Starting it shows the drop zones, which moves the layout, so
+      // the destination is measured -- on screen -- only once it has begun.
+      const from = handle.getBoundingClientRect();
+      const down = {bubbles:true,cancelable:true,pointerId:1,button:0,clientX:from.left+1,clientY:from.top+1};
+      handle.dispatchEvent(new PointerEvent('pointerdown',down));
+      handle.dispatchEvent(new PointerEvent('pointermove',{...down,clientX:down.clientX+20}));
+      target.scrollIntoView({block:'center'});
+      const rect = target.getBoundingClientRect();
+      const at = {...down,clientX:rect.left+rect.width/2,clientY:rect.top+2};
+      handle.dispatchEvent(new PointerEvent('pointermove',at));
+      handle.dispatchEvent(new PointerEvent('pointerup',at));
       await pause();
     };
     await test('Drag cards between action types and into a choice group', async () => {

@@ -1235,7 +1235,6 @@ select.jumpto[hidden] { display: none; }
 .tabs button.dragging, .tabrow.dragging { opacity: 0.4; }
 .tabs button.drop-before { box-shadow: -3px 0 0 0 var(--cs-accent); }
 .tabs button.drop-after { box-shadow: 3px 0 0 0 var(--cs-accent); }
-.tabrow { cursor: grab; }
 .tabrow.drop-before { box-shadow: 0 -2px 0 0 var(--cs-accent); }
 .tabrow.drop-after { box-shadow: 0 2px 0 0 var(--cs-accent); }
 .tabrow .grip { color: var(--cs-muted); font-size: 0.8rem; letter-spacing: -2px; user-select: none; }
@@ -2456,6 +2455,15 @@ table.talents col.tools { width: 6rem; }
 table.talents col.talent { width: 27%; }
 table.talents.bonus col.talent { width: 23%; }
 table.talents.bonus col.source { width: 14%; }
+/* A bonus talent moves by its grip, so the arrows that used to take the tools
+   column only come back on a card, and the column is the cross's width. */
+table.talents.bonus col.grip { width: 1.2rem; }
+table.talents.bonus col.tools { width: 2.6rem; }
+table.talents td.grip { padding: 4px 0 0; text-align: center; }
+table.talents tr.dragging { opacity: 0.4; }
+/* Border-collapse eats a shadow on the row itself, as on the feats tables. */
+table.talents tr.drop-before > td { box-shadow: inset 0 3px 0 -1px var(--cs-accent); }
+table.talents tr.drop-after > td { box-shadow: inset 0 -3px 0 -1px var(--cs-accent); }
 /* In a side panel there is no room to spend on a dropdown of known names, and
    with no notes column there the talent is what the leftover width belongs
    to -- a fixed share would leave it to the dropdown instead. */
@@ -3061,6 +3069,10 @@ input.mono:not(.hexin):hover {
   font-size: 0.95rem; line-height: 1;
 }
 .grip:hover { color: var(--cs-text); }
+/* A drag follows the pointer (ui/drag.js), so a grip must not let a finger
+   pan the page instead: the browser would take the gesture and cancel it. */
+.grip { touch-action: none; }
+.grip:active { cursor: grabbing; }
 .feature.dragging { opacity: 0.45; }
 .feature.drop-before { box-shadow: 0 -3px 0 -1px var(--cs-accent); }
 .feature.drop-after { box-shadow: 0 3px 0 -1px var(--cs-accent); }

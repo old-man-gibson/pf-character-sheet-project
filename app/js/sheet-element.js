@@ -92,6 +92,7 @@ const FEAT_LIST_ID = 'cat-feats';
  */
 const DATALIST_MAX = 40;
 import * as rows from './ui/rows.js';
+import { bindDrag, half, side } from './ui/drag.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
 import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import { talentPopHtml } from './ui/talents.js';
@@ -1810,7 +1811,7 @@ export class CharacterSheetElement extends HTMLElement {
               ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
               ${e.kind === 'visiting' ? 'title="Not on this view’s bar — search took you here"'
     : e.title ? `title="${esc(e.title)}"` : ''}
-              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'draggable="true"'}>${esc(e.label)}</button>`;
+              ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'data-tabdrag'}>${esc(e.label)}</button>`;
   }).join('')}
           <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
@@ -1950,7 +1951,6 @@ export class CharacterSheetElement extends HTMLElement {
         el.readOnly = true;
       }
     }
-    for (const el of root.querySelectorAll('[draggable="true"]')) el.draggable = false;
     for (const el of root.querySelectorAll('[contenteditable="true"]')) el.contentEditable = 'false';
     for (const btn of root.querySelectorAll('button')) {
       if (!btn.matches(READERS_KEEP)) btn.disabled = true;
@@ -2738,8 +2738,8 @@ export class CharacterSheetElement extends HTMLElement {
         <tbody>
           ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
           ${fixed('specialty', 'Specialty')}
-          ${(g.others || []).map((f, i) => `<tr data-granteddrop="${i}">
-            <td class="grip"><span class="grip" data-grantedgrip title="Drag to reorder">&#10495;</span></td>
+          ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}>
+            ${rows.rowGrip()}
             <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
             <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
             <td class="fnote" data-label="Notes">${noteCell(
@@ -3627,9 +3627,9 @@ export class CharacterSheetElement extends HTMLElement {
         data-tabcolor-label="${esc(e.label)}"${hex ? ` style="background:${hex}"` : ''}
         title="${esc(hex ? `Colour: ${hex}` : 'Colour this tab')}" aria-label="Colour ${esc(e.label)}"></button>`;
     };
-    const barRow = (e, i) => `<div class="item statline tabrow" draggable="true" data-tabkey="${esc(e.key)}">
+    const barRow = (e, i) => `<div class="item statline tabrow" data-tabkey="${esc(e.key)}">
       <span class="label pair" style="flex:1">
-        <span class="grip" aria-hidden="true">⋮⋮</span>
+        <span class="grip" data-tabdrag title="Drag to reorder" aria-hidden="true">⋮⋮</span>
         ${name(e)} ${badges(e)}
       </span>
       <span class="value pair">
@@ -5381,63 +5381,38 @@ export class CharacterSheetElement extends HTMLElement {
    * before that one (or after, when dropped on the right/lower half), and a
    * drop on the bar's empty end puts it last. Reordering is a preference, so
    * it goes through the model like a Hide or Show and is saved with the rest.
+   *
+   * A tab on the bar is its own handle -- a press that goes nowhere is still
+   * a click that opens it -- and a manager row is dragged by its grip, since
+   * the rest of the row is the tab's name to type in.
    */
   #bindTabDrag(root) {
-    const draggables = root.querySelectorAll('[draggable="true"][data-tabkey]');
-    if (!draggables.length) return;
-    let dragging = null;
-    const clear = () => root.querySelectorAll('.drop-before, .drop-after')
-      .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
-    const after = (e, el) => {
-      const r = el.getBoundingClientRect();
-      // The bar runs across in the top layout and down in the side one;
-      // the manager's rows always run down.
-      const horizontal = el.matches('nav.tabs [data-tabkey]')
-        && getComputedStyle(el.parentElement).flexDirection !== 'column';
-      return horizontal ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
-    };
-    draggables.forEach((el) => {
-      el.addEventListener('dragstart', (e) => {
-        dragging = el.dataset.tabkey;
-        el.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragging);
-      });
-      el.addEventListener('dragend', () => { dragging = null; el.classList.remove('dragging'); clear(); });
-      el.addEventListener('dragover', (e) => {
-        if (!dragging || dragging === el.dataset.tabkey) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        el.classList.add(after(e, el) ? 'drop-after' : 'drop-before');
-      });
-      el.addEventListener('drop', (e) => {
-        if (!dragging || dragging === el.dataset.tabkey) return;
-        e.preventDefault();
-        const order = this.#model.tabOrder();
-        const at = order.indexOf(el.dataset.tabkey);
-        if (at < 0) return;
-        this.#model.moveTab(dragging, after(e, el) ? at + 1 : at);
-        dragging = null;
+    bindDrag({
+      handles: root.querySelectorAll('[data-tabdrag]'),
+      item: (h) => h.closest('[data-tabkey]'),
+      source: (el) => el.dataset.tabkey,
+      target: (el, point, from) => {
+        const tab = el.closest('[data-tabkey]');
+        if (tab) {
+          if (tab.dataset.tabkey === from) return null;
+          const at = this.#model.tabOrder().indexOf(tab.dataset.tabkey);
+          if (at < 0) return null;
+          // The bar runs across in the top layout and down in the side one;
+          // the manager's rows always run down.
+          const across = tab.matches('nav.tabs [data-tabkey]')
+            && getComputedStyle(tab.parentElement).flexDirection !== 'column';
+          const after = half(tab, point, across ? 'x' : 'y');
+          return { el: tab, cls: side(after), to: at + (after ? 1 : 0) };
+        }
+        // The bar itself: a drop past the last tab (on the ⚙ or the empty run) goes last.
+        const nav = el.closest('nav.tabs');
+        return nav ? { el: nav, cls: null, to: this.#model.tabOrder().length } : null;
+      },
+      drop: (from, t) => {
+        this.#model.moveTab(from, t.to);
         this.#render();
-      });
+      },
     });
-    // The bar itself: a drop past the last tab (on the ⚙ or the empty run) goes last.
-    const nav = root.querySelector('nav.tabs');
-    if (nav) {
-      nav.addEventListener('dragover', (e) => {
-        if (!dragging || e.target.closest('[data-tabkey]')) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-      });
-      nav.addEventListener('drop', (e) => {
-        if (!dragging || e.target.closest('[data-tabkey]')) return;
-        e.preventDefault();
-        this.#model.moveTab(dragging, this.#model.tabOrder().length);
-        dragging = null;
-        this.#render();
-      });
-    }
   }
 
   #bind() {
@@ -6065,9 +6040,8 @@ export class CharacterSheetElement extends HTMLElement {
 
     this.#bindTemplateDrag(root);
     this.#bindNoteDrag(root);
-    this.#bindLanguageDrag(root);
     this.#bindFeatDrag(root);
-    this.#bindGrantedDrag(root);
+    this.#bindRowDrag(root);
 
     root.querySelectorAll('[data-cfcol]').forEach((input) => {
       input.addEventListener('change', () => {
@@ -7019,6 +6993,97 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
+   * Dragging a row of any list that marks itself with `rows.rowDrop` -- bonus
+   * talents, granted feats, languages. `data-rowdrop` is "list|index", and a
+   * drop only ever lands on a row of the list it started in. A list laid out
+   * across rather than down (the language chips) says so with
+   * `data-rowaxis="x"`, and then the left or right half decides the side.
+   */
+  #bindRowDrag(root) {
+    const parse = (el) => {
+      const raw = el.dataset.rowdrop;
+      const cut = raw.lastIndexOf('|');
+      return { list: raw.slice(0, cut), i: Number(raw.slice(cut + 1)) };
+    };
+    bindDrag({
+      handles: root.querySelectorAll('[data-rowgrip]'),
+      item: (grip) => grip.closest('[data-rowdrop]'),
+      source: parse,
+      target: (el, point, from) => {
+        const row = el.closest('[data-rowdrop]');
+        if (!row) return null;
+        const at = parse(row);
+        if (at.list !== from.list || at.i === from.i) return null;
+        const after = half(row, point, row.dataset.rowaxis || 'y');
+        return { el: row, cls: side(after), to: at.i + (after ? 1 : 0) };
+      },
+      drop: (from, t) => {
+        this.#model.listMoveTo(from.list, from.i, t.to);
+        this.#render();
+      },
+    });
+  }
+
+  /**
+   * Dragging a feat: up and down its own group, or across into another.
+   *
+   * Everything about where a drop would land is worked out from the row under
+   * the pointer: which group it belongs to, and which half of it the pointer
+   * is in. An empty group keeps one placeholder row for exactly this reason,
+   * so it is something a feat can be dropped onto rather than a gap that
+   * refuses.
+   */
+  #bindFeatDrag(root) {
+    const parse = (el) => (el?.dataset.featdrop || '').split('|').map(Number);
+    const entries = (g) => `featGroups.${g}.entries`;
+    bindDrag({
+      handles: root.querySelectorAll('[data-featgrip]'),
+      item: (grip) => grip.closest('[data-featdrop]'),
+      source: parse,
+      target: (el, point, [fg, fi]) => {
+        const row = el.closest('[data-featdrop]');
+        if (!row) return null;
+        const [g, i] = parse(row);
+        // An empty group's placeholder is always position 0.
+        if (row.classList.contains('featempty')) return { el: row, cls: 'drop-before', g, to: 0 };
+        if (g === fg && i === fi) return null;
+        const after = half(row, point);
+        return { el: row, cls: side(after), g, to: i + (after ? 1 : 0) };
+      },
+      drop: ([g, i], t) => {
+        this.#model.listMoveInto(entries(g), i, entries(t.g), t.to);
+        this.#render();
+      },
+    });
+  }
+
+  /**
+   * Reordering a class's "What they do" notes by their grip. A note only ever
+   * moves among its own class's notes. The card's key is JSON because a class
+   * name is free text.
+   */
+  #bindNoteDrag(root) {
+    const parse = (el) => JSON.parse(el.dataset.cfndrop);
+    bindDrag({
+      handles: root.querySelectorAll('[data-cfngrip]'),
+      item: (grip) => grip.closest('[data-cfndrop]'),
+      source: parse,
+      target: (el, point, from) => {
+        const card = el.closest('[data-cfndrop]');
+        if (!card) return null;
+        const t = parse(card);
+        if (t.c !== from.c || t.i === from.i) return null;     // one class at a time
+        const after = half(card, point);
+        return { el: card, cls: side(after), to: t.i + (after ? 1 : 0) };
+      },
+      drop: (from, t) => {
+        this.#model.moveClassFeatureNote(from.c, from.i, t.to);
+        this.#render();
+      },
+    });
+  }
+
+  /**
    * Dragging on the Template tab.
    *
    * Two kinds of card move. A group is reordered among the groups; a
@@ -7026,357 +7091,36 @@ export class CharacterSheetElement extends HTMLElement {
    * sub-ability cannot do is land at the top level: it hangs off the feature
    * above it, so a group card accepts one only as a child of itself, and there
    * is no drop that would put it above that feature.
-   *
-   * `draggable` is switched on by the grip and off again when the drag ends, so
-   * the fields inside a card stay selectable with the mouse.
    */
-  /**
-   * Dragging a language past its neighbours.
-   *
-   * The chips are a row rather than a column, so the half a chip the pointer is
-   * on decides which side of it the drop lands, and the marker is drawn on that
-   * edge. As on the Template tab the grip is the only part that starts a drag:
-   * the chip is mostly a text field, and a field that cannot be selected with
-   * the mouse is worse than a list that cannot be reordered.
-   */
-  #bindLanguageDrag(root) {
-    const list = root.querySelector('[data-langlist]');
-    if (!list) return;
-    const chips = [...list.querySelectorAll('[data-langdrop]')];
-    if (chips.length < 2) return;
-    let from = null;
-    const clear = () => chips.forEach((el) => el.classList.remove('drop-before', 'drop-after'));
-    const after = (e, el) => {
-      const r = el.getBoundingClientRect();
-      return e.clientX > r.left + r.width / 2;
-    };
-
-    chips.forEach((chip) => {
-      const grip = chip.querySelector('[data-langgrip]');
-      if (grip) {
-        grip.addEventListener('pointerdown', () => { chip.draggable = true; });
-        grip.addEventListener('pointerup', () => { chip.draggable = false; });
-      }
-      chip.addEventListener('dragstart', (e) => {
-        from = Number(chip.dataset.langdrop);
-        chip.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox refuses to start a drag with nothing on the transfer.
-        e.dataTransfer.setData('text/plain', chip.dataset.langdrop);
-      });
-      chip.addEventListener('dragend', () => {
-        chip.draggable = false;
-        chip.classList.remove('dragging');
-        from = null;
-        clear();
-      });
-      chip.addEventListener('dragover', (e) => {
-        if (from === null || Number(chip.dataset.langdrop) === from) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        chip.classList.add(after(e, chip) ? 'drop-after' : 'drop-before');
-      });
-      chip.addEventListener('drop', (e) => {
-        const at = Number(chip.dataset.langdrop);
-        if (from === null || at === from) return;
-        e.preventDefault();
-        const to = at + (after(e, chip) ? 1 : 0);
-        clear();
-        this.#model.listMoveTo('identity.languages', from, to);
-        from = null;
-        this.#render();
-      });
-    });
-  }
-
-  /**
-   * Dragging a granted feat past its neighbours.
-   *
-   * Only the ones a player added. The Drawback and the Specialty are not in
-   * the list at all -- they are two named slots the sheet writes above it --
-   * so they carry no grip and no drop key, and a drag that wanders over them
-   * finds nothing to land on. That is the whole of keeping them put: there is
-   * no order for them to be knocked out of.
-   *
-   * Its own binding rather than a share of `#bindFeatDrag`, because that one
-   * is built to carry a feat from one group's table into another's and these
-   * rows have nowhere else to go. A granted feat names what handed it over; a
-   * group's feat names the level it was taken at. They are not the same row
-   * and a drop that turned one into the other would lose a field.
-   *
-   * As everywhere else on the sheet, the grip is the only part that starts a
-   * drag -- the rest of the row is fields, and a field you cannot select with
-   * the mouse is worse than a list you cannot reorder.
-   */
-  #bindGrantedDrag(root) {
-    const rows = [...root.querySelectorAll('[data-granteddrop]')];
-    if (rows.length < 2) return;
-    const at = (el) => Number(el.dataset.granteddrop);
-    const clear = () => rows.forEach((r) => r.classList.remove('drop-before', 'drop-after'));
-    let from = null;
-    const after = (e, el) => {
-      const box = el.getBoundingClientRect();
-      return e.clientY > box.top + box.height / 2;
-    };
-
-    rows.forEach((row) => {
-      const grip = row.querySelector('[data-grantedgrip]');
-      if (grip) {
-        grip.addEventListener('pointerdown', () => { row.draggable = true; });
-        grip.addEventListener('pointerup', () => { row.draggable = false; });
-      }
-      row.addEventListener('dragstart', (e) => {
-        from = at(row);
-        row.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox refuses to start a drag with nothing on the transfer.
-        e.dataTransfer.setData('text/plain', row.dataset.granteddrop);
-      });
-      row.addEventListener('dragend', () => {
-        row.draggable = false;
-        row.classList.remove('dragging');
-        from = null;
-        clear();
-      });
-      row.addEventListener('dragover', (e) => {
-        if (from === null || at(row) === from) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        row.classList.add(after(e, row) ? 'drop-after' : 'drop-before');
-      });
-      row.addEventListener('drop', (e) => {
-        if (from === null || at(row) === from) return;
-        e.preventDefault();
-        const to = at(row) + (after(e, row) ? 1 : 0);
-        clear();
-        this.#model.listMoveTo('grantedFeats.others', from, to);
-        from = null;
-        this.#render();
-      });
-    });
-  }
-
-  /**
-   * Dragging a feat: up and down its own group, or across into another.
-   *
-   * The row carries the fields, so only the grip starts a drag -- otherwise a
-   * player could not select the text in a feat's name. Everything about where
-   * a drop would land is worked out from the row under the pointer: which
-   * group it belongs to, and which half of it the pointer is in. An empty
-   * group keeps one placeholder row for exactly this reason, so it is
-   * something a feat can be dropped onto rather than a gap that refuses.
-   */
-  #bindFeatDrag(root) {
-    const rows = [...root.querySelectorAll('[data-featdrop]')];
-    if (!rows.length) return;
-    const parse = (el) => (el?.dataset.featdrop || '').split('|').map(Number);
-    const entries = (g) => `featGroups.${g}.entries`;
-    const clear = () => rows.forEach((r) => r.classList.remove('drop-before', 'drop-after'));
-    let from = null;                       // [group, index] being dragged
-    const after = (e, el) => {
-      const box = el.getBoundingClientRect();
-      return e.clientY > box.top + box.height / 2;
-    };
-    // Where a drop at this point lands: the row under the pointer decides the
-    // group, and which half of it decides the side. An empty group's
-    // placeholder is always position 0, whichever half it was hit on.
-    const targetOf = (e) => {
-      const row = e.target.closest?.('[data-featdrop]');
-      if (!from || !row) return null;
-      const [g, i] = parse(row);
-      if (row.classList.contains('featempty')) return { row, g, to: 0, side: 'drop-before' };
-      const past = after(e, row);
-      return { row, g, to: i + (past ? 1 : 0), side: past ? 'drop-after' : 'drop-before' };
-    };
-
-    root.querySelectorAll('[data-featgrip]').forEach((grip) => {
-      const row = grip.closest('[data-featdrop]');
-      if (!row) return;
-      grip.addEventListener('pointerdown', () => { row.draggable = true; });
-      grip.addEventListener('pointerup', () => { row.draggable = false; });
-    });
-
-    rows.forEach((row) => {
-      row.addEventListener('dragstart', (e) => {
-        from = parse(row);
-        row.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox refuses to start a drag with nothing on the transfer.
-        e.dataTransfer.setData('text/plain', row.dataset.featdrop);
-      });
-      row.addEventListener('dragend', () => {
-        row.draggable = false;
-        row.classList.remove('dragging');
-        from = null;
-        clear();
-      });
-      row.addEventListener('dragover', (e) => {
-        const t = targetOf(e);
-        if (!t || t.row.classList.contains('dragging')) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        t.row.classList.add(t.side);
-      });
-      row.addEventListener('drop', (e) => {
-        const t = targetOf(e);
-        if (!t) return;
-        e.preventDefault();
-        const [g, i] = from;
-        clear();
-        from = null;
-        this.#model.listMoveInto(entries(g), i, entries(t.g), t.to);
-        this.#render();
-      });
-    });
-  }
-
-  /**
-   * Reordering a class's "What they do" notes by their grip.
-   *
-   * The same shape as the template cards below: the grip arms the card, the
-   * list it sits in takes the drop, and a note only ever moves among its own
-   * class's notes. The card's key is JSON because a class name is free text.
-   */
-  #bindNoteDrag(root) {
-    const parse = (el) => JSON.parse(el.dataset.cfndrop);
-    const clear = () => root.querySelectorAll('.cfnote.drop-before, .cfnote.drop-after')
-      .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
-    let from = null;                       // { c: class, i: index } being dragged
-
-    root.querySelectorAll('[data-cfngrip]').forEach((grip) => {
-      const card = grip.closest('[data-cfndrop]');
-      if (!card) return;
-      grip.addEventListener('pointerdown', () => { card.draggable = true; });
-      grip.addEventListener('pointerup', () => { card.draggable = false; });
-    });
-
-    root.querySelectorAll('[data-cfndrop]').forEach((card) => {
-      card.addEventListener('dragstart', (e) => {
-        from = parse(card);
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox refuses to start a drag with nothing on the transfer.
-        e.dataTransfer.setData('text/plain', card.dataset.cfndrop);
-        card.classList.add('dragging');
-        e.stopPropagation();
-      });
-      card.addEventListener('dragend', () => {
-        card.draggable = false;
-        card.classList.remove('dragging');
-        from = null;
-        clear();
-      });
-    });
-
-    /** Where a drop at this point would land, or null if it cannot land. */
-    const targetOf = (e) => {
-      if (!from) return null;
-      const card = e.target.closest?.('[data-cfndrop]');
-      if (!card || card.classList.contains('dragging')) return null;
-      const t = parse(card);
-      if (t.c !== from.c) return null;     // one class at a time
-      const box = card.getBoundingClientRect();
-      const after = e.clientY > box.top + box.height / 2;
-      return { to: t.i + (after ? 1 : 0), card, after };
-    };
-
-    root.querySelectorAll('[data-cfnotes]').forEach((list) => {
-      list.addEventListener('dragover', (e) => {
-        const t = targetOf(e);
-        if (!t) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        t.card.classList.add(t.after ? 'drop-after' : 'drop-before');
-      });
-      list.addEventListener('dragleave', (e) => { if (e.target === list) clear(); });
-      list.addEventListener('drop', (e) => {
-        const t = targetOf(e);
-        clear();
-        if (!t) return;
-        e.preventDefault();
-        this.#model.moveClassFeatureNote(from.c, from.i, t.to);
-        from = null;
-        this.#render();
-      });
-    });
-  }
-
   #bindTemplateDrag(root) {
     const parse = (el) => (el?.dataset.tdrop || '').split('|').map(Number);
-    const clear = () => root.querySelectorAll('.drop-before, .drop-after, .drop-into')
-      .forEach((el) => el.classList.remove('drop-before', 'drop-after', 'drop-into'));
-    let from = null;                       // [template, group, child] being dragged
-
-    root.querySelectorAll('[data-tgrip]').forEach((grip) => {
-      const card = grip.closest('[data-tdrop]');
-      if (!card) return;
-      grip.addEventListener('pointerdown', () => { card.draggable = true; });
-      grip.addEventListener('pointerup', () => { card.draggable = false; });
-    });
-
-    root.querySelectorAll('[data-tdrop]').forEach((card) => {
-      card.addEventListener('dragstart', (e) => {
-        from = parse(card);
-        e.dataTransfer.effectAllowed = 'move';
-        // Firefox refuses to start a drag with nothing on the transfer.
-        e.dataTransfer.setData('text/plain', card.dataset.tdrop);
-        card.classList.add('dragging');
-        e.stopPropagation();               // a child drag is not its group's
-      });
-      card.addEventListener('dragend', () => {
-        card.draggable = false;
-        card.classList.remove('dragging');
-        from = null;
-        clear();
-      });
-    });
-
-    /** Where a drop at this point would land, or null if it cannot land. */
-    const targetOf = (e) => {
-      if (!from) return null;
-      const draggingGroup = from[2] < 0;
-      let card = e.target.closest?.('[data-tdrop]');
-      // A group only ever goes among groups, so a pointer inside another
-      // group's sub-abilities means that group.
-      while (card && draggingGroup && parse(card)[2] >= 0) {
-        card = card.parentElement?.closest('[data-tdrop]');
-      }
-      if (!card || card.classList.contains('dragging')) return null;
-      const [ti, gi, ci] = parse(card);
-      if (ti !== from[0]) return null;     // one template at a time
-      const box = card.getBoundingClientRect();
-      const after = e.clientY > box.top + box.height / 2;
-      if (draggingGroup) return { kind: 'group', to: gi + (after ? 1 : 0), card, after };
-      if (ci >= 0) return { kind: 'child', gi, to: ci + (after ? 1 : 0), card, after };
-      // Dropped on the group itself: last in its list, never above its head.
-      const kids = this.#model.data.templates?.[ti]?.features?.[gi]?.children || [];
-      return { kind: 'child', gi, to: kids.length, card, into: true };
-    };
-
-    root.querySelectorAll('[data-tmpl]').forEach((box) => {
-      box.addEventListener('dragover', (e) => {
-        const t = targetOf(e);
-        if (!t) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        clear();
-        t.card.classList.add(t.into ? 'drop-into' : (t.after ? 'drop-after' : 'drop-before'));
-      });
-      box.addEventListener('dragleave', (e) => { if (e.target === box) clear(); });
-      box.addEventListener('drop', (e) => {
-        const t = targetOf(e);
-        clear();
-        if (!t) return;
-        e.preventDefault();
-        const [ti, gi, ci] = from;
+    bindDrag({
+      handles: root.querySelectorAll('[data-tgrip]'),
+      item: (grip) => grip.closest('[data-tdrop]'),
+      source: parse,
+      target: (el, point, from) => {
+        const draggingGroup = from[2] < 0;
+        let card = el.closest('[data-tdrop]');
+        // A group only ever goes among groups, so a pointer inside another
+        // group's sub-abilities means that group.
+        while (card && draggingGroup && parse(card)[2] >= 0) {
+          card = card.parentElement?.closest('[data-tdrop]');
+        }
+        if (!card || card.classList.contains('dragging')) return null;
+        const [ti, gi, ci] = parse(card);
+        if (ti !== from[0]) return null;     // one template at a time
+        const after = half(card, point);
+        if (draggingGroup) return { el: card, cls: side(after), kind: 'group', to: gi + (after ? 1 : 0) };
+        if (ci >= 0) return { el: card, cls: side(after), kind: 'child', gi, to: ci + (after ? 1 : 0) };
+        // Dropped on the group itself: last in its list, never above its head.
+        const kids = this.#model.data.templates?.[ti]?.features?.[gi]?.children || [];
+        return { el: card, cls: 'drop-into', kind: 'child', gi, to: kids.length };
+      },
+      drop: ([ti, gi, ci], t) => {
         if (t.kind === 'group') this.#model.moveTemplateGroup(ti, gi, t.to);
         else this.#model.moveTemplateChild(ti, gi, ci, t.gi, t.to);
-        from = null;
         this.#render();
-      });
+      },
     });
   }
 
