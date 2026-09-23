@@ -38,6 +38,11 @@ import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
 import { normalizeName, skillKey, slug } from './util.js';
 import { MONSTER_TAB_ORDER } from '../monster/block.js';
 
+// What the Spheres magic side works out and does not save: the sphere table,
+// and what bonuses forwarded to `spheres.*` came to, which is working rather
+// than anything a player typed.
+const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded'];
+
 /**
  * The document shape this build understands, written by tools/convert.py.
  *
@@ -1598,7 +1603,7 @@ export function toDocument(model) {
     training: model.data.training && {
       ...model.data.training,
       ...(model.data.training.combat ? { combat: stripDerived(model.data.training.combat, ['sphereRows']) } : {}),
-      ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, ['sphereRows']) } : {}),
+      ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, MAGIC_DERIVED) } : {}),
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
     // The defence boxes go on holding exactly what was typed; `calc` is the

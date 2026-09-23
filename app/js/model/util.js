@@ -56,6 +56,24 @@ export function sphereForwardKey(name) {
 }
 
 /**
+ * The names a Vancian casting class's caster level and a manifesting class's
+ * manifester level go by -- `vancian.wizard.cl`, `manifester.psion.level`.
+ *
+ * A Vancian block is called by its name, or by the table it draws from when
+ * it has none, which is how the Planner counts it too. A block with neither
+ * has no name, for the same reason a speed row with no type has none.
+ */
+export function vancianForwardKey(c) {
+  const key = slug(c?.name || c?.slotType);
+  return key === 'x' ? null : `vancian.${key}.cl`;
+}
+
+export function manifesterForwardKey(c) {
+  const key = slug(c?.name);
+  return key === 'x' ? null : `manifester.${key}.level`;
+}
+
+/**
  * A bonus that may be a number or a formula, worked out either way.
  *
  * The one shape every "+N" field on the sheet shares once it is allowed to

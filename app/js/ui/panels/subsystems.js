@@ -51,6 +51,7 @@ import {
   psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails,
   veilsAvailable, veilDetails, veilOwn, slug,
+  manifesterForwardKey, vancianForwardKey,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell } from '../html.js';
 import { round } from '../format.js';
@@ -944,12 +945,13 @@ function castingClassPanel(model, c, i) {
     const spends = style.slots === 'pool';
     // Worth saying when a block has been pinned away from what the Planner counts.
     const drift = c.casterLevelOverride !== null && c.casterLevelOverride !== undefined
-      && Number(c.casterLevel) !== Number(c.plannerLevel);
+      && Number(c.casterLevelBase ?? c.casterLevel) !== Number(c.plannerLevel);
 
     return `<section class="panel span2">
       <h3>
         ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
-        <span class="badge">CL ${c.casterLevel ?? 0}</span>
+        <span class="badge">CL ${c.casterLevel ?? 0}</span>${
+  forwardedBadge(model, vancianForwardKey(c) || '')}
         <span class="badge">${spends && c.totalLeft !== c.totalPerDay ? `${c.totalLeft ?? 0} of ` : ''}${c.totalPerDay ?? 0} ${esc(noun.many.toLowerCase())}/day</span>
         ${c.highestLevel ? `<span class="badge">up to level ${c.highestLevel}</span>` : ''}
         ${c.slotTypeUnknown ? '<span class="badge">no table</span>' : ''}
@@ -1410,7 +1412,8 @@ function manifestingClassPanel(model, c, i) {
     return `<section class="panel span2">
       <h3>
         ${itemText('psionics.classes', i, 'name', c.name, 'Manifesting class')}
-        <span class="badge">ML ${c.manifesterLevel ?? 0}</span>
+        <span class="badge">ML ${c.manifesterLevel ?? 0}</span>${
+  forwardedBadge(model, manifesterForwardKey(c) || '')}
         <span class="badge">${c.points ?? 0} pp</span>
         ${c.powerCount ? `<span class="badge">${c.powerCount} power${c.powerCount === 1 ? '' : 's'}</span>` : ''}
         ${c.curveTotal && !c.curveKnown ? '<span class="badge">no curve</span>' : ''}
@@ -1429,7 +1432,7 @@ function manifestingClassPanel(model, c, i) {
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
-      ${pinned && Number(c.manifesterLevel) !== Number(c.plannerLevel)
+      ${pinned && Number(c.manifesterLevelBase ?? c.manifesterLevel) !== Number(c.plannerLevel)
     ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'} of this class.</p>` : ''}
       ${powerDatalist(c)}
       ${(c.powers || []).length ? `<table style="margin-top:8px"><thead><tr>
