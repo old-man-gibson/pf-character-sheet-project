@@ -966,6 +966,14 @@ button.eye { padding: 2px 6px; line-height: 1; }
 /* The four unarmed spheres, and the two items, two abreast. */
 .unarmed-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
 .unarmed-grid .statline:nth-last-child(-n+2) { border-bottom: 0; }
+/* The unarmed setup, in the card of the weapon that reads it: one line shut,
+   and its setup in columns when there is room for two. */
+.unarmed-fold > .subhead .unarmed-dice { margin: 0 4px; font-size: 1.05rem; color: var(--cs-accent); text-transform: none; letter-spacing: 0; }
+.unarmed-fold > .subhead .hint { font-weight: normal; text-transform: none; letter-spacing: 0; }
+.unarmed-cols {
+  display: grid; gap: 4px 24px; align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
 button.eye[aria-pressed="true"] { color: var(--cs-muted); }
 tr.needsfill td:first-child { box-shadow: inset 3px 0 0 var(--cs-bad); }
 

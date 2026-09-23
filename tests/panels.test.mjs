@@ -342,11 +342,24 @@ console.log('\nthe unarmed practitioner table folds, and the shared increases do
   // the fold it was already showing and nothing would move).
   const KEY = 'unarmed-practitioner';
   const c = new Character(blankDocument('Fold Test'));
+  // No weapon reads the unarmed dice, so there is nothing unarmed to show.
+  ok('without a 🥊 weapon the unarmed setup is not there at all',
+    !/unarmed-setup|usesBoxing/.test(gear.renderGearPanel(c, {})));
+  // One that does carries the setup in its card, folded, the dice on its line.
+  c.listAdd('equipment.weapons', { name: 'Fist', useUnarmedDice: true });
+  c.listAdd('equipment.weapons', { name: 'Kick', useUnarmedDice: true });
+  const shut = gear.renderGearPanel(c, {});
+  ok('a 🥊 weapon brings it, folded, with the dice still showing',
+    /data-collapse="unarmed-setup"/.test(shut) && !/usesBoxing/.test(shut) && /class="unarmed-dice">1d3</.test(shut));
+  ok('and a second one points at the first rather than repeating it',
+    shut.match(/data-collapse="unarmed-setup"/g).length === 1 && /worked out under\s+Fist/.test(shut));
+  c.data.uiPrefs.collapsed['unarmed-setup'] = false;
   const seen = () => {
     const html = gear.renderGearPanel(c, {});
     const sub = html.slice(html.indexOf('Practitioner table'));
     return {
-      folded: /foldsub collapsed/.test(html),
+      // Its own fold's button: the weapon card around it has folds of its own.
+      folded: sub.match(/aria-expanded="(\w+)"/)?.[1] === 'false',
       expanded: sub.match(/aria-expanded="(\w+)"/)?.[1],
       controls: /usesBoxing/.test(html),
       shared: /sizeIncreases/.test(html),
