@@ -1820,7 +1820,7 @@ function companionAttacksPanel(model, cc) {
               ? `<span class="fwd" title="${esc(`${fmt(a.damageBonus)} damage in total once every bonus `
                 + 'forwarded here is counted. The roll adds it to the flat part.')}">${fmt(a.damageBonus)}</span>` : ''}</td>
           <td>${itemText(list, i, 'crit', a.crit, '20/×2')}</td>
-          <td>${itemSelect(list, i, 'primary', a.primary === null || a.primary === undefined ? '' : (a.primary ? 'primary' : 'secondary'),
+          <td>${itemSelect(list, i, 'primary', a.primary === true ? 'primary' : a.primary === false ? 'secondary' : String(a.primary || ''),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>
           <td>${itemNum(list, i, 'bonus', a.bonus)}${
             forwardedBadge(model, `${sn}.attack.${companionAttackKey(a)}`)}</td>

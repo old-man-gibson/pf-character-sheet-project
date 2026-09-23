@@ -271,9 +271,10 @@ export const ABILITY_INCREASE_LEVELS = {
 };
 
 /**
- * Natural attacks, from `dataSheet!A112:C123`: the damage type each deals and
- * whether it is primary (full attack bonus) or secondary (-5, or -2 with
- * Multiattack).
+ * Natural attacks: the damage type each deals and whether it is primary (full
+ * attack bonus) or secondary (-5, or -2 with Multiattack). Started from
+ * `dataSheet!A112:C123`, whose last rows are off by one -- Slam, Sting, Talons
+ * and Tail Slap follow the Bestiary's natural attacks table instead.
  */
 export const NATURAL_ATTACKS = [
   ['Bite', 'B, P, and S', true],
@@ -283,10 +284,10 @@ export const NATURAL_ATTACKS = [
   ['Tentacle', 'B', false],
   ['Wing', 'B', false],
   ['Pincers', 'B', false],
-  ['Slam', 'B', false],
-  ['Sting', 'B', true],
-  ['Talons', 'P', true],
-  ['Tail Slap', 'S', true],
+  ['Slam', 'B', true],
+  ['Sting', 'P', true],
+  ['Talons', 'S', true],
+  ['Tail Slap', 'B', false],
   ['Other', 'B, P, or S', false],
 ].map(([name, damageType, primary]) => ({ name, damageType, primary }));
 

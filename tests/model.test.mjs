@@ -349,6 +349,20 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('a natural attack still knows its damage type and role',
     c.data.animalCompanion[0].attacks.map((a) => `${a.damageType} ${a.toHit}`),
     [`B, P, and S ${k.totalAttack}`, `B and S ${k.totalAttack - 2}`]);
+  // Auto follows the Bestiary's table, which the workbook's last rows had off by one.
+  for (const type of ['Slam', 'Sting', 'Talons', 'Tail Slap']) {
+    c.listAdd('animalCompanion.0.attacks', { type, damage: '', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 0, qualities: '' });
+  }
+  const auto = () => c.data.animalCompanion[0].attacks.slice(2);
+  check('slam, sting and talons are primary; a tail slap is secondary',
+    auto().map((a) => `${a.type} ${a.damageType} ${a.primaryResolved ? 'primary' : 'secondary'}`),
+    ['Slam B primary', 'Sting P primary', 'Talons S primary', 'Tail Slap B secondary']);
+  // The role select stores 'primary' / 'secondary' / '' -- a word, not a boolean.
+  const tail = c.data.animalCompanion[0].attacks.length - 1;
+  const roleHit = (v) => { c.setItem('animalCompanion.0.attacks', tail, 'primary', v); return c.data.animalCompanion[0].attacks[tail].toHit; };
+  check('a tail slap set to primary loses the penalty, set to secondary keeps it',
+    [roleHit('primary'), roleHit('secondary'), roleHit('')].map((h) => h - k.totalAttack),
+    [0, k.multiattack ? -2 : -5, k.multiattack ? -2 : -5]);
 
   // Ticking Spheres takes the level from the skill named beside the box.
   const spheres = JSON.parse(JSON.stringify(raw));
