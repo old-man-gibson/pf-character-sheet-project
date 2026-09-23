@@ -624,6 +624,8 @@ export class CharacterSheetElement extends HTMLElement {
   #openGear = null;
   /** The last press on the sheet ({ target, at }); see `#rerender`. */
   #lastPress = null;
+  /** A render put off until a pressed button has had its click; see `#rerender`. */
+  #renderOwed = false;
   /** The last Tab keystroke ({ at, back }); see `#rerender`. */
   #lastTab = null;
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
@@ -1619,6 +1621,22 @@ export class CharacterSheetElement extends HTMLElement {
       ? controlKey(pressedTarget.closest?.('input, select, textarea, button') || null) : null;
     // Read before the render, which can take longer than the window.
     const tab = this.#lastTab && Date.now() - this.#lastTab.at < 150 ? this.#lastTab : null;
+    /*
+     * Leaving for a button is the one press the render must wait out. The
+     * change fires on the press, before the click, and a render then swaps
+     * the button for a copy -- a click is a press and a release on the same
+     * element, so it never fires, and "Add talent" pressed from a half-typed
+     * row took two goes. The value is already in the model; the render is
+     * held until the click has run (most buttons render anyway, which pays
+     * it), with a timer for a press that is dragged off and never clicks.
+     */
+    if (leaving && pressedTarget.closest?.('button')) {
+      this.#renderOwed = true;
+      const settle = () => setTimeout(() => { if (this.#renderOwed) this.#render(); }, 0);
+      this.shadowRoot.addEventListener('click', settle, { once: true });
+      setTimeout(() => { if (this.#renderOwed) this.#render(); }, 1000);
+      return;
+    }
     this.#render();
     if (leaving) {
       if (!pressedKey) return;
@@ -1733,6 +1751,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #render() {
     if (!this.#model) return;
+    this.#renderOwed = false;
     const bar = this.#barEntries();
     // A tab the search took you to that this view's bar does not carry rides
     // along as a guest, so the panel it holds can actually be shown.
