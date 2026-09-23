@@ -10005,7 +10005,9 @@ console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bon
     [Object.keys(JSON.parse(JSON.stringify(c.toJSON())).vancian.classes[0])
       .filter((k) => /casterLevel(Base|Forwarded)/.test(k)),
     Object.keys(JSON.parse(JSON.stringify(c.toJSON())).psionics.classes[0])
-      .filter((k) => /manifesterLevel(Base|Forwarded)/.test(k))], [[], []]);
+      .filter((k) => /manifesterLevel(Base|Forwarded)/.test(k)),
+    Object.keys(JSON.parse(JSON.stringify(c.toJSON())).training.magic)
+      .filter((k) => /Forwarded$/.test(k))], [[], [], []]);
 }
 
 /*
