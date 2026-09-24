@@ -33,7 +33,7 @@ import { DAILY_LEVERAGE_EXTRA } from '../../model.js';
 import { check, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line,
-  rowRemove, rowTools,
+  rowDrop, rowGrip, rowRemove, rowToolsDragged,
 } from '../rows.js';
 import { blendTicks, blendedSection, classNames } from './combat.js';
 
@@ -558,13 +558,14 @@ function guileBonusPanel(model, g) {
     return `<section class="panel span2">
       <h3>Bonus skill talents ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
       <div class="tablewrap"><table class="talents bonus">
-        <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes">
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes">
           <col class="tool"><col class="tool"><col class="tools"></colgroup>
-        <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>
+        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>
           <th class="num" title="Had to be a [utility] talent">[u]</th>
           <th class="num" title="Granted by a base sphere or a drawback — not a talent spent, so it buys no skill ranks">free</th>
           <th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr>
+        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
+          ${rowGrip()}
           <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere', notes: 'notes' })}</td>
           <td>${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
@@ -572,7 +573,7 @@ function guileBonusPanel(model, g) {
           <td>${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
           <td class="mid">${itemCheck(list, i, 'utility', e.utility)}</td>
           <td class="mid">${itemCheck(list, i, 'free', e.free)}</td>
-          ${rowTools(list, i)}
+          ${rowToolsDragged(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>
       <div style="margin-top:6px">${addButton(list, 'Add talent', {

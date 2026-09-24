@@ -16,7 +16,7 @@ const input = (field, value, attrs = '') => `<input data-session-field="${field}
 export function renderSessionBoard(model) {
   const state = sessionState(model), budget = actionBudget(model, state), shortcuts = sessionShortcuts(model);
   const types = (selected) => ACTION_TYPES.map(([key, label]) => `<option value="${key}" ${selected === key ? 'selected' : ''}>${label}</option>`).join('');
-  const handle = (index, title) => `<button class="session-drag" draggable="true" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
+  const handle = (index, title) => `<button class="session-drag" data-session-drag="${index}" aria-label="Drag ${esc(title)}" title="Drag to reorder or move to another action type">⠿</button>`;
   // Automatic width: one column, two for a choice group, a linked ability or a
   // routine of more than four attacks (so the attack line does not wrap into a
   // paragraph), three for several links.

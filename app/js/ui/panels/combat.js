@@ -46,7 +46,7 @@ import {
 import { check, field, roField, select, text } from '../fields.js';
 import {
   addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
-  rowRemove, rowTools,
+  rowDrop, rowGrip, rowRemove, rowTools, rowToolsDragged,
 } from '../rows.js';
 
   /**
@@ -564,15 +564,16 @@ function bonusTalentPanel(model, sideKey, side) {
       <h3>Bonus ${isMagic ? 'magic' : 'combat'} talents
         ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
       <div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
-        <thead><tr><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr>
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
+        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
+        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
+          ${rowGrip()}
           <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere', notes: 'notes' })}</td>
           <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
           <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
           <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
-          ${rowTools(list, i)}
+          ${rowToolsDragged(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>
       <div style="margin-top:6px">${addButton(list, 'Add talent', {

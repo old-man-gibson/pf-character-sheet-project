@@ -47,7 +47,6 @@ export function renderGearPanel(model, ctx) {
       ${weaponsPanel(model, e)}
       <div class="flow span2">
         ${armorPanel(e)}
-        ${unarmedPanel(model)}
         ${loadPanel(model, e)}
       </div>
       <div class="flow span2">
@@ -65,8 +64,17 @@ export function renderGearPanel(model, ctx) {
    * class progression and no talents at all has unarmed dice while having no
    * martial side for the panel to have lived on. The practitioner half is
    * still the Spheres of Might table, and says so.
+   *
+   * It is a fold in the card of the weapon that uses it -- the first one with
+   * its 🥊 ticked -- rather than a panel of its own. As a panel it was the
+   * tallest in the Armor / Load row by half again, and a row is as tall as its
+   * tallest, so the two beside it sat over a gap; and a character with no
+   * unarmed attack had it anyway. One that has one writes it down as a weapon,
+   * since it comes with its own bonuses and crit, so the 🥊 row is where the
+   * dice are read and where the setup behind them belongs. Shut, it is one
+   * line: the dice and where they come from.
    */
-function unarmedPanel(model) {
+function unarmedFold(model) {
     const u = model.data.training?.combat?.unarmed || {};
     const n = u.native || {};
     const per = u.perSphere || {};
@@ -75,24 +83,25 @@ function unarmedPanel(model) {
     const sub = native
       ? (u.nativeDice ? `${n.className || 'class'} ${n.classLevel || 0}` : 'no rung reached yet')
       : `${u.effectiveTalents ?? 0} effective talents`;
-    return `<section class="panel">
-      <h3>Unarmed strike</h3>
-      <div class="bigstats" style="margin-bottom:8px">
-        ${bigStat('Dice', u.dice ?? '—', sub)}
+    const setup = `<div class="unarmed-cols">
+      <div>
+        <div class="statline" title="A class that prints its own unarmed damage table uses that instead of the practitioner one">
+          <span class="label">Class has its own progression</span>
+          <span class="value">${check(`${base}.nativeProgression`, u.nativeProgression)}</span></div>
+        ${native ? nativeUnarmedBlock(model, u, n, base) : ''}
+        ${sharedUnarmedBlock(u, base)}
       </div>
-      <div class="statline" title="A class that prints its own unarmed damage table uses that instead of the practitioner one">
-        <span class="label">Class has its own progression</span>
-        <span class="value">${check(`${base}.nativeProgression`, u.nativeProgression)}</span></div>
-      ${native ? nativeUnarmedBlock(model, u, n, base) : ''}
-      ${collapsibleSub(model, 'unarmed-practitioner',
+      <div>${collapsibleSub(model, 'unarmed-practitioner',
     `Practitioner table${native ? ` <span class="badge">not in use — ${esc(u.practitionerDice || '—')}</span>` : ''}`,
     practitionerUnarmedBlock(u, per, base), '',
     // Folded by default once a class progression is what the character uses:
     // it is then a reading to compare against rather than a set of controls.
     // Unfolding it is remembered, and so is folding it while it is live.
-    native)}
-      ${sharedUnarmedBlock(u, base)}
-    </section>`;
+    native)}</div>
+    </div>`;
+    const title = `🥊 Unarmed dice <strong class="unarmed-dice">${esc(u.dice ?? '—')}</strong>
+      <span class="hint">${esc(sub)}${u.improvedUnarmedStrike ? ' · gains Improved Unarmed Strike' : ''}</span>`;
+    return collapsibleSub(model, 'unarmed-setup', title, setup, 'unarmed-fold', true);
   }
 
   /** The class's own table: which class, its rungs, and the talent bonus. */
@@ -184,8 +193,7 @@ function practitionerUnarmedBlock(u, per, base) {
 function sharedUnarmedBlock(u, base) {
     return `<h4 style="margin:10px 0 4px">Applies either way</h4>
       ${editLine('Step increases (+1 die step)', `${base}.stepIncreases`, u.stepIncreases)}
-      ${editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}
-      ${u.improvedUnarmedStrike ? '<p class="hint">Gains Improved Unarmed Strike (1+ unarmed-sphere talents).</p>' : ''}`;
+      ${editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}`;
   }
 
 /**
@@ -208,6 +216,8 @@ function poolText(pool) {
 export function weaponsPanel(model, e) {
     const weapons = e.weapons || [];
     const cs = model.conditionState;
+    // The unarmed setup shows once, under the first weapon that reads it.
+    const firstUnarmed = weapons.findIndex((w) => w.useUnarmedDice);
     return `<section class="panel span2">
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
       <div class="weaponcards">${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
@@ -250,10 +260,10 @@ export function weaponsPanel(model, e) {
               // something to resolve to.
               value: /^\s*(\{|\[\[)/.test(String(w.dice ?? '')) && !w.useUnarmedDice ? w.diceResolved : null,
               error: w.diceError,
-              title: w.useUnarmedDice ? 'Overridden by the Unarmed strike panel'
+              title: w.useUnarmedDice ? 'Overridden by the unarmed strike dice'
                 : 'Literal dice (12d8), or a reference like {kinetic.fist} to a name defined in prose',
             })}
-            <label class="chk" title="Use the dice from the Unarmed strike panel below">
+            <label class="chk" title="Use the unarmed strike dice — ticked, the card shows how they are worked out">
               ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
@@ -304,6 +314,10 @@ export function weaponsPanel(model, e) {
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
         </div>`, 'weaponwhat', true)}
+        ${!w.useUnarmedDice ? ''
+    : i === firstUnarmed ? unarmedFold(model)
+      : `<p class="hint">🥊 Unarmed dice ${esc(model.data.training?.combat?.unarmed?.dice ?? '—')}, worked out under
+          ${esc(String(weapons[firstUnarmed].name || '').trim() || 'the first 🥊 weapon')}.</p>`}
         <label class="fld" style="margin-top:6px"><span>Special properties
           <span class="hint">— write {{…}} to add to hit and [[…]] to add damage; dice, formulas, a
             {name} you defined, or a mix. Tag a damage token <strong>Crit</strong> for crit-only
@@ -342,8 +356,8 @@ export function weaponsPanel(model, e) {
       })}</div>
       <p class="hint">
         Attack = base mode total + enhancement + misc + adjustment; damage = dice +
-        floor(ability × mult) + misc + enhancement. 🥊 links the dice to the Unarmed
-        strike panel below — a class progression, or the practitioner table.
+        floor(ability × mult) + misc + enhancement. 🥊 makes a weapon an unarmed strike:
+        its dice come from a class progression or the practitioner table, set up in its card.
       </p>
     </section>`;
   }

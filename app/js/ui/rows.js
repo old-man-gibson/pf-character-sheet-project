@@ -135,6 +135,15 @@ export function rowToolsDragged(list, i) {
     </td>`;
 }
 
+/**
+ * The grip cell for a row of a dragged list, and the attribute that row
+ * carries so the element knows which list and place it is. Any list can use
+ * the pair: `#bindRowDrag` groups rows by the list they name, so two tables
+ * on one tab never trade rows.
+ */
+export const rowDrop = (list, i) => `data-rowdrop="${list}|${i}"`;
+export const rowGrip = () => '<td class="grip"><span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span></td>';
+
 /** Tools for a list whose rows are summed, so their order means nothing. */
 export function rowRemove(list, i) {
   return `<td class="tools">
