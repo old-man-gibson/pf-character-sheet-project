@@ -81,9 +81,9 @@ export function foldedProse(model, ctx, key, bindingAttr, value, placeholder = '
  * way at all of seeing what produced it. A `{name}` reference shows the
  * formula from wherever the name was defined, which saves hunting for it.
  *
- * `local` is the scope the text was written in, for a bonus that reads
- * `target`: its working is shown on one of the places it landed, and that
- * place's `target` sits beside whatever else was local to the text.
+ * `local` is the scope the text was written in. For a bonus that reads
+ * `target`, the working is shown for one destination, evaluated with that
+ * destination as `target` on top of `local`.
  */
 export function tokenTitle(model, seg, scope, local = null) {
   if (seg.kind === 'ref') {
@@ -121,11 +121,11 @@ export function targetLabels(model, targets) {
 }
 
 /**
- * One place a bonus landed, by what it is called. A weapon is named by its
- * row, since the place is one weapon's attack or damage rather than a name
- * anybody wrote.
+ * One destination a bonus was added to, by what it is called. A weapon is
+ * named by its row, since the destination is one weapon's attack or damage
+ * rather than a name anybody wrote.
  */
-function landingLabel(model, key, byName) {
+function destinationLabel(model, key, byName) {
   const weapon = /^weapon\.(\d+)\.(.+)$/.exec(key);
   if (weapon) {
     const w = model.data.equipment?.weapons?.[Number(weapon[1])];
@@ -142,32 +142,31 @@ function few(names, keep = 3) {
 }
 
 /**
- * A bonus worked out once per destination, grouped by what each got: "-2 to
- * Appraise, Artistry, Climb and 35 more; nothing to Acrobatics and Bluff".
- * What arrived comes first, in the order it was landed on, and the places the
- * rule said no to after it; the ones it could not be worked out for at all
- * are named last, because they are the ones a reader has to go and fix.
+ * A bonus evaluated once per destination, grouped by amount: "-2 to Appraise,
+ * Artistry, Climb and 35 more; +0 to Acrobatics and Bluff". Non-zero amounts
+ * first, in destination order, then +0; destinations the formula errored on
+ * last.
  */
 export function eachLine(model, seg) {
   const byName = new Map((model.forwardTargetList || []).map((t) => [t.name, t.label]));
   const groups = new Map();
   for (const [key, v] of Object.entries(seg.values || {})) {
     if (!groups.has(v)) groups.set(v, []);
-    groups.get(v).push(landingLabel(model, key, byName));
+    groups.get(v).push(destinationLabel(model, key, byName));
   }
   const type = seg.type ? ` ${seg.type}` : '';
-  const parts = [...groups].sort(([a], [b]) => (!a) - (!b)).map(([v, names]) => (v
-    ? `${fmt(v)}${type} to ${few(names)}` : `nothing to ${few(names)}`));
+  const parts = [...groups].sort(([a], [b]) => (!a) - (!b))
+    .map(([v, names]) => `${fmt(v)}${v ? type : ''} to ${few(names)}`);
   const failed = Object.keys(seg.failed || {});
   if (failed.length) {
-    parts.push(`not worked out for ${few(failed.map((k) => landingLabel(model, k, byName)))}`);
+    parts.push(`error on ${few(failed.map((k) => destinationLabel(model, k, byName)))}`);
   }
   return parts.join('; ');
 }
 
 /**
- * The working for one of those destinations -- the first to get the amount
- * the sentence shows -- with `target` read the way the bonus read it.
+ * The working for one destination -- the first whose amount equals the one
+ * shown -- evaluated with that destination as `target`.
  */
 function eachWorking(model, seg, local) {
   const keys = Object.keys(seg.values || {});
@@ -175,15 +174,14 @@ function eachWorking(model, seg, local) {
   const targets = model.contributions?.targets;
   if (!key || !targets) return '';
   const byName = new Map((model.forwardTargetList || []).map((t) => [t.name, t.label]));
-  return `on ${landingLabel(model, key, byName)}: `
+  return `on ${destinationLabel(model, key, byName)}: `
     + workingLine(seg.expr, tokenScope(model, local, targets.targetOf(key)));
 }
 
 /**
- * What a bonus worked out once per destination shows in its sentence: each
- * different amount it sent, in the order it sent them -- "-2", or "+4 / +2"
- * -- leaving out the destinations that got nothing, since those are the rule
- * saying no rather than a number to read.
+ * The inline text of a per-destination bonus: its distinct non-zero amounts
+ * in destination order ("-2", "+4 / +2"), or "min to max" past three. Zeros
+ * are left out; if every destination got 0, it shows +0.
  */
 export function eachShown(seg) {
   const sent = [...new Set(Object.values(seg.values || {}))].filter(Boolean);
@@ -196,8 +194,8 @@ export function eachShown(seg) {
  * The scope a prose token resolves in: the names the character defines,
  * then whatever is local to where the text was written (a veil's own
  * invested essence), then the character -- inline.js's own proseScope, so a
- * tooltip can never disagree with the value beside it. `target` is the place
- * a bonus lands, for a bonus that reads it.
+ * tooltip can never disagree with the value beside it. `target` is the
+ * destination, for a bonus that reads it.
  */
 export function tokenScope(model, local, target = null) {
   return proseScope(model.inlineNames || {}, local, model.scope(), target);

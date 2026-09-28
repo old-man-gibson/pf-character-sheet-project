@@ -54,16 +54,15 @@ the time a player does not want to write a formula — they want to find the one
 wrote three sessions ago and copy the trick. This is the same list the GM's Formula
 Audit shows, because formulas are text and there is nothing hidden in them.
 
-**Going to one.** Each row says where its formula is written — *note 1 on Lore ↗*,
-*Bluff misc ↗* — and that badge is a button: it switches to the tab the formula is on,
-opens whatever it hides in (a folded panel, a gear row's card, a tracker's editor, the
-second eidolon's page, the skills the table is not showing), lights the field up and puts
-the caret in it. The same badge is on every place in **Needs attention** and every row of
-**Forwarded bonuses**, so a formula that is broken is one click from being fixed. Under the
-hood it is the search palette's own jump, handed the field's selector and the text it holds
-(see `app/js/ui/formula-places.js`). A formula on the Overview's full page — a trait, a
-defence box — is not on the session view's dashboard, so going to one from the session view
-switches to the Build view first, the click a player would make.
+**Go to the field.** Each row shows where its formula is written (*note 1 on Lore ↗*,
+*Bluff misc ↗*). The badge is a button: it switches to that tab, opens whatever the field
+is inside (a folded panel, a gear row's card, a tracker's editor, a companion's page, skill
+rows hidden until *Show all*), highlights the field and focuses it. Rows in **Needs
+attention** and **Forwarded bonuses** have the same button. It uses the search palette's
+jump, given the field's selector and its text; the place-to-jump mapping is in
+`app/js/ui/formula-places.js`. Fields on the Overview's full page (traits, defence boxes)
+are not on the session dashboard, so from the session view the button switches to the
+Build view first.
 
 **Values you can read** — the index. Every name the character publishes, grouped into
 families, each with what it is worth right now, and clicking one puts it in the
@@ -73,36 +72,34 @@ trackers, the character, abilities, health/armour/saves, attack, skills, each su
 companions — are folded until asked for, because a character publishes several hundred
 names and an alphabetical wall of them is a list, not an answer.
 
-Inside a family, each thing it is made of has a **heading of its own** with its names
-under it: every skill (by the label the Skills tab gives it — *Kn. (arcana)*, not
-`kn_arcana`), every ability, each save, hit points, the armour class, every tracker (by its
-name), every sphere. A heading with a few names is a small card and the cards sit side by
-side; one with many — a companion, the columns of the armour class — takes the whole row.
-Your own dotted names group by what they start with, so `arms.hp` and `arms.ac` sit under
-*arms*.
+Within a family, names are grouped under **one heading per item**: each skill (by its
+Skills-tab label, e.g. *Kn. (arcana)*, not `kn_arcana`), each ability, each save, hit
+points, armour class, each tracker (by name), each sphere. Headings with few names render
+as small cards side by side; headings with many (a companion, the AC columns) take a full
+row. User-defined dotted names are grouped by their first segment: `arms.hp` and `arms.ac`
+are under *arms*.
 
-The sub-systems are families of their own rather than one fold: **Spheres of Power** (the
-casting numbers, then each magic sphere), **Spheres of Might** (the practitioner DC, then
-each combat sphere), **Spheres of Guile** (the operative, then each skill sphere),
-**Vancian magic**, **Psionics**, **Akashic** and **Cardcasting**. A sphere with talents in it
-is listed before one without, as on the sphere tables. A system the character does not play
-with is not listed at all — the same rule that puts its tab on the bar: something written
-on it, or a class marked with it. Its names still read; the list just stops offering forty
-spheres to a Vancian caster. The unarmed strike lives under **The character**, spheres or
-none.
+Each sub-system is its own family: **Spheres of Power** (casting numbers, then one heading
+per magic sphere), **Spheres of Might** (practitioner DC, then each combat sphere),
+**Spheres of Guile** (operative, then each skill sphere), **Vancian magic**, **Psionics**,
+**Akashic** and **Cardcasting**. Spheres with talents are listed first, as on the sphere
+tables. Systems the character does not use are not listed; "in use" is the same test that
+shows the system's tab on the bar (something entered on it, or a class tagged with it).
+Their names still resolve in formulas; they are only left out of the list. The unarmed
+strike is under **The character** whether or not the character uses spheres.
 
-**Companions** get a heading each, named for the companion and what it is — *Pip
-(Familiar)*, *Ahriman (Eidolon)* — with its skills under a second heading beside it. The
-second of a kind and after are numbered the way their ids are, so *Wisp (Eidolon 2)* is
-`eidolon2.*`, and a new companion gets its heading the moment it exists. A blank companion
-block nobody is using is not listed. The count beside the title is what the list holds.
+**Companions**: one heading per companion, labelled with its name and kind (*Pip
+(Familiar)*, *Ahriman (Eidolon)*), and a second heading for its skills. The second and
+later companions of a kind are numbered to match their ids: *Wisp (Eidolon 2)* is
+`eidolon2.*`. A companion gets its heading as soon as it is added; an empty companion
+block is not listed. The count beside the section title is the number of names listed.
 
 **Bonuses you can send** — the same index for the other direction: every destination
-`{… += …}` accepts on this character, grouped the same way, each with what it means, and
-under the same headings — each weapon selector (every weapon, melee, ranged, a group, one
-weapon), hit points / armour class / saves / defences, each ability, each tracker, each
-sphere, each companion. A sphere of a system the character does not use still takes a
-bonus but is not offered.
+`{… += …}` accepts on this character, grouped the same way, each with what it means. It
+uses the same headings: one per weapon selector (all weapons, melee, ranged, a weapon
+group, one weapon), hit points / armour class / saves / defences, each ability, each
+tracker, each sphere, each companion. Spheres of an unused system still accept bonuses
+but are not listed.
 **Weapons and damage** is first, because it is the half nobody can discover unaided —
 every other destination is a number printed in a column somewhere, so a reader at least
 knows it exists, while a weapon's damage channel is named nowhere on the sheet. Clicking
@@ -128,8 +125,9 @@ loads it into the scratchpad.
 The **search box** at the top narrows every list on the tab at once — the value index,
 the destinations, the formulas and the forwarded bonuses — which is what "pull it up"
 usually means in practice: type `burn` to get every `tracker.burn.*` name and every formula
-that mentions burn. The two indexes search the headings too, so a companion is found by
-its name (`pip`) and a skill by its label. *Values you can read* and *Bonuses you can send* each carry a box of
+that mentions burn. The two indexes also match heading text, so a companion can be found
+by its name (`pip`) and a skill by its label. *Values you can read* and *Bonuses you can
+send* each carry a box of
 their own as well, since they sit a long way down the tab from the first one: it narrows
 that list alone, and a name has to satisfy both boxes when both are filled.
 
@@ -198,7 +196,7 @@ Almost every value belongs to the character and can be read from anywhere. Three
 |---|---|---|
 | `essence.self` | a veil's own name or description | the essence invested in **that veil**. Elsewhere, name the slot — `essence.hands`, `essence.head` — or read `essence.total` for the pool. |
 | `self.max` `.current` `.remaining` `.min` `.spent` `.pct` `.zone` | a tracker's own note, min and zone bounds | that tracker, without naming itself. Elsewhere use `tracker.<id>.max`; and a tracker's **max** cannot use `self` at all, since that would be defining itself. |
-| `target`, `target.ranks`, `target.base`, … | a forwarded bonus — the formula after `+=` or `-=` | the destination the bonus is landing on, one at a time. See [Reading where it lands](#reading-where-it-lands-target). Elsewhere, name the value itself — `skill.bluff.ranks`. |
+| `target`, `target.ranks`, `target.base`, … | a forwarded bonus — the formula after `+=` or `-=` | the stat the bonus is added to; the formula is evaluated once per destination. See [`target` in forwarded bonuses](#target-in-forwarded-bonuses). Outside a bonus, use the full name, e.g. `skill.bluff.ranks`. |
 
 They are the sharpest edge in the language, because they read like ordinary values, work
 perfectly where they belong, and are simply absent everywhere else — a formula that says
@@ -690,13 +688,12 @@ character defines — `{skill.stealth += skill_familiarity}` works. The one dire
 does not exist is the reverse: a *name* may not be written in terms of a bonus. Names are
 resolved first and bonuses second, so nothing can loop.
 
-#### Reading where it lands: `target`
+#### `target` in forwarded bonuses
 
-Some rules are one sentence about many numbers, where whether each one is touched depends
-on the number itself. *Meticulous: you take a –2 penalty on skill checks for skills with
-which you're untrained* is about every skill and applies to some of them. Inside a bonus's
-formula, **`target` is the destination the bonus is landing on**, and a bonus that reads it
-is worked out once for each destination it reaches:
+Some rules apply to many stats with a per-stat condition. *Meticulous: you take a –2
+penalty on skill checks for skills with which you're untrained* applies to every skill with
+0 ranks. Inside a forwarded bonus's formula, **`target` is the stat the bonus is added
+to**. A bonus whose formula reads `target` is evaluated once per destination:
 
 ```
 Meticulous {skill -= if(target.ranks == 0, 2, 0)}
@@ -705,51 +702,49 @@ Power Attack {weapon.melee.damage += (2 + 2 * floor(bab / 4)) * if(target.twoHan
 Good saves only {saves += if(target.base >= 5, 1, 0)}
 ```
 
-`target.<part>` is the part you would read off the destination by name: landing on Bluff,
-`target.ranks` is `skill.bluff.ranks`; landing on Will, `target.base` is
-`saves.will.base`; landing on Strength, `target.mod` is `str.mod`. Where the destination is
-one number rather than a branch, its parts are the numbers beside it, so `target.dodge`
-works on touch AC as it does on AC. `target` on its own is the destination's own number.
+`target.<part>` resolves to the same value as the destination's full name: on Bluff,
+`target.ranks` is `skill.bluff.ranks`; on Will, `target.base` is `saves.will.base`; on
+Strength, `target.mod` is `str.mod`. If the destination is a single number rather than a
+branch, its parts are its siblings, so `target.dodge` works on touch AC as well as AC.
+`target` alone is the destination's own value.
 
-Everything `target` reads is the destination **before any forwarded bonus reached it** —
-which is what makes it safe to read the thing being added to: the bonuses are cleared, the
-sheet is totalled, and only then is the prose read. The destinations the sheet totals
-*after* reading the prose — skills, weapons, the defence boxes, trackers, the sphere
-tables, the Vancian and manifester levels, companions — have no number of their own at
-that point but last edit's, with this bonus already in it, so they offer only what does
-not move with their bonuses:
+`target` always reads the destination's value **before forwarded bonuses are applied**, so
+a bonus can read the stat it modifies without reading itself. The order in each recompute
+is: clear bonuses, compute totals, evaluate prose. Destinations computed *after* prose is
+evaluated (skills, weapons, defence boxes, trackers, sphere tables, Vancian and manifester
+levels, companions) have no pre-bonus total at that point, so `target` exposes only the
+values that bonuses do not change:
 
-| Landing on | `target` offers |
+| Destination | Available on `target` |
 |---|---|
 | a skill | `ranks`, `classSkill` (1 or 0); not the total |
-| a companion's skill | `ranks` (a familiar's master's, if higher), `classSkill` |
+| a companion's skill | `ranks` (a familiar uses its master's if higher), `classSkill` |
 | a weapon | `enhancement`, `twoHanded` and `light` (1 or 0, from the row's handedness); not its attack or damage |
 | a save | its total, `base`, `ability` and every typed column |
-| an armour class, CMD | its total, and every part of AC — `armor`, `shield`, `dodge`, `natural`, … |
-| an attack, initiative, max hit points | its total, and the numbers beside it |
+| an armour class, CMD | its total, and every AC part: `armor`, `shield`, `dodge`, `natural`, … |
+| an attack, initiative, max hit points | its total, and its sibling values |
 | an ability score | the score, `mod`, `temp` and `tempMod` |
-| a class level, a speed, a Spheres casting number | its total, and the numbers beside it |
-| anything else | nothing, and it says so |
+| a class level, a speed, a Spheres casting number | its total, and its sibling values |
+| anything else | nothing; reading `target` is an error |
 
-A total that has an **Other** column — the saves, the armour classes and CMD, the three
-attacks, initiative — is read *without* it, so `target` on Will is what the sheet works out
-for Will itself. The Other column is measured afresh every time a document is opened (the
-saved total, less what the sheet can see, less what bonuses sent there), and a bonus
-reading its own total with the column in it would be reading a measurement that had not
-finished: a character that doubled its initiative would reopen with the doubling gone.
-Read the total by name — `saves.will` — when you want the column counted.
+Totals with an **Other** column (saves, armour classes, CMD, the three attacks,
+initiative) are read *without* that column: `target` on Will is the Will total the sheet
+computes itself. The Other column is recalculated on every load (saved total, minus what
+the sheet computes, minus forwarded bonuses). If `target` included it, a bonus reading its
+own destination would change that calculation; a character that doubled its initiative
+would lose the doubling on reopen. To include the Other column, use the full name
+(`saves.will`).
 
-A bonus that asks for something its destination has not got says what it has instead —
-*A skill has no "rank" to read. It offers target.ranks and target.classSkill.* — once, not
-once per skill, and lands wherever the formula did work: `{skill.bluff, saves.will +=
-target.ranks}` still reaches Bluff. The sentence shows each different amount it sent
-(`-2`, or `+4 / +2`), and hovering it says which destination got what and shows the working
-on one of them.
+Errors: if a destination lacks the requested part, the message lists what is available
+(*A skill has no "rank". Available: target.ranks and target.classSkill.*). It is reported
+once per bonus, not once per destination. Destinations where the formula succeeds still
+get the bonus: `{skill.bluff, saves.will += target.ranks}` still applies to Bluff. The
+inline value shows each distinct amount (`-2`, or `+4 / +2`); the tooltip lists the amount
+per destination and the working for one of them.
 
-The skill's ranks are readable outside a bonus too, as `skill.<name>.ranks` and
-`skill.<name>.classSkill` — `skill.bluff` itself goes on being the total. Ranks are settled
-before the prose is read, so buying the first rank in a skill takes Meticulous off it in
-the same edit.
+`skill.<name>.ranks` and `skill.<name>.classSkill` are also readable outside bonuses;
+`skill.<name>` is still the total. Ranks are computed before prose is evaluated, so buying
+the first rank in a skill removes the Meticulous penalty in the same recompute.
 
 **How it is worked out.** A forwarded bonus is written in prose, and prose is read late —
 long after the saves and AC it may be aimed at have been totalled. So the sheet is worked

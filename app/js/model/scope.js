@@ -544,20 +544,19 @@ export function scopeNames(model) {
 /* -------------------------------------------------------------- *
  * What `target` reads, destination by destination
  *
- * A bonus that says `target` is asking about the place it lands, and the
- * answer is the same branch a formula reads that place by: landing on Will,
- * `target.base` is `saves.will.base`; landing on Strength, `target.mod` is
- * `str.mod`. Where the destination is a single number rather than a branch
- * -- `attack.melee`, `speed.fly` -- `target` is that number and its parts are
- * the ones beside it, so `target.dodge` works for touch AC as it does for AC.
+ * `target` in a bonus resolves to the same branch as the destination's full
+ * name: on Will, `target.base` is `saves.will.base`; on Strength,
+ * `target.mod` is `str.mod`. Where the destination is a single number rather
+ * than a branch (`attack.melee`, `speed.fly`), `target` is that number and
+ * its parts are its siblings, so `target.dodge` works for touch AC as it
+ * does for AC.
  *
- * Every one of those is read as the sheet stood when the bonuses were worked
- * out, which for everything here is *before any forwarded bonus reached it*:
- * the recompute clears the bonuses, totals these, and only then reads the
- * prose. That is what makes `target` safe to use on the thing it is being
- * added to -- "double your natural armour" reads the armour without the
- * doubling in it. A total with an Other column is read without that too,
- * for the reason OTHER_COLUMNS gives.
+ * All of these are read before any forwarded bonus is applied: the
+ * recompute clears the bonuses, totals these, and only then evaluates the
+ * prose. So a bonus can read the stat it is added to without reading
+ * itself ("double your natural armour" reads the armour before the
+ * doubling). Totals with an Other column exclude that column too; see
+ * OTHER_COLUMNS.
  *
  * The rest are totalled after the prose is read, from the bonuses it sends.
  * Their own numbers at that moment are the last edit's, with this bonus
@@ -589,7 +588,7 @@ const TARGET_LATE = [
   [/^actions\./, 'an action count'],
   [/^(defenses|dr|resistance|weakness|immune)(\.|$)/, 'a defence'],
   [/^tracker\./, 'a tracker'],
-  [/^sphere\./, 'a sphere’s number'],
+  [/^sphere\./, 'a sphere table value'],
   [/^vancian\./, 'a Vancian caster level'],
   [/^manifester\./, 'a manifester level'],
 ];
@@ -653,9 +652,9 @@ function weaponFacts(w) {
 }
 
 /**
- * What `target` is when a bonus lands on `key`: `{ kind, values, late }`, the
- * shape inline.js reads it in. `kind` names the destination in words, for a
- * message that says what to read instead.
+ * What `target` is for destination key `key`: `{ kind, values, late }`, the
+ * shape inline.js reads. `kind` names the destination in words, for error
+ * messages.
  */
 export function targetFacts(model, key, scope) {
   if (key.startsWith('skill.') && key !== 'skill.pointsPerLevel') {
@@ -696,12 +695,12 @@ function companionTargetFacts(model, key) {
   for (const kind of COMPANION_KINDS) {
     const comp = (model.data[kind] || []).find((b) => b?.id === id);
     if (!comp) continue;
-    if (part !== 'skill' || !name) return { kind: 'a companion’s number', late: true, values: {} };
+    if (part !== 'skill' || !name) return { kind: 'a companion stat', late: true, values: {} };
     const sk = (comp.skills || []).find((s) => companionSkillKey(s) === name) || {};
     const own = Math.max(0, Number(sk.ranks) || 0);
     const master = kind === 'familiar' ? skillRanksNamed(model.data.skills, sk.name, sk.spec) : 0;
     return {
-      kind: 'a companion’s skill',
+      kind: 'a companion skill',
       late: true,
       values: { ranks: Math.max(own, master), classSkill: sk.classSkill ? 1 : 0 },
     };
@@ -808,11 +807,10 @@ export function forwardTargets(model) {
   // rows, which do not exist yet on the first pass of a fresh load -- and
   // the destinations are decided once, on that pass.
   //
-  // A system the character does not use keeps its destinations, and a bonus
-  // aimed at one lands as it always did; they are only marked `unused`, so
-  // the Formulas tab can leave them out of its list -- the whole sphere
-  // catalogue offered to a Vancian caster is forty rows of somewhere nothing
-  // will ever be sent. See systemsInUse.
+  // A system the character does not use keeps its destinations, and bonuses
+  // to them still apply; they are only marked `unused` so the Formulas tab
+  // can leave them out of its list (otherwise a Vancian caster is offered
+  // the whole sphere catalogue). See systemsInUse.
   const training = model.data.training || {};
   const using = systemsInUse(model);
   const idle = { magic: !using.power, combat: !using.might, guile: !using.guile };
@@ -1017,11 +1015,10 @@ export function forwardTargets(model) {
     return [`${family}.${part}`];
   };
 
-  // What `target` reads at each place a bonus lands, worked out the first time
-  // it is asked for and kept: the bonuses are read once a recompute, against
-  // the sheet as it stood before any of them arrived, and a sentence showing
-  // one of those bonuses afterwards must be shown the same destination -- not
-  // the same destination a pass later, with the bonus already in it.
+  // `target` per destination key, computed on first request and cached.
+  // Bonuses are evaluated once per recompute, before any is applied; a
+  // tooltip rendered afterwards must use the same pre-bonus values, not
+  // values that already include the bonus.
   const facts = new Map();
   let names = null;
   return {

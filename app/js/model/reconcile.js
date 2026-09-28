@@ -37,15 +37,14 @@ const SOURCE_WORD = {
  * number and cannot hold anything), or it is the branch one lives on (`str`,
  * which already holds str.mod and the rest).
  *
- * And one name the sheet does not work out but keeps all the same: `target`,
- * which is what a bonus calls the place it lands. A definition taking it would
- * be read ahead of the destination in every bonus that says it.
+ * And one reserved name: `target`, the destination inside a forwarded bonus.
+ * A definition named `target` would be looked up before the destination in
+ * every bonus that reads it.
  */
 export function shadowReason(name, builtin) {
   if (/^target$/i.test(String(name))) {
-    return '"target" is what a bonus calls the place it lands — '
-      + '{skill -= if(target.ranks == 0, 2, 0)} — so it cannot be a name of your own. '
-      + 'A dotted one such as my.target never collides.';
+    return '"target" is reserved: inside a forwarded bonus it is the stat the bonus is added to. '
+      + 'Use another name, e.g. my.target.';
   }
   if (builtin.has(name)) {
     return `"${name}" is a value the sheet works out for itself, so it cannot be defined here. `

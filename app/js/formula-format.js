@@ -166,8 +166,8 @@ export const CONTEXTUAL_VALUES = [
   {
     match: (name) => /^target(\.|$)/i.test(name),
     names: 'target, target.ranks, target.base, target.mod …',
-    where: 'a forwarded bonus — the formula after += or -=',
-    what: 'the destination the bonus is landing on, one at a time: {skill -= if(target.ranks == 0, 2, 0)} is worked out once for every skill. target.ranks landing on Bluff is skill.bluff.ranks, target.base landing on Will is saves.will.base, and target on its own is the destination’s own number where the sheet works it out before bonuses arrive — a save or an armour class without its Other column. Elsewhere, name the value itself.',
+    where: 'a forwarded bonus (the formula after += or -=)',
+    what: 'the stat the bonus is added to. A formula that uses target is evaluated once per destination: in {skill -= if(target.ranks == 0, 2, 0)} it is each skill in turn. target.<part> is the destination’s own name plus the part (on Bluff, target.ranks = skill.bluff.ranks; on Will, target.base = saves.will.base). target alone is the destination’s value before bonuses, where the sheet calculates it before applying them; saves and armour classes exclude their Other column. Outside a bonus, use the full name.',
   },
 ];
 
@@ -541,7 +541,7 @@ export const VALUE_GUIDE = [
   { prefix: 'saves.will.base, saves.will.ability, saves.will.luck …', what: 'The same for each save: its base save, its ability modifier, and every typed column by name — resistance, morale, trait, racial and the rest. The save’s own name still reads the total, so saves.will and saves.will.total are one number.', eg: 'saves.fortitude.resistance' },
   { prefix: 'attack.melee, attack.ranged, attack.cmb', what: 'The attack numbers.', eg: 'attack.cmb + 4' },
   { prefix: 'skill.<name>', what: 'Any skill total, by its name in lower case with underscores for spaces.', eg: 'skill.perception + 5' },
-  { prefix: 'skill.<name>.ranks, skill.<name>.classSkill', what: 'The ranks in a skill, and 1 or 0 for whether it is a class skill. The skill’s own name still reads the total, as a save’s does. A rule that turns on ranks — +2, or +4 with 10 ranks — reads them here.', eg: 'if(skill.stealth.ranks >= 10, 6, 3)' },
+  { prefix: 'skill.<name>.ranks, skill.<name>.classSkill', what: 'Ranks in the skill, and 1 or 0 for class skill. skill.<name> alone is still the total.', eg: 'if(skill.stealth.ranks >= 10, 6, 3)' },
   { prefix: 'speed.<type>', what: 'Each movement rate by its type in lower case — speed.land, speed.fly, speed.climb — as the Speed panel totals it, before conditions. A speed may read the speeds listed above it and not the ones below.', eg: 'floor(speed.land / 2)' },
   { prefix: 'mythic.tier', what: 'Mythic tier, and 0 for a character who has none.', eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)' },
   { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Every tracker publishes its numbers under the id shown on its own row. That id never changes when the tracker is renamed, so a formula pointing at one cannot be broken by renaming it.', eg: 'tracker.burn.max - 2' },
@@ -610,8 +610,8 @@ export const TOKEN_FORMS = [
       + 'commas; -= for a penalty; end with "as size" (or morale, luck, …) and it will not '
       + 'stack with another bonus of that type, or "as temp.size" to make it a temporary '
       + 'one. "target.skill.bluff = …" says the same thing the long way. Inside the formula, '
-      + 'target is whatever the bonus is landing on — target.ranks on a skill, target.base on a '
-      + 'save — and a bonus that reads it is worked out for each destination in turn.',
+      + 'target is the stat being added to (target.ranks on a skill, target.base on a save); a '
+      + 'formula that uses it is evaluated once per destination.',
     eg: 'Mythic Social Grace {skill.bluff, skill.diplomacy += mythic.tier}.',
   },
 ];

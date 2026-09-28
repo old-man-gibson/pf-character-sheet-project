@@ -1,5 +1,5 @@
-/** Every formula the Formulas tab lists can be gone to, and lands on a field
- *  that is really there.
+/** Every formula the Formulas tab lists has a go-to target, and that target
+ *  is a field the panel actually renders.
  *
  *  The tab lists formulas by where they are written ("note 1 on Lore", "Bluff
  *  misc") and each of those is a button back to it: ui/formula-places.js turns
@@ -139,7 +139,7 @@ const htmlEscape = (s) => String(s).replace(/[&<>"']/g, (c) => (
  * Check one place: it has a jump, the jump names a tab, and the tab draws the
  * field -- at once, or after the jump's opener has been pressed.
  */
-function lands(model, place, label) {
+function checkPlace(model, place, label) {
   const entry = formulaPlace(model, place);
   if (!entry) {
     fail++;
@@ -305,10 +305,10 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
   const c = everywhere();
   const rows = c.audit();
   check('the character has formulas in many places', rows.length > 10, true);
-  for (const r of rows) lands(c, r.place, `formula ${r.name}`);
+  for (const r of rows) checkPlace(c, r.place, `formula ${r.name}`);
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);
   const forwarded = admin.forwardedRows(c);
-  for (const f of forwarded) lands(c, f.place, `bonus to ${f.to}`);
+  for (const f of forwarded) checkPlace(c, f.place, `bonus to ${f.to}`);
 }
 
 console.log('a formula that does not work can be gone to from Needs attention');
@@ -319,7 +319,7 @@ console.log('a formula that does not work can be gone to from Needs attention');
   const problems = c.formulaProblems();
   check('there are problems to go to', problems.length > 0, true);
   for (const p of problems) {
-    for (const pl of p.places) if (pl.place) lands(c, pl.place, `${p.kind} ${p.name}`);
+    for (const pl of p.places) if (pl.place) checkPlace(c, pl.place, `${p.kind} ${p.name}`);
   }
   check('each duplicate names where both definitions are',
     problems.find((p) => p.kind === 'duplicate')?.places.map((pl) => pl.place), ['note:0', 'note:2']);

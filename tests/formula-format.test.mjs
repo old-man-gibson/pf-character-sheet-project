@@ -88,7 +88,7 @@ check('target belongs to a bonus', contextualNote('target.ranks').includes('forw
   const { proseScope } = await import('../app/js/inline.js');
   const w = workings('target.ranks + level', proseScope({}, null, scope));
   check('a refused name is worked out, not thrown', [w.ok, w.reads.map((r) => r.known)], [false, [false, true]]);
-  check('and the working says where target belongs', /only means something inside a bonus/.test(w.error), true);
+  check('and the working says where target belongs', /only defined inside a forwarded bonus/.test(w.error), true);
 }
 check('in any case, as every name is read', contextualNote('Target').includes('forwarded bonus'), true);
 check('and a name that only starts like it is left alone', contextualNote('targets.hit'), null);

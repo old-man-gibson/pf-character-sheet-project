@@ -260,12 +260,11 @@ export class Character {
     // overlap pays a competence bonus instead. See subsystems/guile.js.
     const guileRanks = this.#guileRanksBySkill(sphereRanksBySkill);
 
-    // The ranks, before any prose is read. A bonus may ask how many ranks the
-    // skill it lands on has -- "on skills with which you are untrained", "if
-    // you have 10 or more ranks" -- and nothing a rank is made of is written
-    // in prose, so they can be settled here rather than read a recompute late.
-    // Read late, buying the first rank in a skill would leave an untrained
-    // penalty on it until the next edit came along to move it.
+    // Ranks are computed before prose is evaluated, because a bonus can read
+    // them via `target.ranks` ("on skills with which you are untrained").
+    // No rank input is written in prose, so this ordering is safe. Computed
+    // after, the first rank bought in a skill would keep the untrained
+    // penalty until the next recompute.
     c.skills.forEach((s, i) => {
       const src = s.rankSources || { bought: 0, gear: false, other: false };
       const specialty = specialtyKeys.has(skillKey(s));

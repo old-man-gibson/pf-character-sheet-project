@@ -102,19 +102,19 @@ const DECK_TABLE = new Set(['round', 'inHand', 'inDeck', 'inPlay', 'inDiscard', 
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
   { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
-  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, base attack bonus and mythic tier; movement rates, levels in each class, the unarmed strike, and the wallet.' },
+  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, BAB, mythic tier; speeds, class levels, the unarmed strike, and wealth.' },
   { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
-  { key: 'skill', label: 'Skills', blurb: 'Each skill under its own heading: the total by its slugged name, and the ranks and class-skill mark under it.' },
-  { key: 'power', label: 'Spheres of Power', blurb: 'Caster level, the casting numbers and spell points, and each magic sphere — its caster level, DC and talents.' },
-  { key: 'might', label: 'Spheres of Might', blurb: 'The practitioner DC, and each combat sphere — its attack bonus, DC and talents.' },
-  { key: 'guile', label: 'Spheres of Guile', blurb: 'The operative’s ability and pools, and each skill sphere — its ranks, DC and ranges.' },
+  { key: 'skill', label: 'Skills', blurb: 'One heading per skill: skill.<name> (the total), .ranks and .classSkill.' },
+  { key: 'power', label: 'Spheres of Power', blurb: 'Caster level, casting numbers and spell points; per magic sphere: CL, DC, talents.' },
+  { key: 'might', label: 'Spheres of Might', blurb: 'Practitioner DC; per combat sphere: attack bonus, DC, talents.' },
+  { key: 'guile', label: 'Spheres of Guile', blurb: 'Operative modifier and pools; per skill sphere: ranks, DC, ranges.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'Each casting class’s caster level, and vancian.cl for the highest of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'Power points, and each manifesting class’s manifester level.' },
   { key: 'akashic', label: 'Akashic', blurb: 'Essence: the pool, and what is invested in each receptacle.' },
   { key: 'cards', label: 'Cardcasting', blurb: 'The deck as it is built, the table in play, and each manipulation taken.' },
-  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, each under a heading of its own. The first of a kind reads under the kind’s bare name, and each one after it gets a heading and a number of its own — eidolon2, eidolon3.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use. The first of a kind reads as <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -136,12 +136,12 @@ export const TARGET_SECTIONS = [
   { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
   { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, levels in a class, and actions a turn.' },
   { key: 'tracker', label: 'Trackers', blurb: 'How big a pool is — its max and min, never what is currently in it.' },
-  { key: 'power', label: 'Spheres of Power', blurb: 'The casting numbers, and each magic sphere’s caster level and DC.' },
-  { key: 'might', label: 'Spheres of Might', blurb: 'Each combat sphere’s attack bonus and DC.' },
-  { key: 'guile', label: 'Spheres of Guile', blurb: 'Each skill sphere’s ranks and DC.' },
+  { key: 'power', label: 'Spheres of Power', blurb: 'Casting numbers; per magic sphere: CL, DC.' },
+  { key: 'might', label: 'Spheres of Might', blurb: 'Per combat sphere: attack bonus, DC.' },
+  { key: 'guile', label: 'Spheres of Guile', blurb: 'Per skill sphere: ranks, DC.' },
   { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or every one of them.' },
   { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or every one of them.' },
-  { key: 'companion', label: 'Companions', blurb: 'Each companion’s numbers under a heading of its own — a second of a kind gets its own.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use; later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
@@ -647,12 +647,13 @@ export function targetsHtml(groups, total, query, own = '') {
       weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A shape that matches
       nothing today is still right — <code>{weapon.ranged.damage += 2}</code> on a character
       carrying no bow starts working the day one is bought.</p>
-    <p class="hint"><strong>A bonus can ask where it is landing.</strong> Inside the formula,
-      <code>target</code> is the destination, one at a time, and its parts are spelt as you would
-      read them by name — <code>target.ranks</code> on a skill is <code>skill.&lt;name&gt;.ranks</code>.
-      So <code>{skill -= if(target.ranks == 0, 2, 0)}</code> is a penalty on every untrained skill and
-      nothing on the others, and <code>{weapon.melee.damage += if(target.twoHanded, 3, 2)}</code>
-      tells a greatsword from a longsword.</p>
+    <p class="hint"><strong><code>target</code>:</strong> inside the formula, <code>target</code> is
+      the stat the bonus is added to, and a formula that uses it is evaluated once per destination.
+      Its parts have the same names as when the stat is read directly: on a skill,
+      <code>target.ranks</code> = <code>skill.&lt;name&gt;.ranks</code>. Examples:
+      <code>{skill -= if(target.ranks == 0, 2, 0)}</code> applies −2 to untrained skills only;
+      <code>{weapon.melee.damage += if(target.twoHanded, 3, 2)}</code> gives two-handed weapons +3
+      and the rest +2.</p>
   </section>`;
 }
 
@@ -669,7 +670,7 @@ export function targetsHtml(groups, total, query, own = '') {
 function whereHtml(where, place, cls = '') {
   if (!place) return cls ? `<span class="${cls}">${esc(where)}</span>` : esc(where);
   return `<button type="button" class="badge fx-goto" data-fx-goto="${esc(place)}"
-    title="${esc(`Go to ${where}, where this is written`)}">${esc(where)}<span class="fx-goto-arrow"
+    title="${esc(`Go to the field: ${where}`)}">${esc(where)}<span class="fx-goto-arrow"
     aria-hidden="true"> ↗</span></button>`;
 }
 
@@ -1001,8 +1002,8 @@ function rulesHtml() {
       'The id is slugged from the name the tracker was created with and never changes afterwards, so renaming a tracker cannot break a formula pointing at it. Each tracker’s ✎ editor spells out its own id.'],
     ['A few names only exist in one kind of field.',
       'self inside a tracker, essence.self inside a veil, target inside a bonus. They are the easiest thing here to get wrong, so they have a table of their own above.'],
-    ['A bonus can ask where it is landing.',
-      'target is the destination, read the way you would read it by name, and a bonus that says it is worked out once for each destination it reaches: {skill -= if(target.ranks == 0, 2, 0)} is a penalty on every untrained skill and nothing on the rest. It reads the destination as it stood before any bonus arrived — and a total without its Other column — so a bonus reading its own destination never chases itself. Skills, weapons and the rest the sheet totals after reading bonuses offer only what does not move with them — a skill its ranks and classSkill — and say so if asked for more.'],
+    ['target is the stat a bonus is added to.',
+      'In a forwarded bonus, target is the destination stat, and the formula is evaluated once per destination: {skill -= if(target.ranks == 0, 2, 0)} gives −2 to untrained skills and 0 to the rest. Values are read from before any bonus is applied, and saves and armour classes without their Other column, so a bonus cannot change its own input. Stats calculated after bonuses are applied (skills, weapons, trackers and others) expose only values bonuses do not change, such as a skill’s ranks and classSkill; asking for anything else gives an error listing what is available.'],
     ['A tracker’s note shows values but does not publish them.',
       'Notes are worked out after the trackers they read, so a {name = …} in one displays but is not readable elsewhere. Put character-wide names in a feature or a note on Lore instead.'],
     ['Comparisons are worth 1 and 0.',

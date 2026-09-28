@@ -191,33 +191,31 @@ export function hasTokens(text) {
 }
 
 /* -------------------------------------------------------------- *
- * `target`: the place a bonus is landing
+ * `target`: the destination inside a forwarded bonus
  *
- * "A -2 penalty on skills with which you are untrained" is one rule about
- * every skill, and whether it applies is a question about each of them in
- * turn. Written as one bonus to one number it could not be said at all; as
- * forty bonuses it would be forty copies of one sentence, each going stale on
- * its own. So a bonus may name the destination it is landing on, `target`,
- * and one that does is worked out once for every destination it reaches:
+ * Some rules depend on each destination: "-2 on skills with which you are
+ * untrained" depends on each skill's ranks. Without `target` that takes one
+ * bonus per skill. With it, a bonus can read the stat it is added to, and a
+ * bonus that does is evaluated once per destination:
  *
  *   {skill -= if(target.ranks == 0, 2, 0)}
  *
- * `target.<part>` is the part a formula would read off the destination by
- * name -- `target.ranks` landing on Bluff is `skill.bluff.ranks` -- and
- * `target` on its own is the destination's own number, where the sheet has
- * worked it out before the bonuses arrive. What each kind of destination has
- * to offer is the model's business (see targetFacts in model/scope.js); the
- * shape handed over here is `{ kind, values, late }`, with `kind` saying what
- * the destination is in words ("a skill") for the messages below.
+ * `target.<part>` resolves to the same value as the destination's full name
+ * (on Bluff, `target.ranks` is `skill.bluff.ranks`). `target` alone is the
+ * destination's own value, for destinations the sheet computes before
+ * bonuses are applied. Which parts each kind of destination exposes is
+ * decided in model/scope.js (targetFacts); this module receives
+ * `{ kind, values, late }`, where `kind` names the destination for error
+ * messages ("a skill").
  * -------------------------------------------------------------- */
 
 /** `target` and `target.<part>`, in any case -- `Target.Ranks` reads like `target.ranks`. */
 const TARGET_NAME_RE = /^target(?:\.(.+))?$/i;
 
 /** What a formula outside a bonus is told when it reads `target`. */
-export const TARGET_OUTSIDE = '"target" only means something inside a bonus — '
-  + '{skill -= if(target.ranks == 0, 2, 0)} — where it is the destination the bonus is '
-  + 'landing on. Anywhere else, name the value itself: skill.bluff.ranks.';
+export const TARGET_OUTSIDE = '"target" is only defined inside a forwarded bonus ({dest += …}), where it '
+  + 'is the stat the bonus is added to, e.g. {skill -= if(target.ranks == 0, 2, 0)}. Outside a '
+  + 'bonus, use the full name, e.g. skill.bluff.ranks.';
 
 /** Is this `target` or one of its parts? */
 export const isTargetName = (name) => TARGET_NAME_RE.test(String(name));
@@ -236,37 +234,36 @@ export function readsTarget(expr) {
 
 const capitalise = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
-/** "target.ranks and target.classSkill", or why there is nothing to list. */
+/** "Available: target.ranks and target.classSkill.", or why nothing is. */
 function offered(t) {
   const names = Object.keys(t.values || {}).map((k) => `target.${k}`);
   if (!names.length) {
-    return ' Its numbers are worked out after the bonuses sent to it, so there is nothing on it '
-      + 'a bonus can read.';
+    return ' None of its values are available to target: they are calculated after bonuses are applied.';
   }
   const list = names.length > 1
     ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
-  return ` It offers ${list}.`;
+  return ` Available: ${list}.`;
 }
 
 /**
- * One read of `target`, or a message that says what to read instead.
+ * Read `target` or `target.<part>`, or throw a message listing what is
+ * available.
  *
- * A destination the sheet only totals once its bonuses are in -- a skill, a
- * weapon, a tracker -- has no number of its own to give, and saying so is
- * better than handing over last edit's total: that total already has this
- * bonus in it, and a rule reading it would chase itself a little further on
- * every keystroke.
+ * A destination the sheet totals only after bonuses are applied (a skill, a
+ * weapon, a tracker) has no pre-bonus value to return. Returning the previous
+ * recompute's total instead would include this bonus, so the result would
+ * drift on every recompute.
  */
 function targetValue(t, part) {
   const values = t.values || {};
   if (!part || (part.toLowerCase() === 'total' && t.late)) {
     if (!t.late && typeof values.total === 'number') return values.total;
-    throw new FormulaError(`"target" on its own is the number this bonus is added to, and for `
-      + `${t.kind} that is only worked out once the bonuses have arrived.${offered(t)}`);
+    throw new FormulaError(`"target" alone is not available for ${t.kind}: its value is calculated `
+      + `after bonuses are applied.${offered(t)}`);
   }
   const v = resolvePath(values, part);
   if (v !== undefined) return v;
-  throw new FormulaError(`${capitalise(t.kind)} has no "${part}" to read.${offered(t)}`);
+  throw new FormulaError(`${capitalise(t.kind)} has no "${part}".${offered(t)}`);
 }
 
 /**
@@ -276,9 +273,9 @@ function targetValue(t, part) {
  * Local before the character so a veil's `essence.self` is found even though
  * the character has an `essence` of its own with no `self` in it.
  *
- * `target` is the destination a bonus is landing on, when there is one. A
- * definition, a shown value or a question has none, and is told so by name
- * rather than being told that `target.ranks` does not exist.
+ * `target` is the destination, when evaluating a forwarded bonus. Definitions,
+ * shown values and questions have none; reading `target` there throws
+ * TARGET_OUTSIDE rather than a "not found" error.
  */
 export function proseScope(names, local, base, target = null) {
   return {
@@ -308,19 +305,18 @@ function amount(expr, scope, sign) {
 }
 
 /**
- * A bonus that reads `target`, worked out once for each place it lands.
+ * Evaluate a bonus that reads `target` once per destination key.
  *
- * `values` holds what each destination receives, and `failed` why any could
- * not be worked out -- "target.ranks" aimed at a save as well as a skill
- * fails on the save and still lands on the skill. `value` is the one number
- * a sentence can show: the amount most of the destinations got, leaving out
- * the ones that got nothing, because "-2" is what a penalty on untrained
- * skills comes to and the trained ones taking none of it is the rule working.
+ * `values` maps each key to its amount. `failed` maps each key the formula
+ * threw on to the error message (e.g. `target.ranks` on a save when the bonus
+ * also goes to skills); those keys get nothing, the others are unaffected.
+ * `value` is the amount shown inline: the most common non-zero amount, or 0
+ * if every amount is 0.
  */
-export function amountsPerTarget(expr, sign, lands, scopeFor, targetOf) {
+export function amountsPerTarget(expr, sign, keys, scopeFor, targetOf) {
   const values = {};
   const failed = {};
-  for (const key of lands) {
+  for (const key of keys) {
     try {
       values[key] = amount(expr, scopeFor(targetOf(key)), sign);
     } catch (err) {
@@ -427,9 +423,8 @@ export function collectUses(sources) {
         // A definition naming itself is a cycle, reported as one; it is not a
         // use of some other name that has gone missing.
         if (t.kind === 'define' && name === t.name) continue;
-        // Nor is a bonus reading its own destination. Whether that destination
-        // has the part asked for is a question about each one it lands on,
-        // answered when the bonus is worked out -- not a name to look up.
+        // Nor is `target` in a bonus: whether each destination has the part
+        // is checked when the bonus is evaluated, not looked up as a name.
         if (t.kind === 'push' && isTargetName(name)) continue;
         out.push({ name, path, scope, kind: 'expr', source: t.kind === 'query' ? t.raw : t.expr });
       }
@@ -580,10 +575,10 @@ export function resolveDefinitions(defs, baseScope) {
  * other only; a size bonus typed into the Stats tab's own Size column is a
  * different number in a different place, and the sheet adds both.
  *
- * A bonus that reads `target` is worked out once per destination it lands on
- * (see amountsPerTarget), and each destination's list holds a copy of the
- * entry carrying that destination's own amount -- so the stacking below, and
- * every badge that explains a number, sees what that number actually got.
+ * A bonus that reads `target` is evaluated once per destination (see
+ * amountsPerTarget), and each destination's list in `by` holds a copy of the
+ * entry with that destination's amount, so stacking and the badges use the
+ * per-destination value.
  *
  * @param contributions  from collectContributions()
  * @param names          the resolved {name = …} values
@@ -592,8 +587,8 @@ export function resolveDefinitions(defs, baseScope) {
  *                       see the model's forwardTargets(). `expand` turns a
  *                       destination into the concrete places it lands (so
  *                       `skill` becomes every skill) and returns null for
- *                       anything unforwardable; `targetOf` is what `target`
- *                       reads at one of those places.
+ *                       anything unforwardable; `targetOf` returns what
+ *                       `target` reads for one of those keys.
  */
 export function resolveContributions(contributions, names, baseScope, targets) {
   const expand = targets?.expand || (() => null);
@@ -627,13 +622,13 @@ export function resolveContributions(contributions, names, baseScope, targets) {
       }
       lands.push(...into);
     }
-    const landed = [...new Set(lands)];
+    const keys = [...new Set(lands)];
 
     let value = 0;
     let error = null;
     let each = null;
     if (targetOf && readsTarget(c.expr)) {
-      each = amountsPerTarget(c.expr, c.sign, landed,
+      each = amountsPerTarget(c.expr, c.sign, keys,
         (target) => proseScope(names, c.scope, baseScope, target), targetOf);
       value = each.value;
       // One complaint per thing wrong, not one per skill it was wrong on: a
@@ -658,9 +653,9 @@ export function resolveContributions(contributions, names, baseScope, targets) {
     const entry = {
       ...c,
       value,
-      error: error || (dropped.length && !landed.length ? `Goes nowhere: ${dropped.join(', ')}` : null),
+      error: error || (dropped.length && !keys.length ? `Goes nowhere: ${dropped.join(', ')}` : null),
       dropped,
-      lands: each ? landed.filter((key) => !(key in each.failed)) : landed,
+      lands: each ? keys.filter((key) => !(key in each.failed)) : keys,
       ...(each ? { values: each.values, failed: each.failed } : {}),
     };
     entries.push(entry);
@@ -716,10 +711,10 @@ export function resolveContributions(contributions, names, baseScope, targets) {
  * own invested essence -- and is looked up ahead of the character's, matching
  * the order `resolveDefinitions` uses.
  *
- * `targets` is the model's forwardTargets(), for a bonus that reads `target`:
- * one of those is worked out for every destination it lands on, exactly as
- * resolveContributions() does it, and carries `values` -- what each got --
- * beside the one `value` the sentence shows.
+ * `targets` is the model's forwardTargets(). A bonus that reads `target` is
+ * evaluated per destination, as in resolveContributions(), and its segment
+ * carries `values` (amount per destination) and `failed` beside the `value`
+ * shown inline.
  */
 export function renderTokens(text, names, baseScope, local = null, targets = null) {
   const scope = proseScope(names, local, baseScope);
@@ -745,9 +740,9 @@ export function renderTokens(text, names, baseScope, local = null, targets = nul
       // sentence is the number the destination receives, or the sentence is
       // lying about what the rule does.
       if (seg.kind === 'push' && targets?.targetOf && readsTarget(seg.expr)) {
-        const lands = [...new Set(seg.targets.flatMap((t) => targets.expand(t) || []))];
-        if (!lands.length) return { ...seg, error: `Goes nowhere: ${seg.targets.join(', ')}` };
-        const each = amountsPerTarget(seg.expr, seg.sign, lands,
+        const keys = [...new Set(seg.targets.flatMap((t) => targets.expand(t) || []))];
+        if (!keys.length) return { ...seg, error: `Goes nowhere: ${seg.targets.join(', ')}` };
+        const each = amountsPerTarget(seg.expr, seg.sign, keys,
           (target) => proseScope(names, local, baseScope, target),
           (key) => targets.targetOf(key, baseScope));
         if (!Object.keys(each.values).length) return { ...seg, error: Object.values(each.failed)[0] };

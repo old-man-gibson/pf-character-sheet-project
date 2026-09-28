@@ -1347,16 +1347,15 @@ console.log('tabs -- a player names a tab their own way; the original is kept');
 }
 
 /*
- * A bonus that asks where it is landing.
+ * `target` in forwarded bonuses, and skill.<name>.ranks.
  *
- * "A -2 penalty on skill checks for skills with which you are untrained" is
- * one rule about every skill that applies to some of them. Until a bonus could
- * name its destination it could not be written once: `{skill -= 2}` hit the
- * trained ones too, and no formula could read a skill's ranks at all. Built
- * here rather than read off a fixture because no roster character has written
- * one yet, and so that it runs in every checkout.
+ * "A -2 penalty on skill checks for skills with which you are untrained"
+ * needs a per-skill condition: `{skill -= 2}` also hits trained skills, and
+ * before this no formula could read a skill's ranks. Built from a blank
+ * document rather than a fixture because no roster character uses it yet,
+ * and so it runs in every checkout.
  */
-console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
+console.log('\ntarget in forwarded bonuses, and skill ranks');
 {
   const { eachLine, eachShown, tokenScope, tokenTitle } = await import('../app/js/ui/prose.js');
   const c = new Character(blankDocument({ name: 'Meticulous', level: 12 }));
@@ -1414,8 +1413,8 @@ console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
   // What the sentence says, and what hovering it says.
   const seg = c.renderProse(c.data.notes[0].body).find((s) => s.kind === 'push');
   check('the sentence shows the penalty', eachShown(seg), '-2');
-  check('hovering names who took it, then who did not',
-    /^-2 to Appraise, .+ and \d+ more; nothing to Acrobatics and Bluff$/.test(eachLine(c, seg)), true);
+  check('the tooltip lists amounts per destination, +0 last',
+    /^-2 to Appraise, .+ and \d+ more; \+0 to Acrobatics and Bluff$/.test(eachLine(c, seg)), true);
   check('and works it out on one of them',
     /on Appraise: if\(target\.ranks == 0, 2, 0\) {2}= {2}if\(0 == 0, 2, 0\) {2}= {2}2/.test(
       tokenTitle(c, seg, tokenScope(c, null))), true);
@@ -1427,20 +1426,20 @@ console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
 
   // Mistakes, told apart, each said once.
   write('{skill.bluff, saves.will += target.ranks}');
-  check('a part one destination lacks fails there and lands on the other',
+  check('a part one destination lacks errors there and still applies to the other',
     [skill('Bluff').forwarded, c.forwardedInto('saves.will')], [10, null]);
   check('saying what the save has instead',
-    /^A saving throw has no "ranks" to read\. It offers .*target\.base/.test(c.contributions.errors[0]?.error), true);
+    /^A saving throw has no "ranks"\. Available: .*target\.base/.test(c.contributions.errors[0]?.error), true);
   check('and the bonus as a whole still works', c.contributions.entries[0].error, null);
   write('{skill -= if(target.rank == 0, 2, 0)}');
   check('a misspelt part is one complaint, not one per skill', c.contributions.errors.map((e) => e.error),
-    ['A skill has no "rank" to read. It offers target.ranks and target.classSkill.']);
+    ['A skill has no "rank". Available: target.ranks and target.classSkill.']);
   check('moves nothing', skill('Climb').forwarded, 0);
   check('and is listed with the bonuses that go nowhere',
     c.formulaProblems().some((p) => p.kind === 'misdirected' && /no "rank"/.test(p.detail)), true);
   write('{skill.bluff += target}');
   check('a skill has no total of its own to give a bonus aimed at it',
-    /only worked out once the bonuses have arrived/.test(c.contributions.errors[0]?.error), true);
+    /calculated after bonuses are applied/.test(c.contributions.errors[0]?.error), true);
 
   // A destination totalled before the prose gives its own number, as it stood
   // before any bonus arrived -- so a bonus reading it cannot chase itself.
@@ -1448,7 +1447,7 @@ console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
   write('{initiative += target} {str.score += if(target.mod < 1, 2, 0)} {saves -= if(target.base == 0, 1, 0)}');
   const init = c.data.hp.initiative;
   const str = c.data.abilities.str.score;
-  check('target is the number the bonus lands on', init, 6);
+  check('target is the destination\'s pre-bonus value', init, 6);
   check('a part beside it reads before the bonus too, so the +2 stays', str, 12);
   check('and a save reads its own base', c.forwardedInto('saves.will')?.total, -1);
   c.recompute(); c.recompute(); c.recompute();
@@ -1489,7 +1488,7 @@ console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
   write('Shown {= target.ranks} and named {my.x = target}');
   check('a shown value or a name is told where target belongs',
     c.renderProse(c.data.notes[0].body).filter((s) => s.kind !== 'text')
-      .every((s) => /only means something inside a bonus/.test(s.error)), true);
+      .every((s) => /only defined inside a forwarded bonus/.test(s.error)), true);
   check('and Needs attention says which kind of field it lives in',
     c.formulaProblems().some((p) => p.kind === 'orphan' && p.name === 'target.ranks' && /forwarded bonus/.test(p.detail)), true);
   {
