@@ -1346,6 +1346,174 @@ console.log('tabs -- a player names a tab their own way; the original is kept');
   check('and leaves nothing behind', c.tabName('sys:Ledger'), null);
 }
 
+/*
+ * A bonus that asks where it is landing.
+ *
+ * "A -2 penalty on skill checks for skills with which you are untrained" is
+ * one rule about every skill that applies to some of them. Until a bonus could
+ * name its destination it could not be written once: `{skill -= 2}` hit the
+ * trained ones too, and no formula could read a skill's ranks at all. Built
+ * here rather than read off a fixture because no roster character has written
+ * one yet, and so that it runs in every checkout.
+ */
+console.log('\na bonus reads where it lands -- target, and a skill\'s ranks');
+{
+  const { eachLine, eachShown, tokenScope, tokenTitle } = await import('../app/js/ui/prose.js');
+  const c = new Character(blankDocument({ name: 'Meticulous', level: 12 }));
+  const skill = (n) => c.data.skills.find((s) => s.name === n);
+  const buy = (n, ranks) => { skill(n).rankSources.bought = ranks; };
+  const write = (body) => { c.data.notes = [{ body }]; c.recompute(); };
+  buy('Acrobatics', 2);
+  skill('Acrobatics').classSkill = true;
+  buy('Bluff', 10);
+  c.recompute();
+  const base = (n) => skill(n).bonus - (skill(n).forwarded || 0);
+
+  // The ranks are readable by name, and the name goes on reading the total.
+  const scope = c.scope();
+  check('a skill still reads as its total', resolvePath(scope, 'skill.acrobatics'), skill('Acrobatics').bonus);
+  check('its ranks and class-skill mark hang off it',
+    [resolvePath(scope, 'skill.acrobatics.ranks'), resolvePath(scope, 'skill.acrobatics.classSkill')], [2, 1]);
+  check('and are among the names a formula may use',
+    ['skill.bluff.ranks', 'skill.bluff.classSkill'].every((n) => c.scopeNames().includes(n)), true);
+  check('Skill Focus, written against its own ranks',
+    evaluateFormula('if(skill.bluff.ranks >= 10, 6, 3)', scope), 6);
+  write('{skill.bluff.ranks += 1}');
+  check('ranks are read, not sent to',
+    /a value you can read, but the sheet has nowhere to put a bonus/.test(c.contributions.errors[0]?.error), true);
+
+  // Meticulous, as the drawback says it.
+  const climb = base('Climb');
+  write('Meticulous {skill -= if(target.ranks == 0, 2, 0)}');
+  check('an untrained skill takes the penalty', skill('Climb').bonus, climb - 2);
+  check('a trained one does not', [skill('Acrobatics').forwarded, skill('Bluff').forwarded], [0, 0]);
+  check('and nothing is reported as wrong', c.contributions.errors, []);
+  const entry = c.contributions.entries[0];
+  check('the bonus keeps what each skill got',
+    [entry.values['skill.climb'], entry.values['skill.bluff']], [-2, 0]);
+  check('and the one number its sentence shows is the penalty', entry.value, -2);
+  check('the skill names the rule that took the two',
+    c.forwardedInto('skill.climb').from.map((f) => [f.value, f.expr]), [[-2, 'if(target.ranks == 0, 2, 0)']]);
+  check('a trained skill shows nothing arriving', c.forwardedInto('skill.bluff'), null);
+
+  // The ranks are settled before the prose is read, so the first rank bought
+  // takes the penalty off in the same edit rather than the one after.
+  buy('Climb', 1);
+  c.recompute();
+  check('buying a rank lifts it at once', skill('Climb').forwarded, 0);
+  buy('Climb', 0);
+  c.recompute();
+  check('and selling it back puts it on again', skill('Climb').forwarded, -2);
+
+  const settled = c.data.skills.map((s) => s.bonus);
+  c.recompute(); c.recompute();
+  check('recomputing settles', c.data.skills.map((s) => s.bonus), settled);
+  check('and so does reopening -- neither absorbed nor doubled',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.skills.map((s) => s.bonus), settled);
+
+  // What the sentence says, and what hovering it says.
+  const seg = c.renderProse(c.data.notes[0].body).find((s) => s.kind === 'push');
+  check('the sentence shows the penalty', eachShown(seg), '-2');
+  check('hovering names who took it, then who did not',
+    /^-2 to Appraise, .+ and \d+ more; nothing to Acrobatics and Bluff$/.test(eachLine(c, seg)), true);
+  check('and works it out on one of them',
+    /on Appraise: if\(target\.ranks == 0, 2, 0\) {2}= {2}if\(0 == 0, 2, 0\) {2}= {2}2/.test(
+      tokenTitle(c, seg, tokenScope(c, null))), true);
+
+  // Two destinations, two amounts: Deceitful, +2 or +4 at 10 ranks.
+  write('Deceitful {skill.bluff, skill.disguise += if(target.ranks >= 10, 4, 2)}');
+  check('each destination gets its own amount', [skill('Bluff').forwarded, skill('Disguise').forwarded], [4, 2]);
+  check('and the sentence shows both', eachShown(c.renderProse(c.data.notes[0].body)[1]), '+4 / +2');
+
+  // Mistakes, told apart, each said once.
+  write('{skill.bluff, saves.will += target.ranks}');
+  check('a part one destination lacks fails there and lands on the other',
+    [skill('Bluff').forwarded, c.forwardedInto('saves.will')], [10, null]);
+  check('saying what the save has instead',
+    /^A saving throw has no "ranks" to read\. It offers .*target\.base/.test(c.contributions.errors[0]?.error), true);
+  check('and the bonus as a whole still works', c.contributions.entries[0].error, null);
+  write('{skill -= if(target.rank == 0, 2, 0)}');
+  check('a misspelt part is one complaint, not one per skill', c.contributions.errors.map((e) => e.error),
+    ['A skill has no "rank" to read. It offers target.ranks and target.classSkill.']);
+  check('moves nothing', skill('Climb').forwarded, 0);
+  check('and is listed with the bonuses that go nowhere',
+    c.formulaProblems().some((p) => p.kind === 'misdirected' && /no "rank"/.test(p.detail)), true);
+  write('{skill.bluff += target}');
+  check('a skill has no total of its own to give a bonus aimed at it',
+    /only worked out once the bonuses have arrived/.test(c.contributions.errors[0]?.error), true);
+
+  // A destination totalled before the prose gives its own number, as it stood
+  // before any bonus arrived -- so a bonus reading it cannot chase itself.
+  c.data.hp.initMisc = 3;
+  write('{initiative += target} {str.score += if(target.mod < 1, 2, 0)} {saves -= if(target.base == 0, 1, 0)}');
+  const init = c.data.hp.initiative;
+  const str = c.data.abilities.str.score;
+  check('target is the number the bonus lands on', init, 6);
+  check('a part beside it reads before the bonus too, so the +2 stays', str, 12);
+  check('and a save reads its own base', c.forwardedInto('saves.will')?.total, -1);
+  c.recompute(); c.recompute(); c.recompute();
+  check('none of them chases itself', [c.data.hp.initiative, c.data.abilities.str.score], [init, str]);
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('not even across a reopen', [reopened.data.hp.initiative, reopened.data.abilities.str.score], [init, str]);
+  c.data.hp.initMisc = 0;
+
+  // A total's Other column is measured afresh on every reopen, so `target`
+  // reads the total without it -- or a bonus doubling its own save would read
+  // a column the measurement had not finished with, and reopen with it gone.
+  write('');
+  c.setOffset('saves.will.total', 2);
+  const willOwn = c.data.saves.will.total - 2;   // what the sheet works out itself
+  write('{saves.will += target}');
+  const will = c.data.saves.will.total;
+  check('target leaves the Other column out', c.forwardedInto('saves.will')?.total, willOwn);
+  check('and a save reading itself reopens as it was saved',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.saves.will.total, will);
+  c.setOffset('saves.will.total', 0);
+
+  // A weapon offers what is written on its row.
+  c.listAdd('equipment.weapons', { name: 'Greatsword', attackType: 'Melee', dice: '2d6', handedness: 'Two-Handed', enhancement: 1 });
+  c.listAdd('equipment.weapons', { name: 'Longsword', attackType: 'Melee', dice: '1d8', handedness: 'One-Handed' });
+  write('Power Attack {weapon.melee.damage += if(target.twoHanded, 3, 2)} {weapon.attack += target.enhancement}');
+  check('a two-handed weapon gets the larger share',
+    [c.forwardedInto('weapon.0.damage')?.total, c.forwardedInto('weapon.1.damage')?.total], [3, 2]);
+  check('and a +1 weapon its enhancement', [c.forwardedInto('weapon.0.attack')?.total, c.forwardedInto('weapon.1.attack')], [1, null]);
+
+  // A familiar's skill reads its own ranks, or its master's where higher.
+  c.data.familiar[0].name = 'Pip';
+  write('{familiar.skill -= if(target.ranks == 0, 2, 0)}');
+  check('a familiar borrows its master\'s ranks', c.forwardedInto('familiar.skill.acrobatics'), null);
+  check('and is untrained where the master is', c.forwardedInto('familiar.skill.appraise')?.total, -2);
+  c.data.familiar[0].name = '';
+
+  // Outside a bonus there is nothing for it to mean, and it says so.
+  write('Shown {= target.ranks} and named {my.x = target}');
+  check('a shown value or a name is told where target belongs',
+    c.renderProse(c.data.notes[0].body).filter((s) => s.kind !== 'text')
+      .every((s) => /only means something inside a bonus/.test(s.error)), true);
+  check('and Needs attention says which kind of field it lives in',
+    c.formulaProblems().some((p) => p.kind === 'orphan' && p.name === 'target.ranks' && /forwarded bonus/.test(p.detail)), true);
+  {
+    // The two tabs that draw every formula's working must draw these too.
+    const admin = await import('../app/js/ui/panels/admin.js');
+    const ctx = { formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: true, tab: 'formulas' };
+    let drawn = true;
+    try { admin.renderFormulaPanel(c, ctx); admin.renderAuditPanel(c, ctx); } catch { drawn = false; }
+    check('the Formulas tab and the audit still draw', drawn, true);
+  }
+  write('{target = 5} {skill -= if(target.ranks == 0, 2, 0)}');
+  check('target cannot be a name of your own', c.formulaProblems().some((p) => p.kind === 'shadow' && p.name === 'target'), true);
+  check('and the bonus still reads its destination', skill('Appraise').forwarded, -2);
+
+  // A tracker's note may carry one too, and the audit does not mistake
+  // `target` for a name nothing defines.
+  c.data.notes = [];
+  const t = c.addTracker({ name: 'Focus', maxFormula: '3', note: 'While focused {skill += if(target.classSkill, 1, 0)}' });
+  check('a note forwards it like any prose', skill('Acrobatics').forwarded, 1);
+  check('and its audit row reads it as a bonus, not an unknown',
+    c.audit().filter((r) => String(r.id).startsWith(`${t.id}:note`)).map((r) => [r.status, r.value]), [['ok', 1]]);
+  c.removeTracker(t.id);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

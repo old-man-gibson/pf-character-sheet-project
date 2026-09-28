@@ -13,7 +13,7 @@ import { ABILITIES } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { setPath } from '../util.js';
+import { setPath, skillRanksNamed } from '../util.js';
 
 // A companion: the level, HD, hit points, attack, saves, AC and every skill
 // and attack total come from the tables and the master, so only what was
@@ -267,17 +267,7 @@ export function importAnimalCompanion(tab) {
  */
 export function companionMaster(model) {
   const c = model.data;
-  const ranksOf = (name, spec = '') => {
-    const want = String(name || '').trim().toLowerCase();
-    const wantSpec = String(spec || '').trim().toLowerCase();
-    let best = 0;
-    for (const s of c.skills || []) {
-      if (String(s.name || '').trim().toLowerCase() !== want) continue;
-      if (wantSpec && String(s.spec || '').trim().toLowerCase() !== wantSpec) continue;
-      best = Math.max(best, Number(s.totalRanks) || 0);
-    }
-    return best;
-  };
+  const ranksOf = (name, spec = '') => skillRanksNamed(c.skills, name, spec);
   return {
     level: Number(c.identity?.level) || 0,
     // The magic training's global caster level, or the character's own level

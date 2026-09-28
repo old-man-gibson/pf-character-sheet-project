@@ -4468,6 +4468,25 @@ button.fx-starter:hover { border-color: var(--cs-accent); border-style: solid; }
   display: grid; gap: 4px; margin: 6px 0 8px;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
 }
+/* Inside a family, one heading per thing it is made of -- a skill, a sphere,
+   a companion. A heading with a few names is a card, its chips one above the
+   other, and the cards sit side by side; one with many (.wide) takes the
+   whole row and lets its chips spread across it. The rule on the left says
+   which chips belong to which heading without boxing every card in. */
+.fx-subs {
+  display: grid; gap: 8px 12px; margin: 6px 0 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+.fx-sub { min-width: 0; padding-left: 8px; border-left: 2px solid var(--cs-line); }
+.fx-sub.wide { grid-column: 1 / -1; }
+.fx-subhead {
+  font-size: 0.72rem; font-weight: 650; color: var(--cs-muted);
+  margin: 1px 0 4px; overflow-wrap: anywhere;
+}
+.fx-sub > .fx-names { margin: 0; grid-template-columns: minmax(0, 1fr); }
+.fx-sub.wide > .fx-names {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
 button.fx-name-chip {
   display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
   font-family: var(--cs-mono); font-size: 0.72rem; text-align: left;
@@ -4588,6 +4607,12 @@ code.fx-problemname { color: var(--cs-accent); font-weight: 650; font-size: 0.82
 }
 .fx-place.inforce .fx-placelabel { color: var(--cs-accent); }
 .fx-placewhere { color: var(--cs-text); }
+/* Where a formula is written, as the way back to it: the badge it always was,
+   made a button, the arrow saying it goes somewhere. */
+button.fx-goto { cursor: pointer; line-height: inherit; background: transparent; }
+button.fx-goto:hover { border-color: var(--cs-accent); color: var(--cs-accent); }
+.fx-goto-arrow { font-size: 0.9em; }
+.fx-place button.fx-goto { margin-left: 0; text-align: left; font-size: 0.72rem; }
 .fx-place code.fx-code { cursor: pointer; }
 .fx-place code.fx-code:hover { outline: 1px solid var(--cs-accent); border-radius: 3px; }
 .fx-placeval {

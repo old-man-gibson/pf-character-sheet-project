@@ -16,6 +16,23 @@ export const slug = (s) => String(s || '')
 export const skillKey = (s) => `${s.name}|${s.spec || ''}`;
 
 /**
+ * The most ranks the character has in a skill named this, ignoring case --
+ * and, given a variant, in that variant only. What a familiar borrows from its
+ * master, and what `target.ranks` reads on one of the familiar's skills.
+ */
+export function skillRanksNamed(skills, name, spec = '') {
+  const want = String(name || '').trim().toLowerCase();
+  const wantSpec = String(spec || '').trim().toLowerCase();
+  let best = 0;
+  for (const s of skills || []) {
+    if (String(s.name || '').trim().toLowerCase() !== want) continue;
+    if (wantSpec && String(s.spec || '').trim().toLowerCase() !== wantSpec) continue;
+    best = Math.max(best, Number(s.totalRanks) || 0);
+  }
+  return best;
+}
+
+/**
  * The name a formula forwards a bonus to a skill under -- the same slug the
  * scope publishes the skill's total as, so `{= skill.bluff}` and
  * `{skill.bluff += 4}` can never mean two different rows.

@@ -81,6 +81,17 @@ check('bare self counts', contextualNote('self').includes('tracker'), true);
 check('an ordinary name has no note', contextualNote('wis.mod'), null);
 check('a near miss is not swept in', contextualNote('essence.hands'), null);
 check('nor is a name that merely starts the same way', contextualNote('selfish'), null);
+check('target belongs to a bonus', contextualNote('target.ranks').includes('forwarded bonus'), true);
+{
+  // Prose refuses `target` outside a bonus rather than not finding it, and a
+  // working drawn in a tooltip must say so, not throw.
+  const { proseScope } = await import('../app/js/inline.js');
+  const w = workings('target.ranks + level', proseScope({}, null, scope));
+  check('a refused name is worked out, not thrown', [w.ok, w.reads.map((r) => r.known)], [false, [false, true]]);
+  check('and the working says where target belongs', /only means something inside a bonus/.test(w.error), true);
+}
+check('in any case, as every name is read', contextualNote('Target').includes('forwarded bonus'), true);
+check('and a name that only starts like it is left alone', contextualNote('targets.hit'), null);
 check('every entry says where and what',
   CONTEXTUAL_VALUES.every((v) => v.where && v.what && v.names && typeof v.match === 'function'), true);
 check('the flag explains rather than denies',

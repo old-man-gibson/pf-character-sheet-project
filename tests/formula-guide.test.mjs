@@ -1,9 +1,10 @@
 /** Tests for the Formulas tab's builders. Run: node tests/formula-guide.test.mjs */
 import { blankDocument } from '../app/js/convert.js';
 import { Character } from '../app/js/model.js';
+import { resolvePath } from '../app/js/formula.js';
 import {
   classify, valueGroups, formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml,
-  scratchpadHtml, referenceHtml, problemsHtml, VALUE_SECTIONS,
+  scratchpadHtml, referenceHtml, problemsHtml, forwardedHtml, VALUE_SECTIONS,
   classifyTarget, targetGroups, targetsHtml, TARGET_SECTIONS,
 } from '../app/js/formula-guide.js';
 
@@ -52,7 +53,7 @@ check('ability', classify('str.mod'), 'ability');
 check('defence', classify('saves.will'), 'defence');
 check('attack', classify('attack.cmb'), 'offence');
 check('companion', classify('eidolon.hd'), 'companion');
-check('magic', classify('caster.sp'), 'magic');
+check('a Spheres of Power number', classify('caster.sp'), 'power');
 check('character', classify('level'), 'character');
 check('a class level is the character too', classify('class.legendary_kineticist.level'), 'character');
 check('anything else', classify('somethingNew.x'), 'other');
@@ -352,6 +353,202 @@ console.log('where a bonus can be sent -- the half a reader cannot see on the sh
   check('the tab carries the destinations', withTargets.includes('Bonuses you can send'), true);
   check('and leaves them out when there are none',
     formulaPanelHtml({ names, scope, inlineNames, audit }).includes('Bonuses you can send'), false);
+}
+
+console.log('a family broken into what it is made of -- a heading each');
+{
+  // One character with a bit of everything that groups: skills with ranks,
+  // a familiar, and two eidolons, the second of which has to get a heading of
+  // its own without anyone asking for one.
+  const c = new Character(blankDocument({ name: 'Headings', level: 8 }));
+  c.data.skills.find((s) => s.name === 'Bluff').rankSources.bought = 3;
+  c.data.familiar[0].name = 'Pip';
+  c.data.eidolon[0].name = 'Ahriman';
+  const second = c.addCompanion('eidolon');
+  second.name = 'Wisp';
+  c.addTracker({ name: 'Burn Pool', maxFormula: '5' });
+  c.recompute();
+  const all = valueGroups(c.scopeNames(), c.scope(), c.inlineNames || {});
+  const group = (key) => all.find((g) => g.key === key);
+  const heading = (key, label) => group(key)?.subs.find((s) => s.label === label);
+
+  check('each skill has a heading, called what the sheet calls it',
+    heading('skill', 'Bluff')?.items.map((i) => i.name),
+    ['skill.bluff', 'skill.bluff.classSkill', 'skill.bluff.ranks', 'skill.bluff.total']);
+  check('a skill with a variant keeps its label', !!heading('skill', 'Kn. (arcana)'), true);
+  check('no skill is left loose above the headings', group('skill').loose, []);
+  check('every name is still counted once',
+    group('skill').subs.reduce((n, s) => n + s.items.length, 0), group('skill').items.length);
+
+  check('every companion in use has a heading of its own, named, in the sheet\'s order of kinds',
+    group('companion').subs.map((s) => s.label).filter((l) => !/skills$/.test(l)),
+    ['Pip (Familiar)', 'Ahriman (Eidolon)', 'Wisp (Eidolon 2)']);
+  check('the blank blocks nobody is using are left out -- their names still read',
+    [group('companion').items.some((i) => i.name.startsWith('animalCompanion.')),
+      resolvePath(c.scope(), 'animalCompanion.hd') !== undefined], [false, true]);
+  check('and the count beside the list is what the list holds',
+    all.listed, all.reduce((n, g) => n + g.items.length, 0));
+  check('a system the character does not play with is not listed',
+    all.filter((g) => ['power', 'might', 'guile', 'vancian', 'psionic', 'akashic', 'cards'].includes(g.key))
+      .map((g) => g.key), []);
+  check('though its names still read', resolvePath(c.scope(), 'caster.level') !== undefined, true);
+  check('and the unarmed strike stays, being the character\'s',
+    group('character').subs.some((s) => s.label === 'Unarmed strike'), true);
+  {
+    // Mark a class as a Spheres of Power one and the section is back, the
+    // way the Magic tab comes back on the bar.
+    const tagged = new Character(blankDocument({ name: 'Tagged', level: 8 }));
+    tagged.data.classes = [{ name: 'Incanter', systems: ['spheres-of-power'] }];
+    tagged.recompute();
+    check('marking a class with the system lists it again',
+      valueGroups(tagged.scopeNames(), tagged.scope(), {}).find((g) => g.key === 'power')?.subs.map((s) => s.label)[0],
+      'Casting');
+  }
+  check('a second of a kind reads under its own id', heading('companion', 'Wisp (Eidolon 2)')
+    .items.every((i) => i.name.startsWith('eidolon2.')), true);
+  check('and a companion\'s skills sit under a heading beside it',
+    heading('companion', 'Pip (Familiar) — skills')?.items.every((i) => i.name.startsWith('familiar.skill.')), true);
+  check('a tracker is headed by its name, not its id',
+    heading('tracker', 'Burn Pool')?.items.map((i) => i.name).includes('tracker.burn_pool.max'), true);
+  check('the abilities are headed in the order a sheet lists them',
+    group('ability').subs.map((s) => s.label),
+    ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma']);
+  check('hit points before armour, armour before the saves',
+    group('defence').subs.map((s) => s.label).slice(0, 5), ['Hit points', 'Armour class', 'Fortitude', 'Reflex', 'Will']);
+  check('level and size sit loose above the headings they have',
+    group('character').loose.map((i) => i.name).includes('level'), true);
+
+  check('a search finds a companion by its name',
+    valueGroups(c.scopeNames(), c.scope(), {}, 'wisp').flatMap((g) => g.items.map((i) => i.name))
+      .every((n) => n.startsWith('eidolon2.')), true);
+  check('and a skill by its label',
+    valueGroups(c.scopeNames(), c.scope(), {}, 'kn. (arcana)').flatMap((g) => g.items.map((i) => i.name)),
+    ['skill.kn_arcana', 'skill.kn_arcana.classSkill', 'skill.kn_arcana.ranks', 'skill.kn_arcana.total']);
+
+  const html = browserHtml(all, c.scopeNames().length, '');
+  check('the headings are drawn', html.includes('<div class="fx-subhead">Bluff</div>'), true);
+  check('a small heading is a card, a big one takes the row',
+    [/class="fx-sub"><div class="fx-subhead">Bluff</.test(html),
+      /class="fx-sub wide"><div class="fx-subhead">Pip \(Familiar\)</.test(html)], [true, true]);
+  check('and every name is drawn exactly once',
+    [...html.matchAll(/data-fx-insert="/g)].length, all.reduce((n, g) => n + g.items.length, 0));
+
+  // The destinations, the same way: one companion, one heading.
+  const targets = targetGroups(c.forwardTargetList);
+  const tgroup = (key) => targets.find((g) => g.key === key);
+  check('each companion\'s destinations sit under the same heading, in the same order',
+    tgroup('companion').subs.map((s) => s.label).filter((l) => !/skills$/.test(l)),
+    ['Pip (Familiar)', 'Ahriman (Eidolon)', 'Wisp (Eidolon 2)']);
+  check('every skill at once comes before each one',
+    tgroup('skill').subs.map((s) => s.label), ['All skills', 'Each skill']);
+  const offered = c.forwardTargetList.filter((t) => !t.unused);
+  check('every destination offered is drawn once',
+    [...targetsHtml(targets, c.forwardTargetList.length, '').matchAll(/data-fx-copy="/g)].length, offered.length);
+  check('a sphere of a system not in play is marked, not offered, and still takes a bonus',
+    [c.forwardTargetList.find((t) => t.name === 'spheres.cl')?.unused,
+      targets.some((g) => g.key === 'power'), c.forwardTargets().expand('spheres.cl')], [true, false, ['spheres.cl']]);
+  check('and the count is of what is offered', targets.listed, offered.length);
+}
+
+console.log('the sub-systems, each a family of its own');
+{
+  const systems = {
+    level: 12,
+    caster: { level: 12, sp: 18 },
+    spheres: { cl: 12 },
+    practitioner: { dc: 17 },
+    unarmed: { talents: 2 },
+    operative: { mod: 4 },
+    vancian: { cl: 9, wizard: { cl: 9 } },
+    manifester: { level: 5, psion: { level: 5 } },
+    pp: { pool: 30 },
+    essence: { pool: 6, hands: 2 },
+    deck: { size: 40, round: 3, manip: { loaded_hand: 1 } },
+    mana: { current: 10 },
+    // One sphere from each list: the branch says which.
+    sphere: {
+      dark: { cl: 12, dc: 18, talents: 3 },
+      athletics: { bab: 10, dc: 16, talents: 2 },
+      study: { ranks: 8, talents: 1, dc: 15, close: 30, medium: 110, long: 440 },
+    },
+  };
+  const sysNames = ['caster.level', 'spheres.cl', 'practitioner.dc', 'unarmed.talents', 'operative.mod',
+    'vancian.cl', 'vancian.wizard.cl', 'manifester.level', 'manifester.psion.level', 'pp.pool',
+    'essence.pool', 'essence.hands', 'deck.size', 'deck.round', 'deck.manip.loaded_hand', 'mana.current',
+    'sphere.dark.cl', 'sphere.dark.dc', 'sphere.athletics.bab', 'sphere.athletics.dc',
+    'sphere.study.ranks', 'sphere.study.dc'];
+  const families = Object.fromEntries(sysNames.map((n) => [n, classify(n, {}, systems)]));
+  check('Spheres of Power', ['caster.level', 'spheres.cl', 'sphere.dark.cl', 'sphere.dark.dc'].map((n) => families[n]),
+    ['power', 'power', 'power', 'power']);
+  check('Spheres of Might', ['practitioner.dc', 'sphere.athletics.bab', 'sphere.athletics.dc']
+    .map((n) => families[n]), ['might', 'might', 'might']);
+  check('the unarmed strike is the character\'s, spheres or none', families['unarmed.talents'], 'character');
+  check('Spheres of Guile', ['operative.mod', 'sphere.study.ranks', 'sphere.study.dc'].map((n) => families[n]),
+    ['guile', 'guile', 'guile']);
+  check('a sphere\'s DC goes where its sphere does, not by its own name',
+    [families['sphere.dark.dc'], families['sphere.athletics.dc'], families['sphere.study.dc']], ['power', 'might', 'guile']);
+  check('Vancian, psionics, Akashic and cardcasting each on their own',
+    ['vancian.wizard.cl', 'manifester.psion.level', 'pp.pool', 'essence.hands', 'deck.manip.loaded_hand']
+      .map((n) => families[n]), ['vancian', 'psionic', 'psionic', 'akashic', 'cards']);
+  check('and the wallet is the character\'s', families['mana.current'], 'character');
+
+  const sys = valueGroups(sysNames, systems, {});
+  const sub = (key) => sys.find((g) => g.key === key)?.subs.map((s) => s.label);
+  check('the casting numbers head the Power section, then each sphere', sub('power'), ['Casting', 'Dark']);
+  {
+    // A sphere with talents in it goes in front of one without, whatever the
+    // alphabet says -- the way the sphere tables fold the untrained away.
+    const both = { ...systems, sphere: { ...systems.sphere, alteration: { cl: 12, dc: 18, talents: 0 } } };
+    check('a trained sphere comes before an untrained one',
+      valueGroups(['caster.level', 'sphere.alteration.cl', 'sphere.dark.cl'], both, {})
+        .find((g) => g.key === 'power').subs.map((s) => s.label), ['Casting', 'Dark', 'Alteration']);
+  }
+  check('the practitioner before the spheres', sub('might'), ['Practitioner', 'Athletics']);
+  check('the operative before the spheres', sub('guile'), ['Operative', 'Study']);
+  check('power points before the manifester levels', sub('psionic'), ['Power points', 'Manifester levels']);
+  check('the pool before the receptacles', sub('akashic'), ['Essence', 'Receptacles']);
+  check('the deck, the table, the manipulations', sub('cards'), ['The deck', 'The table', 'Manipulations taken']);
+
+  // A destination does not carry its sphere's branch, so the model says which
+  // list it came from.
+  const sphereTargets = targetGroups([
+    { name: 'spheres.cl', label: 'Spheres of Power caster level' },
+    { name: 'sphere.dark.dc', label: 'Dark: save DC', system: 'magic', under: 'Dark' },
+    { name: 'sphere.athletics.dc', label: 'Athletics: save DC', system: 'combat', under: 'Athletics' },
+    { name: 'sphere.study.dc', label: 'Study: save DC', system: 'guile', under: 'Study' },
+    { name: 'vancian.cl', label: 'Every Vancian caster level', family: ['vancian.wizard.cl'] },
+    { name: 'manifester.psion.level', label: 'Psion: manifester level' },
+  ]);
+  check('each destination files under its own system', sphereTargets.map((g) => [g.key, g.items.map((i) => i.name)]),
+    [['power', ['spheres.cl', 'sphere.dark.dc']], ['might', ['sphere.athletics.dc']], ['guile', ['sphere.study.dc']],
+      ['vancian', ['vancian.cl']], ['psionic', ['manifester.psion.level']]]);
+  check('a sphere is headed by its own name', sphereTargets[0].subs.map((s) => s.label), ['Casting', 'Dark']);
+}
+
+console.log('where a formula is written is a button back to it');
+{
+  const rows = [
+    { id: '1', name: '{a.note}', source: 'inline', formula: '1 + 1', value: 2, error: null, status: 'ok',
+      where: 'note 1 on Lore', place: 'note:0' },
+    { id: '2', name: 'Loose', source: 'player', formula: '2', value: 2, error: null, status: 'ok' },
+  ];
+  const html = myFormulasHtml(rows, '');
+  check('a formula with a place says where, as a button carrying it',
+    html.includes('data-fx-goto="note:0"') && html.includes('note 1 on Lore<span class="fx-goto-arrow"'), true);
+  check('and one with none keeps the plain badge', (html.match(/data-fx-goto=/g) || []).length, 1);
+  const problems = problemsHtml([{
+    kind: 'orphan', name: 'nope', detail: 'Nothing defines it.',
+    places: [{ label: 'used in', where: 'note 2 on Lore', formula: 'nope + 1', place: 'note:1' },
+      { label: 'used in', where: 'somewhere', formula: 'nope' }],
+  }]);
+  check('a problem\'s places go to where they are written',
+    [problems.includes('data-fx-goto="note:1"'), (problems.match(/data-fx-goto=/g) || []).length], [true, 1]);
+  const forwarded = forwardedHtml([{
+    to: 'Bluff', value: 2, expr: '2', type: '', where: 'note 1 on Lore', place: 'note:0', error: null, dropped: [],
+  }], '');
+  check('and so does a forwarded bonus', forwarded.includes('data-fx-goto="note:0"'), true);
+  check('a place is escaped like everything else',
+    myFormulasHtml([{ ...rows[0], place: '"><b>x' }], '').includes('data-fx-goto="&quot;&gt;&lt;b&gt;x"'), true);
 }
 
 console.log('every insertable carries the text it inserts');

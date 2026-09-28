@@ -402,6 +402,17 @@ const BLOCKED_KEYS = new Set([
 ]);
 
 /**
+ * Where a scope keeps what its names are *of* -- the skill `kn_arcana` is
+ * "Kn. (arcana)", the companion `eidolon2` has a name of its own -- for a
+ * reader that files the names under headings, never for a formula.
+ *
+ * A symbol, so nothing here can reach it: a path is walked by string keys
+ * only, and a list of every name (Object.entries) passes symbols by. What it
+ * holds is plain data and says nothing a formula could compute with.
+ */
+export const SCOPE_INFO = Symbol('what a scope\'s names are of');
+
+/**
  * Whether a resolved branch is also a value: one carrying its own `total`.
  *
  * This is how a total can be broken into parts without the name that used to
