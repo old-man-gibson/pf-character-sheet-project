@@ -157,6 +157,7 @@ import {
   formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
   targetsHtml, targetGroups,
 } from './formula-guide.js';
+import { formulaPlace } from './ui/formula-places.js';
 import { hasTokens, formatValue } from './inline.js';
 import {
   historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
@@ -6975,6 +6976,42 @@ export class CharacterSheetElement extends HTMLElement {
         box.setSelectionRange(box.value.length, box.value.length);
       });
     });
+    // Where a formula is written is a way back to it. See #formulaJump.
+    root.querySelectorAll('[data-fx-goto]').forEach((el) => {
+      if (el.dataset.fxBound) return;
+      el.dataset.fxBound = '1';
+      el.addEventListener('click', () => this.#formulaJump(el.dataset.fxGoto));
+    });
+  }
+
+  /**
+   * Take a formula listed on the Formulas tab back to where it is written.
+   *
+   * The palette's own jump does the travelling -- the tab, a folded panel
+   * opened, the field lit up and the caret put in it. Some fields only exist
+   * once something is opened: a folded cell, a gear row's card, a tracker's
+   * editor, the second eidolon's page. For those the place names what opens
+   * them, and each is clicked in turn -- the same click a player would make --
+   * until the field is there, with the jump made again to land in it.
+   */
+  #formulaJump(place) {
+    const entry = formulaPlace(this.#model, place);
+    if (!entry) return;
+    // The session view's Overview is the dashboard, not the page the field is
+    // on; going to it means going to the Build view, as the player would.
+    if (entry.buildView && this.#model.viewMode() === 'session') this.#model.setViewMode('build');
+    this.#paletteJump(entry);
+    // Landed means the palette's own search found a field to type in, by
+    // selector or by the text the field holds -- not a heading that mentions it.
+    const landed = () => this.#findOnPanel(entry)?.matches?.('input, textarea, select');
+    for (const opener of entry.open || []) {
+      if (landed()) return;
+      let button = null;
+      try { button = this.shadowRoot.querySelector(opener); } catch { /* not a selector */ }
+      if (!button) continue;
+      button.click();
+      this.#paletteJump(entry);
+    }
   }
 
   #refreshPreview(root, kind, maxSrc, minSrc) {

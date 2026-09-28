@@ -35,6 +35,21 @@ export const COMPANION_LABELS = {
   conjured: 'Conjured Companion',
 };
 
+/**
+ * One companion, as a heading over the numbers it publishes: its name and
+ * what it is, "Pip (Familiar)", or what it is alone when it has no name yet.
+ * The second of a kind and after are numbered the way their ids are --
+ * "Wisp (Eidolon 2)" is `eidolon2.*` -- so a character who keeps several finds
+ * each one under its own heading, and a new one gets its own the moment it
+ * exists.
+ */
+export function companionHeading(kind, block) {
+  const nth = /\d+$/.exec(String(block?.id || ''))?.[0];
+  const what = `${COMPANION_LABELS[kind] || kind}${nth ? ` ${nth}` : ''}`;
+  const name = String(block?.name || '').trim();
+  return name ? `${name} (${what})` : what;
+}
+
 /** The worksheet each kind was imported from (none ever carried a conjured one). */
 export const COMPANION_TABS = {
   familiar: 'Familiar',

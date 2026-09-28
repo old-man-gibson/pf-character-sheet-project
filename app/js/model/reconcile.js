@@ -11,7 +11,8 @@
 
 import { DERIVED, FORWARD_BY_DERIVED, diceString, skillLabel } from '../rules.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
-import { hasTokens } from '../inline.js';
+import { hasTokens, isTargetName } from '../inline.js';
+import { contextualNote } from '../formula-format.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
 import { emit } from './events.js';
 import { applyGestalt } from './progression.js';
@@ -35,8 +36,16 @@ const SOURCE_WORD = {
  * *is* one (`level`), it hangs off one (`level.bonus`, where level is a
  * number and cannot hold anything), or it is the branch one lives on (`str`,
  * which already holds str.mod and the rest).
+ *
+ * And one reserved name: `target`, the destination inside a forwarded bonus.
+ * A definition named `target` would be looked up before the destination in
+ * every bonus that reads it.
  */
 export function shadowReason(name, builtin) {
+  if (/^target$/i.test(String(name))) {
+    return '"target" is reserved: inside a forwarded bonus it is the stat the bonus is added to. '
+      + 'Use another name, e.g. my.target.';
+  }
   if (builtin.has(name)) {
     return `"${name}" is a value the sheet works out for itself, so it cannot be defined here. `
       + 'Pick a name of your own — a dotted one such as my.' + String(name).split('.').pop()
@@ -334,6 +343,7 @@ export function audit(model) {
       const info = analyse(s.rankSources.bought);
       return {
         id: `skill-ranks-${i}`,
+        place: `skillRanks:${i}`,
         name: `${skillLabel(s.name, s.spec)} ranks`,
         source: 'skill',
         formula: s.rankSources.bought,
@@ -357,6 +367,7 @@ export function audit(model) {
       const unknown = info.variables.filter((v) => !known.has(v));
       return {
         id: `skill-misc-${i}`,
+        place: `skillMisc:${i}`,
         name: `${skillLabel(s.name, s.spec)} misc`,
         source: 'skill',
         formula: s.offset,
@@ -404,6 +415,7 @@ export function audit(model) {
     const local = new Set(flatNames(d.scope));
     return {
       id: `inline-${i}`,
+      place: d.path,
       name: `{${d.name}}`,
       source: 'inline',
       formula: d.expr,
@@ -432,6 +444,7 @@ export function audit(model) {
       const info = analyse(String(w.miscDamage).replace(/\{[^{}]*\}/g, '0'));
       return {
         id: `weapon-misc-${i}`,
+        place: `weaponMisc:${i}`,
         name: `${w.name || `Weapon ${i + 1}`} misc damage`,
         source: 'weapon',
         formula: w.miscDamage,
@@ -454,6 +467,7 @@ export function audit(model) {
     ];
     return items.map(({ t, kind }, ti) => ({
       id: `weapon-${wi}-${kind}-${ti}`,
+      place: `weapon:${wi}`,
       name: `${w.name || `Weapon ${wi + 1}`} ${kind} token`,
       source: 'weapon',
       formula: t.text,
@@ -478,6 +492,7 @@ export function audit(model) {
         || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
       return {
         id: `speed-${i}`,
+        place: `speed:${i}`,
         name: `${sp.type || `Speed ${i + 1}`} bonus`,
         source: 'player',
         formula: sp.bonus,
@@ -501,6 +516,7 @@ export function audit(model) {
         || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
       return {
         id: `other-${key}`,
+        place: `offset:${key}`,
         name: `${offsetLabel(key)} — Other`,
         source: 'player',
         formula: text,
@@ -532,6 +548,7 @@ export function audit(model) {
         const at = side === 'guile' ? i : (sphereForwardKey(row.sphere) || `sphere.${i}`).slice('sphere.'.length);
         sphereFormulas.push({
           id: `sphere-${side}-${at}-${field}`,
+          place: `sphereCell:${side}:${side === 'guile' ? i : row.sphere}:${field}`,
           name: `${row.sphere || 'Sphere'} ${label}`,
           source: 'player',
           formula: text,
@@ -559,6 +576,7 @@ export function audit(model) {
       || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
     return {
       id: 'languages-extra',
+      place: 'languages',
       name: 'Extra language slots',
       source: 'player',
       formula: langExtra,
@@ -587,6 +605,7 @@ export function audit(model) {
       || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
     return {
       id: `hp-${key}`,
+      place: `hp:${key}`,
       name,
       source: 'player',
       formula: hp[key],
@@ -603,27 +622,32 @@ export function audit(model) {
   // Crafting: any speed increase, cost reduction, item value or DC the
   // player typed as a formula rather than a number.
   const cr = model.data.crafting || {};
+  // `place` is the list and field the number lives in, for the Formulas tab's
+  // jump back to it: `crafting.projects|2|itemDC`.
   const craftFields = [
     ...(cr.speedIncreases || []).map((s, i) => ({
       id: `crafting-speed-${i}`, name: `Speed increase — ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
+      place: `craftNumber:crafting.speedIncreases|${i}|value`,
     })),
     ...(cr.costReductions || []).map((r, i) => ({
       id: `crafting-reduction-${i}`, name: `Cost reduction — ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
+      place: `craftNumber:crafting.costReductions|${i}|value`,
     })),
     ...(cr.projects || []).flatMap((p, i) => {
       const item = p.name || `Project ${i + 1}`;
       return [
-        { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value' },
-        { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC' },
+        { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
+        { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
         ...(p.dcAdjustments || []).map((a, j) => ({
           id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
+          place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,
         })),
       ];
     }),
   ];
   const craftingFormulas = craftFields
     .filter(({ obj, field }) => typeof obj[field] === 'string' && obj[field].trim())
-    .map(({ id, name, obj, field }) => {
+    .map(({ id, name, obj, field, place }) => {
       const formula = obj[field];
       const info = analyse(formula);
       const unknown = info.variables.filter((v) => !known.has(v));
@@ -631,6 +655,7 @@ export function audit(model) {
         || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
       return {
         id,
+        place,
         name,
         source: 'crafting',
         formula,
@@ -653,6 +678,7 @@ export function audit(model) {
       || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
     return {
       id: 'deck-manipulations',
+      place: 'deckManipulations',
       name: 'Deck manipulations available',
       source: 'player',
       formula: cc.manipulationsAvailable,
@@ -676,16 +702,27 @@ export function audit(model) {
     const selfKnown = new Set([...known,
       ...Object.keys(model.trackerScope(t).self).map((k) => `self.${k}`)]);
 
+    // `place` is the field in the tracker's own editor each one is typed in.
     const parts = [];
-    if (t.maxFormula) parts.push({ id: t.id, name: t.name, formula: t.maxFormula });
+    if (t.maxFormula) parts.push({ id: t.id, name: t.name, formula: t.maxFormula, place: `trackerForm:${t.id}:max` });
     if (t.minFormula) {
-      parts.push({ id: `${t.id}:min`, name: `${t.name} min`, formula: t.minFormula, self: true });
+      parts.push({
+        id: `${t.id}:min`, name: `${t.name} min`, formula: t.minFormula, self: true, place: `trackerForm:${t.id}:min`,
+      });
     }
     // Zone bounds are player formulas too (a danger zone from `self.max - 2`).
     (t.style?.zones || []).forEach((z, i) => {
       const label = z.label ? ` (${z.label})` : '';
-      if (z.from) parts.push({ id: `${t.id}:zone${i + 1}:from`, name: `${t.name} zone ${i + 1}${label} from`, formula: z.from, self: true });
-      if (z.to) parts.push({ id: `${t.id}:zone${i + 1}:to`, name: `${t.name} zone ${i + 1}${label} to`, formula: z.to, self: true });
+      for (const edge of ['from', 'to']) {
+        if (!z[edge]) continue;
+        parts.push({
+          id: `${t.id}:zone${i + 1}:${edge}`,
+          name: `${t.name} zone ${i + 1}${label} ${edge}`,
+          formula: z[edge],
+          self: true,
+          place: `trackerForm:${t.id}:zone:${i}:${edge}`,
+        });
+      }
     });
     // Every {…} the player wrote in the tracker's note, one row each.
     if (hasTokens(t.note)) {
@@ -697,18 +734,24 @@ export function audit(model) {
           formula: seg.kind === 'ref' ? seg.name : seg.expr,
           self: true,
           noteError: seg.error || null,
+          // A bonus reading `target` was worked out once per destination,
+          // which is not something one formula against one scope can redo.
+          each: seg.kind === 'push' && seg.values ? seg : null,
+          place: `tracker:${t.id}:note`,
         }));
     }
-    return parts.map(({ id, name, formula, self: usesSelf, noteError }) => {
+    return parts.map(({ id, name, formula, self: usesSelf, noteError, each, place }) => {
       const info = analyse(formula);
-      const unknown = info.variables.filter((v) => !(usesSelf ? selfKnown : known).has(v));
-      let value = null;
+      const unknown = info.variables.filter((v) => !(usesSelf ? selfKnown : known).has(v)
+        && !(each && isTargetName(v)));
+      let value = each ? each.value : null;
       let error = noteError || info.error;
-      if (info.ok && !unknown.length && !noteError) {
+      if (info.ok && !unknown.length && !noteError && !each) {
         try { value = evaluateFormula(formula, usesSelf ? selfScope : scope); } catch (e) { error = e.message; }
       }
       return {
         id,
+        place,
         name,
         source: t.source,
         formula,
@@ -766,6 +809,7 @@ export function orphans(model, auditRows = null) {
     add(u.name, {
       where: describeSource(u.path),
       path: u.path,
+      place: u.path,
       formula: u.source,
       kind: u.kind,
     });
@@ -780,7 +824,7 @@ export function orphans(model, auditRows = null) {
     if (r.source === 'inline') continue;
     for (const name of r.unknownReferences || []) {
       if (known.has(name) || defined.has(name)) continue;
-      add(name, { where: r.where || r.name, path: r.id, formula: r.formula, kind: 'field' });
+      add(name, { where: r.where || r.name, path: r.id, place: r.place, formula: r.formula, kind: 'field' });
     }
   }
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -799,6 +843,10 @@ export function orphans(model, auditRows = null) {
  * The individual formulas carry their own errors as well -- this is the
  * view from above, where a cycle is one problem naming three formulas
  * rather than three formulas each complaining separately.
+ *
+ * Each place carries `place`, where the formula is written in terms the
+ * Formulas tab can take the player back to (see ui/formula-places.js): the
+ * prose path it came from, or the field an audit row names.
  */
 export function formulaProblems(model, auditRows = null) {
   const rows = auditRows || model.audit();
@@ -819,7 +867,7 @@ export function formulaProblems(model, auditRows = null) {
       detail: e.error,
       places: [...new Set(e.cycle)].map((n) => {
         const d = (model.inlineDefinitions || []).find((x) => x.name === n);
-        return { label: n, where: d ? describeSource(d.path) : '', formula: d?.expr || '' };
+        return { label: n, where: d ? describeSource(d.path) : '', formula: d?.expr || '', place: d?.path || null };
       }),
     });
   }
@@ -836,6 +884,7 @@ export function formulaProblems(model, auditRows = null) {
         formula: d.expr,
         value: valueAt.get(`{${dup.name}}@${d.path}`) ?? null,
         inForce: d.path === dup.inForce,
+        place: d.path,
       })),
     });
   }
@@ -845,7 +894,7 @@ export function formulaProblems(model, auditRows = null) {
       kind: 'shadow',
       name: sh.name,
       detail: sh.reason,
-      places: [{ label: 'written in', where: describeSource(sh.path), formula: '' }],
+      places: [{ label: 'written in', where: describeSource(sh.path), formula: '', place: sh.path }],
     });
   }
 
@@ -858,20 +907,26 @@ export function formulaProblems(model, auditRows = null) {
       kind: 'misdirected',
       name: e.target ? `${e.target} +=` : e.source || 'forwarded bonus',
       detail: e.error,
-      places: [{ label: 'written in', where: describeSource(e.path), formula: e.source || '' }],
+      places: [{ label: 'written in', where: describeSource(e.path), formula: e.source || '', place: e.path }],
     });
   }
 
   const orphanNames = new Set();
   for (const o of model.orphans(rows)) {
     orphanNames.add(o.name);
+    // A name that only exists in one kind of field -- `self`, `essence.self`,
+    // `target` -- was not deleted or misspelt; it was written somewhere it
+    // does not exist, and the fix is to say which field it belongs to.
+    const where = contextualNote(o.name);
     out.push({
       kind: 'orphan',
       name: o.name,
       detail: `${o.uses.length} ${o.uses.length === 1 ? 'place asks' : 'places ask'} for `
-        + `"${o.name}" and nothing defines it. Either the definition was deleted or renamed, `
-        + 'or the name is misspelt here.',
-      places: o.uses.map((u) => ({ label: u.kind === 'ref' ? 'quoted in' : 'used in', where: u.where, formula: u.formula })),
+        + `"${o.name}" and nothing defines it. ${where || 'Either the definition was '
+        + 'deleted or renamed, or the name is misspelt here.'}`,
+      places: o.uses.map((u) => ({
+        label: u.kind === 'ref' ? 'quoted in' : 'used in', where: u.where, formula: u.formula, place: u.place || null,
+      })),
     });
   }
 
@@ -892,7 +947,9 @@ export function formulaProblems(model, auditRows = null) {
       kind: 'broken',
       name: r.name,
       detail: r.error || 'This formula does not work.',
-      places: [{ label: 'written in', where: r.where || SOURCE_WORD[r.source] || r.source, formula: r.formula }],
+      places: [{
+        label: 'written in', where: r.where || SOURCE_WORD[r.source] || r.source, formula: r.formula, place: r.place || null,
+      }],
     });
   }
   return out;

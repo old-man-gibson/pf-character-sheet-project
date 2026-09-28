@@ -15,13 +15,13 @@ import {
 } from '../rules.js';
 import {
   COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
-  companionInUse, companionScope, companionSkillKey,
+  companionHeading, companionInUse, companionScope, companionSkillKey,
 } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
-import { NameIndex, resolvePath } from '../formula.js';
+import { NameIndex, SCOPE_INFO, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
 import { sphereTableNames } from './spheres.js';
@@ -31,8 +31,8 @@ import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { trackerFacts } from './trackers.js';
 import {
-  classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, slug, speedForwardKey,
-  sphereForwardKey, vancianForwardKey,
+  classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
+  speedForwardKey, sphereForwardKey, vancianForwardKey,
 } from './util.js';
 
 /**
@@ -105,6 +105,37 @@ function saveScope(c, key) {
   };
 }
 
+/**
+ * Which of the sub-systems this character plays with, by the families the
+ * Formulas tab files their names under -- the same test that puts a system's
+ * tab on the bar: something written on it, or a class marked with it. A
+ * system nobody uses still publishes its names, and they still read; the tab
+ * only stops listing forty spheres to a Vancian caster.
+ */
+export function systemsInUse(model) {
+  const used = model.systemTabsInUse();
+  const tagged = model.taggedSystemTabs();
+  const on = (tab) => !!used[tab] || tagged.has(tab);
+  return {
+    power: on('magic'), might: on('martial'), guile: on('guile'), vancian: on('vancian'),
+    psionic: on('psionics'), akashic: on('akashic'), cards: on('cardcasting'),
+  };
+}
+
+/**
+ * One skill: its total, and the two things about it a rule asks after --
+ * how many ranks are in it, and whether it is a class skill (1 or 0, so
+ * `if(skill.stealth.classSkill, …)` reads the way it is spoken). `total`
+ * last, for the reason saveScope gives.
+ */
+function skillScope(sk) {
+  return {
+    ranks: Number(sk.totalRanks) || 0,
+    classSkill: sk.classSkill ? 1 : 0,
+    total: Number(sk.bonus) || 0,
+  };
+}
+
 export function characterScope(model) {
   const c = model.data;
   // What is worn, split: the armour's own bonus, the shields', and the
@@ -117,6 +148,14 @@ export function characterScope(model) {
   const dc = c.defenses?.calc || {};
   const deathBonus = (Number(c.hp.deathBonusResolved ?? c.hp.deathBonus) || 0)
     + forwarded(model, 'hp.deathBonus');
+  // What the names below are *of*, filled in as they are published, for the
+  // Formulas tab to file them under a heading each: a skill's own label, a
+  // tracker's name, a sphere as it is written, a companion's name and kind --
+  // and which sub-systems are in play, so it can leave the rest unlisted.
+  // Kept under SCOPE_INFO, where no formula can see it (see formula.js).
+  const info = {
+    skills: {}, trackers: {}, spheres: {}, companions: {}, systems: systemsInUse(model),
+  };
   const s = {
     level: Number(c.identity.level) || 0,
     bab: Number(c.attack.bab) || 0,
@@ -334,8 +373,12 @@ export function characterScope(model) {
     const key = sphereForwardKey(name);
     if (!key) return null;
     const short = key.slice('sphere.'.length);
+    info.spheres[short] ??= String(name).trim();
     return (s.sphere[short] ??= {});
   };
+  for (const r of c.training?.guile?.sphereRows || []) {
+    if (r.sphere) info.spheres[slug(r.sphere)] ??= String(r.sphere).trim();
+  }
   for (const r of c.training?.magic?.sphereRows || []) {
     const into = sphereOf(r.sphere);
     if (!into) continue;
@@ -351,9 +394,16 @@ export function characterScope(model) {
     into.talents = Number(r.talents) || 0;
   }
 
+  // Each skill is its total and what the total stands on, the way a save is:
+  // `skill.bluff` goes on being the number, and `skill.bluff.ranks` is how
+  // many ranks are in it. The ranks are settled before any prose is read (see
+  // the skill pass in character.js), which is what lets a bonus ask whether a
+  // skill is trained and get this edit's answer rather than the last one's.
   for (const sk of c.skills) {
     const name = slug(sk.spec ? `${sk.name} ${sk.spec}` : sk.name);
-    if (s.skill[name] === undefined) s.skill[name] = sk.bonus;
+    if (s.skill[name] !== undefined) continue;
+    s.skill[name] = skillScope(sk);
+    info.skills[name] = skillLabel(sk.name, sk.spec);
   }
 
   // The effective level, which is what every rule written about a class
@@ -406,14 +456,22 @@ export function characterScope(model) {
   for (const kind of COMPANION_KINDS) {
     for (const block of c[kind] || []) {
       const cs = companionScope(block);
-      if (cs && block.id && s[block.id] === undefined) s[block.id] = cs;
+      if (!cs || !block.id || s[block.id] !== undefined) continue;
+      s[block.id] = cs;
+      // Only one in use earns a heading: every character carries a blank
+      // block of each kind, and a list of values ought not to open on the
+      // numbers of an eidolon nobody has summoned. Its names still read.
+      if (companionInUse(kind, block)) info.companions[block.id] = companionHeading(kind, block);
     }
   }
 
   // Every tracker publishes its numbers as tracker.<id>.* -- the id is the
   // one shown on the tracker's own row, and it never changes when the tracker
   // is renamed, so a formula pointing at it cannot be broken by a rename.
-  for (const t of model.trackers) s.tracker[t.id] = trackerFacts(t);
+  for (const t of model.trackers) {
+    s.tracker[t.id] = trackerFacts(t);
+    info.trackers[t.id] = String(t.name || '').trim() || t.id;
+  }
 
   // Character-wide inline names ({qi.max = …}) become dotted paths in the
   // scope. They never overwrite a built-in value.
@@ -432,6 +490,7 @@ export function characterScope(model) {
   }
 
   addSheetAliases(s, c);
+  s[SCOPE_INFO] = info;
   return s;
 }
 
@@ -482,6 +541,173 @@ export function scopeNames(model) {
   return flatNames(model.scope()).sort();
 }
 
+/* -------------------------------------------------------------- *
+ * What `target` reads, destination by destination
+ *
+ * `target` in a bonus resolves to the same branch as the destination's full
+ * name: on Will, `target.base` is `saves.will.base`; on Strength,
+ * `target.mod` is `str.mod`. Where the destination is a single number rather
+ * than a branch (`attack.melee`, `speed.fly`), `target` is that number and
+ * its parts are its siblings, so `target.dodge` works for touch AC as it
+ * does for AC.
+ *
+ * All of these are read before any forwarded bonus is applied: the
+ * recompute clears the bonuses, totals these, and only then evaluates the
+ * prose. So a bonus can read the stat it is added to without reading
+ * itself ("double your natural armour" reads the armour before the
+ * doubling). Totals with an Other column exclude that column too; see
+ * OTHER_COLUMNS.
+ *
+ * The rest are totalled after the prose is read, from the bonuses it sends.
+ * Their own numbers at that moment are the last edit's, with this bonus
+ * already in them, and a rule that read one would chase itself a little
+ * further on every keystroke -- so they offer only what does not move with
+ * their bonuses: a skill its ranks and whether it is a class skill, a weapon
+ * the facts written on its row. `late` says which is which.
+ * -------------------------------------------------------------- */
+
+/** Destinations whose own branch is settled before the prose: [test, what one is called]. */
+const TARGET_BRANCHES = [
+  [/^initiative$/, 'initiative'],
+  [/^saves\./, 'a saving throw'],
+  [/^ac\.cmd$/, 'CMD'],
+  [/^ac\./, 'an armour class'],
+  [/^attack\./, 'an attack bonus'],
+  [/^hp\.total$/, 'maximum hit points'],
+  [/^hp\.temp$/, 'temporary hit points'],
+  [/^hp\.deathBonus$/, 'the death threshold'],
+  [/^(str|dex|con|int|wis|cha)\.(score|temp)$/, 'an ability score'],
+  [/^class\./, 'a class level'],
+  [/^speed\./, 'a speed'],
+  [/^spheres\./, 'a Spheres of Power casting number'],
+];
+
+/** Destinations totalled after the prose, which offer nothing a bonus may read. */
+const TARGET_LATE = [
+  [/^skill\.pointsPerLevel$/, 'skill points per level'],
+  [/^actions\./, 'an action count'],
+  [/^(defenses|dr|resistance|weakness|immune)(\.|$)/, 'a defence'],
+  [/^tracker\./, 'a tracker'],
+  [/^sphere\./, 'a sphere table value'],
+  [/^vancian\./, 'a Vancian caster level'],
+  [/^manifester\./, 'a manifester level'],
+];
+
+/**
+ * The totals that carry an Other column, by the name a formula reads them
+ * under, and the key their offset is kept by: `saves.will.total` is
+ * `saves.will.total`, `ac.touch` is `defenses.touch`, `attack.cmb` is
+ * `attack.totalCmb`.
+ *
+ * `target` reads these without it. The Other column is measured afresh every
+ * time a document is opened -- the saved total, less what the sheet can see,
+ * less what bonuses sent there -- and a bonus that read its own total with the
+ * column in it would be reading a number the measurement has not finished
+ * with: a character that doubled its initiative would reopen with it gone.
+ * Hit points are not here, because their saved total never had a bonus in it.
+ */
+const OTHER_COLUMNS = new Map(FORWARD_STATS.filter(([, , key]) => key)
+  .map(([name, , key]) => [key.endsWith('.total') ? `${name}.total` : name, key]));
+
+/** A dotted path walked as it is written, without reading a branch as its total. */
+const branchAt = (scope, key) => String(key).split('.')
+  .reduce((node, k) => (node && typeof node === 'object' ? node[k] : undefined), scope);
+
+/** The numbers directly on one branch, as flat parts, each less its Other column. */
+function numbersOn(node, path, other) {
+  if (!node || typeof node !== 'object') return {};
+  return Object.fromEntries(Object.entries(node)
+    .filter(([, v]) => typeof v === 'number')
+    .map(([k, v]) => [k, v - other(`${path}.${k}`)]));
+}
+
+/**
+ * A destination's own branch: itself where it is one (a save), or the branch
+ * it hangs off with its own number as the total (touch AC among the AC
+ * columns, a speed among the other speeds). `other` is what a total's Other
+ * column holds, which comes off it.
+ */
+function branchValues(scope, key, other) {
+  const own = branchAt(scope, key);
+  if (own && typeof own === 'object') return numbersOn(own, key, other);
+  const dot = key.lastIndexOf('.');
+  const parent = dot > 0 ? key.slice(0, dot) : null;
+  const values = parent ? numbersOn(branchAt(scope, parent), parent, other) : {};
+  if (typeof own === 'number') values.total = own - other(key);
+  return values;
+}
+
+/**
+ * A weapon's own row, as far as a rule about "a two-handed weapon" or "a +1
+ * weapon" needs it. Not its attack or damage: those are totalled from the
+ * very bonuses being worked out.
+ */
+function weaponFacts(w) {
+  const hands = String(w?.handedness || '').toLowerCase();
+  return {
+    enhancement: Number(w?.enhancement) || 0,
+    twoHanded: /two/.test(hands) ? 1 : 0,
+    light: /light/.test(hands) ? 1 : 0,
+  };
+}
+
+/**
+ * What `target` is for destination key `key`: `{ kind, values, late }`, the
+ * shape inline.js reads. `kind` names the destination in words, for error
+ * messages.
+ */
+export function targetFacts(model, key, scope) {
+  if (key.startsWith('skill.') && key !== 'skill.pointsPerLevel') {
+    const b = branchAt(scope, key) || {};
+    return {
+      kind: 'a skill',
+      late: true,
+      values: { ranks: Number(b.ranks) || 0, classSkill: Number(b.classSkill) || 0 },
+    };
+  }
+  const weapon = /^weapon\.(\d+)\./.exec(key);
+  if (weapon) {
+    return {
+      kind: 'a weapon',
+      late: true,
+      values: weaponFacts(model.data.equipment?.weapons?.[Number(weapon[1])]),
+    };
+  }
+  const companion = companionTargetFacts(model, key);
+  if (companion) return companion;
+  const branch = TARGET_BRANCHES.find(([test]) => test.test(key));
+  if (branch) {
+    const other = (path) => (OTHER_COLUMNS.has(path) ? model.offsetOf(OTHER_COLUMNS.get(path)) : 0);
+    return { kind: branch[1], late: false, values: branchValues(scope, key, other) };
+  }
+  const late = TARGET_LATE.find(([test]) => test.test(key));
+  return { kind: late ? late[1] : 'this destination', late: true, values: {} };
+}
+
+/**
+ * A companion's destinations, which settle with the companion -- after the
+ * prose, like every other late one. A companion's skill still has ranks a
+ * bonus may read, from the row itself and, for a familiar, its master's: the
+ * same rule the companion's own total is built on.
+ */
+function companionTargetFacts(model, key) {
+  const [id, part, name] = key.split('.');
+  for (const kind of COMPANION_KINDS) {
+    const comp = (model.data[kind] || []).find((b) => b?.id === id);
+    if (!comp) continue;
+    if (part !== 'skill' || !name) return { kind: 'a companion stat', late: true, values: {} };
+    const sk = (comp.skills || []).find((s) => companionSkillKey(s) === name) || {};
+    const own = Math.max(0, Number(sk.ranks) || 0);
+    const master = kind === 'familiar' ? skillRanksNamed(model.data.skills, sk.name, sk.spec) : 0;
+    return {
+      kind: 'a companion skill',
+      late: true,
+      values: { ranks: Math.max(own, master), classSkill: sk.classSkill ? 1 : 0 },
+    };
+  }
+  return null;
+}
+
 /**
  * Every destination a bonus may be forwarded to on this character, and how
  * to expand the ones that stand for a family.
@@ -497,8 +723,12 @@ export function scopeNames(model) {
 export function forwardTargets(model) {
   const list = [];
   const expand = new Map();
-  const add = (name, label) => {
-    list.push({ name, label });
+  // `extra` says what a destination belongs to where its name cannot: `under`
+  // is the heading the Formulas tab files it under (a tracker's name, one
+  // companion, one sphere as it is written), and `system` which of the three
+  // sphere lists a `sphere.<name>` came from -- `sphere.dark.dc` does not say.
+  const add = (name, label, extra = null) => {
+    list.push({ name, label, ...extra });
     expand.set(name, [name]);
   };
 
@@ -545,7 +775,7 @@ export function forwardTargets(model) {
   for (const t of model.trackers || []) {
     for (const edge of ['max', 'min']) {
       const name = `tracker.${t.id}.${edge}`;
-      if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`);
+      if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`, { under: String(t.name || '').trim() || t.id });
     }
   }
 
@@ -576,20 +806,37 @@ export function forwardTargets(model) {
   // Read off the names the tables are drawn from rather than the worked-out
   // rows, which do not exist yet on the first pass of a fresh load -- and
   // the destinations are decided once, on that pass.
+  //
+  // A system the character does not use keeps its destinations, and bonuses
+  // to them still apply; they are only marked `unused` so the Formulas tab
+  // can leave them out of its list (otherwise a Vancian caster is offered
+  // the whole sphere catalogue). See systemsInUse.
   const training = model.data.training || {};
-  const sphereTargets = (names, columns) => {
+  const using = systemsInUse(model);
+  const idle = { magic: !using.power, combat: !using.might, guile: !using.guile };
+  // `trained` is a sphere with a talent in it, which the Formulas tab puts in
+  // front, as the sphere tables do; a skill sphere is on its list because the
+  // operative chose it, so every one is.
+  const sphereTargets = (system, names, columns) => {
+    const tally = system === 'guile' ? null : training[system]?.tally || {};
     for (const sphere of names) {
       const key = sphereForwardKey(sphere);
       if (!key) continue;
+      const under = String(sphere).trim();
+      const trained = !tally || Number(tally[sphere]) > 0;
       for (const [suffix, what] of columns) {
         const name = `${key}.${suffix}`;
-        if (!expand.has(name)) add(name, `${String(sphere).trim()}: ${what}`);
+        if (!expand.has(name)) {
+          add(name, `${under}: ${what}`, {
+            system, under, ...(trained ? { trained } : null), ...(idle[system] ? { unused: true } : null),
+          });
+        }
       }
     }
   };
-  sphereTargets(sphereTableNames(model, 'magic'), [['cl', 'caster level'], ['dc', 'save DC']]);
-  sphereTargets(sphereTableNames(model, 'combat'), [['bab', 'attack bonus'], ['dc', 'save DC']]);
-  sphereTargets((training.guile?.spheres || []).map((r) => r.sphere), [['ranks', 'ranks'], ['dc', 'save DC']]);
+  sphereTargets('magic', sphereTableNames(model, 'magic'), [['cl', 'caster level'], ['dc', 'save DC']]);
+  sphereTargets('combat', sphereTableNames(model, 'combat'), [['bab', 'attack bonus'], ['dc', 'save DC']]);
+  sphereTargets('guile', (training.guile?.spheres || []).map((r) => r.sphere), [['ranks', 'ranks'], ['dc', 'save DC']]);
 
   // The three casting systems' own levels, each under its own prefix so a
   // bonus says which it means: `spheres.cl` is the Spheres of Power caster
@@ -600,7 +847,9 @@ export function forwardTargets(model) {
   // `vancian.cl` and `manifester.level` are every class of the kind, which is
   // what "+1 caster level" on an item means to a character casting two ways.
   if (training.magic) {
-    for (const [suffix, what] of SPHERES_TARGETS) add(`spheres.${suffix}`, `Spheres of Power ${what}`);
+    for (const [suffix, what] of SPHERES_TARGETS) {
+      add(`spheres.${suffix}`, `Spheres of Power ${what}`, using.power ? null : { unused: true });
+    }
   }
   const levelFamily = (family, rows, keyOf, label) => {
     const members = [];
@@ -643,28 +892,31 @@ export function forwardTargets(model) {
       const kindLabel = COMPANION_LABELS[kind] || kind;
       const own = String(comp.name || '').trim() || kindLabel;
       const prefixes = [[comp.id, comp.id === kind ? own : `${own} (${comp.id})`]];
+      // Every destination of one companion is filed under the one heading,
+      // the same one its readable numbers go under.
+      const mine = { under: companionHeading(kind, comp) };
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
-        for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`);
+        for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`, mine);
         for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
           const into = members.map(under);
           expand.set(under(name), into);
-          list.push({ name: under(name), label: `${label}: all ${name === 'ac' ? 'armour classes' : name}`, family: into });
+          list.push({ name: under(name), label: `${label}: all ${name === 'ac' ? 'armour classes' : name}`, family: into, ...mine });
         }
         const compSkills = [];
         for (const sk of comp.skills || []) {
           const key = companionSkillKey(sk);
           if (!key || key === 'x' || expand.has(under(`skill.${key}`))) continue;
-          add(under(`skill.${key}`), `${label}: ${skillLabel(sk.name, sk.spec)}`);
+          add(under(`skill.${key}`), `${label}: ${skillLabel(sk.name, sk.spec)}`, mine);
           compSkills.push(under(`skill.${key}`));
         }
         expand.set(under('skill'), compSkills);
-        list.push({ name: under('skill'), label: `${label}: every skill`, family: compSkills });
+        list.push({ name: under('skill'), label: `${label}: every skill`, family: compSkills, ...mine });
         for (const a of comp.attacks || []) {
           const key = companionAttackKey(a);
           if (!key || key === 'x' || expand.has(under(`attack.${key}`))) continue;
-          add(under(`attack.${key}`), `${label}: ${a.type} attack`);
-          add(under(`damage.${key}`), `${label}: ${a.type} damage`);
+          add(under(`attack.${key}`), `${label}: ${a.type} attack`, mine);
+          add(under(`damage.${key}`), `${label}: ${a.type} damage`, mine);
         }
       }
     }
@@ -713,12 +965,20 @@ export function forwardTargets(model) {
     return weapons.flatMap((w, i) => (matches(w, i) ? [`weapon.${i}.${channel}`] : []));
   };
   for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
-    list.push({ name: ch === 'attack' ? `weapon.${ch}` : ch, label: `${label}, every weapon` });
+    list.push({ name: ch === 'attack' ? `weapon.${ch}` : ch, label: `${label}, every weapon`, under: 'Every weapon' });
   }
+  // Each selector under a heading of its own, called what it selects: a shape
+  // by the kind of attack, a group as the rows write it, a handle by the
+  // weapon's own name.
+  const heading = new Map([['melee', 'Melee weapons'], ['ranged', 'Ranged weapons'], ['cmb', 'Combat maneuvers']]);
+  for (const w of weapons) {
+    for (const g of w.groups || []) if (g && !heading.has(slug(g))) heading.set(slug(g), String(g).trim());
+  }
+  handles.forEach((h, i) => { if (h && !heading.has(h)) heading.set(h, String(weapons[i]?.name || h).trim()); });
   for (const sel of [...WEAPON_SHAPES, ...groups, ...handles]) {
     if (!sel) continue;
     for (const [ch, label] of WEAPON_CHANNEL_LABELS) {
-      list.push({ name: `weapon.${sel}.${ch}`, label: `${label}, ${sel.replace(/_/g, ' ')}` });
+      list.push({ name: `weapon.${sel}.${ch}`, label: `${label}, ${sel.replace(/_/g, ' ')}`, under: heading.get(sel) || sel });
     }
   }
 
@@ -755,12 +1015,21 @@ export function forwardTargets(model) {
     return [`${family}.${part}`];
   };
 
+  // `target` per destination key, computed on first request and cached.
+  // Bonuses are evaluated once per recompute, before any is applied; a
+  // tooltip rendered afterwards must use the same pre-bonus values, not
+  // values that already include the bonus.
+  const facts = new Map();
   let names = null;
   return {
     list,
     expand: (name) => expand.get(name) || expand.get(canonical(name))
       || defencePartTarget(name) || weaponTarget(name),
     known: (name) => (names ??= new NameIndex(model.scopeNames())).has(name),
+    targetOf: (key, scope) => {
+      if (!facts.has(key)) facts.set(key, targetFacts(model, key, scope ?? model.scope()));
+      return facts.get(key);
+    },
   };
 }
 
@@ -1194,7 +1463,8 @@ export function proseSources(model) {
  *               `{ essence: { self } }` for a veil's own description.
  */
 export function renderProse(model, text, local = null) {
-  return renderTokens(text, model.inlineNames || {}, model.scope(), local);
+  return renderTokens(text, model.inlineNames || {}, model.scope(), local,
+    model.contributions?.targets || null);
 }
 
 /**

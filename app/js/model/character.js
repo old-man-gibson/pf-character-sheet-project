@@ -260,21 +260,12 @@ export class Character {
     // overlap pays a competence bonus instead. See subsystems/guile.js.
     const guileRanks = this.#guileRanksBySkill(sphereRanksBySkill);
 
-    // Inline names ({skill_familiarity = …}) resolve before skill misc so a
-    // misc formula can read them. Their scope has no skill totals yet, which
-    // is intended: skills may read names, names may not read skills, so no
-    // cycle can form between the two.
-    this.#resolveInlineNames();
-    // The defence boxes are both a source of forwarded bonuses and a
-    // destination for them, so they settle here: after the prose has been
-    // read, and before the skills, which may read `dr.fire` or `immune.sleep`
-    // the way they read anything else.
-    this.#resolveDefenceText();
-    const miscScope = this.scope();
-
+    // Ranks are computed before prose is evaluated, because a bonus can read
+    // them via `target.ranks` ("on skills with which you are untrained").
+    // No rank input is written in prose, so this ordering is safe. Computed
+    // after, the first rank bought in a skill would keep the untrained
+    // penalty until the next recompute.
     c.skills.forEach((s, i) => {
-      const primary = (s.abilities || [])[0];
-      const am = statMod(c, primary, null);
       const src = s.rankSources || { bought: 0, gear: false, other: false };
       const specialty = specialtyKeys.has(skillKey(s));
       const spheres = guileRanks.ranks.has(i) ? guileRanks.ranks.get(i)
@@ -305,7 +296,23 @@ export class Character {
       s.specialtyFlag = specialty;
       s.sphereRanks = spheres;
       s.totalRanks = capped + s.ranksOffset;
+    });
 
+    // Inline names ({skill_familiarity = …}) resolve before skill misc so a
+    // misc formula can read them. Their scope has no skill totals yet, which
+    // is intended: skills may read names, names may not read skills, so no
+    // cycle can form between the two.
+    this.#resolveInlineNames();
+    // The defence boxes are both a source of forwarded bonuses and a
+    // destination for them, so they settle here: after the prose has been
+    // read, and before the skills, which may read `dr.fire` or `immune.sleep`
+    // the way they read anything else.
+    this.#resolveDefenceText();
+    const miscScope = this.scope();
+
+    c.skills.forEach((s, i) => {
+      const primary = (s.abilities || [])[0];
+      const am = statMod(c, primary, null);
       const computed = skillTotal({
         ranks: s.totalRanks,
         classSkill: !!s.classSkill,

@@ -22,8 +22,9 @@
  * component, which passes it in and binds the controls it renders.
  */
 
-import { resolvePath } from './formula.js';
+import { SCOPE_INFO, resolvePath } from './formula.js';
 import { isSheetAlias } from './rules.js';
+import { COMPANION_KINDS, companionHeading } from './companions.js';
 import {
   highlight, highlightAgainst, highlightFlagging, workings, formatNumber, contextualNote,
   FUNCTION_HELP, OPERATOR_HELP, VALUE_GUIDE, PLACES_GUIDE, TOKEN_FORMS, CONTEXTUAL_VALUES,
@@ -41,9 +42,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
  * asks for ("what can I read about my saves?"), so the browser groups them --
  * and puts the ones the player named themselves at the top, because those are
  * the ones they will not remember the spelling of.
+ *
+ * Two levels, because one was not enough. A family is a fold, and inside it
+ * each thing the family is made of -- one skill, one sphere, one companion --
+ * has a heading of its own with its names under it. Forty skills at four names
+ * each was a hundred and sixty chips in one heap; under forty headings it is a
+ * list a reader can run a finger down.
  * ------------------------------------------------------------------ */
 
 const ABILITY_KEYS = new Set(['str', 'dex', 'con', 'int', 'wis', 'cha']);
+const ABILITY_NAMES = {
+  str: 'Strength', dex: 'Dexterity', con: 'Constitution',
+  int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
+};
+const ABILITY_ORDER = Object.fromEntries(Object.keys(ABILITY_NAMES).map((k, i) => [k, i]));
+const SAVE_NAMES = { fortitude: 'Fortitude', reflex: 'Reflex', will: 'Will' };
 // A companion's id: the kind's name, or the kind with a number appended for
 // the second and later of a kind (eidolon2, eidolon3).
 const COMPANION_HEAD = /^(familiar|animalCompanion|eidolon|conjured)\d*$/;
@@ -52,21 +65,56 @@ const COMPANION_HEAD = /^(familiar|animalCompanion|eidolon|conjured)\d*$/;
 // all answers to "what does it take to hurt this character".
 const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves', 'defenses', 'dr', 'resistance',
   'weakness', 'immune']);
-const MAGIC_KEYS = new Set(['caster', 'essence', 'pp', 'deck', 'practitioner', 'mana', 'unarmed',
-  'operative', 'sphere']);
-const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed']);
+// The unarmed strike is the character's, spheres or no spheres: a monk's
+// class ladder reads it as surely as a practitioner's talents do.
+const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed',
+  'mana', 'actions', 'unarmed']);
+
+/**
+ * The sub-systems, each a family of its own. They used to share one fold,
+ * where a Vancian caster level sat beside a guile sphere's ranges and the
+ * deck's hand size, and a reader had to know which was which before the list
+ * could tell them. The head of a name says which system it belongs to, with
+ * one exception: `sphere.<name>` holds all three sphere lists under one
+ * prefix -- see sphereFamily.
+ */
+const SYSTEM_HEADS = {
+  caster: 'power', spheres: 'power',
+  practitioner: 'might',
+  operative: 'guile',
+  vancian: 'vancian',
+  manifester: 'psionic', pp: 'psionic',
+  essence: 'akashic',
+  deck: 'cards',
+};
+
+/** The sphere list a destination came from, as the family it is filed in. */
+const SPHERE_FAMILIES = { magic: 'power', combat: 'might', guile: 'guile' };
+
+/** An Akashic pool number, as against the essence in one receptacle. */
+const ESSENCE_POOL = new Set(['pool', 'temp', 'total', 'used', 'free', 'cap']);
+
+/** The deck in play at the table, as against the deck as it is built. */
+const DECK_TABLE = new Set(['round', 'inHand', 'inDeck', 'inPlay', 'inDiscard', 'manaInPlay',
+  'manaUntapped']);
 
 /** The groups, in the order the browser shows them. */
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
   { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
-  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, movement rates, mythic tier, base attack bonus, and levels in each class.' },
+  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, BAB, mythic tier; speeds, class levels, the unarmed strike, and wealth.' },
   { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
-  { key: 'skill', label: 'Skills', blurb: 'Each skill total, by its slugged name.' },
-  { key: 'magic', label: 'Magic and sub-systems', blurb: 'Caster level, spell points, essence, power points, the deck, and each skill sphere.' },
-  { key: 'companion', label: 'Companions', blurb: 'A familiar, animal companion, eidolon or conjured companion, when the character has one. Each reads under the id on its tab: the kind’s bare name for the first of a kind, eidolon2 and so on for the rest.' },
+  { key: 'skill', label: 'Skills', blurb: 'One heading per skill: skill.<name> (the total), .ranks and .classSkill.' },
+  { key: 'power', label: 'Spheres of Power', blurb: 'Caster level, casting numbers and spell points; per magic sphere: CL, DC, talents.' },
+  { key: 'might', label: 'Spheres of Might', blurb: 'Practitioner DC; per combat sphere: attack bonus, DC, talents.' },
+  { key: 'guile', label: 'Spheres of Guile', blurb: 'Operative modifier and pools; per skill sphere: ranks, DC, ranges.' },
+  { key: 'vancian', label: 'Vancian magic', blurb: 'Each casting class’s caster level, and vancian.cl for the highest of them.' },
+  { key: 'psionic', label: 'Psionics', blurb: 'Power points, and each manifesting class’s manifester level.' },
+  { key: 'akashic', label: 'Akashic', blurb: 'Essence: the pool, and what is invested in each receptacle.' },
+  { key: 'cards', label: 'Cardcasting', blurb: 'The deck as it is built, the table in play, and each manipulation taken.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use. The first of a kind reads as <kind>.* (eidolon.hd); later ones are numbered (eidolon2.hd, eidolon3.hd).' },
   { key: 'sheet', label: 'Spreadsheet names', blurb: 'The workbook’s own named ranges, kept so a formula pasted out of one still works — StrMod is str.tempMod, Fort is saves.fortitude. Nothing here is a number you cannot already get another way.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
@@ -86,8 +134,14 @@ export const TARGET_SECTIONS = [
   { key: 'defence', label: 'Health, armour, saves', blurb: 'Hit points, the armour classes, the three saves, and the defence boxes — damage reduction, energy resistance, immunities.' },
   { key: 'ability', label: 'Ability scores', blurb: 'The score itself — so everything built on it moves with it.' },
   { key: 'skill', label: 'Skills', blurb: 'Each skill by its slugged name, and every skill at once.' },
-  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, and levels in a class.' },
+  { key: 'character', label: 'The character', blurb: 'Initiative, movement rates, levels in a class, and actions a turn.' },
   { key: 'tracker', label: 'Trackers', blurb: 'How big a pool is — its max and min, never what is currently in it.' },
+  { key: 'power', label: 'Spheres of Power', blurb: 'Casting numbers; per magic sphere: CL, DC.' },
+  { key: 'might', label: 'Spheres of Might', blurb: 'Per combat sphere: attack bonus, DC.' },
+  { key: 'guile', label: 'Spheres of Guile', blurb: 'Per skill sphere: ranks, DC.' },
+  { key: 'vancian', label: 'Vancian magic', blurb: 'One casting class’s caster level, or every one of them.' },
+  { key: 'psionic', label: 'Psionics', blurb: 'One manifesting class’s manifester level, or every one of them.' },
+  { key: 'companion', label: 'Companions', blurb: 'One heading per companion in use; later companions of a kind are numbered.' },
   { key: 'other', label: 'Everything else', blurb: '' },
 ];
 
@@ -104,17 +158,127 @@ function queryTerms(query) {
     .filter(Boolean);
 }
 
-/** Which group a destination belongs to. */
-export function classifyTarget(name) {
+/** A slug as a heading: "body_control" is "Body Control". */
+const titled = (slug) => String(slug).split('_').filter(Boolean)
+  .map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+/**
+ * Which of the three sphere lists `sphere.<name>` belongs to. The lists share
+ * no name, and each publishes a number the others do not -- a magic sphere its
+ * caster level, a combat sphere its attack bonus, a skill sphere its ranks --
+ * so the sphere's own branch says which. Without one, the name's last part
+ * says what it can.
+ */
+function sphereFamily(name, scope = null) {
+  const [, key, part] = String(name).split('.');
+  const branch = scope?.sphere?.[key];
+  const has = (k) => (branch && typeof branch === 'object' ? k in branch : k === part);
+  if (has('cl')) return 'power';
+  if (has('bab')) return 'might';
+  if (has('ranks') || ['close', 'medium', 'long'].includes(part)) return 'guile';
+  return 'power';
+}
+
+/**
+ * A companion's names split in two: its skills under a heading of their own,
+ * and everything else under its name, because thirty skills folded in with
+ * the hit points and saves is the heap the headings are here to break up.
+ *
+ * `under` is the heading the model gave it; without one it is made from the
+ * id alone. Companions come in the order the sheet keeps the kinds in, each
+ * kind's first before its second -- eidolon, then eidolon2 -- whichever list
+ * they are read in.
+ */
+function companionHeadingFor(head, second, under) {
+  const kind = String(head).replace(/\d+$/, '');
+  const nth = Number(/\d+$/.exec(head)?.[0]) || 1;
+  const title = under || companionHeading(kind, { id: head });
+  const rank = (COMPANION_KINDS.indexOf(kind) + 1) * 1000 + nth * 2;
+  return second === 'skill'
+    ? { key: `${head}.skill`, label: `${title} — skills`, rank: rank + 1 }
+    : { key: head, label: title, rank };
+}
+
+/**
+ * Items under their headings: `{ loose, subs }`, where `loose` is what the
+ * family keeps above its headings (level and size above the speeds) and each
+ * of `subs` is `{ key, label, items }`. `headingOf` answers `{ key, label,
+ * rank }` or null; headings sort by `rank`, and keep the items' own order
+ * within one.
+ */
+function underHeadings(items, headingOf) {
+  const loose = [];
+  const subs = new Map();
+  items.forEach((it, i) => {
+    const h = headingOf(it);
+    if (!h) { loose.push(it); return; }
+    if (!subs.has(h.key)) subs.set(h.key, { key: h.key, label: h.label, rank: h.rank ?? 0, first: i, items: [] });
+    subs.get(h.key).items.push(it);
+  });
+  const ordered = [...subs.values()].sort((a, b) => a.rank - b.rank || a.first - b.first);
+  return { loose, subs: ordered.map(({ key, label, items: its }) => ({ key, label, items: its })) };
+}
+
+/** Which group a destination belongs to. `system` is the sphere list a `sphere.*` one came from. */
+export function classifyTarget(name, system = '') {
   const head = String(name).split('.')[0];
   if (head === 'weapon' || head === 'damage') return 'weapon';
   if (head === 'attack') return 'attack';
   if (head === 'skill') return 'skill';
   if (head === 'tracker') return 'tracker';
-  if (head === 'class' || head === 'initiative' || head === 'speed') return 'character';
+  if (head === 'class' || head === 'initiative' || head === 'speed' || head === 'actions') return 'character';
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
+  if (head === 'sphere') return SPHERE_FAMILIES[system] || sphereFamily(name);
+  if (SYSTEM_HEADS[head]) return SYSTEM_HEADS[head];
+  if (COMPANION_HEAD.test(head)) return 'companion';
   return 'other';
+}
+
+/** The four things a weapon destination can move, longest first so `damage.crit` is not read as `damage`. */
+const WEAPON_CHANNEL_NAMES = ['damage.mult', 'damage.crit', 'damage', 'attack'];
+
+/**
+ * What a weapon destination selects, as a heading: "Every weapon" for the bare
+ * channels, else the selector -- a shape, a group, one weapon -- named the way
+ * the model says (`under`) or by the selector itself.
+ */
+function weaponHeading(t) {
+  if (t.under) return { key: t.under, label: t.under, rank: t.under === 'Every weapon' ? 0 : 1 };
+  const rest = String(t.name).replace(/^weapon\./, '');
+  const channel = WEAPON_CHANNEL_NAMES.find((ch) => rest === ch || rest.endsWith(`.${ch}`));
+  const sel = !channel || rest === channel ? '' : rest.slice(0, -(channel.length + 1));
+  return sel ? { key: sel, label: titled(sel), rank: 1 } : { key: 'every', label: 'Every weapon', rank: 0 };
+}
+
+/** The heading one destination goes under in its family, or null to sit loose above them. */
+function targetHeading(t, family) {
+  const [head, second] = String(t.name).split('.');
+  switch (family) {
+    case 'weapon': return weaponHeading(t);
+    case 'defence':
+      if (head === 'hp') return { key: 'hp', label: 'Hit points', rank: 0 };
+      if (head === 'ac') return { key: 'ac', label: 'Armour class', rank: 1 };
+      if (head === 'saves') return { key: 'saves', label: 'Saves', rank: 2 };
+      return { key: 'lists', label: 'Defences', rank: 3 };
+    case 'ability': return { key: head, label: ABILITY_NAMES[head] || head, rank: ABILITY_ORDER[head] };
+    case 'skill':
+      return t.family || second === 'pointsPerLevel'
+        ? { key: 'all', label: 'All skills', rank: 0 } : { key: 'each', label: 'Each skill', rank: 1 };
+    case 'character':
+      if (head === 'speed') return { key: 'speed', label: 'Speeds', rank: 1 };
+      if (head === 'class') return { key: 'class', label: 'Class levels', rank: 2 };
+      if (head === 'actions') return { key: 'actions', label: 'Actions', rank: 3 };
+      return null;
+    case 'tracker': return { key: second, label: t.under || second };
+    case 'power':
+    case 'might':
+    case 'guile':
+      if (head !== 'sphere') return { key: 'casting', label: 'Casting', rank: 0 };
+      return { key: second, label: t.under || titled(second), rank: t.trained ? 1 : 2 };
+    case 'companion': return companionHeadingFor(head, second, t.under);
+    default: return null;
+  }
 }
 
 /**
@@ -122,25 +286,40 @@ export function classifyTarget(name) {
  *
  * A destination that stands for several ("all saves", "every skill") carries
  * how many it reaches, because that is the difference between the two rows a
- * reader is choosing between.
+ * reader is choosing between. The search reads the heading too, so a
+ * companion is found by its name as well as by its id.
+ *
+ * One the model marks `unused` -- a sphere of a system the character does not
+ * play with -- is left out; it still takes a bonus, it is just not offered.
+ * The list returned carries `listed`, how many it offers with no search.
  */
 export function targetGroups(list, query = '') {
   const terms = queryTerms(query);
   const buckets = new Map(TARGET_SECTIONS.map((sec) => [sec.key, []]));
+  let listed = 0;
   for (const t of list || []) {
-    const hay = `${t.name}\n${t.label}`.toLowerCase();
+    if (t.unused) continue;
+    listed += 1;
+    const family = classifyTarget(t.name, t.system);
+    const heading = targetHeading(t, family);
+    const hay = `${t.name}\n${t.label}\n${heading?.label || ''}`.toLowerCase();
     if (!terms.every((q) => hay.includes(q))) continue;
-    buckets.get(classifyTarget(t.name)).push({
-      name: t.name, label: t.label, reaches: t.family ? t.family.length : 0,
+    buckets.get(family).push({
+      name: t.name, label: t.label, reaches: t.family ? t.family.length : 0, heading,
     });
   }
-  return TARGET_SECTIONS
-    .map((sec) => ({ ...sec, items: buckets.get(sec.key) }))
+  const groups = TARGET_SECTIONS
+    .map((sec) => {
+      const items = buckets.get(sec.key);
+      return { ...sec, items, ...underHeadings(items, (it) => it.heading) };
+    })
     .filter((sec) => sec.items.length);
+  groups.listed = listed;
+  return groups;
 }
 
-/** Which family a dotted name belongs to. */
-export function classify(name, inlineNames = {}) {
+/** Which family a dotted name belongs to. `scope` settles which sphere list a `sphere.*` is. */
+export function classify(name, inlineNames = {}, scope = null) {
   if (Object.prototype.hasOwnProperty.call(inlineNames, name)) return 'mine';
   // Before anything else, and by shape rather than by list: the workbook's
   // names are PascalCase and undotted, this sheet's are neither, and the
@@ -153,9 +332,78 @@ export function classify(name, inlineNames = {}) {
   if (ABILITY_KEYS.has(head)) return 'ability';
   if (DEFENCE_KEYS.has(head)) return 'defence';
   if (COMPANION_HEAD.test(head)) return 'companion';
-  if (MAGIC_KEYS.has(head)) return 'magic';
+  if (head === 'sphere') return sphereFamily(name, scope);
+  if (SYSTEM_HEADS[head]) return SYSTEM_HEADS[head];
   if (CHARACTER_KEYS.has(head)) return 'character';
   return 'other';
+}
+
+/**
+ * The heading a readable name goes under in its family, or null to sit loose
+ * above them. `info` is what the scope says its names are *of* (SCOPE_INFO):
+ * a skill's label, a tracker's name, a companion's heading -- with the name
+ * itself to fall back on, so a bare scope still groups.
+ */
+function valueHeading(name, family, info, scope = null) {
+  const [head, second] = String(name).split('.');
+  switch (family) {
+    case 'tracker': return { key: second, label: info.trackers?.[second] || second };
+    case 'character':
+      if (head === 'speed') return { key: 'speed', label: 'Speeds', rank: 1 };
+      if (head === 'class') return { key: 'class', label: 'Class levels', rank: 2 };
+      if (head === 'unarmed') return { key: 'unarmed', label: 'Unarmed strike', rank: 3 };
+      if (head === 'mana') return { key: 'mana', label: 'Wealth', rank: 4 };
+      return null;
+    case 'ability': return { key: head, label: ABILITY_NAMES[head] || head, rank: ABILITY_ORDER[head] };
+    case 'defence':
+      if (head === 'hp') return { key: 'hp', label: 'Hit points', rank: 0 };
+      if (head === 'ac') return { key: 'ac', label: 'Armour class', rank: 1 };
+      if (head === 'saves') return { key: `saves.${second}`, label: SAVE_NAMES[second] || titled(second), rank: 2 };
+      return { key: 'lists', label: 'Defences', rank: 3 };
+    case 'skill': return { key: second, label: info.skills?.[second] || titled(second) };
+    case 'power':
+    case 'might':
+    case 'guile':
+      // A sphere with a talent in it goes in front, as on the sphere tables;
+      // a skill sphere is only listed because the operative chose it.
+      if (head === 'sphere') {
+        const trained = family === 'guile' || Number(scope?.sphere?.[second]?.talents) > 0;
+        return { key: second, label: info.spheres?.[second] || titled(second), rank: trained ? 1 : 2 };
+      }
+      // caster.* and spheres.* are the one set of casting numbers said two
+      // ways, so they share a heading.
+      return { key: head === 'spheres' ? 'caster' : head,
+        label: { practitioner: 'Practitioner', operative: 'Operative' }[head] || 'Casting', rank: 0 };
+    case 'psionic':
+      return head === 'pp'
+        ? { key: 'pp', label: 'Power points', rank: 0 } : { key: 'ml', label: 'Manifester levels', rank: 1 };
+    case 'akashic':
+      return ESSENCE_POOL.has(second)
+        ? { key: 'pool', label: 'Essence', rank: 0 } : { key: 'receptacles', label: 'Receptacles', rank: 1 };
+    case 'cards':
+      if (second === 'manip') return { key: 'manip', label: 'Manipulations taken', rank: 2 };
+      return DECK_TABLE.has(second)
+        ? { key: 'table', label: 'The table', rank: 1 } : { key: 'deck', label: 'The deck', rank: 0 };
+    case 'companion': return companionHeadingFor(head, second, info.companions?.[head]);
+    default: return null;
+  }
+}
+
+/**
+ * The player's own names, by what they start with: `arms.hp` and `arms.ac`
+ * under "arms". Only where two or more share a start -- a name alone under a
+ * heading of its own is a heading for nothing.
+ */
+function mineHeadings(items) {
+  const count = new Map();
+  for (const it of items) {
+    const head = it.name.includes('.') ? it.name.split('.')[0] : '';
+    if (head) count.set(head, (count.get(head) || 0) + 1);
+  }
+  return underHeadings(items, (it) => {
+    const head = it.name.includes('.') ? it.name.split('.')[0] : '';
+    return head && count.get(head) > 1 ? { key: head, label: head } : null;
+  });
 }
 
 /**
@@ -164,19 +412,65 @@ export function classify(name, inlineNames = {}) {
  * An inline name may also be a prefix of others (`arms` holding `arms.hp`),
  * so a name that resolves to an object is dropped -- it is a branch, not a
  * value, and a formula reading it would get nothing.
+ *
+ * Each group carries `items`, every name in it, and `loose` and `subs`, the
+ * same names under their headings. The search reads the heading as well as
+ * the name, so "Pip" finds a familiar and "Kn. (arcana)" its skill.
+ *
+ * A companion the character is not using is left out, and so is a sub-system
+ * it does not play with: every character keeps a blank block of each kind and
+ * the whole sphere catalogue, and their names read, but a list opening on the
+ * numbers of an eidolon nobody has summoned, or forty spheres shown to a
+ * Vancian caster, is the clutter this is here to clear. The model says what
+ * is in use (SCOPE_INFO) by the rule that puts a system's tab on the bar; a
+ * scope that does not say keeps everything. The list returned carries
+ * `listed`, how many names it would hold with no search, for the count beside
+ * its title.
  */
 export function valueGroups(names, scope, inlineNames = {}, query = '') {
   const terms = queryTerms(query);
+  const info = scope?.[SCOPE_INFO] || {};
+  const using = info.companions;
   const buckets = new Map(VALUE_SECTIONS.map((s) => [s.key, []]));
+  let listed = 0;
   for (const name of names) {
-    if (!terms.every((q) => name.toLowerCase().includes(q))) continue;
+    const family = classify(name, inlineNames, scope);
+    if (family === 'companion' && using && !using[String(name).split('.')[0]]) continue;
+    if (info.systems?.[family] === false) continue;
     const value = resolvePath(scope, name);
     if (value === undefined || (value && typeof value === 'object')) continue;
-    buckets.get(classify(name, inlineNames)).push({ name, value, display: formatNumber(value) });
+    listed += 1;
+    const heading = valueHeading(name, family, info, scope);
+    const hay = `${name}\n${heading?.label || ''}`.toLowerCase();
+    if (!terms.every((q) => hay.includes(q))) continue;
+    buckets.get(family).push({ name, value, display: formatNumber(value), heading });
   }
-  return VALUE_SECTIONS
-    .map((s) => ({ ...s, items: buckets.get(s.key) }))
+  const groups = VALUE_SECTIONS
+    .map((s) => {
+      const items = buckets.get(s.key);
+      const split = s.key === 'mine' ? mineHeadings(items) : underHeadings(items, (it) => it.heading);
+      return { ...s, items, ...split };
+    })
     .filter((s) => s.items.length);
+  groups.listed = listed;
+  return groups;
+}
+
+/**
+ * A family's chips: the loose ones first, then each heading with its own.
+ *
+ * A heading with a few names is a small card, and the cards sit side by side
+ * -- a skill, a sphere, a tracker. One with more than that takes the whole
+ * width and lets its chips spread across it: a companion, the columns of an
+ * armour class. `chip` draws one item.
+ */
+const CARD_MAX = 8;
+function groupBody(g, chip) {
+  const grid = (items) => `<div class="fx-names">${items.map(chip).join('')}</div>`;
+  if (!g.subs?.length) return grid(g.items);
+  return `${g.loose?.length ? grid(g.loose) : ''}<div class="fx-subs">${g.subs.map((s) => `<div
+      class="fx-sub${s.items.length > CARD_MAX ? ' wide' : ''}"><div class="fx-subhead">${esc(s.label)}</div>${
+  grid(s.items)}</div>`).join('')}</div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -279,9 +573,12 @@ export function ownFormulasHtml(html) {
 export function browserHtml(groups, total, query, own = '') {
   const shown = groups.reduce((n, g) => n + g.items.length, 0);
   const searching = !!(query || own);
+  // What the list holds with no search, where valueGroups counted it: the
+  // caller's total counts every name, the unused companions' included.
+  const whole = Number.isFinite(groups.listed) ? groups.listed : total;
   return `<section class="panel span2" data-fx-section="values">
     <h3>Values you can read
-      <span class="badge">${searching ? `${shown} of ${total}` : `${total}`}</span>
+      <span class="badge">${searching ? `${shown} of ${whole}` : `${whole}`}</span>
     </h3>
     <p class="hint">Every name this character publishes, with what it is worth right now.
       Click one to drop it into the box above.</p>
@@ -293,10 +590,10 @@ export function browserHtml(groups, total, query, own = '') {
     ${shown ? groups.map((g) => `<details class="fx-group" ${g.key === 'mine' || searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
         ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
-      <div class="fx-names">${g.items.map((it) => `<button type="button" class="fx-name-chip"
+      ${groupBody(g, (it) => `<button type="button" class="fx-name-chip"
         data-fx-insert="${esc(it.name)}" title="${esc(`${it.name} = ${it.display}`)}">
         <span class="n">${esc(it.name)}</span><span class="v">${esc(it.display)}</span>
-      </button>`).join('')}</div>
+      </button>`)}
     </details>`).join('')
     : `<p class="empty">No value on this character matches “${esc([query, own].filter(Boolean).join(' '))}”.</p>`}
   </section>`;
@@ -318,9 +615,11 @@ export function browserHtml(groups, total, query, own = '') {
 export function targetsHtml(groups, total, query, own = '') {
   const shown = groups.reduce((n, g) => n + g.items.length, 0);
   const searching = !!(query || own);
+  // What the list offers with no search, where targetGroups counted it.
+  const whole = Number.isFinite(groups.listed) ? groups.listed : total;
   return `<section class="panel span2" data-fx-section="targets">
     <h3>Bonuses you can send
-      <span class="badge">${searching ? `${shown} of ${total}` : `${total}`}</span>
+      <span class="badge">${searching ? `${shown} of ${whole}` : `${whole}`}</span>
     </h3>
     <p class="hint">Every destination <code>{… += …}</code> accepts on this character. Click one
       to copy the whole token — paste it into the feat, talent or feature that grants the bonus
@@ -331,12 +630,12 @@ export function targetsHtml(groups, total, query, own = '') {
     ${shown ? groups.map((g) => `<details class="fx-group" ${searching ? 'open' : ''}>
       <summary><strong>${esc(g.label)}</strong> <span class="badge">${g.items.length}</span>
         ${g.blurb ? `<span class="hint"> ${esc(g.blurb)}</span>` : ''}</summary>
-      <div class="fx-names">${g.items.map((it) => `<button type="button" class="fx-name-chip fx-target"
+      ${groupBody(g, (it) => `<button type="button" class="fx-name-chip fx-target"
         data-fx-copy="{${esc(it.name)} += 2}"
         title="${esc(`{${it.name} += 2} — ${it.label}${it.reaches ? ` (reaches ${it.reaches})` : ''}. Click to copy.`)}">
         <span class="n">${esc(it.name)}</span><span class="v">${esc(it.label)}</span>
         ${it.reaches ? `<span class="badge">${it.reaches}</span>` : ''}
-      </button>`).join('')}</div>
+      </button>`)}
     </details>`).join('')
     : `<p class="empty">No destination on this character matches “${esc([query, own].filter(Boolean).join(' '))}”.</p>`}
     <p class="hint"><strong>A weapon destination is a shape, not a list.</strong>
@@ -348,7 +647,31 @@ export function targetsHtml(groups, total, query, own = '') {
       weapon: <code>{damage += 2}</code>, <code>{weapon.attack += 1}</code>. A shape that matches
       nothing today is still right — <code>{weapon.ranged.damage += 2}</code> on a character
       carrying no bow starts working the day one is bought.</p>
+    <p class="hint"><strong><code>target</code>:</strong> inside the formula, <code>target</code> is
+      the stat the bonus is added to, and a formula that uses it is evaluated once per destination.
+      Its parts have the same names as when the stat is read directly: on a skill,
+      <code>target.ranks</code> = <code>skill.&lt;name&gt;.ranks</code>. Examples:
+      <code>{skill -= if(target.ranks == 0, 2, 0)}</code> applies −2 to untrained skills only;
+      <code>{weapon.melee.damage += if(target.twoHanded, 3, 2)}</code> gives two-handed weapons +3
+      and the rest +2.</p>
   </section>`;
+}
+
+/**
+ * Where a formula is written, as the way back to it.
+ *
+ * The words are the ones the row has always shown -- "note 1 on Lore", "a
+ * weapon's Misc dmg" -- made a button with an arrow on, because a list that
+ * says a formula is broken and then leaves the player to go and find it is
+ * half of an answer. `place` is what ui/formula-places.js turns into a jump:
+ * a prose path, or the field an audit row names. Without one, the same words
+ * as they were.
+ */
+function whereHtml(where, place, cls = '') {
+  if (!place) return cls ? `<span class="${cls}">${esc(where)}</span>` : esc(where);
+  return `<button type="button" class="badge fx-goto" data-fx-goto="${esc(place)}"
+    title="${esc(`Go to the field: ${where}`)}">${esc(where)}<span class="fx-goto-arrow"
+    aria-hidden="true"> ↗</span></button>`;
 }
 
 /** What each kind of problem is called, and the one-line version of the fix. */
@@ -404,7 +727,7 @@ export function problemsHtml(problems) {
       <div class="fx-places">
         ${p.places.map((pl) => `<div class="fx-place${pl.inForce ? ' inforce' : ''}">
           <span class="fx-placelabel">${esc(pl.label)}</span>
-          <span class="fx-placewhere">${esc(pl.where)}</span>
+          <span class="fx-placewhere">${whereHtml(pl.where, pl.place)}</span>
           ${pl.formula ? `<code class="fx-code" data-fx-insert="${esc(pl.formula)}" data-fx-replace="1"
             title="Click to open this in the box above">${highlight(pl.formula)}</code>` : ''}
           ${pl.value === null || pl.value === undefined ? '' : `<span class="fx-placeval">${esc(formatNumber(pl.value))}</span>`}
@@ -453,7 +776,7 @@ export function myFormulasHtml(rows, query) {
       : matches.map((r) => `<div class="fx-row${r.status === 'error' ? ' bad' : ''}">
           <div class="fx-rowhead">
             <strong>${esc(r.name)}</strong>
-            <span class="badge">${esc(r.where || SOURCE_LABEL[r.source] || r.source)}</span>
+            ${whereHtml(r.where || SOURCE_LABEL[r.source] || r.source, r.place, 'badge')}
             ${r.status === 'error' ? '<span class="badge err">not working</span>' : ''}
             <span class="fx-rowval">${r.value === null || r.value === undefined ? '—' : esc(formatNumber(r.value))}</span>
           </div>
@@ -498,15 +821,16 @@ export function forwardedHtml(rows, query) {
         <div class="fx-rowhead">
           <strong>${esc(r.to)}</strong><code class="fx-into">${r.value < 0 ? '-=' : '+='}</code>
           ${r.type ? `<span class="badge">${esc(r.type)}</span>` : ''}
-          <span class="badge">${esc(r.where)}</span>
+          ${whereHtml(r.where, r.place, 'badge')}
           ${r.error ? '<span class="badge err">not working</span>' : ''}
           ${!r.error && r.dropped?.length
     ? `<span class="badge err">${esc(r.dropped.join(', '))} goes nowhere</span>` : ''}
           <span class="fx-rowval">${r.error ? '—'
-    : esc(`${r.value > 0 ? '+' : ''}${formatNumber(r.value)}`)}</span>
+    : esc(r.shown ?? `${r.value > 0 ? '+' : ''}${formatNumber(r.value)}`)}</span>
         </div>
         <code class="fx-code fx-rowsrc" data-fx-insert="${esc(r.expr)}" data-fx-replace="1"
           title="Click to open this in the box above">${highlight(r.expr)}</code>
+        ${r.each && !r.error ? `<div class="hint fx-each">${esc(r.each)}</div>` : ''}
         ${r.error ? `<div class="fx-err">${esc(r.error)}</div>` : ''}
       </div>`).join('')}
   </section>`;
@@ -639,7 +963,7 @@ function contextualHtml() {
   return `<section class="panel span2">
     <h3>Names that only exist somewhere</h3>
     <p class="hint">Almost every value belongs to the character and can be read from anywhere.
-      These two belong to the <em>field they are written in</em>, and will not resolve outside it —
+      These belong to the <em>place they are written</em>, and will not resolve outside it —
       not in another feature, not in a tracker, and not in the try-it box at the top of this tab.
       When one is flagged in red, that is what has happened.</p>
     <table class="fx-table"><tbody>
@@ -677,7 +1001,9 @@ function rulesHtml() {
     ['A tracker’s id is not its name.',
       'The id is slugged from the name the tracker was created with and never changes afterwards, so renaming a tracker cannot break a formula pointing at it. Each tracker’s ✎ editor spells out its own id.'],
     ['A few names only exist in one kind of field.',
-      'self inside a tracker, essence.self inside a veil. They are the easiest thing here to get wrong, so they have a table of their own above.'],
+      'self inside a tracker, essence.self inside a veil, target inside a bonus. They are the easiest thing here to get wrong, so they have a table of their own above.'],
+    ['target is the stat a bonus is added to.',
+      'In a forwarded bonus, target is the destination stat, and the formula is evaluated once per destination: {skill -= if(target.ranks == 0, 2, 0)} gives −2 to untrained skills and 0 to the rest. Values are read from before any bonus is applied, and saves and armour classes without their Other column, so a bonus cannot change its own input. Stats calculated after bonuses are applied (skills, weapons, trackers and others) expose only values bonuses do not change, such as a skill’s ranks and classSkill; asking for anything else gives an error listing what is available.'],
     ['A tracker’s note shows values but does not publish them.',
       'Notes are worked out after the trackers they read, so a {name = …} in one displays but is not readable elsewhere. Put character-wide names in a feature or a note on Lore instead.'],
     ['Comparisons are worth 1 and 0.',

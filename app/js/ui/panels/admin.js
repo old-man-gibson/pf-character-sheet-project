@@ -10,7 +10,7 @@
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc } from '../html.js';
-import { prose, targetLabels, tokenScope } from '../prose.js';
+import { eachLine, eachShown, prose, targetLabels, tokenScope } from '../prose.js';
 import { describeSource } from '../../model.js';
 import { highlightFlagging, workingLine } from '../../formula-format.js';
 import { formulaPanelHtml } from '../../formula-guide.js';
@@ -46,14 +46,22 @@ export function renderFormulaPanel(model, ctx) {
     });
   }
 
-  /** Every forwarded bonus, as the tab lists them: destination, amount, source. */
+  /**
+   * Every forwarded bonus, as the tab lists them: destination, amount, source.
+   * One that reads `target` sent a different amount to different places, so
+   * it carries what it shows in place of one number and the line that says
+   * which place got what.
+   */
 export function forwardedRows(model) {
     return (model.contributions?.entries || []).map((e) => ({
       to: targetLabels(model, e.targets),
       value: e.value,
+      shown: e.values ? eachShown(e) : null,
+      each: e.values ? eachLine(model, e) : null,
       expr: e.expr,
       type: e.type,
       where: describeSource(e.path),
+      place: e.path,
       error: e.error,
       dropped: e.dropped,
     }));
