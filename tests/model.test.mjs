@@ -2013,6 +2013,12 @@ console.log('a Vancian class\'s concentration may be a formula');
   check('a bad name is an error, not a number', [k().concentrationNum, !!k().concentrationError,
     c.audit().find((r) => r.id === 'vancian-0-concentration')?.status], [0, true, 'error']);
   check('the working is not saved', 'concentrationNum' in JSON.parse(JSON.stringify(c.toJSON())).vancian.classes[0], false);
+  c.set('statsBuild.int.pointBuy', 16);
+  c.set('vancian.classes.0.concentration', null);
+  check('blank is caster level + the casting modifier', k().concentrationNum, 9 + k().statMod);
+  c.set('vancian.classes.0.concentration', 0);
+  check('and a stored 0 is blank too, as every block was created with it', k().concentrationNum, 9 + k().statMod);
+  check('the modifier is really in it', k().statMod, 3);
 }
 
 console.log('the veilweaving level and DCs are worked out, as the Veilweaving sphere says');

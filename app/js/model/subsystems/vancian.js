@@ -71,7 +71,7 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'tableName', 'concentrationNum', 'concentrationError',
+      'casterLevelForwarded', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -347,14 +347,24 @@ export function recomputeVancian(model) {
     c.casterLevel = Math.max(0, level + c.casterLevelForwarded);
 
     /*
-     * Concentration is the player's, as a number or a formula
-     * (`vancian.wizard.cl + int.mod + 4`). Worked out after the caster level
-     * above, so a formula naming this class's own CL reads this pass's figure.
+     * Concentration is caster level + the casting modifier unless the player
+     * gives a number or a formula (`vancian.wizard.cl + int.mod + 4`). A stored
+     * 0 counts as blank: it is what every block was created with and what an
+     * empty workbook cell imported as, never a figure anyone chose. Worked out
+     * after the caster level above, so a formula naming this class's own CL
+     * reads this pass's figure.
      */
-    const conc = evaluateAmount(c.concentration,
-      typeof c.concentration === 'string' && c.concentration.trim() ? model.scope() : null);
-    c.concentrationNum = conc.value;
-    c.concentrationError = conc.error;
+    const typed = c.concentration;
+    const formula = typeof typed === 'string' && typed.trim() !== '';
+    c.concentrationAuto = c.casterLevel + mod;
+    if (!formula && !(Number(typed) || 0)) {
+      c.concentrationNum = c.concentrationAuto;
+      c.concentrationError = null;
+    } else {
+      const conc = evaluateAmount(typed, formula ? model.scope() : null);
+      c.concentrationNum = conc.value;
+      c.concentrationError = conc.error;
+    }
 
     c.statMod = mod;
     c.statScore = score;

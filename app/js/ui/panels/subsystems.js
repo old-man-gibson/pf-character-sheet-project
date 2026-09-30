@@ -938,7 +938,7 @@ export function vancianPanel(model, ctx = {}) {
       <section class="panel span2">
         ${addButton('vancian.classes', 'Add casting class', {
     name: '', slotType: '', stat: '', stat2: '', prep: '', source: '',
-    casterLevelOverride: null, concentration: 0,
+    casterLevelOverride: null, concentration: null,
     spells: SPELL_LEVELS.map((level) => ({ level, perDay: null, known: null })),
   })}
       </section>
@@ -993,14 +993,17 @@ function castingClassPanel(model, c, i) {
     title: `Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
   }))}
           ${field('Concentration', `<span class="rollpair">${
-    exprField(`data-set="${base}.concentration"`, c.concentration ?? '', {
-      width: '4.2rem',
-      value: c.concentrationNum,
-      error: c.concentrationError,
-      placeholder: '0',
-      title: `A number, or a formula like ${vancianForwardKey(c) || 'vancian.wizard.cl'} + ${
-        String(c.stat || 'Int').toLowerCase()}.mod`,
-    })}${rollButton(model, 'concentration', `vancian:${i}`,
+    exprField(`data-set="${base}.concentration"`,
+      typeof c.concentration === 'string' || Number(c.concentration) ? c.concentration : '', {
+        kind: 'expr-or-null',
+        width: '4.2rem',
+        value: c.concentrationNum,
+        error: c.concentrationError,
+        placeholder: String(c.concentrationAuto ?? 0),
+        title: `Blank: caster level ${c.casterLevel ?? 0} + casting modifier ${fmt(c.statMod ?? 0)}. `
+          + `Or a number, or a formula like ${vancianForwardKey(c) || 'vancian.wizard.cl'} + ${
+            String(c.stat || 'Int').toLowerCase()}.mod`,
+      })}${rollButton(model, 'concentration', `vancian:${i}`,
     `${c.name || 'this class'} concentration`)}</span>`)}
         </div>
       </div>
