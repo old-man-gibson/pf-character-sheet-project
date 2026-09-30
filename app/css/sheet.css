@@ -3066,6 +3066,8 @@ input.tabname:hover, input.tabname:focus { border-color: var(--cs-line); }
   font-variant-numeric: tabular-nums; cursor: help; vertical-align: middle;
 }
 .fwd em { font-style: normal; opacity: 0.7; font-size: 0.9em; }
+/* Held back, not counted: a caster-level bonus before casting is unlocked. */
+.fwd.waiting { opacity: 0.6; background: transparent; outline: 1px dashed currentColor; outline-offset: -1px; }
 
 
 /* ---------- formula fields ---------- */

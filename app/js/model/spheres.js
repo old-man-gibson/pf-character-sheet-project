@@ -1470,9 +1470,10 @@ export function recomputeTraining(model) {
           }
         }
       }
-      if (cls.extended) {
-        // Blocks from the extended page carry no level rows of their own;
-        // count their class levels straight from the Planner.
+      if (cls.extended || !(cls.levels || []).length) {
+        // Blocks from the extended page carry no level rows of their own, and
+        // nor does a block added by hand before its rows are filled in; count
+        // their class levels straight from the override or the Planner.
         for (let l = 1; l <= 20; l++) {
           const has = override != null ? l <= override : plannerHasClass(model, cls.name, l);
           if (has) {
@@ -1523,7 +1524,13 @@ export function recomputeTraining(model) {
   if (t.magic) {
     const m = t.magic;
     const casters = (m.classes || []).filter((x) => x.name);
-    const bestMod = Math.max(0, ...casters.map((x) => mod(x.mod1)));
+    // A class still to come on the Planner is not a casting class yet: it
+    // lends no casting modifier, no spell points, and does not count toward
+    // the tradition's spell points per casting class. With none taken (casting
+    // from Advanced Magic Training alone) the modifier falls back to the
+    // classes named, since that is the only casting ability written down.
+    const acquired = casters.filter((x) => (x.classLevelsCurrent ?? 0) > 0);
+    const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
     // Advanced Magic Training grants casting to non-casting classes:
     // Low-Caster progression, or Mid-Caster with the mythic version.
@@ -1538,8 +1545,16 @@ export function recomputeTraining(model) {
     // The distinction is worth the arithmetic: two class levels on a
     // mid-caster is one caster level, which is what the boost is worth and
     // not what m.clBonus would give.
-    const effectiveLevels = (x) => (x.classLevelsCurrent ?? 0)
-      + forwarded(model, `class.${slug(x.name)}.level`);
+    //
+    // Only a class the character has at the current level: a bonus to a class
+    // still to come on the Planner waits (`levelWaiting`) until its first
+    // level arrives, as `classLevelCount` does for every other system.
+    const effectiveLevels = (x) => {
+      const own = x.classLevelsCurrent ?? 0;
+      const bonus = forwarded(model, `class.${slug(x.name)}.level`);
+      x.levelWaiting = own ? 0 : bonus;
+      return own + (own ? bonus : 0);
+    };
     //
     // A bonus forwarded to `spheres.cl` (and .dc, .msb, .msd) lands beside the
     // typed one in the same line, kept apart so the box goes on saying what was
@@ -1551,9 +1566,18 @@ export function recomputeTraining(model) {
     m.dcForwarded = forwarded(model, 'spheres.dc');
     m.msbForwarded = forwarded(model, 'spheres.msb');
     m.msdForwarded = forwarded(model, 'spheres.msd');
-    m.globalCL = Math.max(0, amtFloor, ...casters.map(
+    //
+    // Casting is unlocked by a level in a casting class or by Advanced Magic
+    // Training. Before that, a bonus to caster level -- typed or forwarded --
+    // has nothing to raise, so it waits (`clWaiting`) rather than handing a
+    // caster level to a character who cannot cast.
+    const baseCL = Math.max(0, amtFloor, ...casters.map(
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
-    )) + (Number(m.clBonus) || 0) + m.clForwarded;
+    ));
+    m.castingUnlocked = amtFloor > 0 || casters.some((x) => (x.classLevelsCurrent ?? 0) > 0);
+    const clPlus = (Number(m.clBonus) || 0) + m.clForwarded;
+    m.clWaiting = m.castingUnlocked ? 0 : clPlus;
+    m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
     m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0)
       + m.dcForwarded;
     m.msb = Math.max(0, ...casters.map(effectiveLevels))
@@ -1590,7 +1614,7 @@ export function recomputeTraining(model) {
     // workbook cached. Taken a step at a time -- boon n is worth what it adds
     // on top of the n-1 below it -- so the steps add back up to the ladder
     // however they are split.
-    const castingClassCount = new Set(casters.map((x) => x.name)).size;
+    const castingClassCount = new Set(acquired.map((x) => x.name)).size;
 
     /**
      * A pool, split step by step between the two things it can become.
@@ -1647,10 +1671,15 @@ export function recomputeTraining(model) {
     m.traditionEssence = m.traditionPools.reduce((n, p) => n + p.essence, 0);
     m.castingClassCount = castingClassCount;
 
-    m.classSP = casters.map((x) => ({
-      name: x.name,
-      sp: Math.min(x.classLevels ?? 0, level) + mod(x.mod1) + (x.mod2 ? mod(x.mod2) : 0),
-    }));
+    // A class's spell points are its levels so far plus its casting modifier:
+    // the levels the character has now, not the ones planned (Wizard 1-5,
+    // Fighter 6-10, Wizard 11-20 is 5 wizard levels at 10th), and nothing at
+    // all for a class not taken yet. The same ability in both slots counts
+    // once, as `statMod` reads a slot everywhere else.
+    m.classSP = casters.map((x) => {
+      const own = x.classLevelsCurrent ?? 0;
+      return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
+    });
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
       + (Number(m.bonusSP) || 0) + m.traditionSP;
 
@@ -1913,7 +1942,10 @@ export function recomputeSphereRows(model) {
       const key = sphereForwardKey(row.sphere);
       const clForwarded = key ? forwarded(model, `${key}.cl`) : 0;
       const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
-      const clPlus = cl.value + clForwarded;
+      // A sphere's own CL bonus waits with the global one until casting is
+      // unlocked (see recomputeTraining).
+      const unlocked = t.magic.castingUnlocked !== false;
+      const clPlus = unlocked ? cl.value + clForwarded : 0;
       return {
         ...row,
         talents: (t.magic.tally || {})[row.sphere] || 0,
@@ -1923,6 +1955,7 @@ export function recomputeSphereRows(model) {
         dcBonusError: dcPlus.error,
         clForwarded,
         dcForwarded,
+        clWaiting: unlocked ? 0 : cl.value + clForwarded,
         cl: t.magic.globalCL + clPlus,
         // A sphere's DC follows its caster level, so a CL bonus -- typed or
         // forwarded -- is worth half of itself here as well, as the global

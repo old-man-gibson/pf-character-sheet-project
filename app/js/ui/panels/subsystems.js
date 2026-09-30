@@ -969,7 +969,8 @@ function castingClassPanel(model, c, i) {
       <h3>
         ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
         <span class="badge">CL ${c.casterLevel ?? 0}</span>${
-  forwardedBadge(model, vancianForwardKey(c) || '')}
+  forwardedBadge(model, vancianForwardKey(c) || '', '', '', c.casterLevelWaiting
+    ? 'this class has no levels yet, so the bonus is held until its first level' : '')}
         <span class="badge">${spends && c.totalLeft !== c.totalPerDay ? `${c.totalLeft ?? 0} of ` : ''}${c.totalPerDay ?? 0} ${esc(noun.many.toLowerCase())}/day</span>
         ${c.highestLevel ? `<span class="badge">up to level ${c.highestLevel}</span>` : ''}
         ${c.slotTypeUnknown ? '<span class="badge">no table</span>' : ''}
@@ -1469,7 +1470,8 @@ function manifestingClassPanel(model, c, i) {
       <h3>
         ${itemText('psionics.classes', i, 'name', c.name, 'Manifesting class')}
         <span class="badge">ML ${c.manifesterLevel ?? 0}</span>${
-  forwardedBadge(model, manifesterForwardKey(c) || '')}
+  forwardedBadge(model, manifesterForwardKey(c) || '', '', '', c.manifesterLevelWaiting
+    ? 'this class has no levels yet, so the bonus is held until its first level' : '')}
         <span class="badge">${c.points ?? 0} pp</span>
         ${c.powerCount ? `<span class="badge">${c.powerCount} power${c.powerCount === 1 ? '' : 's'}</span>` : ''}
         ${c.curveTotal && !c.curveKnown ? '<span class="badge">no curve</span>' : ''}

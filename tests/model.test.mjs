@@ -2022,6 +2022,37 @@ console.log('conditions move CMD through Strength as well as Dexterity');
   check('and the figure survives a save and reload', again.data.defenses.ffCmd, 11);
 }
 
+console.log('caster-level bonuses wait for casting; spell points count classes the character has');
+{
+  const c = new Character(blankDocument({ name: 'Early', level: 5 }));
+  c.set('training.magic.clBonus', 2);
+  c.listAdd('notes', { title: 'Items', body: '{spheres.cl += 1} {class.incanter.level += 4} {vancian.wizard.cl += 3}' });
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const m = () => c.data.training.magic;
+  check('no casting class yet: caster level bonuses wait, typed and forwarded',
+    [m().castingUnlocked, m().globalCL, m().clWaiting], [false, 0, 3]);
+  check('and a Vancian class with no levels holds its own',
+    [c.data.vancian.classes[0].casterLevel, c.data.vancian.classes[0].casterLevelWaiting], [0, 3]);
+
+  // Incanter planned for 6th to 10th: on the Planner, not taken yet at 5th.
+  for (let lv = 6; lv <= 10; lv++) c.setProgressionClass(lv, 0, 'Incanter');
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', mod1: 'Int', mod2: 'Int', levels: [] });
+  c.set('statsBuild.int.pointBuy', 14);
+  const inc = () => m().classes.find((x) => x.name === 'Incanter');
+  check('a class still to come unlocks nothing and takes no class-level bonus',
+    [m().castingUnlocked, m().globalCL, inc().levelWaiting], [false, 0, 4]);
+  check('nor has spell points', m().classSP.find((x) => x.name === 'Incanter').sp, 0);
+
+  c.set('identity.level', 7);
+  check('at 7th it has two levels: casting unlocks and every bonus lands',
+    [m().castingUnlocked, m().globalCL, m().clWaiting, inc().levelWaiting], [true, 2 + 4 + 2 + 1, 0, 0]);
+  check('spell points are the two levels it has, not the five planned, plus Int once though both slots say Int',
+    m().classSP.find((x) => x.name === 'Incanter').sp, 2 + 2);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));
@@ -3361,8 +3392,10 @@ console.log('spheres training reproduces the sheet');
   check('angou effective', m.effectiveDrawbacks, 6);
   check('angou SP tier', m.spTier, 5);
   check('angou boons -- every effective drawback is one', m.boons, 6);
-  check('angou tradition SP (3 casting classes)', m.traditionSP, 12);
-  check('angou total SP', m.totalSP, 83);
+  // Two casting classes, not the workbook's three: its Wizard block has no
+  // Wizard levels, and a class not taken is not a casting class.
+  check('angou tradition SP (2 casting classes)', m.traditionSP, 8);
+  check('angou total SP', m.totalSP, 79);
 
   // Bryva: the other internally-consistent workbook.
   const b = new Character(load('bryva'));
@@ -3390,7 +3423,7 @@ console.log('spheres training reproduces the sheet');
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying off a drawback costs 2 effective', c.data.training.magic.effectiveDrawbacks, 4);
   check('which drops the boons with it', c.data.training.magic.boons, 4);
-  check('and the tradition SP', c.data.training.magic.totalSP, sp0 - 12);
+  check('and the tradition SP', c.data.training.magic.totalSP, sp0 - 8);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('restored', c.data.training.magic.totalSP, sp0);
 }
@@ -4344,11 +4377,11 @@ console.log('training values reach the formula scope');
   const c = new Character(load('angou'));
   const scope = c.scope();
   check('caster.level', scope.caster.level, 20);
-  check('caster.sp', scope.caster.sp, 83);
+  check('caster.sp', scope.caster.sp, 79);
   check('practitioner.dc', scope.practitioner.dc, 36);
   check('unarmed.talents', scope.unarmed.talents, 19);
   const t = c.addTracker({ name: 'SP Pool', maxFormula: 'caster.sp' });
-  check('tracker can read SP', t.max, 83);
+  check('tracker can read SP', t.max, 79);
 }
 
 console.log('gestalt classes drive save bases');
@@ -8281,7 +8314,7 @@ console.log('blended training -- one class, one pool, two progressions');
   // None of the per-side numbers move: they are still computed off the block
   // sitting on that side, which is why the pair is kept rather than merged.
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
-  check('spell points unmoved', a.data.training.magic.totalSP, 83);
+  check('spell points unmoved', a.data.training.magic.totalSP, 79);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
   check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
@@ -8558,9 +8591,11 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   check('split by default the way the sheets were written -- the ones past the '
     + 'fifth as points, the rest as essence',
   m().traditionPools.map((p) => [p.label, p.spSteps, p.sp, p.essenceSteps, p.essence]),
-  [['Boons 6', 1, 12, 5, 16]]);
-  check("which is the 12 tradition SP his sheet cached, and its total",
-    [m().traditionSP, m().totalSP, m().sheet.totalSP], [12, 83, 83]);
+  [['Boons 6', 1, 8, 5, 16]]);
+  // His sheet cached 12 and 83: it counted a Wizard block he has no levels
+  // in as a third casting class.
+  check("which is 4 short of the 12 tradition SP his sheet cached, and of its total",
+    [m().traditionSP, m().totalSP, m().sheet.totalSP], [8, 79, 83]);
   // His workbook reads the ladder twice -- 20 as the Akashic tab's Essence Boon
   // *and* 4 x 3 classes as spell points, 32 points from a 20-point ladder. One
   // pool can only read it once, so the essence is 4 short of what he wrote.
@@ -8572,7 +8607,7 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   // The split moves a step at a time, and the halves always add back up.
   c.set('training.magic.tradition.boonSP', 6);
   check('all of it as spell points, multiplied per casting class',
-    [m().traditionSP, m().traditionEssence], [60, 0]);
+    [m().traditionSP, m().traditionEssence], [40, 0]);
   c.set('training.magic.tradition.boonSP', 0);
   check('all of it as essence, unmultiplied', [m().traditionSP, m().traditionEssence], [0, 20]);
   c.set('training.magic.tradition.boonSP', 3);
@@ -8582,22 +8617,22 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   check('and the two halves still come to the ladder',
     p().sp / m().castingClassCount + p().essence, m().boonPoints);
   c.set('training.magic.tradition.boonSP', 1);
-  check('restored', [m().totalSP, m().traditionEssence], [83, 16]);
+  check('restored', [m().totalSP, m().traditionEssence], [79, 16]);
 
   // Buying a drawback off drops the count for a moment. The split is clamped
   // to what is left, but the number the player wrote survives the dip.
   c.set('training.magic.tradition.boonSP', 5);
-  check('five of six as spell points', m().traditionSP, 60);
+  check('five of six as spell points', m().traditionSP, 40);
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying one off leaves four to split, and clamps to them',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [4, 4, 42]);
+    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [4, 4, 28]);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('and the fifth comes back when the boon does',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [6, 5, 60]);
+    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [6, 5, 40]);
   c.set('training.magic.tradition.boonSP', 1);
 
   for (const [id, boons, sp, essence] of [
-    ['angou', 6, 12, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
+    ['angou', 6, 8, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
     ['nico', 4, 0, 11], ['bryva', 0, 0, 0],
   ]) {
     const x = new Character(load(id)).data.training.magic;
@@ -10688,6 +10723,8 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
 {
   const c = new Character(blankDocument({ name: 'Spheres' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
   c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
   c.addGuileSphere('Study');
@@ -10769,6 +10806,8 @@ console.log('\nthe sphere tables -- a place to send a bonus');
 {
   const c = new Character(blankDocument({ name: 'Spheres' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Sphere', clBonus: 0, dcBonus: 0, sheetValue: 'Sphere CL / DC' });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 1, dcBonus: 0 });
   c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
@@ -10862,6 +10901,8 @@ console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bon
 {
   const c = new Character(blankDocument({ name: 'Casters' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.set('training.magic.clBonus', 1);
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
   c.listAdd('vancian.classes', {

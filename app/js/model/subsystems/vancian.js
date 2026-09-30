@@ -71,7 +71,7 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
+      'casterLevelForwarded', 'casterLevelWaiting', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -341,10 +341,14 @@ export function recomputeVancian(model) {
      * above already includes. Nor is it capped at 20: the table stops there,
      * caster level does not.
      */
+    //
+    // A class with no levels yet cannot cast, so a bonus to its caster level
+    // waits (`casterLevelWaiting`) until its first level arrives.
     const key = vancianForwardKey(c);
     c.casterLevelBase = level;
     c.casterLevelForwarded = key ? forwarded(model, key) : 0;
-    c.casterLevel = Math.max(0, level + c.casterLevelForwarded);
+    c.casterLevelWaiting = level ? 0 : c.casterLevelForwarded;
+    c.casterLevel = Math.max(0, level + (level ? c.casterLevelForwarded : 0));
 
     /*
      * Concentration is caster level + the casting modifier unless the player

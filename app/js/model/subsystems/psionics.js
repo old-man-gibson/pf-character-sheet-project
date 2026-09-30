@@ -88,7 +88,7 @@ export const PSIONIC_DERIVED = [
   {
     path: 'classes',
     keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelForwarded',
-      'curveKnown', 'basePoints',
+      'manifesterLevelWaiting', 'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
 ];
@@ -230,7 +230,10 @@ export function recomputePsionics(model) {
     const key = manifesterForwardKey(c);
     c.manifesterLevelBase = level;
     c.manifesterLevelForwarded = key ? forwarded(model, key) : 0;
-    c.manifesterLevel = Math.max(0, level + c.manifesterLevelForwarded);
+    // A class with no levels yet cannot manifest: the bonus waits for its
+    // first level (`manifesterLevelWaiting`).
+    c.manifesterLevelWaiting = level ? 0 : c.manifesterLevelForwarded;
+    c.manifesterLevel = Math.max(0, level + (level ? c.manifesterLevelForwarded : 0));
 
     const base = psionicPoints(c.curveTotal, level);
     c.curveKnown = psionicCurve(c.curveTotal) !== null;

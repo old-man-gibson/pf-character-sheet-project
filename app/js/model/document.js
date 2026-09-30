@@ -41,7 +41,8 @@ import { MONSTER_TAB_ORDER } from '../monster/block.js';
 // What the Spheres magic side works out and does not save: the sphere table,
 // and what bonuses forwarded to `spheres.*` came to, which is working rather
 // than anything a player typed.
-const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded'];
+const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded',
+  'castingUnlocked', 'clWaiting', { path: 'classes', keys: ['levelWaiting'] }];
 
 /**
  * The document shape this build understands, written by tools/convert.py.

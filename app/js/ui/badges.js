@@ -56,9 +56,12 @@ export function sheetBonusField(model, key, width = '4rem') {
  * worse than the copied formulas it replaced -- so the amount sits next to
  * the field it is added to, and points back at the sentence that sent it.
  */
-export function forwardedBadge(model, name, tag = '', only = '') {
+export function forwardedBadge(model, name, tag = '', only = '', waiting = '') {
   const f = name ? model.forwardedInto(name, only) : null;
   if (!f) return '';
+  // A bonus with nothing yet to raise -- a caster level before casting is
+  // unlocked -- is shown held back rather than hidden, with the reason.
+  if (waiting) tag = tag ? `${tag}, waiting` : 'waiting';
   // A superseded bonus stays on the list, marked. It is the reason the one
   // above it is not adding to it, and a reader who cannot see it will write
   // it in again by hand.
@@ -66,7 +69,8 @@ export function forwardedBadge(model, name, tag = '', only = '') {
     .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''} from ${x.where}`
       + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`)
     .join('\n');
-  return `<span class="fwd" title="Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
+  return `<span class="fwd${waiting ? ' waiting' : ''}" title="${
+    waiting ? `Waiting: ${esc(waiting)}\n` : ''}Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
     + `${fmt(f.total)}${tag ? ` <em>${esc(tag)}</em>` : ''}</span>`;
 }
 
