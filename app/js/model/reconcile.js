@@ -9,7 +9,7 @@
  * forwarded bonus and says where each part came from.
  */
 
-import { DERIVED, FORWARD_BY_DERIVED, diceString, skillLabel } from '../rules.js';
+import { DERIVED, FORWARD_BY_DERIVED, diceString, flatFootedLoss, skillLabel } from '../rules.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
 import { contextualNote } from '../formula-format.js';
@@ -207,6 +207,14 @@ export function reconcile(model) {
     // off before the difference is called an offset.
     model.offsets[d.key] = target - bare - forwarded(model, FORWARD_BY_DERIVED[d.key]);
   }
+  // Flat-footed CMD follows the CMD, less what flat-footed loses. A workbook
+  // that took more off than the Dexterity and dodge bonuses the sheet can see
+  // keeps the rest. A blank sheet or a pasted monster never worked the figure
+  // out -- it sat at 10, or at the CMD -- so neither has anything to keep.
+  const kind = model.data.source?.kind;
+  model.ffCmdExtra = kind === 'blank' || kind === 'monster' ? 0
+    : (Number(model.imported['defenses.cmd']) || 0) - (Number(model.imported['defenses.ffCmd']) || 0)
+      - flatFootedLoss(model.data);
 }
 
 /**

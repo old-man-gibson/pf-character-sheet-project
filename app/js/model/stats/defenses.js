@@ -210,6 +210,11 @@ export function abilityMoves(c, totals) {
   const dexMod = Number(c.abilities.dex?.totalMod) || 0;
   const dexAfter = dexMod + (deltas.dex || 0);
   const cmdDexDelta = (totals.losesDex ? Math.min(0, dexAfter) : dexAfter) - dexMod;
+  // CMD adds Strength as well as Dexterity, so Bull's Strength moves it as
+  // it moves CMB, and fatigued takes one from each. Flat-footed CMD has no
+  // Dexterity bonus to lose, only a penalty to gain.
+  const strDelta = deltas.str || 0;
+  const ffCmdDexDelta = Math.min(0, dexAfter) - Math.min(0, dexMod);
 
   const mode = (key) => c.attack.modes?.[key] || {};
   const atk = (key) => slot(mode(key).stat1, mode(key).stat2);
@@ -221,7 +226,7 @@ export function abilityMoves(c, totals) {
       melee: atk('melee'), altMelee: atk('altMelee'), ranged: atk('ranged'), altRanged: atk('altRanged'),
       cmb: atk('cmb'), altCmb: atk('altCmb'),
       ac: acAbilityDelta, touch: acAbilityDelta, flatFooted: c.defenses.uncannyDodge ? acAbilityDelta : 0,
-      cmd: cmdDexDelta, ffCmd: 0,
+      cmd: strDelta + cmdDexDelta, ffCmd: strDelta + ffCmdDexDelta,
       fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
       // Initiative follows whatever ability its row names, Dex by default.
       initiative: slot(c.hp.initAbility || 'Dex', c.hp.initAbility2),
@@ -351,9 +356,10 @@ export function conditionState(model) {
     // outright -- so blinded is −2 to both, and a flat-footed character's
     // lost Dexterity comes off both.
     cmd: via.cmd + mods.cmd + totals.acPenalty,
-    // Flat-footed CMD has no Dexterity in it to lose, so it takes everything
-    // else: what a condition says about CMD outright, and every AC penalty.
-    ffCmd: mods.cmd + totals.acPenalty,
+    // Flat-footed CMD has no Dexterity bonus in it to lose, so it takes
+    // everything else: its Strength (and any Dexterity penalty), what a
+    // condition says about CMD outright, and every AC penalty.
+    ffCmd: via.ffCmd + mods.cmd + totals.acPenalty,
     fortitude: sv('fortitude'),
     reflex: sv('reflex'),
     will: sv('will'),

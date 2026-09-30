@@ -1213,6 +1213,36 @@ export function cmdBonusTotal(resolved, types = AC_BONUS_TYPES) {
   return total;
 }
 
+/**
+ * Flat-footed CMD: the CMD less what a flat-footed creature loses -- its
+ * Dexterity bonus and its dodge bonuses (the AC columns flat-footed AC drops),
+ * but never a penalty. Uncanny dodge keeps both.
+ *
+ * Worked out from the finished CMD rather than reconciled on its own, so it
+ * carries whatever the CMD carries: the workbook's adjustment, a forwarded
+ * bonus. The saved figure was never worked out, and on a blank sheet it
+ * stayed at 10 whatever the character's CMD became.
+ *
+ * `extra` is what a workbook took off beyond that, measured once on load
+ * (see reconcile): a dodge bonus it kept inside the CMD's adjustment, where
+ * the sheet cannot see it to drop it.
+ */
+export function flatFootedLoss(c, types = AC_BONUS_TYPES) {
+  const d = c.defenses;
+  if (d.uncannyDodge) return 0;
+  let lost = Math.max(0, Number(c.abilities.dex?.totalMod) || 0);
+  for (const [key, , flags] of types) {
+    if (flags?.flatFooted === false && flags?.cmd !== false) {
+      lost += Math.max(0, Number(d.acBonusesResolved?.[key]) || 0);
+    }
+  }
+  return lost;
+}
+
+export function flatFootedCmd(c, extra = 0) {
+  return (Number(c.defenses.cmd) || 0) - flatFootedLoss(c) - (Number(extra) || 0);
+}
+
 /* ----- gestalt class progressions ----- */
 
 /**

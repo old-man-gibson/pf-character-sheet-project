@@ -1996,6 +1996,32 @@ console.log('caster, manifester and sphere caster levels each belong to their ow
     [s.caster.level, s.vancian.wizard.cl, s.manifester.psion.level], [0, 9, 5]);
 }
 
+console.log('conditions move CMD through Strength as well as Dexterity');
+{
+  const c = new Character(blankDocument({ name: 'Tired', level: 5 }));
+  c.set('statsBuild.str.pointBuy', 14);
+  c.set('statsBuild.dex.pointBuy', 14);
+  c.set('conditions.Fatigued', 1);
+  const s = c.conditionState;
+  check('fatigued is −2 Str and −2 Dex: one from each modifier', [s.deltas.str, s.deltas.dex], [-1, -1]);
+  check('so CMB moves by the Str and CMD by both', [s.delta.cmb, s.delta.cmd], [-1, -2]);
+  check('flat-footed CMD keeps its Str, so it moves by that', s.delta.ffCmd, -1);
+
+  // Flat-footed CMD is worked out, where it used to sit at the 10 a blank
+  // sheet starts with.
+  const d = () => c.data.defenses;
+  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [14, 12]);
+  c.set('defenses.acBonuses.dodge', 1);
+  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [15, 12]);
+  c.set('defenses.uncannyDodge', true);
+  check('uncanny dodge keeps both', d().ffCmd, 15);
+  c.set('defenses.uncannyDodge', false);
+  c.set('statsBuild.dex.pointBuy', 8);
+  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [12, 11]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 11);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));
@@ -8982,7 +9008,11 @@ console.log('conditions -- what is ticked moves the numbers beside the base, nev
   check('paralysed sets Dex to 0', s.scores.dex, 0);
   check('and Str to 0', s.scores.str, 0);
   check('so the Dex modifier is −5', s.deltas.dex, -5 - c.data.abilities.dex.totalMod);
-  check('CMD loses the Dex bonus and takes the penalty', s.delta.cmd, -5 - c.data.abilities.dex.totalMod);
+  // CMD adds Str as well as Dex, and paralysis sets both to 0.
+  check('CMD loses the Str and Dex bonuses and takes both penalties', s.delta.cmd,
+    -5 - c.data.abilities.dex.totalMod - 5 - c.data.abilities.str.totalMod);
+  check('flat-footed CMD had no Dex bonus to lose, but still loses Str', s.delta.ffCmd,
+    -5 - Math.min(0, c.data.abilities.dex.totalMod) - 5 - c.data.abilities.str.totalMod);
   check('melee attacks against it gain +4', s.acVsMelee, -4);
   check('it cannot move', s.speeds.every((sp) => sp.adjusted === 0), true);
   c.set('conditions.Helpless', 1);

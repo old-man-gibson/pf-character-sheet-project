@@ -34,7 +34,7 @@
 
 import {
   DERIVED, FORWARD_BY_DERIVED, SIZE_CARRY_MULTIPLIER, abilityMod, armorParts, carryTiers,
-  iterativeAttacks, skillTotal, statMod,
+  flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
 import { evaluateFormula } from '../formula.js';
 import {
@@ -160,8 +160,10 @@ export class Character {
     for (const d of DERIVED) this.imported[d.key] = Number(getPath(this.data, d.key) ?? 0);
     this.imported['initiative'] = Number(this.data.hp?.initiative ?? 0);
     this.imported['hp.total'] = Number(this.data.hp?.total);
+    this.imported['defenses.ffCmd'] = Number(this.data.defenses?.ffCmd ?? 0);
 
     this.offsets = {};
+    this.ffCmdExtra = 0;
     this.#normalise();
     this.trackers = this.#loadTrackers();
     this.#reconcile();
@@ -245,6 +247,7 @@ export class Character {
       if (d.key === 'initiative') c.hp.initiative = value;
       else setPath(c, d.key, value);
     }
+    c.defenses.ffCmd = flatFootedCmd(c, this.ffCmdExtra);
 
     c.attack.iterative = iterativeAttacks(c.attack.bab);
 

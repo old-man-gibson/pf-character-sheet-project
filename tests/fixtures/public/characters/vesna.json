@@ -529,7 +529,7 @@
   "touch": 16,
   "flatFooted": 13,
   "cmd": 24,
-  "ffCmd": 10,
+  "ffCmd": 18,
   "acStat1": "Dex",
   "acStat2": null,
   "bonusAC": null,
