@@ -73,7 +73,9 @@ export const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 
  * Nothing here is ever copied onto the character. The player's own writing
  * has its own editable cell and is the only thing the sheet saves; this is
  * read where it stands, so that a corrected pack corrects every sheet and an
- * exported character stays a list of names.
+ * exported character stays a list of names. (Two exceptions, each on purpose:
+ * a published sheet carries the text as `cited` for a reader with no pack,
+ * and a sphere talent's Fill copies it into the note -- see fillTalentNotes.)
  */
 export function catalogueFace(details, { compact = true } = {}) {
   if (!details?.known) return '';

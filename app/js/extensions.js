@@ -901,6 +901,55 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch, 
 /* ---------------- merging the tables ---------------- */
 
 /**
+ * A second copy of a sphere joined to the first, talent by talent.
+ *
+ * A sphere used to be replaced outright, on the reasoning that one page is the
+ * whole sphere and a later pack carrying it is a corrected copy. That held
+ * while a pack was a page. A pack can also be a *book*, and a sphere is spread
+ * over as many books as wrote talents for it: a sphere is in one pack, and
+ * five more of its talents are in another -- which, replacing, left a caster
+ * with those five and nothing else, depending on which pack loaded second.
+ *
+ * A correction still works, one entry at a time: a talent or base ability of
+ * the same name is the later copy's, and so is any field it fills. What a
+ * later copy cannot do is take a talent away, which nothing has wanted to.
+ * Used by `mergeTables` when packs load, and by the pack editor when a sphere
+ * is pasted into a pack that already has it, so the two file it alike.
+ */
+export function mergeSphere(had, sphere) {
+  const merged = { ...had };
+  for (const [key, value] of Object.entries(obj(sphere))) {
+    if (key === 'name' || key === 'talents' || key === 'abilities') continue;
+    if (value === null || value === undefined || value === '') continue;
+    merged[key] = value;
+  }
+  const byName = (a, b) => {
+    const outList = [...arr(a)];
+    const where = new Map(outList.map((e, j) => [lower(e?.name), j]));
+    for (const e of arr(b)) {
+      const j = where.get(lower(e?.name));
+      if (j === undefined) { where.set(lower(e?.name), outList.length); outList.push(e); } else outList[j] = e;
+    }
+    return outList;
+  };
+  merged.talents = byName(had?.talents, sphere?.talents);
+  merged.abilities = byName(had?.abilities, sphere?.abilities);
+  return merged;
+}
+
+/**
+ * Which entry of a catalogue kind an entry is: its name, and whose it is. An
+ * entry that says whose it is meets only its own -- the rogue's Evasion talent
+ * and the monk's Evasion art are two entries of one name, and by name alone
+ * whichever was filed second would have erased the other. Used by
+ * `mergeTables` and by the pack editor, so the two file an entry alike.
+ */
+export function catalogueEntryKey(e) {
+  const f = new Map(arr(e?.fields).map(([k, v]) => [lower(k), lower(v)]));
+  return `${lower(e?.name)}|${f.get('class') || ''}|${f.get('option') || ''}`;
+}
+
+/**
  * Fold every enabled pack's tables into the one document each registrar
  * expects. Later packs win: a class or manipulation with the same name
  * (case-insensitively) as an earlier one replaces it, so a player can fix a
@@ -1020,13 +1069,7 @@ export function mergeTables(extensions) {
     // The entries inside a group get an index of their own for the same
     // reason: `class option` is 3,003 of them under one kind, and a second
     // pack contributing to that kind would otherwise scan all of them each.
-    // An entry that says whose it is meets only its own: the rogue's Evasion
-    // talent and the monk's Evasion art are two entries of one name, and by
-    // name alone whichever pack loaded second would have erased the other.
-    const whose = (e) => {
-      const f = new Map(arr(e?.fields).map(([k, v]) => [lower(k), lower(v)]));
-      return `${lower(e?.name)}|${f.get('class') || ''}|${f.get('option') || ''}`;
-    };
+    const whose = catalogueEntryKey;
     const entries = [...arr(list[i].entries)];
     const where = new Map();
     for (let j = 0; j < entries.length; j++) where.set(whose(entries[j]), j);
@@ -1037,45 +1080,13 @@ export function mergeTables(extensions) {
     list[i] = { ...list[i], ...group, entries };
   };
 
-  /**
-   * A sphere joins one already there, talent by talent.
-   *
-   * It used to replace it outright, on the reasoning that one page is the
-   * whole sphere and a later pack carrying it is a corrected copy. That held
-   * while a pack was a page. A pack can also be a *book*, and a sphere is
-   * spread over as many books as wrote talents for it: a sphere is in one
-   * pack, and five more of its talents are in another -- which, replacing,
-   * left a caster with those five and nothing else, depending on which pack
-   * happened to load second.
-   *
-   * A correction still works, one entry at a time: a talent or base ability
-   * of the same name is the later pack's. What a later pack cannot do is take
-   * a talent away, which no pack has wanted to.
-   */
+  /** A sphere joins one already there, talent by talent (`mergeSphere`). */
   const upsertSphere = (list, sphere) => {
     const k = lower(sphere?.name);
     if (!k) return;
     const i = at(list, 'name', k);
     if (i === -1) { list.push(sphere); noteAdded(list, 'name', k); return; }
-    const had = list[i];
-    const merged = { ...had };
-    for (const [key, value] of Object.entries(sphere)) {
-      if (key === 'name' || key === 'talents' || key === 'abilities') continue;
-      if (value === null || value === undefined || value === '') continue;
-      merged[key] = value;
-    }
-    const byName = (a, b) => {
-      const outList = [...arr(a)];
-      const where = new Map(outList.map((e, j) => [lower(e?.name), j]));
-      for (const e of arr(b)) {
-        const j = where.get(lower(e?.name));
-        if (j === undefined) { where.set(lower(e?.name), outList.length); outList.push(e); } else outList[j] = e;
-      }
-      return outList;
-    };
-    merged.talents = byName(had.talents, sphere.talents);
-    merged.abilities = byName(had.abilities, sphere.abilities);
-    list[i] = merged;
+    list[i] = mergeSphere(list[i], sphere);
   };
 
   /** A discipline joins one already there rather than replacing it. */
@@ -1141,18 +1152,35 @@ export function mergeTables(extensions) {
  */
 export function registerTables(merged, registrars) {
   const r = obj(registrars);
-  r.setManeuverCatalogue?.(merged.maneuvers);
-  r.setSphereCatalogue?.(merged.spheres);
-  r.setVeilCatalogue?.(merged.veils);
-  r.setFeatCatalogue?.(merged.feats);
-  r.setSpellCatalogue?.(merged.spells);
-  r.setPowerCatalogue?.(merged.powers);
-  r.setReferenceCatalogue?.(merged.catalogues);
-  r.setVancianTables?.(merged.vancian);
-  r.setPsionicTables?.(merged.psionics);
-  r.setCardcastingTables?.(merged.cardcasting);
-  r.setCookingTables?.(merged.cooking);
-  r.setAltTrainingTables?.(merged.altTraining);
+  const failed = [];
+  // One table a setter cannot read must not take the rest with it. A pack
+  // with a malformed entry used to throw out of here, the page kept that
+  // failed load, and no character would open until the pack was removed. A
+  // table that fails is registered empty instead and named in what this
+  // returns, so the page opens and the caller can say which pack to look at.
+  const register = (name, table) => {
+    const set = r[name];
+    if (typeof set !== 'function') return;
+    try {
+      set(table);
+    } catch (err) {
+      failed.push({ name, error: err?.message || String(err) });
+      try { set(undefined); } catch { /* every setter reads nothing as an empty table */ }
+    }
+  };
+  register('setManeuverCatalogue', merged.maneuvers);
+  register('setSphereCatalogue', merged.spheres);
+  register('setVeilCatalogue', merged.veils);
+  register('setFeatCatalogue', merged.feats);
+  register('setSpellCatalogue', merged.spells);
+  register('setPowerCatalogue', merged.powers);
+  register('setReferenceCatalogue', merged.catalogues);
+  register('setVancianTables', merged.vancian);
+  register('setPsionicTables', merged.psionics);
+  register('setCardcastingTables', merged.cardcasting);
+  register('setCookingTables', merged.cooking);
+  register('setAltTrainingTables', merged.altTraining);
+  return failed;
 }
 
 /* ---------------- the active set ---------------- */
@@ -1185,8 +1213,11 @@ export function activeBlocks(extensions) {
   }
   // A catalogue pack's classes are blocks too, made from their entries --
   // numbered after the pack's own, and never over a class somebody wrote as
-  // a block, which is the better of the two.
+  // a block, which is the better of the two. Between two packs deriving the
+  // same class, the later one's stands: the packs arrive bundled first and
+  // local after, and somebody's own pack overrides a bundled one.
   const written = new Set(out.filter((b) => b.kind === 'class').map((b) => lower(b.name)));
+  const derived = new Map();
   for (const ext of arr(extensions)) {
     let index = arr(ext.blocks).length;
     for (const cat of arr(ext.provides?.catalogues?.catalogues)) {
@@ -1196,11 +1227,11 @@ export function activeBlocks(extensions) {
         if (!DERIVED_CLASS.has(entry)) DERIVED_CLASS.set(entry, classBlockFromEntry(entry));
         const block = DERIVED_CLASS.get(entry);
         if (!block || written.has(lower(block.name))) continue;
-        written.add(lower(block.name));
-        out.push({ ...block, extId: ext.id, extName: ext.name, index: index++ });
+        derived.set(lower(block.name), { ...block, extId: ext.id, extName: ext.name, index: index++ });
       }
     }
   }
+  out.push(...derived.values());
   return out;
 }
 

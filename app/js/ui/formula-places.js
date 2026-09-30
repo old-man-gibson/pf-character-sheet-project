@@ -379,6 +379,7 @@ function placeOf(model, ref) {
       const [list, i, field] = ref.slice('craftNumber:'.length).split('|');
       return { tab: 'crafting', sel: [item(list, i, field)] };
     }
+    case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 

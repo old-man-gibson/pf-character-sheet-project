@@ -40,6 +40,8 @@
  * accident is a palette nobody trusts at the table.
  */
 import { esc } from './html.js';
+import { trackerReading } from './panels/trackers.js';
+import { companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 
@@ -665,7 +667,7 @@ function akashic(model, add) {
     add({
       kind: 'class', title: text(cl.name), tab: 'akashic',
       value: cl.level ? `Lv ${cl.level}` : '',
-      sub: bits('Akashic class', cl.essenceCap ? `essence cap ${cl.essenceCap}` : '', cl.baseDC ? `DC ${cl.baseDC}` : ''),
+      sub: bits('Akashic class', cl.essenceCap ? `essence cap ${cl.essenceCap}` : '', `DC ${10 + (Number(cl.modValue) || 0)}`),
       keys: 'akashic veilweaver',
     });
   }
@@ -703,7 +705,7 @@ function vancian(model, add) {
     if (!text(cl.name)) return;
     add({
       kind: 'class', title: text(cl.name), tab: 'vancian',
-      value: cl.concentration ? `concentration ${fmt(cl.concentration)}` : '',
+      value: cl.concentrationNum ? `concentration ${fmt(cl.concentrationNum)}` : '',
       sub: bits('Vancian caster', text(cl.slotType), text(cl.stat)),
       roll: { kind: 'concentration', ref: `vancian:${i}`, what: `${text(cl.name)} concentration` },
       keys: 'caster class spell slots',
@@ -808,24 +810,20 @@ function techniques(model, add) {
 /** Trackers, resources, buffs, conditions -- the things that move in play. */
 function trackers(model, add) {
   const c = model.data;
-  for (const t of c.customTrackers || []) {
+  // The live trackers, the sheet's resources among them -- not the saved
+  // copies, which lag behind every spend until the next save, and not the
+  // resource rows, which no tab draws any more.
+  for (const t of model.trackers || []) {
     if (!text(t.name)) continue;
+    const { shown, range } = trackerReading(t);
     add({
       kind: 'tracker', title: text(t.name), tab: 'trackers', start: true,
-      value: `${t.current ?? 0}/${t.max ?? 0}`,
-      sub: bits(text(t.refresh), text(t.source), clip(t.note, 60), t.error ? `formula error: ${t.error}` : ''),
-      sel: `[data-tracker-current="${t.id}"]`, keys: 'tracker pool uses',
+      value: `${shown}${range.replace(/^\/ /, '/')}`,
+      sub: bits(text(t.refresh), t.source === 'sheet' ? 'from sheet' : '', clip(t.note, 60),
+        t.error ? `formula error: ${t.error}` : ''),
+      sel: `[data-tracker-current="${t.id}"]`, keys: 'tracker pool uses resource',
     });
   }
-  (c.resources || []).forEach((r, i) => {
-    if (!text(r.name)) return;
-    add({
-      kind: 'tracker', title: text(r.name), tab: 'overview',
-      value: `${(Number(r.total) || 0) - (Number(r.uses) || 0)}/${r.total ?? 0}`,
-      sub: bits('Resource', text(r.refresh)), sel: `[data-item^="resources|${i}|"]`,
-      keys: 'resource uses',
-    });
-  });
   (c.buffs || []).forEach((b, i) => {
     if (!text(b.name)) return;
     add({
@@ -914,21 +912,25 @@ function companions(model, add) {
       // The roll dispatcher's spelling for which of the kind: bare for the
       // first, `eidolon:1` after -- the same string the tab's buttons carry.
       const rollKind = ci === 0 ? kind : `${kind}:${ci}`;
-      const name = text(co.name) || text(co.species) || text(co.kind);
-      if (!name && !(co.attacks || []).length) return;
-      if (name) {
-        add({
-          kind: 'companion', title: name, tab: kind,
-          value: co.hp?.max ? `${co.hp.max} hp` : '',
-          sub: bits(label, text(co.species), text(co.archetype)),
-          roll: { kind: rollKind, ref: 'init', what: `${label.toLowerCase()} initiative` }, keys: 'companion pet',
-        });
-      }
+      // What the companion is: the animal or creature for most kinds, the base
+      // form for an eidolon or a conjured one. Its numbers are the computed
+      // ones recompute leaves on the block (`calc`, and attack rows carrying
+      // `toHit`), not the fields the player types.
+      if (!companionInUse(kind, co)) return;
+      const what = text(co.creature) || text(co.baseForm);
+      const name = text(co.name) || what || label;
+      const k = co.calc || {};
+      add({
+        kind: 'companion', title: name, tab: kind,
+        value: k.hpMax ? `${k.hpMax} hp` : '',
+        sub: bits(label, what !== name ? what : '', typeof co.archetype === 'string' ? text(co.archetype) : ''),
+        roll: { kind: rollKind, ref: 'init', what: `${label.toLowerCase()} initiative` }, keys: 'companion pet',
+      });
       (co.attacks || []).forEach((a, i) => {
         if (!text(a.type) && !text(a.name)) return;
         add({
           kind: 'companion', title: text(a.name) || text(a.type), tab: kind,
-          value: bits(fmt(a.attack ?? 0), text(a.damage)),
+          value: bits(fmt(a.toHit ?? 0), text(a.damage)),
           sub: bits(name || label, `${label} attack`), roll: { kind: rollKind, ref: `attack:${i}`, what: `${label} attack` },
           keys: 'attack natural',
         });
@@ -1077,7 +1079,9 @@ function commands(model, add) {
   cmd('Theme & layout', 'theme', 'Palettes, and where the tabs go', 'theme palette layout colour sidebar rail');
   cmd('Switch light / dark', 'theme-flip', 'The same look on the other scheme', 'theme light dark switch toggle');
   cmd('Formulas guide', 'formulas', 'Values, destinations and every formula on the sheet', 'formula fx guide search values');
-  cmd('Rest — refresh daily trackers', 'quick-rest', 'Everything with a daily refresh comes back', 'rest sleep night day refresh');
+  cmd('End encounter', 'rest-encounter', 'Trackers that come back after an encounter', 'rest encounter combat fight end refresh');
+  cmd('New day', 'rest-day', 'Hit points, daily trackers, slots, power points and companions back', 'rest sleep night day new refresh');
+  cmd('New week', 'rest-week', 'A new day, and weekly trackers too', 'rest week new refresh');
   if ((model.data.vancian?.classes || []).length) {
     cmd('New day — spell slots', 'vancian-new-day', 'Give back every prepared spell', 'new day spells rest');
   }

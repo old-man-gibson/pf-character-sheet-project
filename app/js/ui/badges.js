@@ -9,6 +9,7 @@
 import { esc } from './html.js';
 import { exprField } from './rows.js';
 import { fmt, FORWARD_BY_DERIVED } from '../rules.js';
+import { stackingNote } from '../model/scope.js';
 
 /* ----- the import offset, as a field -----
  * AC, touch, flat-footed, CMD and the three saves all carry a reconciliation
@@ -63,7 +64,7 @@ export function forwardedBadge(model, name, tag = '', only = '') {
   // it in again by hand.
   const from = f.from
     .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''} from ${x.where}`
-      + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${x.counts ? '' : `  (does not stack with the other ${x.type})`}`)
+      + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`)
     .join('\n');
   return `<span class="fwd" title="Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
     + `${fmt(f.total)}${tag ? ` <em>${esc(tag)}</em>` : ''}</span>`;

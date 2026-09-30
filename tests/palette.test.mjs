@@ -64,10 +64,9 @@ function sampleCharacter() {
   };
   d.featGroups = [{ name: 'Level Up', entries: [{ name: 'Blind-Fight', detail: 3 }] }];
   d.akashic.slots = [{ slot: 'Head', bound: false, twinveil: false, veils: [{ name: 'Iron Crown', desc: 'Authority', essence: 2, dc: 19 }] }];
-  d.customTrackers = [{
-    id: 't1', name: 'Bardic Performance', max: 14, min: 0, current: 3, refresh: 'Daily',
-    note: '', style: null, maxFormula: '14', minFormula: null,
-  }];
+  // Through the model, the way the Trackers tab adds one: the palette reads
+  // the live trackers, and the saved copy lags behind them until a save.
+  model.addTracker({ name: 'Bardic Performance', maxFormula: '14', refresh: 'Daily', current: 3 });
   d.notes = [{ title: 'Debts', body: 'Owes the harbourmaster forty gold.' }];
   model.recompute();
   return model;
@@ -105,10 +104,37 @@ check('the feat says which group it is in', find(rows, 'Blind-Fight').sub, 'Leve
 // The DC is the veilweaver's base plus the essence invested, recomputed --
 // so it is 2 here rather than the 19 the row was written with, and the point
 // of the check is that the row says chakra, DC and description in that order.
-check('the veil says which chakra', find(rows, 'Iron Crown').sub, 'Head veil · DC 2 · Authority');
+// No veilweaving class, so the base is 10 with no modifier, and 2 essence makes 12.
+check('the veil says which chakra', find(rows, 'Iron Crown').sub, 'Head veil · DC 12 · Authority');
 check('a feat is not rollable', find(rows, 'Blind-Fight').roll, null);
 check('the skill points at its own row',
   find(rows, 'Disguise').sel[0].startsWith('[data-item^="skills|'), true);
+
+console.log('a tracker and a companion read as they stand, not as they were saved');
+{
+  const m = sampleCharacter();
+  const bard = m.trackers.find((t) => t.name === 'Bardic Performance');
+  m.updateTracker(bard.id, { current: 8 });
+  check('a spend shows at once', find(index(m), 'Bardic Performance').value, '8/14');
+  // A sheet resource is a tracker like any other, on the Trackers tab.
+  const withKi = blankDocument('palette-ki');
+  withKi.resources = [{ name: 'Ki Pool', total: 5, uses: 1, refresh: 'Daily' }];
+  const ki = find(index(new Character(withKi)), 'Ki Pool');
+  check('a sheet resource is found where it is drawn', [ki?.tab, ki?.value, ki?.sel], ['trackers', '1/5', ['[data-tracker-current="ki_pool"]']]);
+
+  // Its computed numbers, not fields nobody writes: a companion's hit points
+  // and its attack's bonus to hit come from what recompute worked out.
+  m.listAdd('animalCompanion', {});
+  m.set('animalCompanion.0.levelOverride', 4);
+  m.listAdd('animalCompanion.0.attacks', { type: 'Bite', damage: '1d6', primary: true });
+  const k = m.data.animalCompanion[0].calc;
+  const pet = find(index(m), 'Animal companion');
+  check('a companion nobody has named is listed under its kind, with its hit points',
+    pet?.value, `${k.hpMax} hp`);
+  const bite = find(index(m), 'Bite');
+  check('its attack shows its bonus to hit', bite?.value?.split(' · ')[0],
+    (() => { const n = m.data.animalCompanion[0].attacks[0].toHit; return n >= 0 ? `+${n}` : String(n); })());
+}
 
 console.log('the vitals lead, and are what an empty box opens on');
 const opening = searchIndex(rows, '');

@@ -180,7 +180,7 @@ export function renderSkillsPanel(model, ctx) {
                 <td data-stack="name">${skillNameCell(s, i)}</td>
                 <td class="num total" data-stack="head"><span class="rollpair">${fmt(s.bonus)}${
                   rollButton(model, 'skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span></td>
-                <td class="num" data-label="Ranks">${s.totalRanks}</td>
+                <td class="num" data-label="Ranks">${esc(s.totalRanks)}</td>
                 <td class="mid" data-label="Class skill">${itemCheck('skills', i, 'classSkill', s.classSkill)}</td>
                 <td class="num bought" data-label="Bought">${exprField(`data-item="skills|${i}|rankSources.bought"`,
                   s.rankSources?.bought ?? 0, {

@@ -350,9 +350,10 @@ export function setCompanionAbilityText(list) {
   ABILITY_TEXT = new Map();
   for (const entry of Array.isArray(list) ? list : []) {
     const key = abilityTextKey(entry?.name);
-    // First pack in wins, which is the order `activeExtensions` puts them in:
-    // bundled, then local, so somebody's own pack overrides a bundled one.
-    if (key && !ABILITY_TEXT.has(key)) ABILITY_TEXT.set(key, entry);
+    // The last pack in wins. `activeExtensions` puts them bundled first and
+    // local after, so somebody's own pack overrides a bundled one, as it does
+    // everywhere else. (First-in-wins had it the other way round.)
+    if (key) ABILITY_TEXT.set(key, entry);
   }
 }
 

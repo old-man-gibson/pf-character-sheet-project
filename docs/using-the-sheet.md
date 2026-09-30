@@ -12,10 +12,22 @@ and anything downstream recalculates immediately.
 **Play tracking**
 - Hit points as a meter that carries everything at once — what is left, the temporary
   points stacked past the maximum, and how much of what is left is nonlethal — with
-  Damage, Nonlethal, Heal and Rest buttons. Damage spends temporary hit points first;
-  Rest restores everything and zeroes every tracker. Unconscious, dying and dead are
+  Damage, Nonlethal and Heal buttons, and three rests. Damage spends temporary hit points
+  first. **End encounter** brings back trackers that refresh per encounter; **New day**
+  does that and restores hit points (temporary and nonlethal cleared), daily trackers,
+  spell slots and prepared spells, power points, temporary essence and companions' hit
+  points; **New week** does all of that and brings back weekly trackers. A tracker with no
+  refresh is left for you to move, and each rest is one step of undo. Unconscious, dying and dead are
   flagged automatically, and below zero the bar itself goes red and glows, harder the
   closer the character gets to dying. See *Hit points* below.
+- **Undo, one action at a time.** Everything done at the table — damage, healing, a pip
+  or a spell slot spent, power points, a card drawn or played, a session **Use**, a turn,
+  a condition ticked, a buff switched, a companion hurt, a rest — puts **Undo** and its
+  name on the tab rail: *Undo 5 damage*, *Undo Ki 5 → 4*, *Undo standard action*. It
+  takes back that action and nothing else, so damage taken since, or a note typed since,
+  stays. The ▾ beside it lists the thirty before it, each with its own Undo, for the spend
+  noticed only after the next hit landed. One that a later action also changed — damage,
+  then a heal — says which to take back first, and changes nothing until you do.
 - Conditions are switches (negative levels a count) that show what they cost — tick
   one and every number it moves reads out its conditioned value beside the base.
   See *The Overview* below.
@@ -93,7 +105,8 @@ an **Undo** beside it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> does the same from anywh
 the sheet — twenty steps deep, and still there after the message has gone. It covers
 structural changes rather than typing, because a field's own <kbd>Ctrl</kbd>+<kbd>Z</kbd>
 is better at typing than this would be, so the key is left alone wherever a caret is
-standing. Every change is saved as you make
+standing. The key also takes back actions at the table (see *Play tracking* above):
+whichever is newer, a removal or an action, goes first. Every change is saved as you make
 it, and **Save** — on the tab rail, or <kbd>Ctrl</kbd>+<kbd>S</kbd> — marks the version
 the sheet opens on; see
 [Saving, and going back](importing-and-saving.md#saving-and-going-back). Under the rail's
@@ -461,8 +474,9 @@ In the session view the **Overview is a dashboard** rather than the full page:
   **Nonlethal** (piles up against what is left rather than coming off it),
   **Heal** (raises current to the max and erases nonlethal alike), **+ Temp** (grants
   temporary hit points — they do not stack, so the better of what you have and what
-  you are given is what you keep) and **Rest** (every tracker whose refresh reads as
-  daily goes back to unspent).
+  you are given is what you keep), then **End encounter**, **New day** and **New week**
+  (as on the hit-point panel: each brings back what lasts that long, and the ones
+  shorter than it).
 
 Expand states persist with the character; the full Overview is one Build-view click
 away.

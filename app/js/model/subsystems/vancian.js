@@ -12,7 +12,7 @@ import {
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { forwarded } from '../scope.js';
-import { closestName, vancianForwardKey } from '../util.js';
+import { closestName, evaluateAmount, vancianForwardKey } from '../util.js';
 
 let VANCIAN_TABLES = { classes: [] };
 
@@ -71,16 +71,16 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'tableName',
+      'casterLevelForwarded', 'tableName', 'concentrationNum', 'concentrationError',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
     // `used` is play state and stays; `left` is the subtraction and does not.
     path: 'classes',
     list: 'spells',
-    keys: ['dc', 'base', 'classBonus', 'abilityBonus', 'atWill', 'slots', 'knownCount', 'left'],
+    keys: ['dc', 'base', 'classBonus', 'abilityBonus', 'atWill', 'slots', 'knownCount', 'left', 'usedNow'],
   },
-  { path: 'prepared', keys: ['left'] },
+  { path: 'prepared', keys: ['left', 'usedNow'] },
 ];
 
 /**
@@ -346,6 +346,16 @@ export function recomputeVancian(model) {
     c.casterLevelForwarded = key ? forwarded(model, key) : 0;
     c.casterLevel = Math.max(0, level + c.casterLevelForwarded);
 
+    /*
+     * Concentration is the player's, as a number or a formula
+     * (`vancian.wizard.cl + int.mod + 4`). Worked out after the caster level
+     * above, so a formula naming this class's own CL reads this pass's figure.
+     */
+    const conc = evaluateAmount(c.concentration,
+      typeof c.concentration === 'string' && c.concentration.trim() ? model.scope() : null);
+    c.concentrationNum = conc.value;
+    c.concentrationError = conc.error;
+
     c.statMod = mod;
     c.statScore = score;
     c.plannerLevel = fromProgression;
@@ -396,17 +406,20 @@ export function recomputeVancian(model) {
 
       /*
        * What has been spent today. This is the one thing here the player owns
-       * rather than the table, so it is kept -- but clamped to what the class
-       * actually has, or a level that shrinks (a stat drops, a level is
-       * retrained) would be left claiming more spent than it ever had.
+       * rather than the table, so it is kept as they spent it, and only what
+       * is shown is held to what the class has now (`usedNow`, `left`). It
+       * used to be cut down to fit, so a level that shrank for a moment -- a
+       * stat drained, the casting pack switched off and on -- came back with
+       * those slots unspent, and was saved that way.
        *
        * A spontaneous caster only needs the count: which spell went into which
        * slot is not a question their sheet can ask. Cantrips are at will and so
        * have nothing to spend.
        */
       const cap = s.atWill ? 0 : Math.max(0, Number(s.slots) || 0);
-      s.used = Math.max(0, Math.min(cap, Math.floor(Number(s.used) || 0)));
-      s.left = s.atWill ? null : cap - s.used;
+      s.used = Math.max(0, Math.floor(Number(s.used) || 0));
+      s.usedNow = Math.min(cap, s.used);
+      s.left = s.atWill ? null : cap - s.usedNow;
     }
 
     c.totalPerDay = (c.spells || []).reduce((t, s) => t + (Number(s.slots) || 0), 0);
@@ -423,8 +436,9 @@ export function recomputeVancian(model) {
    */
   for (const p of v.prepared || []) {
     p.uses = Math.max(0, Math.floor(Number(p.uses) || 0));
-    p.used = Math.max(0, Math.min(p.uses, Math.floor(Number(p.used) || 0)));
-    p.left = p.uses - p.used;
+    p.used = Math.max(0, Math.floor(Number(p.used) || 0));
+    p.usedNow = Math.min(p.uses, p.used);
+    p.left = p.uses - p.usedNow;
   }
 
   v.calc = {
@@ -433,8 +447,8 @@ export function recomputeVancian(model) {
     unknownSlotTypes: (v.classes || []).filter((c) => c.slotTypeUnknown).map((c) => c.slotType),
     // Anything left to spend today, across every block and the prepared list.
     spent: (v.classes || []).reduce((t, c) => t
-      + (c.spells || []).reduce((n, s) => n + (Number(s.used) || 0), 0), 0)
-      + (v.prepared || []).reduce((t, p) => t + (Number(p.used) || 0), 0),
+      + (c.spells || []).reduce((n, s) => n + (Number(s.usedNow) || 0), 0), 0)
+      + (v.prepared || []).reduce((t, p) => t + (Number(p.usedNow) || 0), 0),
   };
 }
 

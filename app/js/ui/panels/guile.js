@@ -30,7 +30,7 @@ import {
   guilePackages, guileSkillHint, skillLabel,
 } from '../../rules.js';
 import { DAILY_LEVERAGE_EXTRA } from '../../model.js';
-import { check, select, text } from '../fields.js';
+import { check, autoNum, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line,
   rowDrop, rowGrip, rowRemove, rowToolsDragged,
@@ -173,8 +173,8 @@ export function guileClassBlock(model, g, cls, ci) {
           ${operativeField(model, g)}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               <span class="hint">${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility</span>
             </span></label>
           ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems))}

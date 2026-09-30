@@ -28,7 +28,7 @@ import {
   WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt,
 } from '../../rules.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
-import { check, field, num, select, text } from '../fields.js';
+import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
   itemNum, itemSelect, itemText, line, rowRemove, rowTools,
@@ -193,7 +193,7 @@ function practitionerUnarmedBlock(u, per, base) {
 function sharedUnarmedBlock(u, base) {
     return `<h4 style="margin:10px 0 4px">Applies either way</h4>
       ${editLine('Step increases (+1 die step)', `${base}.stepIncreases`, u.stepIncreases)}
-      ${editLine('Size increases (+2 die steps)', `${base}.sizeIncreases`, u.sizeIncreases)}`;
+      ${editLine('Size increases (one size larger each)', `${base}.sizeIncreases`, u.sizeIncreases)}`;
   }
 
 /**
@@ -267,7 +267,7 @@ export function weaponsPanel(model, e) {
               ${itemCheck('equipment.weapons', i, 'useUnarmedDice', w.useUnarmedDice)}<span>🥊</span></label>
           </span>`)}
           ${field('Ability', itemSelect('equipment.weapons', i, 'damageAbility', w.damageAbility, ABILITIES.map((k) => ABILITY_LABELS[k])))}
-          ${field('×', `<input type="number" value="${w.abilityMult ?? 1}" step="0.5" min="0"
+          ${field('×', `<input type="number" value="${esc(w.abilityMult ?? 1)}" step="0.5" min="0"
             data-item="equipment.weapons|${i}|abilityMult" data-kind="number" style="width:3.2rem"
             title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
           ${field('Misc dmg', itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' })
@@ -369,8 +369,8 @@ function armorPanel(e) {
       <td data-stack="name">${text(`${path}.name`, piece.name)}</td>
       <td class="num" data-label="AC">${num(`${path}.acBonus`, piece.acBonus, 'style="width:3.2rem"')}</td>
       <td class="num" data-label="Enhancement">${num(`${path}.enhancement`, piece.enhancement, 'style="width:3.2rem"')}</td>
-      <td class="num" data-label="Max Dex"><input type="number" value="${piece.maxDex ?? ''}" placeholder="—"
-        data-set="${path}.maxDex" data-kind="number-or-null" style="width:3.2rem"></td>
+      <td class="num" data-label="Max Dex">${autoNum(`data-set="${path}.maxDex"`, piece.maxDex,
+    { placeholder: '—', width: '3.2rem' })}</td>
       <td class="num" data-label="Armor check penalty">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
       <td data-label="Type">${text(`${path}.type`, piece.type)}</td>
       <td class="mid" data-label="Ghost touch">${check(`${path}.ghostTouch`, piece.ghostTouch)}</td>
@@ -897,9 +897,9 @@ function craftProject(ctx, model, cr, p, i) {
       </div>
       <div class="weapongrid">
         ${field('Base price', itemExpr(list, i, 'value', p, { width: '7rem' }))}
-        ${field('Discount %', `<input type="number" value="${p.discountOverride ?? ''}"
-          data-item="${list}|${i}|discountOverride" data-kind="number-or-null" style="width:4.4rem"
-          placeholder="${Number(cr.discount) || 0}" title="Blank uses the crafter's standing discount">`)}
+        ${field('Discount %', autoNum(`data-item="${list}|${i}|discountOverride"`, p.discountOverride, {
+    placeholder: Number(cr.discount) || 0, width: '4.4rem', title: "Blank uses the crafter's standing discount",
+  }))}
         ${field('Zero profit', `<span class="pair">${itemCheck(list, i, 'zeroProfit', p.zeroProfit)}
           <span class="hint">sell at cost</span></span>`)}
         <span class="wsep"></span>
@@ -1063,7 +1063,9 @@ export function wealthPanel(model, ctx) {
           <div class="offeringfields${v.due ? '' : ' dormant'}"${v.due ? ''
     : ' title="Only the Oath of Offerings and material casting are paid this way — tick one to fill these in."'}>
             <div class="fieldgrid wealthfields">
-              ${field('Baseline after last offering', `<input type="number" value="${v.baseline === null ? '' : v.baseline}" data-set="wealth.baseline" data-kind="number-or-null" placeholder="—" title="The balance recorded after the last offering"${off}>`)}
+              ${field('Baseline after last offering', autoNum('data-set="wealth.baseline"', v.baseline, {
+    placeholder: '—', title: 'The balance recorded after the last offering', extra: off.trim(),
+  }))}
               ${field('OoO / day', roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
               ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"${off}>`)}
               ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, `min="0" title="Mana earned in sessions since the last offering; the oath takes half"${off}`))}

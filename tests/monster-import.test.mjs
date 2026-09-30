@@ -89,7 +89,7 @@ console.log('the reader takes a Bestiary block apart');
   check('two attack groups', b.melee.map((a) => [a.name, a.count, a.group, a.attack, a.enhancement]),
     [['adamantine unholy longsword', 1, 0, 53, 5], ['slam', 2, 1, 47, 0]]);
   check('the sword\'s damage, crit and rider', [b.melee[0].dice, b.melee[0].flat, b.melee[0].critRange, b.melee[0].riders],
-    ['2d6', 24, 4, [{ dice: '1d6', kind: 'cold' }]]);
+    ['2d6', 24, 17, [{ dice: '1d6', kind: 'cold' }]]);
   check('space and reach', [b.space, b.reach], ['10 ft.', '10 ft.']);
   check('the spell-like block keeps its lines and footnote', [b.magic.length, b.magic[0].lines.length, b.magic[0].lines[3].startsWith('M ')], [1, 4, true]);
   check('scores', b.abilities, { str: 36, dex: 30, con: 41, int: 35, wis: 32, cha: 35 });
@@ -111,8 +111,8 @@ console.log('the pieces read on their own');
 {
   check('an attack with a touch and a trailing note', parseAttacks('incorporeal touch +12 touch (1d8 plus energy drain), 2 wings +8 (1d6+2)').map((a) => [a.name, a.touch, a.count, a.riders, a.notes]),
     [['incorporeal touch', true, 1, [], 'energy drain'], ['wing', false, 2, [], '']]);
-  check('a crit multiplier', readDamage('1d8+4/x3'), { dice: '1d8', flat: 4, critRange: 1, critMult: 3, riders: [], notes: '' });
-  check('a range and a rider', readDamage('2d6+7/19-20 plus grab'), { dice: '2d6', flat: 7, critRange: 2, critMult: 2, riders: [], notes: 'grab' });
+  check('a crit multiplier', readDamage('1d8+4/x3'), { dice: '1d8', flat: 4, critRange: 20, critMult: 3, riders: [], notes: '' });
+  check('a range and a rider', readDamage('2d6+7/19-20 plus grab'), { dice: '2d6', flat: 7, critRange: 19, critMult: 2, riders: [], notes: 'grab' });
   check('skills with a note', readSkills('Stealth +12 (+16 in forests), Craft (traps) +9'),
     [{ name: 'Stealth', spec: null, bonus: 12, note: '+16 in forests' }, { name: 'Craft', spec: 'traps', bonus: 9, note: '' }]);
   check('a bonus feat superscript', readFeats('ToughnessB, Weapon Focus (bite)'), [{ name: 'Toughness', detail: '' }, { name: 'Weapon Focus', detail: 'bite' }]);
@@ -139,11 +139,16 @@ console.log('the document reproduces the block, and holds on reload');
   check('ABP stays out of a monster', [c.defenses.acBonuses.abpDeflection, c.defenses.acBonuses.abpNatural, c.saves.fortitude.bonuses.abpResistance], [0, 0, 0]);
   check('hit points, initiative', [c.hp.total, c.hp.initiative, m.offsets.initiative], [717, 14, 4]);
   check('saves', [c.saves.fortitude.total, c.saves.reflex.total, c.saves.will.total], [30, 30, 36]);
-  check('BAB, melee, CMB', [c.attack.bab, c.attack.totalMelee, c.attack.totalCmb, m.offsets['attack.totalCmb']], [35, 49, 49, 0]);
+  // Large: melee is BAB 35 + Str 13 - 1 and CMB is BAB 35 + Str 13 + 1, the
+  // size modifier one way on an attack roll and the other on a maneuver.
+  check('BAB, melee, CMB', [c.attack.bab, c.attack.totalMelee, c.attack.totalCmb, m.offsets['attack.totalCmb']], [35, 47, 49, 0]);
   const [sword, slam] = c.equipment.weapons;
   check('the sword: to hit, damage explained as 1.5 Str + 5, the rider as a token', [sword.attackTotal, sword.damageTotal, sword.abilityMult, sword.miscDamage, sword.special, sword.critRange, sword.count],
-    [53, '2d6+24', 1.5, 0, '[[1d6]] cold', 4, 1]);
-  check('the slams: two of them, secondary attack in the offset', [slam.attackTotal, slam.damageTotal, slam.count, slam.attackOffset, slam.natural], [47, '8d6+13', 2, -2, true]);
+    [53, '2d6+24', 1.5, 0, '[[1d6]] cold', 17, 1]);
+  // "Or 2 slams +47": the slams in place of the sword, at the melee total, so
+  // nothing is left to explain. The -2 that used to sit here was the size
+  // modifier added the wrong way round, not a secondary attack.
+  check('the slams: two of them, at the melee total', [slam.attackTotal, slam.damageTotal, slam.count, slam.attackOffset, slam.natural], [47, '8d6+13', 2, 0, true]);
   const skill = (name) => c.skills.find((s) => s.name === name);
   check('a listed skill: ranks that explain it, class skill, the rest in Misc', [skill('Bluff').bonus, skill('Bluff').totalRanks, skill('Bluff').classSkill, skill('Bluff').offset], [56, 35, true, 6]);
   check('a fanned Knowledge lands on its row', [skill('Kn. (planes)').bonus, skill('Kn. (arcana)').bonus, skill('Kn. (nature)').totalRanks], [50, 47, 0]);
@@ -160,6 +165,24 @@ console.log('the document reproduces the block, and holds on reload');
   check('reload keeps every figure', [again.data.defenses.ac, again.data.defenses.cmd, again.data.saves.fortitude.total, again.data.hp.total, again.data.equipment.weapons.map((w) => w.attackTotal), again.data.skills.find((s) => s.name === 'Bluff').bonus],
     [48, 90, 30, 717, [53, 47], 56]);
   check('and the session bar leads with the block', again.sessionDefaultTabs()[0], 'statblock');
+
+  // Pasted and saved by a build that added size to attacks the wrong way:
+  // melee saved as 49, and each weapon's adjustment made up the 2 against the
+  // printed figure. Reopened, the melee total is put right, and the weapons
+  // give the 2 back, so the printed +53 and +47 still stand.
+  // The same build kept the crit range as its width: 17-20 as 4, and none as 1.
+  const old = JSON.parse(JSON.stringify(m.toJSON()));
+  delete old.corrections;
+  old.attack.totalMelee += 2;
+  for (const w of old.equipment.weapons) w.attackOffset -= 2;
+  old.equipment.weapons[0].critRange = 4;
+  old.equipment.weapons[1].critRange = 1;
+  const reopened = new Character(old);
+  check('a monster saved under the old size rule: melee right, weapons as printed, no offsets made up',
+    [reopened.data.attack.totalMelee, reopened.offsets['attack.totalMelee'],
+      reopened.data.equipment.weapons.map((w) => [w.attackTotal, w.attackOffset])],
+    [47, 0, [[53, 1], [47, 0]]]);
+  check('and its crit ranges are the lowest roll that threatens', reopened.data.equipment.weapons.map((w) => w.critRange), [17, 20]);
 
   // A score edited moves the block the way it moves everything else: two
   // points of Strength are a point of modifier, which is +1 to hit and, at

@@ -18,6 +18,7 @@ import { Character } from '../app/js/model.js';
 import * as model from '../app/js/model.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { describePublish, publishDocument } from '../app/js/publish.js';
+import { blankDocument } from '../app/js/convert.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
 
 let pass = 0;
@@ -30,11 +31,6 @@ const check = (label, actual, expected) => {
     console.log(`  FAIL ${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 };
-
-if (!hasFixtures()) {
-  console.log('publish: skipped -- no roster to read.');
-  process.exit(0);
-}
 
 /** Every pack a deployment carries, from either folder the app reads. */
 function bundledPacks() {
@@ -52,12 +48,53 @@ function bundledPacks() {
 
 registerTables(mergeTables(bundledPacks()), model);
 
+/*  Feats, spells and powers travel as the pack's words beside the player's
+ *  own, never in their place, and a sheet with no pack reads them there. A
+ *  small catalogue of our own, so this runs whatever the roster holds; the
+ *  bundled tables are registered again after it. */
+{
+  model.setFeatCatalogue({ feats: [{ name: 'Power Attack', type: 'Combat', text: 'Trade attack for damage.', source: 'Core' }] });
+  model.setSpellCatalogue({ spells: [{ name: 'Shield', school: 'abjuration', text: 'An invisible disc.', source: 'Core' }] });
+  model.setPowerCatalogue({ powers: [{ name: 'Mind Thrust', discipline: 'telepathy', text: 'Deal damage to a mind.', source: 'Psionics' }] });
+  const c = new Character(blankDocument({ name: 'Cited' }));
+  c.data.featGroups = [{ name: 'Feats', entries: [{ name: 'Power Attack', detail: '', note: 'mine' }, { name: 'Homebrew Feat', detail: '', note: '' }] }];
+  c.data.vancian.prepared = [{ prepUsed: '', classLevel: '', name: 'Shield', note: '' }];
+  c.data.psionics.classes = [{ name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 1, powers: [{ name: 'Mind Thrust', level: 1, note: '' }] }];
+  const { doc: out, report: r } = publishDocument(c.toJSON());
+  const feat = out.featGroups[0].entries[0];
+  check('a feat carries the pack’s words as cited, and the player’s note is untouched',
+    [feat.cited?.text, feat.cited?.source, feat.note], ['Trade attack for damage.', 'Core', 'mine']);
+  check('so do a prepared spell and a power',
+    [out.vancian.prepared[0].cited?.text, out.psionics.classes[0].powers[0].cited?.text], ['An invisible disc.', 'Deal damage to a mind.']);
+  check('each is counted under its kind, and the unpacked one is named',
+    [r.carriedBy.feat, r.carriedBy.spell, r.carriedBy.power, r.unknown], [1, 1, 1, ['feat: Homebrew Feat']]);
+  // No pack at all now: what the sheet reads is the cited text.
+  model.setFeatCatalogue({ feats: [] });
+  const reopened = new Character(out).toJSON();
+  const back = reopened.featGroups[0].entries[0];
+  check('with no pack, the published feat still shows its text, and says where it came from',
+    [model.featDetails(back).known, model.featDetails(back).text, model.featDetails(back).cited], [true, 'Trade attack for damage.', true]);
+  check('and an unpublished one shows nothing, as before', model.featDetails({ name: 'Power Attack' }).known, false);
+  model.setFeatCatalogue({ feats: [{ name: 'Power Attack', type: 'Combat', text: 'Corrected since.', source: 'Core' }] });
+  check('with the pack back, the pack answers rather than the copy',
+    [model.featDetails(back).cited, model.featDetails(back).text], [false, 'Corrected since.']);
+  registerTables(mergeTables(bundledPacks()), model);
+}
+
+if (!hasFixtures()) {
+  console.log('publish: skipped -- no roster to read.');
+  process.exit(0);
+}
+
 /** Whichever character in the roster leans hardest on pack content. */
 const richest = fixtureIds()
   .map((id) => {
     const doc = new Character(loadCharacter(id)).toJSON();
     const { report } = publishDocument(doc);
-    return { id, doc, weight: report.carried + report.outline.length };
+    // Veils and maneuvers, which the stranger below reads back.
+    const weight = (report.carriedBy.veil || 0) + (report.carriedBy.maneuver || 0)
+      + report.outline.filter((o) => /^(veil|maneuver):/.test(o)).length;
+    return { id, doc, weight };
   })
   .sort((a, b) => b.weight - a.weight)[0];
 
@@ -79,10 +116,16 @@ check('the report says something a button could print', /carrying/.test(describe
  *  four do not add up to what was referenced, something travelled unreported
  *  or was reported twice -- and the whole point of the report is that an
  *  author can trust it about a sheet only a stranger can judge. */
-const referenced = (richest.doc.akashic?.slots || [])
+const named = (list) => (list || []).filter((r) => String(r?.name ?? '').trim()).length;
+const g = richest.doc.grantedFeats || {};
+const referenced = [...(richest.doc.akashic?.slots || []), ...(richest.doc.akashic?.kheshig || [])]
   .flatMap((s) => s.veils || []).filter((v) => v?.name).length
   + (richest.doc.maneuvers?.disciplines || [])
-    .reduce((n, d) => n + (d.known || []).length + (d.custom || []).length, 0);
+    .reduce((n, d) => n + (d.known || []).length + (d.custom || []).length, 0)
+  + (richest.doc.featGroups || []).reduce((n, grp) => n + named(grp.entries), 0)
+  + named([g.drawback, g.specialty, ...(g.others || [])])
+  + named(richest.doc.vancian?.prepared)
+  + (richest.doc.psionics?.classes || []).reduce((n, c) => n + named(c.powers), 0);
 check('every referenced entry is accounted for exactly once',
   report.carried + report.outline.length + report.blank.length + report.unknown.length,
   referenced);
@@ -107,10 +150,18 @@ for (const d of published.maneuvers?.disciplines || []) {
     Object.keys(d.notes || {}).filter((n) => !listed.has(n)), []);
 }
 
-/*  Catalogue slices the sheet keeps to fill its pickers are not about this
- *  character, and a published sheet has no pickers. */
-check('what the sheet only offers is dropped',
-  published.cardcasting ? published.cardcasting.manipulationsAvailable : null, null);
+/*  An encounter in progress is not the character, so the card table stays
+ *  behind. The player's own count of manipulations is the character, and
+ *  travels: dropping it showed a reader the table's number, not the author's. */
+{
+  const withCount = JSON.parse(JSON.stringify(richest.doc));
+  withCount.cardcasting = {
+    ...(withCount.cardcasting || {}), manipulationsAvailable: 'int.mod + 7', table: { active: true, round: 3 },
+  };
+  const out = publishDocument(withCount).doc;
+  check("the player's own count of manipulations travels", out.cardcasting?.manipulationsAvailable, 'int.mod + 7');
+  check('the encounter in progress does not', out.cardcasting?.table ?? null, null);
+}
 
 /* ---------------- what a stranger sees ---------------- */
 

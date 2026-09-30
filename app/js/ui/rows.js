@@ -250,12 +250,14 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
    * are not keep the tooltip they have always had and gain nothing.
    */
   const bd = b ? ` data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
+  // `format` makes text, and `base` can be a stored value no rule has
+  // touched (flat-footed CMD is carried, not computed), so it is escaped.
   if (!d) {
     return title
-      ? `<span class="working" title="${esc(title)}"${bd}>${format(base)}</span>`
-      : `${format(base)}`;
+      ? `<span class="working" title="${esc(title)}"${bd}>${esc(format(base))}</span>`
+      : esc(format(base));
   }
-  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}"${bd}>${format(cs.adjusted[key])}</strong>`;
+  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}"${bd}>${esc(format(cs.adjusted[key]))}</strong>`;
 }
 
 /**
@@ -270,8 +272,8 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
  */
 export function movedSub(cs, key, base, format = fmt) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
-  if (!d) return `${format(base)}`;
-  return `<span class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${format(cs.adjusted[key])}</span>`;
+  if (!d) return esc(format(base));
+  return `<span class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${esc(format(cs.adjusted[key]))}</span>`;
 }
 
 export function addButton(list, label, template) {

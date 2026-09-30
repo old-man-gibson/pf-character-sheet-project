@@ -64,5 +64,5 @@ export function bindChains(root,model,render) {
     if (card) executeChainAction(model,card,pending.id); render();
   }));
   root.querySelectorAll('[data-chain-skip]').forEach(el=>el.addEventListener('click',()=>{dismissFollowup(model,el.dataset.chainSkip);render();}));
-  root.querySelectorAll('[data-chain-cancel]').forEach(el=>el.addEventListener('click',()=>{model.markUndo('Cancelled remaining chain');model.set('session.pendingFollowups',[]);render();}));
+  root.querySelectorAll('[data-chain-cancel]').forEach(el=>el.addEventListener('click',()=>{model.play('Cancelled chain',()=>model.set('session.pendingFollowups',[]));render();}));
 }

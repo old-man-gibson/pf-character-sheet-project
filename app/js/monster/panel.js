@@ -117,7 +117,11 @@ function attackLines(model, type) {
     const total = Number(w.calc?.totalAtk ?? w.attackTotal) || 0;
     const n = Array.isArray(w.iteratives) ? w.iteratives.length : 1;
     const atk = Array.from({ length: n }, (_, k) => fmt(total - 5 * k)).join('/');
-    const crit = `${Number(w.critRange) > 1 ? `/${21 - Number(w.critRange)}-20` : ''}${Number(w.critMult) > 2 ? `/×${w.critMult}` : ''}`;
+    // The lowest roll that threatens, as the Gear tab keeps it (19 for
+    // 19-20), and the multiplier whether it was saved as 3 or as "x3".
+    const low = Number(w.critRange) || 20;
+    const mult = Number(String(w.critMult ?? '').replace(/^\s*[x×]/i, '')) || 2;
+    const crit = `${low < 20 ? `/${low}-20` : ''}${mult > 2 ? `/×${mult}` : ''}`;
     // The rider is prose, and prose takes formulas: a weapon whose special
     // says `{bloodburst.dmg}` prints the number here, as it does on
     // Equipment. The damage string can carry one too.
@@ -155,7 +159,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const hdText = m
       ? `${level}d${m.hitDie}${c.gestalt?.hp ? (c.gestalt.hp.abilityMod * level ? fmt(c.gestalt.hp.abilityMod * level) : '') : ''}`
       : `${level} HD`;
-    const maxNow = movedInline(cs, 'hp', hp.max, String);
+    const maxNow = movedInline(cs, 'hp', hp.baseMax, String);
     const hpLine = `${hp.current < hp.max ? `<strong class="bad">${hp.current}</strong>/` : ''}${maxNow} (${esc(hdText)})${hp.temp > 0 ? `; ${hp.temp} temporary` : ''}`;
     const defLists = d.calc || {};
     const savesLine = `<b>Fort</b> ${moved('fortitude', s.fortitude.total)}, <b>Ref</b> ${moved('reflex', s.reflex.total)}, <b>Will</b> ${moved('will', s.will.total)}${m?.saveNote ? `; ${shown(model, m.saveNote)}` : ''}`;

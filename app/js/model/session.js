@@ -79,20 +79,21 @@ export function useSessionAction(model, card) {
 export function advanceTurn(model, start) {
   const state = sessionState(model);
   if (state.pendingFollowups?.length) return;
-  model.markUndo(start ? 'Started next turn' : 'Ended turn');
-  if (start) {
-    state.turn = count(state.turn) + 1;
-    state.spent = { swift: count(state.pendingSwift), immediate: count(state.pendingSwift) };
-    state.pendingSwift = 0;
-    state.onTurn = true;
-  } else {
-    if (!state.onTurn) return;
-    state.onTurn = false;
-    // An immediate taken on your turn uses that turn's swift. After the
-    // turn, a new immediate borrows from the next one instead.
-    state.spent.immediate = count(state.pendingSwift);
-  }
-  model.set('session', state);
+  if (!start && !state.onTurn) return;
+  model.play(start ? 'Next turn' : 'End turn', () => {
+    if (start) {
+      state.turn = count(state.turn) + 1;
+      state.spent = { swift: count(state.pendingSwift), immediate: count(state.pendingSwift) };
+      state.pendingSwift = 0;
+      state.onTurn = true;
+    } else {
+      state.onTurn = false;
+      // An immediate taken on your turn uses that turn's swift. After the
+      // turn, a new immediate borrows from the next one instead.
+      state.spent.immediate = count(state.pendingSwift);
+    }
+    model.set('session', state);
+  });
 }
 
 // Shortcuts resolve by name, not position, so rearranging a sheet cannot point

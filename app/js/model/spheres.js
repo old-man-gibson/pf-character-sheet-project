@@ -22,7 +22,9 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, evaluateAmount, normalizeName, slug, sphereForwardKey } from './util.js';
+import {
+  closestName, evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
+} from './util.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -74,7 +76,7 @@ function dedupeTalents(talents) {
 
 /** Register the shared catalogue. Call before constructing a Character. */
 export function setSphereCatalogue(doc) {
-  const list = Array.isArray(doc?.spheres) ? doc.spheres : [];
+  const list = packRows(doc?.spheres);
   SPHERE_CATALOGUE = {
     spheres: list.map((s) => ({
       name: String(s.name || ''),
@@ -82,18 +84,18 @@ export function setSphereCatalogue(doc) {
       // separately; '' when a page never said.
       kind: ['combat', 'magic', 'guile'].includes(s.kind) ? s.kind : '',
       description: String(s.description || ''),
-      abilities: (s.abilities || []).map((a) => ({
+      abilities: packRows(s.abilities).map((a) => ({
         name: String(a.name || ''), text: String(a.text || ''), option: !!a.option,
         // The ability's text divided by sphere, where a page divides it.
-        bySphere: (a.bySphere || []).map((x) => ({ sphere: String(x.sphere || ''), text: String(x.text || '') })),
+        bySphere: packRows(a.bySphere).map((x) => ({ sphere: String(x.sphere || ''), text: String(x.text || '') })),
       })),
       // What the page says about choosing among its packages, when it has any.
       choose: String(s.choose || ''),
-      talents: dedupeTalents((s.talents || []).map((t) => ({
+      talents: dedupeTalents(packRows(s.talents).map((t) => ({
         name: String(t.name || ''),
         group: String(t.group || ''),
-        tags: (t.tags || []).map(String),
-        sources: (t.sources || []).map(String),
+        tags: packWords(t.tags),
+        sources: packWords(t.sources),
         prerequisites: String(t.prerequisites || ''),
         text: String(t.text || ''),
       }))),
@@ -790,6 +792,14 @@ export function blankTalentNotes(model, sideKey) {
  * Fill those notes. The rule is `setTalentEntry`'s and is not loosened: only a
  * note that is empty, only from a name the catalogue knows, and a sphere the
  * row already chose still decides which talent that is.
+ *
+ * This is the one place a pack's text is copied onto the character. Feats,
+ * spells, powers, veils and maneuvers show the pack's words beside the
+ * player's and never store them (ui/html.js, `catalogueFace`); a sphere talent
+ * takes them into its note, because the player asks for it here, row by row
+ * or with one button, and the note is theirs to cut down afterwards. Kept as
+ * the exception on purpose (2026-09-29): a pack corrected later does not
+ * correct a note already filled.
  */
 export function fillTalentNotes(model, sideKey) {
   let filled = 0;
@@ -1093,6 +1103,15 @@ export function setCustomizationActive(model, index, setIndex) {
  * technique talents -- the only source that has to know -- are keyed off the
  * caller's `sideKey`.
  */
+/**
+ * Whether a ladder row's talent is one the character has: a slot the class
+ * grants, at a level the character has reached. Every tally counts by this
+ * -- the sphere sides, a blended pool, a guile class -- and so does the
+ * knowledge a prerequisite reads.
+ */
+export const rowCounts = (lv) => !!lv?.granted && !lv.future;
+export const utilityCounts = (lv) => !!lv?.utilityGranted && !lv.future;
+
 export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
   const tally = {};
   const bump = (s, n = 1) => {
@@ -1101,25 +1120,26 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
   // A blended class holds one pool of talents spent on either kind, so each
   // of its talents is counted once, on the side its sphere belongs to --
   // wherever the block itself happens to live. Its mirror on the other side
-  // is the same pool seen twice and contributes nothing of its own.
-  // A pool that reaches skill talents is counted the way the guile side
-  // counts, slot by granted slot, on both of its ladders: switching its pool
-  // to a slower tier must not leave the rows it no longer grants still
-  // counting. A pool that does not keeps the sphere sides' old reading, every
-  // row with a sphere in it, which is what the imported workbooks were
-  // checked against.
+  // is the same pool seen twice and contributes nothing of its own. A pool
+  // that reaches skill talents counts both of its ladders.
+  //
+  // Every ladder counts only what the character has at the level they are:
+  // a slot the class grants (`granted`), at a level reached (`!future`). The
+  // sphere sides used to count every row with a sphere in it -- a planned
+  // talent at a level not yet reached, and one typed in a row the class does
+  // not grant -- while the guile side counted granted slots only.
   const blendedTalents = (cls, home) => {
     const systems = poolSystems(cls, home);
     const slots = poolHasUtility(cls, home);
     for (const lv of cls.levels || []) {
-      if ((!slots || lv.granted) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-      if (slots && lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
+      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
+      if (slots && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
     }
   };
   for (const cls of side.classes || []) {
     if (cls.blendedMirror) continue;
     if (cls.blended || cls.blendedSkill) blendedTalents(cls, sideKey ?? cls.side);
-    else for (const lv of cls.levels || []) bump(lv.sphere);
+    else for (const lv of cls.levels || []) if (rowCounts(lv)) bump(lv.sphere);
   }
   if (sideKey) {
     const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
@@ -1134,8 +1154,8 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
       const systems = poolSystems(cls, 'guile');
       if (!systems.includes(sideKey)) continue;
       for (const lv of cls.levels || []) {
-        if (lv.granted && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-        if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
+        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
+        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
       }
     }
   }
@@ -1184,18 +1204,47 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
 export function pairBlended(model) {
   const t = model.data.training || {};
   const magic = t.magic?.classes || [];
-  for (const cls of t.combat?.classes || []) {
+  const combat = t.combat?.classes || [];
+  // Rows still shared by two blocks whose names no longer match -- one of
+  // them was renamed -- are split into two copies, so an edit to one stops
+  // changing the other and neither side counts the other's talents.
+  for (const m of magic) {
+    const holder = combat.find((c) => c.levels && c.levels === m.levels);
+    if (holder && holder.name !== m.name) m.levels = m.levels.map((lv) => ({ ...lv }));
+  }
+  const written = (levels) => (levels || [])
+    .some((lv) => String(lv?.talent ?? '').trim() || String(lv?.sphere ?? '').trim());
+  const sameTalents = (a, b) => (a || []).length === (b || []).length
+    && (a || []).every((lv, i) => String(lv?.talent ?? '') === String(b[i]?.talent ?? '')
+      && String(lv?.sphere ?? '') === String(b[i]?.sphere ?? ''));
+  for (const cls of combat) {
     delete cls.blendedMirror;
     const twin = cls.name && magic.find((m) => m.name === cls.name);
     // `blended: false` is a decision -- two blocks that share a name and are
     // deliberately kept apart -- and is left alone.
     if (!twin || cls.blended === false || twin.blended === false) continue;
+    // Pairing makes the two blocks share one list of rows, so it is only done
+    // where that loses nothing: the rows are shared already, one side has
+    // none written, or both hold the same talents -- the workbook's way of
+    // writing a blended class, a block on each tab with its talents twice.
+    // Two different pools under one name, a class renamed onto another's, are
+    // left apart: pairing them overwrote the magic block's talents.
+    const noOwnRows = !(cls.levels || []).length && (twin.levels || []).length;
+    const takesTwins = !written(cls.levels) && written(twin.levels);
+    if (cls.levels !== twin.levels && !noOwnRows && !takesTwins
+      && written(twin.levels) && !sameTalents(cls.levels, twin.levels)) {
+      // Not a mirror of anything now, whatever an earlier pairing left on it:
+      // a mirror's talents are counted through its owner, and it has none.
+      delete twin.blendedMirror;
+      continue;
+    }
     cls.blended = true;
     twin.blended = true;
     twin.blendedMirror = true;
-    // The owner's rows are the pool. An extended block has none of its own,
-    // so it is the twin that holds them and the roles swap.
-    if (!(cls.levels || []).length && (twin.levels || []).length) {
+    // The owner's rows are the pool. A block with none of its own -- an
+    // extended block, or a class named before anything was written in it --
+    // takes its twin's, and the roles swap.
+    if (noOwnRows || takesTwins) {
       cls.levels = twin.levels;
       cls.blendedMirror = true;
       delete twin.blendedMirror;
@@ -1638,9 +1687,10 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     const row = t ? of(sphere) : null;
     if (row) row.names.push(t);
   };
+  // The same rows the tally counts, and no others.
   for (const cls of side?.classes || []) {
     if (cls.blendedMirror) continue;
-    for (const lv of cls.levels || []) put(lv.sphere, lv.talent);
+    for (const lv of cls.levels || []) if (rowCounts(lv)) put(lv.sphere, lv.talent);
   }
   for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
   for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
@@ -1693,7 +1743,17 @@ export function sphereRanksBySkill(model) {
     unnamed: (sphere) => of(sphere).unnamed,
   };
 
-  model.trainingSkillRanks = (t.skillRanks || []).map((row) => {
+  // Every row of the table, not only the ones a workbook wrote. A character
+  // built here had no stored rows, so its sphere ranks never paid at all. A
+  // row nobody has touched is on at ×1, which is how the workbook read a
+  // blank cell; the rows are stored so the panel's switches have one to write.
+  if (!Array.isArray(t.skillRanks)) t.skillRanks = [];
+  for (const def of SPHERE_SKILL_RANKS) {
+    if (!t.skillRanks.some((row) => row?.skill === def.key)) {
+      t.skillRanks.push({ skill: def.key, enabled: true, multiplier: 1 });
+    }
+  }
+  model.trainingSkillRanks = t.skillRanks.map((row) => {
     const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
     if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
     const state = sphereSkillRequirement(def, check);

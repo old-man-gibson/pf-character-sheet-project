@@ -848,7 +848,8 @@ min: -floor((burn.max + qi.max) / 4)
 Its pips run from −7 to +7 either side of a zero mark, the negative side fills in
 red and the value turns red while negative, the range reads `/ ±7` (or `/ −3…+10`
 for a lopsided one), `+`/`−` and the pips clamp to the range on both ends, clicking
-the zero mark resets it, and Rest returns it to 0. Both formulas are audited, and
+the zero mark resets it, and the rest its refresh names (End encounter, New day or New
+week) returns it to 0. Both formulas are audited, and
 `tracker.<id>.min` joins `.current` / `.max` / `.remaining` in the formula scope.
 Custom trackers can be edited in place (✎) — name, max, min and refresh — so an
 existing pool can be given a min without being re-created.

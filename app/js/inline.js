@@ -295,13 +295,15 @@ export function proseScope(names, local, base, target = null) {
 }
 
 /**
- * What a bonus's formula comes to, signed. Truncated towards zero rather than
- * floored: a bonus of 2.5 is +2 and a penalty of 2.5 is -2, where flooring
- * would quietly make the penalty the harsher of the two. Never -0, which a
- * penalty of nothing would otherwise be, and which prints as a minus sign.
+ * What a bonus's formula comes to, signed. The formula's own answer rounds
+ * down, as every formula field's does (`resolveNumberField`): `+= -5/2` is -3.
+ * The sign goes on afterwards, so `-= 5/2` takes off 2 -- the amount written,
+ * rounded down, then taken off -- which is how "a penalty of half your level"
+ * reads. Never -0, which a penalty of nothing would otherwise be, and which
+ * prints as a minus sign.
  */
 function amount(expr, scope, sign) {
-  return (Math.trunc(Number(evaluateFormula(expr, scope)) || 0) * sign) || 0;
+  return (Math.floor(Number(evaluateFormula(expr, scope)) || 0) * sign) || 0;
 }
 
 /**
@@ -568,12 +570,11 @@ export function resolveDefinitions(defs, baseScope) {
  * only place a player can go and fix them.
  *
  * A bonus may name its type -- "as size", "as morale" -- and then it does not
- * stack with another of the same type at the same destination: the largest
- * bonus and the largest penalty of each type count, and untyped ones all do.
- * The type is a stacking key and nothing else, so a house type works exactly
- * as a printed one does. Note that this settles forwarded bonuses against each
- * other only; a size bonus typed into the Stats tab's own Size column is a
- * different number in a different place, and the sheet adds both.
+ * stack with another of the same type at the same destination, nor with the
+ * destination's own column of that type (`targets.columnsOf`): the largest
+ * of them counts. Untyped, dodge and circumstance bonuses all count, and so
+ * does every penalty. The type is a stacking key and nothing else, so a house
+ * type works exactly as a printed one does.
  *
  * A bonus that reads `target` is evaluated once per destination (see
  * amountsPerTarget), and each destination's list in `by` holds a copy of the
@@ -666,31 +667,38 @@ export function resolveContributions(contributions, names, baseScope, targets) {
     }
   }
 
-  // Now the stacking, per destination. Untyped bonuses all count; within a
-  // named type only the best bonus and the worst penalty do, which is the
-  // whole reason for saying "as size" -- two size bonuses are one size bonus,
-  // and the sheet has to know that without being told twice.
+  // Now the stacking, per destination, as the rulebook has it. Penalties all
+  // count, whatever their type. Untyped, dodge and circumstance bonuses all
+  // count. Any other type counts once, at its best -- two size bonuses are one
+  // size bonus -- and that includes a column of the same type at the
+  // destination: a forwarded +2 resistance bonus to a save whose Resistance
+  // column already holds 3 adds nothing, and a +5 adds 2.
   //
   // The ones that lose are not dropped from the list. "Where did this number
   // come from" is answered badly by a source that has quietly vanished, so
   // every bonus stays, marked `counts: false` where a bigger one of its type
-  // is already there.
+  // is already there, and `overlapAt` says how much of one a column covered.
+  const overlapAt = {};       // destination -> Map(entry -> { overlap, column })
   for (const [key, list] of Object.entries(by)) {
     let total = 0;
     const best = new Map();      // type -> the entry holding the largest bonus
-    const worst = new Map();     // type -> the entry holding the largest penalty
     const counts = new Set();
     for (const e of list) {
-      if (!e.type) { total += e.value; counts.add(e); continue; }
-      const pick = e.value < 0 ? worst : best;
-      const held = pick.get(e.type);
+      if (e.value < 0 || stacksWithItself(e.type)) { total += e.value; counts.add(e); continue; }
+      const held = best.get(e.type);
       // First one wins a tie, so the order a rule was written in decides which
       // of two identical bonuses is shown as the one in force -- arbitrary
       // either way, but stable, and it never changes under a later edit.
-      if (!held || (e.value < 0 ? e.value < held.value : e.value > held.value)) pick.set(e.type, e);
+      if (!held || e.value > held.value) best.set(e.type, e);
     }
-    for (const map of [best, worst]) {
-      for (const e of map.values()) { total += e.value; counts.add(e); }
+    const columns = targets?.columnsOf ? targets.columnsOf(key) : null;
+    for (const e of best.values()) {
+      const column = Math.max(0, Number(columns?.[e.type] ?? columns?.[baseType(e.type)]) || 0);
+      const overlap = Math.min(column, e.value);
+      if (overlap) (overlapAt[key] ||= new Map()).set(e, { overlap, column });
+      if (overlap >= e.value) continue;
+      total += e.value - overlap;
+      counts.add(e);
     }
     totals[key] = total;
     countedAt[key] = counts;
@@ -700,8 +708,17 @@ export function resolveContributions(contributions, names, baseScope, targets) {
   // bonuses has to work it out against the same places, and what `target` read
   // at each is remembered there (see forwardTargets), so it shows the amount
   // that arrived rather than one worked out against the sheet a pass later.
-  return { totals, entries, errors, by, countedAt, targets: targets || null };
+  return { totals, entries, errors, by, countedAt, overlapAt, targets: targets || null };
 }
+
+/**
+ * The bonus types that stack with themselves: untyped, dodge and
+ * circumstance. Every other type counts once, at its best. "as temp" alone
+ * is untyped (see parseType); "as temp.dodge" is a dodge bonus.
+ */
+export const STACKING_TYPES = new Set(['', 'untyped', 'dodge', 'circumstance']);
+export const baseType = (type) => String(type || '').toLowerCase().replace(/^temp(\.|$)/, '');
+export const stacksWithItself = (type) => STACKING_TYPES.has(baseType(type));
 
 /**
  * Evaluate the tokens in one text, given the resolved names and base scope.

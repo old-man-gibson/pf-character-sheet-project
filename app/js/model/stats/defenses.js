@@ -24,7 +24,7 @@ import {
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
 import { resolveSaveBonuses } from './saves.js';
-import { resolveBonusBlock } from '../util.js';
+import { resolveBonusBlock, resolveNumberField } from '../util.js';
 
 /**
  * Resolve the typed save and AC bonuses before anything reads them.
@@ -94,15 +94,10 @@ export function resolveDefenceText(model) {
   const hp = c.hp;
   if (hp) {
     const raw = hp.deathBonus;
-    hp.deathBonusError = null;
-    if (typeof raw === 'string' && raw.trim() !== '') {
-      try {
-        hp.deathBonusResolved = Math.trunc(Number(evaluateFormula(raw, model.scope())) || 0);
-      } catch (err) {
-        hp.deathBonusResolved = 0;
-        hp.deathBonusError = err.message;
-      }
-    } else hp.deathBonusResolved = Number(raw) || 0;
+    const formula = typeof raw === 'string' && raw.trim() !== '';
+    const { value, error } = resolveNumberField(formula ? model.scope() : null, raw);
+    hp.deathBonusResolved = value;
+    hp.deathBonusError = error;
   }
 
   if (!d) return;
@@ -482,13 +477,26 @@ export function tempHpGrant(model) {
   return { granted, spent, left: granted - spent };
 }
 
+/**
+ * Hit points as they stand now.
+ *
+ * `current` and `max` are what the character has at this moment: a negative
+ * level takes 5 from both ("-5 current and total hit points"), and a buff that
+ * raises the maximum raises what is left with it, as a higher Constitution
+ * does. The stored figure is the undrained one -- `baseCurrent`, against
+ * `baseMax` -- so damage and healing move it, and the 5 come back with the
+ * level. Being out, dying and dead read the figure as it stands now.
+ */
 export function hpState(model) {
   const hp = model.data.hp;
-  const max = model.hpMax;
-  if (hp.current === undefined || hp.current === null) hp.current = max;
+  const baseMax = model.hpMax;
+  if (hp.current === undefined || hp.current === null) hp.current = baseMax;
   if (hp.temp === undefined || hp.temp === null) hp.temp = 0;
   if (hp.nonlethal === undefined || hp.nonlethal === null) hp.nonlethal = 0;
-  const current = Number(hp.current) || 0;
+  const baseCurrent = Number(hp.current) || 0;
+  const shift = Number(conditionState(model).delta.hp) || 0;
+  const max = Math.max(0, baseMax + shift);
+  const current = baseCurrent + shift;
   const typedTemp = Number(hp.temp) || 0;
   const grant = tempHpGrant(model);
   const temp = typedTemp + grant.left;
@@ -506,6 +514,9 @@ export function hpState(model) {
   return {
     max,
     current,
+    baseMax,
+    baseCurrent,
+    shift,
     temp,
     typedTemp,
     tempGranted: grant.granted,
@@ -548,36 +559,20 @@ export function takeDamage(model, amount, { nonlethal = false } = {}) {
     hp.nonlethal = state.nonlethal + left;
   } else {
     left -= spendTemp(model, left);
-    hp.current = state.current - left;
+    hp.current = state.baseCurrent - left;
   }
   model.recompute();
   return model;
 }
 
+// Healing stops at the maximum. The stored figure is the undrained one, so it
+// stops at the undrained maximum, which is the same point as it stands now.
 export function healDamage(model, amount) {
   const hp = model.data.hp;
   const state = model.hpState;
   const n = Math.max(0, Number(amount) || 0);
-  hp.current = Math.min(state.max, state.current + n);
+  hp.current = Math.min(state.baseMax, state.baseCurrent + n);
   hp.nonlethal = Math.max(0, state.nonlethal - n);
-  model.recompute();
-  return model;
-}
-
-/** Full rest: back to maximum, temporary and nonlethal cleared. */
-export function restoreAll(model) {
-  const hp = model.data.hp;
-  hp.current = model.hpMax;
-  hp.temp = 0;
-  // The granted pool comes back full too: what was spent of it is play state
-  // and rests with everything else.
-  hp.tempSpent = 0;
-  hp.nonlethal = 0;
-  // Back to the resting point: nothing spent, or the neutral 0 of a two-sided
-  // meter -- but never outside the tracker's own range.
-  for (const t of model.trackers) {
-    t.current = Math.max(Number(t.min) || 0, Math.min(Number(t.max) || 0, 0));
-  }
   model.recompute();
   return model;
 }
@@ -656,31 +651,13 @@ export function applyHealing(model, amount) {
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   if (!n) return { healed: 0 };
   const hp = model.data.hp;
-  const max = model.hpState.max;
+  const max = model.hpState.baseMax;
   const before = Number(hp.current) || 0;
   hp.current = Math.min(max, before + n);
   hp.nonlethal = Math.max(0, (Number(hp.nonlethal) || 0) - n);
   model.recompute();
   emit(model, { type: 'quick-action', action: 'heal', amount: n });
   return { healed: hp.current - before };
-}
-
-/**
- * A night's rest: every tracker whose refresh reads as daily -- "Daily",
- * "per day", "on rest", "at dawn" -- goes back to unspent (a two-sided
- * meter to its zero mark). Hit points, spell slots and pools with other
- * rhythms keep their own rules and are the player's to move.
- * Returns how many trackers moved.
- */
-export function restRefresh(model) {
-  let count = 0;
-  for (const t of model.trackers) {
-    if (!/daily|day|rest|dawn|morning|night/i.test(String(t.refresh || ''))) continue;
-    if ((Number(t.current) || 0) !== 0) { t.current = 0; count++; }
-  }
-  if (count) model.recompute();
-  emit(model, { type: 'quick-action', action: 'rest', count });
-  return count;
 }
 
 /**

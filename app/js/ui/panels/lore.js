@@ -65,7 +65,7 @@ export function renderProgressionPanel(model, ctx) {
             <th class="num">Fort</th><th class="num">Ref</th><th class="num">Will</th>
           </tr></thead>
           <tbody>${p.levels.map((row) => `<tr class="${row.level > level ? 'future' : ''}">
-            <td class="num">${row.level}</td>
+            <td class="num">${esc(row.level)}</td>
             ${tracks.map((t) => `<td>${classCell(row, t)}</td>`).join('')}
             <td class="num derived">${row.computed?.hp ? `d${row.computed.hp}` : ''}</td>
             <td class="num derived">${row.computed?.ranks || ''}</td>

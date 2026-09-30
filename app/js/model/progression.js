@@ -404,10 +404,25 @@ export function classLevelsIn(model, className) {
  * the block silently lost every slot it should have had.
  */
 export function classLevelCount(model, className) {
-  const match = closestName(className, model.progressionClasses());
-  if (!match) return 0;
+  const planned = closestName(className, model.progressionClasses());
   const cap = Number(model.data.identity?.level) || 20;
-  const own = model.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+  // A class on the Classes table is counted the way its saves, hit points and
+  // BAB are (classPresence): its Levels box when one is set, the Planner's
+  // rows when the Planner names it, and every level when neither says. Only
+  // the Planner used to count here, so a Wizard 12 with an empty Planner had
+  // 12th-level saves and cast as nobody at all.
+  const table = (model.data.classes || []).filter((x) => x?.name);
+  const listed = closestName(className, table.map((x) => x.name));
+  let own = 0;
+  if (listed) {
+    const row = table.find((x) => x.name === listed);
+    const level = Math.min(cap, Number(model.data.identity?.level) || 0);
+    own = classPresence(model, [row], level).get(row).filter(Boolean).length;
+  } else if (planned) {
+    own = model.classLevelsIn(planned).filter((lvl) => lvl <= cap).length;
+  }
+  const match = planned || listed;
+  if (!match) return 0;
   // "Counts as two levels higher of Kineticist" is a rule about this number
   // and nothing else, so it goes on here rather than in the Planner: the
   // levels the character actually took do not move, and neither do the hit
@@ -1083,6 +1098,49 @@ export function removeClassFeatureColumn(model, className, index) {
 }
 
 /**
+ * Per class, which character levels it is present at: the Planner's rows, or
+ * the first N levels where the Classes table pins a count.
+ */
+export function classPresence(model, classes, level) {
+  const presence = new Map();
+  for (const cls of classes) {
+    const override = cls.levelsOverride == null ? null : Number(cls.levelsOverride);
+    let byLevel;
+    if (override != null) {
+      byLevel = Array.from({ length: level }, (_, i) => i + 1 <= override);
+    } else {
+      byLevel = Array.from({ length: level }, (_, i) => plannerHasClass(model, cls.name, i + 1));
+      // A class the Planner never mentions is assumed to run all levels —
+      // sparse planners name a class once rather than on every row.
+      if (!byLevel.some(Boolean)) byLevel = byLevel.map(() => true);
+    }
+    presence.set(cls, byLevel);
+  }
+  return presence;
+}
+
+const SAVE_FLAGS = { fortitude: 'goodFort', reflex: 'goodRef', will: 'goodWill' };
+
+/**
+ * Each save's progression level by level -- true where a class present at
+ * that level has it good, false where only poor ones are there, null where no
+ * class is -- and whether any class present at all has it good.
+ */
+export function saveProgressions(classes, presence, level) {
+  const out = {};
+  for (const [save, flag] of Object.entries(SAVE_FLAGS)) {
+    const perLevel = [];
+    for (let l = 1; l <= level; l++) {
+      const present = classes.filter((x) => presence.get(x)[l - 1]);
+      perLevel.push(present.length ? present.some((x) => !!x[flag]) : null);
+    }
+    const anyGood = classes.some((x) => presence.get(x).some(Boolean) && !!x[flag]);
+    out[save] = { perLevel, anyGood };
+  }
+  return out;
+}
+
+/**
  * Everything the class table implies, following gestalt rules: at each
  * character level the classes present (from the Planner) contribute their
  * best progression.
@@ -1101,33 +1159,12 @@ export function applyGestalt(model) {
   const level = Number(c.identity.level) || 0;
   const classes = (c.classes || []).filter((x) => x.name);
 
-  // Per class, which character levels it is present at.
-  const presence = new Map();
-  for (const cls of classes) {
-    const override = cls.levelsOverride == null ? null : Number(cls.levelsOverride);
-    let byLevel;
-    if (override != null) {
-      byLevel = Array.from({ length: level }, (_, i) => i + 1 <= override);
-    } else {
-      byLevel = Array.from({ length: level }, (_, i) => plannerHasClass(model, cls.name, i + 1));
-      // A class the Planner never mentions is assumed to run all levels —
-      // sparse planners name a class once rather than on every row.
-      if (!byLevel.some(Boolean)) byLevel = byLevel.map(() => true);
-    }
-    presence.set(cls, byLevel);
-    cls.gestaltLevels = byLevel.filter(Boolean).length;
-  }
+  const presence = classPresence(model, classes, level);
+  for (const cls of classes) cls.gestaltLevels = presence.get(cls).filter(Boolean).length;
 
-  const saves = { fortitude: 'goodFort', reflex: 'goodRef', will: 'goodWill' };
   const summary = { saves: {}, hpPerLevel: 0, ranksPerLevel: 0 };
 
-  for (const [save, flag] of Object.entries(saves)) {
-    const perLevel = [];
-    for (let l = 1; l <= level; l++) {
-      const present = classes.filter((x) => presence.get(x)[l - 1]);
-      perLevel.push(present.length ? present.some((x) => !!x[flag]) : null);
-    }
-    const anyGood = classes.some((x) => x.gestaltLevels > 0 && !!x[flag]);
+  for (const [save, { perLevel, anyGood }] of Object.entries(saveProgressions(classes, presence, level))) {
     const base = gestaltSaveBase(perLevel, anyGood);
     summary.saves[save] = { base, anyGood };
     if (c.saves?.[save]) c.saves[save].base = base;

@@ -41,9 +41,9 @@ import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  sphereSide, statMod, trackSpheres,
+  parseLadderRule, sphereSide, statMod, trackSpheres,
 } from '../../rules.js';
-import { check, field, roField, select, text } from '../fields.js';
+import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {
   addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
   rowDrop, rowGrip, rowRemove, rowTools, rowToolsDragged,
@@ -241,8 +241,8 @@ function trainingSide(model, sideKey, side) {
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               ${forwardedBadge(model, classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
@@ -262,7 +262,7 @@ function trainingSide(model, sideKey, side) {
             const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}`
               : `Level ${lv.level} grants no talent`;
             return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
               <td class="${state}" data-stack="name">${talentCell(model,
     `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
@@ -314,7 +314,11 @@ function customizationPanel(model, blocks) {
       <h3>Customized weapons <span class="badge">${blocks.length}</span></h3>
       ${blocks.map((block, bi) => {
     const list = `training.combat.customizations.${bi}.sets`;
-    const rule = (key, label) => `<label class="fld"><span>${esc(label)}</span>
+    // A "then at" that is not a level rule grants nothing, as a talent
+    // ladder's does, and says so the same way.
+    const rule = (key, label) => {
+      const { error } = parseLadderRule(block.spec?.[key]?.gainsAt);
+      return `<label class="fld${error ? ' bad' : ''}"${error ? ` title="${esc(error)}"` : ''}><span>${esc(label)}</span>
         <span class="pair">
           <input type="number" min="0" value="${esc(block.spec?.[key]?.start ?? 1)}" style="width:3.2rem"
             data-custrule="${bi}|${key}|start" aria-label="${esc(label)} to begin with">
@@ -322,7 +326,9 @@ function customizationPanel(model, blocks) {
           <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
             data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
             aria-label="Levels ${esc(label.toLowerCase())} goes up at">
+          ${error ? '<span class="hint bad">not a rule — grants nothing</span>' : ''}
         </span></label>`;
+    };
     // What one track is called, so a class that customizes something other
     // than weapons reads as itself: the pack's `unit` names the rows and the
     // count beside them.
@@ -470,8 +476,8 @@ function blendedPanel(model, pairs) {
           ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
           <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${autoNum(`data-item="${list}|${owner.index}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               ${forwardedBadge(model, classForwardKey(cls.name))}
               <span class="hint">${skill ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`
                 : `talents: ${cls.totalTalents ?? 0}`}</span>
@@ -492,7 +498,7 @@ function blendedPanel(model, pairs) {
           : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
         : `Level ${lv.level} grants no talent`;
       return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
               <td class="${state}" data-stack="name">${talentCell(model,
         `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
         on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>

@@ -27,7 +27,7 @@
  */
 
 import { blankDocument } from '../convert.js';
-import { STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from '../rules.js';
+import { RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 
 export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './block.js';
@@ -541,9 +541,13 @@ export function parseAttacks(text, attackType = 'Melee') {
   return rows;
 }
 
-/** "2d6+24/17-20 plus 1d6 cold and grab" as its parts. */
+/**
+ * "2d6+24/17-20 plus 1d6 cold and grab" as its parts. The crit range is the
+ * lowest roll that threatens -- 17 here, 20 when none is printed -- which is
+ * how a weapon row keeps it everywhere else.
+ */
 export function readDamage(text) {
-  const out = { dice: '', flat: 0, critRange: 1, critMult: 2, riders: [], notes: '' };
+  const out = { dice: '', flat: 0, critRange: 20, critMult: 2, riders: [], notes: '' };
   const t = text.trim();
   if (!t) return out;
   const m = t.match(/^(\d+d\d+)?\s*([+-]\s*\d+)?\s*(?:\/\s*(\d+)\s*-\s*(\d+))?\s*(?:\/\s*[x×]\s*(\d))?\s*(?:\/\s*(\d+)\s*-\s*(\d+))?\s*(?:\/\s*[x×]\s*(\d))?\s*(.*)$/i);
@@ -552,7 +556,7 @@ export function readDamage(text) {
   out.flat = m[2] ? signed(m[2]) : 0;
   const lo = m[3] ?? m[6];
   const hi = m[4] ?? m[7];
-  if (lo && hi) out.critRange = Math.max(1, Number(hi) - Number(lo) + 1);
+  if (lo && hi) out.critRange = Math.min(20, Math.max(1, Number(lo)));
   const mult = m[5] ?? m[8];
   if (mult) out.critMult = Number(mult);
   const rest = (m[9] || '').replace(/^plus\s+/i, '').trim();
@@ -595,6 +599,9 @@ export function monsterDocument(block, options = {}) {
     createdAt: options.createdAt,
   });
   doc.source = { ...doc.source, kind: 'monster', title: b.name || doc.identity.name };
+  // Worked out under the current rules, so none of the fixes for figures an
+  // older build saved applies to it (model/corrections.js).
+  doc.corrections = [...RULE_CORRECTIONS];
   const level = hd;
   doc.identity.level = level;
   doc.identity.race = b.type ? `${b.type[0].toUpperCase()}${b.type.slice(1)}${b.subtypes.length ? ` (${b.subtypes.join(', ')})` : ''}` : doc.identity.race;
@@ -644,9 +651,12 @@ export function monsterDocument(block, options = {}) {
   }];
   doc.attack.bab = bab;
   if (rate === undefined) doc.attack.babOverride = bab;
-  doc.attack.totalMelee = bab + mod('str') - (SIZE_MODIFIERS[doc.identity.size] ?? 0);
-  doc.attack.totalRanged = bab + mod('dex') - (SIZE_MODIFIERS[doc.identity.size] ?? 0);
-  doc.attack.totalCmb = b.cmb ?? doc.attack.totalMelee;
+  // What the sheet will work out, so nothing is left over as an offset: size
+  // as AC takes it on the attack rolls, the other way round on CMB.
+  const size = SIZE_MODIFIERS[doc.identity.size] ?? 0;
+  doc.attack.totalMelee = bab + mod('str') + size;
+  doc.attack.totalRanged = bab + mod('dex') + size;
+  doc.attack.totalCmb = b.cmb ?? (bab + mod('str') - size);
 
   // Hit points: the block's total, with Con behind it; the offset takes the
   // difference between a rolled average and the sheet's full dice.

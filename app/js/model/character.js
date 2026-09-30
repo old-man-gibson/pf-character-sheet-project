@@ -51,7 +51,9 @@ import {
   taggedSystemTabs, toggleClassSystem, toggleProficiency, viewMode,
 } from './edit.js';
 import { emit, subscribe } from './events.js';
-import { markUndo, undo, undoLabel, clearUndo } from './undo.js';
+import {
+  markUndo, undo, undoLabel, undoLast, undoPlay, clearUndo, playAction, playActions,
+} from './undo.js';
 import {
   addClassFeatureColumn, addClassFeatureColumnOptions, addClassFeatureNote,
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
@@ -90,9 +92,10 @@ import {
 import {
   applyDamage, applyHealing, applyNonlethal, availableConditions, conditionState, grantTempHp,
   healDamage, hpMax, hpState, meterSpec, meterStyle, mythicHp, resolveAcBonuses,
-  resolveDefenceBonuses, resolveDefenceText, restRefresh, restoreAll, setMeterStyle, sizeNow,
+  resolveDefenceBonuses, resolveDefenceText, setMeterStyle, sizeNow,
   takeDamage,
 } from './stats/defenses.js';
+import { rest } from './rest.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
   addWealthEntry, casterLevel, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
@@ -133,6 +136,17 @@ import {
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
 import { getPath, safe, setPath, skillForwardKey, skillKey } from './util.js';
+
+/** A number of hit points as an action takes it: whole, and never below none. */
+const points = (n) => Math.max(0, Math.floor(Number(n) || 0));
+
+/** What playing a card is called, by how it was played. */
+const PLAY_MODES = {
+  cast: (name) => `Cast ${name}`,
+  ongoing: (name) => `${name} (ongoing)`,
+  trap: (name) => `Set ${name}`,
+  mana: (name) => `${name} as mana`,
+};
 
 export class Character {
   /** @param {object} data  a document produced by tools/convert.py */
@@ -298,6 +312,18 @@ export class Character {
       s.totalRanks = capped + s.ranksOffset;
     });
 
+    // What a formula may read of the sub-systems worked out below -- the
+    // sphere tables, veils and essence, maneuvers, the Vancian and manifester
+    // levels, power points, the deck, the companions -- is worked out once
+    // here, before the prose is read, and again after it with what the prose
+    // forwards to them. Worked out only after, a formula read the previous
+    // recompute's figures, and on opening a sheet none at all: a bonus written
+    // in terms of `pp.pool` was measured into the offset as the sheet opened
+    // and added again on the first edit, so it climbed by its own size every
+    // session. A bonus now reads this pass's figure from before any bonus
+    // applies, which is what a bonus reads everywhere else on the sheet.
+    this.#recomputeReadable();
+
     // Inline names ({skill_familiarity = …}) resolve before skill misc so a
     // misc formula can read them. Their scope has no skill totals yet, which
     // is intended: skills may read names, names may not read skills, so no
@@ -378,6 +404,22 @@ export class Character {
     this.#recomputeBuffs();
   }
 
+  /**
+   * The sub-systems a formula may read, before the prose (see #computePass),
+   * in the order they read one another. Each is worked out again after the
+   * prose, so what they show carries the bonuses it forwards.
+   */
+  #recomputeReadable() {
+    this.#recomputeSphereRows();
+    this.#recomputeGuileSpheres();
+    this.#recomputeAkashic();
+    this.#recomputeManeuvers();
+    this.#recomputeVancian();
+    this.#recomputePsionics();
+    this.#recomputeCardcasting();
+    this.#recomputeCompanions();
+  }
+
   /* ---------------- delegations ---------------- */
   //
   // Below here the class is an index. Each entry hands the model to the
@@ -417,9 +459,20 @@ export class Character {
 
   undo(...a) { return undo(this, ...a); }
 
+  undoLast(...a) { return undoLast(this, ...a); }
+
   clearUndo(...a) { return clearUndo(this, ...a); }
 
   get undoLabel() { return undoLabel(this); }
+
+  /* Taking back one thing done at the table, and only that. The actions below
+     run through `play`, each under the name its Undo button offers it back
+     by ("Undo 5 damage"); see playAction in model/undo.js. */
+  play(...a) { return playAction(this, ...a); }
+
+  undoPlay(...a) { return undoPlay(this, ...a); }
+
+  get playActions() { return playActions(this); }
 
   list(...a) { return listAt(this, ...a); }
   listAdd(...a) { return listAdd(this, ...a); }
@@ -593,14 +646,13 @@ export class Character {
   get mythicHp() { return mythicHp(this); }
   get hpMax() { return hpMax(this); }
   get hpState() { return hpState(this); }
-  damage(...a) { return takeDamage(this, ...a); }
-  heal(...a) { return healDamage(this, ...a); }
-  restoreAll(...a) { return restoreAll(this, ...a); }
-  applyDamage(...a) { return applyDamage(this, ...a); }
-  applyNonlethal(...a) { return applyNonlethal(this, ...a); }
-  grantTempHp(...a) { return grantTempHp(this, ...a); }
-  applyHealing(...a) { return applyHealing(this, ...a); }
-  restRefresh(...a) { return restRefresh(this, ...a); }
+  damage(n, o) { return this.play(`${points(n)}${o?.nonlethal ? ' nonlethal' : ''} damage`, () => takeDamage(this, n, o)); }
+  heal(n) { return this.play(`heal ${points(n)}`, () => healDamage(this, n)); }
+  rest(...a) { return this.play((r) => r?.label, () => rest(this, ...a)); }
+  applyDamage(...a) { return this.play((r) => r.taken && `${r.taken} damage`, () => applyDamage(this, ...a)); }
+  applyNonlethal(...a) { return this.play((r) => r.taken && `${r.taken} nonlethal damage`, () => applyNonlethal(this, ...a)); }
+  grantTempHp(...a) { return this.play((r) => r.granted && `${r.granted} temporary hit points`, () => grantTempHp(this, ...a)); }
+  applyHealing(...a) { return this.play((r) => r.healed && `heal ${r.healed}`, () => applyHealing(this, ...a)); }
   meterStyle(...a) { return meterStyle(this, ...a); }
   setMeterStyle(...a) { return setMeterStyle(this, ...a); }
   meterSpec(...a) { return meterSpec(this, ...a); }
@@ -636,45 +688,45 @@ export class Character {
   #tableLog(...a) { return tableLog(this, ...a); }
   #tableName(...a) { return tableName(this, ...a); }
   #tableDraw(...a) { return drawCards(this, ...a); }
-  tableStart(...a) { return tableStart(this, ...a); }
-  tableRedraw(...a) { return tableRedraw(this, ...a); }
-  tableNextRound(...a) { return tableNextRound(this, ...a); }
-  tableDraw(...a) { return tableDraw(this, ...a); }
-  tablePlay(...a) { return tablePlay(this, ...a); }
-  tableRetrace(...a) { return tableRetrace(this, ...a); }
-  tableBury(...a) { return tableBury(this, ...a); }
+  tableStart(...a) { return this.play('Start encounter', () => tableStart(this, ...a)); }
+  tableRedraw(...a) { return this.play('Redraw hand', () => tableRedraw(this, ...a)); }
+  tableNextRound(...a) { return this.play('Next round', () => tableNextRound(this, ...a)); }
+  tableDraw(...a) { return this.play('Draw a card', () => tableDraw(this, ...a)); }
+  tablePlay(id, mode = 'cast') { return this.play(PLAY_MODES[mode]?.(tableName(this, id)) ?? `Play ${tableName(this, id)}`, () => tablePlay(this, id, mode)); }
+  tableRetrace(id) { return this.play(`Retrace ${tableName(this, id)}`, () => tableRetrace(this, id)); }
+  tableBury(id) { return this.play(`Bury ${tableName(this, id)}`, () => tableBury(this, id)); }
   #rollFor(...a) { return rollFor(this, ...a); }
   #tableKeywords(...a) { return tableKeywords(this, ...a); }
   #tableTrigger(...a) { return tableTrigger(this, ...a); }
   #tableSettle(...a) { return tableSettle(this, ...a); }
-  tableResolve(...a) { return tableResolve(this, ...a); }
+  tableResolve(id) { return this.play(`Resolve ${tableName(this, id)}`, () => tableResolve(this, id)); }
   spellPointTracker(...a) { return spellPointTracker(this, ...a); }
   #spendSP(...a) { return spendSP(this, ...a); }
-  tableSpend(...a) { return tableSpend(this, ...a); }
-  tableReveal(...a) { return tableReveal(this, ...a); }
+  tableSpend(id, n = 1) { return this.play(`${n} SP${id ? ` on ${tableName(this, id)}` : ''}`, () => tableSpend(this, id, n)); }
+  tableReveal(id) { return this.play(`Reveal ${tableName(this, id)}`, () => tableReveal(this, id)); }
   cardRolls(...a) { return cardRolls(this, ...a); }
   tableRoll(...a) { return tableRoll(this, ...a); }
-  tableBoost(...a) { return tableBoost(this, ...a); }
-  tableMove(...a) { return tableMove(this, ...a); }
-  tableExileRandom(...a) { return tableExileRandom(this, ...a); }
-  tableTap(...a) { return tableTap(this, ...a); }
-  tableShuffleDiscard(...a) { return tableShuffleDiscard(this, ...a); }
+  tableBoost(id, which) { return this.play(`Boost ${tableName(this, id)}`, () => tableBoost(this, id, which)); }
+  tableMove(id, to) { return this.play(`${tableName(this, id)} to ${to}`, () => tableMove(this, id, to)); }
+  tableExileRandom(...a) { return this.play('Exile at random', () => tableExileRandom(this, ...a)); }
+  tableTap(id, ...a) { return this.play(`Tap ${tableName(this, id)}`, () => tableTap(this, id, ...a)); }
+  tableShuffleDiscard(...a) { return this.play('Shuffle discard in', () => tableShuffleDiscard(this, ...a)); }
   tablePeek(...a) { return tablePeek(this, ...a); }
-  tableEnd(...a) { return tableEnd(this, ...a); }
+  tableEnd(...a) { return this.play('End encounter — cards', () => tableEnd(this, ...a)); }
 
   // subsystems/maneuvers.js
   #recomputeManeuvers(...a) { return recomputeManeuvers(this, ...a); }
-  toggleManeuver(...a) { return toggleManeuver(this, ...a); }
+  toggleManeuver(path, name, ready) { return this.play(`${name} ${ready ? 'readied' : 'unreadied'}`, () => toggleManeuver(this, path, name, ready)); }
   setManeuverNote(...a) { return setManeuverNote(this, ...a); }
   setManeuverField(...a) { return setManeuverField(this, ...a); }
 
   // subsystems/psionics.js
   #recomputePsionics(...a) { return recomputePsionics(this, ...a); }
-  psionicsNewDay(...a) { return psionicsNewDay(this, ...a); }
+  psionicsNewDay(...a) { return this.play('New day — power points', () => psionicsNewDay(this, ...a)); }
 
   // subsystems/vancian.js
   #recomputeVancian(...a) { return recomputeVancian(this, ...a); }
-  vancianNewDay(...a) { return vancianNewDay(this, ...a); }
+  vancianNewDay(...a) { return this.play('New day — spell slots', () => vancianNewDay(this, ...a)); }
 
   // subsystems/cooking.js
   cookingView(...a) { return cookingView(this, ...a); }
@@ -704,7 +756,8 @@ export class Character {
   #companionMaster(...a) { return companionMaster(this, ...a); }
   #recomputeCompanions(...a) { return recomputeCompanions(this, ...a); }
   addCompanion(...a) { return addCompanion(this, ...a); }
-  companionDamage(...a) { return companionDamage(this, ...a); }
-  companionHeal(...a) { return companionHeal(this, ...a); }
-  companionRest(...a) { return companionRest(this, ...a); }
+  companionDamage(kind, i, n) { return this.play(`${this.#companionName(kind, i)}: ${points(n)} damage`, () => companionDamage(this, kind, i, n)); }
+  companionHeal(kind, i, n) { return this.play(`${this.#companionName(kind, i)}: heal ${points(n)}`, () => companionHeal(this, kind, i, n)); }
+  companionRest(kind, i) { return this.play(`${this.#companionName(kind, i)}: rest`, () => companionRest(this, kind, i)); }
+  #companionName(kind, i) { return this.data[kind]?.[Number(i) || 0]?.name || kind; }
 }

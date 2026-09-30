@@ -947,16 +947,25 @@ export function drawCards(model, n, why = 'draw') {
   return drawn;
 }
 
-/** Initiative: build the deck from every copy, shuffle, draw the opening hand. */
+/**
+ * Initiative: build the deck from every copy, shuffle, draw the opening hand.
+ *
+ * Every copy but the ones in the Lifebound piles. Those hold until a rest:
+ * "When you rest to regain spell points, remove all cards from your Stun,
+ * Death, and Wounds piles" -- so a character still hurt from the last fight
+ * starts the next one without them. A new encounter used to empty the piles.
+ */
 export function tableStart(model) {
   const p = model.data.cardcasting;
   if (!p) return model;
   const t = p.table;
   const k = p.calc;
+  const piles = { stun: [...(t.stun || [])], wounds: [...(t.wounds || [])], death: [...(t.death || [])] };
+  const held = new Set([...piles.stun, ...piles.wounds, ...piles.death]);
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
-    deck: shuffle(model, model.tableInstances()), hand: [], play: [], mana: [], discard: [], exile: [],
-    stun: [], wounds: [], death: [], faceDown: [], log: [], counters: null, lastRoll: null, lastTrigger: '',
+    deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
+    ...piles, faceDown: [], log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
   tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled`);

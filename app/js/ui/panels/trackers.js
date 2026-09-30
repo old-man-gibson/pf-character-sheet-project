@@ -98,20 +98,31 @@ export function isDraining(t) {
   return (Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining';
 }
 
-
-function trackerRow(model, ctx, t) {
-  if (ctx.editTracker === t.id) return trackerEditRow(model, ctx, t);
+/**
+ * A tracker as its controls read: the number in the box -- what is left on a
+ * draining tracker, the position otherwise -- and the range written beside
+ * it. The Trackers tab, the dashboard and the palette all show a tracker, and
+ * it should read the same in each of them.
+ */
+export function trackerReading(t) {
   const max = Number(t.max) || 0;
   const min = Number(t.min) || 0;
   const cur = Number(t.current) || 0;
-  const twoSided = min < 0;
   const draining = isDraining(t);
+  const twoSided = min < 0;
   const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
-  const shown = draining ? max - cur : cur;
-
   const range = min === 0 ? `/ ${max}`
     : (twoSided && min === -max) ? `/ ±${max}`
       : `/ ${signed(min)}…${signed(max)}`;
+  return { shown: draining ? max - cur : cur, range, draining, twoSided };
+}
+
+
+function trackerRow(model, ctx, t) {
+  if (ctx.editTracker === t.id) return trackerEditRow(model, ctx, t);
+  const {
+    shown, range, draining, twoSided,
+  } = trackerReading(t);
   // Everything is editable; only Mythic Power cannot be deleted.
   const protectedTracker = model.isProtectedTracker(t.id);
   const minusLabel = twoSided ? 'Decrease by one' : draining ? 'Spend one' : 'Restore one';

@@ -566,6 +566,13 @@ export function guileRanges(ranks) {
  * either/or: Diplomacy comes from Leadership or from Warleader, Acrobatics from
  * the Leap package or the Run one.
  *
+ * Where both are there, their talents add: two martial spheres feeding one
+ * skill stack their bonus ranks, under the ordinary rule that a skill holds no
+ * more ranks than the character has levels (the cap here, and again on the
+ * skill's total). Guile's rule -- overlapping skill spheres do not stack, and
+ * pay a competence bonus instead -- is Spheres of Guile's own, and applies
+ * only where a guile skill sphere is one of them (subsystems/guile.js).
+ *
  * The check is three-valued, because a talent this sheet cannot see is not the
  * same as one the character does not have -- the Alternate Training techniques grant
  * sphere talents by the handful without ever naming which -- so a sphere whose
@@ -1212,10 +1219,14 @@ export function cmdBonusTotal(resolved, types = AC_BONUS_TYPES) {
  * Base save progression: good saves give +2 at the class's first level and
  * +1/2 per level; poor saves +1/3 per level. Gestalt characters take the best
  * progression among the classes present at each level.
+ *
+ * Counted in sixths, so that six poor levels come to exactly 2. Adding 1/3 in
+ * floating point made them 1.999..., which floored to 1: a poor save was one
+ * short at 6th, 15th and 18th level.
  */
 export function gestaltSaveBase(perLevelGood, anyGood) {
-  const inc = perLevelGood.reduce((t, good) => t + (good == null ? 0 : (good ? 0.5 : 1 / 3)), 0);
-  return (anyGood ? 2 : 0) + Math.floor(inc);
+  const sixths = perLevelGood.reduce((t, good) => t + (good == null ? 0 : (good ? 3 : 2)), 0);
+  return (anyGood ? 2 : 0) + Math.floor(sixths / 6);
 }
 
 /* ----- feature-column level rules ----- */
@@ -1458,9 +1469,12 @@ export function trackCount(rule, classLevel) {
   const level = Math.max(0, Math.floor(Number(classLevel) || 0));
   if (!level) return 0;
   const start = Math.max(0, Math.floor(Number(rule?.start) || 0));
-  const at = String(rule?.gainsAt ?? '').trim();
-  if (!at) return start;
-  return start + levelRuleLevels(parseLevelRule(at)).filter((l) => l <= level).length;
+  // Read the way every talent ladder is read: a rule that does not parse adds
+  // nothing, and the panel says why. Read as a class-feature column is, it
+  // would grant every level -- 21 talents a weapon at 20th for one typo.
+  const { parsed } = parseLadderRule(rule?.gainsAt);
+  if (!parsed) return start;
+  return start + levelRuleLevels(parsed).filter((l) => l <= level).length;
 }
 
 /* ----- unarmed practitioner damage (dataSheet!F80:L101) ----- */
@@ -1520,9 +1534,9 @@ export const STEP_DIE = {
 };
 
 /**
- * One die value moved along that chain, clamped to its ends. A size increase
- * is two steps and a plain step increase one, which is the sheet's own rule
- * and the only arithmetic either progression does to a base die.
+ * One die value moved along that chain, clamped to its ends: a plain step
+ * increase is one step. A size increase is not a fixed number of steps -- see
+ * `raiseDice`.
  *
  * Returns null for a die the chain does not list, so a caller can say so
  * rather than silently substituting something else.
@@ -1534,15 +1548,41 @@ export function stepDice(die, steps = 0) {
 }
 
 /**
- * Unarmed damage dice, exactly as the sheet computes them: effective talents
- * pick the Medium-column base die, then each size increase is worth two die
- * steps and each step increase one, capped at the top of the chain.
+ * A Medium base die under size increases and then step increases.
+ *
+ * A size increase walks the damage chart the way a weapon's size change does
+ * (`stepDamageDice`): one step up from 1d6 or less, two above it. So a Medium
+ * 1d6 is a Large 1d8, which is the monk's own Large column, where "two steps a
+ * size" made it 1d10. Size goes first, because it picks the die for the size;
+ * the step increases then raise that die one step each along the chain.
+ *
+ * Returns null for a die the chain does not list.
+ */
+export function raiseDice(die, { sizeIncreases = 0, stepIncreases = 0 } = {}) {
+  let value = String(die ?? '').trim().toLowerCase();
+  if (DIE_STEP[value] === undefined) return null;
+  const sizes = Math.trunc(Number(sizeIncreases) || 0);
+  if (sizes) {
+    const [n, d] = value.split('d').map(Number);
+    const moved = stepDamageDice(n, d, sizes, 'Medium');
+    // The chart bottoms out at a flat 1; the chain's floor is 1d2.
+    if (moved) value = moved[1] > 1 ? `${moved[0]}d${moved[1]}` : STEP_DIE[2];
+  }
+  // Only when there are steps to take: the chain files 3d8 and 2d10 on one
+  // step, so a walk of none would hand 3d8 back as 2d10.
+  const steps = Math.trunc(Number(stepIncreases) || 0);
+  return steps ? stepDice(value, steps) : value;
+}
+
+/**
+ * Unarmed damage dice: effective talents pick the Medium-column base die,
+ * then size increases and step increases raise it (`raiseDice`), capped at
+ * the top of the chain.
  */
 export function unarmedDice(talents, { stepIncreases = 0, sizeIncreases = 0 } = {}) {
   const row = UNARMED_TABLE[Math.max(0, Math.min(20, Math.floor(Number(talents) || 0)))];
   const base = row[1]; // Medium
-  return stepDice(base, 2 * (Number(sizeIncreases) || 0) + (Number(stepIncreases) || 0))
-    ?? STEP_DIE[4];
+  return raiseDice(base, { sizeIncreases, stepIncreases }) ?? STEP_DIE[4];
 }
 
 /* ----- a class's own unarmed progression ----- */
@@ -1594,6 +1634,15 @@ export function ladderRung(ladder, level) {
 export function ladderDice(ladder, level) {
   return ladderRung(ladder, level)?.dice ?? null;
 }
+
+/**
+ * Rules the sheet once worked out wrong, or figures it once stored in the
+ * wrong form, by name. A document lists the ones it was saved after, so a
+ * figure saved the old way is put right once, on load, and never again
+ * (model/corrections.js). The monster importer writes the whole list, because
+ * what it writes is current.
+ */
+export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range'];
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {
@@ -2810,26 +2859,29 @@ export const DERIVED = [
       + cmdBonusTotal(c.defenses.acBonusesResolved)
       + Math.min(0, Number(c.defenses.miscAC) || 0),
   },
+  // Melee and ranged take the size modifier as AC does (a Large creature is
+  // -1 to hit); CMB takes the special size modifier, which is the same number
+  // the other way round. See `sizeAttackMod`.
   {
     key: 'attack.totalMelee',
     label: 'Melee Attack',
     deps: ['attack.bab', 'str.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'melee') - sizeMod(c) + c.attack.miscBonus,
+    compute: (c) => c.attack.bab + modeMod(c, 'melee') + sizeAttackMod(c, 'melee') + c.attack.miscBonus,
   },
   {
     key: 'attack.totalRanged',
     label: 'Ranged Attack',
     deps: ['attack.bab', 'dex.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'ranged') - sizeMod(c) + c.attack.miscBonus,
+    compute: (c) => c.attack.bab + modeMod(c, 'ranged') + sizeAttackMod(c, 'ranged') + c.attack.miscBonus,
   },
   {
     key: 'attack.totalCmb',
     label: 'CMB',
     deps: ['attack.bab', 'str.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'cmb') - sizeMod(c) + c.attack.miscBonus,
+    compute: (c) => c.attack.bab + modeMod(c, 'cmb') + sizeAttackMod(c, 'cmb') + c.attack.miscBonus,
   },
 ];
 
@@ -3040,7 +3092,7 @@ export const isSheetAlias = (name) => /^[A-Z][A-Za-z0-9]*$/.test(String(name));
 
 /* -------------------------------------------------------------- */
 
-function abilityKey(name) {
+export function abilityKey(name) {
   return String(name || '').trim().toLowerCase().slice(0, 3);
 }
 
@@ -3085,6 +3137,17 @@ export function statScore(c, stat1, stat2) {
 
 export function sizeMod(c) {
   return SIZE_MODIFIERS[c.identity.size] ?? 0;
+}
+
+/**
+ * What size does to one attack slot. An attack roll takes the size modifier
+ * as AC does, so a Large creature is -1 to hit and a Small one +1; a combat
+ * maneuver takes the special size modifier, the same number the other way
+ * round. Melee and ranged used to subtract it as CMB does, which put a Large
+ * character 2 above an enlarged Medium one.
+ */
+export function sizeAttackMod(c, mode) {
+  return /cmb/i.test(String(mode)) ? -sizeMod(c) : sizeMod(c);
 }
 
 function modeMod(c, mode) {

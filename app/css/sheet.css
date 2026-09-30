@@ -1079,6 +1079,38 @@ table.ledger td.tools button { padding: 0 6px; font-size: 0.72rem; }
   margin-left: auto; position: relative;
 }
 .railactions button.railmore { padding: 4px 8px; line-height: 1; font-size: 0.95rem; }
+/* "Undo 5 damage": the last thing done at the table, by name, with the ones
+   before it one press away under ▾. The name is cut rather than the rail
+   wrapped, and the whole of it is in the title. */
+.playundo { position: relative; display: inline-flex; align-items: stretch; min-width: 0; }
+.playundo > button[data-action="undo-play"] {
+  max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.playundo > button[data-action="undo-play"]:has(+ .playundomore) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.playundo > button.playundomore {
+  padding: 4px 6px; line-height: 1; margin-left: -1px;
+  border-top-left-radius: 0; border-bottom-left-radius: 0;
+}
+.playundomenu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 41;
+  display: flex; flex-direction: column; gap: 3px; padding: 6px;
+  min-width: 14rem; max-width: min(24rem, 90vw); max-height: 60vh; overflow-y: auto;
+  background: var(--cs-panel); border: 1px solid var(--cs-line);
+  border-radius: var(--cs-radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.playundomenu button {
+  text-align: left; background: none; border: 0; border-radius: 5px;
+  padding: 5px 8px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.playundomenu button:hover { background: var(--cs-panel-2); }
+/* On a phone the rail has no room for a name, and a bare ↶ says nothing about
+   what it would take back -- there is no hover to ask. So it takes a row of
+   its own under the others, name and all. */
+@container (max-width: 620px) {
+  .railactions:has(.playundo) { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .playundo { order: 10; flex: 1 1 100%; }
+  .playundo > button[data-action="undo-play"] { flex: 1 1 auto; max-width: none; text-align: left; }
+}
 /* Sharing a line with the strip on a phone: the icon carries the search button
    and its title says the rest, which is what the shortcut on its face was
    teaching anyway. */
@@ -1305,6 +1337,7 @@ select.jumpto[hidden] { display: none; }
   :host([layout="side"]) .railactions select.jumpto[hidden] { display: block; }
   :host([layout="side"]) .railactions select.jumpto:disabled { opacity: 0.45; cursor: default; }
   :host([layout="side"]) .chromemenu { right: auto; left: 0; }
+  :host([layout="side"]) .playundomenu { right: auto; left: 0; }
   :host([layout="side"]) .tabs { flex: none; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
   :host([layout="side"]) .tabs button {
     flex: none; text-align: left; border-radius: 6px; padding: 6px 10px 6px 12px;
@@ -2281,6 +2314,53 @@ label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
 }
 label.fld.tall textarea { min-height: 58px; }
+/* A Vancian block's settings are six short picks, each only as wide as what
+   it holds. The first row sets the width: the stat, preparation and source
+   selects at their natural size. The slot table takes whatever the second
+   row has left after the caster level and concentration, and its select is
+   `width: 0` so its long class names never widen the block. The casting stat
+   is a <div>: it holds the second stat's caret, and a caret inside a <label>
+   would be what clicking the label's text pressed. */
+.vcast { display: inline-flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.vcast-row { display: flex; gap: 8px; align-items: flex-start; }
+.vcast-row > .fld { flex: none; }
+.vcast-row > .fld select { width: auto; }
+.vcast-row > label.fld.vtable { flex: 1 1 0; min-width: 7rem; }
+.vcast-row > label.fld.vtable select { width: 0; min-width: 100%; }
+.vcast label.fld .xf { width: var(--xf-w); }
+/* A formula needs more room than its answer does: while it is being edited
+   the box opens leftward over the caster level rather than reflowing the row. */
+.vcast .xf:focus-within input.xf-src {
+  position: relative; z-index: 5; width: 16rem; margin-left: calc(var(--xf-w) - 16rem);
+}
+.vcast .fld.vstat { display: flex; flex-direction: column; gap: 3px; }
+.vcast .fld.vstat > span:first-child, .vcast .vstat2 {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
+}
+.vcast .vstat .disclose { text-transform: none; letter-spacing: 0; font-size: 0.7rem; padding: 0 2px; }
+.vcast .vstat > .rollpair { display: flex; }
+.vcast .vstat > .rollpair > select { flex: 1; min-width: 0; }
+.vcast .vmod { flex: none; min-width: 2.2em; text-align: right; font-weight: 640; font-variant-numeric: tabular-nums; }
+.vcast .vstat2 { margin-top: 3px; }
+/* Each casting class is as wide as its settings and slot table, not the tab:
+   the blocks sit side by side where they fit and wrap where they don't. */
+.vclasses {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
+}
+.vclasses > .panel.vclass { flex: 0 1 auto; max-width: 100%; min-width: 0; }
+/* The settings and the slot table set a block's width; the heading's badges
+   and the hints fit inside it and wrap, rather than widening it the moment a
+   badge such as "up to level 1" appears. */
+.vclass > h3, .vclass > p.hint { width: 0; min-width: 100%; }
+/* The slot table sized to its figures: at full width four numbers sat a
+   quarter of a screen apart and the pips drifted to the far side. */
+table.build.vslots { width: auto; margin-top: 8px; }
+/* Six pips to a row, so seven to twelve slots grow the row downward instead
+   of widening the block; past twelve `slotSpend` prints the count instead. */
+table.build.vslots .pips {
+  display: grid; grid-template-columns: repeat(6, max-content); margin-top: 0;
+}
+table.build.vslots th, table.build.vslots td { padding-left: 8px; padding-right: 8px; }
 /* A value the sheet works out rather than takes -- the mythic tier, the
    language slots Int grants -- gets the same box as the fields beside it,
    drawn as read-only, so a computed number is not a stray word under a

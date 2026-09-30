@@ -7,7 +7,7 @@ import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
-  isPackKey, packsWorthMoving,
+  isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
@@ -739,6 +739,18 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   check('and corrects the ones it shares', joined[0].talents[0].text, 'Grapple, corrected.');
   check('without losing the name or the base abilities it did not restate',
     [joined[0].name, joined[0].abilities.length], [sphere.name, sphere.abilities.length]);
+  // The pack editor files a pasted sphere through the same join, so pasting
+  // one talent into a pack that has the sphere adds it rather than leaving
+  // the sphere with that one talent and nothing else.
+  const pasted = mergeSphere(pack.provides.spheres.spheres[0], handbook.provides.spheres.spheres[0]);
+  check('the editor’s join is the loader’s', [pasted.talents.map((t) => [t.name, t.text]), pasted.abilities.length],
+    [joined[0].talents.map((t) => [t.name, t.text]), joined[0].abilities.length]);
+  // And a reference entry is the same entry only for the same class and
+  // option: two classes' Evasion are two entries.
+  const evasion = (cls) => ({ name: 'Evasion', fields: [['Class', cls], ['Option', 'Talent']] });
+  check('an entry is filed by its name and whose it is',
+    [catalogueEntryKey(evasion('Rogue')) === catalogueEntryKey(evasion('Monk')),
+      catalogueEntryKey(evasion('Rogue')) === catalogueEntryKey({ ...evasion('rogue'), text: 'x' })], [false, true]);
 
   /*
    * Matching a talent somebody typed on their sheet against the catalogue.
@@ -1124,6 +1136,39 @@ console.log('a pack may carry a maneuver\'s cells, and they survive the whole pa
   })]), { setManeuverCatalogue });
   check('a cell the pack left out is blank, not missing',
     cells.map((k) => disciplineEntries('Bare')[0][k]), cells.map(() => ''));
+
+  /*
+   * A pack is JSON somebody may have written by hand. One talent whose tags
+   * are a string, or a stray null in a list, used to throw inside the setter
+   * -- and the page kept that failed load, so no character would open until
+   * the pack was found and removed. The entry is read as well as it can be,
+   * and a table that still cannot be read is registered empty and named,
+   * without taking the other tables with it.
+   */
+  const rough = mergeTables([normalizeExtension({
+    id: 'rough', name: 'Rough',
+    provides: {
+      spheres: { spheres: [{ name: 'Rough', kind: 'combat', talents: [{ name: 'Counter', tags: 'counter', sources: 'Some Book' }, null] }] },
+      maneuvers: { disciplines: [{ name: 'Rough', entries: [null, { name: 'Jab', level: 1 }] }] },
+    },
+  })]);
+  let failed;
+  let threw = null;
+  try {
+    failed = registerTables(rough, { setSphereCatalogue, setManeuverCatalogue });
+  } catch (err) { threw = err.message; }
+  check('a malformed entry does not throw out of registration', threw, null);
+  check('a list written as one string is read as a list of one',
+    [sphereTalent('Rough', 'Counter')?.tags, sphereTalent('Rough', 'Counter')?.sources], [['counter'], ['Some Book']]);
+  check('a hole in a list is skipped, and the rest is kept',
+    [disciplineEntries('Rough').map((e) => e.name), failed], [['Jab'], []]);
+  const broken = registerTables(rough, {
+    setSphereCatalogue: () => { throw new Error('unreadable'); },
+    setManeuverCatalogue,
+  });
+  check('a table its setter still cannot read is named, and the next one registers anyway',
+    [broken, disciplineEntries('Rough').map((e) => e.name)],
+    [[{ name: 'setSphereCatalogue', error: 'unreadable' }], ['Jab']]);
 }
 
 console.log('apply -- blocks land on a blank character through the model');
@@ -1667,6 +1712,10 @@ console.log('a catalogue pack\'s tables are menus too: class options, and powers
   check('a class somebody wrote as a block is the one offered, in whichever pack',
     activeBlocks([asPack('cat'), asPack('hand', [{ kind: 'class', name: 'Stancer', hd: 8 }])]).filter((b) => b.kind === 'class').map((b) => [b.extId, b.hd]),
     [['hand', 8]]);
+  // Two packs deriving the same class: the later one stands, as a local pack
+  // stands over a bundled one everywhere else. The first used to keep it.
+  check('two packs deriving one class: the later pack’s is offered, once',
+    activeBlocks([asPack('bundled'), asPack('mine')]).filter((b) => b.kind === 'class').map((b) => b.extId), ['mine']);
   {
     const s = new Character(blankDocument({ name: 'Stan', level: 4 }));
     for (let l = 1; l <= 4; l++) s.setProgressionClass(l, 0, 'Stancer');

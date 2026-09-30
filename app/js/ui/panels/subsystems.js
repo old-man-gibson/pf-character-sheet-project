@@ -69,7 +69,7 @@ import {
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
-import { abilitySelect, check, field, num, select, text } from '../fields.js';
+import { abilitySelect, check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
   itemSelect, itemText, line,
@@ -117,22 +117,25 @@ const slotText = (s) => {
  * and their layout maths are shared; only the plumbing differs.
  *
  * `path` is the item the click writes to, as `list|index|field`. Clicking the nth
- * pip leaves n unspent, and clicking the lowest lit one spends it -- the rule the
- * tracker pips already follow.
+ * pip leaves n unspent, and clicking the last lit one spends it -- the rule the
+ * tracker pips follow too (`pipClickValue`).
  */
 export function slotSpend({ path, total, left, shape = 'pips', name = 'slot' }) {
   const cap = Math.max(0, Number(total) || 0);
   if (!cap) return '';
   const lit = Math.max(0, Math.min(cap, Number(left) || 0));
-  const attrs = (n) => `data-spend="${path}" data-total="${cap}" data-left="${lit}" data-n="${n}"`;
+  // The name rides along for the Undo button: "Undo Fireball 2 → 1".
+  const attrs = (n) => `data-spend="${path}" data-total="${cap}" data-left="${lit}" data-n="${n}" data-name="${esc(name)}"`;
   const title = `${lit} of ${cap} left`;
+  // A count in place of pips spends one: it is a click on the last lit pip.
+  // With none left there is nothing to spend, and the old way of asking gave
+  // one back instead.
+  const count = () => `<button class="pipcount" ${attrs(lit)}${lit ? '' : ' disabled'}
+      title="${esc(lit ? `${title} — click to spend one` : `None of ${cap} left`)}">${lit}<span class="of">/${cap}</span></button>`;
 
   if (shape === 'squares') {
     const sq = squareLayout({ min: 0, max: cap, current: cap - lit, style: { shape, fill: 'remaining' } });
-    if (sq.mode === 'number') {
-      return `<button class="pipcount" ${attrs(Math.max(1, lit - 1))}
-        title="${esc(`${title} — click to spend one`)}">${lit}<span class="of">/${cap}</span></button>`;
-    }
+    if (sq.mode === 'number') return count();
     return `<span class="pips square" title="${esc(title)}">${
       Array.from({ length: sq.slots }, (_, i) => `<button class="pip ${i + 1 <= lit ? 'used' : ''}"
         ${attrs(i + 1)} title="${esc(`${i + 1} of ${cap}`)}"
@@ -141,10 +144,7 @@ export function slotSpend({ path, total, left, shape = 'pips', name = 'slot' }) 
   }
 
   // A long row of pips stops being readable, so a big pool just shows the count.
-  if (cap > 12) {
-    return `<button class="pipcount" ${attrs(Math.max(1, lit - 1))}
-      title="${esc(`${title} — click to spend one`)}">${lit}<span class="of">/${cap}</span></button>`;
-  }
+  if (cap > 12) return count();
   return `<span class="pips" title="${esc(title)}">${
     Array.from({ length: cap }, (_, i) => `<button class="pip ${i + 1 <= lit ? 'used' : ''}"
       ${attrs(i + 1)} title="${esc(`${i + 1} of ${cap}`)}"
@@ -312,6 +312,10 @@ function akashicClassesPanel(a) {
     const rows = (a.classes || [])
       .map((c, i) => ({ c, i }))
       .filter(({ c }) => c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
+    const vw = a.veilweaving || {};
+    const levelTitle = vw.sphere
+      ? 'Levels in casting and veilweaving classes together, each level once (the Veilweaving sphere). Type a number to pin it.'
+      : 'Levels in this class, from the Planner or the Classes table. Type a number to pin it.';
     return `<section class="panel span2">
       <h3>Veilweaving <span class="badge">${rows.length} class${rows.length === 1 ? '' : 'es'}</span></h3>
       <div class="akashic-head">
@@ -323,7 +327,10 @@ function akashicClassesPanel(a) {
             ${rows.map(({ c, i }) => `<tr>
               <td>${itemText(list, i, 'name', c.name, 'Class')}</td>
               <td>${select(`${list}.${i}.mod`, c.mod, ABILITY_LABELS_LIST)}</td>
-              <td class="num">${itemNum(list, i, 'level', c.level)}</td>
+              <td class="num">${autoNum(`data-item="${list}|${i}|levelOverride"`, c.levelOverride, {
+    auto: true, placeholder: c.levelAuto ?? 0, width: '3.2rem', title: levelTitle,
+    label: `Veilweaving level of ${c.name || 'this class'}`,
+  })}</td>
               <td class="num">${itemNum(list, i, 'essenceCap', c.essenceCap)}</td>
               <td class="num">${itemNum(list, i, 'bonusCap', c.bonusCap)}</td>
               <td class="num total">${c.totalCap ?? 0}</td>
@@ -332,13 +339,22 @@ function akashicClassesPanel(a) {
           </tbody></table>
           <div class="pair" style="margin-top:6px">
             ${addButton(list, 'Add class', {
-    name: '', mod: null, level: 0, essenceCap: 0, bonusCap: 0, baseDC: 0, steadyVeilDC: 0,
+    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0,
   })}
             <label class="minifield">Base DC
-              ${num('akashic.baseDC', a.baseDC, 'style="width:3.4rem"')}</label>
+              ${autoNum('data-set="akashic.baseDCOverride"', a.baseDCOverride, {
+    auto: true, placeholder: vw.baseDCAuto ?? a.baseDC ?? 10, width: '3.4rem',
+    title: `10 + the veilweaving modifier${vw.ability ? ` (${vw.ability})` : ''}. Type a number to pin it.`,
+  })}</label>
             <label class="minifield">Steady veil DC
-              ${num('akashic.steadyVeilDC', a.steadyVeilDC, 'style="width:3.4rem"')}</label>
+              ${autoNum('data-set="akashic.steadyVeilDCOverride"', a.steadyVeilDCOverride, {
+    auto: true, placeholder: vw.steadyVeilDCAuto ?? a.steadyVeilDC ?? 10, width: '3.4rem',
+    title: 'The base DC and half the veilweaving level. Type a number to pin it.',
+  })}</label>
           </div>
+          ${vw.sphere ? `<p class="hint">With the Veilweaving sphere, levels in casting classes count
+            as veilweaving levels (each level once), and a class row with no ability reads its
+            casting ability.</p>` : ''}
         </div>
 
         <div class="ak-pool">
@@ -890,7 +906,8 @@ function maneuverSelect(bindingAttr, value, options, blank) {
    * bonus slots from the casting stats, the DC from the rule. Each cell will
    * still take a number, which then overrides the one behind it.
    */
-export function vancianPanel(model) {
+/** `ctx.armedRemove` is which ask-twice × is armed -- element state, handed in. */
+export function vancianPanel(model, ctx = {}) {
     const v = model.data.vancian;
     if (!v) return '<div class="grid"><p class="empty">No casting data.</p></div>';
 
@@ -915,7 +932,8 @@ export function vancianPanel(model) {
         ${(v.classes || []).length ? '' : '<p class="empty">No casting classes yet.</p>'}
       </section>
 
-      ${(v.classes || []).map((c, i) => castingClassPanel(model, c, i)).join('')}
+      ${(v.classes || []).length ? `<div class="vclasses">${
+    (v.classes || []).map((c, i) => castingClassPanel(model, c, i)).join('')}</div>` : ''}
 
       <section class="panel span2">
         ${addButton('vancian.classes', 'Add casting class', {
@@ -924,7 +942,7 @@ export function vancianPanel(model) {
     spells: SPELL_LEVELS.map((level) => ({ level, perDay: null, known: null })),
   })}
       </section>
-      ${vancianPreparedPanel(model, v)}
+      ${vancianPreparedPanel(model, v, ctx)}
       ${systemExtrasPanel(v, 'vancian', 'Vancian Magic')}
     </div>`;
   }
@@ -947,7 +965,7 @@ function castingClassPanel(model, c, i) {
     const drift = c.casterLevelOverride !== null && c.casterLevelOverride !== undefined
       && Number(c.casterLevelBase ?? c.casterLevel) !== Number(c.plannerLevel);
 
-    return `<section class="panel span2">
+    return `<section class="panel vclass">
       <h3>
         ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
         <span class="badge">CL ${c.casterLevel ?? 0}</span>${
@@ -959,35 +977,44 @@ function castingClassPanel(model, c, i) {
           <button class="danger" data-remove="vancian.classes|${i}">Remove</button>
         </span>
       </h3>
-      <div class="fieldgrid">
-        ${field('Casting stat', select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST))}
-        ${field('Second stat', select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST))}
-        ${field('Prepared as', select(`${base}.prep`, c.prep,
+      <div class="vcast">
+        <div class="vcast-row">
+          ${castingStatCell(model, c, i)}
+          ${field('Prepared as', select(`${base}.prep`, c.prep,
     PREP_STYLES.map((p) => [p.key, p.label])))}
-        ${field('Source', select(`${base}.source`, c.source,
+          ${field('Source', select(`${base}.source`, c.source,
     CASTING_SOURCES.map((s) => [s.key, s.label])))}
-        ${field('Slot table', select(`${base}.slotType`, c.slotType, castingTableNames()))}
-        ${field('Caster level', `<input type="number" value="${c.casterLevelOverride ?? ''}"
-          placeholder="${c.plannerLevel ?? 0}" data-set="${base}.casterLevelOverride"
-          data-kind="number-or-null"
-          title="Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.">`)}
-        ${field('Concentration', `<span class="rollpair">${
-          num(`${base}.concentration`, c.concentration)}${
-          rollButton(model, 'concentration', `vancian:${i}`,
-            `${c.name || 'this class'} concentration`)}</span>`)}
+        </div>
+        <div class="vcast-row">
+          ${field('Slot table', select(`${base}.slotType`, c.slotType, castingTableNames()), 'vtable')}
+          ${field('Caster level', autoNum(`data-set="${base}.casterLevelOverride"`, c.casterLevelOverride, {
+    placeholder: c.plannerLevel ?? 0,
+    width: '4.2rem',
+    title: `Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
+  }))}
+          ${field('Concentration', `<span class="rollpair">${
+    exprField(`data-set="${base}.concentration"`, c.concentration ?? '', {
+      width: '4.2rem',
+      value: c.concentrationNum,
+      error: c.concentrationError,
+      placeholder: '0',
+      title: `A number, or a formula like ${vancianForwardKey(c) || 'vancian.wizard.cl'} + ${
+        String(c.stat || 'Int').toLowerCase()}.mod`,
+    })}${rollButton(model, 'concentration', `vancian:${i}`,
+    `${c.name || 'this class'} concentration`)}</span>`)}
+        </div>
       </div>
-      ${line('Stat modifier', fmt(c.statMod ?? 0))}
       ${c.tableName && c.tableName !== c.slotType
     ? `<p class="hint">Reading <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
       ${drift ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'}
         of this class.</p>` : ''}
-      <table class="build" style="margin-top:8px"><thead><tr>
-        <th>${esc(noun.one)} level</th>
-        <th class="num">${esc(noun.many)}/day</th>
+      <table class="build vslots"><thead><tr>
+        <th title="${esc(noun.one)} level">Level</th>
+        <th class="num" title="${esc(noun.many)} per day">/day</th>
         ${hasBonus ? '<th class="num" title="Granted by the class itself, on top of the slots">Bonus</th>' : ''}
-        <th class="num">${esc(noun.many)} known</th>
-        <th class="num">DC</th>
-        ${spends ? '<th title="Click a pip to spend or restore">Left today</th>' : ''}
+        <th class="num" title="${esc(noun.many)} known">Known</th>
+        <th class="num" title="Save DC">DC</th>
+        ${spends ? '<th title="Click a pip to spend or restore">Remaining today</th>' : ''}
       </tr></thead><tbody>
         ${(c.spells || []).map((s, si) => {
     const auto = slotText(s);
@@ -996,15 +1023,16 @@ function castingClassPanel(model, c, i) {
       : `${s.base} from the table${s.abilityBonus ? ` + ${s.abilityBonus} for the casting stat` : ''}`;
     const autoKnown = s.knownCount === null || s.knownCount === undefined ? '—' : String(s.knownCount);
     return `<tr>
-          <th scope="row">${s.level}</th>
-          <td class="num"><input type="number" value="${s.perDay ?? ''}" placeholder="${esc(auto)}"
-            data-item="${base}.spells|${si}|perDay" data-kind="number-or-null" style="width:4.2rem"
-            title="${esc(breakdown)}. Type a number to override."></td>
+          <th scope="row">${esc(s.level)}</th>
+          <td class="num">${autoNum(`data-item="${base}.spells|${si}|perDay"`, s.perDay,
+    { placeholder: auto, width: '4.2rem', title: `${breakdown}. Type a number to override.` })}</td>
           ${hasBonus ? `<td class="num total">${val(s.classBonus)}</td>` : ''}
-          <td class="num"><input type="number" value="${s.known ?? ''}" placeholder="${esc(autoKnown)}"
-            data-item="${base}.spells|${si}|known" data-kind="number-or-null" style="width:4.2rem"
-            title="${style.known ? 'From the table. Type a number to override.'
-      : 'A prepared caster fills slots from a spellbook, so this is not slot-derived.'}"></td>
+          <td class="num">${autoNum(`data-item="${base}.spells|${si}|known"`, s.known, {
+    placeholder: autoKnown,
+    width: '4.2rem',
+    title: style.known ? 'From the table. Type a number to override.'
+      : 'A prepared caster fills slots from a spellbook, so this is not slot-derived.',
+  })}</td>
           <td class="num total">${s.dc ?? 0}</td>
           ${spends ? `<td>${s.atWill ? '<span class="hint">at will</span>'
       : slotSpend({
@@ -1018,6 +1046,31 @@ function castingClassPanel(model, c, i) {
       </tbody></table>
     </section>`;
   }
+
+/**
+ * The casting stat, its modifier, and the second stat folded under it.
+ *
+ * Few casters have a second stat, so its box stays behind a caret until asked
+ * for. Once it holds a stat it is always shown: folding away a value that still
+ * changes the numbers would hide why they are what they are. The fold is a
+ * *shown* key, like `veil:showEmpty`, so an absent key means folded.
+ */
+function castingStatCell(model, c, i) {
+  const base = `vancian.classes.${i}`;
+  const key = `vstat2:${i}`;
+  const asked = !!model.data.uiPrefs?.collapsed?.[key];
+  const shown = !!c.stat2 || asked;
+  const caret = c.stat2 ? '' : `<button class="disclose" data-collapse="${key}"
+      data-collapse-to="${!asked}" aria-expanded="${asked}"
+      title="${asked ? 'Hide the second stat' : 'Add a second casting stat'}">${asked ? '▾' : '▸'} second</button>`;
+  return `<div class="fld vstat">
+      <span>Casting stat ${caret}</span>
+      <span class="rollpair">${select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST)}<span
+        class="vmod" title="Stat modifier">${fmt(c.statMod ?? 0)}</span></span>
+      ${shown ? `<span class="vstat2">Second stat</span>${
+    select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST)}` : ''}
+    </div>`;
+}
 
   /**
    * The spell list, and where a prepared caster spends.
@@ -1073,7 +1126,7 @@ function powerDatalist(c) {
   });
 }
 
-function vancianPreparedPanel(model, v) {
+function vancianPreparedPanel(model, v, ctx = {}) {
     const list = 'vancian.prepared';
     const rows = v.prepared || [];
     const spells = rows.filter((r) => r.name).length;
@@ -1108,7 +1161,7 @@ function vancianPreparedPanel(model, v) {
           <td class="spendcell">${r.name ? slotSpend({
     path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
   }) : ''}</td>
-          ${rowRemoveArmed(list, i, r.name || 'this row')}
+          ${rowRemoveArmed(list, i, r.name || 'this row', ctx.armedRemove ?? null)}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No spells listed.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add spell', {
@@ -1425,10 +1478,10 @@ function manifestingClassPanel(model, c, i) {
         ${field('Ability 1', select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST))}
         ${field('Ability 2', select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST))}
         ${field('Points at 20', select(`${base}.curveTotal`, c.curveTotal, curveOptions()))}
-        ${field('Manifester level', `<input type="number" value="${c.manifesterLevelOverride ?? ''}"
-          placeholder="${c.plannerLevel ?? 0}" data-set="${base}.manifesterLevelOverride"
-          data-kind="number-or-null"
-          title="Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.">`)}
+        ${field('Manifester level', autoNum(`data-set="${base}.manifesterLevelOverride"`, c.manifesterLevelOverride, {
+    placeholder: c.plannerLevel ?? 0,
+    title: `Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
+  }))}
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
@@ -1572,9 +1625,11 @@ function companionLevelControls(model, cc) {
           ? 'the Conjuration sphere’s caster level on the Magic Spheres tab' : 'the class’s levels in the Planner';
     return `${source}
       ${showClass ? field('Master class', select(`${p}.masterClass`, b.masterClass, classes)) : ''}
-      ${field('Level override', `<input type="number" value="${b.levelOverride ?? ''}"
-        placeholder="${k.rawLevel ?? 0}" data-set="${p}.levelOverride" data-kind="number-or-null" min="0" max="${kind === 'conjured' ? 40 : 20}"
-        title="Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to pin it.">`)}
+      ${field('Level override', autoNum(`data-set="${p}.levelOverride"`, b.levelOverride, {
+    placeholder: k.rawLevel ?? 0,
+    title: `Auto: ${k.rawLevel ?? 0} from ${autoFrom}. Enter a number to pin it.`,
+    extra: `min="0" max="${kind === 'conjured' ? 40 : 20}"`,
+  }))}
       ${field('Master level penalty', num(`${p}.masterLevelPenalty`, b.masterLevelPenalty, 'min="0"'))}`;
   }
 
@@ -1686,11 +1741,16 @@ function companionScoresPanel(model, cc) {
         ${ABILITIES.map((a) => {
     const s = sc[a] || {};
     const base = kind === 'familiar' && a === 'int'
-      ? `<input type="number" value="${esc(b.scores?.int?.base ?? '')}" placeholder="${esc(k.tableInt ?? '')}"
-            data-set="${p}.scores.int.base" data-kind="number-or-null" title="Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.">`
+      ? autoNum(`data-set="${p}.scores.int.base"`, b.scores?.int?.base, {
+        placeholder: k.tableInt ?? '',
+        title: `Auto: ${k.tableInt ?? ''} from the familiar table. Enter a number to pin it.`,
+      })
       : kind === 'conjured'
-        ? `<input type="number" value="${esc(b.scores?.[a]?.base ?? '')}" placeholder="${esc(s.base ?? 10)}"
-            data-set="${p}.scores.${a}.base" data-kind="number-or-null" title="Auto: ${esc(s.base ?? 10)} from ${b.baseForm ? `the ${esc(b.baseForm)} base form` : 'the default line'}${b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.">`
+        ? autoNum(`data-set="${p}.scores.${a}.base"`, b.scores?.[a]?.base, {
+          placeholder: s.base ?? 10,
+          title: `Auto: ${s.base ?? 10} from ${b.baseForm ? `the ${b.baseForm} base form` : 'the default line'}${
+            b.size === 'Small' ? ', Small-adjusted' : ''}. Enter a number to pin it.`,
+        })
         : num(`${p}.scores.${a}.base`, b.scores?.[a]?.base ?? 10);
     return `<tr>
           <th scope="row"><span class="abmark" data-ab="${a}">${ABILITY_LABELS[a]}</span></th>

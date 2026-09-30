@@ -37,6 +37,7 @@
 import { MANEUVER_FIELDS } from './rules.js';
 import { veilDetails } from './model/subsystems/akashic.js';
 import { disciplineEntries, maneuverDetails } from './model/subsystems/maneuvers.js';
+import { featDetails, powerDetails, spellDetails } from './model/subsystems/catalogues.js';
 
 /**
  * The catalogue's own words about a veil, kept beside the text.
@@ -51,6 +52,12 @@ const VEIL_CITATION = ['slot', 'descriptor', 'bindEffect', 'source'];
 
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
+/** One entry a reader can read, counted in all and under its kind. */
+const carry = (report, kind) => {
+  report.carried++;
+  report.carriedBy[kind] = (report.carriedBy[kind] || 0) + 1;
+};
+
 /**
  * Fill in every veil the character has shaped.
  *
@@ -59,7 +66,9 @@ const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
  * described is left exactly as it was.
  */
 function publishVeils(doc, report) {
-  for (const slot of doc.akashic?.slots || []) {
+  // The chakra slots and the Kheshig's bound veils alike: both are veils the
+  // character has shaped, and the Kheshig's used to leave without their text.
+  for (const slot of [...(doc.akashic?.slots || []), ...(doc.akashic?.kheshig || [])]) {
     for (const veil of slot.veils || []) {
       if (!veil?.name) continue;
       const details = veilDetails(veil);
@@ -67,7 +76,7 @@ function publishVeils(doc, report) {
       for (const field of VEIL_CITATION) {
         if (details[field] && !veil[field]) veil[field] = details[field];
       }
-      if (String(veil.desc ?? '').trim()) report.carried++;
+      if (String(veil.desc ?? '').trim()) carry(report, 'veil');
       else if (details.known) report.blank.push(`veil: ${veil.name}`);
       else report.unknown.push(`veil: ${veil.name}`);
     }
@@ -103,7 +112,7 @@ function publishManeuvers(doc, report) {
         // this file is concerned and still reach a reader as a name with a
         // badge beside it. Counting that as carried is how an author ends up
         // sending out a sheet they believe is readable.
-        if (String(written.text ?? '').trim()) report.carried++;
+        if (String(written.text ?? '').trim()) carry(report, 'maneuver');
         else report.outline.push(`maneuver: ${discipline.name} / ${name}`);
       } else if (from) {
         report.blank.push(`maneuver: ${discipline.name} / ${name}`);
@@ -115,14 +124,51 @@ function publishManeuvers(doc, report) {
 }
 
 /**
- * Drop what a reader is offered rather than shown.
+ * Fill in every feat, spell and power the character lists, and no others.
  *
- * These are catalogue slices the sheet keeps to populate its pickers. A
- * published sheet has no pickers, so they are weight that says nothing about
- * this character -- exactly the weight that turns a citation into a copy.
+ * These keep the player's own writing (`detail`, `note`) apart from the
+ * pack's text, and the sheet shows the pack's beside the player's rather than
+ * instead of it (ui/html.js, `catalogueFace`). So the pack's words travel as
+ * `cited` on the row -- never into the player's fields -- and the sheet reads
+ * `cited` only where no pack answers for the name. The rows are the ones the
+ * sheet displays: the feat groups, the granted feats, the prepared spells and
+ * each manifesting class's powers.
+ */
+function publishCatalogueRows(doc, report) {
+  const granted = doc.grantedFeats || {};
+  const rows = [
+    ...(doc.featGroups || []).flatMap((g) => (g?.entries || []).map((r) => ['feat', r, featDetails])),
+    ...[granted.drawback, granted.specialty, ...(granted.others || [])].map((r) => ['feat', r, featDetails]),
+    ...(doc.vancian?.prepared || []).map((r) => ['spell', r, spellDetails]),
+    ...(doc.psionics?.classes || []).flatMap((c) => (c?.powers || []).map((r) => ['power', r, powerDetails])),
+  ];
+  for (const [kind, row, read] of rows) {
+    if (!row || typeof row !== 'object' || !String(row.name ?? '').trim()) continue;
+    const details = read(row);
+    if (details.entry) {
+      const cited = { text: details.text, source: details.source, fields: details.fields };
+      if (cited.text.trim() || cited.fields.length || cited.source.trim()) row.cited = cited;
+    }
+    if (String(row.cited?.text ?? '').trim()) carry(report, kind);
+    else if (row.cited) report.outline.push(`${kind}: ${row.name}`);
+    else if (details.known) report.blank.push(`${kind}: ${row.name}`);
+    else report.unknown.push(`${kind}: ${row.name}`);
+  }
+}
+
+/**
+ * Drop what describes a session rather than the character.
+ *
+ * The card table is an encounter in progress: a deck order, a hand, a round.
+ * A reader is shown the character, not the author's last fight.
+ *
+ * `cardcasting.manipulationsAvailable` is not in this list. It reads like a
+ * catalogue slice, but it is the player's own count of manipulations (a
+ * number or a formula, blank for the table's), and dropping it showed a
+ * reader the table's number where the author's sheet showed theirs.
  */
 function dropOffered(doc, report) {
-  const offered = [['cardcasting', 'manipulationsAvailable'], ['cardcasting', 'table']];
+  const offered = [['cardcasting', 'table']];
   for (const [block, field] of offered) {
     if (doc[block] && doc[block][field] !== undefined && doc[block][field] !== null) {
       doc[block][field] = null;
@@ -157,10 +203,11 @@ function dropOffered(doc, report) {
  */
 export function publishDocument(doc) {
   const out = clone(doc);
-  const report = { carried: 0, outline: [], blank: [], unknown: [], dropped: [] };
+  const report = { carried: 0, carriedBy: {}, outline: [], blank: [], unknown: [], dropped: [] };
   if (!out || typeof out !== 'object') return { doc: out, report };
   publishVeils(out, report);
   publishManeuvers(out, report);
+  publishCatalogueRows(out, report);
   dropOffered(out, report);
   return { doc: out, report };
 }

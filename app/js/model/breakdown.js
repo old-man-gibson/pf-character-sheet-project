@@ -21,7 +21,7 @@
 
 import {
   AC_BONUS_TYPES, ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY,
-  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abpGroupTotal, armorParts, conditionTotals, sizeMod, statMod,
+  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abpGroupTotal, armorParts, conditionTotals, sizeAttackMod, sizeMod, statMod,
 } from '../rules.js';
 import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, mythicHp } from './stats/defenses.js';
@@ -160,7 +160,7 @@ function attackBreakdown(model, mode) {
   return [
     part('BAB', c.attack.bab),
     abilityPart(c, m.stat1, m.stat2),
-    part('size', -sizeMod(c)),
+    part(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode)),
     part('misc', c.attack.miscBonus),
     ...extras(model, ATTACK_MODE_KEY[mode], `attack.${mode}`),
   ];
