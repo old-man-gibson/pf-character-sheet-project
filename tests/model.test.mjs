@@ -72,6 +72,7 @@ import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
+import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -2777,6 +2778,16 @@ console.log('a psionic power’s note reads {…}');
   c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'Deals {thrust.dice = 2}d10' }] }]);
   check('a name defined in a power note can be read', c.scope().thrust?.dice, 2);
   check('and the Formulas tab says where it is', describeSource('powerNote:0:0'), 'power 1 of manifesting class 1, its note');
+}
+
+console.log('an added veilweaving class row is shown until it is filled or removed');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  const before = (c.data.akashic.classes || []).length;
+  c.listAdd('akashic.classes', { name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true });
+  const shown = (m) => subsystemPanels.akashicPanel(m, {}).includes(`data-remove="akashic.classes|${before}"`);
+  check('the blank row it adds is on the panel, with its ×', shown(c), true);
+  check('and still after a save and reload', shown(new Character(JSON.parse(JSON.stringify(c.toJSON())))), true);
 }
 
 const missing = missingCharacters(REAL);

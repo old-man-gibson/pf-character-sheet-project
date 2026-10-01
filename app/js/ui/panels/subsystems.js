@@ -308,10 +308,11 @@ function akashicClassesPanel(a) {
     const list = 'akashic.classes';
     const e = a.essence || {};
     // Only the filled class blocks are worth a row; the template's six leave
-    // five empty ones behind on most sheets.
+    // five empty ones behind on most sheets. A row added here is shown from
+    // the start (`added`), so it can be filled in or removed.
     const rows = (a.classes || [])
       .map((c, i) => ({ c, i }))
-      .filter(({ c }) => c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
+      .filter(({ c }) => c.added || c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
     const vw = a.veilweaving || {};
     const levelTitle = vw.sphere
       ? 'Levels in casting and veilweaving classes together, each level once (the Veilweaving sphere). Type a number to pin it.'
@@ -339,7 +340,7 @@ function akashicClassesPanel(a) {
           </tbody></table>
           <div class="pair" style="margin-top:6px">
             ${addButton(list, 'Add class', {
-    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0,
+    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true,
   })}
             <label class="minifield">Base DC
               ${autoNum('data-set="akashic.baseDCOverride"', a.baseDCOverride, {
