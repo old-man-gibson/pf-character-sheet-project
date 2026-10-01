@@ -180,7 +180,8 @@ export function guileClassBlock(model, g, cls, ci) {
           ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems))}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
-        ${ladderTable(model, list, ci, cls, systems, spheres)}
+        ${systems.length > 1 ? ladderStack(model, list, ci, cls, systems, spheres)
+    : ladderTable(model, list, ci, cls, systems, spheres)}
       </div>`;
   }
 
@@ -415,6 +416,67 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
           }).join('')}</tbody>
         </table></div>`;
   }
+
+/**
+ * A blended pool's two ladders stacked rather than side by side.
+ *
+ * Side by side, a pool that reaches martial or magical talents *and* skill
+ * talents shares the blended panel's width out six ways, and every cell came
+ * out a few letters wide. Here each level is one box (a `<tbody>`): the any
+ * talent, and the [utility] talent under it, each a row of the ordinary
+ * talent table -- talent, sphere, notes -- and only the ladders that level
+ * grants. A level granting neither is the empty slot the plain blended table
+ * draws. Same fields as `ladderTable`; the Guile tab keeps that one.
+ */
+export function ladderStack(model, list, ci, cls, systems, spheres) {
+  const slots = `${list}.${ci}.levels`;
+  const landed = (sphere) => {
+    if (!String(sphere || '').trim()) return null;
+    return talentLandsOn(sphere, systems) ?? 'none';
+  };
+  const why = (side, sphere) => (side === 'none'
+    ? ` — ${sphere} is not a sphere this class's talents count as, so it counts nowhere`
+    : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : '');
+  // One ladder's row: `u` is the [utility] ladder, whose fields carry the
+  // prefix. `head` is what the level cell says.
+  const row = (lv, li, u, head, extra = '') => {
+    const f = (name) => (u ? `utility${name[0].toUpperCase()}${name.slice(1)}` : name);
+    const sphere = lv[f('sphere')];
+    const side = landed(sphere);
+    const count = u ? `Utility talent #${lv.utilityCount}${why(side, sphere)}`
+      : `Talent #${Math.floor(lv.count)} at level ${lv.level}${why(side, sphere)}`;
+    return `<tr class="${lv.future ? 'future' : ''}${u ? ' utilrow' : ''}${extra}">
+        <td class="num" data-stack="head"${head.label ? ` data-headlabel="${head.label}"` : ''} title="${esc(count)}">${head.text}</td>
+        <td class="slot-on${u ? ' util' : ''}" data-stack="name">${talentCell(model,
+    `data-item="${slots}|${li}|${f('talent')}" placeholder="${u ? '[utility]…' : 'Talent…'}"`, lv[f('talent')], sphere,
+    { sphere: f('sphere'), notes: f('notes') })}</td>
+        <td class="slot-on${u ? ' util' : ''}${side ? ` side-${side}` : ''}" data-label="Sphere">${
+  itemSelect(slots, li, f('sphere'), sphere, spheres)}</td>
+        <td class="slot-on${u ? ' util' : ''}" data-label="Notes">${talentNote(model,
+    `data-item="${slots}|${li}|${f('notes')}"`, lv[f('notes')], `${slots}|${li}|${f('notes')}`)}</td>
+      </tr>`;
+  };
+  const body = (cls.levels || []).map((lv, li) => {
+    const on = !!lv.granted;
+    const uOn = !!lv.utilityGranted;
+    const level = { label: 'Level', text: esc(lv.level) };
+    if (!on && !uOn) {
+      return `<tbody class="lvlbox"><tr class="emptyslot${lv.future ? ' future' : ''}">
+          <td class="num" data-stack="head" data-headlabel="Level" title="Level ${esc(lv.level)} grants nothing">${esc(lv.level)}</td>
+          <td class="slot-off" colspan="3"></td></tr></tbody>`;
+    }
+    const rows = [];
+    if (on) rows.push(row(lv, li, false, level));
+    const tag = '<span class="utag">[utility]</span>';
+    if (uOn) rows.push(row(lv, li, true, on ? { text: tag } : { label: 'Level', text: `${esc(lv.level)}${tag}` }));
+    return `<tbody class="lvlbox">${rows.join('')}</tbody>`;
+  }).join('');
+  return `<div class="tablewrap"><table class="talents stacked ladderstack">
+      <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
+      <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
+      ${body}
+    </table></div>`;
+}
 
   /* ----- the sphere table: ranks, DCs and ranges in one ----- */
 

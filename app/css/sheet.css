@@ -2045,6 +2045,17 @@ tr.untrained { color: var(--cs-muted); }
   table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"]::before { display: none; }
   table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"] select { width: auto; min-width: 9.5rem; max-width: 12rem; }
   table.talents.stacked > tbody > tr:not(.shut) > td[data-stack="head"] { grid-row: 2; }
+  /* A stacked ladder: the level is the card, and its any and [utility]
+     talents are two rows inside it rather than two cards. */
+  table.talents.ladderstack > tbody.lvlbox {
+    display: block; border: 1px solid var(--cs-line); border-radius: 6px;
+    padding: 5px 6px; margin-bottom: 6px;
+  }
+  table.talents.ladderstack > tbody.lvlbox > tr { border: 0; border-radius: 0; padding: 0; margin: 0; }
+  table.talents.ladderstack .utag { display: inline; margin-left: 4px; }
+  table.talents.ladderstack > tbody.lvlbox > tr + tr {
+    margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--cs-line);
+  }
   /* Folded: the name and whatever rides with it, and the controls. What goes
      is the body, which is exactly the labelled part. */
   table.stacked > tbody > tr.shut > td[data-label] { display: none; }
@@ -2534,6 +2545,10 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
    a share of the table. Notes is the column with no width of its own -- it
    takes whatever the others leave, which is most of it. */
 table.talents { table-layout: fixed; }
+/* A blended pool's ladders, stacked (guile.js ladderStack): one box a level,
+   its [utility] row under its any row. */
+table.talents.ladderstack > tbody.lvlbox + tbody.lvlbox { border-top: 1px solid var(--cs-line); }
+table.talents.ladderstack .utag { display: block; font-size: 0.62rem; color: var(--cs-muted); white-space: nowrap; }
 table.talents td { padding: 2px 4px; vertical-align: top; }
 /* A talent a pack's sphere catalogue recognises. The mark sits in the box's
    own top-right rather than taking a column, because most talents on most

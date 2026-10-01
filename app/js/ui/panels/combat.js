@@ -35,7 +35,7 @@ import {
   SYSTEM_NOUNS, TEMPLATE_TYPES, TRAINING_SYSTEMS, classForwardKey, poolMode, poolSpheres, sphereForwardKey,
   sphereNames, talentLandsOn,
 } from '../../model.js';
-import { guileClassBlock, ladderTable, operativeField, poolCounts, poolField } from './guile.js';
+import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
   ABILITIES, ABILITY_LABELS,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
@@ -492,7 +492,7 @@ function blendedPanel(model, pairs) {
           ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
     ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts)}
         </div>
-        ${skill ? ladderTable(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
+        ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
           <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
           <tbody>${(cls.levels || []).map((lv, li) => {

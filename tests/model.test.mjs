@@ -8502,8 +8502,8 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   check('drawn on the martial and guile tabs, not the magic one',
     [martialHtml, combatPanels.renderMagicPanel(c), guilePanels.renderGuilePanel(c)]
       .map((html) => html.includes('Blended training')), [true, false, true]);
-  check('as two ladders, with the rate kept and a rule box for [utility]',
-    ['guileladder', 'training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule',
+  check('as two ladders, stacked, with the rate kept and a rule box for [utility]',
+    ['ladderstack', 'training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule',
       'training.combat.classes|0|anyRule'].map((x) => martialHtml.includes(x)), [true, true, true, false]);
 
   // [utility] talents at the levels a rule names: the book's "1 a level, and a
@@ -8629,7 +8629,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   const guileHtml = guilePanels.renderGuilePanel(s);
   check('it moves out of Skill expertise into Blended training',
     [guileHtml.includes('data-blendguile="0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
-  check('and heads the martial tab with its ladders', combatPanels.renderMartialPanel(s).includes('guileladder'), true);
+  check('and heads the martial tab with its ladders, stacked', combatPanels.renderMartialPanel(s).includes('ladderstack'), true);
   check('which puts the martial and magic tabs in use for a character with no classes there',
     (() => { const x = fresh(); x.data.training.combat.classes = []; x.addGuileClass('Only');
       x.setGuileBlend(0, 'magic', true); return [x.systemTabsInUse().martial, x.systemTabsInUse().magic]; })(),
@@ -8673,7 +8673,15 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
     [normal.any.notes / normal.any.talent, normal.utility.notes / normal.utility.talent].map(r2), [2, 2]);
   check('the shares add up past what a table holds, so fixed columns keep their width',
     Math.round(normal.any.talent + normal.any.notes + normal.utility.talent + normal.utility.notes), 400);
-  check('the headings are switches', combatPanels.renderMartialPanel(L).includes(`data-ladderfocus="${key}|utility"`), true);
+  // In the blended panel the ladders stack, a level to a box, so there is no
+  // width to share and no switch; the Guile tab's side-by-side ladders keep it.
+  const blendedHtml = combatPanels.renderMartialPanel(L);
+  check('the blended panel stacks them instead, with no switch to share the width',
+    [blendedHtml.includes('ladderstack'), blendedHtml.includes('data-ladderfocus')], [true, false]);
+  const lvls = champ(L).levels;
+  check('each level draws only the ladders it grants',
+    [(blendedHtml.match(/class="[^"]*utilrow/g) || []).length, (blendedHtml.match(/<tbody class="lvlbox">/g) || []).length],
+    [lvls.filter((lv) => lv.utilityGranted).length, lvls.length]);
   L.data.uiPrefs.ladderFocus = { [key]: 'utility' };
   const focused = lay();
   check('focusing [utility] narrows the any ladder to a quarter of its shares and a short dropdown',
