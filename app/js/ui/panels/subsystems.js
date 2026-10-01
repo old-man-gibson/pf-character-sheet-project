@@ -1692,9 +1692,9 @@ function companionHeadPanel(model, cc) {
         ${bigStat('BAB', fmt(k.bab ?? 0), kind === 'familiar' ? 'master’s' : 'from the table')}
         ${bigStat('Attack', { html: w('attack', fmt(k.totalAttack ?? 0)) }, `${k.attackAbility || 'Str'} + size`)}
         ${bigStat('CMD', { html: w('cmd', String(k.cmd ?? 10)) }, `flat ${k.ffCmd ?? 10}`)}
-        ${bigStat('Fort', { html: w('fort', sv('fort')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.fort ? 'good' : 'poor'))}
-        ${bigStat('Ref', { html: w('ref', sv('ref')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.ref ? 'good' : 'poor'))}
-        ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : (b.goodSaves?.will ? 'good' : 'poor'))}
+        ${bigStat('Fort', { html: w('fort', sv('fort')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.fort ? 'good' : 'poor'))}
+        ${bigStat('Ref', { html: w('ref', sv('ref')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.ref ? 'good' : 'poor'))}
+        ${bigStat('Will', { html: w('will', sv('will')) }, kind === 'familiar' ? 'master’s base' : ((k.formSaves || b.goodSaves)?.will ? 'good' : 'poor'))}
       </div>
       <p class="hint">${kind === 'familiar'
     ? 'A familiar is its master’s level, uses the master’s BAB and base saves, has half the master’s hit points, and takes its Intelligence and natural armour from the familiar table.'
@@ -1811,12 +1811,15 @@ function companionDefensePanel(model, cc) {
         ${field('Flat-footed only', num(`${p}.ac.ff`, ac.ff))}
         ${field('CMD other', num(`${p}.cmdOther`, b.cmdOther))}
         ${field('CMB other', num(`${p}.cmbOther`, b.cmbOther))}
+        ${field('CMB ability', select(`${p}.cmbAbility`, b.cmbAbility, ABILITY_LABELS_LIST,
+    `auto (${['Tiny', 'Diminutive', 'Fine'].includes(b.size) ? 'Dex' : 'Str'})`))}
         ${field('Initiative bonus', num(`${p}.initBonus`, b.initBonus))}
       </div>
       <p class="hint">10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
-        + the bonuses: <em>all</em> counts everywhere, <em>touch only</em> for dodge and deflection,
-        <em>flat-footed only</em> for armour and extra natural armour. CMB is BAB + Str + the
-        special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries.</p>
+        + the bonuses: <em>all</em> counts everywhere (deflection, luck, insight…), <em>touch only</em>
+        for dodge, which flat-footed loses, <em>flat-footed only</em> for armour and extra natural armour.
+        CMD takes <em>all</em> and dodge, and every penalty. CMB is BAB + ${esc(k.cmbAbility || 'Str')} + the
+        special size modifier ${fmt(-(k.sizeAC ?? 0))}, the same one CMD carries; Tiny or smaller uses Dex.</p>
       ${kind === 'eidolon' || kind === 'conjured' ? `<div class="fieldgrid" style="margin-top:8px">
         ${field('DR', text(`${p}.dr`, b.dr))}
         ${field('Resistances', text(`${p}.resistances`, b.resistances))}
@@ -1839,7 +1842,11 @@ function companionSavesPanel(model, cc) {
       </tr></thead><tbody>
         ${rows.map(([key, name, ab]) => `<tr>
           <th scope="row">${name}<span class="hint" style="margin-left:4px">${ab}</span></th>
-          ${kind === 'familiar' ? '' : `<td>${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
+          ${kind === 'familiar' ? '' : k.formSaves
+    // The base form sets these; a tick here would change nothing.
+    ? `<td><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
+        title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></td>`
+    : `<td>${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
           <td>${num(`${p}.saves.${key}.misc`, b.saves?.[key]?.misc)}${

@@ -343,13 +343,17 @@ export function conditionState(model) {
   const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
   const sizeSteps = trueSteps + effSteps;
   if (trueSteps) {
+    // The move is the size modifier's own change, not one a step: the table
+    // doubles past Small and Large (Tiny +2, Diminutive +4; Huge −2), which is
+    // what Size Change means by "doubled when moving to or from Diminutive".
+    const move = (SIZE_MODIFIERS[ladder[baseIdx + trueSteps]] ?? 0) - (SIZE_MODIFIERS[ladder[baseIdx]] ?? 0);
     buffsOn.push({
       name: 'Size',
       info: {
         key: 'buff:size',
         label: `${trueSteps > 0 ? `${trueSteps} size larger` : `${-trueSteps} size smaller`}`,
         mods: {
-          attack: -trueSteps, ac: -trueSteps, cmb: 2 * trueSteps, cmd: trueSteps,
+          attack: move, ac: move, cmb: -2 * move, cmd: -move,
         },
       },
       count: 1,

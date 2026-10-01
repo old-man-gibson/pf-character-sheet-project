@@ -1196,6 +1196,48 @@ console.log('companions -- the conjured companion follows the Conjuration sphere
   check('and every column follows the dice', [k.bab, k.tableNatural], [9, 6]);
   c.set('conjured.0.archetypes.mindless', false);
 
+  // Unwilling: the same extra dice, and the increases they bring are listed
+  // where the dice cross each fourth -- at caster level 12, 9 + 3 = 12 dice.
+  c.set('conjured.0.archetypes.unwilling', true);
+  c.set('conjured.0.levelOverride', 12);
+  k = c.data.conjured[0].calc;
+  const increasesListed = k.gains.filter((g) => /Ability score increase/.test(g.text)).length;
+  check('unwilling at 12th: 12 dice, three increases, and all three listed',
+    [k.hd, increasesListed], [12, 3]);
+  check('evasion and the rest still arrive by caster level',
+    k.gains.filter((g) => /Evasion/.test(g.text)).map((g) => g.level), [2]);
+  c.set('conjured.0.archetypes.unwilling', false);
+  c.set('conjured.0.levelOverride', 9);
+
+  // The base form sets the good saves, whatever the block's own ticks say.
+  c.set('conjured.0.baseForm', 'Orb');
+  k = c.data.conjured[0].calc;
+  check('an Orb is good at Reflex and Will, bad at Fortitude',
+    [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [2, 5, 5]);
+  c.set('conjured.0.baseForm', 'Quadruped');
+
+  // CMD takes the AC bonuses the character's would, and every penalty.
+  const cmd0 = () => [c.data.conjured[0].calc.cmd, c.data.conjured[0].calc.ffCmd];
+  const [base0, ff0] = cmd0();
+  c.set('conjured.0.ac.all', 2);
+  c.set('conjured.0.ac.touch', 1);
+  c.set('conjured.0.ac.ff', 3);
+  check('deflection and the like count toward CMD, dodge too, armour not',
+    cmd0(), [base0 + 2 + 1, ff0 + 2]);
+  c.set('conjured.0.ac.ff', -2);
+  check('a penalty in any bucket comes off both', cmd0(), [base0 + 2 + 1 - 2, ff0 + 2 - 2]);
+  for (const k2 of ['all', 'touch', 'ff']) c.set(`conjured.0.ac.${k2}`, 0);
+
+  // Tiny or smaller uses Dexterity for CMB, and the choice can be made.
+  const cmbOf = () => c.data.conjured[0].calc;
+  c.set('conjured.0.size', 'Tiny');
+  check('a Tiny companion uses Dex for CMB', cmbOf().cmbAbility, 'Dex');
+  c.set('conjured.0.size', 'Medium');
+  check('a Medium one Str', cmbOf().cmbAbility, 'Str');
+  c.set('conjured.0.cmbAbility', 'Dex');
+  check('unless told otherwise, as Agile Maneuvers would', cmbOf().cmbAbility, 'Dex');
+  c.set('conjured.0.cmbAbility', '');
+
   c.set('conjured.0.archetypes.puppet', true);
   check('a puppet is a point cheaper to summon', c.data.conjured[0].calc.summonCost, 0);
   c.set('conjured.0.archetypes.puppet', false);
@@ -6166,12 +6208,16 @@ console.log('buff extra bonuses -- targets past the six dials');
   // capped steps, so an absurd row still reads as Colossal.
   c.data.identity.size = 'Huge';
   cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
+  // Huge -2 to Colossal -8: the modifier's own change, which doubles past Large.
   check('a Huge character stops at Colossal in numbers and dice alike',
-    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-6, -6, 6, 6, 2]);
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 500 }]);
-  check('a +500 row is four steps from Medium, everywhere',
-    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 4]);
+  check('a +500 row is four steps from Medium, everywhere -- Colossal at -8',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-8, -8, 8, 8, 4]);
+  cs = buff([{ target: 'size', value: -2 }]);
+  check('and down: Medium to Tiny is +2, doubled from the +1 of Small, as Size Change says',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmd], [2, 2, -2]);
 
   // {size} reads the true size after buffs -- and only the true size: the
   // stacking and effective kinds change what a character counts as, not what
