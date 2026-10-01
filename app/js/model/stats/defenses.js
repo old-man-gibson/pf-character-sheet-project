@@ -187,6 +187,30 @@ export function sizeNow(model) {
  * change to each modifier; `byKey` the ability-borne share of every key in
  * `delta`, zero for the ones no ability reaches.
  */
+/**
+ * The ability slots each headline number is built on, whose movement reaches
+ * it. The one list: `abilityMoves` sums by it, and the breakdown names its
+ * "through Dex" line by it, so the label cannot say Dex while the sum read
+ * Wisdom.
+ */
+export function abilitySlots(c) {
+  const mode = (key) => c.attack.modes?.[key] || {};
+  const atk = (key) => [mode(key).stat1, mode(key).stat2];
+  const sv = (key) => [c.saves[key]?.stat1, c.saves[key]?.stat2];
+  const ac = [c.defenses.acStat1, c.defenses.acStat2];
+  return {
+    melee: atk('melee'), altMelee: atk('altMelee'), ranged: atk('ranged'), altRanged: atk('altRanged'),
+    cmb: atk('cmb'), altCmb: atk('altCmb'),
+    ac, touch: ac, flatFooted: c.defenses.uncannyDodge ? ac : [],
+    // CMD adds both; flat-footed keeps the Strength and any Dexterity penalty.
+    cmd: ['Str', 'Dex'], ffCmd: ['Str', 'Dex'],
+    fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
+    // Initiative follows whatever ability its row names, Dex by default.
+    initiative: [c.hp.initAbility || 'Dex', c.hp.initAbility2],
+    hp: [],
+  };
+}
+
 export function abilityMoves(c, totals) {
   const deltas = {};
   const scores = {};
@@ -216,9 +240,9 @@ export function abilityMoves(c, totals) {
   const strDelta = deltas.str || 0;
   const ffCmdDexDelta = Math.min(0, dexAfter) - Math.min(0, dexMod);
 
-  const mode = (key) => c.attack.modes?.[key] || {};
-  const atk = (key) => slot(mode(key).stat1, mode(key).stat2);
-  const sv = (key) => slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
+  const slots = abilitySlots(c);
+  const atk = (key) => slot(...slots[key]);
+  const sv = (key) => slot(...slots[key]);
   return {
     deltas,
     scores,
@@ -228,8 +252,7 @@ export function abilityMoves(c, totals) {
       ac: acAbilityDelta, touch: acAbilityDelta, flatFooted: c.defenses.uncannyDodge ? acAbilityDelta : 0,
       cmd: strDelta + cmdDexDelta, ffCmd: strDelta + ffCmdDexDelta,
       fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
-      // Initiative follows whatever ability its row names, Dex by default.
-      initiative: slot(c.hp.initAbility || 'Dex', c.hp.initAbility2),
+      initiative: slot(...slots.initiative),
       hp: 0,
     },
   };
@@ -560,7 +583,9 @@ function spendTemp(model, want) {
 export function takeDamage(model, amount, { nonlethal = false } = {}) {
   const hp = model.data.hp;
   const state = model.hpState;
-  let left = Math.max(0, Number(amount) || 0);
+  // Whole points, rounded down, as the Quick actions card and companions
+  // take them: 2.5 damage is 2.
+  let left = Math.max(0, Math.floor(Number(amount) || 0));
   if (nonlethal) {
     hp.nonlethal = state.nonlethal + left;
   } else {
@@ -576,7 +601,7 @@ export function takeDamage(model, amount, { nonlethal = false } = {}) {
 export function healDamage(model, amount) {
   const hp = model.data.hp;
   const state = model.hpState;
-  const n = Math.max(0, Number(amount) || 0);
+  const n = Math.max(0, Math.floor(Number(amount) || 0));
   hp.current = Math.min(state.baseMax, state.baseCurrent + n);
   hp.nonlethal = Math.max(0, state.nonlethal - n);
   model.recompute();

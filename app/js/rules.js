@@ -2299,10 +2299,27 @@ export function mergeLayout(grid) {
 export function parseDiceExpr(text, evaluate) {
   const notes = [];
   let s = String(text ?? '').replace(/\([^)]*\)/g, (m) => { notes.push(m.trim()); return ' '; });
+  const formula = typeof evaluate === 'function' && evaluate !== Number;
+  // A bare name whose value is dice text -- `[[kinetic.fist.simple crit]]` --
+  // is spliced in as those dice before they are read, as the session roller
+  // does. Evaluated as a number it came to nothing and said nothing.
+  if (formula) {
+    s = s.replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, (name) => {
+      if (/^d\d+$/i.test(name)) return name;
+      try {
+        const v = evaluate(name);
+        return typeof v === 'string' && DICE_TEXT.test(v) ? ` ${v.trim()} ` : name;
+      } catch {
+        return name;
+      }
+    });
+  }
   const dice = {};
-  s = s.replace(/([+-]?)\s*(\d+)\s*d\s*(\d+)/gi, (m, sign, n, d) => {
+  // `d6` is one die, as everywhere else on the sheet. Bounded on both sides so
+  // `speed30` or `wand4` is a name and not a die.
+  s = s.replace(/([+-]?)\s*(?<![\w.])(\d*)\s*d\s*(\d+)(?![\w.])/gi, (m, sign, n, d) => {
     const k = Number(d);
-    dice[k] = (dice[k] || 0) + (sign === '-' ? -1 : 1) * Number(n);
+    dice[k] = (dice[k] || 0) + (sign === '-' ? -1 : 1) * Number(n || 1);
     return ' ';
   });
   // Whatever remains is a plain number or a sandbox formula.
@@ -2312,13 +2329,18 @@ export function parseDiceExpr(text, evaluate) {
   let error = null;
   if (rem) {
     try {
-      flat = Math.floor(Number(evaluate ? evaluate(rem) : Number(rem)) || 0);
+      // With no formula reader the rest is plain arithmetic signs and digits,
+      // spaces and all: `2d6 - 1` is a minus one, not nothing.
+      flat = Math.floor(Number(formula ? evaluate(rem) : Number(rem.replace(/\s+/g, ''))) || 0);
     } catch (err) {
       error = err.message;
     }
   }
   return { dice, flat, notes, error };
 }
+
+/** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
+export const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;
 
 /** Merge dice maps ({dieSize: count}). */
 export function addDice(a, b) {

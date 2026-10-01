@@ -567,7 +567,7 @@ function parseCrit(text) {
 function rollableDice(text) {
   const s = String(text ?? '').replace(/\([^)]*\)/g, ' ').trim();
   if (!s) return false;
-  return /^[+-]?\s*(\d+\s*d\s*\d+|\d+)(\s*[+-]\s*(\d+\s*d\s*\d+|\d+))*$/i.test(s);
+  return /^[+-]?\s*(\d*\s*d\s*\d+|\d+)(\s*[+-]\s*(\d*\s*d\s*\d+|\d+))*$/i.test(s);
 }
 
 /** One natural attack: to hit, damage as written, and what a threat does. */

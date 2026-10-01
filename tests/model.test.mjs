@@ -55,7 +55,7 @@ import {
   setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
-import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
   leveragePool,
@@ -2115,6 +2115,51 @@ console.log('a casting block named for its archetype still counts its class\'s l
   c.listAdd('psionics.classes', { name: 'Psion (Telepath)', stat: 'Int', stat2: '', curveTotal: 343, powers: [] });
   for (let lv = 1; lv <= 5; lv++) c.setProgressionClass(lv, 0, 'Psion');
   check('a manifesting block too', [c.data.psionics.classes[0].levelClass, c.data.psionics.classes[0].manifesterLevel], ['Psion', 5]);
+}
+
+console.log('one dice reader: d6 is a die, a spaced minus counts, a dice-valued name is spliced');
+{
+  const pick = (p) => [p.dice, p.flat, p.error];
+  check('d6+2 is one d6 and two', pick(readDice('d6+2', null)), [{ 6: 1 }, 2, null]);
+  check('2d6 - 1 keeps its minus with no formula reader', pick(readDice('2d6 - 1', Number)), [{ 6: 2 }, -1, null]);
+  const names = { 'kinetic.fist.simple': '4d6', 'speed30': 5, 'con.mod': 3 };
+  const evaluate = (t) => {
+    const k = t.trim();
+    if (k in names) return names[k];
+    return k.split('+').reduce((s, x) => s + Number(names[x.trim()] ?? x), 0);
+  };
+  check('a name holding dice is read as those dice', pick(readDice('kinetic.fist.simple + 2', evaluate)), [{ 6: 4 }, 2, null]);
+  check('a name ending in digits is a name, not a die', pick(readDice('1d8 + speed30', evaluate)), [{ 8: 1 }, 5, null]);
+}
+
+console.log('hit points and resource costs are whole points, rounded down');
+{
+  const c = new Character(blankDocument({ name: 'Halves', level: 5 }));
+  c.set('hp.current', 30);
+  const before = c.hpState.current;
+  c.damage(2.5);
+  check('2.5 damage is 2', c.hpState.current, before - 2);
+  c.heal(1.9);
+  check('1.9 healing is 1', c.hpState.current, before - 1);
+  c.damage(3.7, { nonlethal: true });
+  check('nonlethal too', c.hpState.nonlethal, 3);
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '5' });
+  c.set('session', { cards: [{ id: 'a', title: 'Flurry', type: 'standard', resource: ki.id, cost: '1.5' }] });
+  useSessionAction(c, sessionState(c).cards[0]);
+  check('a card costing 1.5 spends 1', c.trackers.find((t) => t.id === ki.id).current, 1);
+}
+
+console.log('a breakdown names the ability a number is actually built on');
+{
+  const c = new Character(blankDocument({ name: 'Sage', level: 5 }));
+  c.set('statsBuild.wis.pointBuy', 14);
+  c.set('hp.initAbility', 'Wis');
+  c.data.buffs = [{ name: 'Owl', on: true, bonuses: [{ target: 'wis', value: 4 }] },
+    { name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
+  c.recompute();
+  const row = (key, label) => c.breakdown(key).adjustments?.find((p) => p.label === label);
+  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff — through Wis');
+  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff — through Str');
 }
 
 console.log('a Vancian class\'s concentration may be a formula');

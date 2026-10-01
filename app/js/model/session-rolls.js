@@ -1,11 +1,8 @@
 import { evaluateFormula } from '../formula.js';
-import { diceString } from '../rules.js';
+import { DICE_TEXT, diceString } from '../rules.js';
 import { d20, weaponRollSpec, queryText, shiftD20 as shiftAttack } from '../roll20.js';
 import { sessionShortcuts, sessionState } from './session.js';
 import { effectiveAction } from './action-features.js';
-
-/** "4d6", "2d8+3", "1d6 + 1d4 - 1": a value that is dice text rather than a number. */
-const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;
 
 /** Split on commas that are not inside parentheses, so "max(0, 4 - x)" stays whole. */
 function splitTopLevel(text) {

@@ -64,7 +64,9 @@ export function planAction(model, card, state = sessionState(model), budget = ac
     if (card.resource) {
       tracker = model.trackers.find(t => t.id === card.resource);
       if (!tracker) throw new Error('The linked resource no longer exists');
-      amount = Number(evaluateFormula(String(card.cost ?? '1'), model.scope()));
+      // A resource is spent in whole points, rounded down like every formula
+      // field: a cost of 1.5 is 1.
+      amount = Math.floor(Number(evaluateFormula(String(card.cost ?? '1'), model.scope())));
       if (!Number.isFinite(amount) || amount < 0) throw new Error('Resource cost must be zero or a positive number');
       if (tracker.error || Number(tracker.current) + amount > Number(tracker.max)) throw new Error(`Not enough ${tracker.name}`);
     }
