@@ -21,6 +21,31 @@ import {
 } from '../../rules.js';
 import { skillForwardKey } from '../../model.js';
 
+/**
+ * Which skill rows the table shows, as indices into `model.data.skills`.
+ *
+ * Rows with something in them, or every row when nothing has anything yet,
+ * or every row under Show all; a row hidden with the eye only under Show
+ * all. `ctx.keep` is the rows shown a moment ago: the element passes them
+ * while the player stays on the tab, so a row does not vanish under the
+ * click the moment another skill gets its first rank -- the table drops the
+ * unused ones when the tab is next opened.
+ */
+export function skillRowIndices(model, ctx = {}) {
+  const skills = model.data.skills || [];
+  const inUse = (s) => s.totalRanks > 0 || s.offset || s.spec || s.custom;
+  // A character with no ranks anywhere -- one just started from a blank
+  // sheet -- would otherwise open on an empty table with nothing to fill in,
+  // so the unused-skill filter only applies once there is something it keeps.
+  const showAll = ctx.showAllSkills || !skills.some(inUse);
+  return skills
+    .map((s, i) => ({ s, i }))
+    // A skill the player just added has nothing in it yet, so it needs the
+    // custom flag to survive the unused-skill filter and be fillable at all.
+    .filter(({ s, i }) => ctx.showAllSkills || (!s.hidden && (showAll || inUse(s) || !!ctx.keep?.has(i))))
+    .map(({ i }) => i);
+}
+
 export function renderSkillsPanel(model, ctx) {
   /**
    * The Skill cell: the skill and its variant, as one name.
@@ -65,19 +90,10 @@ export function renderSkillsPanel(model, ctx) {
     const skills = model.data.skills || [];
     // Read once: every row's d20 asks what the ticked conditions do to it.
     const cs = model.conditionState;
-    const inUse = (s) => s.totalRanks > 0 || s.offset || s.spec || s.custom;
-    // A character with no ranks anywhere -- one just started from a blank
-    // sheet -- would otherwise open on an empty table with nothing to fill in,
-    // so the unused-skill filter only applies once there is something it keeps.
-    const showAll = ctx.showAllSkills || !skills.some(inUse);
     // The list is the template's, in the template's order: rows are not
     // reordered or deleted, only hidden -- the eye at the end of each row --
     // and a hidden skill comes back under Show all, eye closed, to be reopened.
-    const rows = skills
-      .map((s, i) => ({ s, i }))
-      // A skill the player just added has nothing in it yet, so it needs the
-      // custom flag to survive the unused-skill filter and be fillable at all.
-      .filter(({ s }) => ctx.showAllSkills || (!s.hidden && (showAll || inUse(s))));
+    const rows = skillRowIndices(model, ctx).map((i) => ({ s: skills[i], i }));
     const hiddenCount = skills.filter((s) => s.hidden).length;
     const key = (s) => `${s.name}|${s.spec || ''}`;
     const label = (s) => skillLabel(s.name, s.spec);
