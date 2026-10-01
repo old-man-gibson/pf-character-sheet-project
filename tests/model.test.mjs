@@ -2523,6 +2523,20 @@ console.log('customized weapons -- one sphere list, offered and checked');
   setSphereCatalogue(before);
 }
 
+console.log('customized weapons -- the drawn weapon’s talents read {…}');
+{
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 3);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 3, levels: [] });
+  c.addCustomization('Armiger', { sets: { start: 2, gainsAt: '' }, talents: { start: 1, gainsAt: '' } });
+  const base = c.data.attack.totalMelee;
+  c.setItem('training.combat.customizations.0.sets.0.talents', 0, 'talent', 'Keen {attack.melee += 1}');
+  c.setItem('training.combat.customizations.0.sets.1.talents', 0, 'talent', 'Heavy {attack.melee += 5}');
+  check('the drawn weapon’s talent applies, the stowed one’s does not', c.data.attack.totalMelee - base, 1);
+  c.setCustomizationActive(0, 1);
+  check('draw the other and it swaps', c.data.attack.totalMelee - base, 5);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

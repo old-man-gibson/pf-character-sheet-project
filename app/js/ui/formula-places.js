@@ -296,6 +296,13 @@ function placeOf(model, ref) {
     case 'bonusTalent':
       return trainingPlace(model, a, `training.${a}.bonusTalents`, b, c === 'notes' ? 'notes' : 'talent',
         (s) => `${s}-bonus`);
+    case 'weaponTalent':
+      return {
+        tab: SIDE_TABS.combat,
+        sel: [item(`training.combat.customizations.${a}.sets.${b}.talents`, c, 'talent')],
+        expand: 'customized-weapons',
+        open: [shutFold('customized-weapons')],
+      };
     // The magic side's tradition has no table of entries, and only the magic
     // side's drawbacks are drawn; the rest are gone to as the side.
     case 'tradition':

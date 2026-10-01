@@ -1470,6 +1470,17 @@ export function proseSources(model) {
     (t?.tradition?.drawbacks || []).forEach((x, xi) => push(`drawback:${side}:${xi}`, x));
     (t?.tradition?.boughtOff || []).forEach((x, xi) => push(`boughtOff:${side}:${xi}`, x));
   }
+  // A customized weapon's talents are prose like any other talent, but only
+  // the drawn weapon's: a stowed weapon's talents are not live, so neither is
+  // what they say.
+  (d.training?.combat?.customizations || []).forEach((block, bi) => {
+    (block.sets || []).forEach((set, si) => {
+      if (set.spare || si !== (Number(block.active) || 0)) return;
+      (set.talents || []).forEach((row, ri) => {
+        if (row.granted !== false) push(`weaponTalent:${bi}:${si}:${ri}`, row.talent);
+      });
+    });
+  });
   // Veils used to be cells on a raw grid, so their text resolved `{…}` the
   // way every other cell did. Now that they are a modelled field, they have
   // to be listed here or a veil that reads "{= con.mod + 2}" would stop
