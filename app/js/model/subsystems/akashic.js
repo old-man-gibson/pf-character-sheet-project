@@ -505,26 +505,43 @@ export function essenceScope(model) {
     free: Number(a?.calc?.free) || 0,
     cap: Number(a?.calc?.totalCap) || 0,
   };
-  const put = (key, value) => {
-    if (key && out[key] === undefined) out[key] = value;
+  // A receptacle with no name publishes nothing (it would be `essence.x`),
+  // and one whose name is already taken -- "Pool" beside the pool total, a
+  // second receptacle of the same name -- takes the next free `_2`, `_3`,
+  // the way a second tracker of one name does.
+  const named = (raw) => (String(raw ?? '').trim() ? slug(raw) : '');
+  const putFree = (key, value) => {
+    if (!key) return;
+    let name = key;
+    for (let n = 2; out[name] !== undefined; n++) name = `${key}_${n}`;
+    out[name] = value;
   };
+  // Veils in a chakra slot are numbered along the chakra: hands, hands2, and
+  // a second Hands slot goes on from hands3 rather than folding into the first.
+  const along = new Map();
   for (const slot of a?.slots || []) {
-    const key = slug(slot.slot);
+    const key = named(slot.slot);
+    if (!key) continue;
     const veils = slot.veils || [];
+    const from = along.get(key) || 0;
     // Both names exist whether or not the slot is twinned, and an empty slot
     // reads zero -- the workbook published VeilEssenceShoulder2 even with
     // nothing in it, and a formula asking should get 0 rather than an error.
-    put(key, Number(veils[0]?.essence) || 0);
-    put(`${key}2`, Number(veils[1]?.essence) || 0);
-    for (let i = 2; i < veils.length; i++) put(`${key}${i + 1}`, Number(veils[i].essence) || 0);
+    const count = Math.max(2, veils.length);
+    for (let i = 0; i < count; i++) {
+      const at = from + i + 1;
+      const name = at === 1 ? key : `${key}${at}`;
+      if (out[name] === undefined) out[name] = Number(veils[i]?.essence) || 0;
+    }
+    along.set(key, from + count);
   }
   for (const r of a?.kheshig || []) {
     // "Weapon Veil (Kheshig)" -> essence.weapon
-    const key = slug(String(r.label || '').replace(/\s*Veil\s*\(Kheshig\)\s*$/i, ''));
-    put(key, Number((r.veils || [])[0]?.essence) || 0);
+    putFree(named(String(r.label || '').replace(/\s*Veil\s*\(Kheshig\)\s*$/i, '')),
+      Number((r.veils || [])[0]?.essence) || 0);
   }
   for (const r of a?.otherReceptacles || []) {
-    put(slug(r.name), Number(r.essence) || 0);
+    putFree(named(r.name), Number(r.essence) || 0);
   }
   return out;
 }

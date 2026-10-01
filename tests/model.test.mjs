@@ -2809,6 +2809,21 @@ console.log('a receptacle ticked off holds no essence');
   check('only the active one counts as used', c.data.akashic.calc.used, 2);
 }
 
+console.log('essence names: no fold, no hiding, no essence.x');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.slots', [
+    { slot: 'Hands', veils: [{ name: 'A', essence: 1 }] },
+    { slot: 'Hands', veils: [{ name: 'B', essence: 4 }] },
+    { slot: '', veils: [{ name: 'C', essence: 5 }] },
+  ]);
+  c.set('akashic.otherReceptacles', [{ name: 'Pool', essence: 3 }, { name: '', essence: 6 }]);
+  const e = c.scope().essence;
+  check('a second Hands slot goes on from hands3', [e.hands, e.hands2, e.hands3, e.hands4], [1, 0, 4, 0]);
+  check('a receptacle named Pool is pool_2; the pool total stays', [e.pool_2, e.pool], [3, 0]);
+  check('nothing unnamed is published', 'x' in e, false);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
