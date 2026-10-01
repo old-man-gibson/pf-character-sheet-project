@@ -166,7 +166,7 @@ export function importManeuvers(tab) {
  * discipline the reference tab never listed -- is kept in `custom` so nothing
  * from a sheet is lost.
  */
-export function shrinkDiscipline({ name, entries = [], known, custom, notes }) {
+export function shrinkDiscipline({ name, entries = [], known, custom, notes, readiedStances }) {
   // The player's own entries ride along whichever shape arrives. Copied a
   // level down, because an entry is now a record of its own and a shallow
   // copy would hand two disciplines the same one.
@@ -179,7 +179,10 @@ export function shrinkDiscipline({ name, entries = [], known, custom, notes }) {
   }
   // Already in the new shape (a saved document, or a discipline just added).
   if (Array.isArray(known)) {
-    return { name, known: [...known], custom: custom ? [...custom] : [], notes: keptNotes };
+    return {
+      name, known: [...known], custom: custom ? [...custom] : [], notes: keptNotes,
+      ...(Array.isArray(readiedStances) && readiedStances.length ? { readiedStances: [...readiedStances] } : {}),
+    };
   }
   const granted = new Set(disciplineEntries(name).map((e) => e.name));
   const out = { name, known: [], custom: [], notes: keptNotes };
@@ -223,13 +226,24 @@ export function recomputeManeuvers(model) {
     // still has to appear, or ticking it would silently drop it.
     const granted = disciplineEntries(d.name);
     const extra = (d.custom || []).filter((e) => !granted.some((g) => g.name === e.name));
+    // Without the catalogue (a published copy, or the pack switched off) a
+    // readied name is all there is, so which of them are stances is kept
+    // beside them (`readiedStances`, written whenever the catalogue says so)
+    // or read off the player's own Type cell.
+    const wasStance = new Set(d.readiedStances || []);
+    const typedStance = (name) => /^stance$/i.test(String(d.notes?.[name]?.type ?? '').trim());
     const missing = [...readied]
       .filter((name) => !granted.some((g) => g.name === name)
         && !extra.some((e) => e.name === name))
-      .map((name) => ({ level: 0, kind: 'maneuver', name, type: '' }));
+      .map((name) => ({
+        level: 0, kind: wasStance.has(name) || typedStance(name) ? 'stance' : 'maneuver', name, type: '',
+      }));
 
     d.entries = [...granted, ...extra, ...missing]
       .map((e) => ({ ...e, known: readied.has(e.name) }));
+    const stancesNow = d.entries.filter((e) => e.known && e.kind === 'stance').map((e) => e.name);
+    if (stancesNow.length) d.readiedStances = stancesNow;
+    else delete d.readiedStances;
     d.knownManeuvers = d.entries.filter((e) => e.known && e.kind !== 'stance').length;
     d.knownStances = d.entries.filter((e) => e.known && e.kind === 'stance').length;
     d.inCatalogue = granted.length > 0;

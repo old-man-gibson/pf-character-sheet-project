@@ -29,7 +29,7 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
-  sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable,
+  sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2831,6 +2831,25 @@ console.log('a chakra matches however the page wrote it');
   check('Wrist finds the veils written for Wrists', veilsAvailable({ slot: 'Wrist' }).map((v) => v.name), ['Bracers of Thought', 'Gloves of Ash']);
   check('and Head is still not Headband', veilsAvailable({ slot: 'Headband' }).length, 0);
   setVeilCatalogue(before);
+}
+
+console.log('readied stances stay stances without the discipline pack');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [{ name: 'Golden Lion', entries: [
+    { level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' },
+    { level: 1, kind: 'stance', name: 'Pride Stance', type: 'Stance' },
+  ] }] });
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'Golden Lion', known: [], custom: [], notes: {} }]);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', true);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Pride Stance', true);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  setManeuverCatalogue({ disciplines: [] });
+  const bare = new Character(saved);
+  check('with no pack: one maneuver and one stance, as with it',
+    [bare.data.maneuvers.calc.maneuvers, bare.data.maneuvers.calc.stances], [1, 1]);
+  setManeuverCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);
