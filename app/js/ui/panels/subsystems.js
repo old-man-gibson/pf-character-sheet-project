@@ -693,9 +693,12 @@ export function maneuversPanel(model, ctx) {
     const m = model.data.maneuvers;
     if (!m) return '<div class="grid"><p class="empty">No maneuver data.</p></div>';
     const k = m.calc || {};
-    const taken = new Set((m.disciplines || []).map((d) => d.name));
-    const available = maneuverCatalogue().disciplines
-      .map((d) => d.name).filter((name) => !taken.has(name));
+    // Matched as the packs merge them: case and space do not make a second discipline.
+    const key = (n) => String(n ?? '').trim().toLowerCase();
+    const taken = new Set((m.disciplines || []).map((d) => key(d.name)));
+    const available = [...new Map(maneuverCatalogue().disciplines
+      .map((d) => [key(d.name), d.name])).entries()]
+      .filter(([k]) => k && !taken.has(k)).map(([, name]) => name);
 
     return `<div class="grid">
       <section class="panel span2">

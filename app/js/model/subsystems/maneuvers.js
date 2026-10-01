@@ -54,6 +54,22 @@ export function maneuverCatalogue() {
  * With no catalogue loaded the column is what it always was: a box to type in.
  * ------------------------------------------------------------------ */
 
+/**
+ * A maneuver or discipline name as it is matched: case and surrounding space
+ * do not count, the way the pack merge already reads them -- so a later pack
+ * that spells a maneuver differently does not orphan one already readied.
+ */
+export const maneuverKey = (name) => String(name ?? '').trim().toLowerCase();
+
+/** The key a discipline's notes hold a maneuver under, however it is spelled there. */
+function noteKeyOf(discipline, name) {
+  const want = maneuverKey(name);
+  const notes = discipline?.notes;
+  if (!notes || typeof notes !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(notes, name)) return name;
+  return Object.keys(notes).find((k) => maneuverKey(k) === want) ?? null;
+}
+
 /** Every maneuver and stance a discipline grants, by discipline name. */
 export function disciplineEntries(name) {
   const key = String(name || '').trim().toLowerCase();
@@ -221,26 +237,26 @@ export function recomputeManeuvers(model) {
   let maneuvers = 0;
   let stances = 0;
   for (const d of m.disciplines || []) {
-    const readied = new Set(d.known || []);
+    const readied = new Set((d.known || []).map(maneuverKey));
     // A maneuver readied from a discipline the catalogue no longer lists
     // still has to appear, or ticking it would silently drop it.
     const granted = disciplineEntries(d.name);
-    const extra = (d.custom || []).filter((e) => !granted.some((g) => g.name === e.name));
+    const extra = (d.custom || []).filter((e) => !granted.some((g) => maneuverKey(g.name) === maneuverKey(e.name)));
     // Without the catalogue (a published copy, or the pack switched off) a
     // readied name is all there is, so which of them are stances is kept
     // beside them (`readiedStances`, written whenever the catalogue says so)
     // or read off the player's own Type cell.
-    const wasStance = new Set(d.readiedStances || []);
-    const typedStance = (name) => /^stance$/i.test(String(d.notes?.[name]?.type ?? '').trim());
-    const missing = [...readied]
-      .filter((name) => !granted.some((g) => g.name === name)
-        && !extra.some((e) => e.name === name))
+    const wasStance = new Set((d.readiedStances || []).map(maneuverKey));
+    const typedStance = (name) => /^stance$/i.test(String(d.notes?.[noteKeyOf(d, name)]?.type ?? '').trim());
+    const listed = new Set([...granted, ...extra].map((e) => maneuverKey(e.name)));
+    const missing = [...new Map((d.known || []).map((name) => [maneuverKey(name), name])).values()]
+      .filter((name) => !listed.has(maneuverKey(name)))
       .map((name) => ({
-        level: 0, kind: wasStance.has(name) || typedStance(name) ? 'stance' : 'maneuver', name, type: '',
+        level: 0, kind: wasStance.has(maneuverKey(name)) || typedStance(name) ? 'stance' : 'maneuver', name, type: '',
       }));
 
     d.entries = [...granted, ...extra, ...missing]
-      .map((e) => ({ ...e, known: readied.has(e.name) }));
+      .map((e) => ({ ...e, known: readied.has(maneuverKey(e.name)) }));
     const stancesNow = d.entries.filter((e) => e.known && e.kind === 'stance').map((e) => e.name);
     if (stancesNow.length) d.readiedStances = stancesNow;
     else delete d.readiedStances;
@@ -266,10 +282,11 @@ export function recomputeManeuvers(model) {
 export function toggleManeuver(model, path, name, ready) {
   const d = getPath(model.data, path);
   if (!d) return model;
-  const known = new Set(d.known || []);
-  if (ready) known.add(name);
-  else known.delete(name);
-  d.known = [...known];
+  // Matched as the recompute matches, so unreadying "Roar" also takes back
+  // a "roar" an older pack wrote.
+  const known = (d.known || []).filter((n) => maneuverKey(n) !== maneuverKey(name));
+  if (ready) known.push(name);
+  d.known = known;
   model.recompute();
   emit(model, { type: 'set', path: `${path}.known`, value: d.known });
   return model;
@@ -300,7 +317,7 @@ export function toggleManeuver(model, path, name, ready) {
  * it on every sheet, which it cannot do if the sheets took a copy.
  */
 export function maneuverOwn(discipline, name) {
-  const raw = (discipline?.notes || {})[name];
+  const raw = (discipline?.notes || {})[noteKeyOf(discipline, name) ?? name];
   const out = {};
   for (const f of MANEUVER_FIELDS) {
     out[f.key] = raw && typeof raw === 'object' && !Array.isArray(raw)
@@ -359,9 +376,10 @@ export function setManeuverField(model, path, name, field, value) {
   for (const f of MANEUVER_FIELDS) if (entry[f.key].trim() !== '') kept[f.key] = entry[f.key];
   const keys = Object.keys(kept);
 
-  if (!keys.length) delete d.notes[name];
-  else if (keys.length === 1 && keys[0] === 'text') d.notes[name] = kept.text;
-  else d.notes[name] = kept;
+  const at = noteKeyOf(d, name) ?? name;
+  if (!keys.length) delete d.notes[at];
+  else if (keys.length === 1 && keys[0] === 'text') d.notes[at] = kept.text;
+  else d.notes[at] = kept;
 
   model.recompute();
   emit(model, { type: 'maneuver-note', path, name });

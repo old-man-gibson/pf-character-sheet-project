@@ -2852,6 +2852,29 @@ console.log('readied stances stay stances without the discipline pack');
   setManeuverCatalogue(before);
 }
 
+console.log('maneuver names match however a pack spelled them');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [
+    { name: 'Golden Lion', entries: [{ level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' }] },
+    { name: 'Iron Tortoise', entries: [] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'golden lion', known: ['roar'], custom: [], notes: { roar: 'Loud {roar.x = 1}' } }]);
+  const d = () => c.data.maneuvers.disciplines[0];
+  check('a readied name an older pack spelled differently stays readied, once',
+    [c.data.maneuvers.calc.maneuvers, d().entries.length, d().entries[0].known], [1, 1, true]);
+  check('and its note is still read', maneuverDetails(d(), 'Roar').text, 'Loud {roar.x = 1}');
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar', 'Louder');
+  check('an edit writes the note it already had', Object.keys(d().notes), ['roar']);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', false);
+  check('unreadying takes it back', [d().known, c.data.maneuvers.calc.maneuvers], [[], 0]);
+  const html = subsystemPanels.maneuversPanel(c, {});
+  check('a discipline already trained is not offered again in another case',
+    [html.includes('<option value="Golden Lion"'), html.includes('Iron Tortoise')], [false, true]);
+  setManeuverCatalogue(before);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
