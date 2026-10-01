@@ -71,6 +71,7 @@ import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
+import * as overviewPanels from '../app/js/ui/panels/overview.js';
 
 let pass = 0;
 let fail = 0;
@@ -2700,6 +2701,32 @@ console.log('a training side is in use by one rule');
   const n = new Character(d);
   check('a document with no magic side still gets a magic tab it can add a class on',
     combatPanels.renderMagicPanel(n).includes('data-action="add-training-class" data-side="magic"'), true);
+}
+
+console.log('dashboard sphere cards show what the character has');
+{
+  const levels = () => Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  const caster = new Character(blankDocument({ name: 'Caster' }));
+  caster.set('identity.level', 3);
+  caster.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 3, levels: levels() });
+  const card = overviewPanels.dashSystemCards(caster);
+  check('a pure caster sees no practitioner DC', [card.includes('Caster level'), card.includes('Practitioner DC')], [true, false]);
+
+  const fighter = new Character(blankDocument({ name: 'Fighter' }));
+  fighter.set('identity.level', 3);
+  fighter.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', talentsPerLevel: 'Expert', classLevelsOverride: 3, levels: levels() });
+  fighter.set('training.combat.classes.0.levels.0.sphere', 'Boxing');
+  fighter.set('training.combat.classes.0.levels.0.talent', 'Haymaker {haymaker.x = 2}');
+  fighter.set('training.combat.classes.0.levels.9.sphere', 'Boxing');
+  fighter.set('training.combat.classes.0.levels.9.talent', 'Future Punch');
+  fighter.addCustomization('Armiger', { sets: { start: 1, gainsAt: '' }, talents: { start: 1, gainsAt: '' } });
+  fighter.setItem('training.combat.customizations.0.sets.0.talents', 0, 'talent', 'Weapon Trick');
+  const fcard = overviewPanels.dashSystemCards(fighter);
+  check('a martial-only block prints no caster level, and its practitioner DC',
+    [fcard.includes('Caster level'), fcard.includes('Practitioner DC')], [false, true]);
+  check('the talents card leaves out a talent at a level not reached, and lists the drawn weapon’s',
+    [fcard.includes('Haymaker'), fcard.includes('Future Punch'), fcard.includes('Weapon Trick')], [true, false, true]);
+  check('and its hover shows the text as it reads, not the raw braces', fcard.includes('title="Haymaker {'), false);
 }
 
 const missing = missingCharacters(REAL);

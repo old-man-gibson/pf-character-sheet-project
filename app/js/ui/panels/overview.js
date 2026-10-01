@@ -21,7 +21,9 @@ import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
-import { plannerHasClass, poolHasUtility, poolSystems, stackingNote, talentLandsOn } from '../../model.js';
+import {
+  guileTalentRows, ownTalentRows, plannerHasClass, stackingNote, trackTalentSide, trainingSideInUse,
+} from '../../model.js';
 import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
 
@@ -950,25 +952,32 @@ function dashAbilitiesCard(model) {
     </section>`;
   }
 
-  /** The Spheres casting figures a round actually asks for, with the concentration d20. */
+  /**
+   * The Spheres figures a round actually asks for, with the concentration
+   * d20: the casting numbers for a caster, the practitioner DC for a
+   * practitioner, both for both -- each only where that side is in use, so a
+   * pure caster is not shown a practitioner DC nor a martial stat block a
+   * caster level of 0.
+   */
 function dashSpheresCard(model) {
     const t = model.data.training || {};
-    const m = t.magic;
-    if (!m) {
-      return `<section class="panel"><h3>Casting numbers</h3>
-        <p class="empty">No magic training — the Magic Spheres tab starts it.</p></section>`;
+    const m = trainingSideInUse(model, 'magic') ? t.magic : null;
+    const combat = trainingSideInUse(model, 'combat') ? t.combat : null;
+    if (!m && !combat) {
+      return `<section class="panel"><h3>Sphere numbers</h3>
+        <p class="empty">No sphere training — the Magic and Martial Spheres tabs start it.</p></section>`;
     }
     return `<section class="panel">
-      <h3>Casting numbers</h3>
-      ${line('Caster level', m.globalCL ?? 0)}
+      <h3>${m ? 'Casting numbers' : 'Sphere numbers'}</h3>
+      ${m ? `${line('Caster level', m.globalCL ?? 0)}
       ${lineHtml('Concentration', `<span class="rollpair">${fmt(m.concentration ?? 0)}${
         rollButton(model, 'concentration', 'magic', 'a concentration check')}</span>`, true)}
       ${line('MSB / MSD', `${fmt(m.msb ?? 0)} / ${m.msd ?? 0}`)}
       ${lineHtml('Save DC', dcShown(model, m.globalDC), true)}
-      ${line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}
-      ${t.combat ? lineHtml('Practitioner DC', dcShown(model, t.combat.practitionerDC), true) : ''}
-      <p class="hint">Points spent in play live on their tracker in Resources; the
-        talents are on Magic Spheres.</p>
+      ${line('Spell points', `${m.availableSP ?? m.totalSP ?? 0} of ${m.totalSP ?? 0}`)}` : ''}
+      ${combat ? lineHtml('Practitioner DC', dcShown(model, combat.practitionerDC), true) : ''}
+      ${m ? `<p class="hint">Points spent in play live on their tracker in Resources; the
+        talents are on Magic Spheres.</p>` : ''}
     </section>`;
   }
 
@@ -1039,42 +1048,29 @@ function dashManeuversCard(model) {
    */
 function dashTalentsCard(model) {
     const t = model.data.training || {};
-    const line = (text) => `<div class="dashtalent" title="${esc(text)}">${hasTokens(text)
+    // The hover is the line's whole text as it reads, formulas worked out.
+    const line = (text) => `<div class="dashtalent" title="${esc(proseText(model, text))}">${hasTokens(text)
       ? renderedProse(model, text) : esc(text)}</div>`;
-    // A class's talents are filed under the kind they count as: a blended
-    // pool's skill talent reads under Skill wherever the class sits, and a
-    // pool with a [utility] ladder lists those too. A talent that counts
-    // nowhere is still one the player wrote, so it stays with its class.
+    // The talents the character has now, filed under the kind they count as:
+    // the same rows the sphere tallies count (a slot the class grants, at a
+    // level reached; a blended pool's talent on the side its sphere belongs
+    // to), plus the drawn customized weapon's.
     const byKind = { combat: [], magic: [], guile: [] };
-    for (const home of ['combat', 'magic', 'guile']) {
-      for (const cls of t[home]?.classes || []) {
-        if (cls.blendedMirror) continue;
-        const systems = poolSystems(cls, home);
-        const slots = poolHasUtility(cls, home);
-        for (const lv of cls.levels || []) {
-          const picks = [[lv.talent, lv.sphere]];
-          if (slots) picks.push([lv.utilityTalent, lv.utilitySphere]);
-          for (const [talent, sphere] of picks) {
-            const v = String(talent || '').trim();
-            if (!v) continue;
-            const kind = systems.length > 1 && String(sphere || '').trim() ? talentLandsOn(sphere, systems) : null;
-            byKind[kind || home].push(v);
-          }
-        }
-      }
+    const put = (key, talent) => {
+      const v = String(talent || '').trim();
+      if (v) byKind[key].push(v);
+    };
+    for (const key of ['combat', 'magic']) {
+      for (const row of ownTalentRows(model, t[key], { sideKey: key })) put(key, row.talent);
+    }
+    for (const row of guileTalentRows(t.guile, t)) put('guile', row.talent);
+    for (const block of t.combat?.customizations || []) {
+      const set = (block.sets || [])[Number(block.active) || 0];
+      if (!set || set.spare) continue;
+      for (const row of set.talents || []) if (row.granted !== false) put(trackTalentSide(row.sphere), row.talent);
     }
     const side = (key, label) => {
-      const s = t[key];
-      if (!s) return '';
-      const texts = [...byKind[key]];
-      for (const b of s.bonusTalents || []) {
-        const v = String(b.talent || '').trim();
-        if (v) texts.push(v);
-      }
-      for (const e of s.tradition?.entries || []) {
-        const v = String(e.talent || '').trim();
-        if (v) texts.push(v);
-      }
+      const texts = byKind[key];
       if (!texts.length) return '';
       return `<h4 class="subhead">${label} <span class="badge">${texts.length}</span></h4>
         ${texts.map(line).join('')}`;
