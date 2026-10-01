@@ -3192,6 +3192,9 @@ export class CharacterSheetElement extends HTMLElement {
       veilEdit: this.#veilEdit,
       openText: this.#openText,
       peek: this.#peek,
+      // The essence and power-point meters open the tracker style editor, so
+      // these tabs need its state too, or their ✎ Style does nothing.
+      ...this.#trackerCtx(),
     };
   }
 
@@ -5803,7 +5806,11 @@ export class CharacterSheetElement extends HTMLElement {
     // The power point meter is still click-to-set, whatever it has been
     // restyled to: a bar reads the position along the track, and the pips
     // carry the number they stand for.
+    // Not the style editor's preview, which draws the same meter and must not
+    // spend the pool it is only showing.
+    const live = (el) => !el.closest('.style-preview');
     root.querySelectorAll('.meter.pp .bar').forEach((bar) => {
+      if (!live(bar)) return;
       bar.classList.add('clickable');
       bar.addEventListener('click', (e) => {
         const box = bar.getBoundingClientRect();
@@ -5819,6 +5826,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
     root.querySelectorAll('.meter.pp .pips').forEach((row) => {
+      if (!live(row)) return;
       const pips = [...row.querySelectorAll('.pip')];
       pips.forEach((pip, i) => {
         pip.classList.add('clickable');

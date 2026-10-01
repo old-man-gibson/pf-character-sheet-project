@@ -74,6 +74,7 @@ import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
+import * as trackerPanels from '../app/js/ui/panels/trackers.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -3000,6 +3001,22 @@ console.log('self.zone reads a draining tracker where its badge does');
   const t = c.trackers.find((x) => x.id === ki.id);
   check('9 spent of 10 leaves 1, and the note says low, as the badge does',
     [c.trackerScope(t).self.zone, c.renderProse(t.note, c.trackerScope(t)).map((x) => x.text ?? x.value).join('')], ['low', 'State: low']);
+}
+
+console.log('zones read self in the style preview and on the meters');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10' });
+  const draft = { style: { zones: [{ from: '0', to: 'self.max * 0.3', color: '#aa2222', label: 'low' }] } };
+  const html = trackerPanels.stylePreviewHtml(c, { editDraft: draft }, c.trackers.find((t) => t.id === ki.id));
+  check('the editor’s own example works in its preview', html.includes('terr'), false);
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', manifesterLevelOverride: 3, powers: [] }]);
+  c.set('psionics.bonusPoints', 10);
+  c.setMeterStyle?.('pp', { zones: [{ from: '0', to: 'self.max - 5', color: '#aa2222', label: 'low' }] });
+  const pp = c.meterSpec('pp');
+  check('a meter’s zone example names its own pool', evaluateFormula(pp.zoneExample, c.scope()) > 0, true);
+  const pre = trackerPanels.stylePreviewHtml(c, { editDraft: { style: { zones: [{ from: '0', to: 'self.max - 5', color: '#aa2222' }] } } }, pp);
+  check('and a meter preview reads self too', pre.includes('terr'), false);
 }
 
 const missing = missingCharacters(REAL);

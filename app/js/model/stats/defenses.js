@@ -23,6 +23,7 @@ import {
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
+import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
 
@@ -730,14 +731,17 @@ export function setMeterStyle(model, key, style) {
  * the thing that has gone wrong, not the room left in the track.
  */
 export function meterSpec(model, key) {
+  // A meter's zones read `self` the way a tracker's do: its own min, max
+  // and current, so a band can be written without naming the pool.
   const zones = (spec) => {
     const style = model.meterStyle(key);
+    const scope = { ...model.scope(), self: trackerFacts(spec) };
     return {
       ...spec,
       id: key,
       meter: true,
       style,
-      resolvedZones: resolveZones(style.zones, (src) => evaluateFormula(src, model.scope())),
+      resolvedZones: resolveZones(style.zones, (src) => evaluateFormula(src, scope)),
     };
   };
 
@@ -814,7 +818,7 @@ export function meterSpec(model, key) {
       layers: [],
       alert: 0,
       alertFill: false,
-      zoneExample: 'caster.sp * 0.5',
+      zoneExample: 'pp.pool * 0.5',
     });
   }
   return null;

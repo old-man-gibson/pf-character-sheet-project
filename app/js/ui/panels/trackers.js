@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
-import { SYSTEM_POOLS, trackerDrains, trackerShown } from '../../model/trackers.js';
+import { SYSTEM_POOLS, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
@@ -528,7 +528,9 @@ function colorField(field, value, { label, none, noneCss }) {
 /** The tracker or meter as it would look with the draft style (zone formulas resolved live). */
 export function stylePreviewHtml(model, ctx, t) {
   const style = normalizeStyle(ctx.editDraft.style);
-  const scope = model.scope();
+  // The zones read here as they will on the tracker or meter itself, with
+  // `self` its own row -- the editor's own example is written with it.
+  const scope = { ...model.scope(), self: trackerFacts(t) };
   const zones = resolveZones(style.zones, (src) => evaluateFormula(src, scope));
   const bad = zones.map((z, i) => (z.error ? `zone ${i + 1}: ${z.error}` : null)).filter(Boolean);
   const tooManyPips = t.meter && style.shape === 'pips'
