@@ -145,10 +145,47 @@ run.addEventListener('click', async () => {
         assert(getComputedStyle(sheet).getPropertyValue('--fx-number').trim() === '#1f7a43', 'Dark formula color printed');
       } finally { root.adoptedStyleSheets = original; probe.remove(); }
     });
+    // Leaving a half-typed cell by pressing something else, in the order a real
+    // press runs: the press, the cell's change, focus landing, the release.
+    const pressOutOf = (edited, value, target) => {
+      edited.focus();
+      edited.value = value;
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+      edited.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const release = (target) => target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true }));
+    await test('A cell clicked into mid-edit opens where it was clicked', async () => {
+      const root = sheet.shadowRoot;
+      root.getElementById('tab-overview').click();
+      const name = root.querySelector('[data-set="identity.name"]');
+      pressOutOf(root.querySelector('[data-set="identity.heroPoints.current"]'), '2', name);
+      assert(root.querySelector('[data-set="identity.name"]') === name, 'Re-rendered under the press');
+      name.focus();
+      name.setSelectionRange(3, 3);
+      release(name);
+      await until(() => root.querySelector('[data-set="identity.name"]') !== name);
+      const now = root.activeElement;
+      assert(now?.dataset.set === 'identity.name', 'Focus did not follow the click');
+      assert(now.selectionStart === 3 && now.selectionEnd === 3, `Caret at ${now.selectionStart}, not where the click put it`);
+      assert(sheet.model.data.identity.heroPoints.current === 2, 'The edit was lost');
+    });
+    await test('A box pressed mid-edit takes the click', async () => {
+      const root = sheet.shadowRoot;
+      const box = root.querySelector('[data-set="conditions.Blinded"]');
+      const was = !!sheet.model.data.conditions.Blinded;
+      pressOutOf(root.querySelector('[data-set="identity.heroPoints.current"]'), '1', box);
+      release(box);
+      // A click is a press and a release on the same element.
+      if (root.querySelector('[data-set="conditions.Blinded"]') === box) box.click();
+      await until(() => root.querySelector('[data-set="conditions.Blinded"]') !== box);
+      assert(!!sheet.model.data.conditions.Blinded === !was, 'The click never reached the box');
+      assert(sheet.model.data.identity.heroPoints.current === 1, 'The edit was lost');
+    });
   } finally {
     sheet.remove();
     await forget(id);
     localStorage.removeItem(`${workingKey(id)}:recovery`);
+    localStorage.removeItem(`character-sheet:tab:${id}`);
     status.textContent = `${passed} passed, ${failed} failed`;
     run.disabled = false;
   }
