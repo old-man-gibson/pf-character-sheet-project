@@ -2031,6 +2031,20 @@ tr.untrained { color: var(--cs-muted); }
      inherits the same alignment and lands in the same wrong place. */
   table.stacked > tbody > tr > td.num,
   table.stacked > tbody > tr > td.mid { text-align: left; }
+  /* A talent card: the talent and its sphere share the top row, the sphere
+     only as wide as the longest sphere name it offers, so the card is three
+     rows rather than five. The sphere's own label goes -- the dropdown says
+     which sphere it is. Everything else (the level, notes, tools) runs full
+     width underneath. */
+  table.talents.stacked > tbody > tr:not(.shut) {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; align-items: start;
+  }
+  table.talents.stacked > tbody > tr:not(.shut) > td { grid-column: 1 / -1; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-stack="name"] { grid-column: 1; grid-row: 1; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"] { grid-column: 2; grid-row: 1; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"]::before { display: none; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"] select { width: auto; max-width: 11rem; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-stack="head"] { grid-row: 2; }
   /* Folded: the name and whatever rides with it, and the controls. What goes
      is the body, which is exactly the labelled part. */
   table.stacked > tbody > tr.shut > td[data-label] { display: none; }
@@ -2202,6 +2216,14 @@ tr.untrained { color: var(--cs-muted); }
   table.stacked > tbody > tr.emptyslot > td[data-stack="head"] { display: block; }
   table.stacked > tbody > tr.emptyslot > td[data-stack="head"]::after {
     content: " — no talent"; }
+}
+
+/* Too narrow for a talent and a sphere side by side: back to one per row,
+   with the sphere's label, as every other card. */
+@container (max-width: 380px) {
+  table.talents.stacked > tbody > tr:not(.shut) { display: flex; flex-direction: column; align-items: stretch; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"]::before { display: block; }
+  table.talents.stacked > tbody > tr:not(.shut) > td[data-label="Sphere"] select { width: 100%; max-width: none; }
 }
 
 /* ---------- ability build (Stats tab) ---------- */
@@ -2487,8 +2509,15 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
    hold three letters and used to be stretched to a column each, with the
    modifier they stand for nowhere in sight; now each is as wide as its own
    title or its picker-and-modifier, whichever is more, and no wider. */
-.trainhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px; }
+/* Top-aligned, so every label in a row sits on one line whichever field
+   wraps under its box: aligned at the bottom, the class-levels field (its
+   talent count below the box) pushed its own label up above the rest. */
+.trainhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
 .trainhead > label.fld { flex: 1 1 120px; min-width: 0; }
+/* The class-level count is a three-digit box and a talent count beside it,
+   not a share of the row's slack. */
+.trainhead > label.fld.lvlpick { flex: 0 0 auto; }
+.trainhead > label.fld.lvlpick > .pair { flex-wrap: nowrap; white-space: nowrap; }
 .trainhead > label.fld.abmod { flex: 0 0 auto; }
 /* The class picker and the rate pickers -- type, talents a level, expertise
    tier -- are the same width on all three tabs, and no wider than a class

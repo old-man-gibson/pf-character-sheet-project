@@ -171,7 +171,7 @@ export function guileClassBlock(model, g, cls, ci) {
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
           ${poolField(list, ci, cls, 'guile')}
           ${operativeField(model, g)}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
     { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}

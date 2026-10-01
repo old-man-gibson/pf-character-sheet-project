@@ -239,7 +239,7 @@ function trainingSide(model, sideKey, side) {
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
           ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
     { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
@@ -481,7 +481,7 @@ function blendedPanel(model, pairs) {
           ${systems.includes('combat') ? head(martial, 'Practitioner', PRACTITIONER_TYPES) : ''}
           ${systems.includes('magic') ? head(casting, 'Casting', CASTING_TYPES) : ''}
           ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
               ${autoNum(`data-item="${list}|${owner.index}|classLevelsOverride"`, cls.classLevelsOverride,
     { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
