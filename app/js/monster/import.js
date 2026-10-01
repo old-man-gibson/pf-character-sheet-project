@@ -27,6 +27,7 @@
  */
 
 import { blankDocument } from '../convert.js';
+import { naturalAttack } from '../companions.js';
 import { RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 
@@ -501,6 +502,12 @@ const SINGULAR = { hooves: 'hoof', claws: 'claw', slams: 'slam', bites: 'bite', 
 /** Damage type from the attack's name, where the name says. */
 function damageTypeOf(name) {
   const n = name.toLowerCase();
+  // A natural attack reads the one natural-attacks table the companions use
+  // (claw is B and S, pincers B, as the Bestiary has them); the names below
+  // are for weapons and for attacks that table does not list.
+  const bare = n.trim().replace(/^\d+\s+/, '');
+  const natural = naturalAttack(bare) || naturalAttack(`${bare}s`) || naturalAttack(bare.replace(/s$/, ''));
+  if (natural && natural.name !== 'Other') return natural.damageType;
   if (/\b(bite|jaws)\b/.test(n)) return 'B, P, S';
   if (/\b(claw|talon|rake|scythe|sword|axe|falchion|kukri|scimitar|glaive|halberd)\b/.test(n)) return 'S';
   if (/\b(slam|tail slap|tail|hoof|fist|mace|club|hammer|flail|staff|morningstar|rock|wing|tentacle|kick)\b/.test(n)) return 'B';

@@ -25,7 +25,7 @@ import { hasTokens } from '../inline.js';
 import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
 import {
-  ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, armorParts, fmt, statMod,
+  ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, abpGroupTotal, armorParts, fmt, statMod,
 } from '../rules.js';
 import { group } from '../ui/format.js';
 
@@ -79,10 +79,12 @@ function acParts(model) {
   const parts = [];
   const push = (n, label) => { if (n) parts.push(`${fmt(n)} ${label}`); };
   push(a.armor, 'armor');
-  push((r.abpDeflection || 0) + (r.deflection || 0), 'deflection');
+  // Each ABP bonus and its typed partner stop at the cap together, as the
+  // total has them (abpGroupTotal), or the parts add up past the AC.
+  push(abpGroupTotal(r.abpDeflection, r.deflection), 'deflection');
   push(Math.min(a.maxDex, statMod(c, d.acStat1, d.acStat2)), 'Dex');
   push(r.dodge, 'dodge');
-  push((r.abpNatural || 0) + (r.enhancedNatural || 0) + (r.natural || 0), 'natural');
+  push(abpGroupTotal(r.abpNatural, r.enhancedNatural) + (r.natural || 0), 'natural');
   push(a.shield, 'shield');
   for (const [key, label] of AC_BONUS_TYPES) {
     if (['abpDeflection', 'deflection', 'dodge', 'abpNatural', 'enhancedNatural', 'natural'].includes(key)) continue;

@@ -237,5 +237,26 @@ console.log('the Stat Block tab prints the block, and prints a character too');
   check('the block normalises its subtypes from text', normalizeMonster({ subtypes: 'devil, evil' }).subtypes, ['devil', 'evil']);
 }
 
+console.log('natural attacks take their damage type from the one natural-attacks table');
+{
+  const doc = monsterDocument(parseStatBlock([
+    'Pinchy CR 3', 'N Medium vermin', 'Defense', 'AC 15, touch 10, flat-footed 15 (+5 natural)', 'hp 20 (3d8+7)',
+    'Fort +5, Ref +1, Will +1', 'Offense', 'Speed 30 ft.', 'Melee 2 claws +4 (1d6+2), 2 pincers +2 (1d4+1)',
+    'Statistics', 'Str 14, Dex 10, Con 14, Int —, Wis 10, Cha 2', 'Base Atk +2; CMB +4; CMD 14',
+  ].join('\n')), { createdAt: '2026-01-01T00:00:00' });
+  const types = Object.fromEntries((doc.equipment.weapons || []).map((w) => [w.name.replace(/^\d+\s+/, ''), w.damageType]));
+  check('a claw is bludgeoning and slashing, pincers bludgeoning, as the Bestiary has them',
+    [types.claws ?? types.claw, types.pincers ?? types.pincer], ['B and S', 'B']);
+}
+
+console.log('the stat block AC line caps ABP with its typed partner, as the total does');
+{
+  const c = new Character(blankDocument({ name: 'Warded', level: 20 }));
+  c.set('defenses.acBonuses.deflection', 4);
+  const out = renderStatBlockPanel(c, {});
+  const line = out.match(/\(([^)]*deflection[^)]*)\)/)?.[1] || '';
+  check('ABP deflection +5 and a typed +4 print as the +5 the AC counts', /\+5 deflection/.test(line), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

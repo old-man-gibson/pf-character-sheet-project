@@ -2204,6 +2204,18 @@ console.log('a breakdown names the ability a number is actually built on');
   check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff — through Str');
 }
 
+console.log('companion ids are unique across every kind, whatever a file says');
+{
+  const doc = blankDocument({ name: 'Dupes', level: 5 });
+  doc.eidolon = [{ id: 'eidolon', name: 'A' }, { id: 'eidolon', name: 'B' }];
+  doc.conjured = [{ id: 'eidolon2', name: 'C' }];
+  const c = new Character(doc);
+  const ids = ['eidolon', 'conjured'].flatMap((k) => c.data[k].map((b) => b.id));
+  // The conjured block's odd "eidolon2" is still its own, so it keeps it; the
+  // repeated eidolon takes the next name nobody has.
+  check('a repeated id takes the next free one of its own kind', ids, ['eidolon', 'eidolon3', 'eidolon2']);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));

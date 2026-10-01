@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList,
+  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList, uniqueCompanionIds,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -668,6 +668,7 @@ export function normalise(model) {
     const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
     if (!named) d.sheetTabs.splice(index, 1);
   }
+  uniqueCompanionIds(d);
 
   /*
    * Vancian is the one of them that can arrive on more than one tab. The

@@ -664,6 +664,32 @@ export function normalizeCompanionList(kind, value) {
   });
 }
 
+/**
+ * Every companion's id once, across all four kinds.
+ *
+ * The id is the name formulas read it by, so two blocks sharing one -- an
+ * imported file, a hand edit, two documents' companions pasted together --
+ * would answer to the same `eidolon2.*` and the second would be unreachable.
+ * The first keeps it; a later one takes the next free name of its own kind,
+ * as `addCompanion` would have given it.
+ */
+export function uniqueCompanionIds(d) {
+  const seen = new Set();
+  for (const kind of COMPANION_KINDS) {
+    for (const b of d[kind] || []) {
+      if (!b) continue;
+      if (seen.has(String(b.id))) {
+        let id = kind;
+        for (let n = 2; seen.has(id) || COMPANION_KINDS.some((k) => (d[k] || []).some((x) => x !== b && x?.id === id)); n++) {
+          id = `${kind}${n}`;
+        }
+        b.id = id;
+      }
+      seen.add(String(b.id));
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Whether a block holds anything the player put there.
  * ------------------------------------------------------------------ */
