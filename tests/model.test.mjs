@@ -3019,6 +3019,18 @@ console.log('zones read self in the style preview and on the meters');
   check('and a meter preview reads self too', pre.includes('terr'), false);
 }
 
+console.log('a draining tracker above a floor: the box, the pips and the squares agree');
+{
+  const t = { id: 'focus', name: 'Focus', min: 2, max: 10, current: 5, style: null };
+  const drain = normalizeStyle({ fill: 'remaining' });
+  const pips = (html) => [(html.match(/class=\"pip /g) || []).length, (html.match(/ used /g) || []).length];
+  check('the box shows 5 left of 8', [trackerPanels.trackerReading({ ...t, style: drain }).shown, trackerPanels.trackerReading({ ...t, style: drain }).range], [5, '/ 8']);
+  check('eight pips, five lit', pips(trackerPanels.trackerVisual(t, drain, [])), [8, 5]);
+  check('filling the other way: three spent', pips(trackerPanels.trackerVisual(t, normalizeStyle({}), [])), [8, 3]);
+  const sq = trackerPanels.trackerVisual(t, normalizeStyle({ fill: 'remaining', shape: 'squares' }), []);
+  check('squares: five of eight left', /5 of 8 left/.test(sq), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

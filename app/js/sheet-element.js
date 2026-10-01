@@ -6704,7 +6704,10 @@ export class CharacterSheetElement extends HTMLElement {
         const cur = Number(t.current) || 0;
         // Pips show what is left on a draining tracker and the position
         // otherwise; the click is the one rule either way (pipClickValue).
-        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n) : pipClickValue(cur, n);
+        // A pip carries the value it stands for; on a draining tracker what is
+        // left is counted from the floor, so the pip's place is n - min.
+        const min = Math.max(0, Number(t.min) || 0);
+        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n - min) : pipClickValue(cur, n);
         this.#model.updateTracker(t.id, { current: next });
         this.#emitTracker(t);
         this.#render();

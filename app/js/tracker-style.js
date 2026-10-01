@@ -385,11 +385,13 @@ export function squareLayout({ min, max, current, style }) {
   const hi = Math.max(0, Number(max) || 0);
   const lo = Number(min) || 0;
   const cur = Math.max(lo, Math.min(hi, Number(current) || 0));
-  const lit = Math.max(0, Math.min(hi, s.fill === 'remaining' ? hi - cur : cur));
+  // Counted from the floor, so a pool of 2..10 is eight squares, as its box says.
+  const span = Math.max(0, hi - Math.max(0, lo));
+  const lit = Math.max(0, Math.min(span, s.fill === 'remaining' ? hi - cur : cur - Math.max(0, lo)));
   return {
-    total: hi,
+    total: span,
     lit,
-    slots: Math.min(hi, SQUARE_PIP_LIMIT),
+    slots: Math.min(span, SQUARE_PIP_LIMIT),
     mode: lit > SQUARE_PIP_LIMIT ? 'number' : 'pips',
   };
 }
