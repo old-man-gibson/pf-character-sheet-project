@@ -171,7 +171,7 @@ export const GUILE_DERIVED = [
   { path: 'classes', list: 'levels', keys: ['count', 'utilityCount', 'granted', 'utilityGranted', 'future'] },
   {
     path: 'spheres',
-    keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'competence',
+    keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'repeatOf', 'competence',
       'rankBonusNum', 'rankBonusError', 'ranksForwarded'],
   },
 ];
@@ -449,7 +449,16 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
   };
 
   // What each row is owed, before any of them find out they are sharing.
+  // A sphere has one associated skill, so a second row naming it is a
+  // leftover rather than a second sphere: it pays nothing, and `repeatOf`
+  // says which row above already holds that sphere.
   const byIndex = new Map();
+  const firstRow = new Map();
+  (g.spheres || []).forEach((row, at) => {
+    const name = String(row?.sphere || '').trim().toLowerCase();
+    row.repeatOf = name && firstRow.has(name) ? firstRow.get(name) : null;
+    if (name && !firstRow.has(name)) firstRow.set(name, at);
+  });
   for (const row of g.spheres || []) {
     const talents = Number(tally[row.sphere]) || 0;
     const i = skillIndexOf(model, row.skill);
@@ -457,17 +466,17 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
     // A bonus forwarded here is kept beside the typed one, never folded in.
     const key = sphereForwardKey(row.sphere);
     row.skillIndex = i;
-    row.talents = talents;
+    row.talents = row.repeatOf != null ? 0 : talents;
     row.rankBonusNum = rank.value;
     row.rankBonusError = rank.error;
     row.ranksForwarded = key ? forwarded(model, `${key}.ranks`) : 0;
-    row.ranksGranted = i < 0 || !talents
+    row.ranksGranted = i < 0 || !talents || row.repeatOf != null
       ? 0
       : Math.min(level, talents * RANKS_PER_TALENT + rank.value + row.ranksForwarded);
     row.paysRanks = false;
     row.duplicate = false;
     row.competence = 0;
-    if (i < 0 || !talents) continue;
+    if (i < 0 || !talents || row.repeatOf != null) continue;
     if (!byIndex.has(i)) byIndex.set(i, []);
     byIndex.get(i).push(row);
   }

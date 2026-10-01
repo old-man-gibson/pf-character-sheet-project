@@ -2468,6 +2468,28 @@ console.log('talent requirements read every talent the tally counts');
     [h.data.training.combat.tally.Scout, h.trainingSkillRanks.find((r) => r.skill === 'Perception').state], [1, 'met']);
 }
 
+console.log('a guile sphere listed twice pays once');
+{
+  const c = new Character(blankDocument({ name: 'Twice' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.guile.bonusTalents', { sphere: 'Study', talent: 'Lore Expert' });
+  c.addGuileSphere('Study');
+  c.addGuileSphere('Study');
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  c.setItem('training.guile.spheres', 1, 'skill', 'Sense Motive');
+  const rows = c.data.training.guile.sphereRows;
+  const ranks = (name) => c.data.skills.find((x) => x.name === name).totalRanks;
+  check('the first row pays its skill', [rows[0].paysRanks, ranks('Perception')], [true, 5]);
+  check('the second points back at it and pays nothing',
+    [rows[1].repeatOf, rows[1].talents, rows[1].ranksGranted, rows[1].paysRanks, ranks('Sense Motive')],
+    [0, 0, 0, false, 0]);
+  check('sphere.study reads the first row', c.scope().sphere.study.ranks, 5);
+  check('the panel says so', guilePanels.renderGuilePanel(c).includes('already listed above'), true);
+  c.listRemove('training.guile.spheres', 0);
+  check('remove the first and the second takes over',
+    [c.data.training.guile.sphereRows[0].repeatOf, ranks('Sense Motive')], [null, 5]);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

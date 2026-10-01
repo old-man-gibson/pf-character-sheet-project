@@ -526,8 +526,11 @@ function guileSpherePanel(model, g) {
     // than blanked, because the name is still the answer to what this sphere
     // is associated with; it is the row that has gone missing.
     const lost = !!r.skill && r.skillIndex < 0;
+    const repeat = r.repeatOf != null;
     return `<tr>
-          <td>${itemSelect(list, i, 'sphere', r.sphere, spheres)}</td>
+          <td${repeat ? ` class="dupskill" title="${esc(`${r.sphere} is already on row ${r.repeatOf + 1}. `
+      + 'A sphere has one associated skill, so this row pays nothing. Remove it, or pick another sphere.')}"` : ''}>${
+  itemSelect(list, i, 'sphere', r.sphere, spheres)}${repeat ? '<div class="req">already listed above</div>' : ''}</td>
           <td>${packages.length
       ? itemSelect(list, i, 'package', r.package, packages)
       : '<span class="hint">—</span>'}</td>
@@ -545,6 +548,7 @@ function guileSpherePanel(model, g) {
       ? `${RANKS_PER_TALENT} ranks a talent, capped at ${level} Hit Dice. The skill's total is ${r.ranks}.`
         + (r.competence ? ` Another sphere shares this skill, so it pays +${r.competence} competence`
           + ' rather than a second helping of ranks.' : '')
+      : repeat ? 'This sphere already pays on the row above.'
       : r.duplicate
         ? `${owed} ranks earned and not paid: ${r.skill} is already filled by another sphere `
           + `— here or on the martial tab. The overlap is worth ${r.competence

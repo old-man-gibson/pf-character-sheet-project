@@ -267,7 +267,7 @@ export function characterScope(model) {
     // that scales says "per rank in the associated skill" and a sheet that
     // cannot be asked leaves the number to be typed in and go stale.
     sphere: Object.fromEntries((c.training?.guile?.sphereRows || [])
-      .filter((r) => r.sphere)
+      .filter((r) => r.sphere && r.repeatOf == null)
       .map((r) => [slug(r.sphere), {
         ranks: Number(r.ranks) || 0,
         talents: Number(r.talents) || 0,
