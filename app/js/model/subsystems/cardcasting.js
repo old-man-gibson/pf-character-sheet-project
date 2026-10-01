@@ -101,6 +101,18 @@ export function deckManipulation(name) {
   return DECK_MANIPULATIONS.find((m) => manipulationKey(m.name) === key) || null;
 }
 
+/**
+ * What a picked manipulation is called, the one name every reader uses: the
+ * catalogue's spelling when the catalogue knows it ("Loaded-Hand" is Loaded
+ * Hand), else what was typed, trimmed. '' for a row with no name.
+ */
+export function manipulationName(name) {
+  return deckManipulation(name)?.name || String(name ?? '').trim();
+}
+
+/** Whether a picked manipulation is the one named, however either is spelled. */
+const isManipulation = (m, name) => !!manipulationKey(m?.name) && manipulationKey(manipulationName(m.name)) === manipulationKey(name);
+
 /** The deck feats a character has: every feat or bought-off drawback tagged [Deck]. */
 export function deckFeatNames(d) {
   const out = [];
@@ -681,7 +693,7 @@ export function recomputeCardcasting(model) {
   for (const m of p.manipulations) m.count = Math.max(0, Math.floor(Number(m.count) || 0));
   const manipulationsTaken = p.manipulations.reduce((n, m) => n + m.count, 0);
   const loadedHand = p.manipulations
-    .filter((m) => /^loaded hand/i.test(String(m.name || '')))
+    .filter((m) => isManipulation(m, 'Loaded Hand'))
     .reduce((n, m) => n + m.count, 0);
   // Available: one per deck feat, plus one for Card Shark -- unless a
   // number or a formula is written over it.
@@ -815,9 +827,9 @@ export function hasDeckFeat(model, re) {
   return (model.data.cardcasting?.calc?.deckFeats || []).some((f) => re.test(f));
 }
 
-/** Is a manipulation by that name taken? */
-export function hasManipulation(model, re) {
-  return (model.data.cardcasting?.manipulations || []).some((m) => re.test(String(m.name || '')) && Number(m.count) > 0);
+/** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches. */
+export function hasManipulation(model, name) {
+  return (model.data.cardcasting?.manipulations || []).some((m) => isManipulation(m, name) && Number(m.count) > 0);
 }
 
 /** May this card go onto the table as mana right now? */
@@ -1179,8 +1191,8 @@ export function tableKeywords(model, id, card) {
   // What a card does to itself -- exile, bottom, top, return -- is its own
   // rule; only the keywords that stand in for a manipulation want it taken.
   const may = {
-    peek: [() => hasManipulation(model, /^read the cards/i), 'Read the Cards'],
-    wild: [() => hasManipulation(model, /^wild ?card/i), 'Wild Card'],
+    peek: [() => hasManipulation(model, 'Read the Cards'), 'Read the Cards'],
+    wild: [() => hasManipulation(model, 'Wild Card'), 'Wild Card'],
   };
   let m;
   while ((m = re.exec(text))) {

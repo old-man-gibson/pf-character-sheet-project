@@ -29,6 +29,7 @@ import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/a
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
+import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts } from './trackers.js';
 import {
   classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
@@ -350,9 +351,17 @@ export function characterScope(model) {
       manaUntapped: Number(c.cardcasting?.table?.calc?.manaUntapped) || 0,
     },
   };
+  // Named as the row shows it, and nothing for a row nobody has named (it
+  // would be deck.manip.x). Rows that are one manipulation however they are
+  // spelled -- "Loaded-Hand" and "Loaded Hand" -- add into one name, the
+  // first row's.
+  const manipKey = new Map();
   for (const m of c.cardcasting?.manipulations || []) {
-    const key = slug(m.name);
-    if (!key) continue;
+    const name = String(m.name ?? '').trim();
+    if (!name) continue;
+    const same = manipulationName(name).toLowerCase().replace(/[^a-z]/g, '');
+    if (!manipKey.has(same)) manipKey.set(same, slug(name));
+    const key = manipKey.get(same);
     s.deck.manip[key] = (s.deck.manip[key] || 0) + (Number(m.count) || 0);
   }
 

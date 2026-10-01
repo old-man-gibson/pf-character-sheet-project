@@ -30,6 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
+  hasManipulation,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2873,6 +2874,26 @@ console.log('maneuver names match however a pack spelled them');
   check('a discipline already trained is not offered again in another case',
     [html.includes('<option value="Golden Lion"'), html.includes('Iron Tortoise')], [false, true]);
   setManeuverCatalogue(before);
+}
+
+console.log('a deck manipulation is one thing however it is spelled');
+{
+  const before = deckManipulationCatalogue();
+  setCardcastingTables({ manipulations: [{ name: 'Loaded Hand' }, { name: 'Wild Card' }] });
+  const c = new Character(blankDocument({ name: 'Dealer' }));
+  c.set('cardcasting.mods.tightHand', true);
+  c.set('cardcasting.manipulations', [
+    { group: 'General', name: 'Loaded-Hand', note: '', count: 1 },
+    { group: 'General', name: 'loaded hand', note: '', count: 1 },
+    { group: 'General', name: 'Wildcard', note: '', count: 1 },
+    { group: 'General', name: '', note: '', count: 2 },
+  ]);
+  check('Loaded-Hand raises the Tight Hand limit', c.data.cardcasting.calc.handMax, 5);
+  const manip = c.scope().deck.manip;
+  check('the two spellings are one formula name, and an unnamed row is none',
+    [manip.loaded_hand, 'x' in manip], [2, false]);
+  check('Wildcard counts as Wild Card', hasManipulation(c, 'Wild Card'), true);
+  setCardcastingTables({ manipulations: before });
 }
 
 const missing = missingCharacters(REAL);
