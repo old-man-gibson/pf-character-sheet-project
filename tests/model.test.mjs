@@ -2678,6 +2678,14 @@ console.log('Fill notes counts the rows each tab draws');
   setSphereCatalogue(before);
 }
 
+console.log('the training class picker offers the Planner’s classes');
+{
+  const c = new Character(blankDocument({ name: 'Planned' }));
+  c.set('identity.level', 3);
+  c.setProgressionClass(1, 0, 'Incanter');
+  check('a class only on the Planner can be picked', combatPanels.classNames(c).includes('Incanter'), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

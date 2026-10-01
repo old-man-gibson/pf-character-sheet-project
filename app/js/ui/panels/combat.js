@@ -182,10 +182,16 @@ export function blendTicks(systems, home, attr, counts = null) {
   /* ----- training class blocks with per-level talent slots ----- */
 
 
+/**
+ * The classes a training block can be: every class the character has --
+ * the Classes table and the Planner, as the model lists them -- and any name
+ * a training block already holds, so a pick is never dropped from its own
+ * select.
+ */
 export function classNames(model) {
-    const names = new Set(model.data.classes.map((x) => x.name).filter(Boolean));
+    const names = new Set(model.classNames());
     for (const side of Object.values(model.data.training || {})) {
-      for (const cls of side?.classes || []) if (cls.name) names.add(cls.name);
+      for (const cls of side?.classes || []) if (String(cls.name || '').trim()) names.add(String(cls.name).trim());
     }
     return [...names];
   }
