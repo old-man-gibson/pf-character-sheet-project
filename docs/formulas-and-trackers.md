@@ -957,6 +957,14 @@ shield together) and `ac.ability` (the ability bonus after the armour's Max Dex 
 capped it). `ac.size` is the Stats tab's *Size* column, a size-typed bonus — not the
 modifier for being Large, which is already in the total.
 
+What is worn reads further down too. `ac.armor.enhancement` and `ac.shield.enhancement`
+are the enhancement already counted in each. `ac.armor.type` is how heavy the armour
+worn is, read from its *Type* cell: 0 for none or unarmoured, 1 light, 2 medium,
+3 heavy — so `ac.armor.type >= 2` is "medium or heavy" — and `ac.armor.light`,
+`ac.armor.medium` and `ac.armor.heavy` are 1 or 0, for `if(ac.armor.heavy, …)`.
+`ac.maxDex` is the lowest Max Dex of everything worn (99 when nothing caps it), and
+`ac.acp` the armour check penalty of all of it, negative, as the skills take it.
+
 **Several of a thing take a number.** Where a character keeps more than one row of the
 same kind, each row takes the family name and a number from one: `ac.shield1`,
 `ac.shield2`, matching the *Shield 1* / *Shield 2* the Equipment tab labels them with.

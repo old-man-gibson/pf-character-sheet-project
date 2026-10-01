@@ -191,8 +191,8 @@ for (const id of IDS) {
   const armorAc = c.data.equipment?.armor?.active ? pieceAc(c.data.equipment.armor) : 0;
   const shieldAc = (c.data.equipment?.shields || [])
     .filter((sh) => sh.active).reduce((t, sh) => t + pieceAc(sh), 0);
-  check(`${id} ac.armor is the armour worn`, s.ac.armor, armorAc);
-  check(`${id} ac.shield is the shields carried`, s.ac.shield, shieldAc);
+  check(`${id} ac.armor is the armour worn`, evaluateFormula('ac.armor', s), armorAc);
+  check(`${id} ac.shield is the shields carried`, evaluateFormula('ac.shield', s), shieldAc);
   check(`${id} the two still come to the AC bonus`, worn.armor + worn.shield, worn.ac);
 
   // One name per shield row, numbered from one the way the rows are
@@ -202,7 +202,7 @@ for (const id of IDS) {
   const numbered = rows.map((_, i) => s.ac[`shield${i + 1}`]);
   check(`${id} every shield row has a name`, numbered.filter((v) => v === undefined).length, 0);
   check(`${id} no name for a row that is not there`, s.ac[`shield${rows.length + 1}`], undefined);
-  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), s.ac.shield);
+  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), evaluateFormula('ac.shield', s));
   check(`${id} a row that is not held contributes nothing`,
     rows.map((sh) => (sh.active ? pieceAc(sh) : 0)), numbered);
   check(`${id} ACBonusShield<n> names the same row`,
@@ -2961,6 +2961,21 @@ console.log('alternate training fills a feat level\u2019s note too');
   setFeatCatalogue(feats);
   setSphereCatalogue(spheres);
   setAltTrainingTables(merged.altTraining);
+}
+
+console.log('the armour worn is readable in formulas: type, enhancement, max Dex, ACP');
+{
+  const c = new Character(blankDocument({ name: 'Knight' }));
+  const read = (name) => evaluateFormula(name, c.scope());
+  check('nothing worn: type 0, no cap, no penalty', [read('ac.armor.type'), read('ac.maxDex'), read('ac.acp')], [0, 99, 0]);
+  c.set('equipment.armor', { ...c.data.equipment.armor, active: true, name: 'Full Plate', acBonus: 9, enhancement: 1, maxDex: 1, acp: -6, type: 'Heavy' });
+  check('heavy armour', [read('ac.armor'), read('ac.armor.enhancement'), read('ac.armor.type'), read('ac.armor.heavy'), read('ac.armor.light')], [10, 1, 3, 1, 0]);
+  check('its cap and penalty', [read('ac.maxDex'), read('ac.acp')], [1, -6]);
+  check('a rule written against it', read('if(ac.armor.type >= 2, 2, 0)'), 2);
+  c.set('equipment.armor.type', 'light armor');
+  check('a typed word is read', [read('ac.armor.type'), read('ac.armor.light')], [1, 1]);
+  c.set('equipment.armor.active', false);
+  check('taken off, nothing is worn', [read('ac.armor.type'), read('ac.maxDex')], [0, 99]);
 }
 
 const missing = missingCharacters(REAL);
@@ -5770,7 +5785,8 @@ console.log('armour and shields take an enhancement bonus');
   const ac0 = ac();
   c.set('equipment.armor.enhancement', 2);
   check('a +2 breastplate is two more AC', ac(), ac0 + 2);
-  check('and ac.armor reads the whole piece', c.scope().ac.armor, 8);
+  check('and ac.armor reads the whole piece', evaluateFormula('ac.armor', c.scope()), 8);
+  check('and its enhancement on its own', evaluateFormula('ac.armor.enhancement', c.scope()), 2);
   c.set('equipment.armor.active', false);
   check('taken off, the enhancement goes with it', ac(), ac0 - 6);
   c.set('equipment.armor.active', true);

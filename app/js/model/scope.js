@@ -199,11 +199,28 @@ export function characterScope(model) {
     // ACBonusShield1 / ACBonusShield2. The family name stays the total, so
     // ac.shield1 + ac.shield2 is ac.shield, and a character with one shield
     // need never learn that the numbers exist.
+    //
+    // `ac.armor` and `ac.shield` are still the numbers they always were (a
+    // branch carrying a total reads as the total), and are broken down: the
+    // enhancement already inside them, and for the armour worn its weight --
+    // `ac.armor.type` is 0 for none, 1 light, 2 medium, 3 heavy, and
+    // `ac.armor.light` / `.medium` / `.heavy` are 1 or 0 for an if(…).
+    // `ac.maxDex` is the lowest cap of what is worn, 99 when nothing caps it;
+    // `ac.acp` the armour check penalty of all of it, as the skills take it.
     ac: {
       ...bonusColumns(c.defenses.acBonusesResolved, AC_BONUS_TYPES),
       ...Object.fromEntries(worn.shields.map((v, i) => [`shield${i + 1}`, v])),
-      armor: worn.armor,
-      shield: worn.shield,
+      armor: {
+        total: worn.armor,
+        enhancement: worn.armorEnhancement,
+        type: worn.armorType,
+        light: worn.armorType === 1 ? 1 : 0,
+        medium: worn.armorType === 2 ? 1 : 0,
+        heavy: worn.armorType === 3 ? 1 : 0,
+      },
+      shield: { total: worn.shield, enhancement: worn.shieldEnhancement },
+      maxDex: Number.isFinite(worn.maxDex) ? worn.maxDex : 99,
+      acp: worn.acp,
       ability: Math.min(worn.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2)),
       touch: c.defenses.touch,
       flatFooted: c.defenses.flatFooted,

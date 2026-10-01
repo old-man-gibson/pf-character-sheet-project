@@ -25,7 +25,7 @@ import {
   CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
   CRAFT_TIME_BASES, GEAR_BONUS_TYPES, GEAR_BONUS_TYPE_SHORT, MONK_UNARMED_LADDER, SIZE_MODIFIERS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_SPHERES, WEAPON_ATTACK_TYPES, WEAPON_CRIT_MULTS,
-  WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt,
+  WEAPON_FAMILIARITY, WEAPON_GROUPS, WEAPON_HANDEDNESS, attackModeAbility, diceString, fmt, ARMOR_TYPES,
 } from '../../rules.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
@@ -372,7 +372,8 @@ function armorPanel(e) {
       <td class="num" data-label="Max Dex">${autoNum(`data-set="${path}.maxDex"`, piece.maxDex,
     { placeholder: '—', width: '3.2rem' })}</td>
       <td class="num" data-label="Armor check penalty">${num(`${path}.acp`, piece.acp, 'style="width:3.2rem"')}</td>
-      <td data-label="Type">${text(`${path}.type`, piece.type)}</td>
+      <td data-label="Type"${piece.kind === 'Shield' ? '' : ` title="Light, Medium or Heavy — formulas read it as ac.armor.type (1 to 3) and ac.armor.light / medium / heavy"`}>${
+  text(`${path}.type`, piece.type, '', piece.kind === 'Shield' ? {} : { list: 'armor-types' })}</td>
       <td class="mid" data-label="Ghost touch">${check(`${path}.ghostTouch`, piece.ghostTouch)}</td>
       <td class="num" data-label="Weight">${num(`${path}.weight`, piece.weight, 'style="width:3.6rem"')}</td>
       <td class="num" data-label="Cost">${num(`${path}.cost`, piece.cost, 'style="width:4rem"')}</td>
@@ -388,6 +389,7 @@ function armorPanel(e) {
           <th>Type</th><th>Ghost</th><th class="num">Wt</th><th class="num">Cost</th><th></th></tr></thead>
         <tbody>
           ${row(e.armor || {}, 'equipment.armor')}
+          <datalist id="armor-types">${ARMOR_TYPES.map((t) => `<option value="${t}">`).join('')}</datalist>
           ${(e.shields || []).map((s, i) => row(s, `equipment.shields.${i}`,
     `<td class="tools"><button class="danger" data-remove="equipment.shields|${i}" aria-label="Remove">×</button></td>`)).join('')}
         </tbody>
