@@ -2638,6 +2638,20 @@ console.log('splitting a blended class, and filling notes, can be undone');
   setSphereCatalogue(before);
 }
 
+console.log('a guile sphere row with talents offers no ×');
+{
+  const c = new Character(blankDocument({ name: 'Rows' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.guile.bonusTalents', { sphere: 'Study', talent: 'Lore Expert' });
+  c.addGuileSphere('Bluster');
+  const html = guilePanels.renderGuilePanel(c);
+  const removable = (i) => html.includes(`data-remove="training.guile.spheres|${i}"`);
+  const studyAt = c.data.training.guile.spheres.findIndex((r) => r.sphere === 'Study');
+  const blusterAt = c.data.training.guile.spheres.findIndex((r) => r.sphere === 'Bluster');
+  check('the trained sphere has no live ×; the untrained one does', [removable(studyAt), removable(blusterAt)], [false, true]);
+  check('and says why', html.includes('Study has 1 talent, so it stays on the table.'), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

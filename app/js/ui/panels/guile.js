@@ -21,7 +21,7 @@ import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
 import {
-  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn,
+  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn, talentsIn,
 } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
@@ -527,6 +527,7 @@ function guileSpherePanel(model, g) {
     // is associated with; it is the row that has gone missing.
     const lost = !!r.skill && r.skillIndex < 0;
     const repeat = r.repeatOf != null;
+    const trained = repeat ? 0 : talentsIn(g.tally, r.sphere);
     return `<tr>
           <td${repeat ? ` class="dupskill" title="${esc(`${r.sphere} is already on row ${r.repeatOf + 1}. `
       + 'A sphere has one associated skill, so this row pays nothing. Remove it, or pick another sphere.')}"` : ''}>${
@@ -564,7 +565,13 @@ function guileSpherePanel(model, g) {
       + ` + ${fmt(g.operativeAbilityMod || 0)} operative modifier`)}"` : ''}>${r.dc ?? '—'}</td>
           <td class="num" title="25 ft. + 5 ft. per 2 ranks / 100 ft. + 10 ft. per rank / 400 ft. + 40 ft. per rank">${
   r.skillIndex >= 0 ? `${r.close} / ${r.medium} / ${r.long}` : '—'}</td>
-          ${rowRemove(list, i)}
+          ${trained
+      // A sphere a talent went into is put straight back on the table, so a
+      // × would only reset the row. It goes when its talents do.
+      ? `<td class="tools"><button class="danger" disabled aria-label="Remove"
+          title="${esc(`${r.sphere} has ${trained} talent${trained === 1 ? '' : 's'}, so it stays on the table. `
+            + 'The row goes when its talents do.')}">×</button></td>`
+      : rowRemove(list, i)}
         </tr>`;
   }).join('')}</tbody>
       </table></div>` : '<p class="empty">Spend a talent on a sphere above and its row appears here.</p>'}
