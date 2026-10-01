@@ -2759,6 +2759,18 @@ console.log('customized weapons -- the armiger’s counts by default, and a note
   setSphereCatalogue(before);
 }
 
+console.log('a maneuver bonus waits for the maneuver to be readied');
+{
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'Golden Lion', known: [], custom: [], notes: {} }]);
+  const will = () => c.data.saves.will.total;
+  const base = will();
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar', 'Steady {saves.will += 2} {roar.size = 30}');
+  check('not readied: the bonus waits, the name is there', [will() - base, c.scope().roar.size], [0, 30]);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', true);
+  check('readied: it applies', will() - base, 2);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

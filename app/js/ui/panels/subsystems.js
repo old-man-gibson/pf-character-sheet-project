@@ -823,7 +823,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
         <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
     </div>`;
 }
 
@@ -834,11 +834,14 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
  * "Target: —", they are simply not part of the maneuver, and a card of seven
  * em-dashes is a form rather than a rules entry.
  */
-function maneuverRead(model, ctx, entry, key) {
+// A bonus written on a maneuver applies only while it is readied.
+const UNREADIED = { inactiveTitle: 'Not readied, so the bonus is not applying. Ready it to switch it on.' };
+
+function maneuverRead(model, ctx, entry, key, readied = true) {
   const shown = MANEUVER_FIELDS
     .map((f) => [f, entry[f.key]])
     .filter(([, v]) => String(v).trim() !== '');
-  const value = (v) => (hasTokens(v) ? renderedProse(model, v) : esc(v));
+  const value = (v) => (hasTokens(v) ? renderedProse(model, v, null, { ...UNREADIED, inactive: !readied }) : esc(v));
   const cells = shown.filter(([f]) => f.key !== 'text');
   const body = shown.find(([f]) => f.key === 'text');
   return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
@@ -877,7 +880,7 @@ function maneuverCells(model, list, e, own) {
       ? maneuverSelect(bind(f), own[f.key], f.options,
         under ? `${under} — from the catalogue` : '—')
       : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
-        own[f.key], f.lines || 1, 'grow');
+        own[f.key], f.lines || 1, 'grow', null, { ...UNREADIED, inactive: !e.known });
     return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
   };
   const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];

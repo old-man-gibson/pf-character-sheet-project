@@ -1420,14 +1420,19 @@ export function proseSources(model) {
   // written out longhand. The description keeps the source name it has always
   // had, so a formula named in one still answers to `maneuverNote:…` in the
   // audit; the cells beside it are new and say which they are.
+  //
+  // A bonus written there waits for the maneuver to be readied, as a buff's
+  // waits for its tick; a definition stands either way. Same `future` state.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
+    const readied = new Set((disc.known || []).map((n) => String(n).trim().toLowerCase()));
     for (const [name, entry] of Object.entries(disc.notes || {})) {
-      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry); continue; }
+      const off = readied.has(String(name).trim().toLowerCase()) ? null : { future: true };
+      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry, null, off); continue; }
       for (const f of MANEUVER_FIELDS) {
         // The name goes last in both, because it is the part that can hold a
         // colon of its own ("Lesson I: Balance") and split the path.
         push(f.key === 'text' ? `maneuverNote:${di}:${name}` : `maneuver:${di}:${f.key}:${name}`,
-          entry?.[f.key]);
+          entry?.[f.key], null, off);
       }
     }
   });
