@@ -33,7 +33,7 @@ const NEW_TEMPLATE_TABLE = () => ({
 });
 import {
   SYSTEM_NOUNS, TEMPLATE_TYPES, TRAINING_SYSTEMS, classForwardKey, poolMode, poolSpheres, sphereForwardKey,
-  sphereNames, talentLandsOn,
+  sphereNames, talentLandsOn, trackSphereNames, trackTalentSide,
 } from '../../model.js';
 import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
@@ -41,7 +41,7 @@ import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  parseLadderRule, sphereSide, statMod, trackSpheres,
+  parseLadderRule, statMod,
 } from '../../rules.js';
 import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {
@@ -338,8 +338,7 @@ function customizationPanel(model, blocks) {
     // customized weapon teaches its wielder to fight with it -- and widened by
     // the archetype that says so, which is why it is a field here and not a
     // rule in the engine.
-    const spheres = sphereNames(trackSpheres(block.spec),
-      block.spec?.spheres === 'both' ? null : block.spec?.spheres || 'combat');
+    const spheres = trackSphereNames(block.spec);
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
@@ -401,7 +400,7 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
         <tbody>${rows.map((row, ri) => {
     const on = row.granted !== false;
     const state = on ? 'slot-on' : 'slot-off';
-    const side = on && row.sphere ? sphereSide(row.sphere, 'combat') : null;
+    const side = on && row.sphere ? trackTalentSide(row.sphere) : null;
     const bonus = on && ri >= block.talentCount;
     return `<tr>
           <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase

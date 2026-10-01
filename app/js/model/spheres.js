@@ -12,7 +12,7 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  statMod, tempEssenceCost, trackCount, trackSpheres,
+  statMod, tempEssenceCost, trackCount,
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
@@ -222,6 +222,27 @@ export function poolSpheres(systems) {
   const lists = { combat: COMBAT_SPHERES, magic: MAGIC_SPHERES, guile: GUILE_SPHERES };
   const names = systems.flatMap((s) => sphereNames(lists[s] || [], s));
   return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Every sphere a customized weapon's track may learn from: the martial
+ * list by default, the magical one or both when its archetype says so, and
+ * the packs' spheres of those kinds. The panel offers exactly this list and
+ * the off-list check reads it, so a sphere offered is never flagged.
+ */
+export function trackSphereNames(spec) {
+  const side = TRACK_SPHERE_SIDES.includes(spec?.spheres) ? spec.spheres : 'combat';
+  return poolSpheres(side === 'both' ? ['combat', 'magic'] : [side]);
+}
+
+/**
+ * The side a customized weapon's talent counts on: its sphere's system, a
+ * pack's included, and martial for a name nobody knows -- the track lives on
+ * the martial side.
+ */
+export function trackTalentSide(sphere) {
+  const system = sphereSystem(sphere);
+  return system === 'magic' ? 'magic' : 'combat';
 }
 
 /**
@@ -992,7 +1013,7 @@ export function checkCustomizationBases(model, t) {
     // and kept, never dropped: it is nearly always a track whose archetype
     // has not been added yet, and throwing the row away would lose the
     // player's work to punish them for the order they did things in.
-    const allowed = new Set(trackSpheres(block.spec));
+    const allowed = new Set(trackSphereNames(block.spec).map((s) => s.trim().toLowerCase()));
     for (const set of block.sets || []) {
       const bases = new Set((set.talents || [])
         .filter((r) => r.granted !== false && isBasePick(r.talent))
@@ -1000,7 +1021,7 @@ export function checkCustomizationBases(model, t) {
         .filter(Boolean));
       for (const row of set.talents || []) {
         const sphere = String(row.sphere || '').trim();
-        row.offList = !!sphere && row.granted !== false && !allowed.has(sphere);
+        row.offList = !!sphere && row.granted !== false && !allowed.has(sphere.toLowerCase());
         row.needsBase = !!sphere && !!String(row.talent || '').trim()
           && row.granted !== false && !isBasePick(row.talent)
           && !bases.has(sphere) && !owned(sphere);
@@ -1194,7 +1215,7 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
       (block.sets || []).forEach((set, i) => {
         if (set.spare || (customizations === 'active' && i !== block.active)) return;
         for (const row of set.talents || []) {
-          if (row.granted !== false && sphereSide(row.sphere, 'combat') === sideKey) bump(row.sphere);
+          if (row.granted !== false && trackTalentSide(row.sphere) === sideKey) bump(row.sphere);
         }
       });
     }

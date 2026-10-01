@@ -29,6 +29,7 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
+  sphereCatalogue, trackSphereNames,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2488,6 +2489,38 @@ console.log('a guile sphere listed twice pays once');
   c.listRemove('training.guile.spheres', 0);
   check('remove the first and the second takes over',
     [c.data.training.guile.sphereRows[0].repeatOf, ranks('Sense Motive')], [null, 5]);
+}
+
+console.log('customized weapons -- one sphere list, offered and checked');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [
+    { name: 'Shadowcraft', kind: 'magic', talents: [] },
+    { name: 'Gunslinging', kind: 'combat', talents: [] },
+    { name: 'Lockcraft', kind: 'guile', talents: [] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 5);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 5, levels: [] });
+  c.addCustomization('Armiger', { sets: { start: 1, gainsAt: '' }, talents: { start: 2, gainsAt: '' } });
+  const cust = () => c.data.training.combat.customizations[0];
+  check('a martial track offers the pack martial sphere',
+    [trackSphereNames(cust().spec).includes('Gunslinging'), trackSphereNames(cust().spec).includes('Shadowcraft')],
+    [true, false]);
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Gunslinging');
+  c.setItem(list, 1, 'sphere', 'Shadowcraft');
+  const flags = () => cust().sets[0].talents.slice(0, 2).map((r) => !!r.offList);
+  check('a pack sphere it offers is not flagged; the magic one is', flags(), [false, true]);
+  check('a pack magic sphere counts on the magic side',
+    [c.data.training.combat.tally.Shadowcraft, c.data.training.magic.tally.Shadowcraft], [undefined, 1]);
+  c.setCustomizationRule(0, 'spheres', 'both');
+  const both = trackSphereNames(cust().spec);
+  check('martial and magical offers both, and no skill sphere',
+    [both.includes('Shadowcraft'), both.includes('Gunslinging'), both.includes('Lockcraft'), both.includes('Study')],
+    [true, true, false, false]);
+  check('and flags nothing', flags(), [false, false]);
+  setSphereCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);
