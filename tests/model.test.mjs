@@ -2896,6 +2896,43 @@ console.log('a deck manipulation is one thing however it is spelled');
   setCardcastingTables({ manipulations: before });
 }
 
+console.log('spell points and power points are built-in drain trackers');
+{
+  const c = new Character(blankDocument({ name: 'Caster' }));
+  c.set('identity.level', 4);
+  check('no casting, no pools', [c.spellPointTracker(), c.trackers.some((t) => t.pool)], [null, false]);
+
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', mod1: 'Int', classLevelsOverride: 4, levels: [] });
+  const sp = () => c.spellPointTracker();
+  const total = c.data.training.magic.totalSP;
+  check('a spherecaster gets Spell Points, full, draining, Daily',
+    [sp()?.name, sp()?.max, sp()?.max === total && total > 0, sp()?.style?.fill, sp()?.refresh],
+    ['Spell Points', total, true, 'remaining', 'Daily']);
+  c.set('akashic.essence.spTemp', 1);
+  check('condensing spell points into essence lowers the pool',
+    sp().max, c.data.training.magic.availableSP);
+  check('by what it costs', total - sp().max, c.data.training.magic.spOnEssence);
+  c.set('akashic.essence.spTemp', 0);
+  c.updateTracker(sp().id, { name: 'Arcane Reserve' });
+  check('renamed, it is still the pool cards spend from', [sp()?.name, sp()?.pool], ['Arcane Reserve', 'sp']);
+  check('and it cannot be deleted while the character casts', [c.removeTracker(sp().id), !!sp()], [false, true]);
+
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', curveTotal: c.data.psionics?.classes?.[0]?.curveTotal ?? null, manifesterLevelOverride: 4, powers: [] }]);
+  c.set('psionics.bonusPoints', 6);
+  const pp = () => c.trackers.find((t) => t.pool === 'pp');
+  check('a psionic caster gets Power Points, the size of the pool',
+    [pp()?.name, pp()?.max, pp()?.style?.fill], ['Power Points', c.data.psionics.pool, 'remaining']);
+  c.updateTracker(pp().id, { current: 2 });
+  check('spending on the tracker spends the Psionics pool', [c.data.psionics.spent, c.data.psionics.left], [2, c.data.psionics.pool - 2]);
+  c.set('psionics.spent', 3);
+  check('and spending on the Psionics tab moves the tracker', pp().current, 3);
+  c.rest('day');
+  check('a new day restores both', [pp().current, c.data.psionics.spent], [0, 0]);
+  const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('one of each after a save and reload',
+    [saved.trackers.filter((t) => t.pool === 'sp').length, saved.trackers.filter((t) => t.pool === 'pp').length], [1, 1]);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
@@ -7649,7 +7686,8 @@ console.log('Mythic Power drains by default');
     const c = new Character(raw);
     const mp = c.trackers.find((t) => t.id === 'mythic_power');
     check(`${id} mythic power drains`, mp.style?.fill, 'remaining');
-    check(`${id} nothing else is styled`, c.trackers.filter((t) => t.id !== 'mythic_power' && t.style), []);
+    check(`${id} and the casting pools drain`, c.trackers.filter((t) => t.pool).every((t) => t.style?.fill === 'remaining'), true);
+    check(`${id} nothing else is styled`, c.trackers.filter((t) => t.id !== 'mythic_power' && !t.pool && t.style), []);
     // Draining is presentation only -- the stored value is still the sheet's
     // own Uses count, and `remaining` is the drained view of it. (Saburo's
     // sheet is the one that ships with a non-zero count.)
@@ -10356,16 +10394,13 @@ console.log('card casting -- the table: an encounter played through');
   n.tableEnd();
   check('the end of the encounter notes the exiled cards\' return', /exiled cards: half return now/.test(nt().log[nt().log.length - 1]), true);
 
-  // Spell points: paid from a Spell Points tracker when there is one.
+  // Spell points: paid from the Spell Points tracker every spherecaster carries.
   const s = new Character(load('nico'));
   s.rng = () => 0.4;
-  check('no tracker, nothing to pay from', s.spellPointTracker(), null);
+  const spT = s.spellPointTracker();
+  check('a spherecaster carries a Spell Points tracker, as full as Magic Spheres says',
+    [spT?.id, spT?.max], ['spell_points', s.data.training.magic.availableSP]);
   s.tableStart();
-  const paid0 = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) > 0);
-  s.tablePlay(paid0, 'cast');
-  check('a cast without a tracker just logs the cast', /spell point/.test(s.data.cardcasting.table.log[s.data.cardcasting.table.log.length - 1]), false);
-  const spT = s.addTracker({ name: 'Spell Points', maxFormula: 'caster.sp' });
-  check('a tracker named Spell Points is found', s.spellPointTracker()?.id, spT.id);
   const paid = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) === 1);
   s.tablePlay(paid, 'cast');
   check('a 1-point card spends one from the tracker', s.spellPointTracker().current, 1);

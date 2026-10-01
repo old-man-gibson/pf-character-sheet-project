@@ -14,6 +14,7 @@ import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
 import { sphereTally } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
+import { poolTracker } from '../trackers.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
 export const CARD_COLORS = [
@@ -1299,12 +1300,13 @@ export function tableResolve(model, id) {
 }
 
 /**
- * The Spell Points tracker, if the character keeps one -- by name, so a
- * player's own "Spell Points" (or "SP") pool is found however it was made.
- * A tracker's `current` counts what has been spent.
+ * The Spell Points tracker: the casting pool every spherecaster carries (see
+ * SYSTEM_POOLS in trackers.js), found by its mark rather than its name, so
+ * renaming it does not stop cards spending from it. `current` counts what
+ * has been spent.
  */
 export function spellPointTracker(model) {
-  return model.trackers.find((t) => /^spell\s*points?$|^sp$/i.test(String(t.name || '').trim())) || null;
+  return poolTracker(model, 'sp');
 }
 
 /** Spend n spell points from the tracker, if there is one; log it on the table. */

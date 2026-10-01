@@ -31,6 +31,85 @@ const mythicPowerAt = (tier) => (tier > 0 ? 3 + tier * 2 : 0);
 // It reads as a pool you draw down over an adventuring day, so it starts full
 // and drains. Fresh objects per call: styles are mutated in place by the editor.
 const mythicPowerStyle = () => normalizeStyle({ fill: 'remaining' });
+// The casting pools drain the same way.
+const drainStyle = () => normalizeStyle({ fill: 'remaining' });
+
+/*
+ * The casting pools every caster carries, as trackers.
+ *
+ * Spell points and power points are spent in play like any other pool, so
+ * each is a tracker -- one the character gets as soon as the system grants
+ * any, as Mythic Power is granted at tier 1. Its maximum is the system's own
+ * number rather than a formula: spell points are what the Magic Spheres tab
+ * has available (condensing some into essence lowers it), power points the
+ * Psionics pool. A tracker is found by its `pool` mark, so renaming it keeps
+ * every card and session spend pointed at it; an existing tracker with the
+ * pool's name (a workbook's "Spell Points") is adopted rather than doubled.
+ *
+ * Power points already had a spent count of their own on the Psionics tab,
+ * and that stays the one count: the tracker reads it and writes it.
+ */
+export const SPELL_POINTS_ID = 'spell_points';
+export const POWER_POINTS_ID = 'power_points';
+
+export const SYSTEM_POOLS = [
+  {
+    pool: 'sp', id: SPELL_POINTS_ID, name: 'Spell Points', match: /^spell\s*points?$|^sp$/i,
+    what: 'the spell points available on Magic Spheres',
+    has: (d) => (Number(d.training?.magic?.totalSP) || 0) > 0,
+    max: (d) => Number(d.training?.magic?.availableSP ?? d.training?.magic?.totalSP) || 0,
+  },
+  {
+    pool: 'pp', id: POWER_POINTS_ID, name: 'Power Points', match: /^power\s*points?$|^pp$/i,
+    what: 'the power point pool on Psionics',
+    has: (d) => (Number(d.psionics?.pool) || 0) > 0,
+    max: (d) => Number(d.psionics?.pool) || 0,
+    spent: {
+      get: (d) => Math.max(0, Math.floor(Number(d.psionics?.spent) || 0)),
+      set: (d, v) => { if (d.psionics) d.psionics.spent = Math.max(0, Math.floor(Number(v) || 0)); },
+    },
+  },
+];
+
+const poolDef = (pool) => SYSTEM_POOLS.find((p) => p.pool === pool) || null;
+
+/** The tracker that holds a casting pool ('sp' or 'pp'), or null. */
+export function poolTracker(model, pool) {
+  const def = poolDef(pool);
+  if (!def) return null;
+  const list = model.trackers || [];
+  return list.find((t) => t.pool === pool)
+    || list.find((t) => !t.pool && t.id === def.id)
+    || list.find((t) => !t.pool && def.match.test(String(t.name || '').trim()))
+    || null;
+}
+
+/** Give every caster the pool trackers their systems grant. */
+export function ensureSystemPools(model) {
+  const d = model.data;
+  for (const def of SYSTEM_POOLS) {
+    if (!def.has(d)) continue;
+    const found = poolTracker(model, def.pool);
+    if (found) { found.pool = def.pool; continue; }
+    let id = def.id;
+    for (let n = 2; model.trackers.some((t) => t.id === id); n++) id = `${def.id}_${n}`;
+    model.trackers.push({
+      id,
+      name: def.name,
+      pool: def.pool,
+      current: def.spent ? def.spent.get(d) : 0,
+      maxFormula: null,
+      max: 0,
+      minFormula: null,
+      min: 0,
+      refresh: 'Daily',
+      note: '',
+      style: drainStyle(),
+      source: 'player',
+      createdAt: null,
+    });
+  }
+}
 
 /**
  * The numbers a tracker knows about itself.
@@ -87,7 +166,9 @@ export function seedTrackers(model) {
       refresh: r.refresh || '',
       source: 'sheet',
       note: typeof r.total === 'string' ? String(r.total) : '',
-      style: id === MYTHIC_POWER_ID ? mythicPowerStyle() : null,
+      style: id === MYTHIC_POWER_ID ? mythicPowerStyle()
+        : SYSTEM_POOLS.some((p) => p.id === id) ? drainStyle() : null,
+      ...(SYSTEM_POOLS.find((p) => p.id === id) ? { pool: SYSTEM_POOLS.find((p) => p.id === id).pool } : {}),
     };
   });
 }
@@ -168,8 +249,10 @@ export function ensureMythicPower(model) {
  * signed position rather than a spent count.
  */
 export function recomputeTrackers(model) {
-  // A character who has just reached level 8 gains Mythic Power here.
+  // A character who has just reached level 8 gains Mythic Power here, and a
+  // caster their spell or power points.
   ensureMythicPower(model);
+  ensureSystemPools(model);
   const scope = model.scope();
   const toInt = (v) => (typeof v === 'number' ? Math.floor(v) : Math.floor(Number(v)) || 0);
   const errors = new Map();
@@ -188,7 +271,12 @@ export function recomputeTrackers(model) {
     // a failed formula does everywhere else; keeping last pass's number and
     // adding the bonus to it again made the range grow on every recompute.
     let max = 0;
-    if (t.maxFormula) {
+    const pool = t.pool ? poolDef(t.pool) : null;
+    if (pool) {
+      // The system's own number, and for power points its own spent count.
+      max = pool.max(model.data);
+      if (pool.spent) t.current = pool.spent.get(model.data);
+    } else if (t.maxFormula) {
       try { max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
     }
     t.max = max + t.forwardedMax;
@@ -273,6 +361,10 @@ export function updateTracker(model, id, patch) {
 
 function setTracker(model, t, patch) {
   Object.assign(t, patch);
+  // A pool that keeps its spent count elsewhere is written there, or the
+  // recompute would read the old count straight back.
+  const linked = t.pool ? poolDef(t.pool)?.spent : null;
+  if (linked && patch && 'current' in patch) linked.set(model.data, t.current);
   model.recompute();
   // A value typed in is held to the range, the way a step is -- 99 typed into
   // a pool of 5 used to be stored as 99. Only a value being set is clamped: a
@@ -283,15 +375,22 @@ function setTracker(model, t, patch) {
     const held = Math.max(lo, Math.min(hi, Number(t.current) || 0));
     if (held !== t.current) {
       t.current = held;
+      if (linked) linked.set(model.data, held);
       model.recompute();
     }
   }
   return t;
 }
 
-/** True when a tracker may not be deleted (Mythic Power, and only that). */
+/**
+ * True when a tracker may not be deleted: Mythic Power, and a casting pool
+ * while its system grants one (it would only come straight back).
+ */
 export function isProtectedTracker(model, id) {
-  return id === MYTHIC_POWER_ID;
+  if (id === MYTHIC_POWER_ID) return true;
+  const t = (model.trackers || []).find((x) => x.id === id);
+  const pool = t?.pool ? poolDef(t.pool) : null;
+  return !!pool && pool.has(model.data);
 }
 
 /** @returns {boolean} whether the tracker was removed. */
