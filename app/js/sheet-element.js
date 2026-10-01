@@ -433,32 +433,47 @@ const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|b
 const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password']);
 
 /**
- * Put the caret after what a multi-line box already says.
+ * Put the caret after what a box already says.
  *
  * A box focused by script rather than by a click opens with the caret at 0,
- * and a re-render always focuses by script: clicking out of one talent cell
- * into the next rebuilt the panel under the click, and the talent box came
- * back with the caret in front of its name. Where the click landed in the old
- * box is gone with it, so the end -- where the next word goes -- stands in.
+ * and after a re-render focus is only ever given by script. Where a click
+ * landed is carried over when the old box can say where (see `#payRender`).
+ * The end -- where the next word goes -- stands in for the rest: a
+ * multi-line box a Tab arrives in, and a number box however it was entered,
+ * since a number box neither reports its caret nor takes one
+ * (`setSelectionRange` throws). Writing a value does leave the caret after
+ * it, though, so a number box has its value written out and back.
  */
 function caretToEnd(el) {
-  if (el?.tagName !== 'TEXTAREA') return;
-  try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* not attached */ }
+  if (el?.tagName === 'TEXTAREA') {
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch { /* not attached */ }
+  } else if (el?.type === 'number') {
+    const { value } = el;
+    el.value = '';
+    el.value = value;
+  }
 }
 
-/** A stable identifier for a control, so focus survives a re-render. */
+/** The attributes a control is known by across a re-render, most telling first. */
+const CONTROL_ATTRS = ['data-set', 'data-item', 'data-build', 'data-offset', 'data-pick',
+  'data-sphere-bonus', 'data-ext-search', 'data-cfeat'];
+
+/**
+ * A stable identifier for a control, so focus survives a re-render: the
+ * selector that finds its copy in the markup the render writes.
+ */
 function controlKey(input) {
-  if (!input) return null;
-  const attr = input.dataset.set ? `set:${input.dataset.set}`
-    : input.dataset.item ? `item:${input.dataset.item}`
-      : input.dataset.build ? `build:${input.dataset.build}`
-        : input.dataset.offset ? `offset:${input.dataset.offset}`
-          : input.dataset.pick ? `pick:${input.dataset.pick}`
-            : input.dataset.sphereBonus ? `spherebonus:${input.dataset.sphereBonus}`
-              : input.dataset.extSearch ? `extsearch:${input.dataset.extSearch}`
-                : input.dataset.cfeat ? `cfeat:${input.dataset.cfeat}` : null;
-  return attr;
+  const attr = CONTROL_ATTRS.find((a) => input?.getAttribute?.(a));
+  return attr ? `[${attr}="${CSS.escape(input.getAttribute(attr))}"]` : null;
 }
+
+/**
+ * Controls whose press opens a chooser of their own -- a select's list, a
+ * colour or date picker. The control holds its chooser open, so a render
+ * that replaced it would shut the chooser under the pointer.
+ */
+const PICKERS = 'select, input[type="color"], input[type="date"], input[type="time"], '
+  + 'input[type="datetime-local"], input[type="month"], input[type="week"]';
 
 /**
  * Is this element one somebody is typing into?
@@ -624,10 +639,13 @@ export class CharacterSheetElement extends HTMLElement {
    * way of looking at the list, not a fact about what they are carrying.
    */
   #openGear = null;
-  /** The last press on the sheet ({ target, at }); see `#rerender`. */
+  /** The last press on the sheet ({ target, at, up }); see `#rerender`. */
   #lastPress = null;
-  /** A render put off until a pressed button has had its click; see `#rerender`. */
-  #renderOwed = false;
+  /**
+   * A render put off until the press that ended an edit is over
+   * ({ until: 'release' | 'picker', timer }), or null; see `#oweRender`.
+   */
+  #renderOwed = null;
   /** The last Tab keystroke ({ at, back }); see `#rerender`. */
   #lastTab = null;
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
@@ -898,6 +916,9 @@ export class CharacterSheetElement extends HTMLElement {
     extensionRuntime.addEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.addEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.addEventListener('pointerdown', this.#onPointerDownAway, true);
+    // On the document, so a press let go of off the sheet still ends.
+    this.ownerDocument.addEventListener('pointerup', this.#onPointerUp, true);
+    this.ownerDocument.addEventListener('pointercancel', this.#onPointerUp, true);
     // Column edges can be dragged on every table; the widths are a browser
     // preference, kept beside the roll format rather than in any document.
     this.#unbindColumnResize = bindColumnResize(this.shadowRoot,
@@ -916,6 +937,8 @@ export class CharacterSheetElement extends HTMLElement {
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
+    this.ownerDocument.removeEventListener('pointerup', this.#onPointerUp, true);
+    this.ownerDocument.removeEventListener('pointercancel', this.#onPointerUp, true);
     this.#unbindColumnResize?.();
     this.#unbindColumnResize = null;
     this.ownerDocument.removeEventListener('scroll', this.#onViewportChange, true);
@@ -1618,63 +1641,26 @@ export class CharacterSheetElement extends HTMLElement {
     const caret = activeInput?.selectionStart ?? null;
     /*
      * Was this change the player leaving the cell? A press on something else
-     * fires the cell's `change` on the way out, and the re-render that
-     * follows rebuilds the panel under the press -- so the thing pressed is
-     * gone before it can take focus, and restoring focus to the edited cell
-     * put the caret straight back where the player had just clicked out of.
-     * A formula cell showed it worst: it re-opened to its source every time.
-     * So when the last press was a moment ago and not on this field, focus
-     * goes to the pressed control's replacement if it was one, and to
-     * nothing otherwise.
+     * fires the cell's `change` on the way out -- on the press, before the
+     * press has done anything -- and rendering there rebuilt the panel under
+     * it, so whatever the press was for went with the thing pressed. A click
+     * is a press and a release on one element: a button or a box needed a
+     * second go ("Add talent" from a half-typed row took two), a formula cell
+     * never opened, and a cell clicked into came back focused by script with
+     * the caret at 0 instead of where the click put it. Handing focus back to
+     * the cell being left was worse -- the caret went straight back where the
+     * player had just clicked out of, and a formula cell re-opened to its
+     * source every time. So the render waits until the press is over.
      */
-    const press = this.#lastPress;
-    const pressedTarget = press && Date.now() - press.at < 150 ? press.target : null;
-    const sameField = (t) => !t || !activeInput || t === activeInput
-      || !!activeInput.closest?.('.xf, .prose')?.contains(t);
-    const leaving = pressedTarget && !sameField(pressedTarget);
-    const pressedKey = leaving
-      ? controlKey(pressedTarget.closest?.('input, select, textarea, button') || null) : null;
+    const press = this.#pressLeaving(activeInput);
+    if (press) {
+      this.#oweRender(press);
+      return;
+    }
     // Read before the render, which can take longer than the window.
     const tab = this.#lastTab && Date.now() - this.#lastTab.at < 150 ? this.#lastTab : null;
-    /*
-     * Leaving for a button is the one press the render must wait out. The
-     * change fires on the press, before the click, and a render then swaps
-     * the button for a copy -- a click is a press and a release on the same
-     * element, so it never fires, and "Add talent" pressed from a half-typed
-     * row took two goes. The value is already in the model; the render is
-     * held until the click has run (most buttons render anyway, which pays
-     * it), with a timer for a press that is dragged off and never clicks.
-     */
-    if (leaving && pressedTarget.closest?.('button')) {
-      this.#renderOwed = true;
-      const settle = () => setTimeout(() => { if (this.#renderOwed) this.#render(); }, 0);
-      this.shadowRoot.addEventListener('click', settle, { once: true });
-      setTimeout(() => { if (this.#renderOwed) this.#render(); }, 1000);
-      return;
-    }
     this.#render();
-    if (leaving) {
-      if (!pressedKey) return;
-      const [pk, pref] = [pressedKey.slice(0, pressedKey.indexOf(':')), pressedKey.slice(pressedKey.indexOf(':') + 1)];
-      const pattr = {
-        set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
-        spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search', cfeat: 'data-cfeat',
-      }[pk];
-      const landed = pattr && this.shadowRoot.querySelector(`[${pattr}="${CSS.escape(pref)}"]`);
-      if (landed) {
-        landed.closest('.xf')?.classList.add('editing');
-        landed.focus();
-        caretToEnd(landed);
-      }
-      return;
-    }
-    if (!key) return;
-    const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-    const attr = {
-      set: 'data-set', item: 'data-item', build: 'data-build', offset: 'data-offset', pick: 'data-pick',
-      spherebonus: 'data-sphere-bonus', extsearch: 'data-ext-search', cfeat: 'data-cfeat',
-    }[kind];
-    const next = this.shadowRoot.querySelector(`[${attr}="${CSS.escape(ref)}"]`);
+    const next = key && this.shadowRoot.querySelector(key);
     if (!next) return;
     // A formula field that regains focus keeps showing its source. Set that
     // here rather than leaning on the focus event, which a browser window that
@@ -1695,7 +1681,8 @@ export class CharacterSheetElement extends HTMLElement {
       if (to) {
         to.closest('.xf')?.classList.add('editing');
         to.focus();
-        if (typeof to.select === 'function' && CARET_TYPES.has(to.type)) {
+        // A number box too: it takes `select()`, though it will not take a caret.
+        if (typeof to.select === 'function' && (CARET_TYPES.has(to.type) || to.type === 'number')) {
           try { to.select(); } catch { /* not a text control */ }
         } else caretToEnd(to);
         return;
@@ -1707,6 +1694,71 @@ export class CharacterSheetElement extends HTMLElement {
       && (CARET_TYPES.has(next.type) || next.tagName === 'TEXTAREA')) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
     }
+  }
+
+  /**
+   * The press taking focus away from `field`, if that is what is happening:
+   * one a moment ago, on something else. The moment runs from the release
+   * once there has been one, because a tap on a touch screen moves focus
+   * only when the finger lifts.
+   */
+  #pressLeaving(field) {
+    const press = this.#lastPress;
+    if (!press || !field || Date.now() - (press.up || press.at) >= 150) return null;
+    const t = press.target;
+    if (!t || t === field || field.closest?.('.xf, .prose')?.contains(t)) return null;
+    return press;
+  }
+
+  /**
+   * Put a render off until the press that ended an edit is over; see
+   * `#rerender`. The edit is already in the model -- only the drawing waits.
+   *
+   * Over is a moment after the release, so the click the release makes has
+   * run on the control it was aimed at (most controls render when clicked,
+   * which pays this anyway). A press on a picker is over only once the
+   * picker has changed or been left, because its list stays open until then.
+   * A second's timer covers a release that never arrives.
+   */
+  #oweRender(press) {
+    if (this.#renderOwed) clearTimeout(this.#renderOwed.timer);
+    const picker = press.target?.closest?.(PICKERS);
+    const owed = { until: picker ? 'picker' : 'release', timer: 0 };
+    this.#renderOwed = owed;
+    const pay = () => setTimeout(() => this.#payRender(owed), 0);
+    if (picker) {
+      // Left for another press, that press is waited out in turn.
+      const done = () => {
+        if (this.#renderOwed !== owed) return;
+        const next = this.#pressLeaving(picker);
+        if (next) this.#oweRender(next); else pay();
+      };
+      picker.addEventListener('change', done, { once: true });
+      picker.addEventListener('blur', done, { once: true });
+    } else if (press.up) pay();                     // let go already -- a tap -- so its click is running now
+    else owed.timer = setTimeout(() => this.#payRender(owed), 1000);
+  }
+
+  /**
+   * The render `#oweRender` held back, now the press is over. Focus and the
+   * caret go to the new copy of whatever the press left them in -- read off
+   * the old one before the render throws it away -- so a cell clicked into
+   * opens where it was clicked, selection and all.
+   */
+  #payRender(owed) {
+    if (this.#renderOwed !== owed) return;         // something has rendered since
+    const active = this.shadowRoot.activeElement;
+    const key = controlKey(active);
+    const range = typeof active?.selectionStart === 'number'
+      ? [active.selectionStart, active.selectionEnd, active.selectionDirection] : null;
+    this.#render();
+    const next = key && this.shadowRoot.querySelector(key);
+    if (!next) return;
+    next.closest('.xf')?.classList.add('editing');
+    next.focus();
+    if (range) {
+      try { next.setSelectionRange(...range); } catch { /* not a text box after all */ }
+    } else caretToEnd(next);
   }
 
   #fail(msg) {
@@ -1766,7 +1818,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   #render() {
     if (!this.#model) return;
-    this.#renderOwed = false;
+    if (this.#renderOwed) clearTimeout(this.#renderOwed.timer);
+    this.#renderOwed = null;
     const bar = this.#barEntries();
     // A tab the search took you to that this view's bar does not carry rides
     // along as a guest, so the panel it holds can actually be shown.
@@ -5108,7 +5161,7 @@ export class CharacterSheetElement extends HTMLElement {
     // Where the last press landed, for `#rerender`: a change that fires
     // because the player clicked somewhere else must not hand focus back to
     // the cell they were leaving.
-    this.#lastPress = { target: path[0] || null, at: Date.now() };
+    this.#lastPress = { target: path[0] || null, at: Date.now(), up: 0 };
     // The list under the Undo button shuts the same way.
     if (this.#playMenu && !path.some((n) => n?.classList?.contains?.('playundo'))) {
       this.#playMenu = false;
@@ -5142,6 +5195,19 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.shadowRoot.activeElement?.matches?.('[data-tabpick]')) return;
     this.#tabColorFor = null;
     this.#render();
+  };
+
+  /**
+   * The end of a press, for `#oweRender`: when it let go, and the render it
+   * was holding back, paid a moment later -- after the click the release
+   * makes, which the browser dispatches in the same task.
+   */
+  #onPointerUp = () => {
+    // Only its own release: a later press off the sheet is never recorded,
+    // and letting go of that must not make this one look a moment old again.
+    if (this.#lastPress && !this.#lastPress.up) this.#lastPress.up = Date.now();
+    const owed = this.#renderOwed;
+    if (owed?.until === 'release') setTimeout(() => this.#payRender(owed), 0);
   };
 
   /**
