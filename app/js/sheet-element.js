@@ -116,7 +116,7 @@ import * as trackerUi from './ui/panels/trackers.js';
 import { round, group, pct, same, PIP_LIMIT } from './ui/format.js';
 import * as prose from './ui/prose.js';
 import { renderStatsPanel, pickSelect, mythicPickAt } from './ui/panels/stats.js';
-import { renderSkillsPanel } from './ui/panels/skills.js';
+import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
 import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
 import {
   fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
@@ -631,6 +631,12 @@ export class CharacterSheetElement extends HTMLElement {
   #editMeter = null;     // key of the built-in meter whose style is open ('hp', 'essence')
   #editDraft = { name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null) };
   #showAllSkills = false;
+  /**
+   * The skill rows shown while the player stays on the Skills tab, so an edit
+   * does not pull a row out from under the next click; see skillRowIndices.
+   * Dropped when the tab is left, or Hide unused is pressed.
+   */
+  #skillRowsKept = null;
   #showAllGear = false;
   /**
    * Which gear item is open as a card ("equipment.gear|3"), or null.
@@ -1832,6 +1838,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.isAdmin) bar.push({ key: 'audit', id: 'audit', label: 'Formula Audit', kind: 'core' });
     const allIds = [...bar.map((e) => e.id), 'systabs'];
     if (!allIds.includes(this.#tab)) this.#tab = bar[0]?.id ?? 'systabs';
+    if (this.#tab !== 'skills') this.#skillRowsKept = null;
 
     // Read once for the whole bar rather than per coloured tab: it is a
     // computed-style lookup, and the answer cannot change inside one render.
@@ -2740,7 +2747,9 @@ export class CharacterSheetElement extends HTMLElement {
    * element is the model and the one piece of view state it reads.
    */
   #skillsPanel() {
-    return renderSkillsPanel(this.#model, { showAllSkills: this.#showAllSkills });
+    const ctx = { showAllSkills: this.#showAllSkills, keep: this.#skillRowsKept };
+    this.#skillRowsKept = new Set(skillRowIndices(this.#model, ctx));
+    return renderSkillsPanel(this.#model, ctx);
   }
 
   /* ---------------- the two sphere tabs ---------------- */
@@ -7591,6 +7600,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'toggle-skills':
         this.#showAllSkills = !this.#showAllSkills;
+        this.#skillRowsKept = null;
         this.#render();
         break;
       case 'toggle-weapon': {

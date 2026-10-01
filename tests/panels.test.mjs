@@ -38,7 +38,7 @@ import * as admin from '../app/js/ui/panels/admin.js';
 import * as gear from '../app/js/ui/panels/gear.js';
 import * as trackers from '../app/js/ui/panels/trackers.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
-import { renderSkillsPanel } from '../app/js/ui/panels/skills.js';
+import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
 import { normalizeStyle } from '../app/js/tracker-style.js';
 
@@ -592,6 +592,18 @@ console.log('\nno character text reaches the page as markup');
     [tabled.includes('<table class="peektable">'), tabled.includes('prose-view rich'), tabled.includes('<textarea data-item="x|0|notes"'), tabled.includes('Level\tSize')],
     [true, true, true, true]);
   check('a note without one is the plain box', talentNote(noteModel, 'data-item="x|0|notes"', 'Taken at 5th.', 'x|0|notes').includes('prose-view'), false);
+}
+
+console.log('skill rows stay put while the player is on the tab');
+{
+  const c = new Character(blankDocument({ name: 'Ranks', level: 3 }));
+  const all = skillRowIndices(c, {});
+  check('nothing in use: every row', all.length, c.data.skills.length);
+  c.setItem('skills', 0, 'rankSources.bought', 2);
+  check('a first rank alone narrows the table to that row', skillRowIndices(c, {}), [0]);
+  check('but the rows shown a moment ago are kept', skillRowIndices(c, { keep: new Set(all) }).length, all.length);
+  c.setItem('skills', 1, 'hidden', true);
+  check('except one hidden with the eye', skillRowIndices(c, { keep: new Set(all) }).includes(1), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
