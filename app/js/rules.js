@@ -1443,6 +1443,16 @@ export function summariseLevels(levels) {
  * talents: {start: 1, gainsAt: '3, +4'} }` and nothing about weapons is
  * written into the engine.
  */
+/**
+ * What "+ Customized weapons" starts a track with: the armiger's -- three
+ * weapons at 1st and one more at 11th and 19th; one talent each at 1st and
+ * one more at 3rd, 7th, 11th, 15th and 19th. Both are editable on the track.
+ */
+export const DEFAULT_TALENT_TRACKS = {
+  sets: { start: 3, gainsAt: '11, 19' },
+  talents: { start: 1, gainsAt: '3, 7, 11, 15, 19' },
+};
+
 export function normalizeTalentTracks(spec) {
   if (!spec || typeof spec !== 'object') return null;
   // A rule written as a bare string is its gainsAt; the start comes from the

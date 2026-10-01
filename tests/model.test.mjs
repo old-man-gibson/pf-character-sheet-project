@@ -72,6 +72,7 @@ import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
+import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
 let fail = 0;
@@ -2727,6 +2728,35 @@ console.log('dashboard sphere cards show what the character has');
   check('the talents card leaves out a talent at a level not reached, and lists the drawn weapon’s',
     [fcard.includes('Haymaker'), fcard.includes('Future Punch'), fcard.includes('Weapon Trick')], [true, false, true]);
   check('and its hover shows the text as it reads, not the raw braces', fcard.includes('title="Haymaker {'), false);
+}
+
+console.log('customized weapons -- the armiger’s counts by default, and a note per talent');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] }] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 11);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 11, levels: [] });
+  const block = c.addCustomization('Armiger');
+  check('3 weapons + 1 at 11th; 1 talent + 1 at 3rd, 7th and 11th', [block.setCount, block.talentCount], [4, 4]);
+
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Boxing');
+  c.setTalentEntry(list, 0, 'Haymaker', { sphere: 'sphere', notes: 'notes' });
+  const row = () => c.data.training.combat.customizations[0].sets[0].talents[0];
+  check('naming a known talent fills its note', row().notes, 'Hit hard.');
+  c.setItem(list, 0, 'notes', '');
+  check('and Fill notes reaches weapon talents', [c.blankTalentNotes('combat'), c.fillTalentNotes('combat'), row().notes], [1, 1, 'Hit hard.']);
+
+  const pop = talentPopHtml(c, JSON.stringify({ k: 'wtalent', p: `${list}|0` }));
+  check('hovering the name shows name and sphere, then the text',
+    [pop.includes('<span class="bdname">Haymaker</span><span class="bdsphere">Boxing</span>'), pop.includes('Hit hard.')], [true, true]);
+
+  const shut = combatPanels.renderMartialPanel(c);
+  check('the note starts folded behind an arrow', [shut.includes(`data-collapse="wnote:${list}|0"`), shut.includes(`data-item="${list}|0|notes"`)], [true, false]);
+  c.data.uiPrefs.collapsed = { ...(c.data.uiPrefs.collapsed || {}), [`wnote:${list}|0`]: false };
+  check('opened, the note is there to edit', combatPanels.renderMartialPanel(c).includes(`data-item="${list}|0|notes"`), true);
+  setSphereCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);

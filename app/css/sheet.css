@@ -2670,6 +2670,14 @@ table.speeds .speedfwd { margin-top: 2px; }
 .weaponset.drawn .weaponhead .chk { color: var(--cs-good); }
 .weaponset table.talents col.sphere { width: 7.6rem; }
 .weaponset table.talents col.talent { width: auto; }
+.weaponset table.talents col.fold { width: 1.7rem; }
+.weaponset table.talents td.tools { padding: 0; text-align: center; vertical-align: middle; }
+.weaponset .catfold { font-size: 1rem; margin-top: 0; }
+/* An arrow whose note has something in it says so in the accent colour. */
+.weaponset .catfold.hasnote { color: var(--cs-accent); }
+.weaponset tr.wnote > td { padding-top: 0; }
+.weaponset tr.wnote textarea { width: 100%; }
+.bdpop .bdsphere { color: var(--cs-muted); font-size: 0.85em; white-space: nowrap; }
 .weaponset .weapondrawback { margin: 5px 0 0; }
 .weaponset .weapondrawback input[type="text"] { flex: 1; min-width: 0; }
 .weaponset .weapondrawback .chk { flex: 0 0 auto; font-size: 0.72rem; color: var(--cs-muted); }

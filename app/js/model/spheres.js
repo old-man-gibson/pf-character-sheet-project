@@ -12,7 +12,7 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  statMod, tempEssenceCost, trackCount,
+  statMod, tempEssenceCost, trackCount, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
@@ -757,6 +757,15 @@ function notedTalentRows(model, sideKey) {
     ladder(pool.owner.cls, pool.kind === 'guile' || poolHasUtility(pool.owner.cls, pool.owner.side));
   }
   for (const b of side?.bonusTalents || []) out.push([b, PLAIN_COLUMNS]);
+  // Every customized weapon's talents, drawn or stowed: each has a note.
+  if (sideKey === 'combat') {
+    for (const block of side?.customizations || []) {
+      for (const set of block.sets || []) {
+        if (set.spare) continue;
+        for (const row of set.talents || []) if (row.granted !== false) out.push([row, PLAIN_COLUMNS]);
+      }
+    }
+  }
   return out;
 }
 
@@ -1094,7 +1103,7 @@ export function checkCustomizationBases(model, t) {
  * Adding the same class twice tunes what is there rather than making a
  * second block -- a class grants its customizations once.
  */
-export function addCustomization(model, className, spec = {}) {
+export function addCustomization(model, className, spec = DEFAULT_TALENT_TRACKS) {
   const t = model.data.training;
   if (!t?.combat) return null;
   if (!Array.isArray(t.combat.customizations)) t.combat.customizations = [];

@@ -280,6 +280,7 @@ function everywhere() {
   c.addCustomization('Armiger', { sets: { start: 2, gainsAt: '' }, talents: { start: 1, gainsAt: '' } });
   c.setItem('training.combat.customizations.0.sets.0.talents', 0, 'talent', 'Keen Edge {edge.x = 1}');
   c.setItem('training.combat.customizations.0.sets.1.talents', 0, 'talent', 'Stowed {stowed.x = 1}');
+  c.setItem('training.combat.customizations.0.sets.0.talents', 0, 'notes', 'cuts {edge.note = 2}');
   const wisp = c.addCompanion('eidolon');
   wisp.name = 'Wisp';
   wisp.notes = 'second {wisp.note = 1}';

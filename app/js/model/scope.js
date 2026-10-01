@@ -1482,7 +1482,9 @@ export function proseSources(model) {
     (block.sets || []).forEach((set, si) => {
       if (set.spare || si !== (Number(block.active) || 0)) return;
       (set.talents || []).forEach((row, ri) => {
-        if (row.granted !== false) push(`weaponTalent:${bi}:${si}:${ri}`, row.talent);
+        if (row.granted === false) return;
+        push(`weaponTalent:${bi}:${si}:${ri}`, row.talent);
+        push(`weaponTalent:${bi}:${si}:${ri}:notes`, row.notes);
       });
     });
   });

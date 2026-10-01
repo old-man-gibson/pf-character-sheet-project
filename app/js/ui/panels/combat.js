@@ -17,7 +17,7 @@ import { esc, val } from '../html.js';
 import { collapsible } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
-import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
+import { fillNotesButton, noteField, talentCell, talentLegend, talentNote } from '../talents.js';
 import { rollButton } from '../roll.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
@@ -384,26 +384,38 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
           <span>${live ? 'Drawn' : set.spare ? 'Spare' : 'Stowed'}</span></label>
         ${itemText(list, si, 'weapon', set.weapon, `${Unit} ${si + 1}`, true)}
       </div>
-      <table class="talents">
-        <colgroup><col class="talent"><col class="sphere"></colgroup>
+      <table class="talents weapontalents">
+        <colgroup><col class="talent"><col class="sphere"><col class="fold"></colgroup>
         <tbody>${rows.map((row, ri) => {
     const on = row.granted !== false;
     const state = on ? 'slot-on' : 'slot-off';
     const side = on && row.sphere ? trackTalentSide(row.sphere) : null;
     const bonus = on && ri >= block.talentCount;
+    // The talent's note opens under its row. Shut until the player opens it,
+    // and kept per row; a dot on the arrow says there is something in it.
+    const noteKey = `wnote:${talents}|${ri}`;
+    const said = model.data?.uiPrefs?.collapsed?.[noteKey];
+    const open = on && said === false;
+    const hasNote = !!String(row.notes ?? '').trim();
+    const named = on && !!String(row.talent ?? '').trim();
     return `<tr>
-          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
+          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${named
+      ? ` data-tpop="${esc(JSON.stringify({ k: 'wtalent', p: `${talents}|${ri}` }))}"` : ''}${row.needsBase
       ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
       : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
             ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere,
-    on ? { sphere: 'sphere' } : null)}</td>
+    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
           <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
       ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
         + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
         + 'Widen it above, or add the archetype that does.')}"` : ''}>
             ${on ? itemSelect(talents, ri, 'sphere', row.sphere, spheres)
       : '<select disabled><option></option></select>'}</td>
-        </tr>`;
+          <td class="tools">${on ? `<button class="disclose catfold${hasNote ? ' hasnote' : ''}" data-collapse="${esc(noteKey)}"
+            data-collapse-to="${open}" aria-expanded="${open}"
+            title="${open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note'}">${open ? '▾' : '▸'}</button>` : ''}</td>
+        </tr>${open ? `<tr class="wnote"><td colspan="3">${noteField(model,
+    `data-item="${talents}|${ri}|notes" placeholder="What this talent does…"`, String(row.notes ?? ''))}</td></tr>` : ''}`;
   }).join('')}</tbody>
       </table>
       <div class="listrow weapondrawback">
