@@ -170,6 +170,7 @@ import {
 import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
 } from './roll20.js';
+import { communitySheetImport } from './roll20-sheet.js';
 
 /**
  * What the gold left edge on a field means, in the two flavours it comes in:
@@ -318,9 +319,9 @@ function loadTablesFor(el) {
  * `data-mopen` and `data-mclose` open and shut a maneuver's card, `data-gearopen`
  * does the same for an item, `data-foldcell` unfolds a cell of prose. The named
  * actions are the sheet's own furniture -- search, the view switch, the theme,
- * the formula tab -- plus Export JSON, because a read-only sheet is still the
- * reader's to take away, and the two dismiss buttons, which only close a notice
- * this page put up.
+ * the formula tab -- plus Export JSON and the copy for the Roll20 sheet, because
+ * a read-only sheet is still the reader's to take away, and the dismiss
+ * buttons, which only close a notice this page put up.
  *
  * Anything that opens is paired with what shuts it. Leaving a card openable and
  * not closeable is the kind of half-locked state that reads as a broken sheet
@@ -336,6 +337,7 @@ const READERS_KEEP = [
   '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
   '[data-action="toggle-gear"]', '[data-action="toggle-weapon"]', '[data-action="toggle-skills"]',
   '[data-action="dismiss-history-note"]', '[data-action="dismiss-import-error"]',
+  '[data-action="roll20-sheet"]', '[data-action="dismiss-roll20-sheet"]',
 ].join(',');
 
 
@@ -592,6 +594,7 @@ export class CharacterSheetElement extends HTMLElement {
   #model = null;
   #sourceDoc = null;        // the document as loaded, before any local edits
   #importError = null;      // why the last offered file was refused
+  #roll20Export = null;     // { text, notes, failed }: the last copy for the Roll20 sheet
   /*
    * Saving, and going back.
    *
@@ -2349,6 +2352,27 @@ export class CharacterSheetElement extends HTMLElement {
       </div>`;
   }
 
+  /**
+   * What the copy for the Roll20 sheet needs said beside it: where to paste
+   * it, and the handful of things the import leaves to do by hand. When the
+   * clipboard refused, the text is here to select instead.
+   */
+  #roll20ExportNote() {
+    const { text, notes, failed } = this.#roll20Export;
+    return `<div class="histnote r20note" role="status">
+          <div>
+            <p>${failed ? 'The clipboard is not available here, so the text is below to copy by hand.'
+              : 'Copied.'} In Roll20, open the character's Pathfinder Community sheet, go to
+              its Settings page, paste into the box under <b>HeroLab Character Import</b> and
+              click outside it. The box empties when the import has worked.</p>
+            ${failed ? `<textarea readonly rows="4" data-r20text>${esc(text)}</textarea>` : ''}
+            ${notes.length ? `<p>After the import:</p>
+            <ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+          </div>
+          <button data-action="dismiss-roll20-sheet" aria-label="Dismiss">×</button>
+        </div>`;
+  }
+
   /** Everything the rail does not keep on its face. */
   #chromeMenuHtml() {
     return `<div class="chromemenu" role="menu" aria-label="Sheet actions">
@@ -2361,6 +2385,8 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
         <button data-action="export">Export JSON</button>
+        <button data-action="roll20-sheet"
+          title="Copy this character for the Pathfinder Community sheet on Roll20, to paste into its HeroLab Character Import box">Copy for Roll20 sheet</button>
         ${this.isPublished ? '' : `
         <button data-action="preview-published"
           title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
@@ -2406,6 +2432,7 @@ export class CharacterSheetElement extends HTMLElement {
           ${esc(this.#importError)}
           <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
+        ${this.#roll20Export ? this.#roll20ExportNote() : ''}
         ${/*
            * Always in the markup, hidden until it is true, so `#writeWorking`
            * can turn it on without a re-render (see there). There is no dismiss
@@ -7527,6 +7554,24 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'dismiss-history-note':
         this.#historyNote = null;
+        this.#renderHeader();
+        break;
+      case 'roll20-sheet': {
+        const { text, notes } = communitySheetImport(this.#model);
+        const show = (failed) => {
+          this.#roll20Export = { text, notes, failed };
+          this.#chromeMenu = false;
+          this.#renderHeader();
+          if (failed) this.shadowRoot.querySelector('[data-r20text]')?.select();
+        };
+        // Outside a secure context there is no clipboard, and inside one it
+        // can be refused; either way the text goes on screen to copy instead.
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => show(false), () => show(true));
+        else show(true);
+        break;
+      }
+      case 'dismiss-roll20-sheet':
+        this.#roll20Export = null;
         this.#renderHeader();
         break;
       case 'add-tracker': {

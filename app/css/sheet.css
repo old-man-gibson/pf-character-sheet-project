@@ -870,6 +870,11 @@
   border: 1px solid var(--cs-line); border-radius: 6px;
 }
 .histnote button { margin-left: auto; padding: 0 6px; }
+/* The copy for the Roll20 sheet: where to paste it, and what is left to do. */
+.r20note > div { flex: 1; min-width: 0; }
+.r20note p { margin: 0 0 4px; }
+.r20note ul { margin: 0; padding-left: 1.2em; }
+.r20note textarea { width: 100%; box-sizing: border-box; font: 0.75rem ui-monospace, monospace; }
 
 .history {
   flex-basis: 100%; margin-top: 8px; padding: 10px 12px;
