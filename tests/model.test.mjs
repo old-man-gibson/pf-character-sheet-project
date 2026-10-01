@@ -2053,6 +2053,31 @@ console.log('caster-level bonuses wait for casting; spell points count classes t
     m().classSP.find((x) => x.name === 'Incanter').sp, 2 + 2);
 }
 
+console.log('a blended twin: no guessed casting type, one level count, a second score that shows');
+{
+  const c = new Character(blankDocument({ name: 'Monk', level: 6 }));
+  c.listAdd('training.combat.classes', { name: 'Monk', type: 'Expert', talentsPerLevel: 'Expert', mod1: 'Wis', levels: [] });
+  c.set('statsBuild.wis.pointBuy', 14);
+  c.set('statsBuild.cha.pointBuy', 12);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', 6);
+  c.setBlended('combat', 0, true);
+  const m = () => c.data.training.magic;
+  const twin = () => m().classes.find((x) => x.name === 'Monk');
+  check('the twin copies the martial rate but takes no casting type from it',
+    [twin().talentsPerLevel, twin().effectiveType, m().castingUnlocked, m().globalCL], ['Expert', null, false, 0]);
+  check('and earns no spell points without one', m().classSP.find((x) => x.name === 'Monk').sp, 0);
+  check('it counts the owner\'s levels', [twin().classLevelsOverride, twin().classLevelsCurrent], [6, 6]);
+
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'type', 'Mid');
+  check('a type picked: a Mid caster at 6th', [m().castingUnlocked, m().globalCL], [true, 4]);
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'classLevelsOverride', 2);
+  check('an override typed on the twin gives way to the owner\'s', twin().classLevelsCurrent, 6);
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'mod2', 'Cha');
+  check('its second score adds to its spell points', m().classSP.find((x) => x.name === 'Monk').sp, 6 + 2 + 1);
+  const html = combatPanels.renderMagicPanel(c);
+  check('and has a field in the blended panel', html.includes(`data-item="training.magic.classes|${m().classes.indexOf(twin())}|mod2"`), true);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));

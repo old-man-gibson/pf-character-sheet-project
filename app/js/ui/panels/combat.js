@@ -440,9 +440,16 @@ function blendedPanel(model, pairs) {
     const head = (half, label, types) => {
       if (!half) return `<label class="fld ratepick"><span>${label} type</span><select disabled><option>—</option></select></label>`;
       const list = `training.${half.side}.classes`;
-      return `<label class="fld ratepick"><span>${label} type</span>
-          ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
-        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
+      const casting = label === 'Casting';
+      // A half with no type has no progression on that side: nothing is
+      // guessed from the other side's rate, so say so where it is picked.
+      const unset = !half.cls.effectiveType;
+      return `<label class="fld ratepick${unset ? ' unset' : ''}"><span>${label} type</span>
+          ${itemSelect(list, half.index, 'type', half.cls.type, types)}
+          ${unset ? `<span class="hint warn">Pick one — no ${casting ? 'caster level' : 'practitioner progression'} until then</span>` : ''}</label>
+        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, casting ? 'Casting score' : 'Practitioner mod')}
+        ${/* Only the casting half: spell points are what a second score adds to. */''}
+        ${casting ? abilityField(model, list, half.index, 'mod2', half.cls.mod2, '2nd score') : ''}`;
     };
     const guile = model.data.training?.guile;
 

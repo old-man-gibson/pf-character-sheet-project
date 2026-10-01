@@ -8,9 +8,9 @@
  */
 
 import {
-  COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
+  CASTING_TYPES, COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
-  TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
+  PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
   statMod, tempEssenceCost, trackCount, trackSpheres,
 } from '../rules.js';
@@ -1261,6 +1261,12 @@ export function pairBlended(model) {
       if (mirror[key] != null && mirror[key] !== '' && (owner[key] == null || owner[key] === '')) owner[key] = mirror[key];
       delete mirror[key];
     }
+    // One class, one count of its levels: the mirror follows the owner's
+    // override, which is the one the Blended training panel shows. One of its
+    // own, typed before the pair was made, is dropped rather than left to
+    // make the two halves disagree out of sight.
+    if (owner.classLevelsOverride == null) delete mirror.classLevelsOverride;
+    else mirror.classLevelsOverride = owner.classLevelsOverride;
   }
   for (const m of magic) {
     if (m.blended && !(t.combat?.classes || []).some((x) => x.name === m.name)) {
@@ -1401,6 +1407,9 @@ export function blendedClasses(model) {
  * spell points and boons, and the global casting numbers. Runs before the
  * skills loop because sphere talents grant skill ranks.
  */
+/** The types each sphere side's classes may take. */
+const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
+
 export function recomputeTraining(model) {
   const t = model.data.training;
   if (!t) return;
@@ -1420,8 +1429,14 @@ export function recomputeTraining(model) {
       cls.side = sideKey;
       // Several sheets fill in only one of type / talents-per-level;
       // each falls back to the other.
+      // The fallback only reads a rate that belongs to this side: a blended
+      // class's other half copies the martial rate, and how fast a class
+      // learns martial talents says nothing about its caster level. Expert on
+      // the magic side is not a casting type, so the half has none until one
+      // is picked.
       const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
-      const type = cls.type || TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+      const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+      const type = cls.type || (guess && SIDE_TYPES[sideKey].includes(guess) ? guess : null);
       const rate = TALENT_RATES[tpl] ?? 0;
       const progRate = TYPE_RATES[type] ?? 0;
       cls.effectiveType = type;
@@ -1529,7 +1544,10 @@ export function recomputeTraining(model) {
     // the tradition's spell points per casting class. With none taken (casting
     // from Advanced Magic Training alone) the modifier falls back to the
     // classes named, since that is the only casting ability written down.
-    const acquired = casters.filter((x) => (x.classLevelsCurrent ?? 0) > 0);
+    // A class with no casting type picked -- a blended half not yet set --
+    // has no casting progression, so it is not a casting class either.
+    const casts = (x) => (TYPE_RATES[x.effectiveType] ?? 0) > 0;
+    const acquired = casters.filter((x) => (x.classLevelsCurrent ?? 0) > 0 && casts(x));
     const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
     // Advanced Magic Training grants casting to non-casting classes:
@@ -1574,7 +1592,7 @@ export function recomputeTraining(model) {
     const baseCL = Math.max(0, amtFloor, ...casters.map(
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
     ));
-    m.castingUnlocked = amtFloor > 0 || casters.some((x) => (x.classLevelsCurrent ?? 0) > 0);
+    m.castingUnlocked = amtFloor > 0 || acquired.length > 0;
     const clPlus = (Number(m.clBonus) || 0) + m.clForwarded;
     m.clWaiting = m.castingUnlocked ? 0 : clPlus;
     m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
@@ -1677,7 +1695,7 @@ export function recomputeTraining(model) {
     // all for a class not taken yet. The same ability in both slots counts
     // once, as `statMod` reads a slot everywhere else.
     m.classSP = casters.map((x) => {
-      const own = x.classLevelsCurrent ?? 0;
+      const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
       return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
     });
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
