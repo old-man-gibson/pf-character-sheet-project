@@ -44,6 +44,7 @@ import {
   guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
+import { altTrainingTalents } from './alt-training.js';
 import { forwarded } from '../scope.js';
 import { poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, utilityCounts } from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
@@ -314,6 +315,13 @@ export function recomputeGuile(model) {
 
   g.tally = guileTally(g, { training });
   g.tallySpent = guileTally(g, { spentOnly: true, training });
+  // An Alternate Training technique that teaches a skill sphere counts here
+  // the way one teaching a martial or magic sphere counts on its side.
+  const technique = altTrainingTalents(model);
+  const learned = String(technique?.sphere || '').trim();
+  if (technique?.side === 'guile' && learned) {
+    for (const t of [g.tally, g.tallySpent]) t[learned] = (t[learned] || 0) + technique.count;
+  }
 
   // A sphere is on the table because a talent went into it, or because the
   // player put it there to choose its skill before spending anything. Rows

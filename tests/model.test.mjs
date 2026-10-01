@@ -2537,6 +2537,43 @@ console.log('customized weapons -- the drawn weapon’s talents read {…}');
   check('draw the other and it swaps', c.data.attack.totalMelee - base, 5);
 }
 
+console.log('alternate training -- every reader takes the branch the player ticked');
+{
+  // Levels written out of order, a talent at 1st whose "already had it"
+  // branch is a feat, and a second technique that teaches a skill sphere.
+  const grants = {
+    1: [{ talent: true, name: 'Athletics Sphere', alt: { feat: true, name: 'Bonus feat' } }],
+    3: [{ talent: true, name: 'Wall Stunt' }],
+    5: [{ talent: true, name: 'Air Stunt' }],
+  };
+  setAltTrainingTables({
+    levels: [5, 1, 3],
+    repeatFrom: 99,
+    techniques: [
+      { name: 'Test Body', talents: { side: 'combat', sphere: 'Athletics' }, grants },
+      { name: 'Test Mind', talents: { side: 'guile', sphere: 'Study' }, grants },
+    ],
+  });
+  const c = new Character(blankDocument({ name: 'Trainee' }));
+  c.set('identity.level', 5);
+  c.set('altTraining.technique', 'Test Body');
+  const counts = () => c.data.altTraining.calc.counts;
+  const athletics = () => c.data.training.combat.tally.Athletics;
+  check('the ladder is drawn in level order', c.data.altTraining.calc.rows.map((r) => r.level), [1, 3, 5]);
+  check('three talents on the tab and in the tally', [counts().talent, athletics()], [3, 3]);
+  c.set('altTraining.alt.1', true);
+  check('already had it: a feat instead, on the tab and in the tally alike',
+    [counts().talent, counts().feat, athletics()], [2, 1, 2]);
+  check('and so do the sphere skill ranks',
+    c.trainingSkillRanks.find((r) => r.skill === 'Climb').talents, 2);
+
+  c.set('altTraining.alt.1', false);
+  c.set('altTraining.technique', 'Test Mind');
+  check('a skill-sphere technique counts on the guile side',
+    [c.data.training.guile.tally.Study, c.data.training.combat.tally.Athletics], [3, undefined]);
+  setAltTrainingTables(merged.altTraining);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

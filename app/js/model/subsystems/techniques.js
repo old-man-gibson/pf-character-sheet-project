@@ -7,7 +7,7 @@
  */
 
 import {
-  altTrainingGrantsAt, altTrainingLevels, altTrainingTechnique, grantCount,
+  altTrainingLevels, altTrainingTechnique, grantCount, liveGrantsAt,
 } from './alt-training.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
@@ -489,11 +489,12 @@ export function techniqueTalents(model) {
   if (!sphere) return null;
   const level = Number(model.data.identity.level) || 0;
   const picks = model.data.altTraining?.picks || {};
+  const alt = model.data.altTraining?.alt || {};
   const names = [];
   const choices = [];
   for (const lvl of altTrainingLevels()) {
-    if (lvl > level) break;
-    for (const g of altTrainingGrantsAt(t, lvl)) {
+    if (lvl > level) continue;
+    for (const g of liveGrantsAt(t, lvl, alt)) {
       if (!grantCount(g, 'talent')) continue;
       const pick = String(picks[lvl] ?? '').trim();
       // A grant the player chooses is a choice even where the rules name the
