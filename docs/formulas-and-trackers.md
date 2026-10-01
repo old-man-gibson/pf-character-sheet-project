@@ -425,7 +425,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
 | `str.temp`, `dex.temp`, … | the same, said the other way round: the *working* score, which is what a bonus lasting a fight moves. `{str.temp += 2 as size}` and `{str.score += 2 as temp.size}` are the same bonus |
 | `defenses.sr` | spell resistance |
-| `defenses.dr`, `dr.magic`, `dr.cold_iron`, … | damage reduction, all of it or one bypass — see below |
+| `defenses.dr`, `dr.magic`, `dr.cold_iron`, `dr.none` (for x/—), … | damage reduction, all of it or one bypass — see below |
 | `defenses.resistance`, `resistance.fire`, … | energy resistance, all of it or one energy |
 | `defenses.weakness`, `weakness.fire`, … | vulnerability, the same way |
 | `immune.sleep`, `immune.fire`, … | an immunity, which is a switch rather than an amount: any positive number grants it, and `-=` suppresses one that was typed in |
