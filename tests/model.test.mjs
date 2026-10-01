@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation,
+  hasManipulation, setFeatCatalogue, featCatalogue,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2931,6 +2931,36 @@ console.log('spell points and power points are built-in drain trackers');
   const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('one of each after a save and reload',
     [saved.trackers.filter((t) => t.pool === 'sp').length, saved.trackers.filter((t) => t.pool === 'pp').length], [1, 1]);
+}
+
+console.log('alternate training fills a feat level\u2019s note too');
+{
+  const feats = featCatalogue();
+  const spheres = sphereCatalogue();
+  setFeatCatalogue({ feats: [{ name: 'Unarmed Combatant', text: 'You may use Str for unarmed damage.' }, { name: 'Iron Will', text: '+2 on Will saves.' }] });
+  setSphereCatalogue({ spheres: [{ name: 'Athletics', kind: 'combat', talents: [{ name: 'Wall Stunt', text: 'Run along walls.' }] }] });
+  setAltTrainingTables({
+    levels: [1, 3, 5], repeatFrom: 99,
+    techniques: [{ name: 'Test Body', talents: { side: 'combat', sphere: 'Athletics' }, grants: {
+      1: [{ feat: true, name: 'Unarmed Combatant' }],
+      3: [{ talent: true, name: 'Wall Stunt' }, { feat: true, name: 'Iron Will' }],
+      5: [{ feat: true, pick: { options: [] } }],
+    } }],
+  });
+  const c = new Character(blankDocument({ name: 'Trainee' }));
+  c.set('identity.level', 5);
+  c.set('altTraining.technique', 'Test Body');
+  check('two feat levels and a talent can be filled', c.blankTalentNotes('altTraining'), 2);
+  c.setAltTrainingPick(5, 'Iron Will');
+  check('a feat picked by name fills as it is typed', c.data.altTraining.rowNotes[5], '+2 on Will saves.');
+  c.fillTalentNotes('altTraining');
+  const notes = c.data.altTraining.rowNotes;
+  check('a named feat fills', notes[1], 'You may use Str for unarmed damage.');
+  check('a row with a talent and a feat gets both, each under its name',
+    notes[3], 'Wall Stunt: Run along walls.\n\nIron Will: +2 on Will saves.');
+  setFeatCatalogue(feats);
+  setSphereCatalogue(spheres);
+  setAltTrainingTables(merged.altTraining);
 }
 
 const missing = missingCharacters(REAL);
