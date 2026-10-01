@@ -16,7 +16,7 @@ import {
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
-import { plannerHasClass } from './progression.js';
+import { ownLevelCount, plannerHasClass } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
@@ -900,10 +900,18 @@ export function applyBudget(model) {
  * not that it was handed two more levels to spend.
  */
 export function ownClassLevels(model, className) {
-  const match = closestName(className, model.progressionClasses());
-  if (!match) return 0;
-  const cap = Number(model.data.identity?.level) || 20;
-  return model.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+  // The training class's own override says how many levels it has, the way
+  // the class's talent ladder reads it; otherwise the levels the Classes
+  // table or the Planner give, as every other count does. Only the Planner
+  // used to count here, so an override of 7 on an empty Planner gave no
+  // weapons at all.
+  const name = String(className || '').trim().toLowerCase();
+  const t = model.data.training || {};
+  const cls = name && ['combat', 'magic', 'guile'].flatMap((k) => t[k]?.classes || [])
+    .find((x) => String(x?.name || '').trim().toLowerCase() === name && x.classLevelsOverride != null);
+  const level = Number(model.data.identity?.level) || 20;
+  if (cls) return Math.max(0, Math.min(level, Math.floor(Number(cls.classLevelsOverride) || 0)));
+  return ownLevelCount(model, className).own;
 }
 
 /**

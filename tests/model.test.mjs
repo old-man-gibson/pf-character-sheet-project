@@ -2216,6 +2216,22 @@ console.log('companion ids are unique across every kind, whatever a file says');
   check('a repeated id takes the next free one of its own kind', ids, ['eidolon', 'eidolon3', 'eidolon2']);
 }
 
+console.log('customized weapons count the class the way everything else does');
+{
+  const spec = { sets: { start: 3, gainsAt: '11, 19' }, talents: { start: 1, gainsAt: '3, +4' } };
+  const c = new Character(blankDocument({ name: 'Armiger', level: 9 }));
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', talentsPerLevel: 'Expert', levels: [] });
+  const block = c.addCustomization('Armiger', spec);
+  const cust = () => c.data.training.combat.customizations[0];
+  check('no levels anywhere: no weapons', [cust().classLevels, cust().setCount], [0, 0]);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', 7);
+  check('the class-level override counts, on an empty Planner', [cust().classLevels, cust().setCount, cust().talentCount], [7, 3, 3]);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', null);
+  c.listAdd('classes', { name: 'Armiger', levelsOverride: 5 });
+  check('and so does the Classes table', cust().classLevels, 5);
+  check('the block is the one added', block === cust(), true);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));
