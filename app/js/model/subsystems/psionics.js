@@ -88,7 +88,7 @@ export const PSIONIC_DERIVED = [
   {
     path: 'classes',
     keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelForwarded',
-      'manifesterLevelWaiting', 'curveKnown', 'basePoints',
+      'manifesterLevelWaiting', 'levelClass', 'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
 ];
@@ -218,7 +218,8 @@ export function recomputePsionics(model) {
   for (const c of p.classes || []) {
     // Manifester level is levels of the class, counted off the Planner the way
     // the sheet's COUNTIF did, unless a block pins it.
-    const fromProgression = model.classLevelCount(c.name);
+    c.levelClass = model.blockClassName(c.name);
+    const fromProgression = model.classLevelCount(c.levelClass);
     const pinned = c.manifesterLevelOverride;
     const level = Math.max(0, Math.min(20,
       pinned === null || pinned === undefined

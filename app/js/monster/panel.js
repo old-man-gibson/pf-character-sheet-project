@@ -175,7 +175,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const scores = ABILITIES.map((k) => {
       const a = c.abilities[k] || {};
       const none = m?.nonabilities?.includes(k);
-      const base = Number(a.tempScore) || 0;
+      const base = Number(a.workingScore ?? a.tempScore) || 0;
       const now = cs.changed ? (cs.scores[k] ?? base) : base;
       return `<b>${ABILITY_LABELS[k]}</b> ${none ? '—' : now !== base
         ? `<strong class="adj ${now > base ? 'up' : ''}" title="${esc(`Base ${base} — with ${cs.sources} applied`)}">${now}</strong>` : now}`;

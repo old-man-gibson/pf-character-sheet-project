@@ -1012,6 +1012,8 @@ function castingClassPanel(model, c, i) {
     ? `<p class="hint">Reading <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
       ${drift ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'}
         of this class.</p>` : ''}
+      ${c.levelClass && c.levelClass !== String(c.name || '').trim()
+    ? `<p class="hint">Counts <strong>${esc(c.levelClass)}</strong> levels.</p>` : ''}
       <table class="build vslots"><thead><tr>
         <th title="${esc(noun.one)} level">Level</th>
         <th class="num" title="${esc(noun.many)} per day">/day</th>
@@ -1105,7 +1107,11 @@ function castingStatCell(model, c, i) {
 const SPELL_LIST_ID = 'cat-spells';
 
 function spellDatalist(v) {
-  const classes = (v?.classes || []).map((c) => String(c?.name || '').trim()).filter(Boolean);
+  // By the class whose list it is -- the slot table, or the class the block
+  // counts levels from -- not the block's own name, which may be an
+  // archetype's: "Wizard (Evoker)" casts from the wizard list.
+  const classes = (v?.classes || [])
+    .map((c) => String(c?.slotType || c?.levelClass || c?.name || '').trim()).filter(Boolean);
   return nameDatalist(SPELL_LIST_ID, 'spells', {
     classes, has: spellCatalogue().spells.length > 0,
   });
@@ -1124,7 +1130,7 @@ function powerListId(c) {
 }
 
 function powerDatalist(c) {
-  const name = String(c?.name || '').trim();
+  const name = String(c?.levelClass || c?.name || '').trim();
   return nameDatalist(powerListId(c), 'powers', {
     classes: name ? [name] : [], has: powerCatalogue().powers.length > 0,
   });

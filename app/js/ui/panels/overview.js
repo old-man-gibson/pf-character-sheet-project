@@ -385,7 +385,7 @@ function dashCondNumbers(model) {
       if (t.mods[key]) bits.push(`${label} ${fmt(t.mods[key])}`);
     }
     for (const key of ABILITIES) {
-      const base = Number(model.data.abilities[key]?.tempScore) || 0;
+      const base = Number(model.data.abilities[key]?.workingScore ?? model.data.abilities[key]?.tempScore) || 0;
       let score = base + (t.ability[key] || 0);
       if (t.abilitySet[key] !== undefined) score = Math.min(score, t.abilitySet[key]);
       score = Math.max(0, score);
@@ -928,7 +928,7 @@ function dashAbilitiesCard(model) {
     const cs = model.conditionState;
     const row = (k) => {
       const a = c.abilities[k] || {};
-      const baseScore = Number(a.tempScore) || 0;
+      const baseScore = Number(a.workingScore ?? a.tempScore) || 0;
       const score = cs.changed ? (cs.scores[k] ?? baseScore) : baseScore;
       // The same sum the d20 copy rolls: the ability's own movement plus the
       // flat penalty on ability checks (a negative level's, say).
@@ -1339,7 +1339,7 @@ function abilityScoresPanel(model) {
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
+              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
               : built
                 ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}

@@ -192,7 +192,7 @@ export function abilityMoves(c, totals) {
   const scores = {};
   for (const key of ABILITIES) {
     const a = c.abilities[key];
-    const base = Number(a?.tempScore) || 0;
+    const base = Number(a?.workingScore ?? a?.tempScore) || 0;
     let score = base + (totals.ability[key] || 0);
     if (totals.abilitySet[key] !== undefined) score = Math.min(score, totals.abilitySet[key]);
     score = Math.max(0, score);
@@ -513,7 +513,7 @@ export function hpState(model) {
   // it stays tied to Con and moves when Con does. The threshold takes a
   // formula and a forwarded bonus alike, so the rule that moves it can be
   // written where the rule is.
-  const conScore = model.data.abilities.con?.tempScore ?? 10;
+  const conScore = model.data.abilities.con?.workingScore ?? model.data.abilities.con?.tempScore ?? 10;
   const deathBonus = (Number(hp.deathBonusResolved ?? hp.deathBonus) || 0)
     + forwarded(model, 'hp.deathBonus');
   const deathAt = -(conScore + deathBonus);

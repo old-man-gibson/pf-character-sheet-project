@@ -246,7 +246,7 @@ function vitals(model, add) {
     if (!ab) continue;
     add({
       kind: 'stat', title: ABILITY_LABELS[key], tab: 'stats', start: true,
-      value: `${ab.tempScore ?? ab.score} (${fmt(ab.totalMod ?? ab.mod)})`,
+      value: `${ab.workingScore ?? ab.tempScore ?? ab.score} (${fmt(ab.totalMod ?? ab.mod)})`,
       sub: bits(ab.tempScore !== ab.score ? `base ${ab.score}` : '', 'ability score'),
       roll: { kind: 'ability', ref: key }, keys: `${key} ability score modifier`,
     });

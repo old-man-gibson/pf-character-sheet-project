@@ -228,7 +228,7 @@ function abilityBreakdown(model, key, which) {
   // The build's own resolver may cap or floor a column; where it does, the
   // difference is named rather than left to make the sum wrong.
   const shown = parts.reduce((t, p) => t + p.value, 0);
-  const total = which === 'temp' ? (Number(a.tempScore) || 0) : (Number(a.score) || 0);
+  const total = which === 'temp' ? (Number(a.workingScore ?? a.tempScore) || 0) : (Number(a.score) || 0);
   if (shown !== total) parts.push(part('the build’s own rules', total - shown, 'caps and floors on the Stats tab'));
   return parts;
 }
@@ -274,7 +274,7 @@ export const BREAKDOWNS = new Map([
     [`${k}.temp`, {
       label: `${ABILITY_LABELS[k]} (working score)`,
       build: (m) => abilityBreakdown(m, k, 'temp'),
-      total: (m) => m.data.abilities[k]?.tempScore,
+      total: (m) => m.data.abilities[k]?.workingScore ?? m.data.abilities[k]?.tempScore,
     }],
   ]),
 ]);

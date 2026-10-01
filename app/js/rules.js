@@ -3161,7 +3161,7 @@ export function statScore(c, stat1, stat2) {
   const scores = [stat1, stat2]
     .map(abilityKey)
     .filter((k) => ABILITIES.includes(k))
-    .map((k) => Number(c.abilities[k].tempScore) || 0);
+    .map((k) => Number(c.abilities[k].workingScore ?? c.abilities[k].tempScore) || 0);
   return scores.length ? Math.max(...scores) : 0;
 }
 

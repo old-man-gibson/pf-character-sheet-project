@@ -2078,6 +2078,45 @@ console.log('a blended twin: no guessed casting type, one level count, a second 
   check('and has a field in the blended panel', html.includes(`data-item="training.magic.classes|${m().classes.indexOf(twin())}|mod2"`), true);
 }
 
+console.log('without a build, a forwarded ability bonus moves the working score everything reads');
+{
+  const doc = { ...blankDocument({ name: 'Typed', level: 9 }), statsBuild: null };
+  doc.abilities = { ...doc.abilities, int: { ...doc.abilities.int, score: 10, tempScore: 10 } };
+  const c = new Character(doc);
+  c.listAdd('notes', { title: 'Headband', body: '{int.score += 4}' });
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: 9, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const a = c.data.abilities.int;
+  check('the typed box keeps what was typed; the working score adds the headband',
+    [a.tempScore, a.workingScore, a.totalMod], [10, 14, 2]);
+  const k = c.data.vancian.classes[0];
+  check('castability reads the same score the bonus slots do', [k.statScore, k.statMod], [14, 2]);
+  check('and no condition ticked moves nothing', c.conditionState.deltas.int, 0);
+  check('formulas read it too', c.scope().int.temp, 14);
+}
+
+console.log('a casting block named for its archetype still counts its class\'s levels');
+{
+  const c = new Character(blankDocument({ name: 'Evoker', level: 5 }));
+  for (let lv = 1; lv <= 5; lv++) c.setProgressionClass(lv, 0, 'Wizard');
+  c.listAdd('vancian.classes', {
+    name: 'Wizard (Evoker)', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  c.listAdd('vancian.classes', {
+    name: 'Blood Arcanist', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const [evoker, other] = c.data.vancian.classes;
+  check('the parenthetical is dropped to find the class', [evoker.levelClass, evoker.casterLevel], ['Wizard', 5]);
+  check('and a name that is no class at all falls back to its slot table', [other.levelClass, other.casterLevel], ['Wizard', 5]);
+  c.listAdd('psionics.classes', { name: 'Psion (Telepath)', stat: 'Int', stat2: '', curveTotal: 343, powers: [] });
+  for (let lv = 1; lv <= 5; lv++) c.setProgressionClass(lv, 0, 'Psion');
+  check('a manifesting block too', [c.data.psionics.classes[0].levelClass, c.data.psionics.classes[0].manifesterLevel], ['Psion', 5]);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));

@@ -125,7 +125,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 14
   },
   "dex": {
    "score": 23,
@@ -143,7 +144,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 23
   },
   "con": {
    "score": 18,
@@ -161,7 +163,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 18
   },
   "int": {
    "score": 26,
@@ -179,7 +182,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 26
   },
   "wis": {
    "score": 15,
@@ -197,7 +201,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 15
   },
   "cha": {
    "score": 12,
@@ -215,7 +220,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 12
   }
  },
  "statsBuild": {

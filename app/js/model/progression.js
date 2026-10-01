@@ -432,6 +432,30 @@ export function classLevelCount(model, className) {
   return own + (own ? forwarded(model, `class.${slug(match)}.level`) : 0);
 }
 
+/**
+ * Which of the character's classes a casting block counts its levels from.
+ *
+ * A block's name is what the player calls it, and is often more than the
+ * class: "Wizard (Evoker)", an archetype, a homebrew title. It used to be the
+ * Planner key as well, so a block named that way counted no levels at all.
+ * So the name is tried first, then the name with its parenthetical dropped,
+ * then the class the block reads its table from (`fallback`, a Vancian
+ * block's slot table). The first that names a class the Planner or the
+ * Classes table has wins; with none, the name stands, as it did.
+ */
+export function blockClassName(model, name, fallback = '') {
+  const known = [
+    ...model.progressionClasses(),
+    ...(model.data.classes || []).map((x) => x?.name).filter(Boolean),
+  ];
+  const plain = String(name ?? '').replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+  for (const candidate of [name, plain, fallback]) {
+    const match = String(candidate ?? '').trim() && closestName(candidate, known);
+    if (match) return match;
+  }
+  return String(name || fallback || '').trim();
+}
+
 export function featureGroup(model, className) {
   const p = model.data.progression;
   if (!p) return null;

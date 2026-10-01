@@ -71,7 +71,7 @@ export const VANCIAN_DERIVED = [
   {
     path: 'classes',
     keys: ['statMod', 'statScore', 'plannerLevel', 'casterLevel', 'casterLevelBase',
-      'casterLevelForwarded', 'casterLevelWaiting', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
+      'casterLevelForwarded', 'casterLevelWaiting', 'levelClass', 'tableName', 'concentrationNum', 'concentrationError', 'concentrationAuto',
       'slotTypeUnknown', 'noun', 'totalPerDay', 'totalKnown', 'totalLeft', 'highestLevel'],
   },
   {
@@ -328,7 +328,10 @@ export function recomputeVancian(model) {
      * not carry, or a block a player wants to hold still. Same shape as the
      * Classes table's `levelsOverride`, and null means "follow".
      */
-    const fromProgression = model.classLevelCount(c.name || c.slotType);
+    // Counted off the class the block is, which its name may only describe:
+    // "Wizard (Evoker)" counts Wizard levels (see blockClassName).
+    c.levelClass = model.blockClassName(c.name, c.slotType);
+    const fromProgression = model.classLevelCount(c.levelClass);
     const pinned = c.casterLevelOverride;
     const level = Math.max(0, Math.min(20,
       pinned === null || pinned === undefined ? fromProgression : Math.floor(Number(pinned) || 0)));

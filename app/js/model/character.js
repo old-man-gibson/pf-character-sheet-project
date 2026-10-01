@@ -59,7 +59,7 @@ import {
   addClassFeatureRuleGroup, addProgressionTrack, applyGestalt, classFeatureColumnOptions,
   classFeatureColumnOptionsChosen, classFeatureDue, classFeatureNoteLevel, classFeatureNotes,
   classFeatureNotesInCell, classFeatureNoteSuggestions, addClassFeatureNoteFromPack, classFeatureParked, moveClassFeatureNote,
-  classFeatureRows,
+  blockClassName, classFeatureRows,
   classFeatureRuleGroups, classLevelAt, classLevelCount, classLevelsIn, classNames,
   featureGroup, fillProgressionTrack, grantingGroups, plannerHasClass, progressionClasses,
   removeClassFeatureColumn, removeClassFeatureColumnOptions, removeClassFeatureNote,
@@ -252,7 +252,7 @@ export class Character {
     c.attack.iterative = iterativeAttacks(c.attack.bab);
 
     // Carry capacity follows Strength, size, Ant Haul and quadruped status.
-    const tiers = carryTiers(c.abilities.str.tempScore + (c.carry?.strBonus || 0), {
+    const tiers = carryTiers((c.abilities.str.workingScore ?? c.abilities.str.tempScore) + (c.carry?.strBonus || 0), {
       multiplier: SIZE_CARRY_MULTIPLIER[c.identity.size] ?? 1,
       antHaul: c.carry?.antHaul || 1,
       quadruped: !!c.carry?.quadruped,
@@ -525,6 +525,7 @@ export class Character {
   classNames(...a) { return classNames(this, ...a); }
   classLevelsIn(...a) { return classLevelsIn(this, ...a); }
   classLevelCount(...a) { return classLevelCount(this, ...a); }
+  blockClassName(...a) { return blockClassName(this, ...a); }
   #featureGroup(...a) { return featureGroup(this, ...a); }
   #classLevelAt(...a) { return classLevelAt(this, ...a); }
   #grantingGroups(...a) { return grantingGroups(this, ...a); }
