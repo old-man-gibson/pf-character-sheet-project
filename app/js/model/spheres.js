@@ -725,24 +725,36 @@ export function talentTagCounts() {
 }
 
 /**
- * Every talent on a side that has a notes cell beside it, as `[row, fields]`.
+ * Every talent a tab draws with a notes cell beside it, as `[row, fields]`:
+ * the class blocks of its own, every blended pool that reaches it (drawn at
+ * the head of each tab it reaches, wherever its rows are stored), and its
+ * bonus talents. So the Fill button on a tab counts and fills what that tab
+ * shows.
  *
- * A guile level is two talents on one row -- the free pick and the [utility]
- * one -- each with a sphere and a note of its own, which is why the columns
- * are named per entry rather than assumed.
+ * A two-ladder level is two talents on one row -- the free pick and the
+ * [utility] one -- each with a sphere and a note of its own, which is why the
+ * columns are named per entry rather than assumed.
  */
 const PLAIN_COLUMNS = { talent: 'talent', sphere: 'sphere', notes: 'notes' };
 const UTILITY_COLUMNS = { talent: 'utilityTalent', sphere: 'utilitySphere', notes: 'utilityNotes' };
 function notedTalentRows(model, sideKey) {
   const side = model.data?.training?.[sideKey];
   const out = [];
-  for (const cls of side?.classes || []) {
-    // A blended class's twin shares its levels; once is enough.
-    if (cls.blendedMirror) continue;
+  const ladder = (cls, utility) => {
     for (const lv of cls.levels || []) {
       out.push([lv, PLAIN_COLUMNS]);
-      if (sideKey === 'guile') out.push([lv, UTILITY_COLUMNS]);
+      if (utility) out.push([lv, UTILITY_COLUMNS]);
     }
+  };
+  // The blocks the tab draws as its own: not a blended one, which is drawn
+  // under Blended training, and not one from the extended-level page.
+  const blended = sideKey === 'guile'
+    ? (cls) => !!(cls.blendedCombat || cls.blendedMagic)
+    : (cls) => !!(cls.blended || cls.blendedSkill || cls.blendedMirror || cls.extended);
+  for (const cls of side?.classes || []) if (!blended(cls)) ladder(cls, sideKey === 'guile');
+  for (const pool of blendedClasses(model)) {
+    if (!pool.systems.includes(sideKey)) continue;
+    ladder(pool.owner.cls, pool.kind === 'guile' || poolHasUtility(pool.owner.cls, pool.owner.side));
   }
   for (const b of side?.bonusTalents || []) out.push([b, PLAIN_COLUMNS]);
   return out;

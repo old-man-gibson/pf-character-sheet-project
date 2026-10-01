@@ -2652,6 +2652,32 @@ console.log('a guile sphere row with talents offers no ×');
   check('and says why', html.includes('Study has 1 talent, so it stays on the table.'), true);
 }
 
+console.log('Fill notes counts the rows each tab draws');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [
+    { name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] },
+    { name: 'Study', kind: 'guile', talents: [{ name: 'Lore Expert', text: 'Know things.' }] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Notes' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.magic.classes', { name: 'Hybrid', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 4,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) });
+  c.setBlended('magic', 0, true);
+  c.setBlendedSkill('magic', 0, true);
+  c.set('training.magic.classes.0.utilityRule', 'every');
+  const lv = c.data.training.magic.classes[0].levels[0];
+  c.set('training.magic.classes.0.levels.0.sphere', 'Boxing');
+  c.set('training.magic.classes.0.levels.0.talent', 'Haymaker');
+  c.set('training.magic.classes.0.levels.0.utilitySphere', 'Study');
+  c.set('training.magic.classes.0.levels.0.utilityTalent', 'Lore Expert');
+  check('the pool is drawn on all three tabs, and each tab counts both of its notes',
+    ['combat', 'magic', 'guile'].map((k) => c.blankTalentNotes(k)), [2, 2, 2]);
+  c.fillTalentNotes('combat');
+  check('the martial tab fills the [utility] note too', [lv.notes, lv.utilityNotes], ['Hit hard.', 'Know things.']);
+  setSphereCatalogue(before);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
