@@ -438,7 +438,8 @@ export function recomputeAkashic(model) {
     0,
   );
   const used = essenceInvested([...(a.slots || []), ...(a.kheshig || [])])
-    + (a.otherReceptacles || []).reduce((t, r) => t + (Number(r.essence) || 0), 0);
+    // A receptacle ticked off holds nothing for now.
+    + (a.otherReceptacles || []).reduce((t, r) => t + (r.active === false ? 0 : Number(r.essence) || 0), 0);
 
   // The Veilweaving sphere condenses spell points into essence for the day.
   // It rides on top of the daily pool rather than inside it -- the pool is

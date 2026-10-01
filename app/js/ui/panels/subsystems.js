@@ -657,9 +657,10 @@ function akashicReceptaclesPanel(model, a) {
     return `<section class="panel span2">
       <h3>Other receptacles <span class="badge">${rows.length}</span></h3>
       <p class="hint">Anything holding essence that is not one of the slots above.
-        Their essence counts against the day's pool the same way a veil's does.</p>
+        Their essence counts against the day's pool the same way a veil's does,
+        except while one is ticked off.</p>
       ${rows.length ? `<div class="veils"${veilGridStyle(model)}>
-        ${rows.map((r, i) => `<div class="veilslot${ticks && !r.active ? ' is-off' : ''}">
+        ${rows.map((r, i) => `<div class="veilslot${r.active === false ? ' is-off' : ''}">
           <div class="veilslot-body">
             <div class="veil">
               <div class="veil-top">
@@ -668,7 +669,7 @@ function akashicReceptaclesPanel(model, a) {
                   ${itemNum(list, i, 'essence', r.essence)}</label>
                 ${rowRemoveButton(list, i, 'Remove this receptacle')}
               </div>
-              ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active, 'On')}</div>` : ''}
+              ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active !== false, 'On')}</div>` : ''}
             </div>
           </div>
         </div>`).join('')}

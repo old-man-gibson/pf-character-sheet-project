@@ -2802,6 +2802,13 @@ console.log('the psionic prerequisite reads the Psionics tab');
   check('a manifester level: met', [altTrainingPrereq(c, tech).state, altTrainingPrereq(c, tech).detail], ['met', 'Psion (manifester level 3).']);
 }
 
+console.log('a receptacle ticked off holds no essence');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.otherReceptacles', [{ name: 'Totem', essence: 2, active: true }, { name: 'Belt', essence: 3, active: false }]);
+  check('only the active one counts as used', c.data.akashic.calc.used, 2);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
