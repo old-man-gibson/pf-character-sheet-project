@@ -45,7 +45,9 @@ stored state has been reconciled — setting `.character` starts an IndexedDB re
 model is not there on the next line), `.changeCount`.
 
 **Events:** `character-change` (`detail: {character, diff}`) and `tracker-change`
-(`detail: {tracker}`), both composed so they cross the shadow boundary.
+(`detail: {tracker}`), both composed so they cross the shadow boundary. `tracker-change`
+fires once for each tracker whose value, range or name moved, however it moved: its own
+controls, a rest, a card or session spend, the Psionics pips, an undo.
 
 A host page that saves server-side can ignore all of the local machinery and listen to
 `character-change`. One that wants the saved-version and history behaviour gets it for

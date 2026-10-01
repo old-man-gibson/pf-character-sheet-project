@@ -1254,6 +1254,8 @@ export class CharacterSheetElement extends HTMLElement {
     // count would sit at zero forever.
     if (!this.#savedDoc) this.#openedDoc = structuredClone(normalized);
     this.#changes = this.#baseline ? countChanges(this.#baseline, normalized) : 0;
+    this.#trackerSeen = null;
+    this.#announceTrackers();
     this.#model.subscribe((_model, detail) => {
       // Something destructive is about to happen and has already saved the
       // way back; offer it. Before the change rather than after, which is
@@ -1276,6 +1278,7 @@ export class CharacterSheetElement extends HTMLElement {
         bubbles: true,
         composed: true,
       }));
+      this.#announceTrackers();
     });
   }
 
@@ -6689,8 +6692,7 @@ export class CharacterSheetElement extends HTMLElement {
         // "+" adds to what the row shows: spent for a filling pool, what is
         // left for a draining one. Clamped to [min, max] by the model.
         const delta = Number(b.dataset.delta) * (this.#isDraining(t0) ? -1 : 1);
-        const t = this.#model.stepTracker(t0.id, delta);
-        this.#emitTracker(t);
+        this.#model.stepTracker(t0.id, delta);
         this.#render();
       });
     });
@@ -6709,7 +6711,6 @@ export class CharacterSheetElement extends HTMLElement {
         const min = Math.max(0, Number(t.min) || 0);
         const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n - min) : pipClickValue(cur, n);
         this.#model.updateTracker(t.id, { current: next });
-        this.#emitTracker(t);
         this.#render();
       });
     });
@@ -6725,7 +6726,6 @@ export class CharacterSheetElement extends HTMLElement {
           min: Number(t.min) || 0, max: Number(t.max) || 0, style: t.style,
         });
         this.#model.updateTracker(t.id, { current });
-        this.#emitTracker(t);
         this.#render();
       });
     });
@@ -7212,6 +7212,24 @@ export class CharacterSheetElement extends HTMLElement {
     this.dispatchEvent(new CustomEvent('tracker-change', {
       detail: { tracker }, bubbles: true, composed: true,
     }));
+  }
+
+  /*
+   * `tracker-change` for every tracker that moved, however it moved: its own
+   * controls, a rest, a card or session spend, the Psionics pips, an undo.
+   * Each of those recomputes, so this compares the trackers after every
+   * recompute with what was last seen, rather than relying on each control to
+   * remember to announce itself (three did, five did not).
+   */
+  #trackerSeen = null;
+
+  #announceTrackers() {
+    const key = (t) => `${t.current}|${t.max}|${t.min}|${t.name}`;
+    const now = new Map((this.#model?.trackers || []).map((t) => [t.id, key(t)]));
+    const before = this.#trackerSeen;
+    this.#trackerSeen = now;
+    if (!before) return;
+    for (const t of this.#model.trackers) if (before.get(t.id) !== now.get(t.id)) this.#emitTracker(t);
   }
 
   /**
