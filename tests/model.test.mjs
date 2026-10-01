@@ -2686,6 +2686,22 @@ console.log('the training class picker offers the Planner’s classes');
   check('a class only on the Planner can be picked', combatPanels.classNames(c).includes('Incanter'), true);
 }
 
+console.log('a training side is in use by one rule');
+{
+  const c = new Character(blankDocument({ name: 'Sides' }));
+  const used = () => { const u = c.systemTabsInUse(); return [u.martial, u.magic, u.guile]; };
+  check('a blank character uses none of the three', used(), [false, false, false]);
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Boxing', talent: 'Haymaker' });
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Dark', talent: 'Darkness' });
+  check('a bonus talent puts martial and magic in use, as it does guile', used(), [true, true, false]);
+
+  const d = blankDocument({ name: 'No magic' });
+  delete d.training.magic;
+  const n = new Character(d);
+  check('a document with no magic side still gets a magic tab it can add a class on',
+    combatPanels.renderMagicPanel(n).includes('data-action="add-training-class" data-side="magic"'), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

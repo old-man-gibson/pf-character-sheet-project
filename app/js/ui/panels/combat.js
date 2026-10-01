@@ -64,69 +64,52 @@ import {
    * What they still share is the blended classes, which belong to neither and
    * so head both.
    */
-/**
- * Whether a training side is a side at all.
- *
- * Every character now carries a `training.combat` because the unarmed block
- * is conjured into one (see document.js) -- a monk with a class progression
- * and no talents needs somewhere to put their dice. That bare holder is not a
- * martial side, and drawing this tab for it would be four empty grids, so the
- * question asked here is the one the ⚙ manager's badges already ask: does it
- * name a class, a tradition or a talent?
+/*
+ * Whether a side is in use is the model's question (trainingSideInUse), and
+ * it decides whether the tab is on the bar. Once the tab is shown it is drawn
+ * whole, with its "+ Add class", whether or not the document has stored the
+ * side yet: adding a class writes it.
  */
-const martialSideInUse = (side) => !!side && !!(
-  (side.classes || []).length
-  || (side.bonusTalents || []).length
-  || (side.customizations || []).length
-  || side.tradition
-  || side.sphereBonuses
-  || side.skillRanks
-  || side.sheetBaseDC != null
-);
-
 export function renderMartialPanel(model) {
     const t = model.data.training || {};
-    const side = martialSideInUse(t.combat) ? t.combat : null;
+    const side = t.combat || {};
     const wrap = (key, html) => collapsible(model, key, html);
     // The full-width groups sit in a strip: folded, they shrink to their
     // headers and pile up in a row of pills instead of holding a row apiece
-    // open. See `.foldstrip`. Built first and wrapped only if it holds
-    // anything -- a caster with no martial side has none of these, and an
-    // empty strip would still spend the grid's gap on itself.
+    // open. See `.foldstrip`.
     const groups = [
       blendedSection(model, wrap, 'combat'),
-      side ? wrap('combat-training', trainingSide(model, 'combat', side)) : '',
-      side && (side.customizations || []).length
+      wrap('combat-training', trainingSide(model, 'combat', side)),
+      (side.customizations || []).length
         ? wrap('customized-weapons', customizationPanel(model, side.customizations)) : '',
-      side ? wrap('combat-bonus', bonusTalentPanel(model, 'combat', side)) : '',
+      wrap('combat-bonus', bonusTalentPanel(model, 'combat', side)),
     ].filter(Boolean).join('');
     return `<div class="grid">
-      ${groups ? `<div class="foldstrip">${groups}</div>` : ''}
-      ${side ? `
-        <div class="sidepanels">
-          ${wrap('combat-tradition', combatTraditionPanel(model, side))}
-          ${wrap('sphere-skills', sphereSkillPanel(model))}
-          ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
-        </div>` : ''}
+      <div class="foldstrip">${groups}</div>
+      <div class="sidepanels">
+        ${wrap('combat-tradition', combatTraditionPanel(model, side))}
+        ${wrap('sphere-skills', sphereSkillPanel(model))}
+        ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
+      </div>
     </div>`;
   }
 
 export function renderMagicPanel(model) {
     const t = model.data.training || {};
+    const magic = t.magic || {};
     const wrap = (key, html) => collapsible(model, key, html);
     const groups = [
       blendedSection(model, wrap, 'magic'),
-      t.magic ? wrap('magic-training', trainingSide(model, 'magic', t.magic)) : '',
-      t.magic ? wrap('magic-bonus', bonusTalentPanel(model, 'magic', t.magic)) : '',
+      wrap('magic-training', trainingSide(model, 'magic', magic)),
+      wrap('magic-bonus', bonusTalentPanel(model, 'magic', magic)),
     ].filter(Boolean).join('');
     return `<div class="grid">
-      ${groups ? `<div class="foldstrip">${groups}</div>` : ''}
-      ${t.magic ? `
-        <div class="sidepanels">
-          ${wrap('magic-tradition', magicTraditionPanel(model, t.magic))}
-          ${wrap('magic-globals', magicGlobalsPanel(model, t.magic))}
-          ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', t.magic))}
-        </div>` : ''}
+      <div class="foldstrip">${groups}</div>
+      <div class="sidepanels">
+        ${wrap('magic-tradition', magicTraditionPanel(model, magic))}
+        ${wrap('magic-globals', magicGlobalsPanel(model, magic))}
+        ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', magic))}
+      </div>
     </div>`;
   }
 
