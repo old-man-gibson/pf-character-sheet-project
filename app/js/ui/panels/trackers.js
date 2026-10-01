@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
-import { SYSTEM_POOLS } from '../../model/trackers.js';
+import { SYSTEM_POOLS, trackerDrains, trackerShown } from '../../model/trackers.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
@@ -99,7 +99,7 @@ export function formulaMeta(model, label, source) {
 
 /** A draining tracker shows and edits what is left rather than what was spent. */
 export function isDraining(t) {
-  return (Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining';
+  return trackerDrains(t);
 }
 
 /**
@@ -111,14 +111,13 @@ export function isDraining(t) {
 export function trackerReading(t) {
   const max = Number(t.max) || 0;
   const min = Number(t.min) || 0;
-  const cur = Number(t.current) || 0;
   const draining = isDraining(t);
   const twoSided = min < 0;
   const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
   const range = min === 0 ? `/ ${max}`
     : (twoSided && min === -max) ? `/ ±${max}`
       : `/ ${signed(min)}…${signed(max)}`;
-  return { shown: draining ? max - cur : cur, range, draining, twoSided };
+  return { shown: trackerShown(t), range, draining, twoSided };
 }
 
 

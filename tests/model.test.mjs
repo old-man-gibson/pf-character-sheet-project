@@ -2991,6 +2991,17 @@ console.log('a typo in a zone does not stop a session card spending');
   check('a max that does not work still blocks', /Not enough Rage/.test(useSessionAction(c, sessionState(c).cards[0]) || ''), true);
 }
 
+console.log('self.zone reads a draining tracker where its badge does');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10', note: 'State: {self.zone}',
+    style: { fill: 'remaining', zones: [{ from: '0', to: '2', color: '#aa2222', label: 'low' }, { from: '3', to: '10', color: '#22aa22', label: 'ok' }] } });
+  c.updateTracker(ki.id, { current: 9 });
+  const t = c.trackers.find((x) => x.id === ki.id);
+  check('9 spent of 10 leaves 1, and the note says low, as the badge does',
+    [c.trackerScope(t).self.zone, c.renderProse(t.note, c.trackerScope(t)).map((x) => x.text ?? x.value).join('')], ['low', 'State: low']);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -30,7 +30,7 @@ import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
-import { trackerFacts } from './trackers.js';
+import { trackerFacts, trackerShown } from './trackers.js';
 import {
   classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   speedForwardKey, sphereForwardKey, vancianForwardKey,
@@ -1645,7 +1645,9 @@ export function proseText(model, text, local = null) {
  * are `tracker.<id>.*`.
  */
 export function trackerScope(model, t) {
-  const zone = zoneAt(Number(t?.current) || 0, t?.resolvedZones || []);
+  // Read at the value the row shows, as its badge is: what is left on a
+  // draining tracker.
+  const zone = zoneAt(trackerShown(t), t?.resolvedZones || []);
   return { self: { ...trackerFacts(t), zone: zone?.label || '' } };
 }
 

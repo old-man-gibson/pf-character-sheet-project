@@ -341,13 +341,20 @@ export function stepTracker(model, id, delta) {
   return model.updateTracker(id, { current: next });
 }
 
-/*
+/** Whether a tracker drains: a pool from 0 drawn as what is left. */
+export function trackerDrains(t) {
+  return (Number(t?.min) || 0) >= 0 && normalizeStyle(t?.style).fill === 'remaining';
+}
+
+/**
  * What a tracker reads as on its row: what is left on a draining one, the
- * position otherwise -- the number a player would say the change moved.
+ * position otherwise -- the number a player would say the change moved, the
+ * one its zone badge is read at, and the one `self.zone` is read at.
  */
-const shownValue = (t) => ((Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining'
-  ? (Number(t.max) || 0) - (Number(t.current) || 0)
-  : Number(t.current) || 0);
+export function trackerShown(t) {
+  return trackerDrains(t) ? (Number(t.max) || 0) - (Number(t.current) || 0) : Number(t?.current) || 0;
+}
+const shownValue = trackerShown;
 
 export function updateTracker(model, id, patch) {
   const t = model.trackers.find((x) => x.id === id);
