@@ -1120,57 +1120,68 @@ export function setCustomizationActive(model, index, setIndex) {
 export const rowCounts = (lv) => !!lv?.granted && !lv.future;
 export const utilityCounts = (lv) => !!lv?.utilityGranted && !lv.future;
 
+/**
+ * Every talent the character has trained on one side: the class ladders
+ * (a blended pool's or a guile class's rows land on the side their sphere
+ * belongs to, wherever the block itself lives, and both of a two-ladder
+ * pool's rows count), bonus talents, and the tradition's when asked. One
+ * walk, so the tally and anything that asks which talents are there --
+ * a skill-rank requirement, the veil traditions -- read the same rows.
+ * Yields { sphere, talent }.
+ *
+ * Every ladder counts only what the character has at the level they are:
+ * a slot the class grants (`granted`), at a level reached (`!future`).
+ */
+export function* ownTalentRows(model, side, { sideKey = null, includeTradition = true } = {}) {
+  // A blended class holds one pool of talents spent on either kind, so each
+  // of its talents is counted once, on the side its sphere belongs to. Its
+  // mirror on the other side is the same pool seen twice and contributes
+  // nothing of its own.
+  function* ladder(cls, home, utility) {
+    const systems = poolSystems(cls, home);
+    for (const lv of cls.levels || []) {
+      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) {
+        yield { sphere: lv.sphere, talent: lv.talent };
+      }
+      if (utility && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) {
+        yield { sphere: lv.utilitySphere, talent: lv.utilityTalent };
+      }
+    }
+  }
+  if (!side) return;
+  for (const cls of side.classes || []) {
+    if (cls.blendedMirror) continue;
+    if (cls.blended || cls.blendedSkill) {
+      const home = sideKey ?? cls.side;
+      yield* ladder(cls, home, poolHasUtility(cls, home));
+    } else {
+      for (const lv of cls.levels || []) if (rowCounts(lv)) yield { sphere: lv.sphere, talent: lv.talent };
+    }
+  }
+  if (sideKey) {
+    const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
+    for (const cls of model.data.training?.[otherKey]?.classes || []) {
+      if (cls.blended && !cls.blendedMirror) yield* ladder(cls, otherKey, poolHasUtility(cls, otherKey));
+    }
+    // A guile class that reaches this side spends both of its ladders here
+    // when the sphere is one of this side's. The ladder flags are worked out
+    // before this pass runs (recomputeGuileLadders).
+    for (const cls of model.data.training?.guile?.classes || []) {
+      if (poolSystems(cls, 'guile').includes(sideKey)) yield* ladder(cls, 'guile', true);
+    }
+  }
+  for (const b of side.bonusTalents || []) yield { sphere: b.sphere, talent: b.talent };
+  if (includeTradition) {
+    for (const e of side.tradition?.entries || []) yield { sphere: e.sphere, talent: e.talent };
+  }
+}
+
 export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
   const tally = {};
   const bump = (s, n = 1) => {
     if (typeof s === 'string' && s.trim()) tally[s.trim()] = (tally[s.trim()] || 0) + n;
   };
-  // A blended class holds one pool of talents spent on either kind, so each
-  // of its talents is counted once, on the side its sphere belongs to --
-  // wherever the block itself happens to live. Its mirror on the other side
-  // is the same pool seen twice and contributes nothing of its own. A pool
-  // that reaches skill talents counts both of its ladders.
-  //
-  // Every ladder counts only what the character has at the level they are:
-  // a slot the class grants (`granted`), at a level reached (`!future`). The
-  // sphere sides used to count every row with a sphere in it -- a planned
-  // talent at a level not yet reached, and one typed in a row the class does
-  // not grant -- while the guile side counted granted slots only.
-  const blendedTalents = (cls, home) => {
-    const systems = poolSystems(cls, home);
-    const slots = poolHasUtility(cls, home);
-    for (const lv of cls.levels || []) {
-      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-      if (slots && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
-    }
-  };
-  for (const cls of side.classes || []) {
-    if (cls.blendedMirror) continue;
-    if (cls.blended || cls.blendedSkill) blendedTalents(cls, sideKey ?? cls.side);
-    else for (const lv of cls.levels || []) if (rowCounts(lv)) bump(lv.sphere);
-  }
-  if (sideKey) {
-    const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
-    for (const cls of model.data.training?.[otherKey]?.classes || []) {
-      if (cls.blended && !cls.blendedMirror) blendedTalents(cls, otherKey);
-    }
-    // A guile class that reaches this side spends both of its ladders here
-    // when the sphere is one of this side's. Only granted slots count, which
-    // is how the guile side counts its own; the ladder flags are worked out
-    // before this pass runs (recomputeGuileLadders).
-    for (const cls of model.data.training?.guile?.classes || []) {
-      const systems = poolSystems(cls, 'guile');
-      if (!systems.includes(sideKey)) continue;
-      for (const lv of cls.levels || []) {
-        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
-      }
-    }
-  }
-  for (const b of side.bonusTalents || []) bump(b.sphere);
-  if (includeTradition) {
-    for (const e of side.tradition?.entries || []) bump(e.sphere);
-  }
+  for (const row of ownTalentRows(model, side, { sideKey, includeTradition })) bump(row.sphere);
   // A parallel track -- an armiger's customized weapon -- is a talent source
   // with a switch, so it is the one source that has to be told which
   // question is being asked: what is live right now ('active'), everything
@@ -1743,12 +1754,7 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     if (row) row.names.push(t);
   };
   // The same rows the tally counts, and no others.
-  for (const cls of side?.classes || []) {
-    if (cls.blendedMirror) continue;
-    for (const lv of cls.levels || []) if (rowCounts(lv)) put(lv.sphere, lv.talent);
-  }
-  for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
-  for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
+  for (const row of ownTalentRows(model, side, { sideKey })) put(row.sphere, row.talent);
 
   const tech = techniqueTalents(model);
   if (tech && tech.side === sideKey) {

@@ -64,6 +64,7 @@ import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
+import { veilTraditionClasses } from '../app/js/model/subsystems/akashic.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
@@ -2423,6 +2424,48 @@ console.log('undo at the table -- cards, a use, slots across a rest');
   check('then comes back spent, and then unspent',
     [d.undoPlay().label, d.data.vancian.prepared[0].used, d.undoPlay().label, d.data.vancian.prepared[0].used],
     ['New day', 1, 'Shield 2 → 1', 0]);
+}
+
+console.log('talent requirements read every talent the tally counts');
+{
+  // Perception's sphere ranks need Great Senses (Scout). A guile class that
+  // reaches martial spends its free pick there; the tally counted it, but the
+  // requirement never saw its name and called it missing.
+  const s = new Character(blankDocument({ name: 'Reach' }));
+  s.data.identity.level = 6;
+  s.addGuileClass('Shifter');
+  s.set('training.guile.classes.0.expertise', 'Virtuoso');
+  s.set('training.guile.classes.0.classLevelsOverride', 6);
+  s.setGuileBlend(0, 'combat', true);
+  s.setGuileBlend(0, 'magic', true);
+  const g = s.data.training.guile.classes[0];
+  const anyAt = g.levels.findIndex((lv) => lv.granted);
+  const utilAt = g.levels.findIndex((lv) => lv.utilityGranted);
+  s.set(`training.guile.classes.0.levels.${anyAt}.sphere`, 'Scout');
+  s.set(`training.guile.classes.0.levels.${anyAt}.talent`, 'Great Senses');
+  const perception = () => s.trainingSkillRanks.find((r) => r.skill === 'Perception');
+  check('a guile pick that lands on combat meets a talent requirement', perception().state, 'met');
+  s.set(`training.guile.classes.0.levels.${anyAt}.talent`, 'Sniper');
+  check('and a different name there is a plain no', perception().state, 'unmet');
+
+  // Its [utility] slot, spent magically on a veil tradition.
+  s.set(`training.guile.classes.0.levels.${utilAt}.utilitySphere`, 'Veilweaving');
+  s.set(`training.guile.classes.0.levels.${utilAt}.utilityTalent`, "Daevic's Tradition");
+  check('a [utility] talent opens its veil list', veilTraditionClasses(s), ['Daevic']);
+
+  // A blended pool kept on the magic side whose martial talent is Great Senses.
+  const doc = blankDocument({ name: 'Magic owned' });
+  doc.identity.level = 4;
+  const levels = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  Object.assign(levels[0], { sphere: 'Scout', talent: 'Great Senses' });
+  doc.training = {
+    ...(doc.training || {}),
+    magic: { classes: [{ name: 'Hybrid', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 4, levels }] },
+    combat: { classes: [{ name: 'Hybrid', type: 'Expert', classLevelsOverride: 4, levels: [] }] },
+  };
+  const h = new Character(doc);
+  check('a blended pool owned by the other side meets it too',
+    [h.data.training.combat.tally.Scout, h.trainingSkillRanks.find((r) => r.skill === 'Perception').state], [1, 'met']);
 }
 
 const missing = missingCharacters(REAL);
