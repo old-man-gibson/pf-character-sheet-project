@@ -2611,6 +2611,33 @@ console.log('a pack sphere with no kind -- on the table its talents put it on');
   setSphereCatalogue(before);
 }
 
+console.log('splitting a blended class, and filling notes, can be undone');
+{
+  const c = new Character(blankDocument({ name: 'Split' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.combat.classes', { name: 'Hybrid', type: 'Expert', classLevelsOverride: 4,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) });
+  c.setBlended('combat', 0, true);
+  const twin = () => (c.data.training.magic.classes || []).find((x) => x.name === 'Hybrid');
+  c.set(`training.magic.classes.${c.data.training.magic.classes.indexOf(twin())}.type`, 'Mid');
+  c.setBlended('combat', 0, false);
+  check('unticking drops the twin it added', twin(), undefined);
+  check('and one undo brings it back with its casting type',
+    [c.undo(), twin()?.type, c.data.training.combat.classes[0].blended], ['Split Hybrid from its magic half', 'Mid', true]);
+  c.setBlendedSkill('combat', 0, true);
+  c.setBlendedSkill('combat', 0, false);
+  check('unticking skill talents is a step too', [c.undo(), c.data.training.combat.classes[0].blendedSkill],
+    ['Stopped Hybrid counting skill talents', true]);
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] }] });
+  c.set('training.combat.classes.0.levels.0.sphere', 'Boxing');
+  c.set('training.combat.classes.0.levels.0.talent', 'Haymaker');
+  const note = () => c.data.training.combat.classes[0].levels[0].notes;
+  check('Fill notes fills, and is one step back', [c.fillTalentNotes('combat'), note(), c.undo(), note() ?? null],
+    [1, 'Hit hard.', 'Filled talent notes', null]);
+  setSphereCatalogue(before);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

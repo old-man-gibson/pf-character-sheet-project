@@ -859,19 +859,27 @@ export function blankTalentNotes(model, sideKey) {
  * correct a note already filled.
  */
 export function fillTalentNotes(model, sideKey) {
+  // Worked out first and written after, so the undo step is taken only when
+  // there is something to fill, and before any of it is.
+  const alt = sideKey === 'altTraining' ? blankAltTrainingNotes(model) : [];
+  const rows = [];
+  for (const [row, f] of notedTalentRows(model, sideKey)) {
+    if (String(row[f.notes] ?? '').trim()) continue;
+    const text = noteFromCatalogue(model, row, f);
+    if (text) rows.push([row, f, text]);
+  }
+  if (!alt.length && !rows.length) return 0;
+  markUndo(model, 'Filled talent notes');
   let filled = 0;
-  if (sideKey === 'altTraining') {
+  if (alt.length) {
     const p = model.data.altTraining;
-    for (const [level, text] of blankAltTrainingNotes(model)) {
-      if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+    if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+    for (const [level, text] of alt) {
       p.rowNotes[level] = text;
       filled++;
     }
   }
-  for (const [row, f] of notedTalentRows(model, sideKey)) {
-    if (String(row[f.notes] ?? '').trim()) continue;
-    const text = noteFromCatalogue(model, row, f);
-    if (!text) continue;
+  for (const [row, f, text] of rows) {
     row[f.notes] = text;
     // An empty sphere is settled the same way it would have been on typing.
     if (!String(row[f.sphere] ?? '').trim()) {
@@ -1382,6 +1390,7 @@ export function setBlended(model, sideKey, index, on) {
     // Lift the `false` a split left, or pairing would keep them apart.
     cls.blended = true;
   } else if (at >= 0) {
+    markUndo(model, `Split ${rowLabel(cls, 'class')} from its ${otherKey === 'magic' ? 'magic' : 'martial'} half`);
     // The talents stay with the block that owns them. A block that blending
     // added holds nothing of its own, so splitting drops it; one that was
     // there before -- the workbook's other half, with its own type and
@@ -1414,7 +1423,10 @@ export function setBlendedSkill(model, sideKey, index, on) {
     cls = (t[otherKey]?.classes || []).find((x) => x.name === cls.name && !x.blendedMirror) || cls;
   }
   if (on) cls.blendedSkill = true;
-  else delete cls.blendedSkill;
+  else if (cls.blendedSkill) {
+    markUndo(model, `Stopped ${rowLabel(cls, 'class')} counting skill talents`);
+    delete cls.blendedSkill;
+  }
   model.recompute();
   emit(model, { type: 'blend-skill', side: sideKey, index, on: !!on });
   return model;
@@ -1434,7 +1446,10 @@ export function setGuileBlend(model, index, sideKey, on) {
   if (on) {
     cls[key] = true;
     if (!t[sideKey] || typeof t[sideKey] !== 'object') t[sideKey] = {};
-  } else delete cls[key];
+  } else if (cls[key]) {
+    markUndo(model, `Stopped ${rowLabel(cls, 'class')} counting ${sideKey === 'combat' ? 'martial' : 'magical'} talents`);
+    delete cls[key];
+  }
   model.recompute();
   emit(model, { type: 'blend-guile', index, side: sideKey, on: !!on });
   return model;
