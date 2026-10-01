@@ -29,6 +29,7 @@ import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/a
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
+import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts } from './trackers.js';
 import {
   classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
@@ -198,11 +199,28 @@ export function characterScope(model) {
     // ACBonusShield1 / ACBonusShield2. The family name stays the total, so
     // ac.shield1 + ac.shield2 is ac.shield, and a character with one shield
     // need never learn that the numbers exist.
+    //
+    // `ac.armor` and `ac.shield` are still the numbers they always were (a
+    // branch carrying a total reads as the total), and are broken down: the
+    // enhancement already inside them, and for the armour worn its weight --
+    // `ac.armor.type` is 0 for none, 1 light, 2 medium, 3 heavy, and
+    // `ac.armor.light` / `.medium` / `.heavy` are 1 or 0 for an if(…).
+    // `ac.maxDex` is the lowest cap of what is worn, 99 when nothing caps it;
+    // `ac.acp` the armour check penalty of all of it, as the skills take it.
     ac: {
       ...bonusColumns(c.defenses.acBonusesResolved, AC_BONUS_TYPES),
       ...Object.fromEntries(worn.shields.map((v, i) => [`shield${i + 1}`, v])),
-      armor: worn.armor,
-      shield: worn.shield,
+      armor: {
+        total: worn.armor,
+        enhancement: worn.armorEnhancement,
+        type: worn.armorType,
+        light: worn.armorType === 1 ? 1 : 0,
+        medium: worn.armorType === 2 ? 1 : 0,
+        heavy: worn.armorType === 3 ? 1 : 0,
+      },
+      shield: { total: worn.shield, enhancement: worn.shieldEnhancement },
+      maxDex: Number.isFinite(worn.maxDex) ? worn.maxDex : 99,
+      acp: worn.acp,
       ability: Math.min(worn.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2)),
       touch: c.defenses.touch,
       flatFooted: c.defenses.flatFooted,
@@ -350,9 +368,17 @@ export function characterScope(model) {
       manaUntapped: Number(c.cardcasting?.table?.calc?.manaUntapped) || 0,
     },
   };
+  // Named as the row shows it, and nothing for a row nobody has named (it
+  // would be deck.manip.x). Rows that are one manipulation however they are
+  // spelled -- "Loaded-Hand" and "Loaded Hand" -- add into one name, the
+  // first row's.
+  const manipKey = new Map();
   for (const m of c.cardcasting?.manipulations || []) {
-    const key = slug(m.name);
-    if (!key) continue;
+    const name = String(m.name ?? '').trim();
+    if (!name) continue;
+    const same = manipulationName(name).toLowerCase().replace(/[^a-z]/g, '');
+    if (!manipKey.has(same)) manipKey.set(same, slug(name));
+    const key = manipKey.get(same);
     s.deck.manip[key] = (s.deck.manip[key] || 0) + (Number(m.count) || 0);
   }
 
@@ -1420,18 +1446,26 @@ export function proseSources(model) {
   // written out longhand. The description keeps the source name it has always
   // had, so a formula named in one still answers to `maneuverNote:…` in the
   // audit; the cells beside it are new and say which they are.
+  //
+  // A bonus written there waits for the maneuver to be readied, as a buff's
+  // waits for its tick; a definition stands either way. Same `future` state.
   (d.maneuvers?.disciplines || []).forEach((disc, di) => {
+    const readied = new Set((disc.known || []).map((n) => String(n).trim().toLowerCase()));
     for (const [name, entry] of Object.entries(disc.notes || {})) {
-      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry); continue; }
+      const off = readied.has(String(name).trim().toLowerCase()) ? null : { future: true };
+      if (typeof entry === 'string') { push(`maneuverNote:${di}:${name}`, entry, null, off); continue; }
       for (const f of MANEUVER_FIELDS) {
         // The name goes last in both, because it is the part that can hold a
         // colon of its own ("Lesson I: Balance") and split the path.
         push(f.key === 'text' ? `maneuverNote:${di}:${name}` : `maneuver:${di}:${f.key}:${name}`,
-          entry?.[f.key]);
+          entry?.[f.key], null, off);
       }
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
+  // A power's note, as a prepared spell's: the panel draws it as prose.
+  (d.psionics?.classes || []).forEach((cls, ci) => (cls.powers || [])
+    .forEach((w, wi) => push(`powerNote:${ci}:${wi}`, w.note)));
   // An item's Other columns and the description on its card: a ring that
   // grants a pool can size it where the ring is written down.
   // A typed bonus with a destination is a forwarded bonus the row spelt out

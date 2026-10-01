@@ -17,6 +17,10 @@ import { prose, renderedProse } from '../prose.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
+import { SYSTEM_POOLS } from '../../model/trackers.js';
+
+/** What a casting pool's maximum is, said once for the row and the editor. */
+const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
 import {
   THEME_ACCENT, THEME_NEGATIVE, TRACKER_PALETTE, barLayout, normalizeStyle, resolveZones,
   rgba, squareLayout, stepColor, trackBand, zoneAt,
@@ -137,14 +141,16 @@ function trackerRow(model, ctx, t) {
   return `<div class="tracker ${t.error ? 'invalid' : ''} ${twoSided ? 'two-sided' : ''}">
       <div>
         <div class="tname">${esc(t.name)}
-          ${t.source === 'player' ? '<span class="badge player">custom</span>'
+          ${t.source === 'player' ? (t.pool ? '<span class="badge">built-in</span>' : '<span class="badge player">custom</span>')
   : `<span class="badge">from sheet${t.edited ? ', edited' : ''}</span>`}
-          ${protectedTracker ? '<span class="badge" title="Every character has Mythic Power from level 8">required</span>' : ''}
+          ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? 'Every caster carries this pool while their system grants points'
+    : 'Every character has Mythic Power from level 8')}">required</span>` : ''}
           ${t.refresh ? `<span class="badge">${esc(t.refresh)}</span>` : ''}
           ${draining ? '<span class="badge">drains</span>' : ''}
           ${stateBadge}
         </div>
-        ${t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
+        ${t.pool ? `<div class="tmeta">max: ${esc(poolWhat(t))}</div>`
+    : t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
         ${t.minFormula ? formulaMeta(model, 'min', t.minFormula) : ''}
         ${['max', 'min'].map((edge) => {
         const badge = forwardedBadge(model, `tracker.${t.id}.${edge}`);
@@ -403,7 +409,8 @@ function trackerEditRow(model, ctx, t) {
       <div class="formrow" style="margin:0">
         <div class="cols">
           <input data-tedit="name" placeholder="Name" value="${esc(d.name)}" aria-label="Tracker name">
-          <input class="mono" data-tedit="maxFormula" placeholder="Max, as a formula" value="${esc(d.maxFormula)}" aria-label="Max formula">
+          ${t.pool ? `<input class="mono" disabled value="" placeholder="${esc(`Max: ${poolWhat(t)}`)}" aria-label="Max, worked out">`
+    : `<input class="mono" data-tedit="maxFormula" placeholder="Max, as a formula" value="${esc(d.maxFormula)}" aria-label="Max formula">`}
           <input class="mono" data-tedit="minFormula" placeholder="Min (optional)" value="${esc(d.minFormula)}" aria-label="Min formula">
           <input data-tedit="refresh" placeholder="Refresh" value="${esc(d.refresh)}" aria-label="Refresh">
         </div>

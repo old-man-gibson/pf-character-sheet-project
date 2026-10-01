@@ -425,7 +425,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |
 | `str.temp`, `dex.temp`, … | the same, said the other way round: the *working* score, which is what a bonus lasting a fight moves. `{str.temp += 2 as size}` and `{str.score += 2 as temp.size}` are the same bonus |
 | `defenses.sr` | spell resistance |
-| `defenses.dr`, `dr.magic`, `dr.cold_iron`, … | damage reduction, all of it or one bypass — see below |
+| `defenses.dr`, `dr.magic`, `dr.cold_iron`, `dr.none` (for x/—), … | damage reduction, all of it or one bypass — see below |
 | `defenses.resistance`, `resistance.fire`, … | energy resistance, all of it or one energy |
 | `defenses.weakness`, `weakness.fire`, … | vulnerability, the same way |
 | `immune.sleep`, `immune.fire`, … | an immunity, which is a switch rather than an amount: any positive number grants it, and `-=` suppresses one that was typed in |
@@ -956,6 +956,14 @@ the armour class publishes its own columns (`ac.dodge`, `ac.natural`, `ac.deflec
 shield together) and `ac.ability` (the ability bonus after the armour's Max Dex has
 capped it). `ac.size` is the Stats tab's *Size* column, a size-typed bonus — not the
 modifier for being Large, which is already in the total.
+
+What is worn reads further down too. `ac.armor.enhancement` and `ac.shield.enhancement`
+are the enhancement already counted in each. `ac.armor.type` is how heavy the armour
+worn is, read from its *Type* cell: 0 for none or unarmoured, 1 light, 2 medium,
+3 heavy — so `ac.armor.type >= 2` is "medium or heavy" — and `ac.armor.light`,
+`ac.armor.medium` and `ac.armor.heavy` are 1 or 0, for `if(ac.armor.heavy, …)`.
+`ac.maxDex` is the lowest Max Dex of everything worn (99 when nothing caps it), and
+`ac.acp` the armour check penalty of all of it, negative, as the skills take it.
 
 **Several of a thing take a number.** Where a character keeps more than one row of the
 same kind, each row takes the family name and a number from one: `ac.shield1`,

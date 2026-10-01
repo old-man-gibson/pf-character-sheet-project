@@ -218,6 +218,7 @@ function placeOf(model, ref) {
     case 'otherBonus': return gearPlace('equipment.other', a, `bonuses.${b}.value`);
     case 'crafting': return { tab: 'crafting', sel: [item('crafting.projects', a, b)] };
     case 'spellNote': return { tab: 'vancian', sel: [item('vancian.prepared', a, 'note')] };
+    case 'powerNote': return { tab: 'psionics', sel: [item(`psionics.classes.${a}.powers`, b, 'note')] };
     // A card's face has no notes field; its notes are gone to as the deck.
     case 'card': return deckPlace(b === 'notes' ? null : item('cardcasting.cards', a, 'effect'));
     case 'sideboard': return deckPlace(b === 'notes' ? null : item('cardcasting.sideboard', a, 'effect'));

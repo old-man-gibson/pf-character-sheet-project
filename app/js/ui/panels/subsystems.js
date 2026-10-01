@@ -308,10 +308,11 @@ function akashicClassesPanel(a) {
     const list = 'akashic.classes';
     const e = a.essence || {};
     // Only the filled class blocks are worth a row; the template's six leave
-    // five empty ones behind on most sheets.
+    // five empty ones behind on most sheets. A row added here is shown from
+    // the start (`added`), so it can be filled in or removed.
     const rows = (a.classes || [])
       .map((c, i) => ({ c, i }))
-      .filter(({ c }) => c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
+      .filter(({ c }) => c.added || c.name || c.mod || c.level || c.essenceCap || c.bonusCap);
     const vw = a.veilweaving || {};
     const levelTitle = vw.sphere
       ? 'Levels in casting and veilweaving classes together, each level once (the Veilweaving sphere). Type a number to pin it.'
@@ -339,7 +340,7 @@ function akashicClassesPanel(a) {
           </tbody></table>
           <div class="pair" style="margin-top:6px">
             ${addButton(list, 'Add class', {
-    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0,
+    name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true,
   })}
             <label class="minifield">Base DC
               ${autoNum('data-set="akashic.baseDCOverride"', a.baseDCOverride, {
@@ -656,9 +657,10 @@ function akashicReceptaclesPanel(model, a) {
     return `<section class="panel span2">
       <h3>Other receptacles <span class="badge">${rows.length}</span></h3>
       <p class="hint">Anything holding essence that is not one of the slots above.
-        Their essence counts against the day's pool the same way a veil's does.</p>
+        Their essence counts against the day's pool the same way a veil's does,
+        except while one is ticked off.</p>
       ${rows.length ? `<div class="veils"${veilGridStyle(model)}>
-        ${rows.map((r, i) => `<div class="veilslot${ticks && !r.active ? ' is-off' : ''}">
+        ${rows.map((r, i) => `<div class="veilslot${r.active === false ? ' is-off' : ''}">
           <div class="veilslot-body">
             <div class="veil">
               <div class="veil-top">
@@ -667,7 +669,7 @@ function akashicReceptaclesPanel(model, a) {
                   ${itemNum(list, i, 'essence', r.essence)}</label>
                 ${rowRemoveButton(list, i, 'Remove this receptacle')}
               </div>
-              ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active, 'On')}</div>` : ''}
+              ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active !== false, 'On')}</div>` : ''}
             </div>
           </div>
         </div>`).join('')}
@@ -691,9 +693,12 @@ export function maneuversPanel(model, ctx) {
     const m = model.data.maneuvers;
     if (!m) return '<div class="grid"><p class="empty">No maneuver data.</p></div>';
     const k = m.calc || {};
-    const taken = new Set((m.disciplines || []).map((d) => d.name));
-    const available = maneuverCatalogue().disciplines
-      .map((d) => d.name).filter((name) => !taken.has(name));
+    // Matched as the packs merge them: case and space do not make a second discipline.
+    const key = (n) => String(n ?? '').trim().toLowerCase();
+    const taken = new Set((m.disciplines || []).map((d) => key(d.name)));
+    const available = [...new Map(maneuverCatalogue().disciplines
+      .map((d) => [key(d.name), d.name])).entries()]
+      .filter(([k]) => k && !taken.has(k)).map(([, name]) => name);
 
     return `<div class="grid">
       <section class="panel span2">
@@ -823,7 +828,7 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
         <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
-      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key)}
+      ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
     </div>`;
 }
 
@@ -834,11 +839,14 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
  * "Target: —", they are simply not part of the maneuver, and a card of seven
  * em-dashes is a form rather than a rules entry.
  */
-function maneuverRead(model, ctx, entry, key) {
+// A bonus written on a maneuver applies only while it is readied.
+const UNREADIED = { inactiveTitle: 'Not readied, so the bonus is not applying. Ready it to switch it on.' };
+
+function maneuverRead(model, ctx, entry, key, readied = true) {
   const shown = MANEUVER_FIELDS
     .map((f) => [f, entry[f.key]])
     .filter(([, v]) => String(v).trim() !== '');
-  const value = (v) => (hasTokens(v) ? renderedProse(model, v) : esc(v));
+  const value = (v) => (hasTokens(v) ? renderedProse(model, v, null, { ...UNREADIED, inactive: !readied }) : esc(v));
   const cells = shown.filter(([f]) => f.key !== 'text');
   const body = shown.find(([f]) => f.key === 'text');
   return `${cells.length ? `<dl class="mdetail-cells">${cells.map(([f, v]) => `
@@ -877,7 +885,7 @@ function maneuverCells(model, list, e, own) {
       ? maneuverSelect(bind(f), own[f.key], f.options,
         under ? `${under} — from the catalogue` : '—')
       : prose(model, `${bind(f)} placeholder="${esc(ghost)}"`,
-        own[f.key], f.lines || 1, 'grow');
+        own[f.key], f.lines || 1, 'grow', null, { ...UNREADIED, inactive: !e.known });
     return `<div class="mcell"><span class="k">${esc(f.label)}</span>${control}</div>`;
   };
   const lines = [...new Set(MANEUVER_FIELDS.map((f) => f.line))];

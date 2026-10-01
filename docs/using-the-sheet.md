@@ -874,7 +874,7 @@ modifier is the AC one the other way round: Large is −1 to AC and +1 to CMD.
 The five boxes under the armour class — **spell resistance**, **DR**, **resistance**,
 **vulnerability** and **immunities** — are free text, because that is how a stat block
 writes them, and each is parsed into the parts it is already made of. `5/magic` is
-`dr.magic`; `fire 10, cold 5` is `resistance.fire` and `resistance.cold`; `sleep,
+`dr.magic`, and DR nothing bypasses (`5/—` or `5/-`) is `dr.none`; `fire 10, cold 5` is `resistance.fire` and `resistance.cold`; `sleep,
 paralysis` is `immune.sleep` and `immune.paralysis`. Every part is both a name a formula
 can read and a destination a bonus can be sent to.
 

@@ -19,7 +19,8 @@ import { evaluateFormula } from '../formula.js';
 import { ownLevelCount, plannerHasClass } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
-import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
+import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
+import { featEntry, powerEntry, spellEntry } from './subsystems/catalogues.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
@@ -805,8 +806,8 @@ export function altTrainingLookup(model, row) {
   return /^\([^)]*\)$/.test(said) ? `${sphere} Sphere ${said}` : said;
 }
 
-/** What the catalogue says about that row, or ''. */
-function altTrainingNoteText(model, row) {
+/** What the sphere catalogue says about that row's talent, or ''. */
+function altTrainingTalentText(model, row) {
   const typed = altTrainingLookup(model, row);
   if (!typed) return '';
   const sphere = model.data.altTraining?.calc?.talents?.sphere;
@@ -814,6 +815,31 @@ function altTrainingNoteText(model, row) {
   // The technique's own sphere first; a talent it may take from elsewhere is
   // still found, by the whole catalogue.
   return talentNoteText(sphereTalent(sphere, typed) || sphereTalent(null, typed), typed);
+}
+
+/**
+ * What the packs say about a ladder row, or '': its talent from the sphere
+ * catalogue, and a feat, spell or power it grants from that catalogue. A
+ * grant the rules name is looked up by that name; one the player chooses, by
+ * what was typed. A row granting two things (1st level is often a talent and
+ * a feat) gets both, each under its name.
+ */
+function altTrainingNoteText(model, row) {
+  const parts = [];
+  const talent = altTrainingTalentText(model, row);
+  if (talent) parts.push([altTrainingLookup(model, row), talent]);
+  const typed = String(row?.text ?? '').trim();
+  const lookups = [['feat', featEntry], ['spell', spellEntry], ['power', powerEntry]];
+  for (const g of row?.grants || []) {
+    for (const [kind, entry] of lookups) {
+      if (!grantCount(g, kind)) continue;
+      const name = g.pick && !grantCount(g, 'talent') ? typed : String(g.name ?? '').trim();
+      const text = name ? String(entry(name)?.text ?? '').trim() : '';
+      if (text) parts.push([entry(name)?.name || name, text]);
+    }
+  }
+  if (parts.length <= 1) return parts[0]?.[1] || '';
+  return parts.map(([name, text]) => `${name}: ${text}`).join('\n\n');
 }
 
 /** The rows of the ladder whose note is empty and could be filled, as `[level, text]`. */

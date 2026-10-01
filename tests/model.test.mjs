@@ -29,7 +29,8 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
-  sphereCatalogue, trackSphereNames,
+  sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
+  hasManipulation, setFeatCatalogue, featCatalogue,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -72,6 +73,7 @@ import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
+import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -189,8 +191,8 @@ for (const id of IDS) {
   const armorAc = c.data.equipment?.armor?.active ? pieceAc(c.data.equipment.armor) : 0;
   const shieldAc = (c.data.equipment?.shields || [])
     .filter((sh) => sh.active).reduce((t, sh) => t + pieceAc(sh), 0);
-  check(`${id} ac.armor is the armour worn`, s.ac.armor, armorAc);
-  check(`${id} ac.shield is the shields carried`, s.ac.shield, shieldAc);
+  check(`${id} ac.armor is the armour worn`, evaluateFormula('ac.armor', s), armorAc);
+  check(`${id} ac.shield is the shields carried`, evaluateFormula('ac.shield', s), shieldAc);
   check(`${id} the two still come to the AC bonus`, worn.armor + worn.shield, worn.ac);
 
   // One name per shield row, numbered from one the way the rows are
@@ -200,7 +202,7 @@ for (const id of IDS) {
   const numbered = rows.map((_, i) => s.ac[`shield${i + 1}`]);
   check(`${id} every shield row has a name`, numbered.filter((v) => v === undefined).length, 0);
   check(`${id} no name for a row that is not there`, s.ac[`shield${rows.length + 1}`], undefined);
-  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), s.ac.shield);
+  check(`${id} the rows add up to ac.shield`, numbered.reduce((t, n) => t + n, 0), evaluateFormula('ac.shield', s));
   check(`${id} a row that is not held contributes nothing`,
     rows.map((sh) => (sh.active ? pieceAc(sh) : 0)), numbered);
   check(`${id} ACBonusShield<n> names the same row`,
@@ -2757,6 +2759,223 @@ console.log('customized weapons -- the armiger’s counts by default, and a note
   c.data.uiPrefs.collapsed = { ...(c.data.uiPrefs.collapsed || {}), [`wnote:${list}|0`]: false };
   check('opened, the note is there to edit', combatPanels.renderMartialPanel(c).includes(`data-item="${list}|0|notes"`), true);
   setSphereCatalogue(before);
+}
+
+console.log('a maneuver bonus waits for the maneuver to be readied');
+{
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'Golden Lion', known: [], custom: [], notes: {} }]);
+  const will = () => c.data.saves.will.total;
+  const base = will();
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar', 'Steady {saves.will += 2} {roar.size = 30}');
+  check('not readied: the bonus waits, the name is there', [will() - base, c.scope().roar.size], [0, 30]);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', true);
+  check('readied: it applies', will() - base, 2);
+}
+
+console.log('a psionic power’s note reads {…}');
+{
+  const c = new Character(blankDocument({ name: 'Psion' }));
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'Deals {thrust.dice = 2}d10' }] }]);
+  check('a name defined in a power note can be read', c.scope().thrust?.dice, 2);
+  check('and the Formulas tab says where it is', describeSource('powerNote:0:0'), 'power 1 of manifesting class 1, its note');
+}
+
+console.log('an added veilweaving class row is shown until it is filled or removed');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  const before = (c.data.akashic.classes || []).length;
+  c.listAdd('akashic.classes', { name: '', mod: null, levelOverride: null, essenceCap: 0, bonusCap: 0, added: true });
+  const shown = (m) => subsystemPanels.akashicPanel(m, {}).includes(`data-remove="akashic.classes|${before}"`);
+  check('the blank row it adds is on the panel, with its ×', shown(c), true);
+  check('and still after a save and reload', shown(new Character(JSON.parse(JSON.stringify(c.toJSON())))), true);
+}
+
+console.log('the psionic prerequisite reads the Psionics tab');
+{
+  const c = new Character(blankDocument({ name: 'Mind' }));
+  c.set('identity.level', 3);
+  const tech = { prereq: { key: 'psionics', text: 'Ability to manifest powers' } };
+  check('no class: unmet', altTrainingPrereq(c, tech).state, 'unmet');
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [] }]);
+  check('a class with no levels: unmet', altTrainingPrereq(c, tech).state, 'unmet');
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 3);
+  check('a manifester level: met', [altTrainingPrereq(c, tech).state, altTrainingPrereq(c, tech).detail], ['met', 'Psion (manifester level 3).']);
+}
+
+console.log('a receptacle ticked off holds no essence');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.otherReceptacles', [{ name: 'Totem', essence: 2, active: true }, { name: 'Belt', essence: 3, active: false }]);
+  check('only the active one counts as used', c.data.akashic.calc.used, 2);
+}
+
+console.log('essence names: no fold, no hiding, no essence.x');
+{
+  const c = new Character(blankDocument({ name: 'Weaver' }));
+  c.set('akashic.slots', [
+    { slot: 'Hands', veils: [{ name: 'A', essence: 1 }] },
+    { slot: 'Hands', veils: [{ name: 'B', essence: 4 }] },
+    { slot: '', veils: [{ name: 'C', essence: 5 }] },
+  ]);
+  c.set('akashic.otherReceptacles', [{ name: 'Pool', essence: 3 }, { name: '', essence: 6 }]);
+  const e = c.scope().essence;
+  check('a second Hands slot goes on from hands3', [e.hands, e.hands2, e.hands3, e.hands4], [1, 0, 4, 0]);
+  check('a receptacle named Pool is pool_2; the pool total stays', [e.pool_2, e.pool], [3, 0]);
+  check('nothing unnamed is published', 'x' in e, false);
+}
+
+console.log('a chakra matches however the page wrote it');
+{
+  const before = veilCatalogue();
+  setVeilCatalogue({ veils: [{ name: 'Bracers of Thought', slot: 'Wrists' }, { name: 'Gloves of Ash', slot: 'Hands, Wrists' }, { name: 'Crown', slot: 'Head' }] });
+  check('Wrist finds the veils written for Wrists', veilsAvailable({ slot: 'Wrist' }).map((v) => v.name), ['Bracers of Thought', 'Gloves of Ash']);
+  check('and Head is still not Headband', veilsAvailable({ slot: 'Headband' }).length, 0);
+  setVeilCatalogue(before);
+}
+
+console.log('readied stances stay stances without the discipline pack');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [{ name: 'Golden Lion', entries: [
+    { level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' },
+    { level: 1, kind: 'stance', name: 'Pride Stance', type: 'Stance' },
+  ] }] });
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'Golden Lion', known: [], custom: [], notes: {} }]);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', true);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Pride Stance', true);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  setManeuverCatalogue({ disciplines: [] });
+  const bare = new Character(saved);
+  check('with no pack: one maneuver and one stance, as with it',
+    [bare.data.maneuvers.calc.maneuvers, bare.data.maneuvers.calc.stances], [1, 1]);
+  setManeuverCatalogue(before);
+}
+
+console.log('maneuver names match however a pack spelled them');
+{
+  const before = maneuverCatalogue();
+  setManeuverCatalogue({ disciplines: [
+    { name: 'Golden Lion', entries: [{ level: 1, kind: 'maneuver', name: 'Roar', type: 'Boost' }] },
+    { name: 'Iron Tortoise', entries: [] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Warlord' }));
+  c.set('maneuvers.disciplines', [{ name: 'golden lion', known: ['roar'], custom: [], notes: { roar: 'Loud {roar.x = 1}' } }]);
+  const d = () => c.data.maneuvers.disciplines[0];
+  check('a readied name an older pack spelled differently stays readied, once',
+    [c.data.maneuvers.calc.maneuvers, d().entries.length, d().entries[0].known], [1, 1, true]);
+  check('and its note is still read', maneuverDetails(d(), 'Roar').text, 'Loud {roar.x = 1}');
+  c.setManeuverNote('maneuvers.disciplines.0', 'Roar', 'Louder');
+  check('an edit writes the note it already had', Object.keys(d().notes), ['roar']);
+  c.toggleManeuver('maneuvers.disciplines.0', 'Roar', false);
+  check('unreadying takes it back', [d().known, c.data.maneuvers.calc.maneuvers], [[], 0]);
+  const html = subsystemPanels.maneuversPanel(c, {});
+  check('a discipline already trained is not offered again in another case',
+    [html.includes('<option value="Golden Lion"'), html.includes('Iron Tortoise')], [false, true]);
+  setManeuverCatalogue(before);
+}
+
+console.log('a deck manipulation is one thing however it is spelled');
+{
+  const before = deckManipulationCatalogue();
+  setCardcastingTables({ manipulations: [{ name: 'Loaded Hand' }, { name: 'Wild Card' }] });
+  const c = new Character(blankDocument({ name: 'Dealer' }));
+  c.set('cardcasting.mods.tightHand', true);
+  c.set('cardcasting.manipulations', [
+    { group: 'General', name: 'Loaded-Hand', note: '', count: 1 },
+    { group: 'General', name: 'loaded hand', note: '', count: 1 },
+    { group: 'General', name: 'Wildcard', note: '', count: 1 },
+    { group: 'General', name: '', note: '', count: 2 },
+  ]);
+  check('Loaded-Hand raises the Tight Hand limit', c.data.cardcasting.calc.handMax, 5);
+  const manip = c.scope().deck.manip;
+  check('the two spellings are one formula name, and an unnamed row is none',
+    [manip.loaded_hand, 'x' in manip], [2, false]);
+  check('Wildcard counts as Wild Card', hasManipulation(c, 'Wild Card'), true);
+  setCardcastingTables({ manipulations: before });
+}
+
+console.log('spell points and power points are built-in drain trackers');
+{
+  const c = new Character(blankDocument({ name: 'Caster' }));
+  c.set('identity.level', 4);
+  check('no casting, no pools', [c.spellPointTracker(), c.trackers.some((t) => t.pool)], [null, false]);
+
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', mod1: 'Int', classLevelsOverride: 4, levels: [] });
+  const sp = () => c.spellPointTracker();
+  const total = c.data.training.magic.totalSP;
+  check('a spherecaster gets Spell Points, full, draining, Daily',
+    [sp()?.name, sp()?.max, sp()?.max === total && total > 0, sp()?.style?.fill, sp()?.refresh],
+    ['Spell Points', total, true, 'remaining', 'Daily']);
+  c.set('akashic.essence.spTemp', 1);
+  check('condensing spell points into essence lowers the pool',
+    sp().max, c.data.training.magic.availableSP);
+  check('by what it costs', total - sp().max, c.data.training.magic.spOnEssence);
+  c.set('akashic.essence.spTemp', 0);
+  c.updateTracker(sp().id, { name: 'Arcane Reserve' });
+  check('renamed, it is still the pool cards spend from', [sp()?.name, sp()?.pool], ['Arcane Reserve', 'sp']);
+  check('and it cannot be deleted while the character casts', [c.removeTracker(sp().id), !!sp()], [false, true]);
+
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', curveTotal: c.data.psionics?.classes?.[0]?.curveTotal ?? null, manifesterLevelOverride: 4, powers: [] }]);
+  c.set('psionics.bonusPoints', 6);
+  const pp = () => c.trackers.find((t) => t.pool === 'pp');
+  check('a psionic caster gets Power Points, the size of the pool',
+    [pp()?.name, pp()?.max, pp()?.style?.fill], ['Power Points', c.data.psionics.pool, 'remaining']);
+  c.updateTracker(pp().id, { current: 2 });
+  check('spending on the tracker spends the Psionics pool', [c.data.psionics.spent, c.data.psionics.left], [2, c.data.psionics.pool - 2]);
+  c.set('psionics.spent', 3);
+  check('and spending on the Psionics tab moves the tracker', pp().current, 3);
+  c.rest('day');
+  check('a new day restores both', [pp().current, c.data.psionics.spent], [0, 0]);
+  const saved = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('one of each after a save and reload',
+    [saved.trackers.filter((t) => t.pool === 'sp').length, saved.trackers.filter((t) => t.pool === 'pp').length], [1, 1]);
+}
+
+console.log('alternate training fills a feat level\u2019s note too');
+{
+  const feats = featCatalogue();
+  const spheres = sphereCatalogue();
+  setFeatCatalogue({ feats: [{ name: 'Unarmed Combatant', text: 'You may use Str for unarmed damage.' }, { name: 'Iron Will', text: '+2 on Will saves.' }] });
+  setSphereCatalogue({ spheres: [{ name: 'Athletics', kind: 'combat', talents: [{ name: 'Wall Stunt', text: 'Run along walls.' }] }] });
+  setAltTrainingTables({
+    levels: [1, 3, 5], repeatFrom: 99,
+    techniques: [{ name: 'Test Body', talents: { side: 'combat', sphere: 'Athletics' }, grants: {
+      1: [{ feat: true, name: 'Unarmed Combatant' }],
+      3: [{ talent: true, name: 'Wall Stunt' }, { feat: true, name: 'Iron Will' }],
+      5: [{ feat: true, pick: { options: [] } }],
+    } }],
+  });
+  const c = new Character(blankDocument({ name: 'Trainee' }));
+  c.set('identity.level', 5);
+  c.set('altTraining.technique', 'Test Body');
+  check('two feat levels and a talent can be filled', c.blankTalentNotes('altTraining'), 2);
+  c.setAltTrainingPick(5, 'Iron Will');
+  check('a feat picked by name fills as it is typed', c.data.altTraining.rowNotes[5], '+2 on Will saves.');
+  c.fillTalentNotes('altTraining');
+  const notes = c.data.altTraining.rowNotes;
+  check('a named feat fills', notes[1], 'You may use Str for unarmed damage.');
+  check('a row with a talent and a feat gets both, each under its name',
+    notes[3], 'Wall Stunt: Run along walls.\n\nIron Will: +2 on Will saves.');
+  setFeatCatalogue(feats);
+  setSphereCatalogue(spheres);
+  setAltTrainingTables(merged.altTraining);
+}
+
+console.log('the armour worn is readable in formulas: type, enhancement, max Dex, ACP');
+{
+  const c = new Character(blankDocument({ name: 'Knight' }));
+  const read = (name) => evaluateFormula(name, c.scope());
+  check('nothing worn: type 0, no cap, no penalty', [read('ac.armor.type'), read('ac.maxDex'), read('ac.acp')], [0, 99, 0]);
+  c.set('equipment.armor', { ...c.data.equipment.armor, active: true, name: 'Full Plate', acBonus: 9, enhancement: 1, maxDex: 1, acp: -6, type: 'Heavy' });
+  check('heavy armour', [read('ac.armor'), read('ac.armor.enhancement'), read('ac.armor.type'), read('ac.armor.heavy'), read('ac.armor.light')], [10, 1, 3, 1, 0]);
+  check('its cap and penalty', [read('ac.maxDex'), read('ac.acp')], [1, -6]);
+  check('a rule written against it', read('if(ac.armor.type >= 2, 2, 0)'), 2);
+  c.set('equipment.armor.type', 'light armor');
+  check('a typed word is read', [read('ac.armor.type'), read('ac.armor.light')], [1, 1]);
+  c.set('equipment.armor.active', false);
+  check('taken off, nothing is worn', [read('ac.armor.type'), read('ac.maxDex')], [0, 99]);
 }
 
 const missing = missingCharacters(REAL);
@@ -5566,7 +5785,8 @@ console.log('armour and shields take an enhancement bonus');
   const ac0 = ac();
   c.set('equipment.armor.enhancement', 2);
   check('a +2 breastplate is two more AC', ac(), ac0 + 2);
-  check('and ac.armor reads the whole piece', c.scope().ac.armor, 8);
+  check('and ac.armor reads the whole piece', evaluateFormula('ac.armor', c.scope()), 8);
+  check('and its enhancement on its own', evaluateFormula('ac.armor.enhancement', c.scope()), 2);
   c.set('equipment.armor.active', false);
   check('taken off, the enhancement goes with it', ac(), ac0 - 6);
   c.set('equipment.armor.active', true);
@@ -7512,7 +7732,8 @@ console.log('Mythic Power drains by default');
     const c = new Character(raw);
     const mp = c.trackers.find((t) => t.id === 'mythic_power');
     check(`${id} mythic power drains`, mp.style?.fill, 'remaining');
-    check(`${id} nothing else is styled`, c.trackers.filter((t) => t.id !== 'mythic_power' && t.style), []);
+    check(`${id} and the casting pools drain`, c.trackers.filter((t) => t.pool).every((t) => t.style?.fill === 'remaining'), true);
+    check(`${id} nothing else is styled`, c.trackers.filter((t) => t.id !== 'mythic_power' && !t.pool && t.style), []);
     // Draining is presentation only -- the stored value is still the sheet's
     // own Uses count, and `remaining` is the drained view of it. (Saburo's
     // sheet is the one that ships with a non-zero count.)
@@ -9230,8 +9451,8 @@ console.log('alternate training -- the prerequisite is checked, and says so when
   check('and vancian casting he does not have reads unmet',
     a.data.altTraining.calc.prereq.state, 'unmet');
   a.set('altTraining.technique', 'Piercing Eye');
-  check('psionics is not modelled, so it is unchecked rather than refused',
-    a.data.altTraining.calc.prereq.state, 'unknown');
+  check('and manifesting he does not have reads unmet, as the Psionics tab has no class',
+    a.data.altTraining.calc.prereq.state, 'unmet');
 }
 
 console.log('alternate training -- "if you already possess it" is a branch, not a footnote');
@@ -10219,16 +10440,13 @@ console.log('card casting -- the table: an encounter played through');
   n.tableEnd();
   check('the end of the encounter notes the exiled cards\' return', /exiled cards: half return now/.test(nt().log[nt().log.length - 1]), true);
 
-  // Spell points: paid from a Spell Points tracker when there is one.
+  // Spell points: paid from the Spell Points tracker every spherecaster carries.
   const s = new Character(load('nico'));
   s.rng = () => 0.4;
-  check('no tracker, nothing to pay from', s.spellPointTracker(), null);
+  const spT = s.spellPointTracker();
+  check('a spherecaster carries a Spell Points tracker, as full as Magic Spheres says',
+    [spT?.id, spT?.max], ['spell_points', s.data.training.magic.availableSP]);
   s.tableStart();
-  const paid0 = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) > 0);
-  s.tablePlay(paid0, 'cast');
-  check('a cast without a tracker just logs the cast', /spell point/.test(s.data.cardcasting.table.log[s.data.cardcasting.table.log.length - 1]), false);
-  const spT = s.addTracker({ name: 'Spell Points', maxFormula: 'caster.sp' });
-  check('a tracker named Spell Points is found', s.spellPointTracker()?.id, spT.id);
   const paid = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) === 1);
   s.tablePlay(paid, 'cast');
   check('a 1-point card spends one from the tracker', s.spellPointTracker().current, 1);

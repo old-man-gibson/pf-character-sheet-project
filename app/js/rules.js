@@ -2394,6 +2394,20 @@ export function diceAverage(dice, flat = 0) {
  * So the rows always add up to `shield`, and a row nobody has raised reads
  * zero rather than a bonus the character is not getting.
  */
+/**
+ * How heavy a piece of armour is, from its Type cell: 0 for none or
+ * unarmoured, 1 light, 2 medium, 3 heavy. Read from the word, so the
+ * workbook's "Medium" and a typed "heavy armor" both answer.
+ */
+export const ARMOR_TYPES = ['Light', 'Medium', 'Heavy', 'Unarmored'];
+export function armorCategory(type) {
+  const t = String(type ?? '').toLowerCase();
+  if (/\bheavy\b/.test(t)) return 3;
+  if (/\bmedium\b/.test(t)) return 2;
+  if (/\blight\b/.test(t)) return 1;
+  return 0;
+}
+
 export function armorParts(c) {
   const armor = c.equipment?.armor?.active ? c.equipment.armor : null;
   const rows = c.equipment?.shields || [];
@@ -2412,6 +2426,10 @@ export function armorParts(c) {
     armor: armorAc,
     shield: shieldAc,
     shields: shieldAcs,
+    // The enhancement on its own, which the totals above already include.
+    armorEnhancement: armor ? Number(armor.enhancement) || 0 : 0,
+    shieldEnhancement: shields.reduce((t, s) => t + (Number(s.enhancement) || 0), 0),
+    armorType: armor ? armorCategory(armor.type) : 0,
     maxDex: maxDexes.length ? Math.min(...maxDexes.map(Number)) : Infinity,
     acp: pieces.reduce((t, p) => t + (Number(p.acp) || 0), 0),
   };

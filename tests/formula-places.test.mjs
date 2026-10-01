@@ -263,6 +263,7 @@ function everywhere() {
   d.akashic.slots = [{ slot: 'Hands', twinveil: false, veils: [{ name: 'Test Veil', essence: 2, desc: 'grips {veil.grip = 3}' }] }];
   // A prepared spell's note, a deck manipulation's note, leftovers from a sheet.
   d.vancian.prepared = [{ name: 'Fireball', note: 'burns {fireball.x = 1}' }];
+  d.psionics = { ...(d.psionics || {}), classes: [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'hits {thrust.x = 1}' }] }] };
   d.cardcasting.manipulations = [{ name: 'Loaded Hand', count: 1, group: 'Draw', note: 'loads {loaded.x = 1}' }];
   d.akashic.sourceExtras = [{ cells: ['left over {akashic.left = 1}'] }];
   d.eidolon[0].attacks = [{ type: 'Bite', qualities: 'bites {bite.x = 1}' }];
