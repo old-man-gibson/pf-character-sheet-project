@@ -24,7 +24,7 @@ import {
 import { NameIndex, SCOPE_INFO, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { sphereTableNames } from './spheres.js';
+import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
@@ -267,7 +267,7 @@ export function characterScope(model) {
     // that scales says "per rank in the associated skill" and a sheet that
     // cannot be asked leaves the number to be typed in and go stale.
     sphere: Object.fromEntries((c.training?.guile?.sphereRows || [])
-      .filter((r) => r.sphere)
+      .filter((r) => r.sphere && r.repeatOf == null)
       .map((r) => [slug(r.sphere), {
         ranks: Number(r.ranks) || 0,
         talents: Number(r.talents) || 0,
@@ -396,9 +396,14 @@ export function characterScope(model) {
   for (const r of c.training?.combat?.sphereRows || []) {
     const into = sphereOf(r.sphere);
     if (!into) continue;
+    const talents = Number(r.talents) || 0;
+    // A sphere on both tables (one no list gives a kind, trained both ways)
+    // counts its talents from both, and its DC is the side it has more on --
+    // the magic one on a tie -- rather than whichever was written last.
+    const shared = into.dc !== undefined;
     into.bab = Number(r.attack) || 0;
-    into.dc = Number(r.dc) || 0;
-    into.talents = Number(r.talents) || 0;
+    if (!shared || talents > (into.talents || 0)) into.dc = Number(r.dc) || 0;
+    into.talents = (shared ? into.talents || 0 : 0) + talents;
   }
 
   // Each skill is its total and what the total stands on, the way a save is:
@@ -830,7 +835,7 @@ export function forwardTargets(model) {
       const key = sphereForwardKey(sphere);
       if (!key) continue;
       const under = String(sphere).trim();
-      const trained = !tally || Number(tally[sphere]) > 0;
+      const trained = !tally || talentsIn(tally, sphere) > 0;
       for (const [suffix, what] of columns) {
         const name = `${key}.${suffix}`;
         if (!expand.has(name)) {
@@ -1470,6 +1475,19 @@ export function proseSources(model) {
     (t?.tradition?.drawbacks || []).forEach((x, xi) => push(`drawback:${side}:${xi}`, x));
     (t?.tradition?.boughtOff || []).forEach((x, xi) => push(`boughtOff:${side}:${xi}`, x));
   }
+  // A customized weapon's talents are prose like any other talent, but only
+  // the drawn weapon's: a stowed weapon's talents are not live, so neither is
+  // what they say.
+  (d.training?.combat?.customizations || []).forEach((block, bi) => {
+    (block.sets || []).forEach((set, si) => {
+      if (set.spare || si !== (Number(block.active) || 0)) return;
+      (set.talents || []).forEach((row, ri) => {
+        if (row.granted === false) return;
+        push(`weaponTalent:${bi}:${si}:${ri}`, row.talent);
+        push(`weaponTalent:${bi}:${si}:${ri}:notes`, row.notes);
+      });
+    });
+  });
   // Veils used to be cells on a raw grid, so their text resolved `{…}` the
   // way every other cell did. Now that they are a modelled field, they have
   // to be listed here or a veil that reads "{= con.mod + 2}" would stop

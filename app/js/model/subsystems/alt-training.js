@@ -35,8 +35,10 @@ let TABLES = {
 export function setAltTrainingTables(doc) {
   const d = doc && typeof doc === 'object' ? doc : {};
   TABLES = {
+    // Ascending and once each, whatever order the pack wrote them in: the
+    // ladder is drawn in this order and read up to the character's level.
     levels: Array.isArray(d.levels) && d.levels.length
-      ? d.levels.map(Number).filter(Number.isFinite) : DEFAULT_LEVELS,
+      ? [...new Set(d.levels.map(Number).filter(Number.isFinite))].sort((a, b) => a - b) : DEFAULT_LEVELS,
     repeatFrom: Number.isFinite(Number(d.repeatFrom)) && d.repeatFrom !== null
       ? Number(d.repeatFrom) : DEFAULT_REPEAT_FROM,
     techniques: Array.isArray(d.techniques) ? d.techniques.filter((t) => t && t.name) : [],
@@ -68,6 +70,24 @@ export function altTrainingGrantsAt(technique, level) {
   if (!t || !TABLES.levels.includes(level)) return [];
   if (level >= TABLES.repeatFrom) return t.repeat ? [t.repeat] : [];
   return t.grants?.[level] || [];
+}
+
+/**
+ * What a level hands over as the character has it: each grant, or its
+ * "if they already possess it, they instead gain…" branch where the player
+ * ticked that. The branch *replaces* the grant rather than adding to it, so
+ * the kinds come off before the alternative's go on -- a talent swapped for a
+ * feat is one feat, not a feat and a talent. Every reader of the ladder goes
+ * through this: the tab's counts, the sphere tally, the talent names.
+ */
+export function liveGrantsAt(technique, level, alt = {}) {
+  return altTrainingGrantsAt(technique, level).map((g) => {
+    if (!g.alt || !alt?.[level]) return { ...g, base: g, alt: false };
+    const {
+      talent, feat, spell, power, ...rest
+    } = g;
+    return { ...rest, ...g.alt, base: g, alt: true };
+  });
 }
 
 /**
@@ -166,18 +186,8 @@ export function recomputeAltTraining(model) {
   };
   const rows = altTrainingLevels().map((lvl) => {
     const reached = lvl <= level;
-    const grants = altTrainingGrantsAt(technique, lvl).map((g) => {
-      // "If they already possess it, they instead gain…": one grant with two
-      // faces, and which one is live decides what the ladder counts. The
-      // branch *replaces* the grant rather than adding to it, so the kinds
-      // come off before the alternative's go on -- a feat swapped for a
-      // spell is one thing gained, not two.
-      if (!g.alt || !p.alt[lvl]) return { ...g, base: g, alt: false };
-      const {
-        talent, feat, spell, power, ...rest
-      } = g;
-      return { ...rest, ...g.alt, base: g, alt: true };
-    });
+    // One grant can have two faces; which one is live decides what counts.
+    const grants = liveGrantsAt(technique, lvl, p.alt);
     const text = String(p.picks[lvl] ?? '');
     const pick = grants.find((g) => g.pick)?.pick || null;
     /*
@@ -244,8 +254,9 @@ export function altTrainingTalents(model) {
   const t = altTrainingTechnique(model.data.altTraining?.technique);
   if (!t?.talents) return null;
   const level = Number(model.data.identity.level) || 0;
+  const alt = model.data.altTraining?.alt || {};
   const count = altTrainingLevels()
     .filter((l) => l <= level)
-    .reduce((n, l) => n + altTrainingGrantsAt(t, l).reduce((k, g) => k + grantCount(g, 'talent'), 0), 0);
+    .reduce((n, l) => n + liveGrantsAt(t, l, alt).reduce((k, g) => k + grantCount(g, 'talent'), 0), 0);
   return count ? { ...t.talents, count } : null;
 }

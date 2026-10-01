@@ -17,7 +17,7 @@ import { esc, val } from '../html.js';
 import { collapsible } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
-import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
+import { fillNotesButton, noteField, talentCell, talentLegend, talentNote } from '../talents.js';
 import { rollButton } from '../roll.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
@@ -33,7 +33,7 @@ const NEW_TEMPLATE_TABLE = () => ({
 });
 import {
   SYSTEM_NOUNS, TEMPLATE_TYPES, TRAINING_SYSTEMS, classForwardKey, poolMode, poolSpheres, sphereForwardKey,
-  sphereNames, talentLandsOn,
+  sphereNames, talentLandsOn, trackSphereNames, trackTalentSide,
 } from '../../model.js';
 import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
@@ -41,7 +41,7 @@ import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  parseLadderRule, sphereSide, statMod, trackSpheres,
+  parseLadderRule, statMod,
 } from '../../rules.js';
 import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {
@@ -64,69 +64,52 @@ import {
    * What they still share is the blended classes, which belong to neither and
    * so head both.
    */
-/**
- * Whether a training side is a side at all.
- *
- * Every character now carries a `training.combat` because the unarmed block
- * is conjured into one (see document.js) -- a monk with a class progression
- * and no talents needs somewhere to put their dice. That bare holder is not a
- * martial side, and drawing this tab for it would be four empty grids, so the
- * question asked here is the one the ⚙ manager's badges already ask: does it
- * name a class, a tradition or a talent?
+/*
+ * Whether a side is in use is the model's question (trainingSideInUse), and
+ * it decides whether the tab is on the bar. Once the tab is shown it is drawn
+ * whole, with its "+ Add class", whether or not the document has stored the
+ * side yet: adding a class writes it.
  */
-const martialSideInUse = (side) => !!side && !!(
-  (side.classes || []).length
-  || (side.bonusTalents || []).length
-  || (side.customizations || []).length
-  || side.tradition
-  || side.sphereBonuses
-  || side.skillRanks
-  || side.sheetBaseDC != null
-);
-
 export function renderMartialPanel(model) {
     const t = model.data.training || {};
-    const side = martialSideInUse(t.combat) ? t.combat : null;
+    const side = t.combat || {};
     const wrap = (key, html) => collapsible(model, key, html);
     // The full-width groups sit in a strip: folded, they shrink to their
     // headers and pile up in a row of pills instead of holding a row apiece
-    // open. See `.foldstrip`. Built first and wrapped only if it holds
-    // anything -- a caster with no martial side has none of these, and an
-    // empty strip would still spend the grid's gap on itself.
+    // open. See `.foldstrip`.
     const groups = [
       blendedSection(model, wrap, 'combat'),
-      side ? wrap('combat-training', trainingSide(model, 'combat', side)) : '',
-      side && (side.customizations || []).length
+      wrap('combat-training', trainingSide(model, 'combat', side)),
+      (side.customizations || []).length
         ? wrap('customized-weapons', customizationPanel(model, side.customizations)) : '',
-      side ? wrap('combat-bonus', bonusTalentPanel(model, 'combat', side)) : '',
+      wrap('combat-bonus', bonusTalentPanel(model, 'combat', side)),
     ].filter(Boolean).join('');
     return `<div class="grid">
-      ${groups ? `<div class="foldstrip">${groups}</div>` : ''}
-      ${side ? `
-        <div class="sidepanels">
-          ${wrap('combat-tradition', combatTraditionPanel(model, side))}
-          ${wrap('sphere-skills', sphereSkillPanel(model))}
-          ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
-        </div>` : ''}
+      <div class="foldstrip">${groups}</div>
+      <div class="sidepanels">
+        ${wrap('combat-tradition', combatTraditionPanel(model, side))}
+        ${wrap('sphere-skills', sphereSkillPanel(model))}
+        ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
+      </div>
     </div>`;
   }
 
 export function renderMagicPanel(model) {
     const t = model.data.training || {};
+    const magic = t.magic || {};
     const wrap = (key, html) => collapsible(model, key, html);
     const groups = [
       blendedSection(model, wrap, 'magic'),
-      t.magic ? wrap('magic-training', trainingSide(model, 'magic', t.magic)) : '',
-      t.magic ? wrap('magic-bonus', bonusTalentPanel(model, 'magic', t.magic)) : '',
+      wrap('magic-training', trainingSide(model, 'magic', magic)),
+      wrap('magic-bonus', bonusTalentPanel(model, 'magic', magic)),
     ].filter(Boolean).join('');
     return `<div class="grid">
-      ${groups ? `<div class="foldstrip">${groups}</div>` : ''}
-      ${t.magic ? `
-        <div class="sidepanels">
-          ${wrap('magic-tradition', magicTraditionPanel(model, t.magic))}
-          ${wrap('magic-globals', magicGlobalsPanel(model, t.magic))}
-          ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', t.magic))}
-        </div>` : ''}
+      <div class="foldstrip">${groups}</div>
+      <div class="sidepanels">
+        ${wrap('magic-tradition', magicTraditionPanel(model, magic))}
+        ${wrap('magic-globals', magicGlobalsPanel(model, magic))}
+        ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', magic))}
+      </div>
     </div>`;
   }
 
@@ -182,10 +165,16 @@ export function blendTicks(systems, home, attr, counts = null) {
   /* ----- training class blocks with per-level talent slots ----- */
 
 
+/**
+ * The classes a training block can be: every class the character has --
+ * the Classes table and the Planner, as the model lists them -- and any name
+ * a training block already holds, so a pick is never dropped from its own
+ * select.
+ */
 export function classNames(model) {
-    const names = new Set(model.data.classes.map((x) => x.name).filter(Boolean));
+    const names = new Set(model.classNames());
     for (const side of Object.values(model.data.training || {})) {
-      for (const cls of side?.classes || []) if (cls.name) names.add(cls.name);
+      for (const cls of side?.classes || []) if (String(cls.name || '').trim()) names.add(String(cls.name).trim());
     }
     return [...names];
   }
@@ -338,8 +327,7 @@ function customizationPanel(model, blocks) {
     // customized weapon teaches its wielder to fight with it -- and widened by
     // the archetype that says so, which is why it is a field here and not a
     // rule in the engine.
-    const spheres = sphereNames(trackSpheres(block.spec),
-      block.spec?.spheres === 'both' ? null : block.spec?.spheres || 'combat');
+    const spheres = trackSphereNames(block.spec);
     return `<div class="trainclass">
         <div class="trainhead">
           <label class="fld"><span>Class</span>
@@ -396,26 +384,38 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
           <span>${live ? 'Drawn' : set.spare ? 'Spare' : 'Stowed'}</span></label>
         ${itemText(list, si, 'weapon', set.weapon, `${Unit} ${si + 1}`, true)}
       </div>
-      <table class="talents">
-        <colgroup><col class="talent"><col class="sphere"></colgroup>
+      <table class="talents weapontalents">
+        <colgroup><col class="talent"><col class="sphere"><col class="fold"></colgroup>
         <tbody>${rows.map((row, ri) => {
     const on = row.granted !== false;
     const state = on ? 'slot-on' : 'slot-off';
-    const side = on && row.sphere ? sphereSide(row.sphere, 'combat') : null;
+    const side = on && row.sphere ? trackTalentSide(row.sphere) : null;
     const bonus = on && ri >= block.talentCount;
+    // The talent's note opens under its row. Shut until the player opens it,
+    // and kept per row; a dot on the arrow says there is something in it.
+    const noteKey = `wnote:${talents}|${ri}`;
+    const said = model.data?.uiPrefs?.collapsed?.[noteKey];
+    const open = on && said === false;
+    const hasNote = !!String(row.notes ?? '').trim();
+    const named = on && !!String(row.talent ?? '').trim();
     return `<tr>
-          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${row.needsBase
+          <td class="${state}${row.needsBase ? ' needsbase' : ''}"${named
+      ? ` data-tpop="${esc(JSON.stringify({ k: 'wtalent', p: `${talents}|${ri}` }))}"` : ''}${row.needsBase
       ? ` title="${esc(`No ${row.sphere} base on this weapon, and the character has none of her own — a customized weapon must possess a base sphere before talents of it.`)}"`
       : bonus ? ' title="The extra talent this weapon\'s drawback bought"' : ''}>
             ${talentCell(model, `data-item="${talents}|${ri}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, row.talent, row.sphere,
-    on ? { sphere: 'sphere' } : null)}</td>
+    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
           <td class="${state}${side ? ` side-${side}` : ''}${row.offList ? ' offlist' : ''}"${row.offList
       ? ` title="${esc(`${row.sphere} is not one this ${Unit.toLowerCase()} may learn — it teaches `
         + `${TRACK_SPHERE_NOUNS[block.spec?.spheres || 'combat']} spheres. `
         + 'Widen it above, or add the archetype that does.')}"` : ''}>
             ${on ? itemSelect(talents, ri, 'sphere', row.sphere, spheres)
       : '<select disabled><option></option></select>'}</td>
-        </tr>`;
+          <td class="tools">${on ? `<button class="disclose catfold${hasNote ? ' hasnote' : ''}" data-collapse="${esc(noteKey)}"
+            data-collapse-to="${open}" aria-expanded="${open}"
+            title="${open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note'}">${open ? '▾' : '▸'}</button>` : ''}</td>
+        </tr>${open ? `<tr class="wnote"><td colspan="3">${noteField(model,
+    `data-item="${talents}|${ri}|notes" placeholder="What this talent does…"`, String(row.notes ?? ''))}</td></tr>` : ''}`;
   }).join('')}</tbody>
       </table>
       <div class="listrow weapondrawback">

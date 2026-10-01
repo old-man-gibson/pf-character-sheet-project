@@ -7373,7 +7373,7 @@ export class CharacterSheetElement extends HTMLElement {
         const taken = new Set((this.#model.data.training?.combat?.customizations || [])
           .map((b) => String(b.className || '')));
         const first = this.#classNames().find((n) => !taken.has(n)) || '';
-        this.#model.addCustomization(first, { sets: { start: 1 }, talents: { start: 1 } });
+        this.#model.addCustomization(first);
         this.#render();
         break;
       }

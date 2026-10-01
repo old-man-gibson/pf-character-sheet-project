@@ -21,7 +21,7 @@ import { collapsible } from '../rows.js';
 import { prose } from '../prose.js';
 import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
 import {
-  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn,
+  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn, talentsIn,
 } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
@@ -526,8 +526,12 @@ function guileSpherePanel(model, g) {
     // than blanked, because the name is still the answer to what this sphere
     // is associated with; it is the row that has gone missing.
     const lost = !!r.skill && r.skillIndex < 0;
+    const repeat = r.repeatOf != null;
+    const trained = repeat ? 0 : talentsIn(g.tally, r.sphere);
     return `<tr>
-          <td>${itemSelect(list, i, 'sphere', r.sphere, spheres)}</td>
+          <td${repeat ? ` class="dupskill" title="${esc(`${r.sphere} is already on row ${r.repeatOf + 1}. `
+      + 'A sphere has one associated skill, so this row pays nothing. Remove it, or pick another sphere.')}"` : ''}>${
+  itemSelect(list, i, 'sphere', r.sphere, spheres)}${repeat ? '<div class="req">already listed above</div>' : ''}</td>
           <td>${packages.length
       ? itemSelect(list, i, 'package', r.package, packages)
       : '<span class="hint">—</span>'}</td>
@@ -545,6 +549,7 @@ function guileSpherePanel(model, g) {
       ? `${RANKS_PER_TALENT} ranks a talent, capped at ${level} Hit Dice. The skill's total is ${r.ranks}.`
         + (r.competence ? ` Another sphere shares this skill, so it pays +${r.competence} competence`
           + ' rather than a second helping of ranks.' : '')
+      : repeat ? 'This sphere already pays on the row above.'
       : r.duplicate
         ? `${owed} ranks earned and not paid: ${r.skill} is already filled by another sphere `
           + `— here or on the martial tab. The overlap is worth ${r.competence
@@ -560,7 +565,13 @@ function guileSpherePanel(model, g) {
       + ` + ${fmt(g.operativeAbilityMod || 0)} operative modifier`)}"` : ''}>${r.dc ?? '—'}</td>
           <td class="num" title="25 ft. + 5 ft. per 2 ranks / 100 ft. + 10 ft. per rank / 400 ft. + 40 ft. per rank">${
   r.skillIndex >= 0 ? `${r.close} / ${r.medium} / ${r.long}` : '—'}</td>
-          ${rowRemove(list, i)}
+          ${trained
+      // A sphere a talent went into is put straight back on the table, so a
+      // × would only reset the row. It goes when its talents do.
+      ? `<td class="tools"><button class="danger" disabled aria-label="Remove"
+          title="${esc(`${r.sphere} has ${trained} talent${trained === 1 ? '' : 's'}, so it stays on the table. `
+            + 'The row goes when its talents do.')}">×</button></td>`
+      : rowRemove(list, i)}
         </tr>`;
   }).join('')}</tbody>
       </table></div>` : '<p class="empty">Spend a talent on a sphere above and its row appears here.</p>'}

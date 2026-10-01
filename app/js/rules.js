@@ -335,9 +335,10 @@ export const COMBAT_SPHERES = ['Alchemy', 'Athletics', 'Barrage', 'Barroom', 'Be
 /** Every sphere either side knows, for the classes that learn from both. */
 export const BLENDED_SPHERES = [...COMBAT_SPHERES, ...MAGIC_SPHERES].sort();
 
+// Keyed lower-case: a sphere is the same sphere however it was capitalised.
 const SPHERE_SIDES = new Map([
-  ...MAGIC_SPHERES.map((s) => [s, 'magic']),
-  ...COMBAT_SPHERES.map((s) => [s, 'combat']),
+  ...MAGIC_SPHERES.map((s) => [s.toLowerCase(), 'magic']),
+  ...COMBAT_SPHERES.map((s) => [s.toLowerCase(), 'combat']),
 ]);
 
 /**
@@ -349,7 +350,7 @@ const SPHERE_SIDES = new Map([
  * itself sits on rather than being dropped.
  */
 export function sphereSide(sphere, fallback = null) {
-  return SPHERE_SIDES.get(String(sphere || '').trim()) ?? fallback;
+  return SPHERE_SIDES.get(String(sphere || '').trim().toLowerCase()) ?? fallback;
 }
 
 /* ------------------------------------------------------------------ *
@@ -368,11 +369,11 @@ export const GUILE_SPHERES = ['Artifice', 'Bluster', 'Body Control', 'Communicat
   'Faction', 'Herbalism', 'Infiltration', 'Investigation', 'Navigation', 'Performance',
   'Spellhacking', 'Study', 'Subterfuge', 'Survivalism', 'Vocation', 'Occultism'];
 
-const GUILE_SPHERE_SET = new Set(GUILE_SPHERES);
+const GUILE_SPHERE_SET = new Set(GUILE_SPHERES.map((s) => s.toLowerCase()));
 
 /** Whether a name is one of the skill spheres, however it was capitalised. */
 export function isGuileSphere(sphere) {
-  return GUILE_SPHERE_SET.has(String(sphere || '').trim());
+  return GUILE_SPHERE_SET.has(String(sphere || '').trim().toLowerCase());
 }
 
 /**
@@ -1442,6 +1443,16 @@ export function summariseLevels(levels) {
  * talents: {start: 1, gainsAt: '3, +4'} }` and nothing about weapons is
  * written into the engine.
  */
+/**
+ * What "+ Customized weapons" starts a track with: the armiger's -- three
+ * weapons at 1st and one more at 11th and 19th; one talent each at 1st and
+ * one more at 3rd, 7th, 11th, 15th and 19th. Both are editable on the track.
+ */
+export const DEFAULT_TALENT_TRACKS = {
+  sets: { start: 3, gainsAt: '11, 19' },
+  talents: { start: 1, gainsAt: '3, 7, 11, 15, 19' },
+};
+
 export function normalizeTalentTracks(spec) {
   if (!spec || typeof spec !== 'object') return null;
   // A rule written as a bare string is its gainsAt; the start comes from the

@@ -278,6 +278,33 @@ export function setViewMode(model, mode) {
 }
 
 /**
+ * Whether a training side is in use: a class named on it, a talent written
+ * into its bonus talents, a tradition, a customized weapon (martial), or a
+ * blended pool from another side that reaches it -- and for guile, whatever
+ * else guileInUse reads. The one answer for the tab bar, the ⚙ manager's
+ * badges and the Formulas tab. An empty side the document conjures (every
+ * character carries a martial one for its unarmed block) is not in use.
+ */
+export function trainingSideInUse(model, key) {
+  const t = model.data.training || {};
+  const side = t[key];
+  const named = (x) => !!String(x ?? '').trim();
+  const own = !!side && (
+    (side.classes || []).some((x) => named(x?.name))
+    || (side.bonusTalents || []).some((b) => named(b?.talent) || named(b?.sphere))
+    || named(side.tradition?.name) || (side.tradition?.entries || []).some((e) => named(e?.talent))
+    || (key === 'combat' && (side.customizations || []).length > 0)
+    || (key === 'guile' && guileInUse(side)));
+  if (own) return true;
+  // A blended pool that reaches a side puts that side in use, though no
+  // class of its own sits there.
+  const flag = { combat: 'blendedCombat', magic: 'blendedMagic', guile: 'blendedSkill' }[key];
+  const from = key === 'guile' ? ['combat', 'magic'] : ['guile', key === 'combat' ? 'magic' : 'combat'];
+  return from.some((k) => (t[k]?.classes || []).some((x) => named(x?.name)
+    && (x[flag] || (k !== 'guile' && key !== 'guile' && x.blended))));
+}
+
+/**
  * Which modelled sub-system tabs already hold this character's data, keyed
  * by tab id -- the single source for the ⚙ manager's "in use"/"empty"
  * badges and for seeding the session bar.
@@ -285,16 +312,10 @@ export function setViewMode(model, mode) {
 export function systemTabsInUse(model) {
   const d = model.data;
   const cr = d.crafting;
-  const trainingSide = (side) => !!side
-    && ((side.classes || []).some((x) => x?.name) || !!side.tradition?.name);
-  // A blended pool that reaches a side puts that side in use, though no
-  // class of its own sits there.
-  const reached = (flag, sides) => sides.some((key) => (d.training?.[key]?.classes || [])
-    .some((x) => x?.name && x[flag]));
   const out = {
-    martial: trainingSide(d.training?.combat) || reached('blendedCombat', ['guile']),
-    magic: trainingSide(d.training?.magic) || reached('blendedMagic', ['guile']),
-    guile: guileInUse(d.training?.guile) || reached('blendedSkill', ['combat', 'magic']),
+    martial: trainingSideInUse(model, 'combat'),
+    magic: trainingSideInUse(model, 'magic'),
+    guile: trainingSideInUse(model, 'guile'),
     crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
       || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
     // Not `slots.length`: the workbook's Akashic tab prints the chakra rows

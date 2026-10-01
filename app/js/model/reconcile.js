@@ -119,6 +119,7 @@ export function describeSource(path) {
     case 'otherBonus': return `gear ${nth(a)}, bonus ${nth(b)}`;
     case 'talent':
     case 'bonusTalent': return `a ${a} talent`;
+    case 'weaponTalent': return parts[4] === 'notes' ? 'a customized weapon’s talent note' : 'a customized weapon’s talent';
     case 'tradition': return `${a} tradition`;
     case 'drawback': return `${a} drawback`;
     case 'boughtOff': return `${a} drawback bought off`;

@@ -44,8 +44,11 @@ import {
   guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
+import { altTrainingTalents } from './alt-training.js';
 import { forwarded } from '../scope.js';
-import { poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, utilityCounts } from '../spheres.js';
+import {
+  poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, talentsIn, tallyAdd, utilityCounts,
+} from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
@@ -171,7 +174,7 @@ export const GUILE_DERIVED = [
   { path: 'classes', list: 'levels', keys: ['count', 'utilityCount', 'granted', 'utilityGranted', 'future'] },
   {
     path: 'spheres',
-    keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'competence',
+    keys: ['skillIndex', 'talents', 'ranksGranted', 'paysRanks', 'duplicate', 'repeatOf', 'competence',
       'rankBonusNum', 'rankBonusError', 'ranksForwarded'],
   },
 ];
@@ -247,8 +250,7 @@ export function guileTally(side, { spentOnly = false, training = null } = {}) {
   const tally = {};
   for (const row of guileTalentRows(side, training)) {
     if (spentOnly && !row.spent) continue;
-    const s = String(row.sphere || '').trim();
-    if (s) tally[s] = (tally[s] || 0) + 1;
+    tallyAdd(tally, row.sphere);
   }
   return tally;
 }
@@ -314,6 +316,13 @@ export function recomputeGuile(model) {
 
   g.tally = guileTally(g, { training });
   g.tallySpent = guileTally(g, { spentOnly: true, training });
+  // An Alternate Training technique that teaches a skill sphere counts here
+  // the way one teaching a martial or magic sphere counts on its side.
+  const technique = altTrainingTalents(model);
+  const learned = String(technique?.sphere || '').trim();
+  if (technique?.side === 'guile' && learned) {
+    for (const t of [g.tally, g.tallySpent]) tallyAdd(t, learned, technique.count);
+  }
 
   // A sphere is on the table because a talent went into it, or because the
   // player put it there to choose its skill before spending anything. Rows
@@ -449,25 +458,34 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
   };
 
   // What each row is owed, before any of them find out they are sharing.
+  // A sphere has one associated skill, so a second row naming it is a
+  // leftover rather than a second sphere: it pays nothing, and `repeatOf`
+  // says which row above already holds that sphere.
   const byIndex = new Map();
+  const firstRow = new Map();
+  (g.spheres || []).forEach((row, at) => {
+    const name = String(row?.sphere || '').trim().toLowerCase();
+    row.repeatOf = name && firstRow.has(name) ? firstRow.get(name) : null;
+    if (name && !firstRow.has(name)) firstRow.set(name, at);
+  });
   for (const row of g.spheres || []) {
-    const talents = Number(tally[row.sphere]) || 0;
+    const talents = talentsIn(tally, row.sphere);
     const i = skillIndexOf(model, row.skill);
     const rank = amount(row.rankBonus);
     // A bonus forwarded here is kept beside the typed one, never folded in.
     const key = sphereForwardKey(row.sphere);
     row.skillIndex = i;
-    row.talents = talents;
+    row.talents = row.repeatOf != null ? 0 : talents;
     row.rankBonusNum = rank.value;
     row.rankBonusError = rank.error;
     row.ranksForwarded = key ? forwarded(model, `${key}.ranks`) : 0;
-    row.ranksGranted = i < 0 || !talents
+    row.ranksGranted = i < 0 || !talents || row.repeatOf != null
       ? 0
       : Math.min(level, talents * RANKS_PER_TALENT + rank.value + row.ranksForwarded);
     row.paysRanks = false;
     row.duplicate = false;
     row.competence = 0;
-    if (i < 0 || !talents) continue;
+    if (i < 0 || !talents || row.repeatOf != null) continue;
     if (!byIndex.has(i)) byIndex.set(i, []);
     byIndex.get(i).push(row);
   }

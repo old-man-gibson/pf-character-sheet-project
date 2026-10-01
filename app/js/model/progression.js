@@ -404,6 +404,24 @@ export function classLevelsIn(model, className) {
  * the block silently lost every slot it should have had.
  */
 export function classLevelCount(model, className) {
+  const { own, match } = ownLevelCount(model, className);
+  if (!match) return 0;
+  // "Counts as two levels higher of Kineticist" is a rule about this number
+  // and nothing else, so it goes on here rather than in the Planner: the
+  // levels the character actually took do not move, and neither do the hit
+  // dice, base saves and BAB that are built from which class ran when.
+  // Nothing is conjured out of nothing -- a class with no levels stays at 0,
+  // because an effective level is a multiplier on a class you have.
+  return own + (own ? forwarded(model, `class.${slug(match)}.level`) : 0);
+}
+
+/**
+ * The levels of a class the character actually has at the current level,
+ * with no "counts as higher" rule on top: `own`, and the spelling it was
+ * found under (`match`, '' when nothing names it). What a talent budget or a
+ * customized weapon count is read from; `classLevelCount` adds the rules.
+ */
+export function ownLevelCount(model, className) {
   const planned = closestName(className, model.progressionClasses());
   const cap = Number(model.data.identity?.level) || 20;
   // A class on the Classes table is counted the way its saves, hit points and
@@ -421,15 +439,7 @@ export function classLevelCount(model, className) {
   } else if (planned) {
     own = model.classLevelsIn(planned).filter((lvl) => lvl <= cap).length;
   }
-  const match = planned || listed;
-  if (!match) return 0;
-  // "Counts as two levels higher of Kineticist" is a rule about this number
-  // and nothing else, so it goes on here rather than in the Planner: the
-  // levels the character actually took do not move, and neither do the hit
-  // dice, base saves and BAB that are built from which class ran when.
-  // Nothing is conjured out of nothing -- a class with no levels stays at 0,
-  // because an effective level is a multiplier on a class you have.
-  return own + (own ? forwarded(model, `class.${slug(match)}.level`) : 0);
+  return { own, match: planned || listed || '' };
 }
 
 /**

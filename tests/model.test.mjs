@@ -29,6 +29,7 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
+  sphereCatalogue, trackSphereNames,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -64,11 +65,14 @@ import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
+import { veilTraditionClasses } from '../app/js/model/subsystems/akashic.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
+import * as overviewPanels from '../app/js/ui/panels/overview.js';
+import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
 let fail = 0;
@@ -2216,6 +2220,22 @@ console.log('companion ids are unique across every kind, whatever a file says');
   check('a repeated id takes the next free one of its own kind', ids, ['eidolon', 'eidolon3', 'eidolon2']);
 }
 
+console.log('customized weapons count the class the way everything else does');
+{
+  const spec = { sets: { start: 3, gainsAt: '11, 19' }, talents: { start: 1, gainsAt: '3, +4' } };
+  const c = new Character(blankDocument({ name: 'Armiger', level: 9 }));
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', talentsPerLevel: 'Expert', levels: [] });
+  const block = c.addCustomization('Armiger', spec);
+  const cust = () => c.data.training.combat.customizations[0];
+  check('no levels anywhere: no weapons', [cust().classLevels, cust().setCount], [0, 0]);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', 7);
+  check('the class-level override counts, on an empty Planner', [cust().classLevels, cust().setCount, cust().talentCount], [7, 3, 3]);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', null);
+  c.listAdd('classes', { name: 'Armiger', levelsOverride: 5 });
+  check('and so does the Classes table', cust().classLevels, 5);
+  check('the block is the one added', block === cust(), true);
+}
+
 console.log('a Vancian class\'s concentration may be a formula');
 {
   const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));
@@ -2407,6 +2427,336 @@ console.log('undo at the table -- cards, a use, slots across a rest');
   check('then comes back spent, and then unspent',
     [d.undoPlay().label, d.data.vancian.prepared[0].used, d.undoPlay().label, d.data.vancian.prepared[0].used],
     ['New day', 1, 'Shield 2 → 1', 0]);
+}
+
+console.log('talent requirements read every talent the tally counts');
+{
+  // Perception's sphere ranks need Great Senses (Scout). A guile class that
+  // reaches martial spends its free pick there; the tally counted it, but the
+  // requirement never saw its name and called it missing.
+  const s = new Character(blankDocument({ name: 'Reach' }));
+  s.data.identity.level = 6;
+  s.addGuileClass('Shifter');
+  s.set('training.guile.classes.0.expertise', 'Virtuoso');
+  s.set('training.guile.classes.0.classLevelsOverride', 6);
+  s.setGuileBlend(0, 'combat', true);
+  s.setGuileBlend(0, 'magic', true);
+  const g = s.data.training.guile.classes[0];
+  const anyAt = g.levels.findIndex((lv) => lv.granted);
+  const utilAt = g.levels.findIndex((lv) => lv.utilityGranted);
+  s.set(`training.guile.classes.0.levels.${anyAt}.sphere`, 'Scout');
+  s.set(`training.guile.classes.0.levels.${anyAt}.talent`, 'Great Senses');
+  const perception = () => s.trainingSkillRanks.find((r) => r.skill === 'Perception');
+  check('a guile pick that lands on combat meets a talent requirement', perception().state, 'met');
+  s.set(`training.guile.classes.0.levels.${anyAt}.talent`, 'Sniper');
+  check('and a different name there is a plain no', perception().state, 'unmet');
+
+  // Its [utility] slot, spent magically on a veil tradition.
+  s.set(`training.guile.classes.0.levels.${utilAt}.utilitySphere`, 'Veilweaving');
+  s.set(`training.guile.classes.0.levels.${utilAt}.utilityTalent`, "Daevic's Tradition");
+  check('a [utility] talent opens its veil list', veilTraditionClasses(s), ['Daevic']);
+
+  // A blended pool kept on the magic side whose martial talent is Great Senses.
+  const doc = blankDocument({ name: 'Magic owned' });
+  doc.identity.level = 4;
+  const levels = Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  Object.assign(levels[0], { sphere: 'Scout', talent: 'Great Senses' });
+  doc.training = {
+    ...(doc.training || {}),
+    magic: { classes: [{ name: 'Hybrid', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 4, levels }] },
+    combat: { classes: [{ name: 'Hybrid', type: 'Expert', classLevelsOverride: 4, levels: [] }] },
+  };
+  const h = new Character(doc);
+  check('a blended pool owned by the other side meets it too',
+    [h.data.training.combat.tally.Scout, h.trainingSkillRanks.find((r) => r.skill === 'Perception').state], [1, 'met']);
+}
+
+console.log('a guile sphere listed twice pays once');
+{
+  const c = new Character(blankDocument({ name: 'Twice' }));
+  c.set('identity.level', 8);
+  c.listAdd('training.guile.bonusTalents', { sphere: 'Study', talent: 'Lore Expert' });
+  c.addGuileSphere('Study');
+  c.addGuileSphere('Study');
+  c.setItem('training.guile.spheres', 0, 'skill', 'Perception');
+  c.setItem('training.guile.spheres', 1, 'skill', 'Sense Motive');
+  const rows = c.data.training.guile.sphereRows;
+  const ranks = (name) => c.data.skills.find((x) => x.name === name).totalRanks;
+  check('the first row pays its skill', [rows[0].paysRanks, ranks('Perception')], [true, 5]);
+  check('the second points back at it and pays nothing',
+    [rows[1].repeatOf, rows[1].talents, rows[1].ranksGranted, rows[1].paysRanks, ranks('Sense Motive')],
+    [0, 0, 0, false, 0]);
+  check('sphere.study reads the first row', c.scope().sphere.study.ranks, 5);
+  check('the panel says so', guilePanels.renderGuilePanel(c).includes('already listed above'), true);
+  c.listRemove('training.guile.spheres', 0);
+  check('remove the first and the second takes over',
+    [c.data.training.guile.sphereRows[0].repeatOf, ranks('Sense Motive')], [null, 5]);
+}
+
+console.log('customized weapons -- one sphere list, offered and checked');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [
+    { name: 'Shadowcraft', kind: 'magic', talents: [] },
+    { name: 'Gunslinging', kind: 'combat', talents: [] },
+    { name: 'Lockcraft', kind: 'guile', talents: [] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 5);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 5, levels: [] });
+  c.addCustomization('Armiger', { sets: { start: 1, gainsAt: '' }, talents: { start: 2, gainsAt: '' } });
+  const cust = () => c.data.training.combat.customizations[0];
+  check('a martial track offers the pack martial sphere',
+    [trackSphereNames(cust().spec).includes('Gunslinging'), trackSphereNames(cust().spec).includes('Shadowcraft')],
+    [true, false]);
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Gunslinging');
+  c.setItem(list, 1, 'sphere', 'Shadowcraft');
+  const flags = () => cust().sets[0].talents.slice(0, 2).map((r) => !!r.offList);
+  check('a pack sphere it offers is not flagged; the magic one is', flags(), [false, true]);
+  check('a pack magic sphere counts on the magic side',
+    [c.data.training.combat.tally.Shadowcraft, c.data.training.magic.tally.Shadowcraft], [undefined, 1]);
+  c.setCustomizationRule(0, 'spheres', 'both');
+  const both = trackSphereNames(cust().spec);
+  check('martial and magical offers both, and no skill sphere',
+    [both.includes('Shadowcraft'), both.includes('Gunslinging'), both.includes('Lockcraft'), both.includes('Study')],
+    [true, true, false, false]);
+  check('and flags nothing', flags(), [false, false]);
+  setSphereCatalogue(before);
+}
+
+console.log('customized weapons -- the drawn weapon’s talents read {…}');
+{
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 3);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 3, levels: [] });
+  c.addCustomization('Armiger', { sets: { start: 2, gainsAt: '' }, talents: { start: 1, gainsAt: '' } });
+  const base = c.data.attack.totalMelee;
+  c.setItem('training.combat.customizations.0.sets.0.talents', 0, 'talent', 'Keen {attack.melee += 1}');
+  c.setItem('training.combat.customizations.0.sets.1.talents', 0, 'talent', 'Heavy {attack.melee += 5}');
+  check('the drawn weapon’s talent applies, the stowed one’s does not', c.data.attack.totalMelee - base, 1);
+  c.setCustomizationActive(0, 1);
+  check('draw the other and it swaps', c.data.attack.totalMelee - base, 5);
+}
+
+console.log('alternate training -- every reader takes the branch the player ticked');
+{
+  // Levels written out of order, a talent at 1st whose "already had it"
+  // branch is a feat, and a second technique that teaches a skill sphere.
+  const grants = {
+    1: [{ talent: true, name: 'Athletics Sphere', alt: { feat: true, name: 'Bonus feat' } }],
+    3: [{ talent: true, name: 'Wall Stunt' }],
+    5: [{ talent: true, name: 'Air Stunt' }],
+  };
+  setAltTrainingTables({
+    levels: [5, 1, 3],
+    repeatFrom: 99,
+    techniques: [
+      { name: 'Test Body', talents: { side: 'combat', sphere: 'Athletics' }, grants },
+      { name: 'Test Mind', talents: { side: 'guile', sphere: 'Study' }, grants },
+    ],
+  });
+  const c = new Character(blankDocument({ name: 'Trainee' }));
+  c.set('identity.level', 5);
+  c.set('altTraining.technique', 'Test Body');
+  const counts = () => c.data.altTraining.calc.counts;
+  const athletics = () => c.data.training.combat.tally.Athletics;
+  check('the ladder is drawn in level order', c.data.altTraining.calc.rows.map((r) => r.level), [1, 3, 5]);
+  check('three talents on the tab and in the tally', [counts().talent, athletics()], [3, 3]);
+  c.set('altTraining.alt.1', true);
+  check('already had it: a feat instead, on the tab and in the tally alike',
+    [counts().talent, counts().feat, athletics()], [2, 1, 2]);
+  check('and so do the sphere skill ranks',
+    c.trainingSkillRanks.find((r) => r.skill === 'Climb').talents, 2);
+
+  c.set('altTraining.alt.1', false);
+  c.set('altTraining.technique', 'Test Mind');
+  check('a skill-sphere technique counts on the guile side',
+    [c.data.training.guile.tally.Study, c.data.training.combat.tally.Athletics], [3, undefined]);
+  setAltTrainingTables(merged.altTraining);
+}
+
+console.log('sphere names -- one sphere however it was capitalised');
+{
+  const c = new Character(blankDocument({ name: 'Lower' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.combat.bonusTalents', { sphere: 'boxing', talent: 'Haymaker' });
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Boxing', talent: 'Jab' });
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 4, levels: [] });
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'dark', clBonus: 2, dcBonus: 1 });
+  const combatRow = c.data.training.combat.sphereRows.filter((r) => r.sphere.toLowerCase() === 'boxing');
+  check('boxing and Boxing are one row, with both talents', combatRow.map((r) => [r.sphere, r.talents]), [['Boxing', 2]]);
+  check('the tally has one key', Object.keys(c.data.training.combat.tally), ['Boxing']);
+  const dark = c.data.training.magic.sphereRows.filter((r) => r.sphere.toLowerCase() === 'dark');
+  check('a bonus row typed as dark applies to Dark',
+    dark.map((r) => [r.sphere, r.clBonusNum, r.dcBonusNum]), [['Dark', 2, 1]]);
+  c.setSphereBonus('magic', 'Dark', 'clBonus', 3);
+  check('and an edit to Dark writes that same row',
+    [c.data.training.magic.sphereBonuses.length, c.data.training.magic.sphereBonuses[0].clBonus], [1, 3]);
+}
+
+console.log('a pack sphere with no kind -- on the table its talents put it on');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Mystery', kind: '', talents: [] }] });
+  const c = new Character(blankDocument({ name: 'Kindless' }));
+  c.set('identity.level', 6);
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 6, levels: [] });
+  const on = (side) => (c.data.training[side].sphereRows || []).some((r) => r.sphere === 'Mystery');
+  check('untrained, it sits on neither table', [on('combat'), on('magic')], [false, false]);
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Mystery', talent: 'A' });
+  check('a magic talent puts it on the magic table only', [on('combat'), on('magic')], [false, true]);
+  const magicDC = c.data.training.magic.sphereRows.find((r) => r.sphere === 'Mystery').dc;
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Mystery', talent: 'B' });
+  check('trained both ways, sphere.mystery counts both and keeps the DC of the side it has more on',
+    [on('combat'), c.scope().sphere.mystery.talents, c.scope().sphere.mystery.dc], [true, 2, magicDC]);
+  setSphereCatalogue(before);
+}
+
+console.log('splitting a blended class, and filling notes, can be undone');
+{
+  const c = new Character(blankDocument({ name: 'Split' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.combat.classes', { name: 'Hybrid', type: 'Expert', classLevelsOverride: 4,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) });
+  c.setBlended('combat', 0, true);
+  const twin = () => (c.data.training.magic.classes || []).find((x) => x.name === 'Hybrid');
+  c.set(`training.magic.classes.${c.data.training.magic.classes.indexOf(twin())}.type`, 'Mid');
+  c.setBlended('combat', 0, false);
+  check('unticking drops the twin it added', twin(), undefined);
+  check('and one undo brings it back with its casting type',
+    [c.undo(), twin()?.type, c.data.training.combat.classes[0].blended], ['Split Hybrid from its magic half', 'Mid', true]);
+  c.setBlendedSkill('combat', 0, true);
+  c.setBlendedSkill('combat', 0, false);
+  check('unticking skill talents is a step too', [c.undo(), c.data.training.combat.classes[0].blendedSkill],
+    ['Stopped Hybrid counting skill talents', true]);
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] }] });
+  c.set('training.combat.classes.0.levels.0.sphere', 'Boxing');
+  c.set('training.combat.classes.0.levels.0.talent', 'Haymaker');
+  const note = () => c.data.training.combat.classes[0].levels[0].notes;
+  check('Fill notes fills, and is one step back', [c.fillTalentNotes('combat'), note(), c.undo(), note() ?? null],
+    [1, 'Hit hard.', 'Filled talent notes', null]);
+  setSphereCatalogue(before);
+}
+
+console.log('a guile sphere row with talents offers no ×');
+{
+  const c = new Character(blankDocument({ name: 'Rows' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.guile.bonusTalents', { sphere: 'Study', talent: 'Lore Expert' });
+  c.addGuileSphere('Bluster');
+  const html = guilePanels.renderGuilePanel(c);
+  const removable = (i) => html.includes(`data-remove="training.guile.spheres|${i}"`);
+  const studyAt = c.data.training.guile.spheres.findIndex((r) => r.sphere === 'Study');
+  const blusterAt = c.data.training.guile.spheres.findIndex((r) => r.sphere === 'Bluster');
+  check('the trained sphere has no live ×; the untrained one does', [removable(studyAt), removable(blusterAt)], [false, true]);
+  check('and says why', html.includes('Study has 1 talent, so it stays on the table.'), true);
+}
+
+console.log('Fill notes counts the rows each tab draws');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [
+    { name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] },
+    { name: 'Study', kind: 'guile', talents: [{ name: 'Lore Expert', text: 'Know things.' }] },
+  ] });
+  const c = new Character(blankDocument({ name: 'Notes' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.magic.classes', { name: 'Hybrid', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 4,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) });
+  c.setBlended('magic', 0, true);
+  c.setBlendedSkill('magic', 0, true);
+  c.set('training.magic.classes.0.utilityRule', 'every');
+  const lv = c.data.training.magic.classes[0].levels[0];
+  c.set('training.magic.classes.0.levels.0.sphere', 'Boxing');
+  c.set('training.magic.classes.0.levels.0.talent', 'Haymaker');
+  c.set('training.magic.classes.0.levels.0.utilitySphere', 'Study');
+  c.set('training.magic.classes.0.levels.0.utilityTalent', 'Lore Expert');
+  check('the pool is drawn on all three tabs, and each tab counts both of its notes',
+    ['combat', 'magic', 'guile'].map((k) => c.blankTalentNotes(k)), [2, 2, 2]);
+  c.fillTalentNotes('combat');
+  check('the martial tab fills the [utility] note too', [lv.notes, lv.utilityNotes], ['Hit hard.', 'Know things.']);
+  setSphereCatalogue(before);
+}
+
+console.log('the training class picker offers the Planner’s classes');
+{
+  const c = new Character(blankDocument({ name: 'Planned' }));
+  c.set('identity.level', 3);
+  c.setProgressionClass(1, 0, 'Incanter');
+  check('a class only on the Planner can be picked', combatPanels.classNames(c).includes('Incanter'), true);
+}
+
+console.log('a training side is in use by one rule');
+{
+  const c = new Character(blankDocument({ name: 'Sides' }));
+  const used = () => { const u = c.systemTabsInUse(); return [u.martial, u.magic, u.guile]; };
+  check('a blank character uses none of the three', used(), [false, false, false]);
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Boxing', talent: 'Haymaker' });
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Dark', talent: 'Darkness' });
+  check('a bonus talent puts martial and magic in use, as it does guile', used(), [true, true, false]);
+
+  const d = blankDocument({ name: 'No magic' });
+  delete d.training.magic;
+  const n = new Character(d);
+  check('a document with no magic side still gets a magic tab it can add a class on',
+    combatPanels.renderMagicPanel(n).includes('data-action="add-training-class" data-side="magic"'), true);
+}
+
+console.log('dashboard sphere cards show what the character has');
+{
+  const levels = () => Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null }));
+  const caster = new Character(blankDocument({ name: 'Caster' }));
+  caster.set('identity.level', 3);
+  caster.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', talentsPerLevel: 'High Caster', classLevelsOverride: 3, levels: levels() });
+  const card = overviewPanels.dashSystemCards(caster);
+  check('a pure caster sees no practitioner DC', [card.includes('Caster level'), card.includes('Practitioner DC')], [true, false]);
+
+  const fighter = new Character(blankDocument({ name: 'Fighter' }));
+  fighter.set('identity.level', 3);
+  fighter.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', talentsPerLevel: 'Expert', classLevelsOverride: 3, levels: levels() });
+  fighter.set('training.combat.classes.0.levels.0.sphere', 'Boxing');
+  fighter.set('training.combat.classes.0.levels.0.talent', 'Haymaker {haymaker.x = 2}');
+  fighter.set('training.combat.classes.0.levels.9.sphere', 'Boxing');
+  fighter.set('training.combat.classes.0.levels.9.talent', 'Future Punch');
+  fighter.addCustomization('Armiger', { sets: { start: 1, gainsAt: '' }, talents: { start: 1, gainsAt: '' } });
+  fighter.setItem('training.combat.customizations.0.sets.0.talents', 0, 'talent', 'Weapon Trick');
+  const fcard = overviewPanels.dashSystemCards(fighter);
+  check('a martial-only block prints no caster level, and its practitioner DC',
+    [fcard.includes('Caster level'), fcard.includes('Practitioner DC')], [false, true]);
+  check('the talents card leaves out a talent at a level not reached, and lists the drawn weapon’s',
+    [fcard.includes('Haymaker'), fcard.includes('Future Punch'), fcard.includes('Weapon Trick')], [true, false, true]);
+  check('and its hover shows the text as it reads, not the raw braces', fcard.includes('title="Haymaker {'), false);
+}
+
+console.log('customized weapons -- the armiger’s counts by default, and a note per talent');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Boxing', kind: 'combat', talents: [{ name: 'Haymaker', text: 'Hit hard.' }] }] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 11);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 11, levels: [] });
+  const block = c.addCustomization('Armiger');
+  check('3 weapons + 1 at 11th; 1 talent + 1 at 3rd, 7th and 11th', [block.setCount, block.talentCount], [4, 4]);
+
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Boxing');
+  c.setTalentEntry(list, 0, 'Haymaker', { sphere: 'sphere', notes: 'notes' });
+  const row = () => c.data.training.combat.customizations[0].sets[0].talents[0];
+  check('naming a known talent fills its note', row().notes, 'Hit hard.');
+  c.setItem(list, 0, 'notes', '');
+  check('and Fill notes reaches weapon talents', [c.blankTalentNotes('combat'), c.fillTalentNotes('combat'), row().notes], [1, 1, 'Hit hard.']);
+
+  const pop = talentPopHtml(c, JSON.stringify({ k: 'wtalent', p: `${list}|0` }));
+  check('hovering the name shows name and sphere, then the text',
+    [pop.includes('<span class="bdname">Haymaker</span><span class="bdsphere">Boxing</span>'), pop.includes('Hit hard.')], [true, true]);
+
+  const shut = combatPanels.renderMartialPanel(c);
+  check('the note starts folded behind an arrow', [shut.includes(`data-collapse="wnote:${list}|0"`), shut.includes(`data-item="${list}|0|notes"`)], [true, false]);
+  c.data.uiPrefs.collapsed = { ...(c.data.uiPrefs.collapsed || {}), [`wnote:${list}|0`]: false };
+  check('opened, the note is there to edit', combatPanels.renderMartialPanel(c).includes(`data-item="${list}|0|notes"`), true);
+  setSphereCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);

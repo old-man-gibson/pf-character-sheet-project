@@ -12,11 +12,11 @@ import {
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
   PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
-  statMod, tempEssenceCost, trackCount, trackSpheres,
+  statMod, tempEssenceCost, trackCount, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
-import { plannerHasClass } from './progression.js';
+import { ownLevelCount, plannerHasClass } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
@@ -106,6 +106,42 @@ export function setSphereCatalogue(doc) {
 export function sphereCatalogue() {
   return SPHERE_CATALOGUE;
 }
+
+/**
+ * A sphere name as the sheet spells it: the engine's lists or the
+ * catalogue's spelling when either knows it, however it was typed, and the
+ * typed name, trimmed, when neither does. Tallies are keyed by this, so
+ * "boxing" and "Boxing" are one sphere.
+ */
+export function canonicalSphere(name) {
+  const clean = String(name ?? '').trim();
+  if (!clean) return '';
+  const key = clean.toLowerCase();
+  return [...COMBAT_SPHERES, ...MAGIC_SPHERES, ...GUILE_SPHERES].find((s) => s.toLowerCase() === key)
+    || sphereEntry(clean)?.name.trim() || clean;
+}
+
+/** Add to a tally under the sphere's one spelling (see canonicalSphere). */
+export function tallyAdd(tally, sphere, n = 1) {
+  let key = canonicalSphere(sphere);
+  if (!key) return;
+  // A name nobody knows keeps the first spelling the tally saw.
+  const low = key.toLowerCase();
+  key = Object.keys(tally).find((k) => k.toLowerCase() === low) ?? key;
+  tally[key] = (tally[key] || 0) + n;
+}
+
+/** A sphere's count in a tally, however either side spelled it. */
+export function talentsIn(tally, sphere) {
+  const low = String(sphere ?? '').trim().toLowerCase();
+  if (!low || !tally) return 0;
+  let n = 0;
+  for (const [k, v] of Object.entries(tally)) if (k.trim().toLowerCase() === low) n += Number(v) || 0;
+  return n;
+}
+
+/** Whether two sphere names are the same sphere. */
+export const sameSphere = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 
 /** One sphere by name, however it was capitalised. */
 export function sphereEntry(name) {
@@ -222,6 +258,27 @@ export function poolSpheres(systems) {
   const lists = { combat: COMBAT_SPHERES, magic: MAGIC_SPHERES, guile: GUILE_SPHERES };
   const names = systems.flatMap((s) => sphereNames(lists[s] || [], s));
   return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Every sphere a customized weapon's track may learn from: the martial
+ * list by default, the magical one or both when its archetype says so, and
+ * the packs' spheres of those kinds. The panel offers exactly this list and
+ * the off-list check reads it, so a sphere offered is never flagged.
+ */
+export function trackSphereNames(spec) {
+  const side = TRACK_SPHERE_SIDES.includes(spec?.spheres) ? spec.spheres : 'combat';
+  return poolSpheres(side === 'both' ? ['combat', 'magic'] : [side]);
+}
+
+/**
+ * The side a customized weapon's talent counts on: its sphere's system, a
+ * pack's included, and martial for a name nobody knows -- the track lives on
+ * the martial side.
+ */
+export function trackTalentSide(sphere) {
+  const system = sphereSystem(sphere);
+  return system === 'magic' ? 'magic' : 'combat';
 }
 
 /**
@@ -668,26 +725,47 @@ export function talentTagCounts() {
 }
 
 /**
- * Every talent on a side that has a notes cell beside it, as `[row, fields]`.
+ * Every talent a tab draws with a notes cell beside it, as `[row, fields]`:
+ * the class blocks of its own, every blended pool that reaches it (drawn at
+ * the head of each tab it reaches, wherever its rows are stored), and its
+ * bonus talents. So the Fill button on a tab counts and fills what that tab
+ * shows.
  *
- * A guile level is two talents on one row -- the free pick and the [utility]
- * one -- each with a sphere and a note of its own, which is why the columns
- * are named per entry rather than assumed.
+ * A two-ladder level is two talents on one row -- the free pick and the
+ * [utility] one -- each with a sphere and a note of its own, which is why the
+ * columns are named per entry rather than assumed.
  */
 const PLAIN_COLUMNS = { talent: 'talent', sphere: 'sphere', notes: 'notes' };
 const UTILITY_COLUMNS = { talent: 'utilityTalent', sphere: 'utilitySphere', notes: 'utilityNotes' };
 function notedTalentRows(model, sideKey) {
   const side = model.data?.training?.[sideKey];
   const out = [];
-  for (const cls of side?.classes || []) {
-    // A blended class's twin shares its levels; once is enough.
-    if (cls.blendedMirror) continue;
+  const ladder = (cls, utility) => {
     for (const lv of cls.levels || []) {
       out.push([lv, PLAIN_COLUMNS]);
-      if (sideKey === 'guile') out.push([lv, UTILITY_COLUMNS]);
+      if (utility) out.push([lv, UTILITY_COLUMNS]);
     }
+  };
+  // The blocks the tab draws as its own: not a blended one, which is drawn
+  // under Blended training, and not one from the extended-level page.
+  const blended = sideKey === 'guile'
+    ? (cls) => !!(cls.blendedCombat || cls.blendedMagic)
+    : (cls) => !!(cls.blended || cls.blendedSkill || cls.blendedMirror || cls.extended);
+  for (const cls of side?.classes || []) if (!blended(cls)) ladder(cls, sideKey === 'guile');
+  for (const pool of blendedClasses(model)) {
+    if (!pool.systems.includes(sideKey)) continue;
+    ladder(pool.owner.cls, pool.kind === 'guile' || poolHasUtility(pool.owner.cls, pool.owner.side));
   }
   for (const b of side?.bonusTalents || []) out.push([b, PLAIN_COLUMNS]);
+  // Every customized weapon's talents, drawn or stowed: each has a note.
+  if (sideKey === 'combat') {
+    for (const block of side?.customizations || []) {
+      for (const set of block.sets || []) {
+        if (set.spare) continue;
+        for (const row of set.talents || []) if (row.granted !== false) out.push([row, PLAIN_COLUMNS]);
+      }
+    }
+  }
   return out;
 }
 
@@ -802,19 +880,27 @@ export function blankTalentNotes(model, sideKey) {
  * correct a note already filled.
  */
 export function fillTalentNotes(model, sideKey) {
+  // Worked out first and written after, so the undo step is taken only when
+  // there is something to fill, and before any of it is.
+  const alt = sideKey === 'altTraining' ? blankAltTrainingNotes(model) : [];
+  const rows = [];
+  for (const [row, f] of notedTalentRows(model, sideKey)) {
+    if (String(row[f.notes] ?? '').trim()) continue;
+    const text = noteFromCatalogue(model, row, f);
+    if (text) rows.push([row, f, text]);
+  }
+  if (!alt.length && !rows.length) return 0;
+  markUndo(model, 'Filled talent notes');
   let filled = 0;
-  if (sideKey === 'altTraining') {
+  if (alt.length) {
     const p = model.data.altTraining;
-    for (const [level, text] of blankAltTrainingNotes(model)) {
-      if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+    if (!p.rowNotes || typeof p.rowNotes !== 'object') p.rowNotes = {};
+    for (const [level, text] of alt) {
       p.rowNotes[level] = text;
       filled++;
     }
   }
-  for (const [row, f] of notedTalentRows(model, sideKey)) {
-    if (String(row[f.notes] ?? '').trim()) continue;
-    const text = noteFromCatalogue(model, row, f);
-    if (!text) continue;
+  for (const [row, f, text] of rows) {
     row[f.notes] = text;
     // An empty sphere is settled the same way it would have been on typing.
     if (!String(row[f.sphere] ?? '').trim()) {
@@ -900,10 +986,18 @@ export function applyBudget(model) {
  * not that it was handed two more levels to spend.
  */
 export function ownClassLevels(model, className) {
-  const match = closestName(className, model.progressionClasses());
-  if (!match) return 0;
-  const cap = Number(model.data.identity?.level) || 20;
-  return model.classLevelsIn(match).filter((lvl) => lvl <= cap).length;
+  // The training class's own override says how many levels it has, the way
+  // the class's talent ladder reads it; otherwise the levels the Classes
+  // table or the Planner give, as every other count does. Only the Planner
+  // used to count here, so an override of 7 on an empty Planner gave no
+  // weapons at all.
+  const name = String(className || '').trim().toLowerCase();
+  const t = model.data.training || {};
+  const cls = name && ['combat', 'magic', 'guile'].flatMap((k) => t[k]?.classes || [])
+    .find((x) => String(x?.name || '').trim().toLowerCase() === name && x.classLevelsOverride != null);
+  const level = Number(model.data.identity?.level) || 20;
+  if (cls) return Math.max(0, Math.min(level, Math.floor(Number(cls.classLevelsOverride) || 0)));
+  return ownLevelCount(model, className).own;
 }
 
 /**
@@ -977,14 +1071,14 @@ export function recomputeCustomizations(model, side) {
  * written in it yet is unknown, not wrong, and is left alone.
  */
 export function checkCustomizationBases(model, t) {
-  const owned = (sphere) => ((t.combat?.tallyOwn || {})[sphere] || 0) > 0
-    || ((t.magic?.tallyOwn || {})[sphere] || 0) > 0;
+  const owned = (sphere) => talentsIn(t.combat?.tallyOwn, sphere) > 0
+    || talentsIn(t.magic?.tallyOwn, sphere) > 0;
   for (const block of t.combat?.customizations || []) {
     // What the track may learn from at all. A sphere outside it is flagged
     // and kept, never dropped: it is nearly always a track whose archetype
     // has not been added yet, and throwing the row away would lose the
     // player's work to punish them for the order they did things in.
-    const allowed = new Set(trackSpheres(block.spec));
+    const allowed = new Set(trackSphereNames(block.spec).map((s) => s.trim().toLowerCase()));
     for (const set of block.sets || []) {
       const bases = new Set((set.talents || [])
         .filter((r) => r.granted !== false && isBasePick(r.talent))
@@ -992,7 +1086,7 @@ export function checkCustomizationBases(model, t) {
         .filter(Boolean));
       for (const row of set.talents || []) {
         const sphere = String(row.sphere || '').trim();
-        row.offList = !!sphere && row.granted !== false && !allowed.has(sphere);
+        row.offList = !!sphere && row.granted !== false && !allowed.has(sphere.toLowerCase());
         row.needsBase = !!sphere && !!String(row.talent || '').trim()
           && row.granted !== false && !isBasePick(row.talent)
           && !bases.has(sphere) && !owned(sphere);
@@ -1009,7 +1103,7 @@ export function checkCustomizationBases(model, t) {
  * Adding the same class twice tunes what is there rather than making a
  * second block -- a class grants its customizations once.
  */
-export function addCustomization(model, className, spec = {}) {
+export function addCustomization(model, className, spec = DEFAULT_TALENT_TRACKS) {
   const t = model.data.training;
   if (!t?.combat) return null;
   if (!Array.isArray(t.combat.customizations)) t.combat.customizations = [];
@@ -1112,57 +1206,68 @@ export function setCustomizationActive(model, index, setIndex) {
 export const rowCounts = (lv) => !!lv?.granted && !lv.future;
 export const utilityCounts = (lv) => !!lv?.utilityGranted && !lv.future;
 
-export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
-  const tally = {};
-  const bump = (s, n = 1) => {
-    if (typeof s === 'string' && s.trim()) tally[s.trim()] = (tally[s.trim()] || 0) + n;
-  };
+/**
+ * Every talent the character has trained on one side: the class ladders
+ * (a blended pool's or a guile class's rows land on the side their sphere
+ * belongs to, wherever the block itself lives, and both of a two-ladder
+ * pool's rows count), bonus talents, and the tradition's when asked. One
+ * walk, so the tally and anything that asks which talents are there --
+ * a skill-rank requirement, the veil traditions -- read the same rows.
+ * Yields { sphere, talent }.
+ *
+ * Every ladder counts only what the character has at the level they are:
+ * a slot the class grants (`granted`), at a level reached (`!future`).
+ */
+export function* ownTalentRows(model, side, { sideKey = null, includeTradition = true } = {}) {
   // A blended class holds one pool of talents spent on either kind, so each
-  // of its talents is counted once, on the side its sphere belongs to --
-  // wherever the block itself happens to live. Its mirror on the other side
-  // is the same pool seen twice and contributes nothing of its own. A pool
-  // that reaches skill talents counts both of its ladders.
-  //
-  // Every ladder counts only what the character has at the level they are:
-  // a slot the class grants (`granted`), at a level reached (`!future`). The
-  // sphere sides used to count every row with a sphere in it -- a planned
-  // talent at a level not yet reached, and one typed in a row the class does
-  // not grant -- while the guile side counted granted slots only.
-  const blendedTalents = (cls, home) => {
+  // of its talents is counted once, on the side its sphere belongs to. Its
+  // mirror on the other side is the same pool seen twice and contributes
+  // nothing of its own.
+  function* ladder(cls, home, utility) {
     const systems = poolSystems(cls, home);
-    const slots = poolHasUtility(cls, home);
     for (const lv of cls.levels || []) {
-      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-      if (slots && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
+      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) {
+        yield { sphere: lv.sphere, talent: lv.talent };
+      }
+      if (utility && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) {
+        yield { sphere: lv.utilitySphere, talent: lv.utilityTalent };
+      }
     }
-  };
+  }
+  if (!side) return;
   for (const cls of side.classes || []) {
     if (cls.blendedMirror) continue;
-    if (cls.blended || cls.blendedSkill) blendedTalents(cls, sideKey ?? cls.side);
-    else for (const lv of cls.levels || []) if (rowCounts(lv)) bump(lv.sphere);
+    if (cls.blended || cls.blendedSkill) {
+      const home = sideKey ?? cls.side;
+      yield* ladder(cls, home, poolHasUtility(cls, home));
+    } else {
+      for (const lv of cls.levels || []) if (rowCounts(lv)) yield { sphere: lv.sphere, talent: lv.talent };
+    }
   }
   if (sideKey) {
     const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
     for (const cls of model.data.training?.[otherKey]?.classes || []) {
-      if (cls.blended && !cls.blendedMirror) blendedTalents(cls, otherKey);
+      if (cls.blended && !cls.blendedMirror) yield* ladder(cls, otherKey, poolHasUtility(cls, otherKey));
     }
     // A guile class that reaches this side spends both of its ladders here
-    // when the sphere is one of this side's. Only granted slots count, which
-    // is how the guile side counts its own; the ladder flags are worked out
+    // when the sphere is one of this side's. The ladder flags are worked out
     // before this pass runs (recomputeGuileLadders).
     for (const cls of model.data.training?.guile?.classes || []) {
-      const systems = poolSystems(cls, 'guile');
-      if (!systems.includes(sideKey)) continue;
-      for (const lv of cls.levels || []) {
-        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
-      }
+      if (poolSystems(cls, 'guile').includes(sideKey)) yield* ladder(cls, 'guile', true);
     }
   }
-  for (const b of side.bonusTalents || []) bump(b.sphere);
+  for (const b of side.bonusTalents || []) yield { sphere: b.sphere, talent: b.talent };
   if (includeTradition) {
-    for (const e of side.tradition?.entries || []) bump(e.sphere);
+    for (const e of side.tradition?.entries || []) yield { sphere: e.sphere, talent: e.talent };
   }
+}
+
+export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
+  const tally = {};
+  const bump = (s, n = 1) => {
+    if (typeof s === 'string') tallyAdd(tally, s, n);
+  };
+  for (const row of ownTalentRows(model, side, { sideKey, includeTradition })) bump(row.sphere);
   // A parallel track -- an armiger's customized weapon -- is a talent source
   // with a switch, so it is the one source that has to be told which
   // question is being asked: what is live right now ('active'), everything
@@ -1175,7 +1280,7 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
       (block.sets || []).forEach((set, i) => {
         if (set.spare || (customizations === 'active' && i !== block.active)) return;
         for (const row of set.talents || []) {
-          if (row.granted !== false && sphereSide(row.sphere, 'combat') === sideKey) bump(row.sphere);
+          if (row.granted !== false && trackTalentSide(row.sphere) === sideKey) bump(row.sphere);
         }
       });
     }
@@ -1306,6 +1411,7 @@ export function setBlended(model, sideKey, index, on) {
     // Lift the `false` a split left, or pairing would keep them apart.
     cls.blended = true;
   } else if (at >= 0) {
+    markUndo(model, `Split ${rowLabel(cls, 'class')} from its ${otherKey === 'magic' ? 'magic' : 'martial'} half`);
     // The talents stay with the block that owns them. A block that blending
     // added holds nothing of its own, so splitting drops it; one that was
     // there before -- the workbook's other half, with its own type and
@@ -1338,7 +1444,10 @@ export function setBlendedSkill(model, sideKey, index, on) {
     cls = (t[otherKey]?.classes || []).find((x) => x.name === cls.name && !x.blendedMirror) || cls;
   }
   if (on) cls.blendedSkill = true;
-  else delete cls.blendedSkill;
+  else if (cls.blendedSkill) {
+    markUndo(model, `Stopped ${rowLabel(cls, 'class')} counting skill talents`);
+    delete cls.blendedSkill;
+  }
   model.recompute();
   emit(model, { type: 'blend-skill', side: sideKey, index, on: !!on });
   return model;
@@ -1358,7 +1467,10 @@ export function setGuileBlend(model, index, sideKey, on) {
   if (on) {
     cls[key] = true;
     if (!t[sideKey] || typeof t[sideKey] !== 'object') t[sideKey] = {};
-  } else delete cls[key];
+  } else if (cls[key]) {
+    markUndo(model, `Stopped ${rowLabel(cls, 'class')} counting ${sideKey === 'combat' ? 'martial' : 'magical'} talents`);
+    delete cls[key];
+  }
   model.recompute();
   emit(model, { type: 'blend-guile', index, side: sideKey, on: !!on });
   return model;
@@ -1724,7 +1836,7 @@ export function recomputeTraining(model) {
 export function sphereTalentKnowledge(model, side, sideKey) {
   const out = new Map();
   const of = (sphere) => {
-    const s = String(sphere || '').trim();
+    const s = canonicalSphere(sphere);
     if (!s) return null;
     if (!out.has(s)) out.set(s, { names: [], choices: [], unnamed: 0 });
     return out.get(s);
@@ -1735,12 +1847,7 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     if (row) row.names.push(t);
   };
   // The same rows the tally counts, and no others.
-  for (const cls of side?.classes || []) {
-    if (cls.blendedMirror) continue;
-    for (const lv of cls.levels || []) if (rowCounts(lv)) put(lv.sphere, lv.talent);
-  }
-  for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
-  for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
+  for (const row of ownTalentRows(model, side, { sideKey })) put(row.sphere, row.talent);
 
   const tech = techniqueTalents(model);
   if (tech && tech.side === sideKey) {
@@ -1753,7 +1860,7 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     // The named sources above are the character's own, so the count they are
     // measured against has to be too -- a customized weapon's talents are
     // neither named here nor countable as unnamed ones.
-    const total = Number((side?.tallyOwn || side?.tally || {})[sphere]) || 0;
+    const total = talentsIn(side?.tallyOwn || side?.tally, sphere);
     row.unnamed = Math.max(0, total - row.names.length - row.choices.length);
   }
   return out;
@@ -1784,7 +1891,7 @@ export function sphereRanksBySkill(model) {
   const known = sphereTalentKnowledge(model, t, 'combat');
   const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
   const check = {
-    has: (sphere) => (tally[sphere] || 0) > 0,
+    has: (sphere) => talentsIn(tally, sphere) > 0,
     named: (sphere) => of(sphere).names,
     choices: (sphere) => of(sphere).choices,
     unnamed: (sphere) => of(sphere).unnamed,
@@ -1804,7 +1911,7 @@ export function sphereRanksBySkill(model) {
     const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
     if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
     const state = sphereSkillRequirement(def, check);
-    const talents = sphereSkillSpheres(def).reduce((n, s) => n + (tally[s] || 0), 0);
+    const talents = sphereSkillSpheres(def).reduce((n, s) => n + talentsIn(tally, s), 0);
     const on = row.enabled && state !== 'unmet';
     const ranks = !on ? 0
       : (def.fullLevelRanks && fullLevel) ? level
@@ -1853,7 +1960,12 @@ export function sphereTableNames(model, sideKey) {
     have.add(key);
     names.push(clean);
   };
-  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) take(s);
+  // A pack sphere whose page never said which kind it is would pass both
+  // sides' filters; it is on a table only once a talent or a bonus puts it
+  // there, so it does not sit on both by default.
+  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) {
+    if (sphereSystem(s) === sideKey) take(s);
+  }
   for (const r of side.sphereBonuses || []) take(r.sphere);
   for (const s of Object.keys(side.tally || {})) take(s);
   return names;
@@ -1873,7 +1985,7 @@ export function setSphereBonus(model, sideKey, sphere, field, value) {
   const name = String(sphere ?? '').trim();
   if (!side || !fields.includes(field) || !name) return model;
   side.sphereBonuses ??= [];
-  let row = side.sphereBonuses.find((r) => String(r.sphere ?? '').trim() === name);
+  let row = side.sphereBonuses.find((r) => sameSphere(r.sphere, name));
   if (!row) {
     row = { sphere: name, [fields[0]]: 0, dcBonus: 0 };
     side.sphereBonuses.push(row);
@@ -1898,8 +2010,11 @@ export function recomputeSphereRows(model) {
   // The stored row for a sphere, or the blank one the table shows for it.
   const rowsOf = (sideKey, blank) => {
     const stored = t[sideKey].sphereBonuses || [];
-    return sphereTableNames(model, sideKey).map((sphere) => stored
-      .find((r) => String(r.sphere ?? '').trim() === sphere) || { sphere, ...blank });
+    // The table's spelling, whatever the stored row was typed as.
+    return sphereTableNames(model, sideKey).map((sphere) => {
+      const row = stored.find((r) => sameSphere(r.sphere, sphere));
+      return row ? { ...row, sphere } : { sphere, ...blank };
+    });
   };
   const ranksOf = (name, specRe) => {
     const s = c.skills.find((x) => x.name === name
@@ -1941,7 +2056,7 @@ export function recomputeSphereRows(model) {
       const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
       return {
         ...row,
-        talents: (t.combat.tally || {})[row.sphere] || 0,
+        talents: talentsIn(t.combat.tally, row.sphere),
         rankBonusNum: rank.value,
         rankBonusError: rank.error,
         dcBonusNum: dcPlus.value,
@@ -1966,7 +2081,7 @@ export function recomputeSphereRows(model) {
       const clPlus = unlocked ? cl.value + clForwarded : 0;
       return {
         ...row,
-        talents: (t.magic.tally || {})[row.sphere] || 0,
+        talents: talentsIn(t.magic.tally, row.sphere),
         clBonusNum: cl.value,
         clBonusError: cl.error,
         dcBonusNum: dcPlus.value,

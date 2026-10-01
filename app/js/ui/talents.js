@@ -10,7 +10,7 @@
  */
 import { esc } from './html.js';
 import { prose } from './prose.js';
-import { hasTokens } from '../inline.js';
+import { hasTokens, plainTokens } from '../inline.js';
 import {
   basePickSphere, isBasePickOf, sphereBasePick, sphereCatalogue, sphereTalent, talentPackage,
 } from '../model.js';
@@ -69,7 +69,7 @@ const LONG_NOTE = 160;
  * always was, and one with formulas in it keeps the formula view, which has
  * to win because it is the one that computes.
  */
-function noteField(model, binding, text) {
+export function noteField(model, binding, text) {
   if (hasTokens(text)) return prose(model, binding, text, 1, 'grow');
   const rich = richText(text);
   if (!rich.includes('<table')) return prose(model, binding, text, 1, 'grow');
@@ -290,6 +290,26 @@ export function talentPopHtml(model, spec) {
       <div class="peektext">${text ? richText(text) : '<span class="empty">Nothing written.</span>'}</div>
       ${source ? `<div class="bdsub peeksource">${esc(source)}</div>` : ''}
     </div>`;
+  // A customized weapon's talent, hovered by its name: what it is called and
+  // its sphere on one line, then what it does -- the player's note when one
+  // is written, the catalogue's text when not.
+  if (s?.k === 'wtalent') {
+    const [list, index] = String(s.p ?? '').split('|');
+    const row = model.list(list)?.[Number(index)];
+    const typed = String(row?.talent ?? '').trim();
+    if (!typed) return '';
+    const name = hasTokens(typed) ? plainTokens(model.renderProse(typed)).trim() : typed;
+    const sphere = String(row?.sphere ?? '').trim();
+    const raw = String(row?.notes ?? '').trim();
+    // As the note reads: its formulas worked out.
+    const note = hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw;
+    const info = note ? null : talentInfo(model, sphere, typed);
+    return `<div class="peek">
+      <div class="bdhead"><span class="bdname">${esc(name)}</span><span class="bdsphere">${esc(sphere || 'no sphere')}</span></div>
+      <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written — open the note with ▸ to add one.</span>'}</div>
+      ${!note && info?.source ? `<div class="bdsub peeksource">${esc(info.source)}</div>` : ''}
+    </div>`;
+  }
   if (s?.k === 'note') {
     const where = String(s.p ?? '');
     const hint = 'Note — click the line to open and edit it';
