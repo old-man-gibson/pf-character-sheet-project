@@ -2771,6 +2771,14 @@ console.log('a maneuver bonus waits for the maneuver to be readied');
   check('readied: it applies', will() - base, 2);
 }
 
+console.log('a psionic power’s note reads {…}');
+{
+  const c = new Character(blankDocument({ name: 'Psion' }));
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [{ name: 'Mind Thrust', level: '1', note: 'Deals {thrust.dice = 2}d10' }] }]);
+  check('a name defined in a power note can be read', c.scope().thrust?.dice, 2);
+  check('and the Formulas tab says where it is', describeSource('powerNote:0:0'), 'power 1 of manifesting class 1, its note');
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -1437,6 +1437,9 @@ export function proseSources(model) {
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
+  // A power's note, as a prepared spell's: the panel draws it as prose.
+  (d.psionics?.classes || []).forEach((cls, ci) => (cls.powers || [])
+    .forEach((w, wi) => push(`powerNote:${ci}:${wi}`, w.note)));
   // An item's Other columns and the description on its card: a ring that
   // grants a pool can size it where the ring is written down.
   // A typed bonus with a destination is a forwarded bonus the row spelt out
