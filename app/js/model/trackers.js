@@ -146,8 +146,14 @@ export const SHEET_TRACKER_OVERRIDES = ['name', 'maxFormula', 'minFormula', 'ref
  * list can be diffed against at save time.
  */
 export function seedTrackers(model) {
+  // Two resources of one name are two trackers: the second takes _2, the way
+  // a tracker added by hand does, rather than being dropped as a repeat id.
+  const taken = new Set();
   return (model.data.resources || []).map((r, i) => {
-    const id = slug(r.name) || `resource_${i}`;
+    const base = slug(r.name) || `resource_${i}`;
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
+    taken.add(id);
     const total = Number(r.total) || 0;
     // Mythic Power is the one pool every character has: it is 3 + 2 per tier
     // by the campaign's rules, and all five sheets agree, so it follows the

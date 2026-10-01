@@ -3031,6 +3031,18 @@ console.log('a draining tracker above a floor: the box, the pips and the squares
   check('squares: five of eight left', /5 of 8 left/.test(sq), true);
 }
 
+console.log('two sheet resources of one name are two trackers');
+{
+  const d = blankDocument({ name: 'Twins' });
+  d.resources = [{ name: 'Ki', total: 3, uses: 1, refresh: 'Daily' }, { name: 'Ki', total: 5, uses: 2, refresh: 'Daily' }];
+  const c = new Character(d);
+  const ki = c.trackers.filter((t) => t.source === 'sheet' && t.name === 'Ki');
+  check('both load, the second as ki_2', ki.map((t) => [t.id, t.max, t.current]), [['ki', 3, 1], ['ki_2', 5, 2]]);
+  c.updateTracker('ki_2', { current: 4 });
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and each keeps its own count through a save', back.trackers.filter((t) => t.name === 'Ki').map((t) => t.current), [1, 4]);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
