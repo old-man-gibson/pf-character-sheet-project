@@ -2593,6 +2593,24 @@ console.log('sphere names -- one sphere however it was capitalised');
     [c.data.training.magic.sphereBonuses.length, c.data.training.magic.sphereBonuses[0].clBonus], [1, 3]);
 }
 
+console.log('a pack sphere with no kind -- on the table its talents put it on');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Mystery', kind: '', talents: [] }] });
+  const c = new Character(blankDocument({ name: 'Kindless' }));
+  c.set('identity.level', 6);
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 6, levels: [] });
+  const on = (side) => (c.data.training[side].sphereRows || []).some((r) => r.sphere === 'Mystery');
+  check('untrained, it sits on neither table', [on('combat'), on('magic')], [false, false]);
+  c.listAdd('training.magic.bonusTalents', { sphere: 'Mystery', talent: 'A' });
+  check('a magic talent puts it on the magic table only', [on('combat'), on('magic')], [false, true]);
+  const magicDC = c.data.training.magic.sphereRows.find((r) => r.sphere === 'Mystery').dc;
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Mystery', talent: 'B' });
+  check('trained both ways, sphere.mystery counts both and keeps the DC of the side it has more on',
+    [on('combat'), c.scope().sphere.mystery.talents, c.scope().sphere.mystery.dc], [true, 2, magicDC]);
+  setSphereCatalogue(before);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

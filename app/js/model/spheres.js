@@ -1924,7 +1924,12 @@ export function sphereTableNames(model, sideKey) {
     have.add(key);
     names.push(clean);
   };
-  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) take(s);
+  // A pack sphere whose page never said which kind it is would pass both
+  // sides' filters; it is on a table only once a talent or a bonus puts it
+  // there, so it does not sit on both by default.
+  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) {
+    if (sphereSystem(s) === sideKey) take(s);
+  }
   for (const r of side.sphereBonuses || []) take(r.sphere);
   for (const s of Object.keys(side.tally || {})) take(s);
   return names;

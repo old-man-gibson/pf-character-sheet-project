@@ -396,9 +396,14 @@ export function characterScope(model) {
   for (const r of c.training?.combat?.sphereRows || []) {
     const into = sphereOf(r.sphere);
     if (!into) continue;
+    const talents = Number(r.talents) || 0;
+    // A sphere on both tables (one no list gives a kind, trained both ways)
+    // counts its talents from both, and its DC is the side it has more on --
+    // the magic one on a tie -- rather than whichever was written last.
+    const shared = into.dc !== undefined;
     into.bab = Number(r.attack) || 0;
-    into.dc = Number(r.dc) || 0;
-    into.talents = Number(r.talents) || 0;
+    if (!shared || talents > (into.talents || 0)) into.dc = Number(r.dc) || 0;
+    into.talents = (shared ? into.talents || 0 : 0) + talents;
   }
 
   // Each skill is its total and what the total stands on, the way a save is:
