@@ -19,7 +19,7 @@ import { parseQuery } from '../../inline.js';
 import { weaponProficient } from '../document.js';
 import { emit } from '../events.js';
 import { forwarded } from '../scope.js';
-import { sphereTally } from '../spheres.js';
+import { sphereTally, talentsIn } from '../spheres.js';
 import { slug } from '../util.js';
 
 /**
@@ -646,7 +646,7 @@ export function recomputeUnarmed(model) {
   });
 
   const per = {};
-  for (const s of UNARMED_SPHERES) per[s] = tally[s] || 0;
+  for (const s of UNARMED_SPHERES) per[s] = talentsIn(tally, s);
   per['Open Hand'] += u.asuraEssence * ASURA_TALENTS_PER_ESSENCE;
 
   let talents = 0;
@@ -654,7 +654,10 @@ export function recomputeUnarmed(model) {
   if (u.usesBrute) talents += per.Brute;
   if (u.usesOpenHand) talents += per['Open Hand'];
   if (u.usesWrestling) talents += per.Wrestling;
-  for (const s of new Set((u.otherSpheres || []).filter(Boolean))) talents += tally[s] || 0;
+  // Named once each, however each was capitalised.
+  const others = [...new Map((u.otherSpheres || []).filter((s) => String(s ?? '').trim())
+    .map((s) => [String(s).trim().toLowerCase(), s])).values()];
+  for (const s of others) talents += talentsIn(tally, s);
   if (u.talentedKnuckle) talents += TALENTED_KNUCKLE_TALENTS;
   if (u.brawlersVest) talents += BRAWLERS_VEST_TALENTS;
   talents += Number(u.extraTalents) || 0;
@@ -665,8 +668,8 @@ export function recomputeUnarmed(model) {
     stepIncreases: u.stepIncreases,
     sizeIncreases: u.sizeIncreases,
   });
-  const anyUnarmedTalent = UNARMED_SPHERES.some((s) => (tally[s] || 0) > 0)
-    || (u.otherSpheres || []).some((s) => (tally[s] || 0) > 0);
+  const anyUnarmedTalent = UNARMED_SPHERES.some((s) => talentsIn(tally, s) > 0)
+    || others.some((s) => talentsIn(tally, s) > 0);
   u.improvedUnarmedStrike = anyUnarmedTalent;
 
   // How many talents are *associated with unarmed strikes*, which is a
@@ -678,8 +681,7 @@ export function recomputeUnarmed(model) {
   // otherwise for a table that reads the clause the other way.
   u.assocTalents = Math.floor(
     UNARMED_SPHERES.reduce((n, s) => n + (per[s] || 0), 0)
-    + [...new Set((u.otherSpheres || []).filter(Boolean))]
-      .reduce((n, s) => n + (tally[s] || 0), 0)
+    + others.reduce((n, s) => n + talentsIn(tally, s), 0)
     + (Number(u.native?.extraAssoc) || 0),
   );
 

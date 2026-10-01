@@ -24,7 +24,7 @@ import {
 import { NameIndex, SCOPE_INFO, resolvePath } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
-import { sphereTableNames } from './spheres.js';
+import { sphereTableNames, talentsIn } from './spheres.js';
 import { WEAPON_CHANNELS, WEAPON_CHANNEL_LABELS, WEAPON_SHAPES } from './stats/attacks.js';
 import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
@@ -830,7 +830,7 @@ export function forwardTargets(model) {
       const key = sphereForwardKey(sphere);
       if (!key) continue;
       const under = String(sphere).trim();
-      const trained = !tally || Number(tally[sphere]) > 0;
+      const trained = !tally || talentsIn(tally, sphere) > 0;
       for (const [suffix, what] of columns) {
         const name = `${key}.${suffix}`;
         if (!expand.has(name)) {

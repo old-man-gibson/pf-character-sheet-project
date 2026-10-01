@@ -46,7 +46,9 @@ import {
 import { plannerHasClass } from '../progression.js';
 import { altTrainingTalents } from './alt-training.js';
 import { forwarded } from '../scope.js';
-import { poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, utilityCounts } from '../spheres.js';
+import {
+  poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, talentsIn, tallyAdd, utilityCounts,
+} from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
@@ -248,8 +250,7 @@ export function guileTally(side, { spentOnly = false, training = null } = {}) {
   const tally = {};
   for (const row of guileTalentRows(side, training)) {
     if (spentOnly && !row.spent) continue;
-    const s = String(row.sphere || '').trim();
-    if (s) tally[s] = (tally[s] || 0) + 1;
+    tallyAdd(tally, row.sphere);
   }
   return tally;
 }
@@ -320,7 +321,7 @@ export function recomputeGuile(model) {
   const technique = altTrainingTalents(model);
   const learned = String(technique?.sphere || '').trim();
   if (technique?.side === 'guile' && learned) {
-    for (const t of [g.tally, g.tallySpent]) t[learned] = (t[learned] || 0) + technique.count;
+    for (const t of [g.tally, g.tallySpent]) tallyAdd(t, learned, technique.count);
   }
 
   // A sphere is on the table because a talent went into it, or because the
@@ -468,7 +469,7 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
     if (name && !firstRow.has(name)) firstRow.set(name, at);
   });
   for (const row of g.spheres || []) {
-    const talents = Number(tally[row.sphere]) || 0;
+    const talents = talentsIn(tally, row.sphere);
     const i = skillIndexOf(model, row.skill);
     const rank = amount(row.rankBonus);
     // A bonus forwarded here is kept beside the typed one, never folded in.

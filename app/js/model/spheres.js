@@ -107,6 +107,42 @@ export function sphereCatalogue() {
   return SPHERE_CATALOGUE;
 }
 
+/**
+ * A sphere name as the sheet spells it: the engine's lists or the
+ * catalogue's spelling when either knows it, however it was typed, and the
+ * typed name, trimmed, when neither does. Tallies are keyed by this, so
+ * "boxing" and "Boxing" are one sphere.
+ */
+export function canonicalSphere(name) {
+  const clean = String(name ?? '').trim();
+  if (!clean) return '';
+  const key = clean.toLowerCase();
+  return [...COMBAT_SPHERES, ...MAGIC_SPHERES, ...GUILE_SPHERES].find((s) => s.toLowerCase() === key)
+    || sphereEntry(clean)?.name.trim() || clean;
+}
+
+/** Add to a tally under the sphere's one spelling (see canonicalSphere). */
+export function tallyAdd(tally, sphere, n = 1) {
+  let key = canonicalSphere(sphere);
+  if (!key) return;
+  // A name nobody knows keeps the first spelling the tally saw.
+  const low = key.toLowerCase();
+  key = Object.keys(tally).find((k) => k.toLowerCase() === low) ?? key;
+  tally[key] = (tally[key] || 0) + n;
+}
+
+/** A sphere's count in a tally, however either side spelled it. */
+export function talentsIn(tally, sphere) {
+  const low = String(sphere ?? '').trim().toLowerCase();
+  if (!low || !tally) return 0;
+  let n = 0;
+  for (const [k, v] of Object.entries(tally)) if (k.trim().toLowerCase() === low) n += Number(v) || 0;
+  return n;
+}
+
+/** Whether two sphere names are the same sphere. */
+export const sameSphere = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
 /** One sphere by name, however it was capitalised. */
 export function sphereEntry(name) {
   const key = String(name || '').trim().toLowerCase();
@@ -1006,8 +1042,8 @@ export function recomputeCustomizations(model, side) {
  * written in it yet is unknown, not wrong, and is left alone.
  */
 export function checkCustomizationBases(model, t) {
-  const owned = (sphere) => ((t.combat?.tallyOwn || {})[sphere] || 0) > 0
-    || ((t.magic?.tallyOwn || {})[sphere] || 0) > 0;
+  const owned = (sphere) => talentsIn(t.combat?.tallyOwn, sphere) > 0
+    || talentsIn(t.magic?.tallyOwn, sphere) > 0;
   for (const block of t.combat?.customizations || []) {
     // What the track may learn from at all. A sphere outside it is flagged
     // and kept, never dropped: it is nearly always a track whose archetype
@@ -1200,7 +1236,7 @@ export function* ownTalentRows(model, side, { sideKey = null, includeTradition =
 export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
   const tally = {};
   const bump = (s, n = 1) => {
-    if (typeof s === 'string' && s.trim()) tally[s.trim()] = (tally[s.trim()] || 0) + n;
+    if (typeof s === 'string') tallyAdd(tally, s, n);
   };
   for (const row of ownTalentRows(model, side, { sideKey, includeTradition })) bump(row.sphere);
   // A parallel track -- an armiger's customized weapon -- is a talent source
@@ -1764,7 +1800,7 @@ export function recomputeTraining(model) {
 export function sphereTalentKnowledge(model, side, sideKey) {
   const out = new Map();
   const of = (sphere) => {
-    const s = String(sphere || '').trim();
+    const s = canonicalSphere(sphere);
     if (!s) return null;
     if (!out.has(s)) out.set(s, { names: [], choices: [], unnamed: 0 });
     return out.get(s);
@@ -1788,7 +1824,7 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     // The named sources above are the character's own, so the count they are
     // measured against has to be too -- a customized weapon's talents are
     // neither named here nor countable as unnamed ones.
-    const total = Number((side?.tallyOwn || side?.tally || {})[sphere]) || 0;
+    const total = talentsIn(side?.tallyOwn || side?.tally, sphere);
     row.unnamed = Math.max(0, total - row.names.length - row.choices.length);
   }
   return out;
@@ -1819,7 +1855,7 @@ export function sphereRanksBySkill(model) {
   const known = sphereTalentKnowledge(model, t, 'combat');
   const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
   const check = {
-    has: (sphere) => (tally[sphere] || 0) > 0,
+    has: (sphere) => talentsIn(tally, sphere) > 0,
     named: (sphere) => of(sphere).names,
     choices: (sphere) => of(sphere).choices,
     unnamed: (sphere) => of(sphere).unnamed,
@@ -1839,7 +1875,7 @@ export function sphereRanksBySkill(model) {
     const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
     if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
     const state = sphereSkillRequirement(def, check);
-    const talents = sphereSkillSpheres(def).reduce((n, s) => n + (tally[s] || 0), 0);
+    const talents = sphereSkillSpheres(def).reduce((n, s) => n + talentsIn(tally, s), 0);
     const on = row.enabled && state !== 'unmet';
     const ranks = !on ? 0
       : (def.fullLevelRanks && fullLevel) ? level
@@ -1908,7 +1944,7 @@ export function setSphereBonus(model, sideKey, sphere, field, value) {
   const name = String(sphere ?? '').trim();
   if (!side || !fields.includes(field) || !name) return model;
   side.sphereBonuses ??= [];
-  let row = side.sphereBonuses.find((r) => String(r.sphere ?? '').trim() === name);
+  let row = side.sphereBonuses.find((r) => sameSphere(r.sphere, name));
   if (!row) {
     row = { sphere: name, [fields[0]]: 0, dcBonus: 0 };
     side.sphereBonuses.push(row);
@@ -1933,8 +1969,11 @@ export function recomputeSphereRows(model) {
   // The stored row for a sphere, or the blank one the table shows for it.
   const rowsOf = (sideKey, blank) => {
     const stored = t[sideKey].sphereBonuses || [];
-    return sphereTableNames(model, sideKey).map((sphere) => stored
-      .find((r) => String(r.sphere ?? '').trim() === sphere) || { sphere, ...blank });
+    // The table's spelling, whatever the stored row was typed as.
+    return sphereTableNames(model, sideKey).map((sphere) => {
+      const row = stored.find((r) => sameSphere(r.sphere, sphere));
+      return row ? { ...row, sphere } : { sphere, ...blank };
+    });
   };
   const ranksOf = (name, specRe) => {
     const s = c.skills.find((x) => x.name === name
@@ -1976,7 +2015,7 @@ export function recomputeSphereRows(model) {
       const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
       return {
         ...row,
-        talents: (t.combat.tally || {})[row.sphere] || 0,
+        talents: talentsIn(t.combat.tally, row.sphere),
         rankBonusNum: rank.value,
         rankBonusError: rank.error,
         dcBonusNum: dcPlus.value,
@@ -2001,7 +2040,7 @@ export function recomputeSphereRows(model) {
       const clPlus = unlocked ? cl.value + clForwarded : 0;
       return {
         ...row,
-        talents: (t.magic.tally || {})[row.sphere] || 0,
+        talents: talentsIn(t.magic.tally, row.sphere),
         clBonusNum: cl.value,
         clBonusError: cl.error,
         dcBonusNum: dcPlus.value,

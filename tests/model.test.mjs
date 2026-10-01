@@ -2574,6 +2574,25 @@ console.log('alternate training -- every reader takes the branch the player tick
   setAltTrainingTables(merged.altTraining);
 }
 
+console.log('sphere names -- one sphere however it was capitalised');
+{
+  const c = new Character(blankDocument({ name: 'Lower' }));
+  c.set('identity.level', 4);
+  c.listAdd('training.combat.bonusTalents', { sphere: 'boxing', talent: 'Haymaker' });
+  c.listAdd('training.combat.bonusTalents', { sphere: 'Boxing', talent: 'Jab' });
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 4, levels: [] });
+  c.listAdd('training.magic.sphereBonuses', { sphere: 'dark', clBonus: 2, dcBonus: 1 });
+  const combatRow = c.data.training.combat.sphereRows.filter((r) => r.sphere.toLowerCase() === 'boxing');
+  check('boxing and Boxing are one row, with both talents', combatRow.map((r) => [r.sphere, r.talents]), [['Boxing', 2]]);
+  check('the tally has one key', Object.keys(c.data.training.combat.tally), ['Boxing']);
+  const dark = c.data.training.magic.sphereRows.filter((r) => r.sphere.toLowerCase() === 'dark');
+  check('a bonus row typed as dark applies to Dark',
+    dark.map((r) => [r.sphere, r.clBonusNum, r.dcBonusNum]), [['Dark', 2, 1]]);
+  c.setSphereBonus('magic', 'Dark', 'clBonus', 3);
+  check('and an edit to Dark writes that same row',
+    [c.data.training.magic.sphereBonuses.length, c.data.training.magic.sphereBonuses[0].clBonus], [1, 3]);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
