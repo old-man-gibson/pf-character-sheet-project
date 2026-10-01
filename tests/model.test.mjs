@@ -29,7 +29,7 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
-  sphereCatalogue, trackSphereNames,
+  sphereCatalogue, trackSphereNames, altTrainingPrereq,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2788,6 +2788,18 @@ console.log('an added veilweaving class row is shown until it is filled or remov
   const shown = (m) => subsystemPanels.akashicPanel(m, {}).includes(`data-remove="akashic.classes|${before}"`);
   check('the blank row it adds is on the panel, with its ×', shown(c), true);
   check('and still after a save and reload', shown(new Character(JSON.parse(JSON.stringify(c.toJSON())))), true);
+}
+
+console.log('the psionic prerequisite reads the Psionics tab');
+{
+  const c = new Character(blankDocument({ name: 'Mind' }));
+  c.set('identity.level', 3);
+  const tech = { prereq: { key: 'psionics', text: 'Ability to manifest powers' } };
+  check('no class: unmet', altTrainingPrereq(c, tech).state, 'unmet');
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', powers: [] }]);
+  check('a class with no levels: unmet', altTrainingPrereq(c, tech).state, 'unmet');
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 3);
+  check('a manifester level: met', [altTrainingPrereq(c, tech).state, altTrainingPrereq(c, tech).detail], ['met', 'Psion (manifester level 3).']);
 }
 
 const missing = missingCharacters(REAL);
@@ -9261,8 +9273,8 @@ console.log('alternate training -- the prerequisite is checked, and says so when
   check('and vancian casting he does not have reads unmet',
     a.data.altTraining.calc.prereq.state, 'unmet');
   a.set('altTraining.technique', 'Piercing Eye');
-  check('psionics is not modelled, so it is unchecked rather than refused',
-    a.data.altTraining.calc.prereq.state, 'unknown');
+  check('and manifesting he does not have reads unmet, as the Psionics tab has no class',
+    a.data.altTraining.calc.prereq.state, 'unmet');
 }
 
 console.log('alternate training -- "if you already possess it" is a branch, not a footnote');

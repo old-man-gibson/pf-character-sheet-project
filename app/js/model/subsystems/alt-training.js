@@ -159,8 +159,16 @@ export function altTrainingPrereq(model, technique) {
     return armor.some((a) => /^(?:medium|heavy)$/i.test(a)) ? met(label) : unmet(label);
   }
   if (key === 'psionics') {
-    return unknown('Psionics is a plain worksheet here, so manifesting is not something '
-      + 'the sheet can check.');
+    // Manifesting means a manifester level: a class on the Psionics tab with
+    // a level of its own.
+    const named = (c.psionics?.classes || []).filter((x) => String(x.name || '').trim());
+    const manifesting = named.filter((x) => Number(x.manifesterLevel) > 0);
+    if (manifesting.length) {
+      return met(`${manifesting.map((x) => `${x.name} (manifester level ${x.manifesterLevel})`).join(', ')}.`);
+    }
+    return named.length
+      ? unmet(`${named.map((x) => x.name).join(', ')} on the Psionics tab, with no manifester level yet.`)
+      : unmet('No manifesting class on the Psionics tab.');
   }
   return unknown('');
 }
