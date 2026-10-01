@@ -5350,7 +5350,8 @@ export class CharacterSheetElement extends HTMLElement {
    * whichever rows have been moved off it.
    */
   #stackRows() {
-    if (this.clientWidth > 620) return;
+    // 0 is a sheet not laid out yet, not a narrow one.
+    if (!this.clientWidth || this.clientWidth > 620) return;
     for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
       // A rung that grants nothing is already one line; there is no body under
       // it for a caret to open. See `tr.emptyslot` in the stylesheet.
