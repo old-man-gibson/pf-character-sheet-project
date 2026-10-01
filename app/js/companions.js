@@ -350,9 +350,10 @@ export function setCompanionAbilityText(list) {
   ABILITY_TEXT = new Map();
   for (const entry of Array.isArray(list) ? list : []) {
     const key = abilityTextKey(entry?.name);
-    // First pack in wins, which is the order `activeExtensions` puts them in:
-    // bundled, then local, so somebody's own pack overrides a bundled one.
-    if (key && !ABILITY_TEXT.has(key)) ABILITY_TEXT.set(key, entry);
+    // The last pack in wins. `activeExtensions` puts them bundled first and
+    // local after, so somebody's own pack overrides a bundled one, as it does
+    // everywhere else. (First-in-wins had it the other way round.)
+    if (key) ABILITY_TEXT.set(key, entry);
   }
 }
 
@@ -663,6 +664,32 @@ export function normalizeCompanionList(kind, value) {
   });
 }
 
+/**
+ * Every companion's id once, across all four kinds.
+ *
+ * The id is the name formulas read it by, so two blocks sharing one -- an
+ * imported file, a hand edit, two documents' companions pasted together --
+ * would answer to the same `eidolon2.*` and the second would be unreachable.
+ * The first keeps it; a later one takes the next free name of its own kind,
+ * as `addCompanion` would have given it.
+ */
+export function uniqueCompanionIds(d) {
+  const seen = new Set();
+  for (const kind of COMPANION_KINDS) {
+    for (const b of d[kind] || []) {
+      if (!b) continue;
+      if (seen.has(String(b.id))) {
+        let id = kind;
+        for (let n = 2; seen.has(id) || COMPANION_KINDS.some((k) => (d[k] || []).some((x) => x !== b && x?.id === id)); n++) {
+          id = `${kind}${n}`;
+        }
+        b.id = id;
+      }
+      seen.add(String(b.id));
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Whether a block holds anything the player put there.
  * ------------------------------------------------------------------ */
@@ -922,12 +949,16 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const multiattack = (b.feats || []).some((f) => /multiattack/i.test(String(f?.name || f || '')));
 
   // Saves: a familiar uses its master's base saves (never below +2 on this
-  // template); the others read good or poor off the table.
+  // template); the others read good or poor off the table. A conjured
+  // companion's two good saves are its base form's -- "dependent on the
+  // creature's form" -- so an Orb is good at Reflex and Will whatever the
+  // block's own ticks say; they matter only before a form is chosen.
+  const good = form ? form.goodSaves : b.goodSaves;
   const saves = {};
   for (const [k, ab] of [['fort', 'con'], ['ref', 'dex'], ['will', 'wis']]) {
     const base = kind === 'familiar'
       ? Math.max(2, Number(master.baseSaves?.[k]) || 0)
-      : (level >= 1 ? (b.goodSaves?.[k] ? row.goodSave : row.poorSave) : 0);
+      : (level >= 1 ? (good?.[k] ? row.goodSave : row.poorSave) : 0);
     const misc = Number(b.saves?.[k]?.misc) || 0;
     const gear = Math.trunc(Number(fwd.saves[k]) || 0);
     saves[k] = { base, mod: mod(ab), misc, gear, total: base + mod(ab) + misc + gear };
@@ -947,16 +978,28 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const ac = 10 + mod('dex') + sizeAC + all + touchOnly + ffOnly + tableNatural + fwd.ac;
   const touch = 10 + mod('dex') + sizeAC + all + touchOnly + fwd.touch;
   const flatFooted = 10 + sizeAC + all + ffOnly + tableNatural + fwd.ff;
+  // CMD takes the AC bonuses the character's CMD takes: everything in the
+  // "all" bucket (deflection, luck, insight, sacred…) and dodge, but not
+  // armour or natural armour -- and every penalty, whichever bucket it is in,
+  // because a penalty to AC applies to CMD. Flat-footed, it loses the Dex
+  // bonus and the dodge, keeping a Dex penalty, as the character's does.
   const cmdOther = Number(b.cmdOther) || 0;
-  const cmd = 10 + bab + mod('str') + mod('dex') - sizeAC + cmdOther + fwd.cmd;
-  const ffCmd = 10 + bab + mod('str') - sizeAC + cmdOther + fwd.cmd;
+  const cmdAc = all + touchOnly + Math.min(0, ffOnly);
+  const ffCmdAc = all + Math.min(0, touchOnly) + Math.min(0, ffOnly);
+  const cmd = 10 + bab + mod('str') + mod('dex') - sizeAC + cmdAc + cmdOther + fwd.cmd;
+  const ffCmd = 10 + bab + mod('str') + Math.min(0, mod('dex')) - sizeAC + ffCmdAc + cmdOther + fwd.cmd;
   // Combat maneuvers, which the worksheet never worked out at all: BAB plus
   // Strength plus the *special* size modifier, which is the size modifier to
   // AC and attack the other way round -- exactly as CMD above already has it.
   // A companion that trips, grapples or bull rushes had nowhere to read this
   // and no way to be given a bonus to it.
+  //
+  // A Tiny or smaller creature uses Dexterity instead, and a feat such as
+  // Agile Maneuvers lets any creature: `cmbAbility` picks, blank for the rule.
   const cmbOther = Number(b.cmbOther) || 0;
-  const cmb = bab + mod('str') - sizeAC + cmbOther + fwd.cmb;
+  const tiny = ['Tiny', 'Diminutive', 'Fine'].includes(b.size);
+  const cmbKey = abilityKey(b.cmbAbility) || (tiny ? 'dex' : 'str');
+  const cmb = bab + mod(cmbKey) - sizeAC + cmbOther + fwd.cmb;
   const initiative = mod('dex') + (Number(b.initBonus) || 0) + fwd.init;
 
   // Skills. A familiar's ranks are its own or its master's, whichever is
@@ -1009,12 +1052,36 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // What the table grants along the way, up to this level. The conjured
   // familiar archetype reads at its halved level, which is where its own
   // gains actually sit; the extra mindless/unwilling dice bring no specials.
+  //
+  // Ability score increases are the exception: "+1 for every 4 Hit Dice
+  // possessed", and the mindless and unwilling extra dice are dice. Those two
+  // already take the increases by their whole Hit Dice (above), so the list
+  // says where those dice cross each fourth, rather than where a plain
+  // companion's would -- otherwise a 12-die unwilling companion at caster
+  // level 12 had three increases and a list naming two.
+  const byDice = kind === 'conjured' && bonusHD > 0 && !arch('familiar');
+  const INCREASE = 'Ability score increase';
   const gains = [];
   for (let i = 0; i < Math.min(kind === 'conjured' ? effLevel : level, table.length); i++) {
     // `abilities` is the cell split into the rules it names, so the panel can
     // open each one on its own text rather than on the whole line.
-    if (table[i].special) {
-      gains.push({ level: i + 1, text: table[i].special, abilities: splitAbilities(table[i].special) });
+    let text = table[i].special;
+    if (byDice) text = text.split(', ').filter((s) => s !== INCREASE).join(', ');
+    if (text) gains.push({ level: i + 1, text, abilities: splitAbilities(text) });
+  }
+  if (byDice) {
+    const diceAt = (cl) => (cl < 1 ? 0 : conjuredHD(cl) + Math.floor(cl / 4));
+    for (let cl = 1; cl <= level; cl++) {
+      for (let t = 4; t <= diceAt(cl); t += 4) {
+        if (diceAt(cl - 1) >= t) continue;
+        const at = gains.findIndex((g) => g.level > cl);
+        const entry = { level: cl, text: INCREASE, abilities: splitAbilities(INCREASE), note: `at ${t} Hit Dice` };
+        const same = gains.find((g) => g.level === cl);
+        if (same) {
+          same.text = `${same.text}, ${INCREASE}`;
+          same.abilities = splitAbilities(same.text);
+        } else gains.splice(at < 0 ? gains.length : at, 0, entry);
+      }
     }
   }
 
@@ -1054,6 +1121,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     cmd,
     ffCmd,
     cmb,
+    cmbAbility: ABILITY_LABELS[cmbKey],
     initiative,
     ranksSpent,
     ranksAllowed,
@@ -1233,18 +1301,25 @@ export function companionBreakdown(kind, block, stat) {
       label: 'CMD',
       total: k.cmd,
       parts: [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
+        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch, 'dodge counts toward CMD'),
+        part('flat-footed only', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD; armour does not'),
         part('CMD other', b.cmdOther), forwarded('cmd')],
     };
     case 'ffCmd': return {
       label: 'Flat-footed CMD',
       total: k.ffCmd,
-      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')), special(),
+      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')),
+        part('Dex penalty', Math.min(0, mod('dex')), 'flat-footed loses the bonus, not a penalty'), special(),
+        part('bonus AC (all)', b.ac?.all),
+        part('touch-only penalty', Math.min(0, Number(b.ac?.touch) || 0), 'flat-footed loses the dodge, not a penalty'),
+        part('flat-footed-only penalty', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD'),
         part('CMD other', b.cmdOther), forwarded('cmd')],
     };
     case 'cmb': return {
       label: 'CMB',
       total: k.cmb,
-      parts: [part('BAB', k.bab), part('Str', mod('str')), special(), part('CMB other', b.cmbOther), forwarded('cmb')],
+      parts: [part('BAB', k.bab), part(k.cmbAbility || 'Str', mod(abilityKey(k.cmbAbility) || 'str')), special(),
+        part('CMB other', b.cmbOther), forwarded('cmb')],
     };
     case 'init': return {
       label: 'Initiative',
@@ -1262,7 +1337,9 @@ export function companionBreakdown(kind, block, stat) {
       const name = { fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[stat];
       const ab = { fort: 'Con', ref: 'Dex', will: 'Wis' }[stat];
       const how = kind === 'familiar' ? 'the master’s, never below +2'
-        : b.goodSaves?.[stat] ? 'good, from the table' : 'poor, from the table';
+        : (k.formSaves || b.goodSaves)?.[stat]
+          ? `good, from the table${k.formSaves ? ` (${b.baseForm} form)` : ''}`
+          : `poor, from the table${k.formSaves ? ` (${b.baseForm} form)` : ''}`;
       return {
         label: name,
         total: sv.total,

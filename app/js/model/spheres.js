@@ -8,9 +8,9 @@
  */
 
 import {
-  COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
+  CASTING_TYPES, COMBAT_SPHERES, EXPERTISE_CUSTOM, EXPERTISE_TIERS, GUILE_SPHERES, MAGIC_SPHERES,
   RANKS_PER_TALENT, SPHERE_SKILL_RANKS, TALENTS_TO_TYPE, TALENT_RATES, TRACK_SPHERE_SIDES,
-  TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
+  PRACTITIONER_TYPES, TYPE_RATES, TYPE_TO_TALENTS, boonStep, drawbackWeight, isBasePick, normalizeTalentTracks,
   expertiseTalents, isGuileSphere, ladderGrants, parseLadderRule, spBoonPoints, sphereSide, sphereSkillLabel, sphereSkillRequirement, sphereSkillSpheres,
   statMod, tempEssenceCost, trackCount, trackSpheres,
 } from '../rules.js';
@@ -22,7 +22,9 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique } from './subsystems/alt-training.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, evaluateAmount, normalizeName, slug, sphereForwardKey } from './util.js';
+import {
+  closestName, evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
+} from './util.js';
 
 /* ------------------------------------------------------------------ *
  * The sphere catalogue.
@@ -74,7 +76,7 @@ function dedupeTalents(talents) {
 
 /** Register the shared catalogue. Call before constructing a Character. */
 export function setSphereCatalogue(doc) {
-  const list = Array.isArray(doc?.spheres) ? doc.spheres : [];
+  const list = packRows(doc?.spheres);
   SPHERE_CATALOGUE = {
     spheres: list.map((s) => ({
       name: String(s.name || ''),
@@ -82,18 +84,18 @@ export function setSphereCatalogue(doc) {
       // separately; '' when a page never said.
       kind: ['combat', 'magic', 'guile'].includes(s.kind) ? s.kind : '',
       description: String(s.description || ''),
-      abilities: (s.abilities || []).map((a) => ({
+      abilities: packRows(s.abilities).map((a) => ({
         name: String(a.name || ''), text: String(a.text || ''), option: !!a.option,
         // The ability's text divided by sphere, where a page divides it.
-        bySphere: (a.bySphere || []).map((x) => ({ sphere: String(x.sphere || ''), text: String(x.text || '') })),
+        bySphere: packRows(a.bySphere).map((x) => ({ sphere: String(x.sphere || ''), text: String(x.text || '') })),
       })),
       // What the page says about choosing among its packages, when it has any.
       choose: String(s.choose || ''),
-      talents: dedupeTalents((s.talents || []).map((t) => ({
+      talents: dedupeTalents(packRows(s.talents).map((t) => ({
         name: String(t.name || ''),
         group: String(t.group || ''),
-        tags: (t.tags || []).map(String),
-        sources: (t.sources || []).map(String),
+        tags: packWords(t.tags),
+        sources: packWords(t.sources),
         prerequisites: String(t.prerequisites || ''),
         text: String(t.text || ''),
       }))),
@@ -790,6 +792,14 @@ export function blankTalentNotes(model, sideKey) {
  * Fill those notes. The rule is `setTalentEntry`'s and is not loosened: only a
  * note that is empty, only from a name the catalogue knows, and a sphere the
  * row already chose still decides which talent that is.
+ *
+ * This is the one place a pack's text is copied onto the character. Feats,
+ * spells, powers, veils and maneuvers show the pack's words beside the
+ * player's and never store them (ui/html.js, `catalogueFace`); a sphere talent
+ * takes them into its note, because the player asks for it here, row by row
+ * or with one button, and the note is theirs to cut down afterwards. Kept as
+ * the exception on purpose (2026-09-29): a pack corrected later does not
+ * correct a note already filled.
  */
 export function fillTalentNotes(model, sideKey) {
   let filled = 0;
@@ -1093,6 +1103,15 @@ export function setCustomizationActive(model, index, setIndex) {
  * technique talents -- the only source that has to know -- are keyed off the
  * caller's `sideKey`.
  */
+/**
+ * Whether a ladder row's talent is one the character has: a slot the class
+ * grants, at a level the character has reached. Every tally counts by this
+ * -- the sphere sides, a blended pool, a guile class -- and so does the
+ * knowledge a prerequisite reads.
+ */
+export const rowCounts = (lv) => !!lv?.granted && !lv.future;
+export const utilityCounts = (lv) => !!lv?.utilityGranted && !lv.future;
+
 export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
   const tally = {};
   const bump = (s, n = 1) => {
@@ -1101,25 +1120,26 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
   // A blended class holds one pool of talents spent on either kind, so each
   // of its talents is counted once, on the side its sphere belongs to --
   // wherever the block itself happens to live. Its mirror on the other side
-  // is the same pool seen twice and contributes nothing of its own.
-  // A pool that reaches skill talents is counted the way the guile side
-  // counts, slot by granted slot, on both of its ladders: switching its pool
-  // to a slower tier must not leave the rows it no longer grants still
-  // counting. A pool that does not keeps the sphere sides' old reading, every
-  // row with a sphere in it, which is what the imported workbooks were
-  // checked against.
+  // is the same pool seen twice and contributes nothing of its own. A pool
+  // that reaches skill talents counts both of its ladders.
+  //
+  // Every ladder counts only what the character has at the level they are:
+  // a slot the class grants (`granted`), at a level reached (`!future`). The
+  // sphere sides used to count every row with a sphere in it -- a planned
+  // talent at a level not yet reached, and one typed in a row the class does
+  // not grant -- while the guile side counted granted slots only.
   const blendedTalents = (cls, home) => {
     const systems = poolSystems(cls, home);
     const slots = poolHasUtility(cls, home);
     for (const lv of cls.levels || []) {
-      if ((!slots || lv.granted) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-      if (slots && lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
+      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
+      if (slots && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
     }
   };
   for (const cls of side.classes || []) {
     if (cls.blendedMirror) continue;
     if (cls.blended || cls.blendedSkill) blendedTalents(cls, sideKey ?? cls.side);
-    else for (const lv of cls.levels || []) bump(lv.sphere);
+    else for (const lv of cls.levels || []) if (rowCounts(lv)) bump(lv.sphere);
   }
   if (sideKey) {
     const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
@@ -1134,8 +1154,8 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
       const systems = poolSystems(cls, 'guile');
       if (!systems.includes(sideKey)) continue;
       for (const lv of cls.levels || []) {
-        if (lv.granted && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
-        if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
+        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) bump(lv.sphere);
+        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) bump(lv.utilitySphere);
       }
     }
   }
@@ -1184,18 +1204,47 @@ export function sphereTally(model, side, { includeTradition = true, sideKey = nu
 export function pairBlended(model) {
   const t = model.data.training || {};
   const magic = t.magic?.classes || [];
-  for (const cls of t.combat?.classes || []) {
+  const combat = t.combat?.classes || [];
+  // Rows still shared by two blocks whose names no longer match -- one of
+  // them was renamed -- are split into two copies, so an edit to one stops
+  // changing the other and neither side counts the other's talents.
+  for (const m of magic) {
+    const holder = combat.find((c) => c.levels && c.levels === m.levels);
+    if (holder && holder.name !== m.name) m.levels = m.levels.map((lv) => ({ ...lv }));
+  }
+  const written = (levels) => (levels || [])
+    .some((lv) => String(lv?.talent ?? '').trim() || String(lv?.sphere ?? '').trim());
+  const sameTalents = (a, b) => (a || []).length === (b || []).length
+    && (a || []).every((lv, i) => String(lv?.talent ?? '') === String(b[i]?.talent ?? '')
+      && String(lv?.sphere ?? '') === String(b[i]?.sphere ?? ''));
+  for (const cls of combat) {
     delete cls.blendedMirror;
     const twin = cls.name && magic.find((m) => m.name === cls.name);
     // `blended: false` is a decision -- two blocks that share a name and are
     // deliberately kept apart -- and is left alone.
     if (!twin || cls.blended === false || twin.blended === false) continue;
+    // Pairing makes the two blocks share one list of rows, so it is only done
+    // where that loses nothing: the rows are shared already, one side has
+    // none written, or both hold the same talents -- the workbook's way of
+    // writing a blended class, a block on each tab with its talents twice.
+    // Two different pools under one name, a class renamed onto another's, are
+    // left apart: pairing them overwrote the magic block's talents.
+    const noOwnRows = !(cls.levels || []).length && (twin.levels || []).length;
+    const takesTwins = !written(cls.levels) && written(twin.levels);
+    if (cls.levels !== twin.levels && !noOwnRows && !takesTwins
+      && written(twin.levels) && !sameTalents(cls.levels, twin.levels)) {
+      // Not a mirror of anything now, whatever an earlier pairing left on it:
+      // a mirror's talents are counted through its owner, and it has none.
+      delete twin.blendedMirror;
+      continue;
+    }
     cls.blended = true;
     twin.blended = true;
     twin.blendedMirror = true;
-    // The owner's rows are the pool. An extended block has none of its own,
-    // so it is the twin that holds them and the roles swap.
-    if (!(cls.levels || []).length && (twin.levels || []).length) {
+    // The owner's rows are the pool. A block with none of its own -- an
+    // extended block, or a class named before anything was written in it --
+    // takes its twin's, and the roles swap.
+    if (noOwnRows || takesTwins) {
       cls.levels = twin.levels;
       cls.blendedMirror = true;
       delete twin.blendedMirror;
@@ -1212,6 +1261,12 @@ export function pairBlended(model) {
       if (mirror[key] != null && mirror[key] !== '' && (owner[key] == null || owner[key] === '')) owner[key] = mirror[key];
       delete mirror[key];
     }
+    // One class, one count of its levels: the mirror follows the owner's
+    // override, which is the one the Blended training panel shows. One of its
+    // own, typed before the pair was made, is dropped rather than left to
+    // make the two halves disagree out of sight.
+    if (owner.classLevelsOverride == null) delete mirror.classLevelsOverride;
+    else mirror.classLevelsOverride = owner.classLevelsOverride;
   }
   for (const m of magic) {
     if (m.blended && !(t.combat?.classes || []).some((x) => x.name === m.name)) {
@@ -1352,6 +1407,9 @@ export function blendedClasses(model) {
  * spell points and boons, and the global casting numbers. Runs before the
  * skills loop because sphere talents grant skill ranks.
  */
+/** The types each sphere side's classes may take. */
+const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
+
 export function recomputeTraining(model) {
   const t = model.data.training;
   if (!t) return;
@@ -1371,8 +1429,14 @@ export function recomputeTraining(model) {
       cls.side = sideKey;
       // Several sheets fill in only one of type / talents-per-level;
       // each falls back to the other.
+      // The fallback only reads a rate that belongs to this side: a blended
+      // class's other half copies the martial rate, and how fast a class
+      // learns martial talents says nothing about its caster level. Expert on
+      // the magic side is not a casting type, so the half has none until one
+      // is picked.
       const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
-      const type = cls.type || TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+      const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+      const type = cls.type || (guess && SIDE_TYPES[sideKey].includes(guess) ? guess : null);
       const rate = TALENT_RATES[tpl] ?? 0;
       const progRate = TYPE_RATES[type] ?? 0;
       cls.effectiveType = type;
@@ -1421,9 +1485,10 @@ export function recomputeTraining(model) {
           }
         }
       }
-      if (cls.extended) {
-        // Blocks from the extended page carry no level rows of their own;
-        // count their class levels straight from the Planner.
+      if (cls.extended || !(cls.levels || []).length) {
+        // Blocks from the extended page carry no level rows of their own, and
+        // nor does a block added by hand before its rows are filled in; count
+        // their class levels straight from the override or the Planner.
         for (let l = 1; l <= 20; l++) {
           const has = override != null ? l <= override : plannerHasClass(model, cls.name, l);
           if (has) {
@@ -1474,7 +1539,16 @@ export function recomputeTraining(model) {
   if (t.magic) {
     const m = t.magic;
     const casters = (m.classes || []).filter((x) => x.name);
-    const bestMod = Math.max(0, ...casters.map((x) => mod(x.mod1)));
+    // A class still to come on the Planner is not a casting class yet: it
+    // lends no casting modifier, no spell points, and does not count toward
+    // the tradition's spell points per casting class. With none taken (casting
+    // from Advanced Magic Training alone) the modifier falls back to the
+    // classes named, since that is the only casting ability written down.
+    // A class with no casting type picked -- a blended half not yet set --
+    // has no casting progression, so it is not a casting class either.
+    const casts = (x) => (TYPE_RATES[x.effectiveType] ?? 0) > 0;
+    const acquired = casters.filter((x) => (x.classLevelsCurrent ?? 0) > 0 && casts(x));
+    const bestMod = Math.max(0, ...(acquired.length ? acquired : casters).map((x) => mod(x.mod1)));
 
     // Advanced Magic Training grants casting to non-casting classes:
     // Low-Caster progression, or Mid-Caster with the mythic version.
@@ -1489,8 +1563,16 @@ export function recomputeTraining(model) {
     // The distinction is worth the arithmetic: two class levels on a
     // mid-caster is one caster level, which is what the boost is worth and
     // not what m.clBonus would give.
-    const effectiveLevels = (x) => (x.classLevelsCurrent ?? 0)
-      + forwarded(model, `class.${slug(x.name)}.level`);
+    //
+    // Only a class the character has at the current level: a bonus to a class
+    // still to come on the Planner waits (`levelWaiting`) until its first
+    // level arrives, as `classLevelCount` does for every other system.
+    const effectiveLevels = (x) => {
+      const own = x.classLevelsCurrent ?? 0;
+      const bonus = forwarded(model, `class.${slug(x.name)}.level`);
+      x.levelWaiting = own ? 0 : bonus;
+      return own + (own ? bonus : 0);
+    };
     //
     // A bonus forwarded to `spheres.cl` (and .dc, .msb, .msd) lands beside the
     // typed one in the same line, kept apart so the box goes on saying what was
@@ -1502,9 +1584,18 @@ export function recomputeTraining(model) {
     m.dcForwarded = forwarded(model, 'spheres.dc');
     m.msbForwarded = forwarded(model, 'spheres.msb');
     m.msdForwarded = forwarded(model, 'spheres.msd');
-    m.globalCL = Math.max(0, amtFloor, ...casters.map(
+    //
+    // Casting is unlocked by a level in a casting class or by Advanced Magic
+    // Training. Before that, a bonus to caster level -- typed or forwarded --
+    // has nothing to raise, so it waits (`clWaiting`) rather than handing a
+    // caster level to a character who cannot cast.
+    const baseCL = Math.max(0, amtFloor, ...casters.map(
       (x) => Math.floor(effectiveLevels(x) * (TYPE_RATES[x.effectiveType] ?? 0)),
-    )) + (Number(m.clBonus) || 0) + m.clForwarded;
+    ));
+    m.castingUnlocked = amtFloor > 0 || acquired.length > 0;
+    const clPlus = (Number(m.clBonus) || 0) + m.clForwarded;
+    m.clWaiting = m.castingUnlocked ? 0 : clPlus;
+    m.globalCL = baseCL + (m.castingUnlocked ? clPlus : 0);
     m.globalDC = 10 + Math.floor(m.globalCL / 2) + bestMod + (Number(m.dcBonus) || 0)
       + m.dcForwarded;
     m.msb = Math.max(0, ...casters.map(effectiveLevels))
@@ -1541,7 +1632,7 @@ export function recomputeTraining(model) {
     // workbook cached. Taken a step at a time -- boon n is worth what it adds
     // on top of the n-1 below it -- so the steps add back up to the ladder
     // however they are split.
-    const castingClassCount = new Set(casters.map((x) => x.name)).size;
+    const castingClassCount = new Set(acquired.map((x) => x.name)).size;
 
     /**
      * A pool, split step by step between the two things it can become.
@@ -1598,10 +1689,15 @@ export function recomputeTraining(model) {
     m.traditionEssence = m.traditionPools.reduce((n, p) => n + p.essence, 0);
     m.castingClassCount = castingClassCount;
 
-    m.classSP = casters.map((x) => ({
-      name: x.name,
-      sp: Math.min(x.classLevels ?? 0, level) + mod(x.mod1) + (x.mod2 ? mod(x.mod2) : 0),
-    }));
+    // A class's spell points are its levels so far plus its casting modifier:
+    // the levels the character has now, not the ones planned (Wizard 1-5,
+    // Fighter 6-10, Wizard 11-20 is 5 wizard levels at 10th), and nothing at
+    // all for a class not taken yet. The same ability in both slots counts
+    // once, as `statMod` reads a slot everywhere else.
+    m.classSP = casters.map((x) => {
+      const own = casts(x) ? x.classLevelsCurrent ?? 0 : 0;
+      return { name: x.name, sp: own ? own + statMod(c, x.mod1, x.mod2) : 0 };
+    });
     m.totalSP = m.classSP.reduce((s, x) => s + x.sp, 0)
       + (Number(m.bonusSP) || 0) + m.traditionSP;
 
@@ -1638,9 +1734,10 @@ export function sphereTalentKnowledge(model, side, sideKey) {
     const row = t ? of(sphere) : null;
     if (row) row.names.push(t);
   };
+  // The same rows the tally counts, and no others.
   for (const cls of side?.classes || []) {
     if (cls.blendedMirror) continue;
-    for (const lv of cls.levels || []) put(lv.sphere, lv.talent);
+    for (const lv of cls.levels || []) if (rowCounts(lv)) put(lv.sphere, lv.talent);
   }
   for (const b of side?.bonusTalents || []) put(b.sphere, b.talent);
   for (const e of side?.tradition?.entries || []) put(e.sphere, e.talent);
@@ -1693,7 +1790,17 @@ export function sphereRanksBySkill(model) {
     unnamed: (sphere) => of(sphere).unnamed,
   };
 
-  model.trainingSkillRanks = (t.skillRanks || []).map((row) => {
+  // Every row of the table, not only the ones a workbook wrote. A character
+  // built here had no stored rows, so its sphere ranks never paid at all. A
+  // row nobody has touched is on at ×1, which is how the workbook read a
+  // blank cell; the rows are stored so the panel's switches have one to write.
+  if (!Array.isArray(t.skillRanks)) t.skillRanks = [];
+  for (const def of SPHERE_SKILL_RANKS) {
+    if (!t.skillRanks.some((row) => row?.skill === def.key)) {
+      t.skillRanks.push({ skill: def.key, enabled: true, multiplier: 1 });
+    }
+  }
+  model.trainingSkillRanks = t.skillRanks.map((row) => {
     const def = SPHERE_SKILL_RANKS.find((d) => d.key === row.skill);
     if (!def) return { ...row, talents: 0, requirement: '', state: 'unmet', current: 0 };
     const state = sphereSkillRequirement(def, check);
@@ -1853,7 +1960,10 @@ export function recomputeSphereRows(model) {
       const key = sphereForwardKey(row.sphere);
       const clForwarded = key ? forwarded(model, `${key}.cl`) : 0;
       const dcForwarded = key ? forwarded(model, `${key}.dc`) : 0;
-      const clPlus = cl.value + clForwarded;
+      // A sphere's own CL bonus waits with the global one until casting is
+      // unlocked (see recomputeTraining).
+      const unlocked = t.magic.castingUnlocked !== false;
+      const clPlus = unlocked ? cl.value + clForwarded : 0;
       return {
         ...row,
         talents: (t.magic.tally || {})[row.sphere] || 0,
@@ -1863,6 +1973,7 @@ export function recomputeSphereRows(model) {
         dcBonusError: dcPlus.error,
         clForwarded,
         dcForwarded,
+        clWaiting: unlocked ? 0 : cl.value + clForwarded,
         cl: t.magic.globalCL + clPlus,
         // A sphere's DC follows its caster level, so a CL bonus -- typed or
         // forwarded -- is worth half of itself here as well, as the global

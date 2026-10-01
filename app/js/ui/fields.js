@@ -11,6 +11,7 @@
  * See ui/rows.js for the same idea applied to rows of a list (`data-item`).
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
+import { numOrNull } from '../model/util.js';
 
 /**
  * `opts.list` points the cell at a `<datalist>`, the way `rows.itemText` does.
@@ -26,6 +27,33 @@ export function text(path, value, placeholder = '', opts = {}) {
 export function num(path, value, extra = '') {
   return `<input type="number" value="${Number(value) || 0}" data-set="${path}"
       data-kind="number" ${extra}>`;
+}
+
+/**
+ * A number that may be left blank: "a number, or blank to work it out".
+ *
+ * Every box of that kind on the sheet is this one control. It writes back a
+ * number or nothing (`number-or-null`, read by the element's `readControl`),
+ * and what it draws into the box is coerced the same way. A document edited
+ * by hand can hold a string where a number belongs, and a box that printed
+ * the stored value as it stood let that string into the page as markup. So
+ * anything that is not a finite number is drawn as blank.
+ *
+ * `binding` is the attribute that addresses the value, `data-set="…"` for a
+ * path or `data-item="…"` for a cell of a row, the way `rows.exprField`
+ * takes it. `auto` gives the box the dashed "worked out" look while it is
+ * blank. `extra` is trusted markup (min, max, disabled), never document text.
+ */
+export function autoNum(binding, value, {
+  placeholder = '', title = '', label = '', width = '', auto = false, extra = '',
+} = {}) {
+  const n = numOrNull(value);
+  const shown = n === null ? '' : String(n);
+  const look = auto ? ` class="autonum${shown === '' ? ' auto' : ''}"` : '';
+  return `<input type="number"${look} value="${shown}" ${binding} data-kind="number-or-null"${
+    placeholder === '' || placeholder == null ? '' : ` placeholder="${esc(placeholder)}"`}${
+    width ? ` style="width:${width}"` : ''}${title ? ` title="${esc(title)}"` : ''}${
+    label ? ` aria-label="${esc(label)}"` : ''}${extra ? ` ${extra}` : ''}>`;
 }
 
 /** A value that is read, not typed: same box as a field, but shown as derived. */

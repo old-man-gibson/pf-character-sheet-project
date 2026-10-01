@@ -155,7 +155,9 @@ function companionPlace(model, kind, index, sel) {
   return {
     tab: kind,
     sel: sel(p),
-    open: index
+    // Always brought into view, the first of a kind too: another may be the
+    // one showing, and the first used to be the one the jump could not reach.
+    open: (model.data[kind] || []).length > 1
       ? [`${attr('data-action', 'companion-select')}${attr('data-kind', kind)}${attr('data-index', index)}`]
       : null,
   };
@@ -379,6 +381,7 @@ function placeOf(model, ref) {
       const [list, i, field] = ref.slice('craftNumber:'.length).split('|');
       return { tab: 'crafting', sel: [item(list, i, field)] };
     }
+    case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 
@@ -394,7 +397,9 @@ function placeOf(model, ref) {
       if (!COMPANION_KINDS.includes(head)) return null;
       const list = d[head] || [];
       const later = a !== head ? list.findIndex((x) => String(x?.id) === a) : -1;
-      return later > 0
+      // Found by id wherever it now stands -- first in the list too, which is
+      // where a later companion lands once the one before it is removed.
+      return later >= 0
         ? companionField(model, head, later, b, c)
         : companionField(model, head, 0, a, b);
     }

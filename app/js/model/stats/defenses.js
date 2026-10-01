@@ -24,7 +24,7 @@ import {
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
 import { resolveSaveBonuses } from './saves.js';
-import { resolveBonusBlock } from '../util.js';
+import { resolveBonusBlock, resolveNumberField } from '../util.js';
 
 /**
  * Resolve the typed save and AC bonuses before anything reads them.
@@ -94,15 +94,10 @@ export function resolveDefenceText(model) {
   const hp = c.hp;
   if (hp) {
     const raw = hp.deathBonus;
-    hp.deathBonusError = null;
-    if (typeof raw === 'string' && raw.trim() !== '') {
-      try {
-        hp.deathBonusResolved = Math.trunc(Number(evaluateFormula(raw, model.scope())) || 0);
-      } catch (err) {
-        hp.deathBonusResolved = 0;
-        hp.deathBonusError = err.message;
-      }
-    } else hp.deathBonusResolved = Number(raw) || 0;
+    const formula = typeof raw === 'string' && raw.trim() !== '';
+    const { value, error } = resolveNumberField(formula ? model.scope() : null, raw);
+    hp.deathBonusResolved = value;
+    hp.deathBonusError = error;
   }
 
   if (!d) return;
@@ -192,12 +187,36 @@ export function sizeNow(model) {
  * change to each modifier; `byKey` the ability-borne share of every key in
  * `delta`, zero for the ones no ability reaches.
  */
+/**
+ * The ability slots each headline number is built on, whose movement reaches
+ * it. The one list: `abilityMoves` sums by it, and the breakdown names its
+ * "through Dex" line by it, so the label cannot say Dex while the sum read
+ * Wisdom.
+ */
+export function abilitySlots(c) {
+  const mode = (key) => c.attack.modes?.[key] || {};
+  const atk = (key) => [mode(key).stat1, mode(key).stat2];
+  const sv = (key) => [c.saves[key]?.stat1, c.saves[key]?.stat2];
+  const ac = [c.defenses.acStat1, c.defenses.acStat2];
+  return {
+    melee: atk('melee'), altMelee: atk('altMelee'), ranged: atk('ranged'), altRanged: atk('altRanged'),
+    cmb: atk('cmb'), altCmb: atk('altCmb'),
+    ac, touch: ac, flatFooted: c.defenses.uncannyDodge ? ac : [],
+    // CMD adds both; flat-footed keeps the Strength and any Dexterity penalty.
+    cmd: ['Str', 'Dex'], ffCmd: ['Str', 'Dex'],
+    fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
+    // Initiative follows whatever ability its row names, Dex by default.
+    initiative: [c.hp.initAbility || 'Dex', c.hp.initAbility2],
+    hp: [],
+  };
+}
+
 export function abilityMoves(c, totals) {
   const deltas = {};
   const scores = {};
   for (const key of ABILITIES) {
     const a = c.abilities[key];
-    const base = Number(a?.tempScore) || 0;
+    const base = Number(a?.workingScore ?? a?.tempScore) || 0;
     let score = base + (totals.ability[key] || 0);
     if (totals.abilitySet[key] !== undefined) score = Math.min(score, totals.abilitySet[key]);
     score = Math.max(0, score);
@@ -215,10 +234,15 @@ export function abilityMoves(c, totals) {
   const dexMod = Number(c.abilities.dex?.totalMod) || 0;
   const dexAfter = dexMod + (deltas.dex || 0);
   const cmdDexDelta = (totals.losesDex ? Math.min(0, dexAfter) : dexAfter) - dexMod;
+  // CMD adds Strength as well as Dexterity, so Bull's Strength moves it as
+  // it moves CMB, and fatigued takes one from each. Flat-footed CMD has no
+  // Dexterity bonus to lose, only a penalty to gain.
+  const strDelta = deltas.str || 0;
+  const ffCmdDexDelta = Math.min(0, dexAfter) - Math.min(0, dexMod);
 
-  const mode = (key) => c.attack.modes?.[key] || {};
-  const atk = (key) => slot(mode(key).stat1, mode(key).stat2);
-  const sv = (key) => slot(c.saves[key]?.stat1, c.saves[key]?.stat2);
+  const slots = abilitySlots(c);
+  const atk = (key) => slot(...slots[key]);
+  const sv = (key) => slot(...slots[key]);
   return {
     deltas,
     scores,
@@ -226,10 +250,9 @@ export function abilityMoves(c, totals) {
       melee: atk('melee'), altMelee: atk('altMelee'), ranged: atk('ranged'), altRanged: atk('altRanged'),
       cmb: atk('cmb'), altCmb: atk('altCmb'),
       ac: acAbilityDelta, touch: acAbilityDelta, flatFooted: c.defenses.uncannyDodge ? acAbilityDelta : 0,
-      cmd: cmdDexDelta, ffCmd: 0,
+      cmd: strDelta + cmdDexDelta, ffCmd: strDelta + ffCmdDexDelta,
       fortitude: sv('fortitude'), reflex: sv('reflex'), will: sv('will'),
-      // Initiative follows whatever ability its row names, Dex by default.
-      initiative: slot(c.hp.initAbility || 'Dex', c.hp.initAbility2),
+      initiative: slot(...slots.initiative),
       hp: 0,
     },
   };
@@ -320,13 +343,17 @@ export function conditionState(model) {
   const effSteps = clampSteps(baseIdx + trueSteps, sizeRows.sizeEffective.up + sizeRows.sizeEffective.down);
   const sizeSteps = trueSteps + effSteps;
   if (trueSteps) {
+    // The move is the size modifier's own change, not one a step: the table
+    // doubles past Small and Large (Tiny +2, Diminutive +4; Huge −2), which is
+    // what Size Change means by "doubled when moving to or from Diminutive".
+    const move = (SIZE_MODIFIERS[ladder[baseIdx + trueSteps]] ?? 0) - (SIZE_MODIFIERS[ladder[baseIdx]] ?? 0);
     buffsOn.push({
       name: 'Size',
       info: {
         key: 'buff:size',
         label: `${trueSteps > 0 ? `${trueSteps} size larger` : `${-trueSteps} size smaller`}`,
         mods: {
-          attack: -trueSteps, ac: -trueSteps, cmb: 2 * trueSteps, cmd: trueSteps,
+          attack: move, ac: move, cmb: -2 * move, cmd: -move,
         },
       },
       count: 1,
@@ -356,9 +383,10 @@ export function conditionState(model) {
     // outright -- so blinded is −2 to both, and a flat-footed character's
     // lost Dexterity comes off both.
     cmd: via.cmd + mods.cmd + totals.acPenalty,
-    // Flat-footed CMD has no Dexterity in it to lose, so it takes everything
-    // else: what a condition says about CMD outright, and every AC penalty.
-    ffCmd: mods.cmd + totals.acPenalty,
+    // Flat-footed CMD has no Dexterity bonus in it to lose, so it takes
+    // everything else: its Strength (and any Dexterity penalty), what a
+    // condition says about CMD outright, and every AC penalty.
+    ffCmd: via.ffCmd + mods.cmd + totals.acPenalty,
     fortitude: sv('fortitude'),
     reflex: sv('reflex'),
     will: sv('will'),
@@ -482,13 +510,26 @@ export function tempHpGrant(model) {
   return { granted, spent, left: granted - spent };
 }
 
+/**
+ * Hit points as they stand now.
+ *
+ * `current` and `max` are what the character has at this moment: a negative
+ * level takes 5 from both ("-5 current and total hit points"), and a buff that
+ * raises the maximum raises what is left with it, as a higher Constitution
+ * does. The stored figure is the undrained one -- `baseCurrent`, against
+ * `baseMax` -- so damage and healing move it, and the 5 come back with the
+ * level. Being out, dying and dead read the figure as it stands now.
+ */
 export function hpState(model) {
   const hp = model.data.hp;
-  const max = model.hpMax;
-  if (hp.current === undefined || hp.current === null) hp.current = max;
+  const baseMax = model.hpMax;
+  if (hp.current === undefined || hp.current === null) hp.current = baseMax;
   if (hp.temp === undefined || hp.temp === null) hp.temp = 0;
   if (hp.nonlethal === undefined || hp.nonlethal === null) hp.nonlethal = 0;
-  const current = Number(hp.current) || 0;
+  const baseCurrent = Number(hp.current) || 0;
+  const shift = Number(conditionState(model).delta.hp) || 0;
+  const max = Math.max(0, baseMax + shift);
+  const current = baseCurrent + shift;
   const typedTemp = Number(hp.temp) || 0;
   const grant = tempHpGrant(model);
   const temp = typedTemp + grant.left;
@@ -499,13 +540,16 @@ export function hpState(model) {
   // it stays tied to Con and moves when Con does. The threshold takes a
   // formula and a forwarded bonus alike, so the rule that moves it can be
   // written where the rule is.
-  const conScore = model.data.abilities.con?.tempScore ?? 10;
+  const conScore = model.data.abilities.con?.workingScore ?? model.data.abilities.con?.tempScore ?? 10;
   const deathBonus = (Number(hp.deathBonusResolved ?? hp.deathBonus) || 0)
     + forwarded(model, 'hp.deathBonus');
   const deathAt = -(conScore + deathBonus);
   return {
     max,
     current,
+    baseMax,
+    baseCurrent,
+    shift,
     temp,
     typedTemp,
     tempGranted: grant.granted,
@@ -543,41 +587,27 @@ function spendTemp(model, want) {
 export function takeDamage(model, amount, { nonlethal = false } = {}) {
   const hp = model.data.hp;
   const state = model.hpState;
-  let left = Math.max(0, Number(amount) || 0);
+  // Whole points, rounded down, as the Quick actions card and companions
+  // take them: 2.5 damage is 2.
+  let left = Math.max(0, Math.floor(Number(amount) || 0));
   if (nonlethal) {
     hp.nonlethal = state.nonlethal + left;
   } else {
     left -= spendTemp(model, left);
-    hp.current = state.current - left;
+    hp.current = state.baseCurrent - left;
   }
   model.recompute();
   return model;
 }
 
+// Healing stops at the maximum. The stored figure is the undrained one, so it
+// stops at the undrained maximum, which is the same point as it stands now.
 export function healDamage(model, amount) {
   const hp = model.data.hp;
   const state = model.hpState;
-  const n = Math.max(0, Number(amount) || 0);
-  hp.current = Math.min(state.max, state.current + n);
+  const n = Math.max(0, Math.floor(Number(amount) || 0));
+  hp.current = Math.min(state.baseMax, state.baseCurrent + n);
   hp.nonlethal = Math.max(0, state.nonlethal - n);
-  model.recompute();
-  return model;
-}
-
-/** Full rest: back to maximum, temporary and nonlethal cleared. */
-export function restoreAll(model) {
-  const hp = model.data.hp;
-  hp.current = model.hpMax;
-  hp.temp = 0;
-  // The granted pool comes back full too: what was spent of it is play state
-  // and rests with everything else.
-  hp.tempSpent = 0;
-  hp.nonlethal = 0;
-  // Back to the resting point: nothing spent, or the neutral 0 of a two-sided
-  // meter -- but never outside the tracker's own range.
-  for (const t of model.trackers) {
-    t.current = Math.max(Number(t.min) || 0, Math.min(Number(t.max) || 0, 0));
-  }
   model.recompute();
   return model;
 }
@@ -656,31 +686,13 @@ export function applyHealing(model, amount) {
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   if (!n) return { healed: 0 };
   const hp = model.data.hp;
-  const max = model.hpState.max;
+  const max = model.hpState.baseMax;
   const before = Number(hp.current) || 0;
   hp.current = Math.min(max, before + n);
   hp.nonlethal = Math.max(0, (Number(hp.nonlethal) || 0) - n);
   model.recompute();
   emit(model, { type: 'quick-action', action: 'heal', amount: n });
   return { healed: hp.current - before };
-}
-
-/**
- * A night's rest: every tracker whose refresh reads as daily -- "Daily",
- * "per day", "on rest", "at dawn" -- goes back to unspent (a two-sided
- * meter to its zero mark). Hit points, spell slots and pools with other
- * rhythms keep their own rules and are the player's to move.
- * Returns how many trackers moved.
- */
-export function restRefresh(model) {
-  let count = 0;
-  for (const t of model.trackers) {
-    if (!/daily|day|rest|dawn|morning|night/i.test(String(t.refresh || ''))) continue;
-    if ((Number(t.current) || 0) !== 0) { t.current = 0; count++; }
-  }
-  if (count) model.recompute();
-  emit(model, { type: 'quick-action', action: 'rest', count });
-  return count;
 }
 
 /**

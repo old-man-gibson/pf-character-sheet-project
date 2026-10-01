@@ -191,9 +191,18 @@ export function bindSessionBoard(root, model, render) {
       if (command === 'group-add') group.selectedId = id;
       model.markUndo('Added session choice'); update(next); return;
     }
+    // Giving an action back and starting the turns over are play, one step
+    // each on the Undo button; the rest of these are edits to the board.
+    if (command === 'restore' || command === 'reset') {
+      const name = ACTION_TYPES.find(([k]) => k === key)?.[1]?.toLowerCase() || key;
+      model.play(command === 'reset' ? 'Reset turns' : `${name} given back`, () => {
+        if (command === 'restore') state.spent[key] = Math.max(0, (Number(state.spent[key]) || 0) - 1);
+        else Object.assign(state, { spent: {}, pendingSwift: 0, turn: 1, onTurn: true, pendingFollowups:[] });
+        model.set('session', state);
+      });
+      render(); return;
+    }
     model.markUndo(`Session: ${command}`);
-    if (command === 'restore') state.spent[key] = Math.max(0, (Number(state.spent[key]) || 0) - 1);
-    if (command === 'reset') Object.assign(state, { spent: {}, pendingSwift: 0, turn: 1, onTurn: true, pendingFollowups:[] });
     if (command === 'add') {
       state.folded[`card:${state.cards.length}`] = false;
       state.folded[`editor:${state.cards.length}`] = false;

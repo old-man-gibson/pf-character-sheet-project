@@ -21,8 +21,8 @@ import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
-import { poolHasUtility, poolSystems, talentLandsOn } from '../../model.js';
-import { formulaMeta, isDraining, meterStyleButton, meterStyleEditor, meterVisual, trackerVisual } from './trackers.js';
+import { plannerHasClass, poolHasUtility, poolSystems, stackingNote, talentLandsOn } from '../../model.js';
+import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
 
 /**
@@ -101,7 +101,7 @@ import {
   THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
 } from '../../tracker-style.js';
 import { WEAPON_MODE_KEYS } from '../../roll20.js';
-import { abilitySelect, area, check, num, roField, roValue, select, text } from '../fields.js';
+import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
   itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
@@ -149,7 +149,7 @@ export function renderOverviewPanel(model, ctx) {
     // what is left once the offering owed today is paid.
     const w = model.wealthView();
     const n = (x) => Number(x || 0).toLocaleString('en-US');
-    return bigStat(esc(w.currency), n(w.current), w.due && w.expected.total
+    return bigStat(w.currency, n(w.current), w.due && w.expected.total
       ? `after offering ${n(w.after)}` : (w.due ? 'nothing owed' : 'on hand'));
   })()}
         </div>
@@ -271,7 +271,9 @@ function dashDefaultCards(model) {
     const out = ['quick', 'resources', 'conditions', 'buffs'];
     if (on('vancian')) out.push('vancian');
     if (on('psionics')) out.push('psionics');
-    if (on('combat') && model.data.training?.magic) out.push('spheres');
+    // Keyed by tab: the old single combat tab is two now, and asking for it
+    // meant the casting card was never added for anyone.
+    if (on('magic') && model.data.training?.magic) out.push('spheres');
     out.push('offense', 'defense', 'abilities', 'speed', 'skills', 'effects');
     return out;
   }
@@ -383,7 +385,7 @@ function dashCondNumbers(model) {
       if (t.mods[key]) bits.push(`${label} ${fmt(t.mods[key])}`);
     }
     for (const key of ABILITIES) {
-      const base = Number(model.data.abilities[key]?.tempScore) || 0;
+      const base = Number(model.data.abilities[key]?.workingScore ?? model.data.abilities[key]?.tempScore) || 0;
       let score = base + (t.ability[key] || 0);
       if (t.abilitySet[key] !== undefined) score = Math.min(score, t.abilitySet[key]);
       score = Math.max(0, score);
@@ -547,15 +549,7 @@ function buffsPanel(model, ctx) {
 function dashResourcesCard(model) {
     const trackers = model.trackers;
     const row = (t) => {
-      const max = Number(t.max) || 0;
-      const min = Number(t.min) || 0;
-      const cur = Number(t.current) || 0;
-      const draining = isDraining(t);
-      const twoSided = min < 0;
-      const shown = draining ? max - cur : cur;
-      const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
-      const range = min === 0 ? `/ ${max}`
-        : (twoSided && min === -max) ? `/ ±${max}` : `/ ${signed(min)}…${signed(max)}`;
+      const { shown, range, draining } = trackerReading(t);
       return `<div class="dashtracker${t.error ? ' invalid' : ''}">
         <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
         <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
@@ -773,6 +767,20 @@ function dashEffectsCard(model) {
 
   /** Damage, healing and the night's rest, one field and three buttons. */
 /**
+ * The three rests, as the Quick actions card and the hit-point panel both
+ * offer them. Each brings back what lasts that long and takes in the shorter
+ * ones (model/rest.js), and each is one step of undo.
+ */
+function restButtons() {
+  return `<button data-action="rest-encounter"
+      title="Trackers that come back after an encounter">End encounter</button>
+    <button data-action="rest-day"
+      title="Hit points to full, temporary and nonlethal cleared; daily and encounter trackers, spell slots, power points, temporary essence and companions' hit points back">New day</button>
+    <button data-action="rest-week"
+      title="A new day, and weekly trackers back as well">New week</button>`;
+}
+
+/**
  * Quick actions: the four buttons a table presses every round, and the one
  * reading they are all about.
  *
@@ -786,9 +794,8 @@ function dashEffectsCard(model) {
  */
 function dashQuickCard(model, ctx) {
     const hp = model.hpState;
-    const cs = model.conditionState;
-    const maxNow = cs.changed && cs.delta.hp ? cs.adjusted.hp : hp.max;
-    const curNow = Math.min(hp.current, maxNow);
+    const maxNow = hp.max;
+    const curNow = hp.current;
     const signed = (n) => String(n).replace('-', '−');
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
     const fig = (label, value, title, cls = '') => `<span class="dashhpfig${cls ? ` ${cls}` : ''}"
@@ -802,7 +809,7 @@ function dashQuickCard(model, ctx) {
       ${meterVisual(model.meterSpec('hp'))}
       <div class="dashhp">
         ${fig('HP', `<strong class="${curNow < maxNow ? 'bad' : ''}">${curNow}</strong>/${maxNow}`,
-    maxNow === hp.max ? 'Current over maximum' : `Base ${hp.current}/${hp.max} — negative levels reduce current and total alike`)}
+    hp.shift ? `Base ${hp.baseCurrent}/${hp.baseMax} — negative levels and buffs move current and total alike` : 'Current over maximum')}
         ${fig('Temp', hp.temp || '—', hp.tempGranted
     ? `${hp.typedTemp} of your own, ${hp.tempGrantLeft} left of ${hp.tempGranted} a rule grants. Damage spends these first.`
     : 'Temporary hit points. Damage spends these first, and they do not stack — the best one applies.')}
@@ -822,8 +829,7 @@ function dashQuickCard(model, ctx) {
         <button data-action="quick-temp"
           title="Grant temporary hit points. They do not stack — the better of what you have and what you are given is what you keep.">+ Temp</button>
         <span class="dashsep" aria-hidden="true"></span>
-        <button data-action="quick-rest"
-          title="Every tracker with a daily refresh goes back to unspent. Slots and pools with other rhythms are yours to move.">Rest</button>
+        ${restButtons()}
       </div>
       <p class="hint">Type an amount, then press what happened to it. The strip above follows along.</p>
     </section>`;
@@ -922,7 +928,7 @@ function dashAbilitiesCard(model) {
     const cs = model.conditionState;
     const row = (k) => {
       const a = c.abilities[k] || {};
-      const baseScore = Number(a.tempScore) || 0;
+      const baseScore = Number(a.workingScore ?? a.tempScore) || 0;
       const score = cs.changed ? (cs.scores[k] ?? baseScore) : baseScore;
       // The same sum the d20 copy rolls: the ability's own movement plus the
       // flat penalty on ability checks (a negative level's, say).
@@ -1140,7 +1146,7 @@ function detailsPanel(model) {
         ${field('Height', text('identity.height', c.identity.height), 'col3')}
         ${field('Weight', text('identity.weight', c.identity.weight), 'col3')}
         ${field('Mythic path', text('identity.mythicPath', c.identity.mythicPath), 'col3')}
-        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${c.identity.mythicTier ?? 0}</span>`, 'col3')}
+        ${field('Mythic tier (auto)', `<span class="value" title="From level; override on Feats & Mythic">${esc(c.identity.mythicTier ?? 0)}</span>`, 'col3')}
         ${field('Portrait URL', text('identity.image', c.identity.image, 'https://…'), 'wide')}
       </div>
       ${characterColorRow(c.identity.color)}
@@ -1333,7 +1339,7 @@ function abilityScoresPanel(model) {
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
+              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
               : built
                 ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
@@ -1450,7 +1456,7 @@ function defenceBox(model, key, label, example) {
       if (!f) continue;
       for (const x of f.from) {
         froms.push(`${fmt(x.value)} to ${name} from ${x.where}`
-          + `${x.counts ? '' : `  (does not stack with the other ${x.type})`}`);
+          + stackingNote(x));
       }
     }
     return `<div class="statline">
@@ -1542,10 +1548,9 @@ function attackPanel(model) {
     const why = over == null
       ? `From the Classes table: the best BAB progression among the classes on each level, summed and floored. Type a number to override it.`
       : `Pinned at ${over}. The Classes table comes to ${base}; clear the box to go back to that.`;
-    return lineHtml('Base attack bonus', `<input type="number"
-      class="autonum${over == null ? ' auto' : ''}" value="${over ?? ''}" placeholder="${base}"
-      data-set="attack.babOverride" data-kind="number-or-null" style="width:4.2rem"
-      title="${esc(why)}" aria-label="Base attack bonus">`);
+    return lineHtml('Base attack bonus', autoNum('data-set="attack.babOverride"', over, {
+      auto: true, placeholder: base, width: '4.2rem', title: why, label: 'Base attack bonus',
+    }));
   })()}
       ${editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
       ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from ${cs.sources}.</p>` : ''}
@@ -1822,7 +1827,7 @@ function classesPanel(model, ctx) {
           <col class="ranks"><col class="arch"><col class="sys"><col class="tools"></colgroup>
         <thead><tr>
           <th>Class</th>
-          <th class="num" title="How many of the character's levels feature this class in the Planner; type a number to override">Levels</th>
+          <th class="num" title="How many of the character's levels this class has: the Planner's rows that name it, or every level when the Planner does not name it. Saves, hit points, BAB and casting all count this. Type a number to override">Levels</th>
           <th class="num">HD</th>
           <th title="Base attack progression — the best one on each level is what the character's BAB is built from">BAB</th>
           <th class="mid" title="Good Fortitude">Fort</th><th class="mid" title="Good Reflex">Ref</th><th class="mid" title="Good Will">Will</th>
@@ -1831,17 +1836,22 @@ function classesPanel(model, ctx) {
           <th title="The sub-systems this class uses (Spheres, Path of War, psionics…)">Systems</th><th></th>
         </tr></thead>
         <tbody>${c.classes.map((x, i) => {
-          const auto = Number(x.gestaltLevels) || 0;
           const over = x.levelsOverride == null ? null : Number(x.levelsOverride);
+          // What the box goes back to when cleared: the Planner's rows, or
+          // every level when the Planner never names the class.
+          const planned = Array.from({ length: level }, (_, l) => plannerHasClass(model, x.name, l + 1)).filter(Boolean).length;
+          const auto = planned || level;
+          const from = planned
+            ? `the Planner features it on ${planned} of ${level} level${level === 1 ? '' : 's'}`
+            : `the Planner does not name it, so it runs every level (${level})`;
           const why = over == null
-            ? `Featured on ${auto} of ${level} level${level === 1 ? '' : 's'} in the Planner. Type a number to override it.`
-            : `Pinned at ${over}. The Planner features it on ${auto} of ${level}; clear the box to go back to that.`;
+            ? `${from[0].toUpperCase()}${from.slice(1)}. Type a number to override it.`
+            : `Pinned at ${over}. Cleared, ${from}.`;
           return `<tr>
           <td data-stack="name">${itemText('classes', i, 'name', x.name)}</td>
-          <td class="num" data-label="Levels" data-inline="spec"><input type="number" class="autonum${over == null ? ' auto' : ''}"
-            value="${over ?? ''}" placeholder="${auto}" title="${esc(why)}"
-            data-item="classes|${i}|levelsOverride" data-kind="number-or-null"
-            aria-label="Levels of ${esc(x.name || 'this class')}"></td>
+          <td class="num" data-label="Levels" data-inline="spec">${autoNum(`data-item="classes|${i}|levelsOverride"`, over, {
+    auto: true, placeholder: auto, title: why, label: `Levels of ${x.name || 'this class'}`,
+  })}</td>
           <td class="num" data-label="Hit die" data-inline="spec">${progressionSelect(i, 'hd', x.hd,
     HIT_DICE.map((d) => [d, `d${d}`]), `Hit die for ${x.name || 'this class'}`, (d) => `d${d}`,
     { count: x.gestaltBeaten?.hd, levels: x.gestaltBeaten?.levels, noun: 'hit die' })}</td>
@@ -1880,7 +1890,7 @@ function classesPanel(model, ctx) {
         <div class="statline"><span class="label">Base attack bonus${gestalt ? ' (gestalt)' : ''}</span>
           <span class="value" title="${esc(`${g.babPerLevel ?? 0} per-level progression, summed and floored once${
     c.attack?.babOverride == null ? '' : `. Pinned at ${c.attack.babOverride} on the Attack panel`}`)}"
-            >+${g.bab ?? 0}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${c.attack.babOverride}</span>`}</span></div>
+            >+${esc(g.bab ?? 0)}${c.attack?.babOverride == null ? '' : ` <span class="badge">pinned +${esc(c.attack.babOverride)}</span>`}</span></div>
         <div class="statline"><span class="label">HP / level${gestalt ? ' (best HD)' : ''}</span>
           <span class="value">d${g.hpPerLevel || 0}</span></div>
         <div class="statline"><span class="label">Hit points from these classes</span>
@@ -2039,9 +2049,11 @@ function hitPointsPanel(ctx, model) {
       ${meterVisual(model.meterSpec('hp'))}
       ${meterStyleEditor(model, ctx, 'hp')}
       <div class="hprow">
-        ${num('hp.current', hp.current)}<span class="hpsep">/</span>
-        <span class="value" title="The maximum the class table comes to, plus anything forwarded here">${hp.max}</span>
+        ${num('hp.current', hp.baseCurrent)}<span class="hpsep">/</span>
+        <span class="value" title="The maximum the class table comes to, plus anything forwarded here">${hp.baseMax}</span>
         ${hp.temp > 0 ? `<span class="hptemp" title="Temporary hit points, spent first">+${hp.temp}</span>` : ''}
+        ${hp.shift ? `<span class="hint" title="Negative levels take 5 from current and total hit points each, and a buff to the maximum adds to both; the figures in the box come back when they end."
+          >now ${hp.current}/${hp.max}</span>` : ''}
       </div>
       ${hpBuild(model)}
       ${model.forwardedInto('hp.total')
@@ -2074,12 +2086,13 @@ function hitPointsPanel(ctx, model) {
         <button data-hp="damage" class="danger">Damage</button>
         <button data-hp="nonlethal">Nonlethal</button>
         <button data-hp="heal">Heal</button>
-        <button data-hp="rest" class="primary">Rest</button>
       </div>
+      <div class="hpactions">${restButtons()}</div>
       <p class="hint">Damage spends temporary hit points first. Death comes at
         −(Con ${hp.deathBonus ? `+ ${hp.deathBonus} ` : ''}), so the threshold moves
-        with Con; raise it for Death's Door and the like. “Rest” restores everything
-        and resets all trackers.</p>
+        with Con; raise it for Death's Door and the like. End encounter, New day and
+        New week each bring back what lasts that long, and each takes in the shorter
+        ones; all three can be undone.</p>
     </section>`;
   }
 

@@ -25,7 +25,7 @@
 import { runtime } from './extension-runtime.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
-  describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter,
+  describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter, mergeSphere, catalogueEntryKey,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
 import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
@@ -691,7 +691,12 @@ Hit Die: d12.
     return n;
   }
 
-  /** File the spheres that were ticked; one of the same name is replaced. */
+  /**
+   * File the spheres that were ticked. One the pack already has is joined
+   * talent by talent (`mergeSphere`), the way two packs carrying it are
+   * merged on load: a talent of the same name is the new paste's, and the
+   * ones it does not mention stay. It used to replace the sphere outright.
+   */
   function applySpheres() {
     const { result, skeep, ssec } = paste;
     let n = 0;
@@ -711,7 +716,7 @@ Hit Die: d12.
       };
       const list = spheres();
       const at = list.findIndex((x) => lower(x.name) === lower(kept.name));
-      if (at === -1) list.push(kept); else list[at] = kept;
+      if (at === -1) list.push(kept); else list[at] = mergeSphere(list[at], kept);
       n++;
     });
     return n;
@@ -731,14 +736,18 @@ Hit Die: d12.
    * The paste panel was built when a paste meant a page and a page meant
    * blocks, so a document of feats read here found its feats and then had
    * nowhere to put them -- only `scrape-pack.mjs` ever wrote these tables. A
-   * PDF is mostly this kind of thing, so they are filed here the way that
-   * tool files them: by name, a later one replacing an earlier of the same.
+   * PDF is mostly this kind of thing, so they are filed here the way packs
+   * are merged on load (mergeTables): a later one replacing an earlier of the
+   * same. A feat, spell or power is the same by name; a reference entry by its
+   * name and whose it is (`catalogueEntryKey`), so two classes' options of one
+   * name stay two entries rather than the second erasing the first.
    */
   function applyCatalogues() {
     const { result } = paste;
     let n = 0;
-    const upsert = (list, item) => {
-      const at = list.findIndex((x) => lower(x.name) === lower(item.name));
+    const byName = (x) => lower(x?.name);
+    const upsert = (list, item, key = byName) => {
+      const at = list.findIndex((x) => key(x) === key(item));
       if (at === -1) list.push(item); else list[at] = item;
       n++;
     };
@@ -756,7 +765,7 @@ Hit Die: d12.
         if (!kind) continue;
         let group = groups.find((g) => lower(g.kind) === lower(kind));
         if (!group) { group = { kind, entries: [] }; groups.push(group); }
-        upsert(group.entries, entry);
+        upsert(group.entries, entry, catalogueEntryKey);
       }
     }
     return n;

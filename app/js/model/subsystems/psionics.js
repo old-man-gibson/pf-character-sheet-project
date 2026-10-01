@@ -6,7 +6,7 @@
  * looked up.
  */
 
-import { statMod } from '../../rules.js';
+import { abilityKey, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { forwarded } from '../scope.js';
 import { closestName, manifesterForwardKey } from '../util.js';
@@ -38,8 +38,13 @@ export function psionicCurveTotals() {
   return PSIONIC_TABLES.curves.map((c) => c.total);
 }
 
-/** The curve reaching `total` at level 20. */
+/**
+ * The curve reaching `total` at level 20. None chosen is no curve at all, not
+ * the curve that reaches 0: `Number(null)` is 0, and that used to hand a class
+ * nobody had set up the non-manifesting curve and its ability share with it.
+ */
 export function psionicCurve(total) {
+  if (total === null || total === undefined || String(total).trim() === '') return null;
   const want = Number(total);
   if (!Number.isFinite(want)) return null;
   return PSIONIC_TABLES.curves.find((c) => c.total === want) || null;
@@ -79,11 +84,11 @@ export function psionicClassTotal(name) {
 export const PSIONIC_DERIVED = [
   'calc',
   // The whole Power Points panel was formulas; only the bonus line was typed.
-  'pool', 'left',
+  'pool', 'left', 'spentNow',
   {
     path: 'classes',
     keys: ['plannerLevel', 'manifesterLevel', 'manifesterLevelBase', 'manifesterLevelForwarded',
-      'curveKnown', 'basePoints',
+      'manifesterLevelWaiting', 'levelClass', 'curveKnown', 'basePoints',
       'abilityPoints', 'points', 'powerCount'],
   },
 ];
@@ -213,7 +218,8 @@ export function recomputePsionics(model) {
   for (const c of p.classes || []) {
     // Manifester level is levels of the class, counted off the Planner the way
     // the sheet's COUNTIF did, unless a block pins it.
-    const fromProgression = model.classLevelCount(c.name);
+    c.levelClass = model.blockClassName(c.name);
+    const fromProgression = model.classLevelCount(c.levelClass);
     const pinned = c.manifesterLevelOverride;
     const level = Math.max(0, Math.min(20,
       pinned === null || pinned === undefined
@@ -225,7 +231,10 @@ export function recomputePsionics(model) {
     const key = manifesterForwardKey(c);
     c.manifesterLevelBase = level;
     c.manifesterLevelForwarded = key ? forwarded(model, key) : 0;
-    c.manifesterLevel = Math.max(0, level + c.manifesterLevelForwarded);
+    // A class with no levels yet cannot manifest: the bonus waits for its
+    // first level (`manifesterLevelWaiting`).
+    c.manifesterLevelWaiting = level ? 0 : c.manifesterLevelForwarded;
+    c.manifesterLevel = Math.max(0, level + (level ? c.manifesterLevelForwarded : 0));
 
     const base = psionicPoints(c.curveTotal, level);
     c.curveKnown = psionicCurve(c.curveTotal) !== null;
@@ -234,8 +243,11 @@ export function recomputePsionics(model) {
     // so it earns no ability share either. The sheet gated the whole sum the
     // same way, and showing a share of points that are not in the pool would
     // only invite adding it up by hand and getting a different answer.
+    // The same ability in both slots counts once, as `statMod` reads a slot
+    // everywhere else: Int and Int is Int, not twice its bonus points.
+    const same = abilityKey(c.stat) !== '' && abilityKey(c.stat) === abilityKey(c.stat2);
     c.abilityPoints = base === null ? 0
-      : Math.floor((oneStat(c.stat) * level) / 2) + Math.floor((oneStat(c.stat2) * level) / 2);
+      : Math.floor((oneStat(c.stat) * level) / 2) + (same ? 0 : Math.floor((oneStat(c.stat2) * level) / 2));
     c.points = base === null ? 0 : Math.max(0, base + c.abilityPoints);
     c.powerCount = (c.powers || []).filter((x) => x.name).length;
     pool += c.points;
@@ -243,10 +255,13 @@ export function recomputePsionics(model) {
 
   p.bonusPoints = Math.max(0, Math.floor(Number(p.bonusPoints) || 0));
   p.pool = pool + p.bonusPoints;
-  // Points spent today. The player's, so it is kept -- but never more than the
-  // pool holds, or a class that shrinks would leave the pool overdrawn.
-  p.spent = Math.max(0, Math.min(p.pool, Math.floor(Number(p.spent) || 0)));
-  p.left = p.pool - p.spent;
+  // Points spent today. The player's, so it is kept as spent, and only what
+  // is shown is held to the pool as it stands (`spentNow`, `left`). It used to
+  // be cut down to fit, so a pool that shrank for a moment came back with the
+  // difference unspent, and was saved that way.
+  p.spent = Math.max(0, Math.floor(Number(p.spent) || 0));
+  p.spentNow = Math.min(p.pool, p.spent);
+  p.left = p.pool - p.spentNow;
   p.calc = {
     classes: (p.classes || []).length,
     powers: (p.classes || []).reduce((n, c) => n + (c.powerCount || 0), 0),

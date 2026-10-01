@@ -11,7 +11,7 @@
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
-  statMod,
+  abpGroupTotal, resolveAbility, statMod,
 } from '../rules.js';
 import {
   COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
@@ -170,7 +170,7 @@ export function characterScope(model) {
       // The threshold and where it sits, so "within 5 of death" can be
       // written down rather than worked out by hand at every level.
       deathBonus,
-      death: -((Number(c.abilities.con?.tempScore) || 10) + deathBonus),
+      death: -((Number(c.abilities.con?.workingScore ?? c.abilities.con?.tempScore) || 10) + deathBonus),
     },
     mythic: { tier: Number(c.identity.mythicTier) || 0 },
     // The size as it stands, true-size buffs included -- {size} follows an
@@ -306,11 +306,18 @@ export function characterScope(model) {
     // Many veils scale something other than their DC off what is invested
     // in them, so these have to be readable from a formula.
     essence: essenceScope(model),
+    // And off the veilweaving level, which the Akashic tab works out (see
+    // applyVeilweaving): the level, the modifier, and the base DC before essence.
+    veilweaving: {
+      level: Number(c.akashic?.veilweaving?.level) || 0,
+      mod: Number(c.akashic?.veilweaving?.mod) || 0,
+      dc: Number(c.akashic?.baseDC) || 0,
+    },
     // The day's power points, for the same reason: a psionic power that scales
     // off the pool should be able to say so rather than restate the number.
     pp: {
       pool: Number(c.psionics?.pool) || 0,
-      spent: Number(c.psionics?.spent) || 0,
+      spent: Number(c.psionics?.spentNow ?? c.psionics?.spent) || 0,
       left: Number(c.psionics?.left) || 0,
       bonus: Number(c.psionics?.bonusPoints) || 0,
     },
@@ -354,7 +361,7 @@ export function characterScope(model) {
     s[key] = {
       score: a.score,
       mod: a.mod,
-      temp: a.tempScore,
+      temp: a.workingScore ?? a.tempScore,
       tempMod: a.totalMod,
     };
   }
@@ -1030,7 +1037,73 @@ export function forwardTargets(model) {
       if (!facts.has(key)) facts.set(key, targetFacts(model, key, scope ?? model.scope()));
       return facts.get(key);
     },
+    columnsOf: (key) => typedColumns(model, key),
   };
+}
+
+/** A save's bonus columns, by the bonus type each one is. */
+const SAVE_COLUMN_TYPES = {
+  resistance: ['abpResistance', 'resistance'], alchemical: ['alchemical'], competence: ['competence'],
+  enhancement: ['enhancement'], insight: ['insight'], luck: ['luck'], trait: ['trait'], morale: ['morale'],
+  profane: ['profane'], racial: ['racial'], sacred: ['sacred'],
+};
+/** The AC row's columns, by type; `natural` is the armour itself. */
+const AC_COLUMN_TYPES = {
+  deflection: ['abpDeflection', 'deflection'], natural: ['natural'], enhancement: ['enhancement'],
+  insight: ['insight'], luck: ['luck'], morale: ['morale'], sacred: ['sacred'], profane: ['profane'], size: ['size'],
+};
+/** An ability score's build columns, by type; `temp.` ones are the temporary table. */
+const ABILITY_COLUMN_TYPES = {
+  enhancement: null, 'temp.enhancement': 'tempEnhancement', size: 'size', 'temp.size': 'tempSize',
+  inherent: 'inherent', racial: 'race', alchemical: 'alchemical', morale: 'morale',
+};
+
+/**
+ * A destination's own typed columns, as `{type: value}`, for the stacking in
+ * resolveContributions: a forwarded bonus of a type the destination already
+ * holds counts only for what it adds past it. Saves read their bonus row, the
+ * armour classes and CMD the AC row -- each only the columns it takes -- and
+ * an ability score its build. Untyped, dodge and circumstance columns are not
+ * here, because those stack.
+ */
+function typedColumns(model, key) {
+  const c = model.data;
+  const row = (resolved, map, types, filter) => {
+    const out = {};
+    for (const [type, cols] of Object.entries(map)) {
+      const flags = types.find(([k]) => k === cols[cols.length - 1])?.[2];
+      if (filter && flags && flags[filter] === false) continue;
+      out[type] = cols.length === 2 ? abpGroupTotal(resolved?.[cols[0]], resolved?.[cols[1]])
+        : Number(resolved?.[cols[0]]) || 0;
+    }
+    return out;
+  };
+  const save = /^saves\.(fortitude|reflex|will)$/.exec(key);
+  if (save) return row(c.saves?.[save[1]]?.bonusesResolved, SAVE_COLUMN_TYPES, SAVE_BONUS_TYPES);
+  const ac = { 'ac.total': null, 'ac.touch': 'touch', 'ac.flatFooted': 'flatFooted', 'ac.cmd': 'cmd' };
+  if (key in ac) {
+    const out = row(c.defenses?.acBonusesResolved, AC_COLUMN_TYPES, AC_BONUS_TYPES, ac[key]);
+    // A gear row's "Natural Armor" arrives as `natural_armor`.
+    if ('natural' in out) out.natural_armor = out.natural;
+    // The armour and shield worn are bonuses of those types too, on every
+    // armour class a touch attack does not ignore, and never on CMD.
+    if (key === 'ac.total' || key === 'ac.flatFooted') {
+      const worn = armorParts(c);
+      out.armor = Number(worn.armor) || 0;
+      out.shield = Number(worn.shield) || 0;
+    }
+    return out;
+  }
+  const ability = /^(str|dex|con|int|wis|cha)\.score$/.exec(key);
+  if (ability) {
+    const b = c.statsBuild?.[ability[1]] || {};
+    const out = {};
+    for (const [type, col] of Object.entries(ABILITY_COLUMN_TYPES)) {
+      out[type] = col ? Number(b[col]) || 0 : resolveAbility(b).enhancement;
+    }
+    return out;
+  }
+  return null;
 }
 
 /** What forwarded bonuses come to at one destination. */
@@ -1049,12 +1122,15 @@ export function forwarded(model, name) {
  */
 export function forwardedSplit(model, name) {
   const counted = model.contributions?.countedAt?.[name];
+  const overlaps = model.contributions?.overlapAt?.[name];
   const out = { permanent: 0, temporary: 0, total: 0 };
   for (const e of model.contributions?.by?.[name] || []) {
     if (e.error || !e.value) continue;
     if (counted && !counted.has(e)) continue;
-    out[e.temporary ? 'temporary' : 'permanent'] += e.value;
-    out.total += e.value;
+    // What a column of the same type already gave is not given twice.
+    const value = e.value - (overlaps?.get(e)?.overlap || 0);
+    out[e.temporary ? 'temporary' : 'permanent'] += value;
+    out.total += value;
   }
   return out;
 }
@@ -1072,21 +1148,41 @@ export function forwardedInto(model, name, only = '') {
   const total = want === null ? forwarded(model, name)
     : (want ? split.temporary : split.permanent);
   const counted = model.contributions?.countedAt?.[name];
+  const overlaps = model.contributions?.overlapAt?.[name];
   // Superseded bonuses stay on the list. A size bonus that lost to a bigger
   // size bonus has not gone away -- it is the reason the bigger one is not
   // adding to it -- and a reader who cannot see it will write it in again.
+  // So does one a column of its type covers, saying how much it covered.
   const from = (model.contributions?.by?.[name] || [])
     .filter((e) => e.value && (want === null || !!e.temporary === want))
-    .map((e) => ({
-      where: describeSource(e.path),
-      value: e.value,
-      expr: e.expr,
-      sign: e.sign,
-      type: e.type,
-      temporary: !!e.temporary,
-      counts: !counted || counted.has(e),
-    }));
+    .map((e) => {
+      const o = overlaps?.get(e);
+      return {
+        where: describeSource(e.path),
+        value: e.value,
+        expr: e.expr,
+        sign: e.sign,
+        type: e.type,
+        temporary: !!e.temporary,
+        counts: !counted || counted.has(e),
+        ...(o ? { column: o.column, adds: e.value - o.overlap } : {}),
+      };
+    });
   return from.length ? { total, from } : null;
+}
+
+/**
+ * Why a forwarded bonus adds less than it says, in words, or '' when it adds
+ * all of it: a bigger bonus of its type is already there, or the
+ * destination's own column of that type is.
+ */
+export function stackingNote(x) {
+  if (x.column) {
+    return x.adds > 0
+      ? `  (adds ${x.adds}: the ${x.type} column already gives ${x.column})`
+      : `  (adds nothing: the ${x.type} column already gives ${x.column})`;
+  }
+  return x.counts ? '' : `  (does not stack with the other ${x.type})`;
 }
 
 /**
@@ -1355,7 +1451,9 @@ export function proseSources(model) {
   // over, and the drawbacks -- a locus priced in mana or a pool sized off
   // level is a number the rest of the sheet may as well be able to read.
   for (const [side, t] of Object.entries(d.training || {})) {
-    (t?.classes || []).forEach((cls, ci) => (cls.levels || []).forEach((lv, li) => {
+    // A blended class's mirror shares its owner's levels, so it is read once,
+    // through the owner -- read twice, a bonus in a pooled talent landed twice.
+    (t?.classes || []).forEach((cls, ci) => (cls.blendedMirror ? [] : cls.levels || []).forEach((lv, li) => {
       push(`talent:${side}:${ci}:${li}`, lv.talent);
       push(`talent:${side}:${ci}:${li}:notes`, lv.notes);
       // The guile side's rows carry a second slot -- the [utility] talent
@@ -1506,14 +1604,19 @@ export function forwardsEarly(model) {
   // casting tables it feeds are downstream of that. A speed is early because
   // the speeds resolve before the prose too, and because another speed may
   // be written to read it. A skill sphere's ranks are early because they
-  // are paid into a skill, and the skills are totalled before the prose;
-  // every other sphere number settles after it and costs no second pass.
+  // are paid into a skill, and the skills are totalled before the prose.
   // The Spheres caster level is early because the training pass works it out
-  // before the prose, and every sphere row is built on it; the Vancian and
-  // manifester levels are worked out after the prose and are not.
+  // before the prose, and every sphere row is built on it.
+  //
+  // The sphere tables, the Vancian and manifester levels and the companions
+  // are worked out before the prose as well, so a formula can read them (see
+  // Character#recomputeReadable) -- and a name reading one that a bonus
+  // raises has to see it raised, which takes the second pass.
+  const companions = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b?.id ?? ''))));
   return Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value
       && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')
-        || name.startsWith('spheres.')
-        || (name.startsWith('sphere.') && name.endsWith('.ranks'))));
+        || name.startsWith('spheres.') || name.startsWith('sphere.')
+        || name.startsWith('vancian.') || name.startsWith('manifester.')
+        || companions.has(name.split('.')[0])));
 }

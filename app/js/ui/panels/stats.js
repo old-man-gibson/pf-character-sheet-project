@@ -61,7 +61,7 @@ export function renderStatsPanel(model, ctx) {
           ${v && v !== ATTUNEMENT_BONUS ? `<span class="hint">${fmt(v)}</span>` : ''}
         </td>`;
     }
-    return `<td class="num ${banding}"><input type="number" value="${v}" data-build="${ab}|${key}"></td>`;
+    return `<td class="num ${banding}"><input type="number" value="${esc(v ?? '')}" data-build="${ab}|${key}"></td>`;
   };
 
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
@@ -103,9 +103,9 @@ export function renderStatsPanel(model, ctx) {
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${groups.map((g) => `${g.cols.map(([k], i) => cell(ab, k, band(g, i))).join('')}${
                   g.sum ? `<td class="num grouped groupend total ${r.enhancementWasted ? 'over' : ''}"
-                      title="${r.enhancementWasted
-  ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
-  : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`}">${r[g.sum] ?? 0}</td>` : ''}`).join('')}
+                      title="${esc(r.enhancementWasted
+    ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
+    : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
                   <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'permanent') || '—'}</td>
                   <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;

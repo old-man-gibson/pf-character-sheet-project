@@ -125,7 +125,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 14
   },
   "dex": {
    "score": 23,
@@ -143,7 +144,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 23
   },
   "con": {
    "score": 18,
@@ -161,7 +163,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 18
   },
   "int": {
    "score": 26,
@@ -179,7 +182,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 26
   },
   "wis": {
    "score": 15,
@@ -197,7 +201,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 15
   },
   "cha": {
    "score": 12,
@@ -215,7 +220,8 @@
     "permanent": 0,
     "temporary": 0,
     "total": 0
-   }
+   },
+   "workingScore": 12
   }
  },
  "statsBuild": {
@@ -529,7 +535,7 @@
   "touch": 16,
   "flatFooted": 13,
   "cmd": 24,
-  "ffCmd": 10,
+  "ffCmd": 18,
   "acStat1": "Dex",
   "acStat2": null,
   "bonusAC": null,
@@ -3340,7 +3346,93 @@
    },
    "bonusTalents": [],
    "sphereBonuses": [],
-   "skillRanks": [],
+   "skillRanks": [
+    {
+     "skill": "Acrobatics",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Climb",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Fly",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Swim",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Bluff",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Craft (any)",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Craft (alchemy)",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Craft (mechanical)",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Craft (traps)",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Diplomacy",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Handle Animal",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Intimidate",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Perception",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Ride",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Sense Motive",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Sleight of Hand",
+     "enabled": true,
+     "multiplier": 1
+    },
+    {
+     "skill": "Stealth",
+     "enabled": true,
+     "multiplier": 1
+    }
+   ],
    "unarmed": {
     "sheetDice": null,
     "talentedKnuckle": false,
@@ -3591,8 +3683,6 @@
  },
  "akashic": {
   "classes": [],
-  "baseDC": 0,
-  "steadyVeilDC": 0,
   "essence": {
    "featTraits": 0,
    "boon": 0,
@@ -3603,7 +3693,9 @@
   "slots": [],
   "kheshig": [],
   "otherReceptacles": [],
-  "sourceExtras": []
+  "sourceExtras": [],
+  "baseDCOverride": null,
+  "steadyVeilDCOverride": null
  },
  "maneuvers": {
   "possibleManeuvers": 0,
@@ -5846,6 +5938,11 @@
    "base": 120
   }
  },
+ "corrections": [
+  "attack-size-sign",
+  "poor-save-thirds",
+  "monster-crit-range"
+ ],
  "customTrackers": [
   {
    "minFormula": null,

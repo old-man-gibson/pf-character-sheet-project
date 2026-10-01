@@ -263,32 +263,21 @@ export function closestName(name, candidates) {
 export const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null));
 
 /**
- * One typed-bonus block -- a save's or the AC's -- resolved against `scope`.
- *
- * Every cell is either a plain number or a formula in the tracker sandbox, so
- * a conditional bonus can be written as the rule it is rather than as a number
- * that goes stale. A cell that throws contributes nothing and leaves its
- * message in `errors`, so one bad formula cannot take the sheet down with it.
- */
-/**
  * One number a player may have written as a formula instead.
  *
- * The half-dozen fields that work this way -- a skill's Misc, the extra
- * language slots, the death threshold, the hit-point parts -- all wanted the
- * same six lines, and each copy was a place for the rounding or the empty
- * case to drift. Truncated towards zero rather than floored, as every other
- * resolved bonus on the sheet is, so a penalty of 2.5 is −2 and not −3.
+ * The fields that work this way -- a skill's Misc, the extra language slots,
+ * the death threshold, the hit-point parts, the cells of a typed-bonus block
+ * -- all come through here or `evaluateAmount`, so the rounding cannot drift
+ * between them. A fraction rounds down, as the rulebook says to: -5/2 is -3,
+ * the same answer a skill's Misc and a buff dial give. (This used to truncate
+ * towards zero, and to say every resolved bonus did, while half of them
+ * floored.)
  *
  * Returns `{ value, error }`: a formula that throws contributes nothing and
  * leaves its message to be shown beside the field and in the Formula Audit.
  */
 export function resolveNumberField(scope, raw) {
-  if (typeof raw !== 'string' || raw.trim() === '') return { value: Number(raw) || 0, error: null };
-  try {
-    return { value: Math.trunc(Number(evaluateFormula(raw, scope)) || 0), error: null };
-  } catch (err) {
-    return { value: 0, error: err.message };
-  }
+  return evaluateAmount(raw, scope);
 }
 
 /**
@@ -308,20 +297,21 @@ export function resolveNumberFields(scope, block, fields) {
   return out;
 }
 
+/**
+ * One typed-bonus block -- a save's or the AC's -- resolved against `scope`.
+ *
+ * Every cell is either a plain number or a formula in the tracker sandbox, so
+ * a conditional bonus can be written as the rule it is rather than as a number
+ * that goes stale. A cell that throws contributes nothing and leaves its
+ * message in `errors`, so one bad formula cannot take the sheet down with it.
+ * Rounded as every other formula field is (`resolveNumberField`).
+ */
 export function resolveBonusBlock(scope, block, types, errors) {
   const out = {};
   for (const [key] of types) {
-    const raw = block?.[key];
-    if (typeof raw !== 'string' || raw.trim() === '') {
-      out[key] = Number(raw) || 0;
-      continue;
-    }
-    try {
-      out[key] = Math.trunc(Number(evaluateFormula(raw, scope)) || 0);
-    } catch (err) {
-      out[key] = 0;
-      errors[key] = err.message;
-    }
+    const { value, error } = evaluateAmount(block?.[key], scope);
+    out[key] = value;
+    if (error) errors[key] = error;
   }
   return out;
 }
@@ -329,3 +319,14 @@ export function resolveBonusBlock(scope, block, types, errors) {
 export const pad = (arr, n, fill) => Array.from({ length: n }, (_, i) => arr?.[i] ?? (typeof fill === 'function' ? fill() : fill));
 
 export const cleanText = (v) => (v === null || v === undefined ? '' : String(v).trim());
+
+/*
+ * Lists read off a pack. A pack is JSON a player may have written by hand, and
+ * one talent whose `tags` is a string, or a null left in a list, used to throw
+ * inside the setter that read it. These read what is there: the objects of a
+ * list of entries, and a list of words from a list or from one word.
+ */
+export const packRows = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
+export const packWords = (v) => (Array.isArray(v)
+  ? v.filter((x) => x !== null && x !== undefined).map(String)
+  : (typeof v === 'string' && v.trim() ? [v.trim()] : []));

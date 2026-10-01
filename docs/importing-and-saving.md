@@ -241,9 +241,11 @@ feat, a tracker, a feature column — says what went with an **Undo** beside it,
 <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes back the last twenty of them from anywhere on the
 sheet. It is deliberately not the same machinery as what follows: History is a snapshot
 every twenty changes, which can put back a weapon you deleted but not without also
-putting back the twelve edits you made after it. The undo stack lives in memory for as
-long as the sheet is open and is not part of the document, so it does not survive a
-reload — the stores below are what does.
+putting back the twelve edits you made after it. Actions at the table — damage, a spent
+pip, a card, a rest — have an **Undo** of their own on the tab rail that takes back that
+action alone; see [Using the sheet](using-the-sheet.md). Both undo stacks live in memory
+for as long as the sheet is open and are not part of the document, so they do not survive
+a reload — the stores below are what does.
 
 Three things are kept per character, each in the store that suits it — and the
 extension packs a player has imported sit beside them, in a database of their own.

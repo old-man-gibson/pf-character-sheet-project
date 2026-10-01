@@ -129,12 +129,18 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
  * ------------------------------------------------------------------ */
 
 /**
- * The caster level the sheet charges upkeep against: the global caster level
- * the magic training works out, and the character's own level for someone
- * who casts without a sphere block behind it.
+ * The Spheres of Power caster level: `caster.level` in a formula, and what
+ * the sheet charges material-casting upkeep against, conjures a companion at
+ * and rolls card dice with.
+ *
+ * Only Spheres casting has one. A Vancian caster level and a manifester level
+ * belong to their own systems (`vancian.<class>.cl`, `manifester.<class>.level`),
+ * and none of the three stands in for another -- a feature that grants that
+ * kind of transparency would be the place to join them. A character with no
+ * magic side has none, where this used to fall back to the character's level.
  */
 export function casterLevel(model) {
-  return Number(model.data.training?.magic?.globalCL ?? model.data.identity?.level) || 0;
+  return Number(model.data.training?.magic?.globalCL) || 0;
 }
 
 /** The wallet today: current mana, the offering owed part by part, and what is left after it. */

@@ -21,10 +21,10 @@
 
 import {
   AC_BONUS_TYPES, ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY,
-  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abpGroupTotal, armorParts, conditionTotals, sizeMod, statMod,
+  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abpGroupTotal, armorParts, conditionTotals, sizeAttackMod, sizeMod, statMod,
 } from '../rules.js';
 import { forwarded, forwardedSplit } from './scope.js';
-import { abilityMoves, mythicHp } from './stats/defenses.js';
+import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
 
 /** A part worth showing: anything but a zero nobody typed. */
@@ -160,7 +160,7 @@ function attackBreakdown(model, mode) {
   return [
     part('BAB', c.attack.bab),
     abilityPart(c, m.stat1, m.stat2),
-    part('size', -sizeMod(c)),
+    part(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode)),
     part('misc', c.attack.miscBonus),
     ...extras(model, ATTACK_MODE_KEY[mode], `attack.${mode}`),
   ];
@@ -228,7 +228,7 @@ function abilityBreakdown(model, key, which) {
   // The build's own resolver may cap or floor a column; where it does, the
   // difference is named rather than left to make the sum wrong.
   const shown = parts.reduce((t, p) => t + p.value, 0);
-  const total = which === 'temp' ? (Number(a.tempScore) || 0) : (Number(a.score) || 0);
+  const total = which === 'temp' ? (Number(a.workingScore ?? a.tempScore) || 0) : (Number(a.score) || 0);
   if (shown !== total) parts.push(part('the build’s own rules', total - shown, 'caps and floors on the Stats tab'));
   return parts;
 }
@@ -274,7 +274,7 @@ export const BREAKDOWNS = new Map([
     [`${k}.temp`, {
       label: `${ABILITY_LABELS[k]} (working score)`,
       build: (m) => abilityBreakdown(m, k, 'temp'),
-      total: (m) => m.data.abilities[k]?.tempScore,
+      total: (m) => m.data.abilities[k]?.workingScore ?? m.data.abilities[k]?.tempScore,
     }],
   ]),
 ]);
@@ -312,19 +312,8 @@ const abilityKeyOf = (x) => {
   return ABILITIES.includes(s) ? s : null;
 };
 
-/** The ability slots a key is built on, whose movement reaches it. */
-function slotsOf(c, key) {
-  const d = c.defenses;
-  if (key === 'ac' || key === 'touch') return [d.acStat1, d.acStat2];
-  if (key === 'flatFooted') return d.uncannyDodge ? [d.acStat1, d.acStat2] : [];
-  if (key === 'cmd' || key === 'initiative') return ['dex'];
-  if (key === 'fortitude' || key === 'reflex' || key === 'will') return [c.saves[key]?.stat1, c.saves[key]?.stat2];
-  if (CHANNELS[key]?.[0] === 'attack') {
-    const m = c.attack.modes?.[key] || {};
-    return [m.stat1, m.stat2];
-  }
-  return [];
-}
+/** The ability slots a key is built on: the list `abilityMoves` sums by. */
+const slotsOf = (c, key) => abilitySlots(c)[key] || [];
 
 /**
  * The ticked buffs and conditions, one entry each, with its share of what
@@ -355,18 +344,32 @@ function adjustmentParts(model, key, cs) {
   const c = model.data;
   const chans = CHANNELS[key] || [];
   const counted = cs.counted || [];
-  const slots = [...new Set(slotsOf(c, key).map(abilityKeyOf).filter(Boolean))].map((s) => ABILITY_LABELS[s]);
-  const throughLabel = slots.length ? `through ${slots.join(' + ')}` : 'through the abilities';
+  const slots = [...new Set(slotsOf(c, key).map(abilityKeyOf).filter(Boolean))];
+  // Named by the abilities this source moved, of the ones the number is built
+  // on: blindness reaches CMD through Dex alone, though CMD adds Str as well.
+  // A source that moved no score took a bonus away instead -- blinded,
+  // flat-footed -- and on CMD the bonus a creature loses is its Dexterity's.
+  const lostBonus = key === 'cmd' || key === 'ffCmd' ? ['dex'] : slots;
+  const throughLabel = (moved) => {
+    const named = (moved.length ? moved : lostBonus).map((s) => ABILITY_LABELS[s]);
+    return named.length ? `through ${named.join(' + ')}` : 'through the abilities';
+  };
   // Each source's ability-borne share: the number with the sources up to and
   // including it, less the number with the sources before it.
   const through = new Map();
   const taken = [];
   let before = 0;
+  let beforeDeltas = {};
   for (const entry of counted) {
     taken.push(entry);
-    const after = abilityMoves(c, conditionTotals(taken)).byKey[key] || 0;
-    if (after !== before) through.set(entry, after - before);
+    const moves = abilityMoves(c, conditionTotals(taken));
+    const after = moves.byKey[key] || 0;
+    if (after !== before) {
+      const moved = slots.filter((s) => (moves.deltas[s] || 0) !== (beforeDeltas[s] || 0));
+      through.set(entry, { value: after - before, label: throughLabel(moved) });
+    }
     before = after;
+    beforeDeltas = moves.deltas;
   }
   const parts = [];
   for (const entry of counted) {
@@ -389,13 +392,14 @@ function adjustmentParts(model, key, cs) {
       value += info.mods.ac * n;
       via.push('an AC penalty applies to CMD too');
     }
-    const indirect = through.get(entry) || 0;
+    const share = through.get(entry);
+    const indirect = share?.value || 0;
     if (value) {
       const p = part(label, value, [kind, ...via].join(' — '));
-      if (indirect) p.lines = [part(throughLabel, indirect)];
+      if (indirect) p.lines = [part(share.label, indirect)];
       parts.push(p);
     } else if (indirect) {
-      parts.push(part(label, indirect, `${kind} — ${throughLabel}`));
+      parts.push(part(label, indirect, `${kind} — ${share.label}`));
     }
   }
   const shown = parts.reduce((t, p) => t + p.value + (p.lines || []).reduce((s, l) => s + l.value, 0), 0);

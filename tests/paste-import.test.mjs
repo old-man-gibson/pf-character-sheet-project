@@ -331,6 +331,16 @@ console.log('races -- an alternate trait whose page dropped the colon');
   check('nothing left over', r.leftovers.length, 0);
 }
 
+console.log('races -- a no-break space from a web page reads as a space');
+{
+  // The clean-up rule for this had an ordinary space in it, so it did
+  // nothing, and a heading with a no-break space in it was not a heading.
+  const nbsp = ' ';
+  const r = parsePaste(`Standard${nbsp}Racial${nbsp}Traits\nAbility Score Modifiers: Dwarves gain +2 Constitution.\nHardy: Dwarves gain a +2 racial bonus on saving throws against poison.\n`);
+  check('the traits are read under a heading written with no-break spaces',
+    r.blocks.map((b) => [b.kind, b.name, (b.traits || []).length]), [['race', 'Dwarf', 1]]);
+}
+
 console.log('markdown paste with a FAQ interlude -- links and bullets stripped, the list carries on');
 {
   const md = `Standard Racial Traits

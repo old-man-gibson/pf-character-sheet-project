@@ -325,6 +325,18 @@ console.log('a formula that does not work can be gone to from Needs attention');
     problems.find((p) => p.kind === 'duplicate')?.places.map((pl) => pl.place), ['note:0', 'note:2']);
 }
 
+console.log('a companion is reached by id wherever it stands, the first of a kind too');
+{
+  const c = everywhere();
+  // Wisp is the one showing; the jump to the first eidolon has to bring it back.
+  c.data.uiPrefs.activeCompanion = { eidolon: 1 };
+  checkPlace(c, 'eidolon:notes', 'the first eidolon while the second is showing');
+  // The first removed, Wisp (eidolon2) is first in the list, still by its id.
+  c.listRemove('eidolon', 0);
+  check('Wisp keeps its id at the head of the list', c.data.eidolon[0].id, 'eidolon2');
+  checkPlace(c, 'eidolon:eidolon2:notes', 'the second eidolon, now first');
+}
+
 console.log('a place nobody can go to is not offered');
 {
   const c = everywhere();

@@ -40,7 +40,7 @@ export { featureKey };
  * are back.
  */
 const clean = (s) => String(s ?? '')
-  .replace(/ /g, ' ')                       // no-break spaces off a web page
+  .replace(/ /g, ' ')                  // no-break spaces off a web page (as an escape: a plain space had replaced the literal one)
   .replace(/−/g, '-')                       // minus sign
   .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')   // [[Source](url)] -> [Source]
   .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')  // [text](url) -> text

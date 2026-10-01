@@ -28,7 +28,7 @@ import {
   wealthView, emptyWealth, isoDay, MATERIAL_CASTING_PER_LEVEL,
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
-  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey,
+  rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -43,25 +43,27 @@ import {
   KHESHIG_VEILS, wikiUrl, mergeLayout,
   CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
-  MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, unarmedDice,
+  MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
+  gestaltSaveBase,
 } from '../app/js/rules.js';
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
   setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
-import { stepDamageDice, stepDiceMap } from '../app/js/rules.js';
+import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
 import {
   GUILE_SPHERES, expertiseTalents, guilePackages, guileRanges, guileSkillHint,
   leveragePool,
 } from '../app/js/rules.js';
-import { rollSpec } from '../app/js/roll20.js';
+import { concentrationRollSpec, rollSpec } from '../app/js/roll20.js';
 import { NameIndex, evaluateFormula, resolvePath } from '../app/js/formula.js';
 import { positionedRows } from '../app/js/model/templates.js';
-import { blankGuileClass } from '../app/js/model/subsystems/guile.js';
+import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
@@ -402,13 +404,25 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
 
 console.log('a class’s own unarmed progression -- rungs, and the die chain they sit on');
 {
-  // The chain, walked and clamped. A size increase is two steps, which is the
-  // only arithmetic either progression does to a base die.
+  // The chain, walked and clamped. A step increase is one step of it.
   check('one step up', stepDice('1d6', 1), '1d8');
-  // Two steps *of this chain*, which is not the same as the size chart's own
-  // walk: here 1d6 -> 1d8 -> 1d10, where the size chart would say 2d6.
-  check('a size is two of them', stepDice('1d6', 2), '1d10');
+  check('two steps', stepDice('1d6', 2), '1d10');
   check('and down again', stepDice('2d6', -2), '1d8');
+  // A size increase is not a fixed number of steps: it walks the damage chart
+  // the way a weapon's does, one step from 1d6 or less and two above it. It
+  // used to be two chain steps everywhere, which made a Medium 1d6 a Large
+  // 1d10 where the monk's own table says 1d8.
+  check('a size up from 1d6 is 1d8, the monk’s Large column',
+    raiseDice('1d6', { sizeIncreases: 1 }), '1d8');
+  check('from 1d8 it is two steps, 2d6', raiseDice('1d8', { sizeIncreases: 1 }), '2d6');
+  check('2d8 goes to 3d8, as the monk’s Large column has it', raiseDice('2d8', { sizeIncreases: 1 }), '3d8');
+  check('a size down from 1d6 is 1d4', raiseDice('1d6', { sizeIncreases: -1 }), '1d4');
+  check('size first, then the steps raise that die',
+    raiseDice('1d6', { sizeIncreases: 1, stepIncreases: 1 }), '1d10');
+  check('no increases leaves the die alone', raiseDice('1d6'), '1d6');
+  check('a die the chain never lists is still refused', raiseDice('1d5', { sizeIncreases: 1 }), null);
+  check('the practitioner table: 4 talents and one size is 1d8, not 1d10',
+    unarmedDice(4, { sizeIncreases: 1 }), '1d8');
   check('clamped at the top', stepDice('16d6', 3), '16d6');
   check('clamped at the bottom', stepDice('1d2', -5), '1d2');
   check('a die the chain never lists says so rather than guessing', stepDice('1d5', 1), null);
@@ -639,7 +653,7 @@ for (const id of IDS) {
   const full = c.hpMax;
   c.applyDamage(20);
   check(`${id} then off current`, [c.hpState.temp, c.hpState.current], [0, full - 11]);
-  c.restoreAll();
+  c.rest('day');
   check(`${id} a rest refills the granted pool`, c.hpState.temp, 12);
 
   // They do not stack: the better of the two is what you keep.
@@ -1182,6 +1196,48 @@ console.log('companions -- the conjured companion follows the Conjuration sphere
   check('and every column follows the dice', [k.bab, k.tableNatural], [9, 6]);
   c.set('conjured.0.archetypes.mindless', false);
 
+  // Unwilling: the same extra dice, and the increases they bring are listed
+  // where the dice cross each fourth -- at caster level 12, 9 + 3 = 12 dice.
+  c.set('conjured.0.archetypes.unwilling', true);
+  c.set('conjured.0.levelOverride', 12);
+  k = c.data.conjured[0].calc;
+  const increasesListed = k.gains.filter((g) => /Ability score increase/.test(g.text)).length;
+  check('unwilling at 12th: 12 dice, three increases, and all three listed',
+    [k.hd, increasesListed], [12, 3]);
+  check('evasion and the rest still arrive by caster level',
+    k.gains.filter((g) => /Evasion/.test(g.text)).map((g) => g.level), [2]);
+  c.set('conjured.0.archetypes.unwilling', false);
+  c.set('conjured.0.levelOverride', 9);
+
+  // The base form sets the good saves, whatever the block's own ticks say.
+  c.set('conjured.0.baseForm', 'Orb');
+  k = c.data.conjured[0].calc;
+  check('an Orb is good at Reflex and Will, bad at Fortitude',
+    [k.saves.fort.base, k.saves.ref.base, k.saves.will.base], [2, 5, 5]);
+  c.set('conjured.0.baseForm', 'Quadruped');
+
+  // CMD takes the AC bonuses the character's would, and every penalty.
+  const cmd0 = () => [c.data.conjured[0].calc.cmd, c.data.conjured[0].calc.ffCmd];
+  const [base0, ff0] = cmd0();
+  c.set('conjured.0.ac.all', 2);
+  c.set('conjured.0.ac.touch', 1);
+  c.set('conjured.0.ac.ff', 3);
+  check('deflection and the like count toward CMD, dodge too, armour not',
+    cmd0(), [base0 + 2 + 1, ff0 + 2]);
+  c.set('conjured.0.ac.ff', -2);
+  check('a penalty in any bucket comes off both', cmd0(), [base0 + 2 + 1 - 2, ff0 + 2 - 2]);
+  for (const k2 of ['all', 'touch', 'ff']) c.set(`conjured.0.ac.${k2}`, 0);
+
+  // Tiny or smaller uses Dexterity for CMB, and the choice can be made.
+  const cmbOf = () => c.data.conjured[0].calc;
+  c.set('conjured.0.size', 'Tiny');
+  check('a Tiny companion uses Dex for CMB', cmbOf().cmbAbility, 'Dex');
+  c.set('conjured.0.size', 'Medium');
+  check('a Medium one Str', cmbOf().cmbAbility, 'Str');
+  c.set('conjured.0.cmbAbility', 'Dex');
+  check('unless told otherwise, as Agile Maneuvers would', cmbOf().cmbAbility, 'Dex');
+  c.set('conjured.0.cmbAbility', '');
+
   c.set('conjured.0.archetypes.puppet', true);
   check('a puppet is a point cheaper to summon', c.data.conjured[0].calc.summonCost, 0);
   c.set('conjured.0.archetypes.puppet', false);
@@ -1511,6 +1567,846 @@ console.log('\ntarget in forwarded bonuses, and skill ranks');
   check('and its audit row reads it as a bonus, not an unknown',
     c.audit().filter((r) => String(r.id).startsWith(`${t.id}:note`)).map((r) => [r.status, r.value]), [['ok', 1]]);
   c.removeTracker(t.id);
+}
+
+console.log('a range whose formula fails holds still under a forwarded bonus');
+{
+  // A failed formula used to leave last pass's number in place and add the
+  // bonus on top of it again, so the range grew by the bonus every recompute
+  // -- and was saved that way.
+  const c = new Character(blankDocument({ name: 'Grit', level: 3 }));
+  c.addTracker({ name: 'Grit', maxFormula: 'floor(', minFormula: 'ceil(' });
+  c.data.notes = [{ body: '{tracker.grit.max += 2} {tracker.grit.min -= 1}' }];
+  const grit = () => c.trackers.find((t) => t.id === 'grit');
+  c.recompute();
+  const first = [grit().max, grit().min];
+  c.recompute();
+  c.recompute();
+  check('the bonus is all a broken max and min come to', first, [2, -1]);
+  check('and they stay there', [grit().max, grit().min], first);
+  check('the formula is still reported as broken', /max: .*min: /.test(grit().error || ''), true);
+}
+
+console.log('a value typed into a tracker stays inside its range');
+{
+  const c = new Character(blankDocument({ name: 'Pool', level: 3 }));
+  c.addTracker({ name: 'Focus', maxFormula: '5' });
+  const id = c.trackers.find((t) => t.name === 'Focus').id;
+  c.updateTracker(id, { current: 99 });
+  const high = c.trackers.find((t) => t.id === id).current;
+  c.updateTracker(id, { current: -3 });
+  const low = c.trackers.find((t) => t.id === id).current;
+  c.updateTracker(id, { current: 2 });
+  check('typed past either end, it stops at the end; inside, it is what was typed',
+    [high, low, c.trackers.find((t) => t.id === id).current], [5, 0, 2]);
+}
+
+console.log('a customized weapon\'s "then at" is read the way a talent ladder\'s is');
+{
+  // A typo is read the way a talent ladder reads one: it adds nothing. Read
+  // as a feature column reads it, "11, 1x" granted every level up to 5.
+  check('a "then at" that is not a rule adds nothing to the start',
+    [trackCount({ start: 3, gainsAt: '11, 1x' }, 5), trackCount({ start: 3, gainsAt: '11, 1x' }, 20)], [3, 3]);
+  check('a blank one is the start alone, and a good one still counts',
+    [trackCount({ start: 3, gainsAt: '' }, 20), trackCount({ start: 3, gainsAt: '11, 19' }, 19)], [3, 5]);
+}
+
+console.log('sphere bonus skill ranks pay on a character built here, not only on an import');
+{
+  // The rows used to exist only where the workbook converter wrote them, so a
+  // character started in the app had none and its sphere ranks never paid.
+  const c = new Character(blankDocument({ name: 'Scout', level: 5 }));
+  c.listAdd('training.combat.classes', {
+    name: 'Sentinel', type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 5,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  c.setItem('training.combat.classes.0.levels', 0, 'sphere', 'Scout');
+  c.setItem('training.combat.classes.0.levels', 0, 'talent', 'Scout sphere');
+  const stealth = c.trainingSkillRanks.find((r) => r.skill === 'Stealth');
+  const skill = c.data.skills.find((s) => s.name === 'Stealth');
+  check('every row of the table is there', c.trainingSkillRanks.length, 17);
+  check('the Scout sphere pays Stealth its ranks', [stealth?.state, stealth?.current], ['met', 5]);
+  check('and the skill has them', skill?.sphereRanks, 5);
+  const off = c.trainingSkillRanks.findIndex((r) => r.skill === 'Stealth');
+  c.setItem('training.combat.skillRanks', off, 'enabled', false);
+  check('a row switched off pays nothing', c.data.skills.find((s) => s.name === 'Stealth')?.sphereRanks, 0);
+}
+
+console.log('two martial spheres feeding one skill stack their ranks, within the level cap');
+{
+  // Leadership and Warleader both pay Diplomacy. Guile's "do not stack, take
+  // a competence bonus" is guile's own rule; martial spheres add.
+  const c = new Character(blankDocument({ name: 'Captain', level: 12 }));
+  c.listAdd('training.combat.classes', {
+    name: 'Commander', type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 12,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  c.setItem('training.combat.classes.0.levels', 0, 'sphere', 'Leadership');
+  c.setItem('training.combat.classes.0.levels', 0, 'talent', 'Leadership sphere');
+  const dip = () => c.trainingSkillRanks.find((r) => r.skill === 'Diplomacy')?.current;
+  check('one talent in Leadership is 5 ranks', dip(), 5);
+  c.setItem('training.combat.classes.0.levels', 1, 'sphere', 'Warleader');
+  c.setItem('training.combat.classes.0.levels', 1, 'talent', 'Warleader sphere');
+  check('one in Warleader as well adds its 5', dip(), 10);
+  c.setItem('training.combat.classes.0.levels', 2, 'sphere', 'Warleader');
+  c.setItem('training.combat.classes.0.levels', 2, 'talent', 'Another');
+  check('and a third stops at the level', dip(), 12);
+  check('the skill has them, no competence bonus', [c.data.skills.find((s) => s.name === 'Diplomacy')?.sphereRanks,
+    c.data.skills.find((s) => s.name === 'Diplomacy')?.competence], [12, 0]);
+}
+
+console.log('a tally counts only what the character has at the level they are');
+{
+  // Planned talents past the character's level, and talents typed in a row
+  // the class does not grant, used to count on the sphere sides.
+  const c = new Character(blankDocument({ name: 'Planner', level: 4 }));
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 20,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  const rows = () => c.data.training.magic.classes[0].levels;
+  c.setItem('training.magic.classes.0.levels', 0, 'sphere', 'Dark');
+  c.setItem('training.magic.classes.0.levels', 0, 'talent', 'Dark Sphere');
+  c.setItem('training.magic.classes.0.levels', 9, 'sphere', 'Dark');
+  c.setItem('training.magic.classes.0.levels', 9, 'talent', 'Planned for 10th');
+  check('a talent planned at 10th does not count at 4th', c.data.training.magic.tally.Dark, 1);
+  check('the row says it is future', rows()[9].future, true);
+  c.set('identity.level', 10);
+  check('at 10th it does', c.data.training.magic.tally.Dark, 2);
+  // A greyed row: one the class's rate does not grant a talent at.
+  c.set('training.magic.classes.0.talentsPerLevel', 'Proficient');
+  const ungranted = rows().findIndex((lv) => !lv.granted && !lv.future);
+  if (ungranted >= 0) {
+    c.setItem('training.magic.classes.0.levels', ungranted, 'sphere', 'Dark');
+    c.setItem('training.magic.classes.0.levels', ungranted, 'talent', 'Typed in a greyed row');
+    check('a talent in a row the class does not grant does not count',
+      c.data.training.magic.tally.Dark, rows().filter((lv) => lv.sphere === 'Dark' && lv.granted && !lv.future).length);
+  } else check('a Proficient class leaves some row ungranted', ungranted >= 0, true);
+}
+
+console.log('a guile tradition’s adroit talents count only at adroit rank');
+{
+  const c = new Character(blankDocument({ name: 'Operative', level: 5 }));
+  c.set('training.guile.tradition.rank', 'Competent');
+  c.listAdd('training.guile.tradition.entries', { talent: 'Sneaky', sphere: 'Stealth', adroit: false });
+  c.listAdd('training.guile.tradition.entries', { talent: 'Sneakier', sphere: 'Stealth', adroit: true });
+  const stealth = () => guileTally(c.data.training.guile).Stealth || 0;
+  check('competent: the adroit entry is greyed and not counted', stealth(), 1);
+  c.set('training.guile.tradition.rank', 'Adroit');
+  check('adroit: it counts', stealth(), 2);
+}
+
+console.log('a blended class\'s talents are read once, though the class sits on two sides');
+{
+  // The pair shares one list of levels, so a walk over both sides meets every
+  // talent twice. The formula walk was the one that did not skip the mirror,
+  // and a bonus written in a pooled talent landed twice.
+  const c = new Character(blankDocument({ name: 'Twin', level: 5 }));
+  c.listAdd('training.magic.classes', {
+    name: 'Hedgewitch', type: 'Mid', talentsPerLevel: null, mod1: 'Wis', mod2: null, classLevelsOverride: 5,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  c.setBlended('magic', 0, true);
+  check('the pair shares one pool', c.data.training.combat.classes[0]?.levels === c.data.training.magic.classes[0].levels, true);
+  const will = c.data.saves.will.total;
+  c.setItem('training.magic.classes.0.levels', 0, 'talent', 'Warded {saves.will += 2}');
+  check('a bonus in a pooled talent counts once', c.data.saves.will.total - will, 2);
+  c.setItem('training.magic.classes.0.levels', 1, 'talent', 'Named {ward = 3}');
+  check('and a name defined there is defined once', (c.inlineDuplicates || []).map((d) => d.name), []);
+}
+
+console.log('renaming a class onto another side\'s class does not take over its talents');
+{
+  // Pairing shares one list of rows, and it used to happen to any two blocks
+  // that came to share a name -- so renaming the martial class to the magic
+  // one's name replaced the magic talents with the martial ones.
+  const levels = (sphere, talent) => Array.from({ length: 20 }, (_, i) => ({
+    level: i + 1, talent: i === 0 ? talent : null, sphere: i === 0 ? sphere : null, notes: null,
+  }));
+  const c = new Character(blankDocument({ name: 'Two', level: 5 }));
+  c.listAdd('training.combat.classes', {
+    name: 'Fighter', type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 5, levels: levels('Boxing', 'Jab'),
+  });
+  c.listAdd('training.magic.classes', {
+    name: 'Mage', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 5, levels: levels('Destruction', 'Fire Blast'),
+  });
+  const magicTalent = () => c.data.training.magic.classes[0].levels[0].talent;
+  c.setItem('training.combat.classes', 0, 'name', 'Mage');
+  check('the magic class keeps its own talent', magicTalent(), 'Fire Blast');
+  check('and the two are not made one pool', c.blendedClasses().length, 0);
+  c.setItem('training.combat.classes', 0, 'name', 'Fighter');
+  c.setItem('training.combat.classes.0.levels', 1, 'talent', 'Hook');
+  check('renamed back, each is still its own', [magicTalent(), c.data.training.magic.classes[0].levels[1].talent], ['Fire Blast', null]);
+
+  // A class added with nothing written in it and named after the magic one
+  // is asking to be paired -- and the pool it joins is the magic one.
+  c.listAdd('training.combat.classes', {
+    name: 'Mage', type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 5, levels: levels(null, null),
+  });
+  check('a blank class named like the magic one pairs with it', c.blendedClasses().map((p) => p.name), ['Mage']);
+  check('and the talents in the pool are the magic ones', [magicTalent(), c.data.training.combat.classes[1].levels[0].talent], ['Fire Blast', 'Fire Blast']);
+}
+
+console.log('a poor save is a third of the level, and never one short');
+{
+  // Six thirds added in floating point came to 1.999..., which floored to 1.
+  const poor = (n) => gestaltSaveBase(Array(n).fill(false), false);
+  check('poor saves at 6th, 15th and 18th are +2, +5 and +6', [poor(6), poor(15), poor(18)], [2, 5, 6]);
+  check('every level from 1st to 20th is a third of it, rounded down',
+    Array.from({ length: 20 }, (_, i) => poor(i + 1)), Array.from({ length: 20 }, (_, i) => Math.floor((i + 1) / 3)));
+  check('a good save is untouched', gestaltSaveBase(Array(6).fill(true), true), 5);
+}
+
+console.log('the same ability in both psionic slots counts once');
+{
+  const c = new Character(blankDocument({ name: 'Mind', level: 10 }));
+  c.set('statsBuild.int.untyped', (Number(c.data.statsBuild.int.untyped) || 0) + (18 - c.data.abilities.int.tempScore));
+  check('Int 18 is a +4 modifier', c.data.abilities.int.totalMod, 4);
+  c.listAdd('psionics.classes', {
+    name: 'Psion', stat: 'Int', stat2: 'Int', curveTotal: 343, manifesterLevelOverride: 10, powers: [],
+  });
+  const psion = () => c.data.psionics.classes[0];
+  check('Int and Int is Int: half of +4 per level, once', psion().abilityPoints, 20);
+  c.setItem('psionics.classes', 0, 'stat2', '');
+  check('the same as Int alone', psion().abilityPoints, 20);
+}
+
+console.log('size on an attack roll is the AC modifier, and on CMB the other way round');
+{
+  const c = new Character(blankDocument({ name: 'Ogre', level: 3 }));
+  c.listAdd('equipment.weapons', {
+    name: 'Club', attackType: 'Melee', dice: '1d6', damageAbility: 'Str', abilityMult: 1,
+    miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2', attackOffset: 0,
+  });
+  const read = () => [c.data.attack.totalMelee, c.data.attack.totalRanged, c.data.attack.totalCmb,
+    c.data.defenses.ac, c.data.equipment.weapons[0].attackTotal];
+  const medium = read();
+  c.set('identity.size', 'Large');
+  check('Large: -1 to melee, ranged, AC and the weapon row, +1 to CMB',
+    read().map((v, i) => v - medium[i]), [-1, -1, 1, -1, -1]);
+  c.set('identity.size', 'Small');
+  check('Small: the other way', read().map((v, i) => v - medium[i]), [1, 1, -1, 1, 1]);
+  const sum = (key) => BREAKDOWNS.get(key).build(c).reduce((n, p) => n + (Number(p.value) || 0), 0);
+  check('the melee and CMB breakdowns still add up to their totals',
+    [sum('melee'), sum('cmb')], [c.data.attack.totalMelee, c.data.attack.totalCmb]);
+}
+
+console.log('a sheet saved under the old size rule comes back right, and a workbook’s stays as it was');
+{
+  // Built here and saved Large before the fix: melee was worked out as BAB +
+  // Str + 1, and saved that way. Reopened, it is -1, with no offset to show
+  // for it -- not the old figure held up by an offset of +2.
+  const base = blankDocument({ name: 'Old Ogre', level: 3 });
+  const built = new Character(base);
+  built.set('identity.size', 'Large');
+  const right = built.data.attack.totalMelee;
+  const saved = JSON.parse(JSON.stringify(built.toJSON()));
+  delete saved.corrections;
+  saved.attack.totalMelee = right + 2;
+  saved.attack.totalRanged += 2;
+  const reopened = new Character(saved);
+  check('a sheet built here: the old +1 becomes -1, and no offset appears',
+    [reopened.data.attack.totalMelee, reopened.offsets['attack.totalMelee']], [right, 0]);
+  check('the fix is recorded, so it is not made twice',
+    new Character(JSON.parse(JSON.stringify(reopened.toJSON()))).data.attack.totalMelee, right);
+
+  // A workbook's total was the workbook's, and right: it stays, and its
+  // offset comes out 2 smaller than it did.
+  const book = JSON.parse(JSON.stringify(saved));
+  delete book.source.kind;
+  book.attack.totalMelee = right + 3;
+  const fromBook = new Character(book);
+  check('a workbook sheet keeps its own figure', [fromBook.data.attack.totalMelee, fromBook.offsets['attack.totalMelee']], [right + 3, 3]);
+
+  // A weapon row keeps an adjustment against the figure its source printed,
+  // and gives back what the fix moved, so the printed figure stands.
+  const armed = JSON.parse(JSON.stringify(saved));
+  armed.equipment.weapons = [{
+    name: 'Greatclub', attackType: 'Melee', dice: '2d8', damageAbility: 'Str', abilityMult: 1.5,
+    miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2', sheetAttack: 9, attackOffset: 9 - (right + 2),
+  }];
+  check('a printed weapon attack stands', new Character(armed).data.equipment.weapons[0].attackTotal, 9);
+}
+
+console.log('negative levels take 5 from current and total hit points alike');
+{
+  // They used to cap current at the drained maximum, so a wounded character
+  // lost nothing to them and a dying one was never nearer death.
+  const c = new Character(blankDocument({ name: 'Drained', level: 5 }));
+  const full = c.hpState.max;
+  c.applyDamage(4);
+  c.set('conditions.Energy Drain', 2);
+  const hp = c.hpState;
+  check('current and total both come down 10', [hp.current, hp.max], [full - 14, full - 10]);
+  check('the stored figure is the undrained one', [hp.baseCurrent, hp.baseMax, c.data.hp.current], [full - 4, full, full - 4]);
+  check('the meter reads the drained figure', c.meterSpec('hp').current, full - 14);
+  c.applyHealing(100);
+  check('healing stops at the drained maximum', [c.hpState.current, c.hpState.max], [full - 10, full - 10]);
+  c.applyDamage(full - 5);
+  check('and the character is dying at what is left after the drain', [c.hpState.current, c.hpState.dying], [-5, true]);
+  c.set('conditions.Energy Drain', 0);
+  check('restored, the 10 come back', [c.hpState.current, c.hpState.dying], [5, false]);
+}
+
+console.log('a class on the Classes table casts at the levels its saves are counted at');
+{
+  // The Planner used to be the only count casting read, so a Wizard 12 with
+  // an empty Planner had 12th-level saves and cast as nobody at all.
+  const c = new Character(blankDocument({ name: 'Tabled', level: 12 }));
+  c.data.classes = [{ name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2, levelsOverride: null }];
+  c.recompute();
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: null, concentration: 0,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  check('an empty Planner: every level, as the saves count it',
+    [c.classLevelCount('Wizard'), c.data.vancian.classes[0].casterLevel, c.data.saves.will.base], [12, 12, 8]);
+  c.data.classes[0].levelsOverride = 5;
+  c.recompute();
+  check('the Levels box, where one is set, for casting and saves alike',
+    [c.classLevelCount('Wizard'), c.data.vancian.classes[0].casterLevel, c.scope().class.wizard.level, c.data.saves.will.base],
+    [5, 5, 5, 4]);
+  check('a class on neither the table nor the Planner is nobody', c.classLevelCount('Druid'), 0);
+}
+
+console.log('a psionic class with no curve chosen manifests nothing');
+{
+  const c = new Character(blankDocument({ name: 'Unset', level: 8 }));
+  c.set('statsBuild.int.untyped', (Number(c.data.statsBuild.int.untyped) || 0) + (18 - c.data.abilities.int.tempScore));
+  c.listAdd('psionics.classes', {
+    name: 'Psion', stat: 'Int', stat2: '', curveTotal: null, manifesterLevelOverride: 8, powers: [],
+  });
+  const p = c.data.psionics.classes[0];
+  // Number(null) is 0, which is the curve of a class that never manifests,
+  // and it used to pay the ability share on top of its nothing.
+  check('no curve, no points, not even the ability share', [p.basePoints, p.abilityPoints, c.data.psionics.pool], [null, 0, 0]);
+}
+
+console.log('a bonus that reads power points or a caster level holds still across reopening');
+{
+  // The prose used to be read before power points, the Vancian and
+  // manifester levels, the deck and the companions were worked out: one edit
+  // behind while playing, and missing as the sheet opened -- when the offset
+  // swallowed the bonus, and the next edit added it again. Will climbed by
+  // the bonus every session.
+  let c = new Character(blankDocument({ name: 'Climber', level: 10 }));
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 10, powers: [] });
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 9, concentration: 0,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  c.data.notes = [{ body: '{saves.will += floor(pp.pool / 30)} {vancian.wizard.cl += 2} {my_cl = vancian.wizard.cl}' }];
+  c.recompute();
+  const will = c.data.saves.will.total;
+  const seen = [];
+  for (let i = 0; i < 3; i++) {
+    c = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+    seen.push(c.data.saves.will.total);
+    c.set('identity.player', `edit ${i}`);
+    seen.push(c.data.saves.will.total);
+  }
+  check('reopened and edited three times, Will stays where it was', seen, Array(6).fill(will));
+  check('with no offset made up for it', c.offsets['saves.will.total'], 0);
+  check('the bonus is there, read off this pass’s pool', c.forwardedInto('saves.will') > 0 || c.data.saves.will.total > c.data.saves.will.base, true);
+  check('a name reading a raised caster level reads it raised, as the class shows it',
+    [c.inlineNames.my_cl, c.data.vancian.classes[0].casterLevel], [11, 11]);
+}
+
+console.log('a formula that comes to a fraction rounds down, in every field');
+{
+  // Saves, AC cells, hit-point parts and forwarded bonuses used to truncate
+  // (-5/2 was -2) while a skill's Misc and the buff dials floored (-3).
+  const c = new Character(blankDocument({ name: 'Rounder', level: 5 }));
+  const will = c.data.saves.will.total;
+  const skill = c.data.skills.find((s) => s.name === 'Bluff');
+  const bluff = skill.bonus;
+  c.set('saves.will.bonuses.untyped', '-5 / 2');
+  c.setItem('skills', c.data.skills.indexOf(skill), 'offset', '-5 / 2');
+  check('a save cell and a skill’s Misc agree: -5/2 is -3', [c.data.saves.will.total - will, skill.bonus - bluff], [-3, -3]);
+  c.set('saves.will.bonuses.untyped', 0);
+  c.data.notes = [{ body: '{saves.will += -5 / 2} {saves.fortitude -= 5 / 2}' }];
+  const fort = c.data.saves.fortitude.total;
+  c.recompute();
+  check('a bonus written as -5/2 is -3; "-= 5/2" takes off the 2 it rounds down to',
+    [c.data.saves.will.total - will, c.data.saves.fortitude.total - fort], [-3, -2]);
+}
+
+console.log('forwarded bonuses stack as the rulebook says');
+{
+  const c = new Character(blankDocument({ name: 'Stacker', level: 1 }));
+  const ac0 = c.data.defenses.ac;
+  const will0 = c.data.saves.will.total;
+  const str0 = c.data.abilities.str.score;
+  const with_ = (body) => { c.data.notes = [{ body }]; c.recompute(); };
+  with_('{ac.total += 1 as dodge} {ac.total += 1 as dodge}');
+  check('two dodge bonuses stack', c.data.defenses.ac - ac0, 2);
+  with_('{ac.total += 1 as circumstance} {ac.total += 2 as circumstance}');
+  check('two circumstance bonuses stack', c.data.defenses.ac - ac0, 3);
+  with_('{ac.total += 1} {ac.total += 2 as untyped}');
+  check('untyped bonuses stack', c.data.defenses.ac - ac0, 3);
+  with_('{saves.will += 2 as morale} {saves.will += 1 as morale}');
+  check('two morale bonuses are the larger one', c.data.saves.will.total - will0, 2);
+  with_('{saves.will -= 2 as morale} {saves.will -= 1 as morale}');
+  check('penalties stack, whatever their type', c.data.saves.will.total - will0, -3);
+  // A column of the same type at the destination is a bonus of that type
+  // too: +3 typed here, on top of ABP's +1, is a resistance column of 4.
+  with_('');
+  c.set('saves.will.bonuses.resistance', 3);
+  const will3 = c.data.saves.will.total;
+  with_('{saves.will += 2 as resistance}');
+  check('a forwarded +2 resistance under a resistance column of 4 adds nothing', c.data.saves.will.total, will3);
+  with_('{saves.will += 6 as resistance}');
+  check('a +6 adds the 2 past the column', c.data.saves.will.total, will3 + 2);
+  check('and the breakdown still adds up to the total',
+    BREAKDOWNS.get('will').build(c).reduce((n, p) => n + (Number(p.value) || 0), 0), c.data.saves.will.total);
+  c.set('saves.will.bonuses.resistance', 0);
+  // An ability score's build columns are typed as well.
+  c.set('statsBuild.str.gear', 4);
+  const str4 = c.data.abilities.str.score;
+  with_('{str.score += 2 as enhancement}');
+  check('an enhancement bonus under the belt’s +4 adds nothing', c.data.abilities.str.score, str4);
+  with_('{str.score += 6 as enhancement}');
+  check('a +6 adds the 2 past it', c.data.abilities.str.score, str4 + 2);
+  check('the belt itself is counted', str4 - str0, 4);
+}
+
+console.log('three rests: the end of an encounter, a new day, a new week');
+{
+  const c = new Character(blankDocument({ name: 'Rester', level: 5 }));
+  const tr = (name, refresh) => c.addTracker({ name, maxFormula: '5', refresh });
+  const ids = {
+    fight: tr('Grit', 'per encounter').id, day: tr('Ki', 'Daily').id,
+    week: tr('Favours', 'per week').id, mine: tr('Tally', '').id,
+  };
+  for (const id of Object.values(ids)) c.updateTracker(id, { current: 3 });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 5, powers: [] });
+  c.set('psionics.spent', 4);
+  c.listAdd('vancian.prepared', { prepUsed: '', classLevel: '', name: 'Shield', note: '', uses: 2, used: 1 });
+  c.set('akashic.essence.spTemp', 2);
+  c.applyDamage(7);
+  const at = () => Object.fromEntries(Object.entries(ids).map(([k, id]) => [k, c.trackers.find((t) => t.id === id).current]));
+
+  const fight = c.rest('encounter');
+  check('end of encounter: the encounter tracker alone', [fight.label, at()], ['End encounter', { fight: 0, day: 3, week: 3, mine: 3 }]);
+  check('and nothing else moves', [c.hpState.current < c.hpState.max, c.data.psionics.spent], [true, 4]);
+  check('undo takes it back as one step', [c.undo(), at().fight], ['End encounter', 3]);
+
+  c.rest('day');
+  check('a new day: encounter and daily trackers, not weekly or the player’s own', at(), { fight: 0, day: 0, week: 3, mine: 3 });
+  check('hit points, power points, prepared spells and temporary essence back',
+    [c.hpState.current === c.hpState.max, c.data.psionics.spent, c.data.vancian.prepared[0].used, c.data.akashic.essence.spTemp],
+    [true, 0, 0, 0]);
+  c.rest('week');
+  check('a new week: the weekly one too, and still not the player’s own', at(), { fight: 0, day: 0, week: 0, mine: 3 });
+  check('what lasts how long, read off the Refresh cell',
+    ['per encounter', 'Daily', 'At dawn', 'per week', 'Combat', 'At Will', ''].map(refreshKind),
+    ['encounter', 'day', 'day', 'week', 'encounter', null, null]);
+  // Whole words: these three used to be read as daily and wiped by a new day.
+  check('and only whole words: a week in days, a word that holds "rest", a weekday',
+    ['once per 7 days', 'Until restored', 'Weekly (Sundays)', '3/day', 'after a long rest', 'every 3 days'].map(refreshKind),
+    ['week', null, 'week', 'day', 'day', null]);
+}
+
+console.log('a pool that shrinks keeps what was spent out of it');
+{
+  const c = new Character(blankDocument({ name: 'Shrinker', level: 10 }));
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 10, powers: [] });
+  const p = () => c.data.psionics;
+  const pool = p().pool;
+  c.set('psionics.spent', 30);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 1);
+  check('shrunk: shown spent no more than the pool, the spend kept', [p().spentNow, p().left, p().spent], [p().pool, 0, 30]);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('saved as spent, not as what fitted', [saved.psionics.spent, 'spentNow' in saved.psionics], [30, false]);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 10);
+  check('grown back, the thirty are still spent', p().left, pool - 30);
+}
+
+console.log('caster, manifester and sphere caster levels each belong to their own system');
+{
+  const doc = blankDocument({ name: 'Wizard', level: 9 });
+  delete doc.training.magic;
+  const c = new Character(doc);
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 9, concentration: 0,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 5, powers: [] });
+  const s = c.scope();
+  // It used to fall back to the character's level with no magic side at all.
+  check('no Spheres casting, no sphere caster level: a CL 9 wizard is not one',
+    [s.caster.level, s.vancian.wizard.cl, s.manifester.psion.level], [0, 9, 5]);
+}
+
+console.log('conditions move CMD through Strength as well as Dexterity');
+{
+  const c = new Character(blankDocument({ name: 'Tired', level: 5 }));
+  c.set('statsBuild.str.pointBuy', 14);
+  c.set('statsBuild.dex.pointBuy', 14);
+  c.set('conditions.Fatigued', 1);
+  const s = c.conditionState;
+  check('fatigued is −2 Str and −2 Dex: one from each modifier', [s.deltas.str, s.deltas.dex], [-1, -1]);
+  check('so CMB moves by the Str and CMD by both', [s.delta.cmb, s.delta.cmd], [-1, -2]);
+  check('flat-footed CMD keeps its Str, so it moves by that', s.delta.ffCmd, -1);
+
+  // Flat-footed CMD is worked out, where it used to sit at the 10 a blank
+  // sheet starts with.
+  const d = () => c.data.defenses;
+  check('flat-footed CMD is the CMD less the Dex bonus', [d().cmd, d().ffCmd], [14, 12]);
+  c.set('defenses.acBonuses.dodge', 1);
+  check('and less a dodge bonus, which CMD keeps', [d().cmd, d().ffCmd], [15, 12]);
+  c.set('defenses.uncannyDodge', true);
+  check('uncanny dodge keeps both', d().ffCmd, 15);
+  c.set('defenses.uncannyDodge', false);
+  c.set('statsBuild.dex.pointBuy', 8);
+  check('a Dex penalty is not lost, only the dodge bonus', [d().cmd, d().ffCmd], [12, 11]);
+  const again = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and the figure survives a save and reload', again.data.defenses.ffCmd, 11);
+}
+
+console.log('caster-level bonuses wait for casting; spell points count classes the character has');
+{
+  const c = new Character(blankDocument({ name: 'Early', level: 5 }));
+  c.set('training.magic.clBonus', 2);
+  c.listAdd('notes', { title: 'Items', body: '{spheres.cl += 1} {class.incanter.level += 4} {vancian.wizard.cl += 3}' });
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const m = () => c.data.training.magic;
+  check('no casting class yet: caster level bonuses wait, typed and forwarded',
+    [m().castingUnlocked, m().globalCL, m().clWaiting], [false, 0, 3]);
+  check('and a Vancian class with no levels holds its own',
+    [c.data.vancian.classes[0].casterLevel, c.data.vancian.classes[0].casterLevelWaiting], [0, 3]);
+
+  // Incanter planned for 6th to 10th: on the Planner, not taken yet at 5th.
+  for (let lv = 6; lv <= 10; lv++) c.setProgressionClass(lv, 0, 'Incanter');
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', mod1: 'Int', mod2: 'Int', levels: [] });
+  c.set('statsBuild.int.pointBuy', 14);
+  const inc = () => m().classes.find((x) => x.name === 'Incanter');
+  check('a class still to come unlocks nothing and takes no class-level bonus',
+    [m().castingUnlocked, m().globalCL, inc().levelWaiting], [false, 0, 4]);
+  check('nor has spell points', m().classSP.find((x) => x.name === 'Incanter').sp, 0);
+
+  c.set('identity.level', 7);
+  check('at 7th it has two levels: casting unlocks and every bonus lands',
+    [m().castingUnlocked, m().globalCL, m().clWaiting, inc().levelWaiting], [true, 2 + 4 + 2 + 1, 0, 0]);
+  check('spell points are the two levels it has, not the five planned, plus Int once though both slots say Int',
+    m().classSP.find((x) => x.name === 'Incanter').sp, 2 + 2);
+}
+
+console.log('a blended twin: no guessed casting type, one level count, a second score that shows');
+{
+  const c = new Character(blankDocument({ name: 'Monk', level: 6 }));
+  c.listAdd('training.combat.classes', { name: 'Monk', type: 'Expert', talentsPerLevel: 'Expert', mod1: 'Wis', levels: [] });
+  c.set('statsBuild.wis.pointBuy', 14);
+  c.set('statsBuild.cha.pointBuy', 12);
+  c.setItem('training.combat.classes', 0, 'classLevelsOverride', 6);
+  c.setBlended('combat', 0, true);
+  const m = () => c.data.training.magic;
+  const twin = () => m().classes.find((x) => x.name === 'Monk');
+  check('the twin copies the martial rate but takes no casting type from it',
+    [twin().talentsPerLevel, twin().effectiveType, m().castingUnlocked, m().globalCL], ['Expert', null, false, 0]);
+  check('and earns no spell points without one', m().classSP.find((x) => x.name === 'Monk').sp, 0);
+  check('it counts the owner\'s levels', [twin().classLevelsOverride, twin().classLevelsCurrent], [6, 6]);
+
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'type', 'Mid');
+  check('a type picked: a Mid caster at 6th', [m().castingUnlocked, m().globalCL], [true, 4]);
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'classLevelsOverride', 2);
+  check('an override typed on the twin gives way to the owner\'s', twin().classLevelsCurrent, 6);
+  c.setItem('training.magic.classes', m().classes.indexOf(twin()), 'mod2', 'Cha');
+  check('its second score adds to its spell points', m().classSP.find((x) => x.name === 'Monk').sp, 6 + 2 + 1);
+  const html = combatPanels.renderMagicPanel(c);
+  check('and has a field in the blended panel', html.includes(`data-item="training.magic.classes|${m().classes.indexOf(twin())}|mod2"`), true);
+}
+
+console.log('without a build, a forwarded ability bonus moves the working score everything reads');
+{
+  const doc = { ...blankDocument({ name: 'Typed', level: 9 }), statsBuild: null };
+  doc.abilities = { ...doc.abilities, int: { ...doc.abilities.int, score: 10, tempScore: 10 } };
+  const c = new Character(doc);
+  c.listAdd('notes', { title: 'Headband', body: '{int.score += 4}' });
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: 9, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const a = c.data.abilities.int;
+  check('the typed box keeps what was typed; the working score adds the headband',
+    [a.tempScore, a.workingScore, a.totalMod], [10, 14, 2]);
+  const k = c.data.vancian.classes[0];
+  check('castability reads the same score the bonus slots do', [k.statScore, k.statMod], [14, 2]);
+  check('and no condition ticked moves nothing', c.conditionState.deltas.int, 0);
+  check('formulas read it too', c.scope().int.temp, 14);
+}
+
+console.log('a casting block named for its archetype still counts its class\'s levels');
+{
+  const c = new Character(blankDocument({ name: 'Evoker', level: 5 }));
+  for (let lv = 1; lv <= 5; lv++) c.setProgressionClass(lv, 0, 'Wizard');
+  c.listAdd('vancian.classes', {
+    name: 'Wizard (Evoker)', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  c.listAdd('vancian.classes', {
+    name: 'Blood Arcanist', slotType: 'Wizard', stat: 'Int', stat2: '', casterLevelOverride: null, concentration: null,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const [evoker, other] = c.data.vancian.classes;
+  check('the parenthetical is dropped to find the class', [evoker.levelClass, evoker.casterLevel], ['Wizard', 5]);
+  check('and a name that is no class at all falls back to its slot table', [other.levelClass, other.casterLevel], ['Wizard', 5]);
+  c.listAdd('psionics.classes', { name: 'Psion (Telepath)', stat: 'Int', stat2: '', curveTotal: 343, powers: [] });
+  for (let lv = 1; lv <= 5; lv++) c.setProgressionClass(lv, 0, 'Psion');
+  check('a manifesting block too', [c.data.psionics.classes[0].levelClass, c.data.psionics.classes[0].manifesterLevel], ['Psion', 5]);
+}
+
+console.log('one dice reader: d6 is a die, a spaced minus counts, a dice-valued name is spliced');
+{
+  const pick = (p) => [p.dice, p.flat, p.error];
+  check('d6+2 is one d6 and two', pick(readDice('d6+2', null)), [{ 6: 1 }, 2, null]);
+  check('2d6 - 1 keeps its minus with no formula reader', pick(readDice('2d6 - 1', Number)), [{ 6: 2 }, -1, null]);
+  const names = { 'kinetic.fist.simple': '4d6', 'speed30': 5, 'con.mod': 3 };
+  const evaluate = (t) => {
+    const k = t.trim();
+    if (k in names) return names[k];
+    return k.split('+').reduce((s, x) => s + Number(names[x.trim()] ?? x), 0);
+  };
+  check('a name holding dice is read as those dice', pick(readDice('kinetic.fist.simple + 2', evaluate)), [{ 6: 4 }, 2, null]);
+  check('a name ending in digits is a name, not a die', pick(readDice('1d8 + speed30', evaluate)), [{ 8: 1 }, 5, null]);
+}
+
+console.log('hit points and resource costs are whole points, rounded down');
+{
+  const c = new Character(blankDocument({ name: 'Halves', level: 5 }));
+  c.set('hp.current', 30);
+  const before = c.hpState.current;
+  c.damage(2.5);
+  check('2.5 damage is 2', c.hpState.current, before - 2);
+  c.heal(1.9);
+  check('1.9 healing is 1', c.hpState.current, before - 1);
+  c.damage(3.7, { nonlethal: true });
+  check('nonlethal too', c.hpState.nonlethal, 3);
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '5' });
+  c.set('session', { cards: [{ id: 'a', title: 'Flurry', type: 'standard', resource: ki.id, cost: '1.5' }] });
+  useSessionAction(c, sessionState(c).cards[0]);
+  check('a card costing 1.5 spends 1', c.trackers.find((t) => t.id === ki.id).current, 1);
+}
+
+console.log('a breakdown names the ability a number is actually built on');
+{
+  const c = new Character(blankDocument({ name: 'Sage', level: 5 }));
+  c.set('statsBuild.wis.pointBuy', 14);
+  c.set('hp.initAbility', 'Wis');
+  c.data.buffs = [{ name: 'Owl', on: true, bonuses: [{ target: 'wis', value: 4 }] },
+    { name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
+  c.recompute();
+  const row = (key, label) => c.breakdown(key).adjustments?.find((p) => p.label === label);
+  check('an initiative keyed to Wisdom says so', row('initiative', 'Owl')?.note, 'buff — through Wis');
+  check('and CMD names the Strength it adds', row('cmd', 'Bull')?.note, 'buff — through Str');
+}
+
+console.log('companion ids are unique across every kind, whatever a file says');
+{
+  const doc = blankDocument({ name: 'Dupes', level: 5 });
+  doc.eidolon = [{ id: 'eidolon', name: 'A' }, { id: 'eidolon', name: 'B' }];
+  doc.conjured = [{ id: 'eidolon2', name: 'C' }];
+  const c = new Character(doc);
+  const ids = ['eidolon', 'conjured'].flatMap((k) => c.data[k].map((b) => b.id));
+  // The conjured block's odd "eidolon2" is still its own, so it keeps it; the
+  // repeated eidolon takes the next name nobody has.
+  check('a repeated id takes the next free one of its own kind', ids, ['eidolon', 'eidolon3', 'eidolon2']);
+}
+
+console.log('a Vancian class\'s concentration may be a formula');
+{
+  const c = new Character(blankDocument({ name: 'Wizard', level: 9 }));
+  c.listAdd('vancian.classes', {
+    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', casterLevelOverride: 9, concentration: 3,
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+  });
+  const k = () => c.data.vancian.classes[0];
+  check('a number is itself', [k().concentrationNum, concentrationRollSpec(c.data, 'vancian:0').rolls[0].formula], [3, '1d20+3']);
+  c.set('vancian.classes.0.concentration', 'vancian.wizard.cl + 4');
+  check('a formula reads this class\'s caster level, and the roll uses it',
+    [k().concentrationNum, concentrationRollSpec(c.data, 'vancian:0').rolls[0].formula], [13, '1d20+13']);
+  check('and is audited', c.audit().find((r) => r.id === 'vancian-0-concentration')?.status, 'ok');
+  c.set('vancian.classes.0.concentration', 'vancian.wizard.cl + nope');
+  check('a bad name is an error, not a number', [k().concentrationNum, !!k().concentrationError,
+    c.audit().find((r) => r.id === 'vancian-0-concentration')?.status], [0, true, 'error']);
+  check('the working is not saved', 'concentrationNum' in JSON.parse(JSON.stringify(c.toJSON())).vancian.classes[0], false);
+  c.set('statsBuild.int.pointBuy', 16);
+  c.set('vancian.classes.0.concentration', null);
+  check('blank is caster level + the casting modifier', k().concentrationNum, 9 + k().statMod);
+  c.set('vancian.classes.0.concentration', 0);
+  check('and a stored 0 is blank too, as every block was created with it', k().concentrationNum, 9 + k().statMod);
+  check('the modifier is really in it', k().statMod, 3);
+}
+
+console.log('the veilweaving level and DCs are worked out, as the Veilweaving sphere says');
+{
+  const c = new Character(blankDocument({ name: 'Weaver', level: 10 }));
+  c.data.classes = [
+    { name: 'Guru', hd: 8, bab: 0.75, goodFort: false, goodRef: false, goodWill: true, skillRanks: 4, levelsOverride: 6 },
+    { name: 'Incanter', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2, levelsOverride: null },
+  ];
+  c.set('statsBuild.wis.untyped', (Number(c.data.statsBuild.wis.untyped) || 0) + (16 - c.data.abilities.wis.tempScore));
+  c.data.akashic.classes = [{ name: 'Guru', mod: 'Wis', essenceCap: 2, bonusCap: 0 }];
+  c.recompute();
+  const a = () => c.data.akashic;
+  check('a veilweaving class: its own levels, 10 + Wis for the base DC, and half the level on top for a steady veil',
+    [a().classes[0].level, a().baseDC, a().steadyVeilDC], [6, 13, 16]);
+  // The sphere makes casting class levels veilweaving levels too, each level once.
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 10,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: i === 0 ? 'Veilweaving Sphere' : null, sphere: i === 0 ? 'Veilweaving' : null, notes: null })),
+  });
+  check('with the Veilweaving sphere, Guru 6 and Incanter 10 on the same levels come to 10',
+    [a().veilweaving.sphere, a().classes[0].level, c.scope().veilweaving.level], [true, 10, 10]);
+  c.setItem('akashic.classes', 0, 'levelOverride', 4);
+  check('a typed level pins it', [a().classes[0].level, a().classes[0].levelAuto], [4, 10]);
+  c.set('akashic.baseDCOverride', 20);
+  check('and a typed base DC pins that, lifting the veils', a().baseDC, 20);
+}
+
+console.log('the Lifebound piles hold until a rest to regain spell points');
+{
+  // "When you rest to regain spell points, remove all cards from your Stun,
+  // Death, and Wounds piles." A new encounter used to empty them.
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  let seed = 11;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.mods = { ...(c.data.cardcasting.mods || {}), lifeboundDeck: true };
+  c.data.cardcasting.cards = [{ name: 'Bolt', qty: 6, color: 'R', mana: '', effect: '', art: '', dice: '' }];
+  c.recompute();
+  const t = () => c.data.cardcasting.table;
+  c.tableStart();
+  const hurt = t().deck[0];
+  c.tableMove(hurt, 'wounds');
+  c.tableEnd();
+  check('the encounter ends with the card still wounded', t().wounds, [hurt]);
+  c.tableStart();
+  check('and the next one starts without it', [t().wounds, [...t().deck, ...t().hand].includes(hurt)], [[hurt], false]);
+  c.tableEnd();
+  c.rest('day');
+  check('a new day takes it off the pile', t().wounds, []);
+  c.tableStart();
+  check('and it is in the next shuffle', [...t().deck, ...t().hand, ...t().mana.map((m) => m.id)].includes(hurt), true);
+}
+
+console.log('a poor save saved one short is put right once');
+{
+  const c = new Character(blankDocument({ name: 'Sixer', level: 6 }));
+  c.data.classes = [{ name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true, skillRanks: 2 }];
+  c.recompute();
+  const fort = c.data.saves.fortitude.total;
+  check('a poor save at 6th is +2', c.data.saves.fortitude.base, 2);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  delete saved.corrections;
+  saved.saves.fortitude.total = fort - 1;   // what the float sum saved
+  const reopened = new Character(saved);
+  check('the one-short figure comes back right, with no offset',
+    [reopened.data.saves.fortitude.total, reopened.offsets['saves.fortitude.total']], [fort, 0]);
+}
+
+console.log('undo at the table -- one action back, and only that');
+{
+  const c = new Character(blankDocument({ name: 'Player', level: 5 }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '5' });
+  const kiNow = () => c.trackers.find((t) => t.id === ki.id).current;
+  const lost = () => c.hpState.max - c.hpState.current;
+
+  c.stepTracker(ki.id, 2);
+  c.applyDamage(6);
+  check('each action is named the way its button offers it back',
+    c.playActions.map((a) => a.label), ['6 damage', 'Ki 0 → 2']);
+  // The case this is for: a spend noticed after the next hit landed.
+  const spend = c.undoPlay(c.playActions[1].seq);
+  check('the spend goes back out of turn, and the damage after it stays',
+    [spend.ok, kiNow(), lost()], [true, 0, 6]);
+  check('and it is off the list', c.playActions.map((a) => a.label), ['6 damage']);
+
+  // Damage and a heal answer the same question, so the heal goes first.
+  c.applyHealing(2);
+  const hp = c.hpState.current;
+  const refused = c.undoPlay(c.playActions[1].seq);
+  check('damage behind a heal is refused, naming the heal',
+    [refused.ok, refused.reason, c.hpState.current], [false, 'heal 2 changed the same thing since. Undo that first.', hp]);
+  check('newest first, both go', [c.undoPlay().label, c.undoPlay().label, lost()], ['heal 2', '6 damage', 0]);
+
+  // A plain edit is not play, and play inside play is one action.
+  c.set('hp.current', c.hpState.baseMax - 3);
+  check('a field set by the model is not an action', c.playActions.length, 0);
+  c.rest('day');
+  check('a rest is one action, whatever it resets', c.playActions.map((a) => a.label), ['New day']);
+  check('and an action that changed nothing keeps nothing', [c.rest('day').label, c.playActions.length], ['New day', 1]);
+  c.clearUndo();
+
+  // Ctrl+Z takes whichever is newest: a removal's snapshot, or play.
+  c.listAdd('equipment.weapons', { name: 'Test Axe', dice: '1d8' });
+  const n = c.list('equipment.weapons').length;
+  c.listRemove('equipment.weapons', n - 1);
+  c.applyDamage(4);
+  check('newest first across both', [c.undo(), c.undo()], ['4 damage', 'Removed Test Axe']);
+  check('the axe and the hit points both back', [c.list('equipment.weapons').length, lost()], [n, 0]);
+
+  // Play undone out of turn must not come back with an older snapshot.
+  c.applyDamage(5);
+  c.listRemove('equipment.weapons', n - 1);
+  check('damage taken back past a removal', c.undoPlay(c.playActions[0].seq).ok, true);
+  check('then the removal, and the damage stays undone', [c.undo(), lost()], ['Removed Test Axe', 0]);
+}
+
+console.log('undo at the table -- cards, a use, slots across a rest');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  let seed = 7;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 3, color: 'R', mana: '', effect: 'Deal damage', art: '', dice: '' },
+    { name: 'Ward', qty: 3, color: 'W', mana: '', effect: 'Shield', art: '', dice: '' },
+  ];
+  c.recompute();
+  const t = () => c.data.cardcasting.table;
+  const piles = () => JSON.stringify([t().deck, t().hand, t().discard]);
+  c.tableStart();
+  const opened = piles();
+  c.tableDraw(1);
+  const drawn = t().hand.at(-1);
+  c.applyDamage(4);
+  const undrawn = c.undoPlay(c.playActions[1].seq);
+  check('a draw goes back out of turn, to the top of the deck',
+    [undrawn.ok, t().hand.includes(drawn), t().deck[0], c.hpState.max - c.hpState.current], [true, false, drawn, 4]);
+  c.tableDraw(1);
+  const card = t().hand.at(-1);
+  c.tablePlay(card, 'cast');
+  const name = c.tableCard(card).name;
+  check('but not once the card has been played', c.undoPlay(c.playActions.find((a) => a.label === 'Draw a card').seq).reason,
+    `Cast ${name} changed the same thing since. Undo that first.`);
+  while (c.playActions.length > 1) c.undoPlay();
+  check('newest first, back to the opening hand', piles(), opened);
+
+  const d = new Character(blankDocument({ name: 'Caster', level: 5 }));
+  const ki = d.addTracker({ name: 'Ki', maxFormula: '5' });
+  d.set('session', { cards: [{ id: 'a', title: 'Flurry', type: 'standard', resource: ki.id, cost: '2' }] });
+  useSessionAction(d, sessionState(d).cards[0]);
+  d.applyDamage(3);
+  const use = d.undoPlay(d.playActions.find((a) => a.label === 'Flurry').seq);
+  check('a Use is named for its card, and goes back alone: its action and its resource',
+    [use.ok, d.trackers.find((x) => x.id === ki.id).current, sessionState(d).spent.standard ?? 0, d.hpState.max - d.hpState.current],
+    [true, 0, 0, 3]);
+  useSessionAction(d, { type: 'standard' });
+  check('a bare spend is named for its action', d.playActions[0].label, 'standard action');
+
+  d.listAdd('vancian.prepared', { prepUsed: '', classLevel: '', name: 'Shield', note: '', uses: 2, used: 0 });
+  d.play('Shield 2 → 1', () => d.setItem('vancian.prepared', 0, 'used', 1));
+  d.rest('day');
+  check('a slot spent before a new day waits for the new day to go first',
+    d.undoPlay(d.playActions.find((a) => a.label.startsWith('Shield')).seq).reason,
+    'New day changed the same thing since. Undo that first.');
+  check('then comes back spent, and then unspent',
+    [d.undoPlay().label, d.data.vancian.prepared[0].used, d.undoPlay().label, d.data.vancian.prepared[0].used],
+    ['New day', 1, 'Shield 2 → 1', 0]);
 }
 
 const missing = missingCharacters(REAL);
@@ -2446,11 +3342,14 @@ console.log('hit points at the table');
   check('dying flagged', c.hpState.dying, true);
   check('dead below negative Con', c.hpState.dead, true);
 
-  c.restoreAll();
+  c.rest('day');
   check('rest restores hp', c.hpState.current, max);
   check('rest clears temp', c.hpState.temp, 0);
   check('rest clears nonlethal', c.hpState.nonlethal, 0);
-  check('rest resets trackers', c.trackers.every((t) => t.current === 0), true);
+  // Bryva's Stuffed tracker has no refresh, so no rest moves it: it is hers.
+  check('a new day resets the trackers that last a day',
+    c.trackers.filter((t) => refreshKind(t.refresh)).every((t) => t.current === 0), true);
+  check('and leaves one with no refresh alone', c.trackers.find((t) => t.id === 'stuffed_88')?.current, 6);
 
   c.damage(12, { nonlethal: true });
   check('nonlethal tracked separately', c.hpState.nonlethal, 12);
@@ -2486,7 +3385,7 @@ console.log('the death threshold, and how loudly the sheet says so');
 
   c.setBuild('con', 'morale', 0);
   c.set('hp.deathBonus', 0);
-  c.restoreAll();
+  c.rest('day');
   check('and rest puts it all back', [c.hpState.current, c.hpState.dying], [c.data.hp.total, false]);
 }
 
@@ -2530,7 +3429,7 @@ console.log('meters -- hit points and essence, drawn the way the player asked');
   check('dying raises the alarm', c.meterSpec('hp').alert > 0, true);
   check('but the fill is empty, not red', c.meterSpec('hp').alertFill, false);
   check('at the threshold the alarm is full', (c.set('hp.current', c.hpState.deathAt), c.meterSpec('hp').alert), 1);
-  c.restoreAll();
+  c.rest('day');
 
   // Essence: the same picture, with the spell-point capacity as its layer.
   let ess = c.meterSpec('essence');
@@ -2612,12 +3511,15 @@ console.log('editing flows into derived stats');
   c.set('saves.will.stat1', 'Int');
   check('save follows its new ability', c.data.saves.will.total, will0 - wisMod + intMod);
 
-  // size changes AC, CMD and carry capacity together
+  // size changes AC, CMD, attacks and carry capacity together
+  const ac1 = c.data.defenses.ac;
   const cmd0 = c.data.defenses.cmd;
+  const melee0 = c.data.attack.totalMelee;
   const light0 = c.data.carry.light;
   c.set('identity.size', 'Large');
-  check('size shifts AC', c.data.defenses.ac, c.data.defenses.ac);
+  check('size lowers AC', c.data.defenses.ac, ac1 - 1);
   check('size raises CMD', c.data.defenses.cmd, cmd0 + 1);
+  check('and lowers melee attack, as it does AC', c.data.attack.totalMelee, melee0 - 1);
   if (!(c.data.carry.light > light0)) { fail++; console.log('  FAIL size did not change carry capacity'); } else pass++;
 }
 
@@ -2653,8 +3555,10 @@ console.log('spheres training reproduces the sheet');
   check('angou effective', m.effectiveDrawbacks, 6);
   check('angou SP tier', m.spTier, 5);
   check('angou boons -- every effective drawback is one', m.boons, 6);
-  check('angou tradition SP (3 casting classes)', m.traditionSP, 12);
-  check('angou total SP', m.totalSP, 83);
+  // Two casting classes, not the workbook's three: its Wizard block has no
+  // Wizard levels, and a class not taken is not a casting class.
+  check('angou tradition SP (2 casting classes)', m.traditionSP, 8);
+  check('angou total SP', m.totalSP, 79);
 
   // Bryva: the other internally-consistent workbook.
   const b = new Character(load('bryva'));
@@ -2682,7 +3586,7 @@ console.log('spheres training reproduces the sheet');
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying off a drawback costs 2 effective', c.data.training.magic.effectiveDrawbacks, 4);
   check('which drops the boons with it', c.data.training.magic.boons, 4);
-  check('and the tradition SP', c.data.training.magic.totalSP, sp0 - 12);
+  check('and the tradition SP', c.data.training.magic.totalSP, sp0 - 8);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('restored', c.data.training.magic.totalSP, sp0);
 }
@@ -2899,8 +3803,10 @@ console.log('a class progression on a real character, and the weapon that reads 
   // The formula override wins over the rungs, and a broken one says why
   // rather than leaving a weapon with no dice at all.
   c.set('training.combat.unarmed.native.formula', "unarmed.classLevel >= 16 ? '2d8' : '1d8'");
+  // 2d8 and one size is 3d8, the monk's Large column; "two chain steps" made
+  // it 2d10.
   check('a formula beats the ladder, and is not a rung',
-    [n().baseDice, u().dice, n().rung], ['2d8', '2d10', null]);
+    [n().baseDice, u().dice, n().rung], ['2d8', '3d8', null]);
   c.set('training.combat.unarmed.native.formula', 'no_such_name + 1');
   check('a broken one is named and falls back to the table',
     [/no_such_name/.test(n().error || ''), u().source, u().dice, u().practitionerDice],
@@ -3051,8 +3957,10 @@ console.log('customized weapons -- parallel talent tracks with one of them live'
     [cust().sets[3].weapon, cust().sets[3].talents[0].talent, cust().sets[3].talents[0].granted],
     ['Trident', 'Lancer Sphere', false]);
   check('the switch comes back to a weapon that exists', cust().active, 2);
-  check('and a spare weapon is live for nothing',
-    [combat().tally.Brute || 0, combat().tally.Lancer || 0], [1, 3]);
+  // Her own Brute talent was taken at 14th, so at 10th it is not hers yet: a
+  // tally counts only what the character has at the level she is.
+  check('and a spare weapon is live for nothing, nor is a talent from 14th',
+    [combat().tally.Brute || 0, combat().tally.Lancer || 0], [0, 3]);
   b.set('identity.level', 16);
   check('back at 16 the fourth weapon and the fifth rows return',
     [cust().setCount, cust().talentCount, cust().sets[3].spare], [4, 5, false]);
@@ -3632,11 +4540,11 @@ console.log('training values reach the formula scope');
   const c = new Character(load('angou'));
   const scope = c.scope();
   check('caster.level', scope.caster.level, 20);
-  check('caster.sp', scope.caster.sp, 83);
+  check('caster.sp', scope.caster.sp, 79);
   check('practitioner.dc', scope.practitioner.dc, 36);
   check('unarmed.talents', scope.unarmed.talents, 19);
   const t = c.addTracker({ name: 'SP Pool', maxFormula: 'caster.sp' });
-  check('tracker can read SP', t.max, 83);
+  check('tracker can read SP', t.max, 79);
 }
 
 console.log('gestalt classes drive save bases');
@@ -3829,7 +4737,7 @@ console.log('mythic tier, HP, tradition and stat picks');
   c.set('mythic.bonusHpPerTier', 7);
   check('a typed figure overrides the path', c.hpState.max, max0 + 20);
   check('and reaches the formula scope', c.scope().hp.total, max0 + 20);
-  c.restoreAll();
+  c.rest('day');
   check('rest fills to the boosted maximum', c.hpState.current, max0 + 20);
   c.set('mythic.bonusHpPerTier', null);
   check('cleared, the path takes it back', c.hpState.max, max0);
@@ -4176,25 +5084,25 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   const ac0 = ac();
   const level = Number(c.data.identity.level) || 0;
   c.setItem('equipment.gear', 0, 'bonuses.0.value', 2);
-  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Deflection');
+  c.setItem('equipment.gear', 0, 'bonuses.0.type', 'Luck');
   check('an amount and a type with nowhere to go change nothing', ac(), ac0);
   check('but the amount is still worked out for the row', c.gearBonusCalc.get('gearBonus:0:0'), { value: 2, error: null });
 
   c.setItem('equipment.gear', 0, 'bonuses.0.target', 'ac.total');
   check('aimed at AC, it lands', ac(), ac0 + 2);
   const entry = c.contributions.entries.find((e) => e.path === 'gearBonus:0:0');
-  check('as a forwarded bonus of its type', [entry?.type, entry?.value, entry?.targets], ['deflection', 2, ['ac.total']]);
+  check('as a forwarded bonus of its type', [entry?.type, entry?.value, entry?.targets], ['luck', 2, ['ac.total']]);
   check('that says which item it came from', describeSource(entry.path), 'gear 1, bonus 1');
 
   // The destination answers to the same spellings a formula does.
   c.setItem('equipment.gear', 0, 'bonuses.0.target', 'AC');
   check('and the workbook’s name for it is the same place', ac(), ac0 + 2);
 
-  // Stacking: a second deflection bonus is one deflection bonus.
+  // Stacking: a second luck bonus is one luck bonus.
   c.setItem('equipment.gear', 1, 'bonuses.0.value', 1);
-  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Deflection');
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Luck');
   c.setItem('equipment.gear', 1, 'bonuses.0.target', 'ac.total');
-  check('two deflection bonuses are the larger one', ac(), ac0 + 2);
+  check('two luck bonuses are the larger one', ac(), ac0 + 2);
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Untyped');
   check('an untyped one adds', ac(), ac0 + 3);
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Natural Armor');
@@ -4226,7 +5134,7 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
 
   // Other items forward the same way, under their own family.
   c.setItem('equipment.other', 0, 'bonuses.0.value', 3);
-  c.setItem('equipment.other', 0, 'bonuses.0.type', 'Resistance');
+  c.setItem('equipment.other', 0, 'bonuses.0.type', 'Luck');
   c.setItem('equipment.other', 0, 'bonuses.0.target', 'saves');
   const will = c.data.saves.will.total;
   check('an Other item forwards too', c.contributions.entries.find((e) => e.path === 'otherBonus:0:0')?.lands,
@@ -4234,10 +5142,30 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   c.setItem('equipment.other', 0, 'bonuses.0.value', 5);
   check('and moves the number', c.data.saves.will.total, will + 2);
 
+  // A bonus of a type the destination already holds counts only for what it
+  // adds past it, as the rulebook has it: Nico's saves carry ABP's +5
+  // resistance and his AC ABP's +2 deflection. These used to add on top.
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 0);
+  const bare = c.data.saves.will.total;
+  c.setItem('equipment.other', 0, 'bonuses.0.type', 'Resistance');
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 5);
+  check('a +5 resistance bonus under ABP’s +5 resistance adds nothing', c.data.saves.will.total, bare);
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 7);
+  check('a +7 adds the 2 past it', c.data.saves.will.total, bare + 2);
+  check('and its badge says so', c.forwardedInto('saves.will').from.map((x) => [x.value, x.column, x.adds]), [[7, 5, 2]]);
+  const acBare = ac();
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', 'ac.total');
+  c.setItem('equipment.gear', 1, 'bonuses.0.value', 3);
+  c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Deflection');
+  check('a ring of +3 over ABP’s +2 deflection adds 1', ac(), acBare + 1);
+  c.setItem('equipment.gear', 1, 'bonuses.0.target', '');
+  c.setItem('equipment.other', 0, 'bonuses.0.type', 'Luck');
+  c.setItem('equipment.other', 0, 'bonuses.0.value', 5);
+
   // What is worked out is not what is saved.
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('the working is not written into the document', saved.gearBonusCalc, undefined);
-  check('the three cells are', saved.equipment.gear[0].bonuses[0], { value: 2, type: 'Deflection', target: 'AC' });
+  check('the three cells are', saved.equipment.gear[0].bonuses[0], { value: 2, type: 'Luck', target: 'AC' });
   const back = new Character(saved);
   check('and a reopened character has the same AC', back.data.defenses.ac, ac());
   check('a filled To alone counts the column as in use', (() => {
@@ -5003,7 +5931,7 @@ console.log('session quick actions -- damage, healing, and the night\'s rest');
   const weekly = c.addTracker({ name: 'Favors', maxFormula: '3', refresh: 'per week' });
   c.updateTracker(daily.id, { current: 4 });
   c.updateTracker(weekly.id, { current: 2 });
-  check('rest refreshes the daily pool only', [c.restRefresh(),
+  check('a new day refreshes the daily pool only', [c.rest('day').trackers,
     c.trackers.find((t) => t.id === daily.id).current,
     c.trackers.find((t) => t.id === weekly.id).current], [1, 0, 2]);
 
@@ -5292,12 +6220,16 @@ console.log('buff extra bonuses -- targets past the six dials');
   // capped steps, so an absurd row still reads as Colossal.
   c.data.identity.size = 'Huge';
   cs = buff([{ target: 'size', value: 4 }, { target: 'sizeEffective', value: 3 }]);
+  // Huge -2 to Colossal -8: the modifier's own change, which doubles past Large.
   check('a Huge character stops at Colossal in numbers and dice alike',
-    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-2, -2, 2, 2, 2]);
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-6, -6, 6, 6, 2]);
   c.data.identity.size = 'Medium';
   cs = buff([{ target: 'size', value: 500 }]);
-  check('a +500 row is four steps from Medium, everywhere',
-    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-4, -4, 4, 4, 4]);
+  check('a +500 row is four steps from Medium, everywhere -- Colossal at -8',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmb, cs.delta.cmd, cs.sizeSteps], [-8, -8, 8, 8, 4]);
+  cs = buff([{ target: 'size', value: -2 }]);
+  check('and down: Medium to Tiny is +2, doubled from the +1 of Small, as Size Change says',
+    [cs.delta.melee, cs.delta.ac, cs.delta.cmd], [2, 2, -2]);
 
   // {size} reads the true size after buffs -- and only the true size: the
   // stacking and effective kinds change what a character counts as, not what
@@ -6028,12 +6960,17 @@ console.log('two-sided trackers -- a min below zero makes a meter that swings ne
   c.stepTracker('plain', 9);
   check('plain trackers clamp at max', plain.current, 5);
 
-  // Rest brings a meter back to its neutral 0.
+  // A rest brings a meter back to its neutral 0 -- the rest its refresh names.
+  // One that says At Will, and a tracker with no refresh at all, are the
+  // player's to move: every rest used to zero every tracker.
   c.updateTracker('hellfire_qi', { current: -3 });
   check('can sit at a negative value', get().current, -3);
-  c.restoreAll();
-  check('rest zeroes the meter', get().current, 0);
-  check('rest zeroes plain trackers', plain.current, 0);
+  c.rest('week');
+  check('an At Will meter is left where it is', get().current, -3);
+  check('and so is a tracker with no refresh', plain.current, 5);
+  c.updateTracker('hellfire_qi', { refresh: 'Daily' });
+  c.rest('day');
+  check('a daily meter comes back to its neutral 0', get().current, 0);
 
   // Both formulas follow the character (Angou's Con already carries an
   // untyped bonus, so edits are relative to it).
@@ -6239,7 +7176,7 @@ console.log('Mythic Power drains by default');
   c.stepTracker('mythic_power', 3);
   check('spent three', c.trackers[0].current, 3);
   check('twenty left', c.scope().tracker.mythic_power.remaining, 20);
-  c.restoreAll();
+  c.rest('day');
   check('rest refills', c.scope().tracker.mythic_power.remaining, 23);
 
   // The default is a seed, not a lock: turning it off must survive a reload.
@@ -6926,8 +7863,8 @@ console.log('akashic -- veil DCs come back from base DC plus essence');
   const marilith = a.slots.find((s) => s.slot === 'Shoulder').veils[0];
   check("Marilith's Aspect DC", [marilith.essence, marilith.dc], [6, 31]);
 
-  // Raising the base DC moves every veil with it.
-  c.set('akashic.baseDC', 30);
+  // Pinning the base DC moves every veil with it.
+  c.set('akashic.baseDCOverride', 30);
   check('a new base DC lifts every veil', a.slots.find((s) => s.slot === 'Shoulder').veils[0].dc, 36);
   c.set('akashic.baseDC', 25);
 
@@ -7400,21 +8337,25 @@ console.log('vancian -- slots are spent at the table and come back with the day'
   // Cantrips are at will, so there is nothing there to spend.
   check('at-will levels have no pool', [at(0).atWill, at(0).left], [true, null]);
 
-  // Overspending, or a level that shrinks under it, must not leave a negative.
+  // Overspending, or a level that shrinks under it, must not leave a negative
+  // -- and must not throw away what was spent, either: the spend is the
+  // player's, and only what is shown is held to what the class has now.
   c.setItem('vancian.classes.0.spells', 1, 'used', 999);
-  check('spending more than exists clamps to the pool',
-    [at(1).used, at(1).left], [slots1, 0]);
+  check('spending more than exists shows the pool spent, and keeps what was written',
+    [at(1).used, at(1).usedNow, at(1).left], [999, slots1, 0]);
+  c.setItem('vancian.classes.0.spells', 1, 'used', 0);
 
-  // Pinning the caster level low takes the higher spell levels away entirely, and
-  // whatever was spent out of them has to go with them.
+  // Pinning the caster level low takes the higher spell levels away entirely.
+  // What was spent out of them is shown as nothing while they are gone, and
+  // is still spent when they come back: it used to be wiped, and saved so.
   c.setItem('vancian.classes.0.spells', 2, 'used', 1);
   check('a 2nd-level slot was spent', at(2).used, 1);
   c.setItem('vancian.classes', 0, 'casterLevelOverride', 1);
   check('an oracle pinned to CL1 has no 2nd-level slots', at(2).slots, null);
-  check('and the spend goes with them', [at(2).used, at(2).left], [0, 0]);
-
+  check('none shown spent while there are none', [at(2).usedNow, at(2).left], [0, 0]);
   c.setItem('vancian.classes', 0, 'casterLevelOverride', 8);
-  c.setItem('vancian.classes.0.spells', 2, 'used', 1);
+  check('and the slot is still spent when they come back', at(2).usedNow, 1);
+
   c.vancianNewDay();
   check('a new day restores everything', c.data.vancian.calc.spent, 0);
 
@@ -7440,9 +8381,10 @@ console.log('vancian -- a prepared caster spends per spell, not per level');
   check('the block counts it as spent', c.data.vancian.calc.spent, 1);
 
   c.setItem('vancian.prepared', 1, 'used', 9);
-  check('it cannot be cast more times than prepared', [row().used, row().left], [3, 0]);
+  check('it cannot be shown cast more times than prepared', [row().usedNow, row().left], [3, 0]);
   c.setItem('vancian.prepared', 1, 'uses', 1);
-  check('and preparing fewer drops the spend to match', [row().used, row().left], [1, 0]);
+  check('and preparing fewer shows the spend to match, keeping what was written',
+    [row().used, row().usedNow, row().left], [9, 1, 0]);
 
   // A heading the player typed is not a spell and gets no pool.
   check('a section heading has nothing to spend',
@@ -7539,7 +8481,7 @@ console.log('blended training -- one class, one pool, two progressions');
   // None of the per-side numbers move: they are still computed off the block
   // sitting on that side, which is why the pair is kept rather than merged.
   check('caster level unmoved', a.data.training.magic.globalCL, 20);
-  check('spell points unmoved', a.data.training.magic.totalSP, 83);
+  check('spell points unmoved', a.data.training.magic.totalSP, 79);
   check('practitioner DC unmoved', a.data.training.combat.practitionerDC, 36);
   check('bryva too', [new Character(load('bryva')).blendedClasses().map((p) => p.name)],
     [['Blacksmith']]);
@@ -7618,8 +8560,8 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   check('drawn on the martial and guile tabs, not the magic one',
     [martialHtml, combatPanels.renderMagicPanel(c), guilePanels.renderGuilePanel(c)]
       .map((html) => html.includes('Blended training')), [true, false, true]);
-  check('as two ladders, with the rate kept and a rule box for [utility]',
-    ['guileladder', 'training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule',
+  check('as two ladders, stacked, with the rate kept and a rule box for [utility]',
+    ['ladderstack', 'training.combat.classes|0|talentsPerLevel', 'training.combat.classes|0|utilityRule',
       'training.combat.classes|0|anyRule'].map((x) => martialHtml.includes(x)), [true, true, true, false]);
 
   // [utility] talents at the levels a rule names: the book's "1 a level, and a
@@ -7745,7 +8687,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   const guileHtml = guilePanels.renderGuilePanel(s);
   check('it moves out of Skill expertise into Blended training',
     [guileHtml.includes('data-blendguile="0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
-  check('and heads the martial tab with its ladders', combatPanels.renderMartialPanel(s).includes('guileladder'), true);
+  check('and heads the martial tab with its ladders, stacked', combatPanels.renderMartialPanel(s).includes('ladderstack'), true);
   check('which puts the martial and magic tabs in use for a character with no classes there',
     (() => { const x = fresh(); x.data.training.combat.classes = []; x.addGuileClass('Only');
       x.setGuileBlend(0, 'magic', true); return [x.systemTabsInUse().martial, x.systemTabsInUse().magic]; })(),
@@ -7789,7 +8731,15 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
     [normal.any.notes / normal.any.talent, normal.utility.notes / normal.utility.talent].map(r2), [2, 2]);
   check('the shares add up past what a table holds, so fixed columns keep their width',
     Math.round(normal.any.talent + normal.any.notes + normal.utility.talent + normal.utility.notes), 400);
-  check('the headings are switches', combatPanels.renderMartialPanel(L).includes(`data-ladderfocus="${key}|utility"`), true);
+  // In the blended panel the ladders stack, a level to a box, so there is no
+  // width to share and no switch; the Guile tab's side-by-side ladders keep it.
+  const blendedHtml = combatPanels.renderMartialPanel(L);
+  check('the blended panel stacks them instead, with no switch to share the width',
+    [blendedHtml.includes('ladderstack'), blendedHtml.includes('data-ladderfocus')], [true, false]);
+  const lvls = champ(L).levels;
+  check('each level draws only the ladders it grants',
+    [(blendedHtml.match(/class="[^"]*utilrow/g) || []).length, (blendedHtml.match(/<tbody class="lvlbox">/g) || []).length],
+    [lvls.filter((lv) => lv.utilityGranted).length, lvls.length]);
   L.data.uiPrefs.ladderFocus = { [key]: 'utility' };
   const focused = lay();
   check('focusing [utility] narrows the any ladder to a quarter of its shares and a short dropdown',
@@ -7816,9 +8766,11 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   check('split by default the way the sheets were written -- the ones past the '
     + 'fifth as points, the rest as essence',
   m().traditionPools.map((p) => [p.label, p.spSteps, p.sp, p.essenceSteps, p.essence]),
-  [['Boons 6', 1, 12, 5, 16]]);
-  check("which is the 12 tradition SP his sheet cached, and its total",
-    [m().traditionSP, m().totalSP, m().sheet.totalSP], [12, 83, 83]);
+  [['Boons 6', 1, 8, 5, 16]]);
+  // His sheet cached 12 and 83: it counted a Wizard block he has no levels
+  // in as a third casting class.
+  check("which is 4 short of the 12 tradition SP his sheet cached, and of its total",
+    [m().traditionSP, m().totalSP, m().sheet.totalSP], [8, 79, 83]);
   // His workbook reads the ladder twice -- 20 as the Akashic tab's Essence Boon
   // *and* 4 x 3 classes as spell points, 32 points from a 20-point ladder. One
   // pool can only read it once, so the essence is 4 short of what he wrote.
@@ -7830,7 +8782,7 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   // The split moves a step at a time, and the halves always add back up.
   c.set('training.magic.tradition.boonSP', 6);
   check('all of it as spell points, multiplied per casting class',
-    [m().traditionSP, m().traditionEssence], [60, 0]);
+    [m().traditionSP, m().traditionEssence], [40, 0]);
   c.set('training.magic.tradition.boonSP', 0);
   check('all of it as essence, unmultiplied', [m().traditionSP, m().traditionEssence], [0, 20]);
   c.set('training.magic.tradition.boonSP', 3);
@@ -7840,22 +8792,22 @@ console.log('tradition boons -- one pool of steps, split between points and esse
   check('and the two halves still come to the ladder',
     p().sp / m().castingClassCount + p().essence, m().boonPoints);
   c.set('training.magic.tradition.boonSP', 1);
-  check('restored', [m().totalSP, m().traditionEssence], [83, 16]);
+  check('restored', [m().totalSP, m().traditionEssence], [79, 16]);
 
   // Buying a drawback off drops the count for a moment. The split is clamped
   // to what is left, but the number the player wrote survives the dip.
   c.set('training.magic.tradition.boonSP', 5);
-  check('five of six as spell points', m().traditionSP, 60);
+  check('five of six as spell points', m().traditionSP, 40);
   c.listAdd('training.magic.tradition.boughtOff', 'Somatic Casting');
   check('buying one off leaves four to split, and clamps to them',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [4, 4, 42]);
+    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [4, 4, 28]);
   c.listRemove('training.magic.tradition.boughtOff', 1);
   check('and the fifth comes back when the boon does',
-    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [6, 5, 60]);
+    [m().boons, m().traditionPools[0].spSteps, m().traditionSP], [6, 5, 40]);
   c.set('training.magic.tradition.boonSP', 1);
 
   for (const [id, boons, sp, essence] of [
-    ['angou', 6, 12, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
+    ['angou', 6, 8, 16], ['narockro', 6, 2, 9], ['saburo', 8, 5, 4],
     ['nico', 4, 0, 11], ['bryva', 0, 0, 0],
   ]) {
     const x = new Character(load(id)).data.training.magic;
@@ -8157,11 +9109,15 @@ console.log('psionics -- points are spent out of one pool and come back with the
   c.set('psionics.spent', 40);
   check('spending forty leaves the rest', p().left, pool - 40);
   c.set('psionics.spent', pool + 500);
-  check('the pool cannot be overdrawn', [p().spent, p().left], [pool, 0]);
+  check('the pool is never shown overdrawn', [p().spentNow, p().left], [pool, 0]);
 
-  // A class that shrinks must not leave the pool spent past its size.
+  // A class that shrinks does not show the pool spent past its size, and does
+  // not throw the spend away either: it is there when the pool comes back.
+  c.set('psionics.spent', 40);
   c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 1);
-  check('a smaller pool drags the spend down with it', p().spent <= p().pool, true);
+  check('a smaller pool shows no more spent than it holds', [p().spentNow <= p().pool, p().spent], [true, 40]);
+  c.setItem('psionics.classes', 0, 'manifesterLevelOverride', 20);
+  check('and the spend is back with the pool', p().left, pool - 40);
 
   c.psionicsNewDay();
   check('a new day restores the pool', [p().spent, p().left], [0, p().pool]);
@@ -8262,7 +9218,11 @@ console.log('conditions -- what is ticked moves the numbers beside the base, nev
   check('paralysed sets Dex to 0', s.scores.dex, 0);
   check('and Str to 0', s.scores.str, 0);
   check('so the Dex modifier is −5', s.deltas.dex, -5 - c.data.abilities.dex.totalMod);
-  check('CMD loses the Dex bonus and takes the penalty', s.delta.cmd, -5 - c.data.abilities.dex.totalMod);
+  // CMD adds Str as well as Dex, and paralysis sets both to 0.
+  check('CMD loses the Str and Dex bonuses and takes both penalties', s.delta.cmd,
+    -5 - c.data.abilities.dex.totalMod - 5 - c.data.abilities.str.totalMod);
+  check('flat-footed CMD had no Dex bonus to lose, but still loses Str', s.delta.ffCmd,
+    -5 - Math.min(0, c.data.abilities.dex.totalMod) - 5 - c.data.abilities.str.totalMod);
   check('melee attacks against it gain +4', s.acVsMelee, -4);
   check('it cannot move', s.speeds.every((sp) => sp.adjusted === 0), true);
   c.set('conditions.Helpless', 1);
@@ -9116,11 +10076,13 @@ console.log('companions -- what the table grants, and where its rules text comes
   // `abilityNotes` -- so the two halves have to agree on it.
   check('the key is the name, folded', abilityTextKey('  Ability Score Increase '), 'ability score increase');
 
-  // First pack in wins, which is bundled-then-local: somebody's own overrides.
+  // The packs arrive bundled first and local after, and somebody's own pack
+  // overrides a bundled one -- so the last to describe an ability keeps it.
+  // (This used to be first-in-wins, which let the bundled text win.)
   setCompanionAbilityText([
-    { name: 'Evasion', text: 'mine' }, { name: 'Evasion', text: 'theirs' },
+    { name: 'Evasion', text: 'bundled' }, { name: 'Evasion', text: 'mine' },
   ]);
-  check('the first pack to describe one keeps it', companionAbilityText('Evasion').text, 'mine');
+  check('the player’s own pack, loaded after a bundled one, keeps it', companionAbilityText('Evasion').text, 'mine');
   setCompanionAbilityText([]);
   check('and no packs at all is simply no text', companionAbilityText('Evasion'), null);
 }
@@ -9936,6 +10898,8 @@ console.log('\nthe sphere tables -- a bonus column that takes a rule');
 {
   const c = new Character(blankDocument({ name: 'Spheres' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
   c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
   c.addGuileSphere('Study');
@@ -10017,6 +10981,8 @@ console.log('\nthe sphere tables -- a place to send a bonus');
 {
   const c = new Character(blankDocument({ name: 'Spheres' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Sphere', clBonus: 0, dcBonus: 0, sheetValue: 'Sphere CL / DC' });
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 1, dcBonus: 0 });
   c.listAdd('training.combat.sphereBonuses', { sphere: 'Athletics', rankBonus: 0, dcBonus: 0 });
@@ -10110,6 +11076,8 @@ console.log('\ncaster levels -- spheres.*, vancian.* and manifester.* take a bon
 {
   const c = new Character(blankDocument({ name: 'Casters' }));
   c.set('identity.level', 8);
+// A casting class with levels: a caster-level bonus waits until casting is unlocked.
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', classLevelsOverride: 8, levels: [] });
   c.set('training.magic.clBonus', 1);
   c.listAdd('training.magic.sphereBonuses', { sphere: 'Dark', clBonus: 0, dcBonus: 0 });
   c.listAdd('vancian.classes', {
@@ -10215,9 +11183,10 @@ console.log('\nthe sphere tables -- every sphere, and only the trained ones in f
     [c.scope().sphere.dark.cl, c.forwardTargets().list.some((t) => t.name === 'sphere.alteration.cl')],
     [dark().cl, true]);
 
-  // A talent from a class level puts the sphere in front.
+  // A talent from a class level puts the sphere in front -- a level the class
+  // has, which with an empty Planner is the level count it is given.
   c.listAdd('training.magic.classes', {
-    name: 'Incanter', type: 'High', levels: [{ level: 1, talent: 'Dark Sphere', sphere: 'Dark' }],
+    name: 'Incanter', type: 'High', classLevelsOverride: 1, levels: [{ level: 1, talent: 'Dark Sphere', sphere: 'Dark' }],
   });
   check('a class talent counts', dark().talents, 1);
   const magicHtml = combatPanels.renderMagicPanel(c);

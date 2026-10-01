@@ -69,7 +69,13 @@ class ExtensionRuntime extends EventTarget {
       this.#loading = Promise.all([
         loadBundledExtensions(base).catch(() => []),
         this.store ? this.store.open().catch(() => false) : Promise.resolve(false),
-      ]).then(([docs]) => { this.bundled = docs; this.refresh({ silent: true }); return this.active(); });
+      ]).then(([docs]) => {
+        this.bundled = docs;
+        // Kept whatever happens: this promise is cached, and every character
+        // the page opens waits on it. A load that failed here would stay failed.
+        try { this.refresh({ silent: true }); } catch (err) { console.error('Could not register the packs', err); }
+        return this.active();
+      });
     }
     return this.#loading;
   }
@@ -81,15 +87,28 @@ class ExtensionRuntime extends EventTarget {
   refresh({ silent = false } = {}) {
     const active = this.active();
     const tables = mergeTables(active);
-    registerTables(tables, REGISTRARS);
+    const failed = registerTables(tables, REGISTRARS);
     // The option menus a pack carries as blocks, so a feature column pointing
     // at one by name finds it as soon as its pack is switched on.
     const blocks = activeBlocks(active);
     // A catalogue pack's class options and wild talents are menus too, though
-    // nothing in it says so. A block of the same name is the one meant.
-    setOptionCatalogues([...classFeatureTextFromTables(tables), ...optionCataloguesFromTables(tables), ...optionCataloguesFrom(blocks)]);
+    // nothing in it says so. A block of the same name is the one meant. Both of
+    // these read every block, so they are held to the same terms as the
+    // tables: one that cannot be read is left empty rather than stopping here.
+    try {
+      setOptionCatalogues([...classFeatureTextFromTables(tables), ...optionCataloguesFromTables(tables), ...optionCataloguesFrom(blocks)]);
+    } catch (err) {
+      failed.push({ name: 'setOptionCatalogues', error: err?.message || String(err) });
+      setOptionCatalogues([]);
+    }
     // And the rules text behind a companion ability the table grants by name.
-    setCompanionAbilityText(namedTextFrom(blocks));
+    try {
+      setCompanionAbilityText(namedTextFrom(blocks));
+    } catch (err) {
+      failed.push({ name: 'setCompanionAbilityText', error: err?.message || String(err) });
+      setCompanionAbilityText([]);
+    }
+    for (const f of failed) console.warn(`A switched-on pack could not be read (${f.name}): ${f.error}`);
     if (!silent) this.dispatchEvent(new CustomEvent('change', { detail: { active: this.active() } }));
   }
 }

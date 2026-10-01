@@ -164,7 +164,7 @@ import {
 } from './history.js';
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
-  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, rgba,
+  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, pipClickValue, rgba,
   trackBand, readableOn,
 } from './tracker-style.js';
 import {
@@ -714,6 +714,8 @@ export class CharacterSheetElement extends HTMLElement {
      only ever one last thing. */
   #undoToast = null;    // { label }
   #undoToastTimer = null;
+  /* The list of earlier play actions under the rail's Undo button, open or not. */
+  #playMenu = false;
   /**
    * Roll template or bare /roll. A preference of the person playing rather than
    * of the character -- their Roll20 game is what decides it -- so it lives in
@@ -1228,6 +1230,17 @@ export class CharacterSheetElement extends HTMLElement {
       // way back; offer it. Before the change rather than after, which is
       // fine: the render that follows draws the toast from the same field.
       if (detail?.type === 'undo-mark') this.#showUndoToast(detail.label);
+      // Something newer to take back than whatever the toast offers: the
+      // rail's button names it now. After the handler that did it has drawn,
+      // because some of those redraw a panel and not the rail.
+      if (detail?.type === 'play-mark') {
+        this.#playMenu = false;
+        if (this.#undoToast) { this.#undoToast = null; queueMicrotask(() => this.#renderRollToast()); }
+        queueMicrotask(() => this.#refreshPlayUndo());
+        // Nothing in the character moved: the action's own changes were
+        // saved and announced as they happened.
+        return;
+      }
       this.#persist();
       this.dispatchEvent(new CustomEvent('character-change', {
         detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
@@ -2262,6 +2275,7 @@ export class CharacterSheetElement extends HTMLElement {
         <select class="jumpto" aria-label="Jump to a section on this tab" hidden>
           <option value="">Jump to…</option>
         </select>
+        ${this.#playUndoHtml()}
         ${this.#searchButton()}
         ${this.isPublished ? '' : `
         <button data-action="save" class="${this.#changes ? 'primary' : ''}"
@@ -2422,15 +2436,13 @@ export class CharacterSheetElement extends HTMLElement {
     // where "why is my AC 50" is asked oftenest.
     const shown = (key, base, format = fmt) => `<strong>${rows.movedInline(cs, key, base, format, this.#model)}</strong>`;
     const moved = (key, base) => rows.movedSub(cs, key, base, String);
-    const maxNow = moved('hp', hp.max);
-    // Negative levels take current and total alike, so the shown current never
-    // stands above the drained maximum; the stored value is untouched and
-    // comes back when the levels do.
-    const curNow = Math.min(hp.current, maxNow);
+    // Hit points as they stand: negative levels take current and total alike
+    // (hpState). The maximum is marked as moved from the undrained one.
+    const maxNow = moved('hp', hp.baseMax);
     return `<div class="subtitle sessionstrip">
-      HP <strong class="${curNow < maxNow ? 'bad' : ''}"
-        title="${maxNow !== hp.max ? esc(`Base ${hp.current}/${hp.max} — negative levels reduce current and total hit points`) : ''}"
-        >${curNow}/${maxNow}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
+      HP <strong class="${hp.current < hp.max ? 'bad' : ''}"
+        title="${hp.shift ? esc(`Base ${hp.baseCurrent}/${hp.baseMax} — negative levels and buffs move current and total hit points alike`) : ''}"
+        >${hp.current}/${maxNow}</strong>${hp.temp > 0 ? `<span class="hptemp">+${hp.temp}</span>` : ''}
       &middot; AC ${shown('ac', d.ac, String)} <span class="dim">touch ${moved('touch', d.touch)} &middot; FF ${moved('flatFooted', d.flatFooted)}</span>
       &middot; Fort ${shown('fortitude', s.fortitude.total)}
       Ref ${shown('reflex', s.reflex.total)}
@@ -2804,7 +2816,10 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #fillDatalist(input) {
     const list = this.shadowRoot?.getElementById(input.getAttribute('list'));
-    if (!list) return;
+    // Only a list that asks to be filled. The veil and class-feature menu
+    // lists are drawn whole by their panels and say nothing, and reading
+    // silence as "feats" swapped their options for feat names on focus.
+    if (!list || !['feats', 'spells', 'powers'].includes(list.dataset.fill)) return;
     const classes = (list.dataset.classes || '').split(',').filter(Boolean);
     const pool = list.dataset.fill === 'spells' ? spellsAvailable({ classes })
       : list.dataset.fill === 'powers' ? powersAvailable({ classes })
@@ -3130,7 +3145,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#systemCtx()); }
 
-  #vancianPanel() { return subsystems.vancianPanel(this.#model); }
+  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove }); }
 
   #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#systemCtx()); }
 
@@ -4047,8 +4062,10 @@ export class CharacterSheetElement extends HTMLElement {
     if (!t) return '';
     // The button only while there is something behind it. After the last step
     // has been taken back the toast is a receipt, and a receipt with a dead
-    // control on it reads as a control that stopped working.
-    const more = this.#model?.undoLabel;
+    // control on it reads as a control that stopped working. A play action
+    // taken back is a receipt too: the rail already names the next one, and
+    // an Undo beside "Undid 5 damage" reads as putting the damage back.
+    const more = t.offer !== false && this.#model?.undoLabel;
     return `<div class="rolltoast undotoast" role="status">
       <div class="rollhead">
         <strong>${esc(t.label)}</strong>
@@ -4058,11 +4075,11 @@ export class CharacterSheetElement extends HTMLElement {
     </div>`;
   }
 
-  /** Offer the last structural change back. */
-  #showUndoToast(label) {
+  /** Offer the last structural change back, or say what an undo did (`offer: false`). */
+  #showUndoToast(label, { offer = true } = {}) {
     clearTimeout(this.#rollToastTimer);
     this.#rollToast = null;
-    this.#undoToast = { label };
+    this.#undoToast = { label, offer };
     this.#renderRollToast();
   }
 
@@ -4236,11 +4253,87 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #undo() {
     if (!this.#model) return;
-    const label = this.#model.undo();
-    if (!label) { this.#showUndoToast('Nothing left to undo'); return; }
+    this.#reportUndo(this.#model.undoLast());
+  }
+
+  /**
+   * "Undo 5 damage": the last thing done at the table, on the rail by name.
+   *
+   * On the rail because play happens on every tab, and the rail is the one
+   * thing every tab has. It takes back that action and nothing else -- damage
+   * taken since, a pip spent since, a note typed since all stay -- so it is
+   * safe to press late. The ▾ beside it lists the ones before, each with its
+   * own button, for the spend noticed only after the next hit landed.
+   */
+  #playUndoHtml() {
+    if (this.isPublished || !this.#model) return '';
+    const list = this.#model.playActions;
+    if (!list.length) return '';
+    const [last] = list;
+    const more = list.length > 1;
+    return `<span class="playundo">
+      <button data-action="undo-play" data-seq="${last.seq}"
+        title="Undo ${esc(last.label)} — only that: whatever happened since stays">↶ Undo ${esc(last.label)}</button>${more ? `<button
+        class="playundomore" data-action="undo-play-menu" aria-haspopup="menu" aria-expanded="${this.#playMenu}"
+        aria-label="Undo an earlier action" title="Undo an earlier action">▾</button>` : ''}
+      ${more && this.#playMenu ? `<div class="playundomenu" role="menu" aria-label="Undo an earlier action">
+        ${list.map((a) => `<button role="menuitem" data-action="undo-play" data-seq="${a.seq}">Undo ${esc(a.label)}</button>`).join('')}
+      </div>` : ''}
+    </span>`;
+  }
+
+  /** Redraw the rail's Undo button alone, for a play action whose handler drew only its panel. */
+  #refreshPlayUndo() {
+    const rail = this.shadowRoot?.querySelector('.railactions');
+    if (!rail || !this.#model) return;
+    const holder = document.createElement('div');
+    holder.innerHTML = this.#playUndoHtml();
+    const fresh = holder.firstElementChild;
+    const old = rail.querySelector('.playundo');
+    if (old && fresh) old.replaceWith(fresh);
+    else if (old) old.remove();
+    else if (fresh) (rail.querySelector('.searchbtn') ?? rail.firstElementChild)?.before(fresh);
+    if (fresh) this.#bindActions(fresh);
+  }
+
+  /**
+   * Say what an undo did, on the toast: what came back, or why it could not.
+   * A play action can be refused -- a card drawn and since played cannot be
+   * un-drawn -- and the reason names what to take back first.
+   */
+  /**
+   * What a plain field write is called on the Undo button when it is play --
+   * a condition ticked, hit points typed, a buff switched -- or null when it
+   * is an edit to the character, which the field's own Ctrl+Z covers.
+   */
+  #fieldPlayLabel(path, value) {
+    const d = this.#model.data;
+    let m = /^conditions\.(.+)$/.exec(path);
+    if (m) {
+      const info = conditionInfo(m[1]);
+      const name = info?.label || m[1];
+      // A tick box writes 1 or 0; only a counted condition has a number to say.
+      if (info?.kind !== 'count') return `${name} ${Number(value) ? 'on' : 'off'}`;
+      return `${name} ${Number(d.conditions?.[m[1]]) || 0} → ${value ?? 0}`;
+    }
+    m = /^hp\.(current|temp|nonlethal)$/.exec(path);
+    if (m) {
+      const name = { current: 'hit points', temp: 'temporary hit points', nonlethal: 'nonlethal damage' }[m[1]];
+      return `${name} ${d.hp?.[m[1]] ?? 0} → ${value ?? 0}`;
+    }
+    m = /^buffs\.(\d+)\.on$/.exec(path);
+    if (m) return `${d.buffs?.[Number(m[1])]?.name || 'buff'} ${value ? 'on' : 'off'}`;
+    return null;
+  }
+
+  #reportUndo(r) {
+    this.#playMenu = false;
+    if (!r) { this.#showUndoToast('Nothing left to undo'); return; }
+    if (!r.ok) { this.#render(); this.#showUndoToast(`Could not undo ${r.label}: ${r.reason}`, { offer: false }); return; }
     this.#undoToast = null;
     this.#render();
-    this.#showUndoToast(`${label} — put back`);
+    if (r.kind === 'snapshot') this.#showUndoToast(`${r.label} — put back`);
+    else this.#showUndoToast(`Undid ${r.label}`, { offer: false });
   }
 
   /* ---------------- the search palette ---------------- */
@@ -5016,6 +5109,11 @@ export class CharacterSheetElement extends HTMLElement {
     // because the player clicked somewhere else must not hand focus back to
     // the cell they were leaving.
     this.#lastPress = { target: path[0] || null, at: Date.now() };
+    // The list under the Undo button shuts the same way.
+    if (this.#playMenu && !path.some((n) => n?.classList?.contains?.('playundo'))) {
+      this.#playMenu = false;
+      this.#refreshPlayUndo();
+    }
     // The `⋯` menu shuts on a press outside it the same way, and on the same
     // listener -- one for the element's life rather than one per render.
     // Its own toggle is excluded, or the press that opens it would also be the
@@ -5252,7 +5350,8 @@ export class CharacterSheetElement extends HTMLElement {
    * whichever rows have been moved off it.
    */
   #stackRows() {
-    if (this.clientWidth > 620) return;
+    // 0 is a sheet not laid out yet, not a narrow one.
+    if (!this.clientWidth || this.clientWidth > 620) return;
     for (const row of this.shadowRoot.querySelectorAll('.body table.stacked > tbody > tr')) {
       // A rung that grants nothing is already one line; there is no body under
       // it for a caret to open. See `tr.emptyslot` in the stylesheet.
@@ -5500,7 +5599,10 @@ export class CharacterSheetElement extends HTMLElement {
       if (input.dataset.build || input.dataset.pick || input.dataset.altpick) return;
       input.addEventListener('change', () => {
         const path = input.dataset.set;
-        this.#model.set(path, readControl(input));
+        const value = readControl(input);
+        const play = this.#fieldPlayLabel(path, value);
+        if (play) this.#model.play(play, () => this.#model.set(path, value));
+        else this.#model.set(path, value);
         // A catalogue cell has something to show the moment it holds a name
         // the catalogue knows, and that showing happens at render.
         if (AFFECTS_DERIVED.test(path) || input.hasAttribute('list')) this.#rerender(input);
@@ -5554,7 +5656,10 @@ export class CharacterSheetElement extends HTMLElement {
       if (input.dataset.talentFill) return;
       input.addEventListener('change', () => {
         const [list, index, field] = input.dataset.item.split('|');
-        this.#model.setItem(list, Number(index), field, readControl(input));
+        const value = readControl(input);
+        const play = this.#fieldPlayLabel(`${list}.${index}.${field}`, value);
+        if (play) this.#model.play(play, () => this.#model.setItem(list, Number(index), field, value));
+        else this.#model.setItem(list, Number(index), field, value);
         /*
          * A catalogue cell re-renders on the way out of it.
          *
@@ -5593,10 +5698,9 @@ export class CharacterSheetElement extends HTMLElement {
         const [list, index, field] = b.dataset.spend.split('|');
         const total = Number(b.dataset.total) || 0;
         const left = Number(b.dataset.left) || 0;
-        const n = Number(b.dataset.n) || 0;
-        const keep = left === n ? n - 1 : n;
-        this.#model.setItem(list, Number(index), field,
-          Math.max(0, Math.min(total, total - keep)));
+        const keep = pipClickValue(left, Number(b.dataset.n) || 0);
+        this.#model.play(`${b.dataset.name || 'slots'} ${left} → ${keep}`, () => this.#model.setItem(list, Number(index), field,
+          Math.max(0, Math.min(total, total - keep))));
         this.#render();
       });
     });
@@ -5609,7 +5713,8 @@ export class CharacterSheetElement extends HTMLElement {
     const setPoolLeft = (left) => {
       const pool = Number(this.#model.data.psionics?.pool) || 0;
       const keep = Math.max(0, Math.min(pool, Math.round(left)));
-      this.#model.set('psionics.spent', pool - keep);
+      const was = Math.max(0, pool - (Number(this.#model.data.psionics?.spent) || 0));
+      this.#model.play(`power points ${was} → ${keep}`, () => this.#model.set('psionics.spent', pool - keep));
       this.#render();
     };
     root.querySelectorAll('[data-pool-step]').forEach((b) => {
@@ -5645,8 +5750,11 @@ export class CharacterSheetElement extends HTMLElement {
         pip.addEventListener('click', () => {
           const pool = Number(this.#model.data.psionics?.pool) || 0;
           const n = i + 1;                      // the pool starts at 0, so pips run 1..max
+          const spent = Math.max(0, Math.min(pool, Number(this.#model.data.psionics?.spent) || 0));
+          // The pips show what is left on a draining meter and what is spent
+          // otherwise; either way the click follows the tracker pips' rule.
           const draining = this.#model.meterStyle('pp').fill === 'remaining';
-          setPoolLeft(Math.max(0, Math.min(pool, draining ? n : pool - n)));
+          setPoolLeft(draining ? pipClickValue(pool - spent, n) : pool - pipClickValue(spent, n));
         });
       });
     });
@@ -6365,7 +6473,6 @@ export class CharacterSheetElement extends HTMLElement {
         if (action === 'damage') this.#model.damage(amount);
         else if (action === 'nonlethal') this.#model.damage(amount, { nonlethal: true });
         else if (action === 'heal') this.#model.heal(amount);
-        else if (action === 'rest') this.#model.restoreAll();
         this.#render();
       });
     });
@@ -6512,17 +6619,9 @@ export class CharacterSheetElement extends HTMLElement {
         const n = Number(b.dataset.n);
         const max = Number(t.max) || 0;
         const cur = Number(t.current) || 0;
-        let next;
-        if (this.#isDraining(t)) {
-          // Pips show what is left: clicking pip n leaves n; clicking the last
-          // lit pip spends it.
-          const remaining = max - cur;
-          next = max - (remaining === n ? n - 1 : n);
-        } else {
-          // Clicking the outermost lit pip steps back one toward zero, so pips
-          // toggle sensibly on either side of a meter; the zero mark resets.
-          next = cur === n ? n - Math.sign(n) : n;
-        }
+        // Pips show what is left on a draining tracker and the position
+        // otherwise; the click is the one rule either way (pipClickValue).
+        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n) : pipClickValue(cur, n);
         this.#model.updateTracker(t.id, { current: next });
         this.#emitTracker(t);
         this.#render();
@@ -7635,8 +7734,11 @@ export class CharacterSheetElement extends HTMLElement {
           // own ("Fatigue" for Fatigued) -- tick that entry, not a twin.
           const info = conditionInfo(name);
           const key = (info && Object.keys(conds).find((n) => conditionInfo(n)?.key === info.key)) || name;
-          conds[key] = info?.kind === 'count' ? (Number(conds[key]) || 0) + 1 : true;
-          this.#model.recompute();
+          const next = info?.kind === 'count' ? (Number(conds[key]) || 0) + 1 : true;
+          this.#model.play(info?.kind === 'count' ? `${key} ${next - 1} → ${next}` : `${key} on`, () => {
+            conds[key] = next;
+            this.#model.recompute();
+          });
         }
         this.#render();
         break;
@@ -7645,8 +7747,10 @@ export class CharacterSheetElement extends HTMLElement {
         const name = button?.dataset.name;
         if (name) {
           const conds = this.#model.data.conditions || {};
-          conds[name] = conditionInfo(name)?.kind === 'count' ? 0 : false;
-          this.#model.recompute();
+          this.#model.play(`${name} off`, () => {
+            conds[name] = conditionInfo(name)?.kind === 'count' ? 0 : false;
+            this.#model.recompute();
+          });
         }
         this.#render();
         break;
@@ -7696,11 +7800,22 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       }
-      case 'quick-rest': {
-        const count = this.#model.restRefresh();
-        this.#historyNote = count
-          ? `Rested — ${count} tracker${count === 1 ? '' : 's'} refreshed.`
-          : 'Rested — nothing with a daily refresh was spent.';
+      case 'undo-play':
+        this.#reportUndo(this.#model.undoPlay(Number(button?.dataset.seq)));
+        break;
+      case 'undo-play-menu':
+        this.#playMenu = !this.#playMenu;
+        this.#refreshPlayUndo();
+        this.shadowRoot.querySelector('.playundomenu button')?.focus();
+        break;
+      case 'rest-encounter':
+      case 'rest-day':
+      case 'rest-week': {
+        const r = this.#model.rest(name.slice('rest-'.length));
+        const moved = r.trackers ? `, ${r.trackers} tracker${r.trackers === 1 ? '' : 's'} back` : '';
+        this.#historyNote = r.span === 'encounter'
+          ? `${r.label}${moved || ' — nothing with an encounter refresh was spent'}.`
+          : `${r.label} — hit points, slots and pools back${moved}.`;
         this.#render();
         break;
       }

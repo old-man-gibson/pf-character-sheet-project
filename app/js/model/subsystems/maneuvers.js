@@ -8,7 +8,7 @@
 import { MANEUVER_FIELDS } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
-import { getPath } from '../util.js';
+import { getPath, packRows } from '../util.js';
 
 let MANEUVER_CATALOGUE = { disciplines: [] };
 
@@ -21,11 +21,11 @@ let MANEUVER_CATALOGUE = { disciplines: [] };
  * player's own pack is their own content, and may fill in all of it.
  */
 export function setManeuverCatalogue(doc) {
-  const list = Array.isArray(doc?.disciplines) ? doc.disciplines : [];
+  const list = packRows(doc?.disciplines);
   MANEUVER_CATALOGUE = {
     disciplines: list.map((d) => ({
       name: String(d.name || ''),
-      entries: (d.entries || []).map((e) => {
+      entries: packRows(d.entries).map((e) => {
         const out = {
           level: Number(e.level) || 0,
           kind: e.kind === 'stance' ? 'stance' : 'maneuver',

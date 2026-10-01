@@ -475,6 +475,31 @@ console.log('\nthe ladder offers a peek at what a feature does, once something i
     [shut.includes('class="cfnote collapsed"'), shut.split('data-cfnote=').length - 1], [true, 2]);
 }
 
+console.log('\nthe dashboard lays out the cards a character uses, and the wallet names its currency once');
+{
+  const c = new Character(blankDocument({ name: 'Caster', level: 5 }));
+  check('no magic class, no casting card', overview.dashCardIds(c).includes('spheres'), false);
+  c.listAdd('training.magic.classes', {
+    name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 5,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })),
+  });
+  check('a magic class brings the casting card', overview.dashCardIds(c).includes('spheres'), true);
+  c.set('wealth.currency', 'Gold & Glory');
+  const html = overview.renderOverviewPanel(c, CTX.overview);
+  check('the currency is escaped once', [html.includes('Gold &amp; Glory'), html.includes('&amp;amp;')], [true, false]);
+}
+
+console.log('\nthe spell list\'s ask-twice × says when it is armed');
+{
+  // The panel moved out of the element and stopped being told which × was
+  // armed, so the second click still removed -- with no "sure?" in between.
+  const c = new Character(blankDocument({ name: 'Wizard', level: 3 }));
+  c.set('vancian', { classes: [], prepared: [{ name: 'Sleep', prepared: 1, used: 0 }] });
+  const plain = subsystems.vancianPanel(c);
+  const armed = subsystems.vancianPanel(c, { armedRemove: 'vancian.prepared|0' });
+  check('unarmed it is a ×, armed it asks', [plain.includes('>sure?<'), armed.includes('>sure?<')], [false, true]);
+}
+
 console.log('\nno character text reaches the page as markup');
 {
   const SHAPES = {
@@ -483,8 +508,18 @@ console.log('\nno character text reaches the page as markup');
     'a textarea': 'Zq</textarea><svg/onload=x(1)>',
     'element content': 'Zq</td></tr><svg/onload=x(1)>',
   };
-  const poisonWith = (payload) => function walk(v) {
-    if (typeof v === 'string') return v === '' ? '' : payload;
+  // Which values a pass replaces with the payload. Text is most of a
+  // document. Blanks and numbers matter as much: an edited file can put a
+  // string where a number or a "blank to work it out" belongs, and a box that
+  // prints its stored value as it stands would let it in. The fixtures hold
+  // null in every such box, so a text-only sweep never reached them.
+  const KINDS = {
+    text: (v) => typeof v === 'string' && v !== '',
+    blank: (v) => v === null,
+    number: (v) => typeof v === 'number',
+  };
+  const poisonWith = (payload, picks) => function walk(v) {
+    if (picks(v)) return payload;
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === 'object') {
       const o = {};
@@ -497,25 +532,27 @@ console.log('\nno character text reaches the page as markup');
   };
 
   const ids = hasFixtures() ? fixtureIds() : [];
-  for (const [where, payload] of Object.entries(SHAPES)) {
-    const poison = poisonWith(payload);
-    let leaked = 0;
-    let drawn = 0;
-    for (const id of ids) {
-      const model = new Character(poison(loadCharacter(id)));
-      for (const [name, draw] of [...PANELS, ...panelsWith(openCtx(model))]) {
-        let html;
-        try { html = String(draw(model) ?? ''); } catch { continue; }
-        drawn++;
-        // Escaped, the payload is still in the output -- as text. What must
-        // not survive is the `<` that makes it a tag again.
-        if (html.includes('<svg/onload=x')) {
-          leaked++;
-          if (leaked === 1) console.log(`  FAIL first leak: ${id} — ${name}`);
+  for (const [kind, picks] of Object.entries(KINDS)) {
+    for (const [where, payload] of Object.entries(SHAPES)) {
+      const poison = poisonWith(payload, picks);
+      let leaked = 0;
+      let drawn = 0;
+      for (const id of ids) {
+        const model = new Character(poison(loadCharacter(id)));
+        for (const [name, draw] of [...PANELS, ...panelsWith(openCtx(model))]) {
+          let html;
+          try { html = String(draw(model) ?? ''); } catch { continue; }
+          drawn++;
+          // Escaped, the payload is still in the output -- as text. What must
+          // not survive is the `<` that makes it a tag again.
+          if (html.includes('<svg/onload=x')) {
+            leaked++;
+            if (leaked === 1) console.log(`  FAIL first leak: ${id} — ${name}`);
+          }
         }
       }
+      if (drawn) check(`${kind} values: escaped on the way out of ${where}`, leaked, 0);
     }
-    if (drawn) check(`escaped on the way out of ${where}`, leaked, 0);
   }
 }
 

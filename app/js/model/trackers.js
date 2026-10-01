@@ -184,21 +184,22 @@ export function recomputeTrackers(model) {
     // rather than taking the whole range down with it.
     t.forwardedMax = forwarded(model, `tracker.${t.id}.max`);
     t.forwardedMin = forwarded(model, `tracker.${t.id}.min`);
+    // Worked out from nothing every pass. A formula that fails comes to 0, as
+    // a failed formula does everywhere else; keeping last pass's number and
+    // adding the bonus to it again made the range grow on every recompute.
+    let max = 0;
     if (t.maxFormula) {
-      try { t.max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
-    } else {
-      t.max = 0;
+      try { max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
     }
-    t.max += t.forwardedMax;
+    t.max = max + t.forwardedMax;
+    let min = 0;
     if (t.minFormula) {
       // The max is already computed, so a symmetric meter can be written as
       // `-self.max` instead of repeating the whole max formula.
       const withMax = { ...scope, self: { max: t.max, current: Number(t.current) || 0 } };
-      try { t.min = toInt(evaluateFormula(t.minFormula, withMax)); } catch (err) { errs.push(`min: ${err.message}`); }
-    } else {
-      t.min = 0;
+      try { min = toInt(evaluateFormula(t.minFormula, withMax)); } catch (err) { errs.push(`min: ${err.message}`); }
     }
-    t.min += t.forwardedMin;
+    t.min = min + t.forwardedMin;
     if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {
       errs.push(`min (${t.min}) is above max (${t.max})`);
     }
@@ -249,11 +250,42 @@ export function stepTracker(model, id, delta) {
   return model.updateTracker(id, { current: next });
 }
 
+/*
+ * What a tracker reads as on its row: what is left on a draining one, the
+ * position otherwise -- the number a player would say the change moved.
+ */
+const shownValue = (t) => ((Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining'
+  ? (Number(t.max) || 0) - (Number(t.current) || 0)
+  : Number(t.current) || 0);
+
 export function updateTracker(model, id, patch) {
   const t = model.trackers.find((x) => x.id === id);
   if (!t) return null;
+  // A value moving is play, one step for the Undo button ("Undo Ki 5 → 4");
+  // a rename or a new formula is an edit to the tracker, and is not.
+  const keys = Object.keys(patch || {});
+  if (keys.length === 1 && keys[0] === 'current' && typeof model.play === 'function') {
+    const from = shownValue(t);
+    return model.play(() => `${t.name} ${from} → ${shownValue(t)}`, () => setTracker(model, t, patch));
+  }
+  return setTracker(model, t, patch);
+}
+
+function setTracker(model, t, patch) {
   Object.assign(t, patch);
   model.recompute();
+  // A value typed in is held to the range, the way a step is -- 99 typed into
+  // a pool of 5 used to be stored as 99. Only a value being set is clamped: a
+  // range that shrinks under a spent pool keeps the spend, as it always has.
+  if (patch && 'current' in patch) {
+    const lo = Math.min(Number(t.min) || 0, Number(t.max) || 0);
+    const hi = Math.max(Number(t.min) || 0, Number(t.max) || 0);
+    const held = Math.max(lo, Math.min(hi, Number(t.current) || 0));
+    if (held !== t.current) {
+      t.current = held;
+      model.recompute();
+    }
+  }
   return t;
 }
 

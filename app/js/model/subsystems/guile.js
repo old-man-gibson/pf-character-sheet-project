@@ -45,7 +45,7 @@ import {
 } from '../../rules.js';
 import { plannerHasClass } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { poolStepper, poolSystems, sphereTalent, talentLandsOn } from '../spheres.js';
+import { poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, utilityCounts } from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
 /** Twenty rows, one per character level, the way both other sides are built. */
@@ -200,10 +200,10 @@ export function guileTalentRows(side, training = null) {
   (side?.classes || []).forEach((cls, ci) => {
     const systems = poolSystems(cls, 'guile');
     (cls.levels || []).forEach((lv, li) => {
-      if (lv.granted && talentLandsOn(lv.sphere, systems) === 'guile') {
+      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === 'guile') {
         out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `class:${ci}:${li}` });
       }
-      if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
+      if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
         out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `class:${ci}:${li}:u` });
       }
     });
@@ -213,10 +213,10 @@ export function guileTalentRows(side, training = null) {
       if (!cls.blendedSkill || cls.blendedMirror) return;
       const systems = poolSystems(cls, key);
       (cls.levels || []).forEach((lv, li) => {
-        if (lv.granted && talentLandsOn(lv.sphere, systems) === 'guile') {
+        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === 'guile') {
           out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `${key}:${ci}:${li}` });
         }
-        if (lv.utilityGranted && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
+        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
           out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `${key}:${ci}:${li}:u` });
         }
       });
@@ -225,7 +225,11 @@ export function guileTalentRows(side, training = null) {
   (side?.bonusTalents || []).forEach((b, bi) => {
     out.push({ talent: b.talent, sphere: b.sphere, utility: !!b.utility, spent: !b.free, from: `bonus:${bi}` });
   });
+  // A tradition's adroit talents are the character's only at adroit rank;
+  // at competent the panel greys them, and they used to count regardless.
+  const adroit = side?.tradition?.rank === 'Adroit';
   (side?.tradition?.entries || []).forEach((e, ei) => {
+    if (e?.adroit && !adroit) return;
     out.push({ talent: e.talent, sphere: e.sphere, utility: false, spent: true, from: `tradition:${ei}` });
   });
   return out;

@@ -3,7 +3,7 @@
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE,
   normalizeHex, hexToRgb, rgba, mixHex, normalizeStyle, isDefaultStyle,
-  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue,
+  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, pipClickValue,
   SQUARE_PIP_LIMIT, SHAPES,
   METERS, METER_DEFAULT_STYLE, meterDefaultStyle, isDefaultMeterStyle,
   trackPos, trackBand, dyingFraction,
@@ -208,6 +208,20 @@ console.log('clicking a bar -- left to right always means low to high');
     barClickValue(0, { min: 0, max: 110, style: drain }).current, 110);
   check('and a quarter left is three quarters spent',
     barClickValue(0.25, { min: 0, max: 100, style: drain }).current, 75);
+
+  /*
+   * A pip click, the one rule trackers, spell slots and power points share. It
+   * was written into each handler, and the power-point copy had lost the half
+   * that lets the last lit pip be spent; the slots' "spend one" count asked a
+   * question the rule answered by handing a slot back at 0.
+   */
+  check('pip n leaves n', pipClickValue(3, 1), 1);
+  check('a pip above the lit ones lights up to it', pipClickValue(1, 4), 4);
+  check('the last lit pip is spent', pipClickValue(3, 3), 2);
+  check('the last one of all goes out', pipClickValue(1, 1), 0);
+  check('asking to spend the last lit pip of none spends nothing', pipClickValue(0, 0), 0);
+  check('a signed meter steps back toward zero from either side',
+    [pipClickValue(-2, -2), pipClickValue(2, 2)], [-1, 1]);
 
   // An ordinary pool fills up as it is spent, so reading and stored value agree.
   check('a spent-fill bar stores what it reads',

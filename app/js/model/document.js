@@ -15,7 +15,7 @@ import {
   WEAPON_HANDEDNESS, conditionInfo, performCategory, skillVariantKind, tierAtLevel,
 } from '../rules.js';
 import {
-  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList,
+  COMPANION_KINDS, COMPANION_TABS, companionInUse, normalizeCompanionList, uniqueCompanionIds,
 } from '../companions.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
@@ -41,7 +41,8 @@ import { MONSTER_TAB_ORDER } from '../monster/block.js';
 // What the Spheres magic side works out and does not save: the sphere table,
 // and what bonuses forwarded to `spheres.*` came to, which is working rather
 // than anything a player typed.
-const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded'];
+const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded',
+  'castingUnlocked', 'clWaiting', { path: 'classes', keys: ['levelWaiting'] }];
 
 /**
  * The document shape this build understands, written by tools/convert.py.
@@ -667,6 +668,7 @@ export function normalise(model) {
     const named = kind !== 'animalCompanion' && g.text(g.take('Name')) !== '';
     if (!named) d.sheetTabs.splice(index, 1);
   }
+  uniqueCompanionIds(d);
 
   /*
    * Vancian is the one of them that can arrive on more than one tab. The

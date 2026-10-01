@@ -17,6 +17,10 @@ export function followupChoices(model, pending) {
 }
 const identity = card => card.source?.startsWith('class-feature:') ? card.source : card.id;
 
+// What a bare spend is called on the Undo button: "Undo standard action".
+const SPEND_NAMES = { standard: 'standard action', move: 'move action', swift: 'swift action', immediate: 'immediate action',
+  aoo: 'attack of opportunity', full: 'full-round action', free: 'free action' };
+
 export function previewChainUse(model, raw, pendingId = null) {
   const state = sessionState(model), pending = (state.pendingFollowups || []).find(p=>p.id===pendingId);
   if (pendingId && !pending) return {error:'This follow-up has already been resolved'};
@@ -49,17 +53,22 @@ export function executeChainAction(model, raw, pendingId = null) {
     id:crypto.randomUUID(),target:l.target,action:l.action || '',waiveResource:!!l.waiveResource,
     required:!!l.required,note:l.note || '',from:card.title || 'Action',path,
   }))];
-  model.markUndo(`Used ${card.title || card.type}`);
-  if (group) next.cards = next.cards.map(c=>c.id===group.id?{...c,selectedId:card.id}:c);
-  if (plan.tracker) plan.tracker.current = Number(plan.tracker.current)+plan.amount;
-  model.set('session',next);
-  return '';
+  // One play action, named for what was used, so the button can take back
+  // this Use alone -- its action, its resource -- and leave the rest.
+  return model.play(card.title || SPEND_NAMES[card.type] || card.type || 'action', () => {
+    if (group) next.cards = next.cards.map(c=>c.id===group.id?{...c,selectedId:card.id}:c);
+    if (plan.tracker) plan.tracker.current = Number(plan.tracker.current)+plan.amount;
+    model.set('session',next);
+    return '';
+  });
 }
 
 export function dismissFollowup(model,id) {
   const state = sessionState(model), pending = (state.pendingFollowups || []).find(p=>p.id===id);
   if (!pending || pending.required) return false;
-  model.markUndo('Skipped optional follow-up');
-  state.pendingFollowups = state.pendingFollowups.filter(p=>p.id!==id);
-  model.set('session',state); return true;
+  model.play('Skipped follow-up', () => {
+    state.pendingFollowups = state.pendingFollowups.filter(p=>p.id!==id);
+    model.set('session',state);
+  });
+  return true;
 }

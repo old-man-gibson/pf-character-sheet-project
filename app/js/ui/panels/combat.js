@@ -35,15 +35,15 @@ import {
   SYSTEM_NOUNS, TEMPLATE_TYPES, TRAINING_SYSTEMS, classForwardKey, poolMode, poolSpheres, sphereForwardKey,
   sphereNames, talentLandsOn,
 } from '../../model.js';
-import { guileClassBlock, ladderTable, operativeField, poolCounts, poolField } from './guile.js';
+import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
   ABILITIES, ABILITY_LABELS,
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
   SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
   TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  sphereSide, statMod, trackSpheres,
+  parseLadderRule, sphereSide, statMod, trackSpheres,
 } from '../../rules.js';
-import { check, field, roField, select, text } from '../fields.js';
+import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {
   addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
   rowDrop, rowGrip, rowRemove, rowTools, rowToolsDragged,
@@ -239,10 +239,10 @@ function trainingSide(model, sideKey, side) {
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
           ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${ci}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               ${forwardedBadge(model, classForwardKey(cls.name))}
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
@@ -262,7 +262,7 @@ function trainingSide(model, sideKey, side) {
             const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}`
               : `Level ${lv.level} grants no talent`;
             return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
               <td class="${state}" data-stack="name">${talentCell(model,
     `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
     on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
@@ -314,7 +314,11 @@ function customizationPanel(model, blocks) {
       <h3>Customized weapons <span class="badge">${blocks.length}</span></h3>
       ${blocks.map((block, bi) => {
     const list = `training.combat.customizations.${bi}.sets`;
-    const rule = (key, label) => `<label class="fld"><span>${esc(label)}</span>
+    // A "then at" that is not a level rule grants nothing, as a talent
+    // ladder's does, and says so the same way.
+    const rule = (key, label) => {
+      const { error } = parseLadderRule(block.spec?.[key]?.gainsAt);
+      return `<label class="fld${error ? ' bad' : ''}"${error ? ` title="${esc(error)}"` : ''}><span>${esc(label)}</span>
         <span class="pair">
           <input type="number" min="0" value="${esc(block.spec?.[key]?.start ?? 1)}" style="width:3.2rem"
             data-custrule="${bi}|${key}|start" aria-label="${esc(label)} to begin with">
@@ -322,7 +326,9 @@ function customizationPanel(model, blocks) {
           <input type="text" value="${esc(block.spec?.[key]?.gainsAt ?? '')}" style="width:6.5rem"
             data-custrule="${bi}|${key}|gainsAt" placeholder="11, 19"
             aria-label="Levels ${esc(label.toLowerCase())} goes up at">
+          ${error ? '<span class="hint bad">not a rule — grants nothing</span>' : ''}
         </span></label>`;
+    };
     // What one track is called, so a class that customizes something other
     // than weapons reads as itself: the pack's `unit` names the rows and the
     // count beside them.
@@ -434,9 +440,16 @@ function blendedPanel(model, pairs) {
     const head = (half, label, types) => {
       if (!half) return `<label class="fld ratepick"><span>${label} type</span><select disabled><option>—</option></select></label>`;
       const list = `training.${half.side}.classes`;
-      return `<label class="fld ratepick"><span>${label} type</span>
-          ${itemSelect(list, half.index, 'type', half.cls.type, types)}</label>
-        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, label === 'Casting' ? 'Casting score' : 'Practitioner mod')}`;
+      const casting = label === 'Casting';
+      // A half with no type has no progression on that side: nothing is
+      // guessed from the other side's rate, so say so where it is picked.
+      const unset = !half.cls.effectiveType;
+      return `<label class="fld ratepick${unset ? ' unset' : ''}"><span>${label} type</span>
+          ${itemSelect(list, half.index, 'type', half.cls.type, types)}
+          ${unset ? `<span class="hint warn">Pick one — no ${casting ? 'caster level' : 'practitioner progression'} until then</span>` : ''}</label>
+        ${abilityField(model, list, half.index, 'mod1', half.cls.mod1, casting ? 'Casting score' : 'Practitioner mod')}
+        ${/* Only the casting half: spell points are what a second score adds to. */''}
+        ${casting ? abilityField(model, list, half.index, 'mod2', half.cls.mod2, '2nd score') : ''}`;
     };
     const guile = model.data.training?.guile;
 
@@ -468,10 +481,10 @@ function blendedPanel(model, pairs) {
           ${systems.includes('combat') ? head(martial, 'Practitioner', PRACTITIONER_TYPES) : ''}
           ${systems.includes('magic') ? head(casting, 'Casting', CASTING_TYPES) : ''}
           ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
-          <label class="fld"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
             <span class="pair">
-              <input type="number" value="${cls.classLevelsOverride ?? ''}" placeholder="${cls.classLevels ?? 0}"
-                data-item="${list}|${owner.index}|classLevelsOverride" data-kind="number-or-null" style="width:3.6rem">
+              ${autoNum(`data-item="${list}|${owner.index}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               ${forwardedBadge(model, classForwardKey(cls.name))}
               <span class="hint">${skill ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`
                 : `talents: ${cls.totalTalents ?? 0}`}</span>
@@ -479,7 +492,7 @@ function blendedPanel(model, pairs) {
           ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
     ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts)}
         </div>
-        ${skill ? ladderTable(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
+        ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
           <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
           <tbody>${(cls.levels || []).map((lv, li) => {
@@ -492,7 +505,7 @@ function blendedPanel(model, pairs) {
           : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
         : `Level ${lv.level} grants no talent`;
       return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${lv.level}</td>
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
               <td class="${state}" data-stack="name">${talentCell(model,
         `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
         on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
@@ -681,8 +694,14 @@ function magicGlobalsPanel(model, m) {
     return `<section class="panel">
       <h3>Casting numbers</h3>
       <div class="statline"><span class="label">Caster level</span>
-        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl')}</span></div>
+        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', '', '',
+    m.castingUnlocked === false ? 'no casting class has a level yet' : '')}</span></div>
       ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
+      ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
+        is held back until one does.</p>` : ''}
+      ${(m.classes || []).filter((x) => x.levelWaiting).map((x) => `<p class="hint">${fmt(x.levelWaiting)}
+        ${esc(x.name)} level${Math.abs(x.levelWaiting) === 1 ? '' : 's'} forwarded — held until the character has a
+        level of ${esc(x.name)}.</p>`).join('')}
       <div class="statline"><span class="label">Global DC</span>
         <span class="value big">${m.globalDC} ${hint(m.globalDC, s.totalDC)}${forwardedBadge(model, 'spheres.dc')}</span></div>
       ${editLine('DC bonus', 'training.magic.dcBonus', m.dcBonus)}
@@ -741,7 +760,8 @@ function sphereBonusPanel(model, sideKey, side) {
         error: r[`${field}Error`],
         title: `A number, or a formula — e.g. ${example}`,
       },
-    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '');
+    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '', '', '',
+      into === 'cl' && r.clWaiting ? 'no casting class has a level yet' : '');
     const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>

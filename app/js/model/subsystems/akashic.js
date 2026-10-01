@@ -6,15 +6,18 @@
  */
 
 import {
-  ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, tempEssence, tempEssenceCost, veilDC,
+  ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, statMod, tempEssence, tempEssenceCost, veilDC,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
+import { classPresence } from '../progression.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
-import { slug } from '../util.js';
+import { closestName, slug } from '../util.js';
 
+// The level and the two DCs are worked out now; what a player pins is kept
+// in the `…Override` beside each (see applyVeilweaving).
 export const AKASHIC_DERIVED = [
-  'calc',
-  { path: 'classes', keys: ['totalCap'] },
+  'calc', 'veilweaving', 'baseDC', 'steadyVeilDC',
+  { path: 'classes', keys: ['totalCap', 'level', 'levelAuto', 'modAbility', 'modValue'] },
   { path: 'slots', list: 'veils', keys: ['dc'] },
   { path: 'kheshig', list: 'veils', keys: ['dc'] },
 ];
@@ -307,6 +310,92 @@ export function importAkashic(tab) {
 }
 
 /**
+ * The veilweaving level and modifier, and the DCs built on them -- worked out
+ * rather than typed, where they used to be typed and to feed nothing: taking
+ * Daevic from 10 to 12 on the Planner moved every other system and left the
+ * veils at 10.
+ *
+ * The level is the number of character levels at which the character has a
+ * veilweaving class -- one named on this tab's class rows -- each level
+ * counted once however many classes share it. With the Veilweaving sphere a
+ * casting class counts as well, as the sphere says: "You count your combined
+ * levels in your casting classes and any veilweaving classes as your
+ * veilweaving level and your casting ability modifier as your veilweaving
+ * modifier ... If a single class is both a veilweaver and a casting class at
+ * the same time it only counts as a single level." With the sphere every class
+ * row reads that one level; without it each reads its own class's.
+ *
+ * The modifier is the ability a class row names; with the sphere and none
+ * named, the casting class's own casting ability. The base DC is 10 + the
+ * first class row's modifier, and a steady veil's DC is that and half its
+ * level. A figure a sheet typed that does not come out the same is kept as an
+ * override (`levelOverride`, `baseDCOverride`, `steadyVeilDCOverride`), the way
+ * BAB keeps one.
+ */
+function applyVeilweaving(model, a) {
+  const d = model.data;
+  const level = Number(d.identity?.level) || 0;
+  const table = (d.classes || []).filter((x) => x?.name);
+  const presence = classPresence(model, table, level);
+  const sphere = (Number(d.training?.magic?.tally?.Veilweaving) || 0) > 0;
+  const casters = (d.training?.magic?.classes || []).filter((x) => x?.name && !x.blendedMirror);
+  const tableNames = table.map((x) => x.name);
+  const tableClass = (name) => {
+    const hit = closestName(name, tableNames);
+    return hit ? table.find((x) => x.name === hit) : null;
+  };
+  const caster = (name) => {
+    const hit = closestName(name, casters.map((x) => x.name));
+    return hit ? casters.find((x) => x.name === hit) : null;
+  };
+  const rows = (a.classes || []).filter((c) => String(c?.name ?? '').trim());
+  const levelsOf = (classes) => {
+    const set = new Set(classes.filter(Boolean));
+    let n = 0;
+    for (let l = 0; l < level; l++) if ([...set].some((x) => presence.get(x)?.[l])) n++;
+    return n;
+  };
+  const combined = levelsOf([
+    ...rows.map((c) => tableClass(c.name)),
+    ...(sphere ? casters.map((x) => tableClass(x.name)) : []),
+  ]);
+  // What a sheet had typed is kept as an override only where it says
+  // something the rule does not: a blank or a 0 was never a figure anybody
+  // chose, and a match needs no pin.
+  const pin = (typed, auto, meaningful) => {
+    const n = Number(typed) || 0;
+    return !meaningful || !n || n === auto ? null : n;
+  };
+
+  for (const c of a.classes || []) {
+    const named = !!String(c?.name ?? '').trim();
+    const auto = !named ? 0 : sphere ? combined : levelsOf([tableClass(c.name)]);
+    if (c.levelOverride === undefined) c.levelOverride = pin(c.level, auto, named);
+    c.levelAuto = auto;
+    c.level = c.levelOverride == null ? auto : Number(c.levelOverride) || 0;
+    const ability = c.mod || (sphere && named ? caster(c.name)?.mod1 : null) || null;
+    c.modAbility = ability;
+    c.modValue = ability ? statMod(d, ability, null) : 0;
+  }
+
+  const primary = rows[0] || null;
+  const baseAuto = 10 + (primary?.modValue || 0);
+  if (a.baseDCOverride === undefined) a.baseDCOverride = pin(a.baseDC, baseAuto, !!primary);
+  a.baseDC = a.baseDCOverride == null ? baseAuto : Number(a.baseDCOverride) || 0;
+  const steadyAuto = a.baseDC + Math.floor((primary?.level || 0) / 2);
+  if (a.steadyVeilDCOverride === undefined) a.steadyVeilDCOverride = pin(a.steadyVeilDC, steadyAuto, !!primary);
+  a.steadyVeilDC = a.steadyVeilDCOverride == null ? steadyAuto : Number(a.steadyVeilDCOverride) || 0;
+  a.veilweaving = {
+    level: sphere ? combined : (primary?.level || 0),
+    mod: primary?.modValue || 0,
+    ability: primary?.modAbility || null,
+    sphere,
+    baseDCAuto: baseAuto,
+    steadyVeilDCAuto: steadyAuto,
+  };
+}
+
+/**
  * Veil DCs, the essence bill, and the caps that bound it.
  *
  * The workbook stored every veil's DC beside its essence; both come back
@@ -318,6 +407,7 @@ export function recomputeAkashic(model) {
   const a = model.data.akashic;
   if (!a) return;
 
+  applyVeilweaving(model, a);
   const base = Number(a.baseDC) || 0;
   const cap = (a.classes || []).reduce(
     (m, c) => Math.max(m, (Number(c.essenceCap) || 0) + (Number(c.bonusCap) || 0)), 0,

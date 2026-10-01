@@ -9,11 +9,12 @@
  * forwarded bonus and says where each part came from.
  */
 
-import { DERIVED, FORWARD_BY_DERIVED, diceString, skillLabel } from '../rules.js';
+import { DERIVED, FORWARD_BY_DERIVED, diceString, flatFootedLoss, skillLabel } from '../rules.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
 import { contextualNote } from '../formula-format.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
+import { applyCorrections } from './corrections.js';
 import { emit } from './events.js';
 import { applyGestalt } from './progression.js';
 import { forwarded } from './scope.js';
@@ -170,6 +171,9 @@ export function reconcile(model) {
   // Before the offsets are measured, or every typed bonus would be counted
   // once in the offset and again in the compute.
   resolveDefenceBonuses(model);
+  // A figure saved under a rule since fixed is moved first, so the offset is
+  // measured against what the sheet would have saved. Once per document.
+  applyCorrections(model);
   // What each stat came to from its visible parts, kept for the caller. The
   // constructor reconciles twice and has to tell two things apart: a stat that
   // moved because a bonus was forwarded *at* it, and one that moved because a
@@ -203,6 +207,14 @@ export function reconcile(model) {
     // off before the difference is called an offset.
     model.offsets[d.key] = target - bare - forwarded(model, FORWARD_BY_DERIVED[d.key]);
   }
+  // Flat-footed CMD follows the CMD, less what flat-footed loses. A workbook
+  // that took more off than the Dexterity and dodge bonuses the sheet can see
+  // keeps the rest. A blank sheet or a pasted monster never worked the figure
+  // out -- it sat at 10, or at the CMD -- so neither has anything to keep.
+  const kind = model.data.source?.kind;
+  model.ffCmdExtra = kind === 'blank' || kind === 'monster' ? 0
+    : (Number(model.imported['defenses.cmd']) || 0) - (Number(model.imported['defenses.ffCmd']) || 0)
+      - flatFootedLoss(model.data);
 }
 
 /**
@@ -692,6 +704,31 @@ export function audit(model) {
     };
   })()] : [];
 
+  // A Vancian casting class's concentration, when written as a rule.
+  const vancianFormulas = (model.data.vancian?.classes || []).flatMap((c, i) => {
+    const text = c.concentration;
+    if (typeof text !== 'string' || !text.trim()) return [];
+    const info = analyse(text);
+    const unknown = info.variables.filter((v) => !known.has(v));
+    const error = c.concentrationError || info.error
+      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+    return [{
+      id: `vancian-${i}-concentration`,
+      place: `vancianConcentration:${i}`,
+      name: `${String(c.name || c.slotType || 'Casting class').trim()} concentration`,
+      source: 'player',
+      formula: text,
+      reads: info.variables,
+      functions: info.functions,
+      unknownReferences: unknown,
+      value: error ? null : c.concentrationNum ?? null,
+      error,
+      status: error ? 'error' : 'ok',
+      createdAt: null,
+      where: 'the Vancian tab',
+    }];
+  });
+
   // Trackers: the max formula, and the min formula when the tracker has one
   // (a two-sided meter). Each is audited on its own.
   const trackerFormulas = model.trackers.flatMap((t) => {
@@ -772,7 +809,7 @@ export function audit(model) {
     .concat(weaponMiscFormulas).concat(weaponFormulas)
     .concat(speedFormulas).concat(otherFormulas).concat(sphereFormulas)
     .concat(languageFormulas).concat(hpFormulas)
-    .concat(craftingFormulas).concat(deckFormulas)
+    .concat(craftingFormulas).concat(deckFormulas).concat(vancianFormulas)
     .concat(trackerFormulas);
 }
 

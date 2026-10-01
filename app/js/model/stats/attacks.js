@@ -11,8 +11,8 @@ import {
   ALT_ATTACK_OF, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL, BRAWLERS_VEST_TALENTS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
-  addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeMod, statMod,
-  stepDice, unarmedDice,
+  addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
+  raiseDice, unarmedDice,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -109,7 +109,7 @@ export function recomputeEquipment(model) {
     // numbers for one attack disagree.
     return (Number(c.attack.bab) || 0)
       + statMod(c, m?.stat1, m?.stat2)
-      - sizeMod(c)
+      + sizeAttackMod(c, key)
       + (Number(c.attack.miscBonus) || 0)
       + forwarded(model, `attack.${ALT_ATTACK_OF[key] || key}`);
   };
@@ -512,7 +512,7 @@ export function recomputeEquipment(model) {
         return;
       }
       try {
-        calc.set(path, { value: Math.trunc(Number(evalFormula(expr)) || 0), error: null });
+        calc.set(path, { value: Math.floor(Number(evalFormula(expr)) || 0), error: null });
       } catch (err) {
         calc.set(path, { value: null, error: err.message });
       }
@@ -746,22 +746,22 @@ function recomputeNativeUnarmed(model, u) {
   }
   n.baseDice = base;
 
-  // "One size larger with 3+ unarmed talents", which is two steps along the
-  // same chain every other increase walks. Counted whether or not the ladder
-  // is what produced the base, so a formula gets it too.
+  // "One size larger with 3+ unarmed talents", a size increase like any
+  // other (`raiseDice`). Counted whether or not the ladder is what produced
+  // the base, so a formula gets it too.
   n.qualifies = u.assocTalents >= (Number(n.threshold) || 0);
   n.sizeBonus = n.qualifies ? (Number(n.bonusSizes) || 0) : 0;
 
-  const steps = 2 * ((Number(u.sizeIncreases) || 0) + n.sizeBonus)
-    + (Number(u.stepIncreases) || 0);
+  const sizeIncreases = (Number(u.sizeIncreases) || 0) + n.sizeBonus;
+  const stepIncreases = Number(u.stepIncreases) || 0;
   if (!base) {
     u.nativeDice = null;
-  } else if (!steps) {
+  } else if (!sizeIncreases && !stepIncreases) {
     // No increase to apply, so a die the chain does not list is still fine --
     // a class may print dice the practitioner chain never mentions.
     u.nativeDice = base;
   } else {
-    u.nativeDice = stepDice(base, steps);
+    u.nativeDice = raiseDice(base, { sizeIncreases, stepIncreases });
     if (!u.nativeDice) {
       n.error = n.error || `${base} is not on the die chain, so it cannot be stepped up.`;
       u.nativeDice = base;

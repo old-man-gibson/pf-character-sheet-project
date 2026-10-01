@@ -351,6 +351,21 @@ export function barClickValue(fraction, { min = 0, max = 0, style = null } = {})
 }
 
 /**
+ * What a click on pip `n` asks for, when `lit` pips are lit.
+ *
+ * The nth pip leaves n lit, and clicking the last lit one puts it out -- so a
+ * pip toggles, and one click can spend the last of a pool. On a two-sided
+ * meter the pips are signed and the last lit one steps back toward the zero
+ * mark. Trackers, spell slots and the power-point pool all ask this, in terms
+ * of whatever their pips show: what is left, or what is spent.
+ */
+export function pipClickValue(lit, n) {
+  const at = Number(lit) || 0;
+  const pick = Number(n) || 0;
+  return at === pick ? pick - Math.sign(pick) : pick;
+}
+
+/**
  * Geometry for the squares shape: a small square of pips, or a count.
  *
  * Made for a pool small enough to hold in the hand -- a prepared caster commits

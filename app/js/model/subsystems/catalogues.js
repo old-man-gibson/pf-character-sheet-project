@@ -98,14 +98,20 @@ function catalogue({ key, shape, fields }) {
    */
   const details = (row) => {
     const shared = entry(row?.name);
+    // A published sheet carries the pack's words for the entries it lists, as
+    // `cited` on the row (publish.js), for a reader with no pack. Read only
+    // where no pack answers for the name, so a pack switched on still wins.
+    const c = shared ? null : row?.cited;
+    const cited = c && (str(c.text).trim() || arr(c.fields).length || str(c.source).trim()) ? c : null;
     return {
       name: str(row?.name),
-      known: !!shared,
+      known: !!(shared || cited),
       own: own(row),
-      text: str(shared?.text),
-      source: str(shared?.source),
-      fields: shared ? fields(shared) : [],
+      text: str(shared ? shared.text : cited?.text),
+      source: str(shared ? shared.source : cited?.source),
+      fields: shared ? fields(shared) : arr(cited?.fields).filter((p) => Array.isArray(p) && p.length === 2),
       entry: shared,
+      cited: !!cited,
     };
   };
 

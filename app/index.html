@@ -671,7 +671,7 @@
     // one would take is almost certainly the same character, re-exported.
     const match = mine.find((c) => c.id === summary.id)
       || mine.find((c) => c.name?.toLowerCase() === summary.name?.toLowerCase());
-    target.innerHTML = mine.map((c) => `<option value="${c.id}">${c.name} — level ${c.level}</option>`).join('');
+    target.innerHTML = mine.map((c) => `<option value="${esc(c.id)}">${esc(c.name)} — level ${esc(c.level)}</option>`).join('');
     form.reset();
     if (match) target.value = match.id;
     const sync = () => { target.disabled = form.how.value !== 'replace'; };

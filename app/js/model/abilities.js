@@ -90,7 +90,14 @@ export function refreshAbilities(model) {
     a.mod = abilityMod(a.score);
     // A blank temp score means "same as base".
     if (!a.tempScore) a.tempScore = a.score;
-    a.totalMod = abilityMod(a.tempScore + loose);
+    // The score everything works from. With a build entry it is the temp
+    // score, which already holds the forwarded bonuses; without one the temp
+    // score is the typed box and a forwarded bonus rides beside it, so it is
+    // added here, once -- castability, carrying capacity and the conditions
+    // read this rather than the box, or a headband moved the bonus slots and
+    // not the highest level castable.
+    a.workingScore = a.tempScore + loose;
+    a.totalMod = abilityMod(a.workingScore);
     a.checkMod = a.totalMod;
   }
 }

@@ -25,7 +25,7 @@ import { hasTokens } from '../inline.js';
 import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
 import {
-  ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, armorParts, fmt, statMod,
+  ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, abpGroupTotal, armorParts, fmt, statMod,
 } from '../rules.js';
 import { group } from '../ui/format.js';
 
@@ -79,10 +79,12 @@ function acParts(model) {
   const parts = [];
   const push = (n, label) => { if (n) parts.push(`${fmt(n)} ${label}`); };
   push(a.armor, 'armor');
-  push((r.abpDeflection || 0) + (r.deflection || 0), 'deflection');
+  // Each ABP bonus and its typed partner stop at the cap together, as the
+  // total has them (abpGroupTotal), or the parts add up past the AC.
+  push(abpGroupTotal(r.abpDeflection, r.deflection), 'deflection');
   push(Math.min(a.maxDex, statMod(c, d.acStat1, d.acStat2)), 'Dex');
   push(r.dodge, 'dodge');
-  push((r.abpNatural || 0) + (r.enhancedNatural || 0) + (r.natural || 0), 'natural');
+  push(abpGroupTotal(r.abpNatural, r.enhancedNatural) + (r.natural || 0), 'natural');
   push(a.shield, 'shield');
   for (const [key, label] of AC_BONUS_TYPES) {
     if (['abpDeflection', 'deflection', 'dodge', 'abpNatural', 'enhancedNatural', 'natural'].includes(key)) continue;
@@ -117,7 +119,11 @@ function attackLines(model, type) {
     const total = Number(w.calc?.totalAtk ?? w.attackTotal) || 0;
     const n = Array.isArray(w.iteratives) ? w.iteratives.length : 1;
     const atk = Array.from({ length: n }, (_, k) => fmt(total - 5 * k)).join('/');
-    const crit = `${Number(w.critRange) > 1 ? `/${21 - Number(w.critRange)}-20` : ''}${Number(w.critMult) > 2 ? `/×${w.critMult}` : ''}`;
+    // The lowest roll that threatens, as the Gear tab keeps it (19 for
+    // 19-20), and the multiplier whether it was saved as 3 or as "x3".
+    const low = Number(w.critRange) || 20;
+    const mult = Number(String(w.critMult ?? '').replace(/^\s*[x×]/i, '')) || 2;
+    const crit = `${low < 20 ? `/${low}-20` : ''}${mult > 2 ? `/×${mult}` : ''}`;
     // The rider is prose, and prose takes formulas: a weapon whose special
     // says `{bloodburst.dmg}` prints the number here, as it does on
     // Equipment. The damage string can carry one too.
@@ -155,7 +161,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const hdText = m
       ? `${level}d${m.hitDie}${c.gestalt?.hp ? (c.gestalt.hp.abilityMod * level ? fmt(c.gestalt.hp.abilityMod * level) : '') : ''}`
       : `${level} HD`;
-    const maxNow = movedInline(cs, 'hp', hp.max, String);
+    const maxNow = movedInline(cs, 'hp', hp.baseMax, String);
     const hpLine = `${hp.current < hp.max ? `<strong class="bad">${hp.current}</strong>/` : ''}${maxNow} (${esc(hdText)})${hp.temp > 0 ? `; ${hp.temp} temporary` : ''}`;
     const defLists = d.calc || {};
     const savesLine = `<b>Fort</b> ${moved('fortitude', s.fortitude.total)}, <b>Ref</b> ${moved('reflex', s.reflex.total)}, <b>Will</b> ${moved('will', s.will.total)}${m?.saveNote ? `; ${shown(model, m.saveNote)}` : ''}`;
@@ -171,7 +177,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const scores = ABILITIES.map((k) => {
       const a = c.abilities[k] || {};
       const none = m?.nonabilities?.includes(k);
-      const base = Number(a.tempScore) || 0;
+      const base = Number(a.workingScore ?? a.tempScore) || 0;
       const now = cs.changed ? (cs.scores[k] ?? base) : base;
       return `<b>${ABILITY_LABELS[k]}</b> ${none ? '—' : now !== base
         ? `<strong class="adj ${now > base ? 'up' : ''}" title="${esc(`Base ${base} — with ${cs.sources} applied`)}">${now}</strong>` : now}`;
