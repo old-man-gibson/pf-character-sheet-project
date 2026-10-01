@@ -29,7 +29,7 @@ import {
   parseProficiencyText, normalizeProficiencies, weaponProficient, speedForwardKey,
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
-  sphereCatalogue, trackSphereNames, altTrainingPrereq,
+  sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2822,6 +2822,15 @@ console.log('essence names: no fold, no hiding, no essence.x');
   check('a second Hands slot goes on from hands3', [e.hands, e.hands2, e.hands3, e.hands4], [1, 0, 4, 0]);
   check('a receptacle named Pool is pool_2; the pool total stays', [e.pool_2, e.pool], [3, 0]);
   check('nothing unnamed is published', 'x' in e, false);
+}
+
+console.log('a chakra matches however the page wrote it');
+{
+  const before = veilCatalogue();
+  setVeilCatalogue({ veils: [{ name: 'Bracers of Thought', slot: 'Wrists' }, { name: 'Gloves of Ash', slot: 'Hands, Wrists' }, { name: 'Crown', slot: 'Head' }] });
+  check('Wrist finds the veils written for Wrists', veilsAvailable({ slot: 'Wrist' }).map((v) => v.name), ['Bracers of Thought', 'Gloves of Ash']);
+  check('and Head is still not Headband', veilsAvailable({ slot: 'Headband' }).length, 0);
+  setVeilCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);

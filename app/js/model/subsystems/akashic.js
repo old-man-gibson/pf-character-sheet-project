@@ -569,6 +569,14 @@ export function essenceScope(model) {
 
 let VEIL_CATALOGUE = { veils: [] };
 
+/**
+ * One chakra however it is written: the slot picker says "Wrist" where a
+ * page says "Wrists", so case and a trailing plural s are not part of it.
+ */
+export function chakraKey(name) {
+  return String(name ?? '').trim().toLowerCase().replace(/s$/, '');
+}
+
 /** "Hands, Wrists" and "Head/Headband" both name two chakras. */
 export function splitSlots(raw) {
   return String(raw ?? '').split(/\s*[,/]\s*/).map((s) => s.trim()).filter(Boolean);
@@ -640,12 +648,12 @@ export function veilSlots() {
  * empty, the answer.
  */
 export function veilsAvailable({ slot = null, classes = [] } = {}) {
-  const chakra = String(slot ?? '').trim().toLowerCase();
+  const chakra = chakraKey(slot);
   const want = (Array.isArray(classes) ? classes : [classes])
     .map((c) => String(c ?? '').trim().toLowerCase()).filter(Boolean);
   const anyClassKnown = want.length > 0 && VEIL_CATALOGUE.veils.some((v) => v.classes.length);
   return VEIL_CATALOGUE.veils
-    .filter((v) => (!chakra || v.slots.some((s) => s.toLowerCase() === chakra)))
+    .filter((v) => (!chakra || v.slots.some((s) => chakraKey(s) === chakra)))
     // A veil no page has placed on a list stays on offer: the class lists are
     // a second import, and a catalogue with only half of them must not hide
     // the half it cannot vouch for.
