@@ -68,7 +68,9 @@ export function planAction(model, card, state = sessionState(model), budget = ac
       // field: a cost of 1.5 is 1.
       amount = Math.floor(Number(evaluateFormula(String(card.cost ?? '1'), model.scope())));
       if (!Number.isFinite(amount) || amount < 0) throw new Error('Resource cost must be zero or a positive number');
-      if (tracker.error || Number(tracker.current) + amount > Number(tracker.max)) throw new Error(`Not enough ${tracker.name}`);
+      // Only a range that does not work blocks a spend; a zone that does not is
+      // a matter of how the tracker looks, and + and − spend through it too.
+      if (tracker.rangeError || Number(tracker.current) + amount > Number(tracker.max)) throw new Error(`Not enough ${tracker.name}`);
     }
     return { next, tracker, amount, error: '' };
   } catch (e) { return { error: e.message }; }

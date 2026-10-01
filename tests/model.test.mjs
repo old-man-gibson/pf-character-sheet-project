@@ -2978,6 +2978,19 @@ console.log('the armour worn is readable in formulas: type, enhancement, max Dex
   check('taken off, nothing is worn', [read('ac.armor.type'), read('ac.maxDex')], [0, 99]);
 }
 
+console.log('a typo in a zone does not stop a session card spending');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '4', style: { zones: [{ from: 'self.max -', to: 'self.max', color: '#aa2222', label: 'low' }] } });
+  check('the zone is flagged', /zone 1/.test(c.trackers.find((t) => t.id === ki.id).error || ''), true);
+  c.set('session', { cards: [{ id: 'a', title: 'Flurry', type: 'free', resource: ki.id, cost: '1' }] });
+  const r = useSessionAction(c, sessionState(c).cards[0]);
+  check('and the card still spends', [r || '', c.trackers.find((t) => t.id === ki.id).current], ['', 1]);
+  const bad = c.addTracker({ name: 'Rage', maxFormula: 'nope +' });
+  c.set('session', { cards: [{ id: 'b', title: 'Rage', type: 'free', resource: bad.id, cost: '1' }] });
+  check('a max that does not work still blocks', /Not enough Rage/.test(useSessionAction(c, sessionState(c).cards[0]) || ''), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

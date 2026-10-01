@@ -291,6 +291,9 @@ export function recomputeTrackers(model) {
     if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {
       errs.push(`min (${t.min}) is above max (${t.max})`);
     }
+    // The range alone, before any zone has had its say: a zone is how the
+    // tracker looks, and a typo in one must not stop it being spent.
+    t.rangeError = errs.length ? errs.join('; ') : null;
     errors.set(t, errs);
   }
 
