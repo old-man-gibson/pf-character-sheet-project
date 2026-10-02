@@ -796,7 +796,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   // them alone.
   const grow = cs?.sizeSteps || 0;
   const sized = grow
-    ? stepDiceMap(calc.baseDmgDice || {}, grow, c.identity?.size)
+    ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
     : { dice: calc.baseDmgDice || {}, flat: 0 };
 
   // The questions each pool holds. They follow the same four rules the dice

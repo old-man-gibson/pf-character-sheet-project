@@ -21,6 +21,7 @@ import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
+import { weaponNow } from '../weapon-now.js';
 import {
   guileTalentRows, ownTalentRows, plannerHasClass, stackingNote, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
@@ -93,16 +94,14 @@ import {
   ABILITIES, ABILITY_LABELS, ALT_ATTACK_OF, ATTACK_MODES, ATTACK_MODE_KEY,
   ATTACK_MODE_LABELS, BUFF_MOD_KEYS, BUFF_TARGETS, CONDITIONS, CONDITION_CATS, GAME_SYSTEMS,
   SIZE_MODIFIERS, TRAIT_SLOTS, WEAPON_GROUPS, WEAPON_FAMILIARITY, WEAPON_HANDEDNESS,
-  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, addDice, attackModeTotal, castingNoun,
-  conditionInfo, conditionTotals, diceString, fmt, prepStyle, skillLabel, statModDelta,
-  stepDiceMap,
+  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES, attackModeTotal, castingNoun,
+  conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { maneuverDetails } from '../../model.js';
 import {
   THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
 } from '../../tracker-style.js';
-import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -591,37 +590,16 @@ function dashOffenseCard(model, ctx, openNow) {
       return `<span class="dashstat"><span class="k">${esc(label)}</span><span class="n">${shown}</span><span class="r">${rollButton(model, kind, ref, rollLabel, cs)}</span></span>`;
     };
     const wrow = (w, i) => {
-      const { calc } = w;
-      const modeKey = WEAPON_MODE_KEYS[w.attackType];
-      const atkDelta = (cs.changed && modeKey && cs.delta[modeKey]) || 0;
-      const dmgDelta = (cs.changed && calc && cs.delta.damage) || 0;
-      const grow = (cs.changed && calc && cs.sizeSteps) || 0;
-      const baseAtkStr = calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0);
-      const atkStr = !atkDelta ? baseAtkStr
-        : calc
-          ? (Object.keys(calc.tokAtk?.dice || {}).length
-            ? `${fmt(calc.totalAtk + atkDelta)}+${diceString(calc.tokAtk.dice)}`
-            : fmt(calc.totalAtk + atkDelta))
-          : fmt((Number(w.attackTotal) || 0) + atkDelta);
-      const baseDmgStr = calc?.totalDmgStr ?? w.damageTotal ?? '—';
-      // A size buff steps the weapon's own dice along the official chart; the
-      // token riders keep theirs, exactly as the rules leave them alone.
-      const sized = grow
-        ? stepDiceMap(calc.baseDmgDice || {}, grow, c.identity?.size)
-        : { dice: calc?.baseDmgDice || {}, flat: 0 };
-      const dmgStr = !(dmgDelta || grow) ? baseDmgStr
-        : diceString(
-          addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
-          calc.totalDmgFlat + dmgDelta + sized.flat,
-        ) + ((calc.notes || []).length ? ` ${calc.notes.join(' ')}` : '');
-      const dmgMoved = dmgDelta || (grow ? 1 : 0);
+      // As the buffs of the moment leave it, the same reading the Gear tab's
+      // weapon card shows (ui/weapon-now.js).
+      const now = weaponNow(c, w, cs);
       const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
       return `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
-      <span class="value rollpair"><strong class="${cls(atkDelta)}"
-          title="${atkDelta ? esc(`Base ${baseAtkStr} — with ${cs.sources} applied`) : ''}">${esc(atkStr)}</strong>
-        <span class="dashdmg${cls(dmgMoved)}"
-          title="${dmgMoved ? esc(`Base ${baseDmgStr} — with ${cs.sources} applied${grow ? `, ${Math.abs(grow)} size step${Math.abs(grow) === 1 ? '' : 's'} ${grow > 0 ? 'larger' : 'smaller'}` : ''}`) : ''}">${esc(dmgStr)}</span>
+      <span class="value rollpair"><strong class="${cls(now.atkDelta)}"
+          title="${esc(now.atkTitle)}">${esc(now.atk)}</strong>
+        <span class="dashdmg${cls(now.dmgMoved)}"
+          title="${esc(now.dmgTitle)}">${esc(now.dmg)}</span>
         ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} — full, single or Vital Strike`, cs)}</span>
     </div>`;
     };

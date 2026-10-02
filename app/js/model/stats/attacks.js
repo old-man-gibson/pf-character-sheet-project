@@ -12,7 +12,7 @@ import {
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
-  raiseDice, unarmedDice,
+  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -246,6 +246,28 @@ export function recomputeEquipment(model) {
       const named = spliceNames(diceText);
       diceText = named.text;
       w.diceError = named.error || (named.queries.length ? NO_QUESTION_HERE : null);
+    }
+    // The Dice cell is the weapon's Medium damage, as the rulebook lists it;
+    // the weapon's Size (blank: made for its wielder, so the character's own
+    // size) steps it along the damage-by-size table -- a Huge bastard sword
+    // written 1d10 rolls 3d8. A weapon read off a stat block already carries
+    // the dice printed for its size, and unarmed dice come from their own
+    // table, so neither is stepped. Only a plain dice expression is.
+    w.sizeSteps = 0;
+    if (!(w.useUnarmedDice && unarmedDiceNow) && w.asWritten === undefined && diceText) {
+      const ladder = Object.keys(SIZE_MODIFIERS);
+      const own = ladder.includes(w.size) ? w.size : (ladder.includes(c.identity?.size) ? c.identity.size : 'Medium');
+      const steps = ladder.indexOf(own) - ladder.indexOf('Medium');
+      const parsed = steps ? parseDiceExpr(diceText, null) : null;
+      if (parsed && !parsed.error && !parsed.notes?.length && Object.keys(parsed.dice || {}).length) {
+        const stepped = stepDiceMap(parsed.dice, steps, 'Medium');
+        diceText = diceString(stepped.dice, (parsed.flat || 0) + (stepped.flat || 0));
+        w.sizeSteps = steps;
+      }
+      // The size the weapon is, which a size buff steps on from.
+      w.sizeNow = own;
+    } else {
+      w.sizeNow = null;
     }
     w.diceResolved = w.useUnarmedDice && unarmedDiceNow ? unarmedDiceNow : diceText;
     const base = modeBase(w.attackType);
