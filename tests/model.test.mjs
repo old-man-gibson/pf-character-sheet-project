@@ -3110,6 +3110,22 @@ console.log('session cards read formulas in their title, cost and text');
   check('and the Formulas tab says where it is', describeSource('sessionCard:0:note'), 'session card 1, its notes');
 }
 
+console.log('a formula can send a bonus to size');
+{
+  const c = new Character(blankDocument({ name: 'Grower' }));
+  const cmb0 = () => c.conditionState.sizeSteps;
+  c.listAdd('buffs', { name: 'Enlarge Person', on: true, note: 'Grows. {size += 1}', bonuses: [] });
+  check('Enlarge Person written as a note makes the character Large', [c.sizeNow(), c.conditionState.sizeSteps], ['Large', 1]);
+  c.setItem('buffs', 0, 'on', false);
+  check('and only while it is on', [c.sizeNow(), cmb0()], ['Medium', 0]);
+  c.listAdd('buffs', { name: 'Encompassing Light', on: true, note: '{size.effective += 1}', bonuses: [] });
+  check('effective size moves the dice, not the size', [c.sizeNow(), c.conditionState.sizeSteps], ['Medium', 1]);
+  c.setItem('buffs', 0, 'on', true);
+  check('the two kinds add', [c.sizeNow(), c.conditionState.sizeSteps], ['Large', 2]);
+  c.listAdd('buffs', { name: 'Same kind', on: true, note: '', bonuses: [{ target: 'size', value: 1 }] });
+  check('a true increase from a row and one from a note do not stack', c.sizeNow(), 'Large');
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);
