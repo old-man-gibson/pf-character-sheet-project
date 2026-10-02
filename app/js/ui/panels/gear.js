@@ -35,6 +35,7 @@ import {
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
+import { weaponNow } from '../weapon-now.js';
 import { itemArea, prose } from '../prose.js';
 
 export function renderGearPanel(model, ctx) {
@@ -234,8 +235,15 @@ export function weaponsPanel(model, e) {
                 data-item="equipment.weapons|${i}|id" data-kind="text"
                 placeholder="${esc(weaponHandle(w.name))}" aria-label="Formula name"></label>
           </span>
-          <span class="bigroll" title="Attack including {{…}} tokens">${esc(w.calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0))}</span>
-          <span class="bigroll dmg" title="Damage including [[…]] tokens">${esc(w.calc?.totalDmgStr ?? w.damageTotal ?? '—')}</span>
+          ${(() => {
+    // As the buffs of the moment leave it -- a size buff steps the dice -- the
+    // same reading the dashboard shows (ui/weapon-now.js).
+    const now = weaponNow(model.data, w, cs);
+    const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
+    return `<span class="bigroll${cls(now.atkDelta)}" title="${esc(now.atkTitle || 'Attack including {{…}} tokens')}">${esc(now.atk)}</span>
+          <span class="bigroll dmg${cls(now.dmgMoved)}" title="${esc(now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps
+      ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`)}">${esc(now.dmg)}</span>`;
+  })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
             title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"

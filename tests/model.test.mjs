@@ -77,6 +77,7 @@ import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
 import * as trackerPanels from '../app/js/ui/panels/trackers.js';
 import * as sessionPanels from '../app/js/ui/panels/session.js';
 import { formulaLookup, formulaDrawerResults } from '../app/js/ui/formula-drawer.js';
+import * as gearPanels from '../app/js/ui/panels/gear.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -3138,6 +3139,23 @@ console.log('the formula lookup finds names, values, destinations and functions'
   check('a function is found by what it does', formulaLookup(c, 'round down').functions.some((f) => f.name === 'floor'), true);
   check('an empty search shows the guide', [formulaLookup(c, '').names.length, formulaLookup(c, '').guide.length > 0], [0, true]);
   check('and no match says so', /Nothing by that name/.test(formulaDrawerResults(c, 'zzzq')), true);
+}
+
+console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
+{
+  const W = { name: 'Longsword', attackType: 'Melee', dice: '1d8', damageAbility: 'Str', abilityMult: 1, miscDamage: 0, miscAttack: 0, enhancement: 0,
+    critRange: 19, critMult: 'x2', damageType: 'S', groups: [], special: '', size: '', range: '', handedness: '', familiarity: '', ammunition: '', weight: 4, price: 15, attackOffset: 0 };
+  const doc = blankDocument({ name: 'Sizer', level: 5 });
+  doc.equipment.weapons.push({ ...W }, { ...W, name: 'Bastard sword', dice: '1d10', size: 'Huge' }, { ...W, name: 'Bite', dice: '2d6', asWritten: 'bite +5 (2d6)' });
+  const c = new Character(doc);
+  const dice = () => c.data.equipment.weapons.slice(-3).map((w) => w.diceResolved);
+  check('Medium dice as written; a Huge 1d10 is 3d8; a stat-block row as printed', dice(), ['1d8', '3d8', '2d6']);
+  c.set('identity.size', 'Large');
+  check('a Large character\u2019s unsized weapon is a Large one; a sized one keeps its size', dice(), ['2d6', '3d8', '2d6']);
+  c.set('identity.size', 'Medium');
+  c.listAdd('buffs', { name: 'Enlarge Person', on: true, note: '{size += 1}', bonuses: [] });
+  const html = gearPanels.renderGearPanel(c, {});
+  check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
 }
 
 const missing = missingCharacters(REAL);
