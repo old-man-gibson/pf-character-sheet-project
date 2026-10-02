@@ -55,32 +55,19 @@
  */
 
 import {
-  Character, inspectDocument, maneuverCatalogue, TEMPLATE_TYPES,
-  castingTableNames,
-  psionicTables, psionicCurveTotals,
-  CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
-  TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
-  COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
-  classForwardKey, gearColumnInUse,
-  featsAvailable, featDetails, featCatalogue,
-  spellsAvailable, powersAvailable,
+  Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish, gearColumnInUse,
+  featsAvailable, spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
-import {
-  applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype, swapLabel,
-} from './extensions.js';
+import { applyBlock, looksLikeExtension, removeArchetype } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
-  PALETTES, LAYOUTS, WIDTHS, AUTO, paletteOf, isPalette, isLayout, isWidth, resolvePalette, schemeOf,
-  flipped, readThemePrefs, writeThemePrefs,
-  ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS, DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
+  PALETTES, LAYOUTS, WIDTHS, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
+  readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
+  DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import {
-  esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
-  nameDatalist, noteCell,
-} from './ui/html.js';
+import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
 /*
@@ -107,72 +94,35 @@ import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
-import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
 import * as admin from './ui/panels/admin.js';
-import { renderGearPanel, renderCraftingPanel, weaponsPanel, wealthPanel } from './ui/panels/gear.js';
+import { renderGearPanel, renderCraftingPanel } from './ui/panels/gear.js';
 import * as trackerUi from './ui/panels/trackers.js';
-import { round, group, pct, same, PIP_LIMIT } from './ui/format.js';
+import { round, group, same } from './ui/format.js';
 import * as prose from './ui/prose.js';
-import { renderStatsPanel, pickSelect, mythicPickAt } from './ui/panels/stats.js';
+import { renderStatsPanel } from './ui/panels/stats.js';
 import * as feats from './ui/panels/feats.js';
 import * as techniques from './ui/panels/techniques.js';
 import * as manager from './ui/panels/manager.js';
 import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
 import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
+import { fmt, SIZE_MODIFIERS, conditionInfo } from './rules.js';
+import { analyse } from './formula.js';
+import { pretty } from './formula-format.js';
 import {
-  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
-  BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
-  BUILD_DERIVED_KEYS, PROWESS_TRACKS, ABP_LEVELS, ARRAY_LEVELS, LEVEL4_LEVELS,
-  ENHANCEMENT_CAP, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, MENTAL_PROWESS_LEVELS,
-  PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, SIZE_MODIFIERS,
-  ABP_LINKED_LEVELS, abpSourceLevel,
-  CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATES, COMBAT_SPHERES, MAGIC_SPHERES,
-  BACKGROUND_SKILLS, UNARMED_SPHERES, TRAIT_CATEGORIES, TRAIT_SLOTS,
-  PERFORM_CATEGORIES, VARIANT_SKILLS, skillVariantKind, skillVariantRoot, skillLabel,
-  parseLevelRule, levelRuleLevels, summariseLevels,
-  MYTHIC_PATH_HP, MYTHIC_STAT_TIERS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
-  MYTHIC_TIER_LEVEL, mythicTierGrant,
-  GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
-  WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
-  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
-  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
-  attackModeAbility,
-  CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
-  BLENDED_SPHERES, sphereSide, conditionInfo, trackSpheres, TRACK_SPHERE_SIDES, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS,
-  ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
-  TALENTED_KNUCKLE_TALENTS, BRAWLERS_VEST_TALENTS, ASURA_TALENTS_PER_ESSENCE,
-  VEIL_SLOTS, ESSENCE_SOURCES, SP_PER_TEMP_ESSENCE,
-  MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
-  PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
-  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
-  conditionTotals, statModDelta, stepDiceMap, addDice,
-} from './rules.js';
-import {
-  COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
-  ABILITY_INCREASE_LEVELS,
-} from './companions.js';
-import { evaluateFormula, analyse, resolvePath } from './formula.js';
-import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
-import {
-  formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
-  targetsHtml, targetGroups,
+  workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
-import { hasTokens, formatValue } from './inline.js';
+import { hasTokens } from './inline.js';
 import {
   historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
 import { downloadFile } from './download.js';
 import {
-  TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
-  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, pipClickValue, rgba,
-  trackBand, readableOn,
+  TRACKER_PALETTE, THEME_ACCENT, normalizeStyle, normalizeHex, isDefaultStyle, barClickValue,
+  pipClickValue, rgba, readableOn,
 } from './tracker-style.js';
-import {
-  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS, weaponStrikes,
-} from './roll20.js';
+import { ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, weaponStrikes } from './roll20.js';
 
 /**
  * What the gold left edge on a field means, in the two flavours it comes in:
@@ -2807,11 +2757,6 @@ export class CharacterSheetElement extends HTMLElement {
   /** The Stats tab lives in ui/panels/stats.js. */
   #statsPanel() { return renderStatsPanel(this.#model, {}); }
 
-  /** Two of its pickers are drawn by the Feats & Mythic tab as well. */
-  #pickSelect(...args) { return pickSelect(...args); }
-
-  #mythicPickAt(tier) { return mythicPickAt(this.#model, tier); }
-
   /* ---------------- skills ---------------- */
 
   /**
@@ -2825,9 +2770,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /* ---------------- the two sphere tabs ---------------- */
-
-  /** Folding a panel down to its heading; the builder is in ui/rows.js. */
-  #collapsible(key, panelHtml) { return rows.collapsible(this.#model, key, panelHtml); }
 
   /** The two sphere tabs and Templates live in ui/panels/combat.js. */
   #combatCtx() { return { showCells: this.#showCells }; }
@@ -2910,12 +2852,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #gearPanel() { return renderGearPanel(this.#model, this.#gearCtx()); }
 
-  /** The session dashboard's offense card draws the weapons table too. */
-  #weaponsPanel(e) { return weaponsPanel(this.#model, e); }
-
   #craftingPanel() { return renderCraftingPanel(this.#model, this.#gearCtx()); }
-
-  #wealthPanel() { return wealthPanel(this.#model, this.#gearCtx()); }
 
   /* ---------------- modelled sub-systems ---------------- */
 
@@ -2940,10 +2877,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
-
-  #systemExtrasPanel(...a) { return subsystems.systemExtrasPanel(...a); }
-
-  #rowRemoveButton(...a) { return subsystems.rowRemoveButton(...a); }
 
   #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
 
@@ -2977,17 +2910,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #trackersPanel() { return trackerUi.renderTrackersPanel(this.#model, this.#trackerCtx()); }
 
-  #formulaMeta(...a) { return trackerUi.formulaMeta(this.#model, ...a); }
-
   #isDraining(...a) { return trackerUi.isDraining(...a); }
-
-  #trackerVisual(...a) { return trackerUi.trackerVisual(...a); }
-
-  #meterVisual(...a) { return trackerUi.meterVisual(...a); }
-
-  #meterStyleButton(...a) { return trackerUi.meterStyleButton(this.#trackerCtx(), ...a); }
-
-  #meterStyleEditor(...a) { return trackerUi.meterStyleEditor(this.#model, this.#trackerCtx(), ...a); }
 
   #styleTarget(...a) { return trackerUi.styleTarget(this.#model, this.#trackerCtx(), ...a); }
 
@@ -3089,27 +3012,13 @@ export class CharacterSheetElement extends HTMLElement {
     this.style.setProperty('--cs-formula-strong', rgba(hex, 0.85));
   }
 
-  #field(label, control) { return fields.field(label, control); }
-
   /* ----- prose fields -----
    * The two-layer prose control and everything that renders a token live in
    * ui/prose.js, because two dozen panels put one somewhere. These pass on
    * what the module cannot see: the model, and which folded cell is open.
    */
 
-  #prose(...a) { return prose.prose(this.#model, ...a); }
-
-  #itemArea(...a) { return prose.itemArea(this.#model, ...a); }
-
   #foldedProse(...a) { return prose.foldedProse(this.#model, { openCell: this.#openCell }, ...a); }
-
-  #renderedProse(...a) { return prose.renderedProse(this.#model, ...a); }
-
-  #tokenScope(...a) { return prose.tokenScope(this.#model, ...a); }
-
-  #tokenTitle(...a) { return prose.tokenTitle(this.#model, ...a); }
-
-  #targetLabels(...a) { return prose.targetLabels(this.#model, ...a); }
 
 
   /**
@@ -3162,85 +3071,10 @@ export class CharacterSheetElement extends HTMLElement {
    * from outside the class.
    */
 
-  #text(path, value, placeholder = '', opts = {}) { return fields.text(path, value, placeholder, opts); }
-
-  #num(path, value, extra = '') { return fields.num(path, value, extra); }
-
-  #roField(value, title = '', extra = '') { return fields.roField(value, title, extra); }
-
-  #area(path, value, rowCount = 3) { return fields.area(path, value, rowCount); }
-
-  #check(path, value, label = '', title = '') { return fields.check(path, value, label, title); }
-
-  #select(path, value, options, blank = '—') { return fields.select(path, value, options, blank); }
-
-  #abilitySelect(path, value) { return fields.abilitySelect(path, value); }
-
 
   /* ----- list rows ----- */
 
-  #itemText(list, i, field, value, placeholder = '', opts = false) {
-    return rows.itemText(list, i, field, value, placeholder, opts);
-  }
-
-  #itemNum(list, i, field, value) { return rows.itemNum(list, i, field, value); }
-
-  #itemCheck(list, i, field, value) { return rows.itemCheck(list, i, field, value); }
-
-  #exprField(bindingAttr, raw, opts = {}) { return rows.exprField(bindingAttr, raw, opts); }
-
-  #itemExpr(list, i, field, obj, opts = {}) { return rows.itemExpr(list, i, field, obj, opts); }
-
-  #itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
-    return rows.itemSelect(list, i, field, value, options, blank, abOf);
-  }
-
-  /* `rows.rowTools` is the plain three-button cell, which every panel that
-     wants one imports for itself; the element only writes the dragged kind. */
-  #rowToolsDragged(list, i) { return rows.rowToolsDragged(list, i); }
-
-  #rowRemove(list, i) { return rows.rowRemove(list, i); }
-
-  /** Which × is armed is element state, so it is handed over here. */
-  #rowRemoveArmed(list, i, what = 'row') {
-    return rows.rowRemoveArmed(list, i, what, this.#armedRemove);
-  }
-
-  /** Resolving tokens needs the model, so it is handed over here. */
-  #proseText(text) { return rows.proseText(this.#model, text); }
-
-  #movedInline(cs, key, base, format = fmt) { return rows.movedInline(cs, key, base, format); }
-
-  #addButton(list, label, template) { return rows.addButton(list, label, template); }
-
-  #bigStat(k, v, sub, now = '', roll = '') { return rows.bigStat(k, v, sub, now, roll); }
-
-  #miniStat(k, v, title = '') { return rows.miniStat(k, v, title); }
-
-  #line(label, value, big = false) { return rows.line(label, value, big); }
-
-  #lineHtml(label, html, big = false) { return rows.lineHtml(label, html, big); }
-
-  #editLine(label, path, value) { return rows.editLine(label, path, value); }
-
   /* ---------------- rolling ---------------- */
-
-  /**
-   * The d20 beside a row: one click puts that row's roll on the clipboard.
-   *
-   * The button carries only which row it is (`skill|12`, `save|will`); the text
-   * is built at the moment it is pressed, so a sheet that has been edited since
-   * it was drawn -- or a condition ticked on another tab -- copies the number
-   * that is true now rather than the one that was true when the table was.
-   *
-   * The tooltip shows the formula anyway, because a roll that quietly differs
-   * from the total printed next to it is worse than no button: conditions move
-   * these numbers, and the tooltip is where that becomes visible before the
-   * paste rather than after it.
-   */
-  #rollButton(kind, ref, what, cs = null) {
-    return roll.rollButton(this.#model, kind, ref, what, cs);
-  }
 
   /**
    * What was copied, shown back.

@@ -168,7 +168,7 @@ export function renderOverviewPanel(model, ctx) {
       ${classesPanel(model, ctx, model, ctx)}
 
       ${supergroup(model, 'defenses', 'Defenses', '', `
-          ${hitPointsPanel(ctx, model, model)}
+          ${hitPointsPanel(ctx, model)}
           ${acPanel(model)}
           ${savesPanel(model)}
           ${initiativePanel(model)}`)}

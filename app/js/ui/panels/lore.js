@@ -183,7 +183,7 @@ function classFeatureGroups(model, ctx) {
         </div>
         ${classFeatureNotes(model, name)}
       </section>`);
-    }).join('') + menuListMarkup(ctx, ctx);
+    }).join('') + menuListMarkup(ctx);
   }
 
   /**

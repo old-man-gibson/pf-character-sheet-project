@@ -10,7 +10,7 @@
  * `pickSelect` and `mythicPickAt` are exported because the Feats & Mythic tab
  * draws the same pickers; everything else here is local.
  */
-import { esc, val, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
+import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { roField } from '../fields.js';
 import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';

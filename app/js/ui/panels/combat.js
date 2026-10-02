@@ -13,7 +13,7 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, val } from '../html.js';
+import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
@@ -37,11 +37,9 @@ import {
 } from '../../model.js';
 import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
-  ABILITIES, ABILITY_LABELS,
-  CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
-  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  parseLadderRule, statMod,
+  ABILITIES, ABILITY_LABELS, CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
+  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS,
+  TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule, statMod,
 } from '../../rules.js';
 import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {

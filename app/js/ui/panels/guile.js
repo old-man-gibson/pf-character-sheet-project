@@ -18,7 +18,6 @@
  */
 import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
-import { prose } from '../prose.js';
 import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
 import {
   SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereForwardKey, sphereNames, talentLandsOn, talentsIn,
