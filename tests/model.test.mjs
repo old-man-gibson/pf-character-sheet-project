@@ -53,6 +53,7 @@ import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
+import { importCrafting } from '../app/js/model/subsystems/crafting.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
@@ -3158,6 +3159,14 @@ console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
   c.listAdd('buffs', { name: 'Enlarge Person', on: true, note: '{size += 1}', bonuses: [] });
   const html = gearPanels.renderGearPanel(c, {});
   check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
+}
+
+console.log('crafting reads the cell beside a label, even a blank one');
+{
+  // A fresh tab: no item value, and the next label two cells over.
+  const tab = { rows: [{ r: 2, cells: [null, 'Value', null, '% Discount', 0.1] }] };
+  const block = importCrafting(tab);
+  check('a blank value stays blank', [block.projects[0].value, block.discount], [0, 10]);
 }
 
 console.log('only what the player wrote counts as a change');

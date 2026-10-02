@@ -11,6 +11,7 @@ import {
   craftingFraction, craftingSpeed, fmt, skillLabel,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
+import { sheetReader } from '../document.js';
 
 /** Labels whose value we keep, read from the cell immediately to their right. */
 const CRAFT_LABELS = {
@@ -85,13 +86,16 @@ function parseDcNotes(text) {
  * down than the other four, and both layouts fall out of the same scan. Cells
  * no label claims -- her Armiger/veil block in M2:S9 -- are kept verbatim in
  * `sourceExtras` so nothing from the workbook is silently dropped.
+ *
+ * Read with the same cursor as the other sub-system tabs, with one
+ * difference: a value is the cell immediately right of its label, never one
+ * further over. A blank value here is common -- a fresh tab has no item --
+ * and the next cell but one is often another label ("Value", blank,
+ * "% Discount"), which skipping blanks would read as the value.
  */
 export function importCrafting(tab, identity = {}) {
-  const rows = (tab?.rows || []).map((r) => [...(r.cells || [])]);
-  const used = new Set();
-  const mark = (ri, ci) => used.add(`${ri}:${ci}`);
-  const at = (ri, ci) => (rows[ri] ? rows[ri][ci] ?? null : null);
-  const text = (v) => (v === null || v === undefined ? '' : String(v).trim());
+  const g = sheetReader(tab);
+  const { rows, at, text, mark, find } = g;
   /** A cell carrying an amount: numbers as numbers, anything else verbatim. */
   const amount = (raw) => {
     if (text(raw) === '') return null;
@@ -99,13 +103,6 @@ export function importCrafting(tab, identity = {}) {
     return Number.isFinite(n) ? n : text(raw);
   };
 
-  const find = (label) => {
-    for (let ri = 0; ri < rows.length; ri++) {
-      const ci = rows[ri].findIndex((v) => typeof v === 'string' && v.trim() === label);
-      if (ci >= 0) return [ri, ci];
-    }
-    return null;
-  };
   /** Consume a label, the value beside it, and any derived cells after that. */
   const take = (label, derived = 0) => {
     const hit = find(label);
@@ -202,16 +199,8 @@ export function importCrafting(tab, identity = {}) {
     .map((label) => ({ label, enabled: true }));
   while (bypassed.length < bypassCount) bypassed.push({ label: '', enabled: true });
 
-  const sourceExtras = [];
-  rows.forEach((cells, ri) => {
-    const kept = cells.map((cell, ci) => (used.has(`${ri}:${ci}`) ? null : cell));
-    while (kept.length && kept[kept.length - 1] === null) kept.pop();
-    if (kept.some((v) => v !== null && v !== undefined && v !== '')) sourceExtras.push({ cells: kept });
-  });
-  // Drop the columns every leftover row shares as empty, so the block keeps its
-  // own alignment instead of trailing a dozen blank cells from the sheet.
-  const lead = Math.min(...sourceExtras.map(({ cells }) => cells.findIndex((v) => v !== null)), Infinity);
-  if (Number.isFinite(lead) && lead > 0) for (const row of sourceExtras) row.cells = row.cells.slice(lead);
+  // Everything no label claimed, without the blank columns it all shares.
+  const sourceExtras = g.extras();
 
   const project = {
     name: text(found.itemName),
