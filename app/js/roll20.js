@@ -721,8 +721,22 @@ export function vitalStrikeTiers(c) {
 }
 
 /**
+ * Whether the character has the mythic Vital Strike feat: chosen as the
+ * mythic feat of a tier they have reached (a mythic feat is written by its
+ * base name), or a feat named "Mythic Vital Strike" / "Vital Strike (Mythic)".
+ */
+export function hasMythicVitalStrike(c) {
+  const tier = Number(c?.mythic?.tierOverride ?? c?.identity?.mythicTier) || 0;
+  const plain = (n) => String(n ?? '').replace(/\s*\[[^\]]*\]\s*$/, '').trim().toLowerCase();
+  if ((c?.mythic?.abilities || []).some((a, i) => i < tier && plain(a?.featChoice) === 'vital strike')) return true;
+  const groups = Array.isArray(c?.featGroups) ? c.featGroups.map((g) => g?.entries || []) : Object.values(c?.feats || {});
+  return groups.flat().some((f) => /^(mythic vital strike|vital strike \(mythic\))$/.test(plain(f?.name ?? f)));
+}
+
+/**
  * What a weapon can be copied as: a full attack (a weapon whose mode makes
- * iteratives), a single attack, and each Vital Strike tier the character has.
+ * iteratives), a single attack, and each Vital Strike tier the character has
+ * -- each once more as its mythic version when they have the mythic feat.
  * `kind` is the roll kind the copy is made under.
  */
 export function weaponStrikes(c, index) {
@@ -731,8 +745,14 @@ export function weaponStrikes(c, index) {
   const out = [];
   if (iterates(WEAPON_MODE_KEYS[w.attackType])) out.push({ kind: 'weapon-full', label: 'Full attack' });
   out.push({ kind: 'weapon-single', label: 'Single attack' });
-  for (let t = 1; t <= vitalStrikeTiers(c); t++) {
+  const tiers = vitalStrikeTiers(c);
+  for (let t = 1; t <= tiers; t++) {
     out.push({ kind: `weapon-vital:${t}`, label: `${VITAL_STRIKE_TIERS[t - 1]} (dice ×${t + 1})` });
+  }
+  if (tiers && hasMythicVitalStrike(c)) {
+    for (let t = 1; t <= tiers; t++) {
+      out.push({ kind: `weapon-mythicvital:${t}`, label: `${VITAL_STRIKE_TIERS[t - 1]}, mythic (dice and bonuses ×${t + 1})` });
+    }
   }
   return out;
 }
@@ -746,7 +766,7 @@ export function weaponStrikes(c, index) {
  * base x mult, plus the untagged [[...]] riders once, plus [[... Crit]] damage
  * multiplied, plus the bonus crit damage column once.
  */
-export function weaponRollSpec(c, index, cs = null, answers = null, single = false, vital = 0) {
+export function weaponRollSpec(c, index, cs = null, answers = null, single = false, vital = 0, mythic = false) {
   const w = c?.equipment?.weapons?.[index];
   if (!w) return null;
   const { calc } = w;
@@ -793,14 +813,21 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   // a critical.
   const tier = Math.max(0, Math.min(VITAL_STRIKE_TIERS.length, Math.floor(Number(vital) || 0)));
   const vitalDice = tier ? scaleDice(sized.dice, tier) : {};
+  // Mythic Vital Strike multiplies, by the same count, the bonuses a critical
+  // multiplies (Strength, enhancement, Misc dmg, [[... Mult]] tokens) -- not
+  // precision damage or riders. Like the extra dice, the extra is added once
+  // on a critical, not multiplied again.
+  const multFlat = (calc.baseDmgFlat || 0) + dmgDelta + sized.flat + rollFlat(calc.tokMultDmg);
+  const vitalFlat = tier && mythic ? multFlat * tier : 0;
+  const vitalName = tier ? `${VITAL_STRIKE_TIERS[tier - 1]}${mythic ? ', mythic' : ''}` : '';
   const rolls = !single && !tier && iterates(modeKey)
     ? iterativeRolls(c.attack?.bab, atkTotal, 'Attack', atkOpts)
     : [{ label: 'Attack', formula: d20(atkTotal, atkOpts) }];
   rolls.push({
-    label: tier ? `Damage (${VITAL_STRIKE_TIERS[tier - 1]})` : 'Damage',
+    label: tier ? `Damage (${vitalName})` : 'Damage',
     formula: damageFormula(
       addDice(addDice(addDice(sized.dice, vitalDice), rollDice(calc.tokDmg)), rollDice(calc.tokMultDmg)),
-      calc.totalDmgFlat + dmgDelta + sized.flat
+      calc.totalDmgFlat + dmgDelta + sized.flat + vitalFlat
         - (calc.tokDmg?.termFlat || 0) - (calc.tokMultDmg?.termFlat || 0),
       [...termTexts(calc.tokDmg, 1, answers), ...termTexts(calc.tokMultDmg, 1, answers)],
     ),
@@ -827,7 +854,8 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   const critFlat = multBase.flat * mult
     + rollFlat(calc.tokDmg)
     + rollFlat(calc.critTagged) * mult
-    + bcd.flat;
+    + bcd.flat
+    + vitalFlat;
   rolls.push({
     label: 'Crit confirm',
     formula: d20((calc.confirmTotal || 0) + atkDelta
@@ -852,8 +880,10 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   const notes = [];
   if (tier) {
     notes.push({
-      label: VITAL_STRIKE_TIERS[tier - 1],
-      text: `a standard action: one attack, the weapon's dice rolled ${tier + 1} times; the extra dice are not multiplied on a critical`,
+      label: vitalName,
+      text: mythic
+        ? `a standard action: one attack, the weapon's dice and the damage bonuses a critical multiplies taken ${tier + 1} times; the extra is not multiplied on a critical`
+        : `a standard action: one attack, the weapon's dice rolled ${tier + 1} times; the extra dice are not multiplied on a critical`,
     });
   }
   if (critRange < 20 || mult !== 2) {
@@ -903,6 +933,7 @@ export function rollSpec(c, kind, ref, cs = null, answers = null) {
     case 'weapon-single': return weaponRollSpec(c, Number(ref), cs, answers, true);
     case 'weapon-full': return weaponRollSpec(c, Number(ref), cs, answers);
     case 'weapon-vital': return weaponRollSpec(c, Number(ref), cs, answers, true, Number(which) || 1);
+    case 'weapon-mythicvital': return weaponRollSpec(c, Number(ref), cs, answers, true, Number(which) || 1, true);
     case 'initiative': return initiativeRollSpec(c, cs);
     case 'concentration': return concentrationRollSpec(c, ref);
     case 'familiar':

@@ -15,7 +15,7 @@ import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, escapeRoll20, d20, damageFormula,
   rollText, rollSpec, roll20Text,
   abilityRollSpec, saveRollSpec, attackRollSpec, skillRollSpec, weaponRollSpec,
-  initiativeRollSpec, concentrationRollSpec, companionRollSpec, vitalStrikeTiers, weaponStrikes,
+  initiativeRollSpec, concentrationRollSpec, companionRollSpec, vitalStrikeTiers, weaponStrikes, hasMythicVitalStrike,
 } from '../app/js/roll20.js';
 
 let pass = 0;
@@ -655,6 +655,25 @@ console.log('a weapon copy offers full, single and the Vital Strike tiers taken'
   ok('Improved: the weapon\u2019s 2d6 rolled three times', /^6d6\+/.test(line(vs, 'Damage (Improved Vital Strike)')));
   ok('and on a crit the extra 4d6 is added once, not doubled', /^8d6\+/.test(line(vs, 'Crit damage')));
   ok('the note says so', vs.notes.some((n) => n.label === 'Improved Vital Strike'));
+}
+
+console.log('mythic Vital Strike multiplies the damage bonuses too');
+{
+  const c = built({ weapons: [{ ...GREATSWORD }] });
+  c.data.featGroups = [{ name: 'Level Up', entries: [{ name: 'Vital Strike' }] }];
+  check('no mythic feat: no mythic option', weaponStrikes(c.data, 0).some((x) => x.kind.startsWith('weapon-mythicvital')), false);
+  c.data.identity.mythicTier = 1;
+  c.data.mythic = { ...(c.data.mythic || {}), abilities: [{ name: '', featChoice: 'Vital Strike' }, { name: '', featChoice: '' }] };
+  check('a mythic feat at a reached tier counts', hasMythicVitalStrike(c.data), true);
+  check('and adds the mythic option', weaponStrikes(c.data, 0).map((x) => x.kind).includes('weapon-mythicvital:1'), true);
+  const plain = rollSpec(c.data, 'weapon-vital:1', 0, c.conditionState);
+  const myth = rollSpec(c.data, 'weapon-mythicvital:1', 0, c.conditionState);
+  const flat = (spec, label) => Number(/\+(\d+)$/.exec(spec.rolls.find((r) => r.label.startsWith(label)).formula)?.[1] || 0);
+  const w = c.data.equipment.weapons[0].calc;
+  check('the hit takes the multiplied bonuses twice', flat(myth, 'Damage') - flat(plain, 'Damage'), w.baseDmgFlat);
+  check('and the crit adds that extra once', flat(myth, 'Crit damage') - flat(plain, 'Crit damage'), w.baseDmgFlat);
+  c.data.mythic.abilities = [{ name: '', featChoice: '' }, { name: '', featChoice: 'Vital Strike' }];
+  check('one chosen at a tier not reached does not', hasMythicVitalStrike(c.data), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
