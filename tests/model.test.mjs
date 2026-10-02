@@ -3066,6 +3066,33 @@ console.log('a weapon talent missing its base says so in its hover card');
   check('the card names the missing base', /No Open Hand base on this weapon/.test(pop), true);
 }
 
+console.log('a veil that grants a sphere counts as its base');
+{
+  const before = veilCatalogue();
+  setVeilCatalogue({ veils: [
+    { name: 'Bands of the Asura', slot: 'Shoulders, Belt', text: 'You gain the Open Hand sphere. Unless you already have it...' },
+    { name: 'Cloak of Echoes', slot: 'Shoulders', text: 'You gain the benefits of the Open Hand sphere when grappling.' },
+  ] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 5);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 5, levels: [] });
+  c.addCustomization('Armiger');
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  const row = (i) => c.data.training.combat.customizations[0].sets[0].talents[i];
+  c.setItem(list, 1, 'sphere', 'Open Hand');
+  c.setItem(list, 1, 'talent', 'Axe Kick');
+  check('no base: marked', row(1).needsBase, true);
+  c.setItem(list, 0, 'sphere', 'Veilweaving');
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere (Cloak of Echoes)');
+  check('a veil that only borrows the sphere is not its base', row(1).needsBase, true);
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere (Bands of the Asura, Essence)');
+  check('the weapon’s own veil that grants Open Hand is its base', row(1).needsBase, false);
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere');
+  c.set('akashic.slots', [{ slot: 'Shoulders', veils: [{ name: 'Bands of the Asura', essence: 0 }] }]);
+  check('and so is one the character has shaped', row(1).needsBase, false);
+  setVeilCatalogue(before);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

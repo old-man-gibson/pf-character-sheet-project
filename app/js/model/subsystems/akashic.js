@@ -626,6 +626,32 @@ export function veilEntry(name) {
   return VEIL_CATALOGUE.veils.find((v) => v.name.toLowerCase() === key) || null;
 }
 
+/**
+ * The spheres a veil grants outright, read from its rules text: Bands of the
+ * Asura says "You gain the Open Hand sphere." Empty for a veil the catalogue
+ * does not know, or one that grants none.
+ */
+export function veilGrantedSpheres(name) {
+  const text = String(veilEntry(name)?.text || '');
+  const out = [];
+  // The sphere's name in capitals, so "you gain the benefits of the …
+  // sphere" is not read as a sphere called "benefits of the …".
+  for (const m of text.matchAll(/\b[Yy]ou gain the ([A-Z][\w'’-]*(?: [A-Z][\w'’-]*)*) sphere\b/g)) out.push(m[1]);
+  return [...new Set(out)];
+}
+
+/**
+ * Every veil named in a talent cell: the cell itself, and each comma-separated
+ * part of a bracket after it -- "Veilweaving Sphere (Bands of the Asura,
+ * Essence)" names Bands of the Asura. Only names the catalogue knows.
+ */
+export function veilsNamedIn(cell) {
+  const raw = String(cell ?? '');
+  const parts = [raw.replace(/\s*\([^)]*\)\s*$/, '')];
+  for (const m of raw.matchAll(/\(([^)]*)\)/g)) parts.push(...m[1].split(','));
+  return parts.map((p) => p.trim()).filter((p) => p && veilEntry(p)).map((p) => veilEntry(p).name);
+}
+
 /** Every veilweaving class any veil names, in the order a picker lists them. */
 export function veilClasses() {
   return uniqueBy(VEIL_CATALOGUE.veils.flatMap((v) => v.classes)).sort((a, b) => a.localeCompare(b));
