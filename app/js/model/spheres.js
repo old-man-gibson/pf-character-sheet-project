@@ -179,9 +179,16 @@ export function talentsTagged(tag) {
  * A player writes what the book calls it, which is not always what the wiki's
  * heading called it -- "Reaping (greater)", "reaping", "Reaping  ". The tags
  * go because the catalogue already keeps them in a field of their own.
+ *
+ * Typography is not part of a name either: "…And Stay Down!" on a sheet is
+ * the pack's "...And Stay Down" -- an ellipsis character is three dots
+ * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
 const talentKey = (s) => String(s ?? '')
+  .normalize('NFKC')
+  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"')
   .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
+  .replace(/[!?]+$/, '')
   .trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**

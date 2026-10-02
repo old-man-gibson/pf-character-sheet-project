@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue,
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -3041,6 +3041,16 @@ console.log('two sheet resources of one name are two trackers');
   c.updateTracker('ki_2', { current: 4 });
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('and each keeps its own count through a save', back.trackers.filter((t) => t.name === 'Ki').map((t) => t.current), [1, 4]);
+}
+
+console.log('a talent name matches whatever its typography');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Duelist', kind: 'combat', talents: [{ name: '...And Stay Down', text: 'Bleed them.' }, { name: "Fighter's Flair", text: 'Flair.' }] }] });
+  check('an ellipsis character and a closing ! still find it',
+    [sphereTalent('Duelist', '…And Stay Down!')?.name, sphereTalent(null, '…and stay down')?.name], ['...And Stay Down', '...And Stay Down']);
+  check('a curly apostrophe finds a straight one', sphereTalent('Duelist', 'Fighter’s Flair')?.name, "Fighter's Flair");
+  setSphereCatalogue(before);
 }
 
 const missing = missingCharacters(REAL);
