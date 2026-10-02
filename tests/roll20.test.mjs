@@ -15,7 +15,7 @@ import {
   ROLL_FORMATS, DEFAULT_ROLL_FORMAT, escapeRoll20, d20, damageFormula,
   rollText, rollSpec, roll20Text,
   abilityRollSpec, saveRollSpec, attackRollSpec, skillRollSpec, weaponRollSpec,
-  initiativeRollSpec, concentrationRollSpec, companionRollSpec,
+  initiativeRollSpec, concentrationRollSpec, companionRollSpec, vitalStrikeTiers, weaponStrikes,
 } from '../app/js/roll20.js';
 
 let pass = 0;
@@ -638,6 +638,23 @@ if (!hasFixtures()) {
       }
     }
   }
+}
+
+console.log('a weapon copy offers full, single and the Vital Strike tiers taken');
+{
+  const c = built({ weapons: [{ ...GREATSWORD }] });
+  check('no Vital Strike feat: full and single', weaponStrikes(c.data, 0).map((x) => x.kind), ['weapon-full', 'weapon-single']);
+  c.data.featGroups = [{ name: 'Level Up', entries: [{ name: 'Vital Strike' }, { name: 'Improved Vital Strike [Combat]' }] }];
+  check('two tiers taken', vitalStrikeTiers(c.data), 2);
+  check('both offered', weaponStrikes(c.data, 0).map((x) => x.kind), ['weapon-full', 'weapon-single', 'weapon-vital:1', 'weapon-vital:2']);
+  const full = rollSpec(c.data, 'weapon-full', 0, c.conditionState);
+  const vs = rollSpec(c.data, 'weapon-vital:2', 0, c.conditionState);
+  const line = (spec, label) => spec.rolls.find((r) => r.label.startsWith(label)).formula;
+  check('a full attack has its iteratives', full.rolls.filter((r) => r.label.startsWith('Attack')).length > 1, true);
+  check('Vital Strike is one attack', vs.rolls.filter((r) => r.label.startsWith('Attack')).length, 1);
+  ok('Improved: the weapon\u2019s 2d6 rolled three times', /^6d6\+/.test(line(vs, 'Damage (Improved Vital Strike)')));
+  ok('and on a crit the extra 4d6 is added once, not doubled', /^8d6\+/.test(line(vs, 'Crit damage')));
+  ok('the note says so', vs.notes.some((n) => n.label === 'Improved Vital Strike'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

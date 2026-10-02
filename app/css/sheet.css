@@ -4870,6 +4870,11 @@ dialog.rollask p.hint { margin: 3px 0 10px; }
 /* The answer is a number the roll will carry, so it is shown in the same face
    the copied roll is shown in -- the two are the same thing twice. */
 .askrow select, .askrow input { font-family: var(--cs-mono); font-size: 0.78rem; width: 100%; }
+/* Which attack a weapon copy makes: a short list of choices, one per line. */
+dialog.rollask .askstrike { border: 0; padding: 0; margin: 6px 0 10px; }
+dialog.rollask .askstrike legend { font-size: 0.78rem; color: var(--cs-muted); padding: 0; margin-bottom: 4px; }
+dialog.rollask .askstrike .askrow { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; cursor: pointer; }
+dialog.rollask .askstrike .askrow input { width: auto; margin: 0; }
 dialog.rollask menu {
   display: flex; justify-content: flex-end; gap: 6px;
   margin: 12px 0 0; padding: 0; list-style: none; flex-wrap: wrap;

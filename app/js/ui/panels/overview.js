@@ -622,7 +622,7 @@ function dashOffenseCard(model, ctx, openNow) {
           title="${atkDelta ? esc(`Base ${baseAtkStr} — with ${cs.sources} applied`) : ''}">${esc(atkStr)}</strong>
         <span class="dashdmg${cls(dmgMoved)}"
           title="${dmgMoved ? esc(`Base ${baseDmgStr} — with ${cs.sources} applied${grow ? `, ${Math.abs(grow)} size step${Math.abs(grow) === 1 ? '' : 's'} ${grow > 0 ? 'larger' : 'smaller'}` : ''}`) : ''}">${esc(dmgStr)}</span>
-        ${rollButton(model, 'weapon', i, `a full attack with ${String(w.name || '').trim() || 'this weapon'} — every iterative, damage and crit`, cs)}</span>
+        ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} — full, single or Vital Strike`, cs)}</span>
     </div>`;
     };
     return `<section class="panel">
@@ -648,7 +648,7 @@ function dashOffenseCard(model, ctx, openNow) {
         </select>`
       : weapons.length === 1 ? `<span class="dim">${esc(wname(weapons[0], 0))}</span>` : '';
     const roll = chosen !== null
-      ? rollButton(model, 'weapon', chosen, `a full attack with ${wname(weapons[chosen], chosen)} — every iterative, its damage and crit`, cs)
+      ? rollButton(model, 'weapon', chosen, `an attack with ${wname(weapons[chosen], chosen)} — full, single or Vital Strike`, cs)
       : rollButton(model, 'mode', 'melee', 'a full-round melee attack — every iterative', cs);
     return lineHtml('Full attack', `${control}
       <span class="dim">${esc(c.attack.iterative || '—')}</span> ${roll}`);

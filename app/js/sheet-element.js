@@ -168,7 +168,7 @@ import {
   trackBand, readableOn,
 } from './tracker-style.js';
 import {
-  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
+  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS, weaponStrikes,
 } from './roll20.js';
 
 /**
@@ -4191,8 +4191,13 @@ export class CharacterSheetElement extends HTMLElement {
     // the player has settled and one the table is still owed -- and the only
     // way the sheet can hand a resolved roll to anything that is not Roll20.
     // `answers` already set (even to nothing) means the asking is done.
-    if (answers === null && spec?.queries?.length) {
-      this.#askRoll(spec, kind, ref, what);
+    //
+    // A weapon is first asked what kind of attack it is making -- a full
+    // attack, a single one, or a Vital Strike tier the character has -- and
+    // copied under that kind, so the question is not asked again on a re-copy.
+    const strikes = kind === 'weapon' ? weaponStrikes(this.#model.data, Number(ref)) : [];
+    if (strikes.length > 1 || (answers === null && spec?.queries?.length)) {
+      this.#askRoll(spec, kind, ref, what, strikes);
       return;
     }
     const text = rollText(spec, this.#rollFormat);
@@ -4223,14 +4228,19 @@ export class CharacterSheetElement extends HTMLElement {
    * roll that is true now, and keeping one in step with every edit would cost
    * more than making it again.
    */
-  #askRoll(spec, kind, ref, what) {
+  #askRoll(spec, kind, ref, what, strikes = []) {
     this.#closeAsk();
     const dlg = this.ownerDocument.createElement('dialog');
     dlg.className = 'rollask';
+    const queries = spec?.queries || [];
     dlg.innerHTML = `<form method="dialog">
       <h2>${esc(spec.name)}</h2>
-      <p class="hint">This roll asks something the sheet cannot answer for you.</p>
-      ${spec.queries.map((q, i) => `<label class="askrow">
+      ${strikes.length > 1 ? `<fieldset class="askstrike"><legend>Which attack?</legend>
+        ${strikes.map((s, i) => `<label class="askrow"><input type="radio" name="strike" value="${esc(s.kind)}"${i === 0 ? ' checked' : ''}>
+          <span>${esc(s.label)}</span></label>`).join('')}
+      </fieldset>` : ''}
+      ${queries.length ? '<p class="hint">This roll asks something the sheet cannot answer for you.</p>' : ''}
+      ${queries.map((q, i) => `<label class="askrow">
         <span>${esc(q.label)}</span>
         ${q.free
     ? `<input type="number" data-ask="${i}" value="${esc(q.answers?.[0]?.text ?? '0')}" step="1">`
@@ -4239,35 +4249,39 @@ export class CharacterSheetElement extends HTMLElement {
       </label>`).join('')}
       <menu>
         <button value="cancel" data-askcancel>Cancel</button>
-        <button value="table" data-asktable
-          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>
-        <button value="here" data-askhere class="primary">Copy with these answers</button>
+        ${queries.length ? `<button value="table" data-asktable
+          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>` : ''}
+        <button value="here" data-askhere class="primary">${queries.length ? 'Copy with these answers' : 'Copy'}</button>
       </menu>
     </form>`;
     this.#ask = dlg;
     this.#askReturn = this.shadowRoot.activeElement;
     this.shadowRoot.append(dlg);
 
-    const chosen = () => Object.fromEntries(spec.queries.map((q, i) => {
+    // The attack picked, as the kind the roll is copied under.
+    const strikeKind = () => dlg.querySelector('input[name="strike"]:checked')?.value || kind;
+    const chosen = () => Object.fromEntries(queries.map((q, i) => {
       const el = dlg.querySelector(`[data-ask="${i}"]`);
       return [q.label, el ? el.value : q.answers?.[0]?.text];
     }));
     dlg.querySelector('[data-askhere]')?.addEventListener('click', () => {
-      const answers = chosen();
+      const answers = queries.length ? chosen() : null;
+      const as = strikeKind();
       this.#closeAsk();
-      this.#copyRoll(kind, ref, what, answers);
+      this.#copyRoll(as, ref, what, answers);
     });
     // An empty set of answers is not "no answers given": it is the player
     // saying the table should be asked instead, which is why it is an object
     // and not the null that would send us round again.
     dlg.querySelector('[data-asktable]')?.addEventListener('click', () => {
+      const as = strikeKind();
       this.#closeAsk();
-      this.#copyRoll(kind, ref, what, {});
+      this.#copyRoll(as, ref, what, {});
     });
     dlg.querySelector('[data-askcancel]')?.addEventListener('click', () => this.#closeAsk());
     dlg.addEventListener('close', () => this.#closeAsk());
     dlg.showModal();
-    dlg.querySelector('[data-ask="0"]')?.focus();
+    (dlg.querySelector('input[name="strike"]:checked') || dlg.querySelector('[data-ask="0"]'))?.focus();
   }
 
   #closeAsk() {
