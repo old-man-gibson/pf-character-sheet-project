@@ -125,6 +125,7 @@ export function describeSource(path) {
     case 'boughtOff': return `${a} drawback bought off`;
     case 'veil': return parts[3] === 'name' ? 'a veil’s name' : 'a veil’s description';
     case 'spellNote': return `prepared spell ${nth(a)}, its note`;
+    case 'sessionCard': return `session card ${nth(a)}, its ${b === 'note' ? 'notes' : b}`;
     case 'powerNote': return `power ${nth(b)} of manifesting class ${nth(a)}, its note`;
     case 'card': return `card ${nth(a)}`;
     case 'sideboard': return `sideboard card ${nth(a)}`;

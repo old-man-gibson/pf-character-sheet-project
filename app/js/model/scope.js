@@ -1463,6 +1463,17 @@ export function proseSources(model) {
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
+  // A session card's own text: its title, the four fact cells and its note.
+  // A name defined there is read like any other, and a mistake in one is
+  // listed with the rest; a bonus written there does not apply by itself --
+  // a card is something the character does, not something always on -- so it
+  // reads as future, as a switched-off buff's does.
+  (d.session?.cards || []).forEach((card, i) => {
+    if (!card || card.kind === 'choice') return;
+    for (const field of ['title', 'range', 'targets', 'save', 'duration', 'note']) {
+      push(`sessionCard:${i}:${field}`, card[field], null, { future: true });
+    }
+  });
   // A power's note, as a prepared spell's: the panel draws it as prose.
   (d.psionics?.classes || []).forEach((cls, ci) => (cls.powers || [])
     .forEach((w, wi) => push(`powerNote:${ci}:${wi}`, w.note)));

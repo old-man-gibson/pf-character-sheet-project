@@ -2,6 +2,9 @@ import { esc } from '../html.js';
 import { D20_ICON } from '../roll.js';
 import { sessionRolls } from '../../model/session-rolls.js';
 import { renderedProse } from '../prose.js';
+import { proseText } from '../rows.js';
+import { hasTokens } from '../../inline.js';
+import { evaluateFormula } from '../../formula.js';
 import { editableSession, choiceParent, moveSessionCard, removeSessionCard } from '../../model/session-layout.js';
 import { bindSessionDrag } from '../session-drag.js';
 import { actionFeatures, linkedFeature, effectiveAction } from '../../model/action-features.js';
@@ -51,7 +54,18 @@ export function renderSessionBoard(model) {
       </article>`;
     }
     const source = card.source ? shortcuts.find(x => x.key === card.source) : null;
-    const title = card.title || source?.title || 'Untitled option';
+    // The title reads {…} like the notes beside it: drawn worked out, and as
+    // plain text wherever it goes into an attribute.
+    const rawTitle = card.title || source?.title || 'Untitled option';
+    const title = proseText(model, rawTitle);
+    const shownTitle = hasTokens(rawTitle) ? renderedProse(model, rawTitle) : esc(rawTitle);
+    // The cost as it will be spent, with the formula behind it on hover.
+    const costSrc = String(card.cost ?? '1');
+    let costNow = null;
+    try { costNow = Math.floor(Number(evaluateFormula(costSrc, model.scope()))); } catch { costNow = null; }
+    const costShown = Number.isFinite(costNow)
+      ? (String(costNow) === costSrc.trim() ? esc(costSrc) : `<span title="${esc(costSrc)}">${costNow}</span>`)
+      : `<span class="tok err" title="${esc(costSrc)}">${esc(costSrc)}</span>`;
     const plan = previewChainUse(model,card);
     const missing = card.source && !source;
     const reason = missing ? 'Source missing or renamed; edit this shortcut before using it' : plan.error;
@@ -70,12 +84,12 @@ export function renderSessionBoard(model) {
     const subtitle = [
       source?.detail ? `<span>${esc(source.detail)}</span>` : '',
       ...facts,
-      card.resource ? `<span><small>Cost</small> ${esc(card.cost || '1')} ${esc(tracker?.name || 'missing resource')}</span>` : '',
+      card.resource ? `<span><small>Cost</small> ${costShown} ${esc(tracker?.name || 'missing resource')}</span>` : '',
     ].filter(Boolean).join(' · ');
     return `<article class="session-option session-width-${width(card, values.attackCount)} ${reason ? 'unavailable' : ''}" data-session-drop="${index}" data-type="${esc(card.type || '')}">
       ${handle(index, title)}${typeTag(card)}
       <details data-session-fold="card:${index}" ${state.folded[`card:${index}`] === false ? 'open' : ''}>
-        <summary>${esc(title)}${subtitle ? `<small class="session-card-facts">${subtitle}</small>` : ''}</summary>
+        <summary>${shownTitle}${subtitle ? `<small class="session-card-facts">${subtitle}</small>` : ''}</summary>
         ${source && (source.title !== title || (source.actionType && source.actionType !== card.type)) ? `<p class="session-source">Linked ${esc(source.kind)}${source.title !== title ? ` · ${esc(source.title)}` : ''}${source.actionType && source.actionType !== card.type ? ` <em>(normally a ${esc((ACTION_TYPES.find(([k]) => k === source.actionType)?.[1] || source.actionType).toLowerCase())} action)</em>` : ''}</p>` : ''}
         ${source?.note && !linkedFeature(model,card) ? `<div class="session-description">${renderedProse(model, source.note)}</div>` : ''}
         ${card.note ? `<div class="session-description">${renderedProse(model, card.note)}</div>` : ''}

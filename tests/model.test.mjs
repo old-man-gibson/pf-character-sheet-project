@@ -75,6 +75,7 @@ import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
 import * as trackerPanels from '../app/js/ui/panels/trackers.js';
+import * as sessionPanels from '../app/js/ui/panels/session.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -3091,6 +3092,22 @@ console.log('a veil that grants a sphere counts as its base');
   c.set('akashic.slots', [{ slot: 'Shoulders', veils: [{ name: 'Bands of the Asura', essence: 0 }] }]);
   check('and so is one the character has shaped', row(1).needsBase, false);
   setVeilCatalogue(before);
+}
+
+console.log('session cards read formulas in their title, cost and text');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  c.set('identity.level', 6);
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10' });
+  const will = c.data.saves.will.total;
+  c.set('session', { cards: [{ id: 'a', title: 'Burst {= level}', type: 'standard', resource: ki.id, cost: 'floor(level / 2)',
+    note: 'Heals {= level * 2}. {burst.size = 3} {saves.will += 2}' }] });
+  const html = sessionPanels.renderSessionBoard(c).replace(/\s+/g, ' ');
+  check('the title is worked out', /<summary>Burst <span class="tok value"[^>]*>6<\/span>/.test(html), true);
+  check('the cost line shows what it spends', html.includes('<small>Cost</small> <span title="floor(level / 2)">3</span> Ki'), true);
+  check('a name a card defines can be read elsewhere', c.scope().burst?.size, 3);
+  check('a bonus written on a card does not apply by itself', c.data.saves.will.total, will);
+  check('and the Formulas tab says where it is', describeSource('sessionCard:0:note'), 'session card 1, its notes');
 }
 
 const missing = missingCharacters(REAL);
