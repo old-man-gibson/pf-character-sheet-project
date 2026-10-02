@@ -103,22 +103,8 @@ export function importPsionics(tab, identity = {}) {
   for (const [ri, ci] of g.findAll('Power Known')) mark(ri, ci);
   g.dropCounterColumns();
 
-  /*
-   * The technique panel: a heading, the odd levels it advances on, and what each
-   * grants. It is the same fixed list on every sheet -- it shows in full even on
-   * a character whose technique is something else -- so it is template furniture.
-   */
-  for (const [ri, ci] of g.scan(/\bTechnique$/)) {
-    mark(ri, ci);
-    for (let r = ri + 1; r < g.rows.length; r++) {
-      if (!/^Level \d+$/.test(text(at(r, ci)))) continue;
-      // The level, what it grants, and the note the sheet put beside it when the
-      // character's technique is the one this panel describes.
-      for (let n = 0; n <= 3; n++) mark(r, ci + n);
-    }
-  }
-  const technique = text(identity.primordiaTechnique);
-  if (technique) for (const [ri, ci] of g.findAll(technique)) mark(ri, ci);
+  // The technique panel the sheet parked on this tab is template furniture.
+  g.skipTechniquePanel(identity.primordiaTechnique);
 
   const classes = [];
   for (const [ri, ci] of g.findAll('Ability 1')) {

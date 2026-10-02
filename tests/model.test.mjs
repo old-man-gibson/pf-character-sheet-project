@@ -54,6 +54,8 @@ import { blankDocument } from '../app/js/convert.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
+import { importVancian } from '../app/js/model/subsystems/vancian.js';
+import { importPsionics } from '../app/js/model/subsystems/psionics.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
@@ -3167,6 +3169,21 @@ console.log('crafting reads the cell beside a label, even a blank one');
   const tab = { rows: [{ r: 2, cells: [null, 'Value', null, '% Discount', 0.1] }] };
   const block = importCrafting(tab);
   check('a blank value stays blank', [block.projects[0].value, block.discount], [0, 10]);
+}
+
+console.log('the technique panel is skipped the same way on the Vancian and Psionics tabs');
+{
+  // Whatever technique heads it, and with a note beside the levels.
+  const panel = [
+    { r: 2, cells: ['Notes kept', null, 'Piercing Eye Technique', null, 'Light Body'] },
+    { r: 3, cells: [null, null, 'Level 1', 'Sees through walls', 'Yours'] },
+    { r: 5, cells: [null, null, 'Level 3', 'Sees further'] },
+    { r: 7, cells: [null, null, 'After the panel'] },
+  ];
+  const left = (block) => block.sourceExtras.flatMap((r) => r.cells).filter((v) => v !== null);
+  const want = ['Notes kept', 'After the panel'];
+  check('Vancian', left(importVancian({ rows: panel }, { primordiaTechnique: 'Light Body' })), want);
+  check('Psionics', left(importPsionics({ rows: panel }, { primordiaTechnique: 'Light Body' })), want);
 }
 
 console.log('only what the player wrote counts as a change');

@@ -380,6 +380,31 @@ export function sheetReader(tab) {
     }
   };
 
+  /**
+   * Mark the Primordia technique panel as consumed: a "… Technique" heading
+   * with "Level 1" just below it, the odd levels down to the first cell in
+   * that column that is not one, and beside each level what it grants and
+   * the note the sheet adds when the panel is the character's own technique.
+   * It is the same fixed list on every sheet, so it is template furniture --
+   * as is the character's technique written anywhere on the tab, which the
+   * identity block already carries.
+   */
+  const skipTechniquePanel = (technique = '') => {
+    for (const [ri, ci] of scan(/\bTechnique$/)) {
+      const first = [1, 2].map((n) => text(at(ri + n, ci))).find(Boolean);
+      if (!/^Level 1$/.test(first || '')) continue;
+      mark(ri, ci);
+      for (let r = ri + 1; r < rows.length; r++) {
+        const cell = text(at(r, ci));
+        if (!cell) continue;
+        if (!/^Level \d+$/.test(cell)) break;
+        for (let n = 0; n <= 3; n++) mark(r, ci + n);
+      }
+    }
+    const own = text(technique);
+    if (own) for (const [ri, ci] of findAll(own)) mark(ri, ci);
+  };
+
   /** Whatever no label claimed, trimmed of the blank columns it all shares. */
   const extras = () => {
     const out = [];
@@ -395,7 +420,7 @@ export function sheetReader(tab) {
 
   return {
     rows, at, text, num, mark, isUsed, rightOf, find, findAll, take, scan,
-    dropCounterColumns, extras,
+    dropCounterColumns, skipTechniquePanel, extras,
   };
 }
 
