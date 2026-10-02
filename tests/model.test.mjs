@@ -51,6 +51,8 @@ import {
 import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { countChanges } from '../app/js/history.js';
+import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
@@ -3156,6 +3158,52 @@ console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
   c.listAdd('buffs', { name: 'Enlarge Person', on: true, note: '{size += 1}', bonuses: [] });
   const html = gearPanels.renderGearPanel(c, {});
   check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
+}
+
+console.log('only what the player wrote counts as a change');
+{
+  // Every path where two documents differ, as arrays of keys.
+  const diffPaths = (a, b, path = [], out = []) => {
+    if (a === b) return out;
+    const ao = a && typeof a === 'object', bo = b && typeof b === 'object';
+    if (!ao || !bo) { if (JSON.stringify(a) !== JSON.stringify(b)) out.push(path); return out; }
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) diffPaths(a[k], b[k], [...path, k], out);
+    return out;
+  };
+  // Each edit, and the paths it may move besides the computed ones. Making
+  // a character mythic gives it Mythic Power, a tracker of its own.
+  const EDITS = [
+    ['level', (c) => c.set('identity.level', (Number(c.data.identity.level) || 1) + 1), ['identity.level']],
+    ['size', (c) => c.set('identity.size', 'Large'), ['identity.size']],
+    ['tier', (c) => c.set('mythic.tierOverride', 5), ['mythic.tierOverride', 'customTrackers']],
+    ...['str', 'dex', 'con', 'int', 'wis', 'cha'].map((k) => [k,
+      (c) => c.set(`statsBuild.${k}.pointBuy`, (Number(c.data.statsBuild?.[k]?.pointBuy) || 10) + 2),
+      [`statsBuild.${k}.pointBuy`]]),
+    ['weapon', (c) => c.data.equipment?.weapons?.length
+      && c.setItem('equipment.weapons', 0, 'enhancement', (Number(c.data.equipment.weapons[0].enhancement) || 0) + 1),
+    ['equipment.weapons.0.enhancement']],
+    ['buff', (c) => c.listAdd('buffs', { name: 'Test', on: true, bonuses: [],
+      note: '{ac += 2} {attack += 1} {size += 1} {str.score += 4}' }), ['buffs']],
+  ];
+  const stray = [];
+  const counts = [];
+  for (const id of IDS) {
+    for (const [name, edit, allowed] of EDITS) {
+      const c = new Character(load(id));
+      const before = JSON.parse(JSON.stringify(c.toJSON()));
+      edit(c);
+      const after = JSON.parse(JSON.stringify(c.toJSON()));
+      for (const p of diffPaths(before, after)) {
+        if (isComputedPath(p) || allowed.some((a) => p.join('.').startsWith(a))) continue;
+        stray.push(`${id} ${name}: ${p.join('.')}`);
+      }
+      if (name === 'level') counts.push(countChanges(before, after));
+    }
+  }
+  // A path that turns up here is either a computed value missing from
+  // model/computed-paths.js or an edit with a side effect it should not have.
+  check('an edit moves only itself and what the engine works out', stray.slice(0, 10), []);
+  check('a level edit is one change', counts.every((n) => n === 1), true);
 }
 
 const missing = missingCharacters(REAL);

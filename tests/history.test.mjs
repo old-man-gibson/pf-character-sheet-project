@@ -89,14 +89,19 @@ if (FIX) {
   const b = structuredClone(a);
   check('a document equals itself', countChanges(a, b), 0);
 
-  b.abilities.str.score += 1;
+  b.statsBuild.str.pointBuy += 1;
   check('one ability score', countChanges(a, b), 1);
+
+  // The score it adds up to is the engine's answer, saved but not an edit.
+  b.abilities.str.score += 1;
+  b.defenses.ac += 1;
+  check('the totals it moves are not counted', countChanges(a, b), 1);
 
   b.identity.name = 'Someone Else';
   check('and a name', countChanges(a, b), 2);
 
   // What a typo typed and corrected is worth: nothing.
-  b.abilities.str.score -= 1;
+  b.statsBuild.str.pointBuy -= 1;
   b.identity.name = a.identity.name;
   check('corrected back to source', countChanges(a, b), 0);
 
