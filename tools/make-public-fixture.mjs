@@ -213,15 +213,22 @@ function playerValues(c) {
   // One block from each shared-table subsystem. Both read their progression
   // from the tables registered above, so these exercise the lookup rather than
   // freezing a column of cached numbers into the fixture.
+  // A prepared arcane caster with a slot spent and a prepared list part used,
+  // and a manifester with powers known and points spent -- the play state each
+  // tab works out what is left from.
   c.listAdd('vancian.classes', {
-    name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '',
+    name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', prep: 'prepared', source: 'arcane',
     casterLevelOverride: null, concentration: 0,
-    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null })),
+    spells: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => ({ level, perDay: null, known: null, used: level === 1 ? 1 : 0 })),
   });
+  c.listAdd('vancian.prepared', { prepUsed: '1st', classLevel: 1, name: 'Magic Missile', uses: 2, used: 1 });
+  c.listAdd('vancian.prepared', { prepUsed: '2nd', classLevel: 2, name: 'Mirror Image', uses: 1, used: 0 });
   c.listAdd('psionics.classes', {
-    name: 'Psion', stat: 'Int', stat2: '', curveTotal: null,
-    manifesterLevelOverride: null, powers: [],
+    name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343,
+    manifesterLevelOverride: null,
+    powers: [{ name: 'Mind Thrust', level: 1 }, { name: 'Energy Ray', level: 1 }, { name: 'Concussion Blast', level: 2 }],
   });
+  c.stepTracker('power_points', 5);
 
   /*
    * Hit points as the player rolled and recorded them. Twelve levels of d6

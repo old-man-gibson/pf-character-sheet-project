@@ -490,7 +490,9 @@
   "initAbility2": null,
   "initMisc": 0,
   "base": 120,
-  "current": 78
+  "current": 78,
+  "temp": 0,
+  "nonlethal": 0
  },
  "classes": [
   {
@@ -3713,13 +3715,26 @@
     "name": "Psion",
     "stat": "Int",
     "stat2": "",
-    "curveTotal": null,
+    "curveTotal": 343,
     "manifesterLevelOverride": null,
-    "powers": []
+    "powers": [
+     {
+      "name": "Mind Thrust",
+      "level": 1
+     },
+     {
+      "name": "Energy Ray",
+      "level": 1
+     },
+     {
+      "name": "Concussion Blast",
+      "level": 2
+     }
+    ]
    }
   ],
   "bonusPoints": 0,
-  "spent": 0,
+  "spent": 5,
   "sourceExtras": []
  },
  "cardcasting": {
@@ -5333,10 +5348,11 @@
   "classes": [
    {
     "name": "Wizard",
-    "slotType": "",
+    "slotType": "Wizard",
     "stat": "Int",
     "stat2": "",
-    "types": "",
+    "prep": "prepared",
+    "source": "arcane",
     "casterLevelOverride": null,
     "concentration": 0,
     "spells": [
@@ -5350,7 +5366,7 @@
       "level": 1,
       "perDay": null,
       "known": null,
-      "used": 0
+      "used": 1
      },
      {
       "level": 2,
@@ -5403,7 +5419,22 @@
     ]
    }
   ],
-  "prepared": [],
+  "prepared": [
+   {
+    "prepUsed": "1st",
+    "classLevel": 1,
+    "name": "Magic Missile",
+    "uses": 2,
+    "used": 1
+   },
+   {
+    "prepUsed": "2nd",
+    "classLevel": 2,
+    "name": "Mirror Image",
+    "uses": 1,
+    "used": 0
+   }
+  ],
   "sourceExtras": []
  },
  "templates": [],
@@ -5978,6 +6009,32 @@
    "note": "",
    "source": "player",
    "createdAt": "2026-01-01T00:00:00.000Z",
+   "forwardedMax": 0,
+   "forwardedMin": 0,
+   "error": null
+  },
+  {
+   "minFormula": null,
+   "min": 0,
+   "style": {
+    "shape": "pips",
+    "fill": "remaining",
+    "color": null,
+    "gradientTo": null,
+    "negativeColor": null,
+    "negativeGradientTo": null,
+    "zones": []
+   },
+   "id": "power_points",
+   "name": "Power Points",
+   "pool": "pp",
+   "current": 5,
+   "maxFormula": null,
+   "max": 174,
+   "refresh": "Daily",
+   "note": "",
+   "source": "player",
+   "createdAt": null,
    "forwardedMax": 0,
    "forwardedMin": 0,
    "error": null
