@@ -420,6 +420,7 @@ recompute have anywhere to *put* an arriving bonus:
 | `tracker.<id>.max`, `tracker.<id>.min` | how big a resource pool is — not how full it is |
 | `initiative` | initiative |
 | `hp.total` | maximum hit points |
+| `size`, `size.effective`, `size.stacking` | size in steps (+1 = one larger): a true change like Enlarge Person, "treated as larger" for the damage dice only, and the kind that stacks with everything. Within a kind the largest increase wins, as with a buff's size rows; written in a buff's note, it applies while the buff is on |
 | `hp.temp` | temporary hit points — a pool of its own beside the box, spent after it |
 | `hp.deathBonus` | how far below zero death is, on top of Constitution |
 | `str.score`, `dex.score`, … | an ability score — which is not a total but the thing a dozen totals are built from, so it cascades through the modifier into attacks, damage, skills, saves, CMD and carrying capacity. `as temp.…` makes it a temporary one |

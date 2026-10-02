@@ -3042,6 +3042,17 @@ export const FORWARD_STATS = [
  * See `forwardTargets` for the matching.
  */
 export const FORWARD_LATE = [
+  /*
+   * Size, in steps (+1 = one larger), the three ways a buff's size rows
+   * take it: `size` is a true size change (Enlarge Person), `size.effective`
+   * is "treated as larger" and reaches the damage dice alone, and
+   * `size.stacking` sums with everything. A bonus in a buff's note lands
+   * only while the buff is on, as its rows do. Late: the size is applied in
+   * the condition layer, which reads after the prose.
+   */
+  ['size', 'Size, true (+1 = one larger)'],
+  ['size.effective', 'Size, effective (damage dice only)'],
+  ['size.stacking', 'Size, stacking (wraps & such)'],
   ['actions.standard', 'Standard actions per turn'],
   ['actions.move', 'Move actions per turn'],
   ['actions.swift', 'Swift actions per turn'],

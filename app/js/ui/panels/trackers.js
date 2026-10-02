@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
-import { SYSTEM_POOLS } from '../../model/trackers.js';
+import { SYSTEM_POOLS, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
@@ -99,7 +99,7 @@ export function formulaMeta(model, label, source) {
 
 /** A draining tracker shows and edits what is left rather than what was spent. */
 export function isDraining(t) {
-  return (Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining';
+  return trackerDrains(t);
 }
 
 /**
@@ -111,14 +111,15 @@ export function isDraining(t) {
 export function trackerReading(t) {
   const max = Number(t.max) || 0;
   const min = Number(t.min) || 0;
-  const cur = Number(t.current) || 0;
   const draining = isDraining(t);
   const twoSided = min < 0;
   const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
+  // A draining tracker shows what is left of the span above its floor.
   const range = min === 0 ? `/ ${max}`
+    : (draining && min > 0) ? `/ ${max - min}`
     : (twoSided && min === -max) ? `/ ±${max}`
       : `/ ${signed(min)}…${signed(max)}`;
-  return { shown: draining ? max - cur : cur, range, draining, twoSided };
+  return { shown: trackerShown(t), range, draining, twoSided };
 }
 
 
@@ -225,7 +226,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
       fill = `<div class="fill" style="left:${pct(f.from)};width:${pct(width)};background:${background}"></div>`;
     }
     const shownValue = draining ? max - cur : cur;
-    const title = twoSided ? signed(cur) : `${shownValue} of ${max}`;
+    const title = twoSided ? signed(cur) : `${shownValue} of ${draining ? max - Math.max(0, min) : max}`;
     return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-bar="${esc(t.id)}"` : ''}
           title="${esc(title)}${interactive ? ' — click to set' : ''}">
         ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
@@ -245,11 +246,14 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   if (style.shape === 'squares') {
     const sq = squareLayout({ min, max, current: cur, style });
     const colour = stepColor(Math.max(1, sq.lit), ctx);
-    const label = `${sq.lit} of ${max}${draining ? ' left' : ' used'}`;
+    const label = `${sq.lit} of ${sq.total}${draining ? ' left' : ' used'}`;
     if (sq.mode === 'number') {
       return `<div class="pipcount" title="${esc(label)}" style="color:${colour};border-color:${colour}">
-          ${sq.lit}<span class="of">/${max}</span></div>`;
+          ${sq.lit}<span class="of">/${sq.total}</span></div>`;
     }
+    // A square's number is the value it stands for, as a row pip's is: the
+    // floor plus its place.
+    const floor = Math.max(0, min);
     const tag = interactive ? 'button' : 'span';
     return `<div class="pips square" title="${esc(label)}">${
       Array.from({ length: sq.slots }, (_, i) => {
@@ -259,17 +263,21 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         // `data-n` is the pip's own number; the click handler converts it for
         // a draining tracker and spends one when the last lit pip is clicked.
         return `<${tag} class="pip ${on ? 'used' : ''}" style="${paint}"
-            ${interactive ? `data-pip="${esc(t.id)}" data-n="${n}"` : ''}
-            title="${esc(`${n} of ${max}`)}"
-            aria-label="Set ${esc(t.name)} to ${n}"></${tag}>`;
+            ${interactive ? `data-pip="${esc(t.id)}" data-n="${floor + n}"` : ''}
+            title="${esc(`${n} of ${sq.total}`)}"
+            aria-label="Set ${esc(t.name)} to ${floor + n}"></${tag}>`;
       }).join('')
     }</div>`;
   }
 
-  const stepCount = max >= min ? (max - min + 1) - (min <= 0 && max >= 0 ? 1 : 0) : 0;
+  // One pip per step above the floor: a pool of 2..10 is eight pips, and
+  // the floor itself is where none are lit. A two-sided meter has a pip for
+  // every value but zero.
+  const first = min > 0 ? min + 1 : min;
+  const stepCount = max >= first ? (max - first + 1) - (first <= 0 && max >= 0 ? 1 : 0) : 0;
   if (!(stepCount > 0 && stepCount <= PIP_LIMIT)) return '';
   const steps = [];
-  for (let k = min; k <= max; k++) if (k !== 0) steps.push(k);
+  for (let k = first; k <= max; k++) if (k !== 0) steps.push(k);
   const tag = interactive ? 'button' : 'span';
   const remaining = max - cur;
   const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pip="${esc(t.id)}" data-n="0"` : ''} title="0"
@@ -529,7 +537,9 @@ function colorField(field, value, { label, none, noneCss }) {
 /** The tracker or meter as it would look with the draft style (zone formulas resolved live). */
 export function stylePreviewHtml(model, ctx, t) {
   const style = normalizeStyle(ctx.editDraft.style);
-  const scope = model.scope();
+  // The zones read here as they will on the tracker or meter itself, with
+  // `self` its own row -- the editor's own example is written with it.
+  const scope = { ...model.scope(), self: trackerFacts(t) };
   const zones = resolveZones(style.zones, (src) => evaluateFormula(src, scope));
   const bad = zones.map((z, i) => (z.error ? `zone ${i + 1}: ${z.error}` : null)).filter(Boolean);
   const tooManyPips = t.meter && style.shape === 'pips'

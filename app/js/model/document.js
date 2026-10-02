@@ -1595,7 +1595,7 @@ export function toDocument(model) {
     // live in style.zones.
     customTrackers: model.trackers
       .filter((t) => t.source === 'player')
-      .map(({ resolvedZones, edited, ...t }) => t),
+      .map(({ resolvedZones, edited, rangeError, ...t }) => t),
     sheetTrackerState,
     // The guile side sits inside `training` beside the two that predate it,
     // so it is stripped in place rather than as a block of its own. The two

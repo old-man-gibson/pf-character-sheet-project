@@ -30,7 +30,7 @@ import { tempHpGrant } from './stats/defenses.js';
 import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
-import { trackerFacts } from './trackers.js';
+import { trackerFacts, trackerShown } from './trackers.js';
 import {
   classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   speedForwardKey, sphereForwardKey, vancianForwardKey,
@@ -1463,6 +1463,17 @@ export function proseSources(model) {
     }
   });
   (d.vancian?.prepared || []).forEach((r, i) => push(`spellNote:${i}`, r.note));
+  // A session card's own text: its title, the four fact cells and its note.
+  // A name defined there is read like any other, and a mistake in one is
+  // listed with the rest; a bonus written there does not apply by itself --
+  // a card is something the character does, not something always on -- so it
+  // reads as future, as a switched-off buff's does.
+  (d.session?.cards || []).forEach((card, i) => {
+    if (!card || card.kind === 'choice') return;
+    for (const field of ['title', 'range', 'targets', 'save', 'duration', 'note']) {
+      push(`sessionCard:${i}:${field}`, card[field], null, { future: true });
+    }
+  });
   // A power's note, as a prepared spell's: the panel draws it as prose.
   (d.psionics?.classes || []).forEach((cls, ci) => (cls.powers || [])
     .forEach((w, wi) => push(`powerNote:${ci}:${wi}`, w.note)));
@@ -1645,7 +1656,9 @@ export function proseText(model, text, local = null) {
  * are `tracker.<id>.*`.
  */
 export function trackerScope(model, t) {
-  const zone = zoneAt(Number(t?.current) || 0, t?.resolvedZones || []);
+  // Read at the value the row shows, as its badge is: what is left on a
+  // draining tracker.
+  const zone = zoneAt(trackerShown(t), t?.resolvedZones || []);
   return { self: { ...trackerFacts(t), zone: zone?.label || '' } };
 }
 

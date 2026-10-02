@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue,
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -74,6 +74,9 @@ import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
+import * as trackerPanels from '../app/js/ui/panels/trackers.js';
+import * as sessionPanels from '../app/js/ui/panels/session.js';
+import { formulaLookup, formulaDrawerResults } from '../app/js/ui/formula-drawer.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -2976,6 +2979,165 @@ console.log('the armour worn is readable in formulas: type, enhancement, max Dex
   check('a typed word is read', [read('ac.armor.type'), read('ac.armor.light')], [1, 1]);
   c.set('equipment.armor.active', false);
   check('taken off, nothing is worn', [read('ac.armor.type'), read('ac.maxDex')], [0, 99]);
+}
+
+console.log('a typo in a zone does not stop a session card spending');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '4', style: { zones: [{ from: 'self.max -', to: 'self.max', color: '#aa2222', label: 'low' }] } });
+  check('the zone is flagged', /zone 1/.test(c.trackers.find((t) => t.id === ki.id).error || ''), true);
+  c.set('session', { cards: [{ id: 'a', title: 'Flurry', type: 'free', resource: ki.id, cost: '1' }] });
+  const r = useSessionAction(c, sessionState(c).cards[0]);
+  check('and the card still spends', [r || '', c.trackers.find((t) => t.id === ki.id).current], ['', 1]);
+  const bad = c.addTracker({ name: 'Rage', maxFormula: 'nope +' });
+  c.set('session', { cards: [{ id: 'b', title: 'Rage', type: 'free', resource: bad.id, cost: '1' }] });
+  check('a max that does not work still blocks', /Not enough Rage/.test(useSessionAction(c, sessionState(c).cards[0]) || ''), true);
+}
+
+console.log('self.zone reads a draining tracker where its badge does');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10', note: 'State: {self.zone}',
+    style: { fill: 'remaining', zones: [{ from: '0', to: '2', color: '#aa2222', label: 'low' }, { from: '3', to: '10', color: '#22aa22', label: 'ok' }] } });
+  c.updateTracker(ki.id, { current: 9 });
+  const t = c.trackers.find((x) => x.id === ki.id);
+  check('9 spent of 10 leaves 1, and the note says low, as the badge does',
+    [c.trackerScope(t).self.zone, c.renderProse(t.note, c.trackerScope(t)).map((x) => x.text ?? x.value).join('')], ['low', 'State: low']);
+}
+
+console.log('zones read self in the style preview and on the meters');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10' });
+  const draft = { style: { zones: [{ from: '0', to: 'self.max * 0.3', color: '#aa2222', label: 'low' }] } };
+  const html = trackerPanels.stylePreviewHtml(c, { editDraft: draft }, c.trackers.find((t) => t.id === ki.id));
+  check('the editor’s own example works in its preview', html.includes('terr'), false);
+  c.set('psionics.classes', [{ name: 'Psion', stat: 'Int', manifesterLevelOverride: 3, powers: [] }]);
+  c.set('psionics.bonusPoints', 10);
+  c.setMeterStyle?.('pp', { zones: [{ from: '0', to: 'self.max - 5', color: '#aa2222', label: 'low' }] });
+  const pp = c.meterSpec('pp');
+  check('a meter’s zone example names its own pool', evaluateFormula(pp.zoneExample, c.scope()) > 0, true);
+  const pre = trackerPanels.stylePreviewHtml(c, { editDraft: { style: { zones: [{ from: '0', to: 'self.max - 5', color: '#aa2222' }] } } }, pp);
+  check('and a meter preview reads self too', pre.includes('terr'), false);
+}
+
+console.log('a draining tracker above a floor: the box, the pips and the squares agree');
+{
+  const t = { id: 'focus', name: 'Focus', min: 2, max: 10, current: 5, style: null };
+  const drain = normalizeStyle({ fill: 'remaining' });
+  const pips = (html) => [(html.match(/class=\"pip /g) || []).length, (html.match(/ used /g) || []).length];
+  check('the box shows 5 left of 8', [trackerPanels.trackerReading({ ...t, style: drain }).shown, trackerPanels.trackerReading({ ...t, style: drain }).range], [5, '/ 8']);
+  check('eight pips, five lit', pips(trackerPanels.trackerVisual(t, drain, [])), [8, 5]);
+  check('filling the other way: three spent', pips(trackerPanels.trackerVisual(t, normalizeStyle({}), [])), [8, 3]);
+  const sq = trackerPanels.trackerVisual(t, normalizeStyle({ fill: 'remaining', shape: 'squares' }), []);
+  check('squares: five of eight left', /5 of 8 left/.test(sq), true);
+}
+
+console.log('two sheet resources of one name are two trackers');
+{
+  const d = blankDocument({ name: 'Twins' });
+  d.resources = [{ name: 'Ki', total: 3, uses: 1, refresh: 'Daily' }, { name: 'Ki', total: 5, uses: 2, refresh: 'Daily' }];
+  const c = new Character(d);
+  const ki = c.trackers.filter((t) => t.source === 'sheet' && t.name === 'Ki');
+  check('both load, the second as ki_2', ki.map((t) => [t.id, t.max, t.current]), [['ki', 3, 1], ['ki_2', 5, 2]]);
+  c.updateTracker('ki_2', { current: 4 });
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('and each keeps its own count through a save', back.trackers.filter((t) => t.name === 'Ki').map((t) => t.current), [1, 4]);
+}
+
+console.log('a talent name matches whatever its typography');
+{
+  const before = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Duelist', kind: 'combat', talents: [{ name: '...And Stay Down', text: 'Bleed them.' }, { name: "Fighter's Flair", text: 'Flair.' }] }] });
+  check('an ellipsis character and a closing ! still find it',
+    [sphereTalent('Duelist', '…And Stay Down!')?.name, sphereTalent(null, '…and stay down')?.name], ['...And Stay Down', '...And Stay Down']);
+  check('a curly apostrophe finds a straight one', sphereTalent('Duelist', 'Fighter’s Flair')?.name, "Fighter's Flair");
+  setSphereCatalogue(before);
+}
+
+console.log('a weapon talent missing its base says so in its hover card');
+{
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 3);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 3, levels: [] });
+  c.addCustomization('Armiger');
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Open Hand');
+  c.setItem(list, 0, 'talent', 'Axe Kick');
+  const pop = talentPopHtml(c, JSON.stringify({ k: 'wtalent', p: `${list}|0` }));
+  check('the card names the missing base', /No Open Hand base on this weapon/.test(pop), true);
+}
+
+console.log('a veil that grants a sphere counts as its base');
+{
+  const before = veilCatalogue();
+  setVeilCatalogue({ veils: [
+    { name: 'Bands of the Asura', slot: 'Shoulders, Belt', text: 'You gain the Open Hand sphere. Unless you already have it...' },
+    { name: 'Cloak of Echoes', slot: 'Shoulders', text: 'You gain the benefits of the Open Hand sphere when grappling.' },
+  ] });
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 5);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 5, levels: [] });
+  c.addCustomization('Armiger');
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  const row = (i) => c.data.training.combat.customizations[0].sets[0].talents[i];
+  c.setItem(list, 1, 'sphere', 'Open Hand');
+  c.setItem(list, 1, 'talent', 'Axe Kick');
+  check('no base: marked', row(1).needsBase, true);
+  c.setItem(list, 0, 'sphere', 'Veilweaving');
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere (Cloak of Echoes)');
+  check('a veil that only borrows the sphere is not its base', row(1).needsBase, true);
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere (Bands of the Asura, Essence)');
+  check('the weapon’s own veil that grants Open Hand is its base', row(1).needsBase, false);
+  c.setItem(list, 0, 'talent', 'Veilweaving Sphere');
+  c.set('akashic.slots', [{ slot: 'Shoulders', veils: [{ name: 'Bands of the Asura', essence: 0 }] }]);
+  check('and so is one the character has shaped', row(1).needsBase, false);
+  setVeilCatalogue(before);
+}
+
+console.log('session cards read formulas in their title, cost and text');
+{
+  const c = new Character(blankDocument({ name: 'Monk' }));
+  c.set('identity.level', 6);
+  const ki = c.addTracker({ name: 'Ki', maxFormula: '10' });
+  const will = c.data.saves.will.total;
+  c.set('session', { cards: [{ id: 'a', title: 'Burst {= level}', type: 'standard', resource: ki.id, cost: 'floor(level / 2)',
+    note: 'Heals {= level * 2}. {burst.size = 3} {saves.will += 2}' }] });
+  const html = sessionPanels.renderSessionBoard(c).replace(/\s+/g, ' ');
+  check('the title is worked out', /<summary>Burst <span class="tok value"[^>]*>6<\/span>/.test(html), true);
+  check('the cost line shows what it spends', html.includes('<small>Cost</small> <span title="floor(level / 2)">3</span> Ki'), true);
+  check('a name a card defines can be read elsewhere', c.scope().burst?.size, 3);
+  check('a bonus written on a card does not apply by itself', c.data.saves.will.total, will);
+  check('and the Formulas tab says where it is', describeSource('sessionCard:0:note'), 'session card 1, its notes');
+}
+
+console.log('a formula can send a bonus to size');
+{
+  const c = new Character(blankDocument({ name: 'Grower' }));
+  const cmb0 = () => c.conditionState.sizeSteps;
+  c.listAdd('buffs', { name: 'Enlarge Person', on: true, note: 'Grows. {size += 1}', bonuses: [] });
+  check('Enlarge Person written as a note makes the character Large', [c.sizeNow(), c.conditionState.sizeSteps], ['Large', 1]);
+  c.setItem('buffs', 0, 'on', false);
+  check('and only while it is on', [c.sizeNow(), cmb0()], ['Medium', 0]);
+  c.listAdd('buffs', { name: 'Encompassing Light', on: true, note: '{size.effective += 1}', bonuses: [] });
+  check('effective size moves the dice, not the size', [c.sizeNow(), c.conditionState.sizeSteps], ['Medium', 1]);
+  c.setItem('buffs', 0, 'on', true);
+  check('the two kinds add', [c.sizeNow(), c.conditionState.sizeSteps], ['Large', 2]);
+  c.listAdd('buffs', { name: 'Same kind', on: true, note: '', bonuses: [{ target: 'size', value: 1 }] });
+  check('a true increase from a row and one from a note do not stack', c.sizeNow(), 'Large');
+}
+
+console.log('the formula lookup finds names, values, destinations and functions');
+{
+  const c = new Character(blankDocument({ name: 'Looker' }));
+  c.set('identity.level', 6);
+  const r = formulaLookup(c, 'will');
+  check('the character\u2019s own save comes first, with its value', [r.names[0].name, r.names[0].value], ['saves.will', c.data.saves.will.total]);
+  check('a destination for a bonus is offered', r.targets.some((t) => t.name === 'saves.will'), true);
+  check('several words narrow it', formulaLookup(c, 'ac armor').names.every((n) => /ac/i.test(n.name) && /armor/i.test(n.name)), true);
+  check('a function is found by what it does', formulaLookup(c, 'round down').functions.some((f) => f.name === 'floor'), true);
+  check('an empty search shows the guide', [formulaLookup(c, '').names.length, formulaLookup(c, '').guide.length > 0], [0, true]);
+  check('and no match says so', /Nothing by that name/.test(formulaDrawerResults(c, 'zzzq')), true);
 }
 
 const missing = missingCharacters(REAL);

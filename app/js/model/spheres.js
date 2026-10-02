@@ -22,6 +22,7 @@ import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
 import { featEntry, powerEntry, spellEntry } from './subsystems/catalogues.js';
 import { techniqueTalents } from './subsystems/techniques.js';
+import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
   closestName, evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
@@ -179,9 +180,16 @@ export function talentsTagged(tag) {
  * A player writes what the book calls it, which is not always what the wiki's
  * heading called it -- "Reaping (greater)", "reaping", "Reaping  ". The tags
  * go because the catalogue already keeps them in a field of their own.
+ *
+ * Typography is not part of a name either: "…And Stay Down!" on a sheet is
+ * the pack's "...And Stay Down" -- an ellipsis character is three dots
+ * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
 const talentKey = (s) => String(s ?? '')
+  .normalize('NFKC')
+  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"')
   .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
+  .replace(/[!?]+$/, '')
   .trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
@@ -1097,8 +1105,16 @@ export function recomputeCustomizations(model, side) {
  * written in it yet is unknown, not wrong, and is left alone.
  */
 export function checkCustomizationBases(model, t) {
+  // A sphere a veil grants is had as much as one trained: a veil the
+  // character has shaped makes it theirs, and one a weapon's own talent
+  // names (the Veilweaving base pick "(Bands of the Asura)") makes it that
+  // weapon's.
+  const shaped = [...(model.data.akashic?.slots || []), ...(model.data.akashic?.kheshig || [])]
+    .flatMap((s) => (s.veils || []).map((v) => v.name));
+  const veilSpheres = new Set(shaped.flatMap((v) => veilGrantedSpheres(v)).map((s) => canonicalSphere(s).toLowerCase()));
   const owned = (sphere) => talentsIn(t.combat?.tallyOwn, sphere) > 0
-    || talentsIn(t.magic?.tallyOwn, sphere) > 0;
+    || talentsIn(t.magic?.tallyOwn, sphere) > 0
+    || veilSpheres.has(canonicalSphere(sphere).toLowerCase());
   for (const block of t.combat?.customizations || []) {
     // What the track may learn from at all. A sphere outside it is flagged
     // and kept, never dropped: it is nearly always a track whose archetype
@@ -1106,16 +1122,17 @@ export function checkCustomizationBases(model, t) {
     // player's work to punish them for the order they did things in.
     const allowed = new Set(trackSphereNames(block.spec).map((s) => s.trim().toLowerCase()));
     for (const set of block.sets || []) {
-      const bases = new Set((set.talents || [])
-        .filter((r) => r.granted !== false && isBasePick(r.talent))
-        .map((r) => String(r.sphere || '').trim())
-        .filter(Boolean));
+      const live = (set.talents || []).filter((r) => r.granted !== false);
+      const bases = new Set([
+        ...live.filter((r) => isBasePick(r.talent)).map((r) => String(r.sphere || '').trim()),
+        ...live.flatMap((r) => veilsNamedIn(r.talent)).flatMap((v) => veilGrantedSpheres(v)),
+      ].filter(Boolean).map((s) => canonicalSphere(s).toLowerCase()));
       for (const row of set.talents || []) {
         const sphere = String(row.sphere || '').trim();
         row.offList = !!sphere && row.granted !== false && !allowed.has(sphere.toLowerCase());
         row.needsBase = !!sphere && !!String(row.talent || '').trim()
           && row.granted !== false && !isBasePick(row.talent)
-          && !bases.has(sphere) && !owned(sphere);
+          && !bases.has(canonicalSphere(sphere).toLowerCase()) && !owned(sphere);
       }
     }
   }

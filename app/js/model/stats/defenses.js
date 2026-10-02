@@ -23,6 +23,7 @@ import {
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
 } from './defence-lists.js';
 import { mythicHpPerTier } from '../progression.js';
+import { trackerFacts } from '../trackers.js';
 import { resolveSaveBonuses } from './saves.js';
 import { resolveBonusBlock, resolveNumberField } from '../util.js';
 
@@ -156,15 +157,19 @@ export function sizeNow(model) {
   if (idx < 0) idx = ladder.indexOf('Medium');
   let up = 0;
   let down = 0;
+  const take = (v) => {
+    if (v > 0) up = Math.max(up, v);
+    else down = Math.min(down, v);
+  };
   for (const b of model.data.buffs || []) {
     if (!b?.on) continue;
     for (const row of b.bonuses || []) {
       if (row?.target !== 'size') continue;
-      const v = Number(row.valueNum ?? row.value) || 0;
-      if (v > 0) up = Math.max(up, v);
-      else down = Math.min(down, v);
+      take(Number(row.valueNum ?? row.value) || 0);
     }
   }
+  // A bonus sent to `size` from a formula is one more true size change.
+  take(Math.trunc(forwarded(model, 'size')) || 0);
   return ladder[Math.max(0, Math.min(ladder.length - 1, idx + up + down))];
 }
 
@@ -335,6 +340,15 @@ export function conditionState(model) {
    * steps are "treated as larger", which reaches the damage dice alone --
    * so both kinds feed `sizeSteps`, the walk the weapon dice take.
    */
+  // Size sent from a formula ({size += 1} in Enlarge Person's note) joins the
+  // rows above as one more of its kind: the largest increase of a type wins,
+  // and stacking sums.
+  for (const [key, slot] of [['size', 'size'], ['size.effective', 'sizeEffective']]) {
+    const v = Math.trunc(forwarded(model, key)) || 0;
+    if (v > 0) sizeRows[slot].up = Math.max(sizeRows[slot].up, v);
+    else if (v < 0) sizeRows[slot].down = Math.min(sizeRows[slot].down, v);
+  }
+  sizeRows.stacking += Math.trunc(forwarded(model, 'size.stacking')) || 0;
   const ladder = Object.keys(SIZE_MODIFIERS);
   let baseIdx = ladder.indexOf(c.identity?.size);
   if (baseIdx < 0) baseIdx = ladder.indexOf('Medium');
@@ -730,14 +744,17 @@ export function setMeterStyle(model, key, style) {
  * the thing that has gone wrong, not the room left in the track.
  */
 export function meterSpec(model, key) {
+  // A meter's zones read `self` the way a tracker's do: its own min, max
+  // and current, so a band can be written without naming the pool.
   const zones = (spec) => {
     const style = model.meterStyle(key);
+    const scope = { ...model.scope(), self: trackerFacts(spec) };
     return {
       ...spec,
       id: key,
       meter: true,
       style,
-      resolvedZones: resolveZones(style.zones, (src) => evaluateFormula(src, model.scope())),
+      resolvedZones: resolveZones(style.zones, (src) => evaluateFormula(src, scope)),
     };
   };
 
@@ -814,7 +831,7 @@ export function meterSpec(model, key) {
       layers: [],
       alert: 0,
       alertFill: false,
-      zoneExample: 'caster.sp * 0.5',
+      zoneExample: 'pp.pool * 0.5',
     });
   }
   return null;

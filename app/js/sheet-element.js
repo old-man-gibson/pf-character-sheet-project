@@ -99,6 +99,7 @@ import { talentPopHtml } from './ui/talents.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
+import { formulaDrawerHtml, formulaDrawerResults } from './ui/formula-drawer.js';
 import * as overview from './ui/panels/overview.js';
 import { bindSessionBoard } from './ui/panels/session.js';
 import { bindClassActions } from './ui/class-actions.js';
@@ -168,7 +169,7 @@ import {
   trackBand, readableOn,
 } from './tracker-style.js';
 import {
-  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS,
+  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS, weaponStrikes,
 } from './roll20.js';
 
 /**
@@ -1254,6 +1255,8 @@ export class CharacterSheetElement extends HTMLElement {
     // count would sit at zero forever.
     if (!this.#savedDoc) this.#openedDoc = structuredClone(normalized);
     this.#changes = this.#baseline ? countChanges(this.#baseline, normalized) : 0;
+    this.#trackerSeen = null;
+    this.#announceTrackers();
     this.#model.subscribe((_model, detail) => {
       // Something destructive is about to happen and has already saved the
       // way back; offer it. Before the change rather than after, which is
@@ -1276,6 +1279,7 @@ export class CharacterSheetElement extends HTMLElement {
         bubbles: true,
         composed: true,
       }));
+      this.#announceTrackers();
     });
   }
 
@@ -1928,6 +1932,10 @@ export class CharacterSheetElement extends HTMLElement {
     // Same trick, and for a stronger reason: a live region that is replaced is
     // a live region a reader has stopped watching.
     this.shadowRoot.append(this.#liveRegion());
+    // The formula lookup, the same way: it is not part of any tab, and an open
+    // one keeps its search and shows the values as they are after this edit.
+    this.shadowRoot.append(this.#formulaDrawer());
+    if (this.#fxOpen) this.#fxRefresh();
     this.#announceChanges();
   }
 
@@ -1950,6 +1958,67 @@ export class CharacterSheetElement extends HTMLElement {
    * recompute, then the change count, then a snapshot) and a region that
    * re-announces the same move three times is worse than one that is quiet.
    */
+  /*
+   * The pull-out formula lookup at the side of the sheet (ui/formula-drawer.js).
+   * Made once and put back after every render, like the palette, so the search
+   * and its focus survive edits; opening it never changes the tab.
+   */
+  #fx = null;
+  #fxOpen = false;
+  #fxQuery = '';
+  #fxCopiedTimer = null;
+
+  #formulaDrawer() {
+    if (this.#fx) return this.#fx;
+    const box = document.createElement('div');
+    box.className = 'fxdrawer';
+    box.innerHTML = formulaDrawerHtml();
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('[data-fxtoggle]')) { this.#fxToggle(); return; }
+      const copy = e.target.closest('[data-fxcopy]');
+      if (copy) this.#fxCopy(copy.dataset.fxcopy);
+    });
+    box.querySelector('[data-fxquery]').addEventListener('input', (e) => {
+      this.#fxQuery = e.target.value;
+      this.#fxRefresh();
+    });
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.#fxOpen) { e.stopPropagation(); this.#fxToggle(false); }
+    });
+    this.#fx = box;
+    return box;
+  }
+
+  #fxToggle(open = !this.#fxOpen) {
+    this.#fxOpen = open;
+    const box = this.#formulaDrawer();
+    box.querySelector('.fxpanel').hidden = !open;
+    box.classList.toggle('open', open);
+    box.querySelector('.fxhandle').setAttribute('aria-expanded', String(open));
+    if (open) {
+      this.#fxRefresh();
+      box.querySelector('[data-fxquery]').focus();
+    } else {
+      box.querySelector('.fxhandle').focus();
+    }
+  }
+
+  #fxRefresh() {
+    if (!this.#model || !this.#fx) return;
+    this.#fx.querySelector('.fxresults').innerHTML = formulaDrawerResults(this.#model, this.#fxQuery);
+  }
+
+  async #fxCopy(text) {
+    const note = this.#fx?.querySelector('.fxcopied');
+    let ok = true;
+    try { await navigator.clipboard.writeText(text); } catch { ok = false; }
+    if (!note) return;
+    note.textContent = ok ? `Copied ${text}` : `Could not copy — ${text}`;
+    note.hidden = false;
+    clearTimeout(this.#fxCopiedTimer);
+    this.#fxCopiedTimer = setTimeout(() => { note.hidden = true; }, 2200);
+  }
+
   #liveRegion() {
     if (!this.#live) {
       this.#live = document.createElement('p');
@@ -3192,6 +3261,9 @@ export class CharacterSheetElement extends HTMLElement {
       veilEdit: this.#veilEdit,
       openText: this.#openText,
       peek: this.#peek,
+      // The essence and power-point meters open the tracker style editor, so
+      // these tabs need its state too, or their ✎ Style does nothing.
+      ...this.#trackerCtx(),
     };
   }
 
@@ -4185,8 +4257,13 @@ export class CharacterSheetElement extends HTMLElement {
     // the player has settled and one the table is still owed -- and the only
     // way the sheet can hand a resolved roll to anything that is not Roll20.
     // `answers` already set (even to nothing) means the asking is done.
-    if (answers === null && spec?.queries?.length) {
-      this.#askRoll(spec, kind, ref, what);
+    //
+    // A weapon is first asked what kind of attack it is making -- a full
+    // attack, a single one, or a Vital Strike tier the character has -- and
+    // copied under that kind, so the question is not asked again on a re-copy.
+    const strikes = kind === 'weapon' ? weaponStrikes(this.#model.data, Number(ref)) : [];
+    if (strikes.length > 1 || (answers === null && spec?.queries?.length)) {
+      this.#askRoll(spec, kind, ref, what, strikes);
       return;
     }
     const text = rollText(spec, this.#rollFormat);
@@ -4217,14 +4294,19 @@ export class CharacterSheetElement extends HTMLElement {
    * roll that is true now, and keeping one in step with every edit would cost
    * more than making it again.
    */
-  #askRoll(spec, kind, ref, what) {
+  #askRoll(spec, kind, ref, what, strikes = []) {
     this.#closeAsk();
     const dlg = this.ownerDocument.createElement('dialog');
     dlg.className = 'rollask';
+    const queries = spec?.queries || [];
     dlg.innerHTML = `<form method="dialog">
       <h2>${esc(spec.name)}</h2>
-      <p class="hint">This roll asks something the sheet cannot answer for you.</p>
-      ${spec.queries.map((q, i) => `<label class="askrow">
+      ${strikes.length > 1 ? `<fieldset class="askstrike"><legend>Which attack?</legend>
+        ${strikes.map((s, i) => `<label class="askrow"><input type="radio" name="strike" value="${esc(s.kind)}"${i === 0 ? ' checked' : ''}>
+          <span>${esc(s.label)}</span></label>`).join('')}
+      </fieldset>` : ''}
+      ${queries.length ? '<p class="hint">This roll asks something the sheet cannot answer for you.</p>' : ''}
+      ${queries.map((q, i) => `<label class="askrow">
         <span>${esc(q.label)}</span>
         ${q.free
     ? `<input type="number" data-ask="${i}" value="${esc(q.answers?.[0]?.text ?? '0')}" step="1">`
@@ -4233,35 +4315,39 @@ export class CharacterSheetElement extends HTMLElement {
       </label>`).join('')}
       <menu>
         <button value="cancel" data-askcancel>Cancel</button>
-        <button value="table" data-asktable
-          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>
-        <button value="here" data-askhere class="primary">Copy with these answers</button>
+        ${queries.length ? `<button value="table" data-asktable
+          title="Copy the questions themselves, for Roll20 to ask at the table">Let Roll20 ask</button>` : ''}
+        <button value="here" data-askhere class="primary">${queries.length ? 'Copy with these answers' : 'Copy'}</button>
       </menu>
     </form>`;
     this.#ask = dlg;
     this.#askReturn = this.shadowRoot.activeElement;
     this.shadowRoot.append(dlg);
 
-    const chosen = () => Object.fromEntries(spec.queries.map((q, i) => {
+    // The attack picked, as the kind the roll is copied under.
+    const strikeKind = () => dlg.querySelector('input[name="strike"]:checked')?.value || kind;
+    const chosen = () => Object.fromEntries(queries.map((q, i) => {
       const el = dlg.querySelector(`[data-ask="${i}"]`);
       return [q.label, el ? el.value : q.answers?.[0]?.text];
     }));
     dlg.querySelector('[data-askhere]')?.addEventListener('click', () => {
-      const answers = chosen();
+      const answers = queries.length ? chosen() : null;
+      const as = strikeKind();
       this.#closeAsk();
-      this.#copyRoll(kind, ref, what, answers);
+      this.#copyRoll(as, ref, what, answers);
     });
     // An empty set of answers is not "no answers given": it is the player
     // saying the table should be asked instead, which is why it is an object
     // and not the null that would send us round again.
     dlg.querySelector('[data-asktable]')?.addEventListener('click', () => {
+      const as = strikeKind();
       this.#closeAsk();
-      this.#copyRoll(kind, ref, what, {});
+      this.#copyRoll(as, ref, what, {});
     });
     dlg.querySelector('[data-askcancel]')?.addEventListener('click', () => this.#closeAsk());
     dlg.addEventListener('close', () => this.#closeAsk());
     dlg.showModal();
-    dlg.querySelector('[data-ask="0"]')?.focus();
+    (dlg.querySelector('input[name="strike"]:checked') || dlg.querySelector('[data-ask="0"]'))?.focus();
   }
 
   #closeAsk() {
@@ -5803,7 +5889,11 @@ export class CharacterSheetElement extends HTMLElement {
     // The power point meter is still click-to-set, whatever it has been
     // restyled to: a bar reads the position along the track, and the pips
     // carry the number they stand for.
+    // Not the style editor's preview, which draws the same meter and must not
+    // spend the pool it is only showing.
+    const live = (el) => !el.closest('.style-preview');
     root.querySelectorAll('.meter.pp .bar').forEach((bar) => {
+      if (!live(bar)) return;
       bar.classList.add('clickable');
       bar.addEventListener('click', (e) => {
         const box = bar.getBoundingClientRect();
@@ -5819,6 +5909,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
     root.querySelectorAll('.meter.pp .pips').forEach((row) => {
+      if (!live(row)) return;
       const pips = [...row.querySelectorAll('.pip')];
       pips.forEach((pip, i) => {
         pip.classList.add('clickable');
@@ -6681,8 +6772,7 @@ export class CharacterSheetElement extends HTMLElement {
         // "+" adds to what the row shows: spent for a filling pool, what is
         // left for a draining one. Clamped to [min, max] by the model.
         const delta = Number(b.dataset.delta) * (this.#isDraining(t0) ? -1 : 1);
-        const t = this.#model.stepTracker(t0.id, delta);
-        this.#emitTracker(t);
+        this.#model.stepTracker(t0.id, delta);
         this.#render();
       });
     });
@@ -6696,9 +6786,11 @@ export class CharacterSheetElement extends HTMLElement {
         const cur = Number(t.current) || 0;
         // Pips show what is left on a draining tracker and the position
         // otherwise; the click is the one rule either way (pipClickValue).
-        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n) : pipClickValue(cur, n);
+        // A pip carries the value it stands for; on a draining tracker what is
+        // left is counted from the floor, so the pip's place is n - min.
+        const min = Math.max(0, Number(t.min) || 0);
+        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n - min) : pipClickValue(cur, n);
         this.#model.updateTracker(t.id, { current: next });
-        this.#emitTracker(t);
         this.#render();
       });
     });
@@ -6714,7 +6806,6 @@ export class CharacterSheetElement extends HTMLElement {
           min: Number(t.min) || 0, max: Number(t.max) || 0, style: t.style,
         });
         this.#model.updateTracker(t.id, { current });
-        this.#emitTracker(t);
         this.#render();
       });
     });
@@ -7201,6 +7292,24 @@ export class CharacterSheetElement extends HTMLElement {
     this.dispatchEvent(new CustomEvent('tracker-change', {
       detail: { tracker }, bubbles: true, composed: true,
     }));
+  }
+
+  /*
+   * `tracker-change` for every tracker that moved, however it moved: its own
+   * controls, a rest, a card or session spend, the Psionics pips, an undo.
+   * Each of those recomputes, so this compares the trackers after every
+   * recompute with what was last seen, rather than relying on each control to
+   * remember to announce itself (three did, five did not).
+   */
+  #trackerSeen = null;
+
+  #announceTrackers() {
+    const key = (t) => `${t.current}|${t.max}|${t.min}|${t.name}`;
+    const now = new Map((this.#model?.trackers || []).map((t) => [t.id, key(t)]));
+    const before = this.#trackerSeen;
+    this.#trackerSeen = now;
+    if (!before) return;
+    for (const t of this.#model.trackers) if (before.get(t.id) !== now.get(t.id)) this.#emitTracker(t);
   }
 
   /**

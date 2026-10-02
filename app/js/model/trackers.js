@@ -146,8 +146,14 @@ export const SHEET_TRACKER_OVERRIDES = ['name', 'maxFormula', 'minFormula', 'ref
  * list can be diffed against at save time.
  */
 export function seedTrackers(model) {
+  // Two resources of one name are two trackers: the second takes _2, the way
+  // a tracker added by hand does, rather than being dropped as a repeat id.
+  const taken = new Set();
   return (model.data.resources || []).map((r, i) => {
-    const id = slug(r.name) || `resource_${i}`;
+    const base = slug(r.name) || `resource_${i}`;
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base}_${n}`;
+    taken.add(id);
     const total = Number(r.total) || 0;
     // Mythic Power is the one pool every character has: it is 3 + 2 per tier
     // by the campaign's rules, and all five sheets agree, so it follows the
@@ -291,6 +297,9 @@ export function recomputeTrackers(model) {
     if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {
       errs.push(`min (${t.min}) is above max (${t.max})`);
     }
+    // The range alone, before any zone has had its say: a zone is how the
+    // tracker looks, and a typo in one must not stop it being spent.
+    t.rangeError = errs.length ? errs.join('; ') : null;
     errors.set(t, errs);
   }
 
@@ -338,13 +347,20 @@ export function stepTracker(model, id, delta) {
   return model.updateTracker(id, { current: next });
 }
 
-/*
+/** Whether a tracker drains: a pool from 0 drawn as what is left. */
+export function trackerDrains(t) {
+  return (Number(t?.min) || 0) >= 0 && normalizeStyle(t?.style).fill === 'remaining';
+}
+
+/**
  * What a tracker reads as on its row: what is left on a draining one, the
- * position otherwise -- the number a player would say the change moved.
+ * position otherwise -- the number a player would say the change moved, the
+ * one its zone badge is read at, and the one `self.zone` is read at.
  */
-const shownValue = (t) => ((Number(t.min) || 0) >= 0 && normalizeStyle(t.style).fill === 'remaining'
-  ? (Number(t.max) || 0) - (Number(t.current) || 0)
-  : Number(t.current) || 0);
+export function trackerShown(t) {
+  return trackerDrains(t) ? (Number(t.max) || 0) - (Number(t.current) || 0) : Number(t?.current) || 0;
+}
+const shownValue = trackerShown;
 
 export function updateTracker(model, id, patch) {
   const t = model.trackers.find((x) => x.id === id);
