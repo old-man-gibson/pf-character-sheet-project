@@ -163,6 +163,7 @@ import { hasTokens, formatValue } from './inline.js';
 import {
   historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
+import { downloadFile } from './download.js';
 import {
   TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
   resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, pipClickValue, rgba,
@@ -7531,11 +7532,7 @@ export class CharacterSheetElement extends HTMLElement {
           ? this.#history.load(button.dataset.key, { includeStale: true }).then((data) => ({ data }))
           : this.#history.readSaved({ includeStale: true })).then((saved) => {
           if (!saved?.data) throw new Error('The saved version could not be read.');
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(new Blob([JSON.stringify(saved.data, null, 2)], { type: 'application/json' }));
-          a.download = `${this.#model.data.id}-saved-recovery.json`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          downloadFile(`${this.#model.data.id}-saved-recovery.json`, JSON.stringify(saved.data, null, 2));
         }).catch((error) => {
           this.#historyNote = error.message;
           this.#renderHeader();
@@ -7549,20 +7546,11 @@ export class CharacterSheetElement extends HTMLElement {
           const saved = JSON.parse(content);
           if (saved?.data) content = JSON.stringify(saved.data, null, 2);
         } catch { /* malformed JSON is still worth recovering byte for byte */ }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
-        a.download = `${this.#model.data.id}-recovery-${Number(button.dataset.index) + 1}.json`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        downloadFile(`${this.#model.data.id}-recovery-${Number(button.dataset.index) + 1}.json`, content);
         break;
       }
       case 'export': {
-        const blob = new Blob([JSON.stringify(this.#model.toJSON(), null, 1)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${this.#model.data.id}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadFile(`${this.#model.data.id}.json`, JSON.stringify(this.#model.toJSON(), null, 1));
         break;
       }
       case 'preview-published':
