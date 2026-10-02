@@ -5042,7 +5042,45 @@ nav.tabs button.visiting { border-style: dashed; color: var(--cs-accent); }
  * this file already reads, so every rule above lands on white without being
  * written twice.
  */
+/* ---------- the pull-out formula lookup ----------
+   A handle on the right edge, and the panel it pulls out over the sheet. It
+   floats rather than taking a column, so opening it never moves the page or
+   changes the tab. */
+.fxhandle {
+  position: fixed; right: 0; top: 42%; z-index: 40;
+  padding: 10px 5px; border-radius: 6px 0 0 6px; border-right: 0;
+  font: 600 0.85rem var(--cs-mono); writing-mode: vertical-rl;
+  background: var(--cs-panel-2); color: var(--cs-accent); cursor: pointer;
+  box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.25);
+}
+.fxdrawer.open .fxhandle { right: min(24rem, calc(100vw - 16px)); }
+.fxpanel {
+  position: fixed; right: 0; top: 8vh; z-index: 40;
+  width: min(24rem, calc(100vw - 16px)); max-height: 84vh;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; border: 1px solid var(--cs-line); border-right: 0; border-radius: 8px 0 0 8px;
+  background: var(--cs-panel); box-shadow: -4px 4px 16px rgba(0, 0, 0, 0.35);
+}
+.fxpanel[hidden] { display: none; }
+.fxhead { display: flex; gap: 6px; }
+.fxhead input { flex: 1; min-width: 0; }
+.fxresults { overflow-y: auto; scrollbar-width: thin; min-height: 0; }
+.fxsec h4 { margin: 8px 0 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cs-muted); }
+.fxname {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%;
+  padding: 3px 6px; border: 0; border-radius: 4px; background: none; text-align: left; cursor: pointer;
+}
+.fxname:hover, .fxname:focus-visible { background: var(--cs-panel-2); }
+.fxname code { color: var(--cs-accent); overflow-wrap: anywhere; }
+.fxval { color: var(--cs-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.fxfn { padding: 4px 6px; border-bottom: 1px solid var(--cs-line); }
+.fxfn p { margin: 2px 0; font-size: 0.78rem; color: var(--cs-muted); }
+.fxeg { border: 0; background: none; padding: 0; cursor: pointer; }
+.fxeg code { color: var(--cs-accent); font-size: 0.78rem; }
+.fxcopied { margin: 0; }
+
 @media print {
+  .fxdrawer { display: none; }
   :host {
     --cs-bg: #fff;
     --cs-panel: #fff;

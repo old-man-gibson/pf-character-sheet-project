@@ -99,6 +99,7 @@ import { talentPopHtml } from './ui/talents.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
+import { formulaDrawerHtml, formulaDrawerResults } from './ui/formula-drawer.js';
 import * as overview from './ui/panels/overview.js';
 import { bindSessionBoard } from './ui/panels/session.js';
 import { bindClassActions } from './ui/class-actions.js';
@@ -1931,6 +1932,10 @@ export class CharacterSheetElement extends HTMLElement {
     // Same trick, and for a stronger reason: a live region that is replaced is
     // a live region a reader has stopped watching.
     this.shadowRoot.append(this.#liveRegion());
+    // The formula lookup, the same way: it is not part of any tab, and an open
+    // one keeps its search and shows the values as they are after this edit.
+    this.shadowRoot.append(this.#formulaDrawer());
+    if (this.#fxOpen) this.#fxRefresh();
     this.#announceChanges();
   }
 
@@ -1953,6 +1958,67 @@ export class CharacterSheetElement extends HTMLElement {
    * recompute, then the change count, then a snapshot) and a region that
    * re-announces the same move three times is worse than one that is quiet.
    */
+  /*
+   * The pull-out formula lookup at the side of the sheet (ui/formula-drawer.js).
+   * Made once and put back after every render, like the palette, so the search
+   * and its focus survive edits; opening it never changes the tab.
+   */
+  #fx = null;
+  #fxOpen = false;
+  #fxQuery = '';
+  #fxCopiedTimer = null;
+
+  #formulaDrawer() {
+    if (this.#fx) return this.#fx;
+    const box = document.createElement('div');
+    box.className = 'fxdrawer';
+    box.innerHTML = formulaDrawerHtml();
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('[data-fxtoggle]')) { this.#fxToggle(); return; }
+      const copy = e.target.closest('[data-fxcopy]');
+      if (copy) this.#fxCopy(copy.dataset.fxcopy);
+    });
+    box.querySelector('[data-fxquery]').addEventListener('input', (e) => {
+      this.#fxQuery = e.target.value;
+      this.#fxRefresh();
+    });
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.#fxOpen) { e.stopPropagation(); this.#fxToggle(false); }
+    });
+    this.#fx = box;
+    return box;
+  }
+
+  #fxToggle(open = !this.#fxOpen) {
+    this.#fxOpen = open;
+    const box = this.#formulaDrawer();
+    box.querySelector('.fxpanel').hidden = !open;
+    box.classList.toggle('open', open);
+    box.querySelector('.fxhandle').setAttribute('aria-expanded', String(open));
+    if (open) {
+      this.#fxRefresh();
+      box.querySelector('[data-fxquery]').focus();
+    } else {
+      box.querySelector('.fxhandle').focus();
+    }
+  }
+
+  #fxRefresh() {
+    if (!this.#model || !this.#fx) return;
+    this.#fx.querySelector('.fxresults').innerHTML = formulaDrawerResults(this.#model, this.#fxQuery);
+  }
+
+  async #fxCopy(text) {
+    const note = this.#fx?.querySelector('.fxcopied');
+    let ok = true;
+    try { await navigator.clipboard.writeText(text); } catch { ok = false; }
+    if (!note) return;
+    note.textContent = ok ? `Copied ${text}` : `Could not copy — ${text}`;
+    note.hidden = false;
+    clearTimeout(this.#fxCopiedTimer);
+    this.#fxCopiedTimer = setTimeout(() => { note.hidden = true; }, 2200);
+  }
+
   #liveRegion() {
     if (!this.#live) {
       this.#live = document.createElement('p');

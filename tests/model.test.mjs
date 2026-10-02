@@ -76,6 +76,7 @@ import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
 import * as trackerPanels from '../app/js/ui/panels/trackers.js';
 import * as sessionPanels from '../app/js/ui/panels/session.js';
+import { formulaLookup, formulaDrawerResults } from '../app/js/ui/formula-drawer.js';
 import { talentPopHtml } from '../app/js/ui/talents.js';
 
 let pass = 0;
@@ -3124,6 +3125,19 @@ console.log('a formula can send a bonus to size');
   check('the two kinds add', [c.sizeNow(), c.conditionState.sizeSteps], ['Large', 2]);
   c.listAdd('buffs', { name: 'Same kind', on: true, note: '', bonuses: [{ target: 'size', value: 1 }] });
   check('a true increase from a row and one from a note do not stack', c.sizeNow(), 'Large');
+}
+
+console.log('the formula lookup finds names, values, destinations and functions');
+{
+  const c = new Character(blankDocument({ name: 'Looker' }));
+  c.set('identity.level', 6);
+  const r = formulaLookup(c, 'will');
+  check('the character\u2019s own save comes first, with its value', [r.names[0].name, r.names[0].value], ['saves.will', c.data.saves.will.total]);
+  check('a destination for a bonus is offered', r.targets.some((t) => t.name === 'saves.will'), true);
+  check('several words narrow it', formulaLookup(c, 'ac armor').names.every((n) => /ac/i.test(n.name) && /armor/i.test(n.name)), true);
+  check('a function is found by what it does', formulaLookup(c, 'round down').functions.some((f) => f.name === 'floor'), true);
+  check('an empty search shows the guide', [formulaLookup(c, '').names.length, formulaLookup(c, '').guide.length > 0], [0, true]);
+  check('and no match says so', /Nothing by that name/.test(formulaDrawerResults(c, 'zzzq')), true);
 }
 
 const missing = missingCharacters(REAL);
