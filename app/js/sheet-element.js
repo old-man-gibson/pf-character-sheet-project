@@ -615,6 +615,7 @@ export class CharacterSheetElement extends HTMLElement {
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
+  #changePending = false;   // an edit has announced itself and its one write is queued
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
   #tableWrapObserver = null; // watches the table scroll boxes that may shed their cap
@@ -1273,13 +1274,23 @@ export class CharacterSheetElement extends HTMLElement {
         // saved and announced as they happened.
         return;
       }
-      this.#persist();
-      this.dispatchEvent(new CustomEvent('character-change', {
-        detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
-        bubbles: true,
-        composed: true,
-      }));
-      this.#announceTrackers();
+      // One edit announces itself two or three times -- the recompute, the
+      // edit, an undo mark before a removal -- and each used to write the
+      // whole document again. They are gathered into one write per task, on a
+      // microtask, so it still lands before the tab can close.
+      if (this.#changePending) return;
+      this.#changePending = true;
+      queueMicrotask(() => {
+        this.#changePending = false;
+        if (this.#model !== _model) return;   // another character has opened since
+        this.#persist();
+        this.dispatchEvent(new CustomEvent('character-change', {
+          detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
+          bubbles: true,
+          composed: true,
+        }));
+        this.#announceTrackers();
+      });
     });
   }
 
