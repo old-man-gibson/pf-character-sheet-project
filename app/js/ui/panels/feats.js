@@ -220,14 +220,14 @@ export function renderFeaturesPanel(model, ctx) {
         <h3>Mythic <span class="badge">tier ${tier}</span></h3>
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
-          ${fields.field(`Tier (auto: ${m.computedTier ?? 0})`, `<span class="pair">
-            <input type="number" value="${m.tierOverride ?? ''}" placeholder="${m.computedTier ?? 0}"
+          ${fields.field(`Tier (auto: ${esc(m.computedTier ?? 0)})`, `<span class="pair">
+            <input type="number" value="${esc(m.tierOverride ?? '')}" placeholder="${esc(m.computedTier ?? 0)}"
               data-set="mythic.tierOverride" data-kind="number-or-null" style="width:3.6rem"
               title="Automatic from level; enter a number to override.">
-            <span class="value">→ ${c.identity.mythicTier ?? 0}</span></span>`)}
+            <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
     `<input type="number" class="autonum${m.bonusHpPerTier == null ? ' auto' : ''}"
-            value="${m.bonusHpPerTier ?? ''}" placeholder="${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0}"
+            value="${esc(m.bonusHpPerTier ?? '')}" placeholder="${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0}"
             data-set="mythic.bonusHpPerTier" data-kind="number-or-null" style="width:3.6rem"
             title="From the path; enter a number to override it."
             aria-label="Bonus hit points per mythic tier">`)}
@@ -236,7 +236,7 @@ export function renderFeaturesPanel(model, ctx) {
         <p class="hint">
           Tier comes from character level (8→1, 10→2, 12→3, 14→4, then one per level to
           20→10). Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
-          × ${c.identity.mythicTier ?? 0} = <strong>${model.mythicHp}</strong> hit points, counted
+          × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points, counted
           into the maximum on the Hit points panel (Champion/Guardian 5, Marshal/Trickster 4,
           Archmage/Hierophant 3).
         </p>
