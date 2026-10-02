@@ -726,7 +726,8 @@ export function vitalStrikeTiers(c) {
  * base name), or a feat named "Mythic Vital Strike" / "Vital Strike (Mythic)".
  */
 export function hasMythicVitalStrike(c) {
-  const tier = Number(c?.mythic?.tierOverride ?? c?.identity?.mythicTier) || 0;
+  // The tier as the sheet has worked it out (the scope reads the same).
+  const tier = Number(c?.identity?.mythicTier) || 0;
   const plain = (n) => String(n ?? '').replace(/\s*\[[^\]]*\]\s*$/, '').trim().toLowerCase();
   if ((c?.mythic?.abilities || []).some((a, i) => i < tier && plain(a?.featChoice) === 'vital strike')) return true;
   const groups = Array.isArray(c?.featGroups) ? c.featGroups.map((g) => g?.entries || []) : Object.values(c?.feats || {});
