@@ -712,6 +712,8 @@
 .bdpop .peeksource { margin: 6px 0 0; padding-top: 5px; border-top: 1px dotted var(--cs-line); }
 .bdpop .bdtotal { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .bdpop .bdsub { color: var(--cs-muted); font-size: 0.72rem; margin-bottom: 5px; }
+/* A rule the row breaks, said in the card that hides the row's own tooltip. */
+.bdpop .peekwarn { color: var(--cs-bad); }
 .bdpop .bdrow {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   padding: 2px 0;

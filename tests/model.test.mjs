@@ -3053,6 +3053,19 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('a weapon talent missing its base says so in its hover card');
+{
+  const c = new Character(blankDocument({ name: 'Armiger' }));
+  c.set('identity.level', 3);
+  c.listAdd('training.combat.classes', { name: 'Armiger', type: 'Expert', classLevelsOverride: 3, levels: [] });
+  c.addCustomization('Armiger');
+  const list = 'training.combat.customizations.0.sets.0.talents';
+  c.setItem(list, 0, 'sphere', 'Open Hand');
+  c.setItem(list, 0, 'talent', 'Axe Kick');
+  const pop = talentPopHtml(c, JSON.stringify({ k: 'wtalent', p: `${list}|0` }));
+  check('the card names the missing base', /No Open Hand base on this weapon/.test(pop), true);
+}
+
 const missing = missingCharacters(REAL);
 if (missing.length) {
   console.log(`\n${pass} passed, ${fail} failed`);

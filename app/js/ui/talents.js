@@ -304,8 +304,14 @@ export function talentPopHtml(model, spec) {
     // As the note reads: its formulas worked out.
     const note = hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw;
     const info = note ? null : talentInfo(model, sphere, typed);
+    // What the cell's own marks mean, said here because this card stands in
+    // for the cell's tooltip while it is up.
+    const warn = row?.needsBase
+      ? `No ${sphere} base on this weapon, and the character has none of their own: a customized weapon must have a sphere's base before its other talents.`
+      : '';
     return `<div class="peek">
       <div class="bdhead"><span class="bdname">${esc(name)}</span><span class="bdsphere">${esc(sphere || 'no sphere')}</span></div>
+      ${warn ? `<div class="bdsub peekwarn">${esc(warn)}</div>` : ''}
       <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written — open the note with ▸ to add one.</span>'}</div>
       ${!note && info?.source ? `<div class="bdsub peeksource">${esc(info.source)}</div>` : ''}
     </div>`;
