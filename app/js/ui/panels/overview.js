@@ -745,7 +745,6 @@ function dashEffectsCard(model) {
     </section>`;
   }
 
-  /** Damage, healing and the night's rest, one field and three buttons. */
 /**
  * The three rests, as the Quick actions card and the hit-point panel both
  * offer them. Each brings back what lasts that long and takes in the shorter
@@ -1898,20 +1897,6 @@ function classesPanel(model, ctx) {
 
 
 /**
- * Where the maximum came from, and the fields that decide it.
- *
- * The workbook worked hit points out on Character Info and this sheet only
- * kept the answer, so the four inputs it kept alongside -- the ability, the
- * favoured-class points, Toughness, the miscellany -- were imported and then
- * never shown. They are the difference between a total that moves with the
- * classes and one that does not, so they are fields, and the sum is spelled
- * out above them in the order the parts are added.
- *
- * The maximum itself is a read-out with an override behind it, the same
- * arrangement as the base attack bonus and a class's Levels: type a number to
- * pin it, clear the box to hand it back to the class table.
- */
-/**
  * One of the three typed parts of the hit-point total, which takes a formula
  * as readily as a number: a favoured-class bonus is "one per level you took
  * it", and written out it stops going stale at the next level-up.
@@ -1926,6 +1911,20 @@ function hpPart(c, key, title, width = '5.4rem') {
   });
 }
 
+/**
+ * Where the maximum came from, and the fields that decide it.
+ *
+ * The workbook worked hit points out on Character Info and this sheet only
+ * kept the answer, so the four inputs it kept alongside -- the ability, the
+ * favoured-class points, Toughness, the miscellany -- were imported and then
+ * never shown. They are the difference between a total that moves with the
+ * classes and one that does not, so they are fields, and the sum is spelled
+ * out above them in the order the parts are added.
+ *
+ * The maximum itself is a read-out with an override behind it, the same
+ * arrangement as the base attack bonus and a class's Levels: type a number to
+ * pin it, clear the box to hand it back to the class table.
+ */
 function hpBuild(model) {
   const c = model.data;
   const g = c.gestalt?.hp || {};

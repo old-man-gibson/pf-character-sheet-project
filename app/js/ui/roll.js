@@ -9,6 +9,11 @@
 import { esc } from './html.js';
 import { rollSpec } from '../roll20.js';
 
+/**
+ * The die on a roll button: a hexagon -- a d20's silhouette -- with the face
+ * you would read on top of it. Drawn rather than typed, because Unicode's dice
+ * characters are all six-sided and an emoji would take the host page's font.
+ */
 const D20_ICON = '<svg class="d20icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
   + '<path d="M50 4 93 28v44L50 96 7 72V28z"/>'
   + '<path d="M50 30 74 70H26z"/>'

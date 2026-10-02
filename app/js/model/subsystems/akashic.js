@@ -479,10 +479,6 @@ export function recomputeAkashic(model) {
 }
 
 /**
- * The flat, read-only view player formulas see. Rebuilt on demand so it can
- * never drift from the model.
- */
-/**
  * The `essence.*` names a formula can read.
  *
  * The workbook published one defined name per receptacle -- VeilEssenceHands

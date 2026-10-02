@@ -156,10 +156,6 @@ export function blendTicks(systems, home, attr, counts = null) {
     return `<label class="fld blendticks"><span>Counts as</span><span class="pair">${ticks}${lost}</span></label>`;
   }
 
-  /**
-   * Wrap a panel so its body can be minimized. The collapsed state lives in
-   * uiPrefs and persists with the character.
-   */
   /* ----- training class blocks with per-level talent slots ----- */
 
 
@@ -641,12 +637,6 @@ function magicTraditionPanel(model, m) {
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
     </section>`;
   }
-
-  /**
-   * What each boon was spent on. A boon is a choice the player makes, not a
-   * number that falls out of the drawback count, so each one gets its own row:
-   * spell points for the casting pool, or essence for the veilweaving one.
-   */
 
   /**
    * How each tradition pool was spent: so many of its steps as spell points,

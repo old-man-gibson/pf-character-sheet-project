@@ -186,11 +186,6 @@ export function pointBuyCost(score, table = POINT_BUY_COST) {
   return table[hi] + (s - hi) * step;
 }
 
-/** Total point-buy spend across all six abilities. */
-export function pointBuyTotal(build, table = POINT_BUY_COST) {
-  return ABILITIES.reduce((t, k) => t + pointBuyCost(build?.[k]?.pointBuy ?? 10, table), 0);
-}
-
 /**
  * Fold the Planner picks into per-ability bonuses.
  * Picks above `level` are plans for the future and do not count yet.
@@ -1422,6 +1417,16 @@ export function summariseLevels(levels) {
 /* ----- parallel talent tracks (the armiger's customized weapons) ----- */
 
 /**
+ * What "+ Customized weapons" starts a track with: the armiger's -- three
+ * weapons at 1st and one more at 11th and 19th; one talent each at 1st and
+ * one more at 3rd, 7th, 11th, 15th and 19th. Both are editable on the track.
+ */
+export const DEFAULT_TALENT_TRACKS = {
+  sets: { start: 3, gainsAt: '11, 19' },
+  talents: { start: 1, gainsAt: '3, 7, 11, 15, 19' },
+};
+
+/**
  * A class whose talents arrive on several tracks at once, with one of them
  * live: the armiger's customized weapons.
  *
@@ -1443,16 +1448,6 @@ export function summariseLevels(levels) {
  * talents: {start: 1, gainsAt: '3, +4'} }` and nothing about weapons is
  * written into the engine.
  */
-/**
- * What "+ Customized weapons" starts a track with: the armiger's -- three
- * weapons at 1st and one more at 11th and 19th; one talent each at 1st and
- * one more at 3rd, 7th, 11th, 15th and 19th. Both are editable on the track.
- */
-export const DEFAULT_TALENT_TRACKS = {
-  sets: { start: 3, gainsAt: '11, 19' },
-  talents: { start: 1, gainsAt: '3, 7, 11, 15, 19' },
-};
-
 export function normalizeTalentTracks(spec) {
   if (!spec || typeof spec !== 'object') return null;
   // A rule written as a bare string is its gainsAt; the start comes from the
@@ -1907,7 +1902,6 @@ export const WEAPON_FAMILIARITY = ['Simple', 'Martial', 'Exotic'];
 export const ARMOR_PROFICIENCIES = ['Unarmored', 'Light', 'Medium', 'Heavy'];
 export const SHIELD_PROFICIENCIES = ['None', 'Buckler', 'Light', 'Heavy', 'Tower'];
 export const WEAPON_CRIT_MULTS = ['x2', 'x3', 'x4'];
-export const WEAPON_ABILITY_MULTS = ['0.5', '1', '1.5', '2'];
 
 /* ------------------------------------------------------------------ *
  * Akashic veilweaving.
@@ -1945,9 +1939,6 @@ export const ESSENCE_SOURCES = [
   ['radiantDawn', 'Radiant Dawn'],
   ['fcb', 'FCB'],
 ];
-
-/** How many veilweaving class blocks the template provides. */
-export const VEILWEAVING_CLASS_SLOTS = 6;
 
 /**
  * The Veilweaving sphere's exchange rate: two spell points condense into one
@@ -2050,12 +2041,6 @@ export function wikiUrl(name) {
   return WIKI_BASE + encodeURIComponent(title).replace(/'/g, '%27');
 }
 
-/** Discipline columns the template provides. */
-export const DISCIPLINE_SLOTS = 10;
-
-/** Highest maneuver level the tab lays out. */
-export const MANEUVER_MAX_LEVEL = 9;
-
 /* ------------------------------------------------------------------ *
  * Vancian casting.
  *
@@ -2073,9 +2058,6 @@ export const MANEUVER_MAX_LEVEL = 9;
  * they exported as a frozen cached value and the tab arrived looking like a
  * hand-typed grid. These are those formulas.
  * ------------------------------------------------------------------ */
-
-/** How many casting-class blocks the template provides. */
-export const CASTING_CLASS_SLOTS = 6;
 
 /** Spell levels 0-9. */
 export const SPELL_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -2229,8 +2211,6 @@ export function craftingSpeed(base, increases = []) {
   return Math.max(0, ((Number(base) || 0) + flat) * (mult > 0 ? mult : 1));
 }
 
-/* ----- dice arithmetic for weapon damage tokens ----- */
-
 /* ------------------------------------------------------------------ *
  * Merged cells in a player-written table.
  *
@@ -2382,19 +2362,6 @@ export function diceAverage(dice, flat = 0) {
 }
 
 /**
- * Active armor + shields, reduced to the numbers the sheet needs.
- *
- * `ac` is the two together, which is all the AC formulas ever wanted. They are
- * also kept apart, because half the rules written about them are about one and
- * not the other -- "your shield bonus to AC", "while wearing no armour" -- and
- * a formula that can only read the sum has to be told the split by hand.
- *
- * `shields` is one number per shield *row*, in the order the rows are kept:
- * what that row is worth while it is being held, and nothing while it is not.
- * So the rows always add up to `shield`, and a row nobody has raised reads
- * zero rather than a bonus the character is not getting.
- */
-/**
  * How heavy a piece of armour is, from its Type cell: 0 for none or
  * unarmoured, 1 light, 2 medium, 3 heavy. Read from the word, so the
  * workbook's "Medium" and a typed "heavy armor" both answer.
@@ -2408,6 +2375,19 @@ export function armorCategory(type) {
   return 0;
 }
 
+/**
+ * Active armor + shields, reduced to the numbers the sheet needs.
+ *
+ * `ac` is the two together, which is all the AC formulas ever wanted. They are
+ * also kept apart, because half the rules written about them are about one and
+ * not the other -- "your shield bonus to AC", "while wearing no armour" -- and
+ * a formula that can only read the sum has to be told the split by hand.
+ *
+ * `shields` is one number per shield *row*, in the order the rows are kept:
+ * what that row is worth while it is being held, and nothing while it is not.
+ * So the rows always add up to `shield`, and a row nobody has raised reads
+ * zero rather than a bonus the character is not getting.
+ */
 export function armorParts(c) {
   const armor = c.equipment?.armor?.active ? c.equipment.armor : null;
   const rows = c.equipment?.shields || [];

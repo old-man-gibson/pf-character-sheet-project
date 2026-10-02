@@ -124,16 +124,6 @@ import {
 } from './tracker-style.js';
 import { ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, weaponStrikes } from './roll20.js';
 
-/**
- * What the gold left edge on a field means, in the two flavours it comes in:
- * prose that may carry {…} tokens anywhere in the text, and a field whose
- * whole value may be written as an expression.
- */
-/**
- * The die on a roll button: a hexagon -- a d20's silhouette -- with the face
- * you would read on top of it. Drawn rather than typed, because Unicode's dice
- * characters are all six-sided and an emoji would take the host page's font.
- */
 /** Which Roll20 shape the buttons copy. A player preference, so it is theirs. */
 const ROLL_FORMAT_KEY = 'cs-roll20-format';
 
@@ -225,13 +215,6 @@ const MODELLED_TAB_IDS = new Set([
  */
 const WEIRD_TAB_LABELS = new Set(['cardcasting', 'technique list', 'autotechnique', 'auto-cooking']);
 const isWeirdTab = (label) => WEIRD_TAB_LABELS.has(String(label || '').trim().toLowerCase());
-
-
-
-/**
- * Past this many steps a row of pips is a wall rather than a reading, so the
- * pip shape draws nothing and a meter falls back to its bar.
- */
 
 
 
@@ -371,7 +354,6 @@ function readControl(input) {
  */
 const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
-/** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
  * The input types a caret can be put back into after a re-render.
  *
@@ -2972,11 +2954,6 @@ export class CharacterSheetElement extends HTMLElement {
    */
 
   /**
-   * Push the character's colour onto the host element, where it overrides the
-   * theme's accent for everything inside the shadow root. Removing it hands
-   * the theme back its own.
-   */
-  /**
    * The surface a player-chosen colour has to be legible on.
    *
    * `--cs-panel-2` rather than `--cs-panel`: it is the ground under buttons,
@@ -3001,6 +2978,10 @@ export class CharacterSheetElement extends HTMLElement {
    * raw one: they are backgrounds and borders, they have no ratio to meet, and
    * they are most of what makes the sheet still look like the colour that was
    * picked. See `readableOn`.
+   *
+   * Pushed onto the host element, where it overrides the theme's accent for
+   * everything inside the shadow root. Removing it hands the theme back its
+   * own.
    */
   #applyCharacterColor() {
     const hex = normalizeHex(this.#model?.data?.identity?.color);
@@ -3071,8 +3052,6 @@ export class CharacterSheetElement extends HTMLElement {
    * from outside the class.
    */
 
-
-  /* ----- list rows ----- */
 
   /* ---------------- rolling ---------------- */
 
@@ -3383,11 +3362,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Say what an undo did, on the toast: what came back, or why it could not.
-   * A play action can be refused -- a card drawn and since played cannot be
-   * un-drawn -- and the reason names what to take back first.
-   */
-  /**
    * What a plain field write is called on the Undo button when it is play --
    * a condition ticked, hit points typed, a buff switched -- or null when it
    * is an edit to the character, which the field's own Ctrl+Z covers.
@@ -3412,6 +3386,11 @@ export class CharacterSheetElement extends HTMLElement {
     return null;
   }
 
+  /**
+   * Say what an undo did, on the toast: what came back, or why it could not.
+   * A play action can be refused -- a card drawn and since played cannot be
+   * un-drawn -- and the reason names what to take back first.
+   */
   #reportUndo(r) {
     this.#playMenu = false;
     if (!r) { this.#showUndoToast('Nothing left to undo'); return; }
@@ -5973,7 +5952,6 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindTrackerStyle(block);
   }
 
-  /** Update a formula preview box in place, without re-rendering the panel. */
   /**
    * The Formulas tab's live parts.
    *
@@ -6217,6 +6195,7 @@ export class CharacterSheetElement extends HTMLElement {
     }
   }
 
+  /** Update a formula preview box in place, without re-rendering the panel. */
   #refreshPreview(root, kind, maxSrc, minSrc) {
     const box = root.querySelector(`.preview.${kind}`);
     if (!box) return;

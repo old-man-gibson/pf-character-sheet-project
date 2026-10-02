@@ -140,8 +140,6 @@ const FEATS = catalogue({
 export const setFeatCatalogue = (doc) => FEATS.set(doc);
 export const featCatalogue = () => FEATS.all();
 export const featEntry = (name) => FEATS.entry(name);
-export const featOwn = (r) => FEATS.own(r);
-export const featIsWritten = (r) => FEATS.isWritten(r);
 export const featDetails = (r) => FEATS.details(r);
 
 /** Every feat type any feat names, for a picker that groups by them. */
@@ -195,8 +193,6 @@ const SPELLS = catalogue({
 export const setSpellCatalogue = (doc) => SPELLS.set(doc);
 export const spellCatalogue = () => SPELLS.all();
 export const spellEntry = (name) => SPELLS.entry(name);
-export const spellOwn = (r) => SPELLS.own(r);
-export const spellIsWritten = (r) => SPELLS.isWritten(r);
 export const spellDetails = (r) => SPELLS.details(r);
 
 /** Every class any spell is listed for, in the order a picker names them. */
@@ -280,8 +276,6 @@ const POWERS = catalogue({
 export const setPowerCatalogue = (doc) => POWERS.set(doc);
 export const powerCatalogue = () => POWERS.all();
 export const powerEntry = (name) => POWERS.entry(name);
-export const powerOwn = (r) => POWERS.own(r);
-export const powerIsWritten = (r) => POWERS.isWritten(r);
 export const powerDetails = (r) => POWERS.details(r);
 
 /** Every class any power is listed for. */

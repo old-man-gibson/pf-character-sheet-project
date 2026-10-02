@@ -61,14 +61,6 @@ export function listRemove(model, path, index) {
 }
 
 /**
- * Ready or unready one maneuver on a discipline.
- *
- * `path` addresses the discipline (`maneuvers.disciplines.0`) and the
- * maneuver is named rather than indexed, because the row it sits on comes
- * from the shared catalogue and its position there is not the character's
- * to depend on.
- */
-/**
  * Tick or untick one proficiency on one of the fixed lists (familiarities,
  * handedness, groups, armor, shields). "None" on the shields list is a
  * statement rather than a kind, so it clears the others and they clear it.

@@ -255,18 +255,6 @@ export function columnIndex(letters) {
   return n;
 }
 
-/** 55 -> "BC". */
-export function columnLetter(index) {
-  let out = '';
-  let n = index;
-  while (n > 0) {
-    const rem = (n - 1) % 26;
-    out = String.fromCharCode(65 + rem) + out;
-    n = Math.floor((n - 1) / 26);
-  }
-  return out;
-}
-
 const CELL_REF = /^([A-Z]+)(\d+)$/;
 
 /**

@@ -13,9 +13,6 @@
  * only the shape, so the model never depends on the converter.
  */
 
-/** Is this document a monster -- one carrying a block? */
-export const isMonster = (model) => !!model?.data?.monster;
-
 /** The build bar a monster opens on: the block first, then what a GM reaches for. */
 export const MONSTER_TAB_ORDER = ['statblock', 'overview', 'skills', 'features', 'gear', 'trackers', 'lore'];
 

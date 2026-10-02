@@ -30,10 +30,6 @@ export function setVancianTables(doc) {
   };
 }
 
-export function vancianTables() {
-  return VANCIAN_TABLES;
-}
-
 /** Every class name the shared table can supply, for pickers and matching. */
 export function castingTableNames() {
   return VANCIAN_TABLES.classes.map((c) => c.name);

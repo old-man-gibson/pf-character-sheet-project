@@ -212,17 +212,6 @@ function groupDelete(name, g, arming) {
   }
 
   /**
-   * What a class's features do, under the ladder that says when each arrives.
-   *
-   * One entry per distinct feature however many levels grant it, an archetype's
-   * among them. This is where a pack's rules text lands: the Template tab is
-   * for templates, and a class is not one.
-   *
-   * The list is the player's: each note folds to its name row, and the grip
-   * drags it into whatever order reads best -- a pack lands them in table
-   * order, which is not always the order a player thinks in.
-   */
-  /**
    * What the ladder names that a pack can explain, to read and then take.
    *
    * Each is shut until opened: the text is there to be looked at before it is
@@ -249,6 +238,17 @@ function packOffers(className, offers) {
     </div>`;
   }
 
+/**
+ * What a class's features do, under the ladder that says when each arrives.
+ *
+ * One entry per distinct feature however many levels grant it, an archetype's
+ * among them. This is where a pack's rules text lands: the Template tab is
+ * for templates, and a class is not one.
+ *
+ * The list is the player's: each note folds to its name row, and the grip
+ * drags it into whatever order reads best -- a pack lands them in table
+ * order, which is not always the order a player thinks in.
+ */
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const offers = model.classFeatureNoteSuggestions(className);

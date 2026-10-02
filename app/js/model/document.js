@@ -425,25 +425,6 @@ export function sheetReader(tab) {
 }
 
 /**
- * Read the workbook's Psionics tab into manifesting classes and a point pool.
- *
- * Six blocks across, five columns apart, each holding a class name, one or two
- * manifesting abilities, the **PP@20** cell that picks which power-point curve
- * the class runs on, and then a list of powers with the level each is manifested
- * at. Beside them the tab keeps a Power Points panel -- one line per block, a
- * hand-entered Bonus PP, and a total.
- *
- * Every number in that panel was a formula, and a Google-only one, so it arrived
- * frozen. They are recomputed in `#recomputePsionics`; only Bonus PP is kept,
- * because on the sheet it is the one that was typed rather than worked out.
- *
- * The class name is free text -- a dropdown warned but did not refuse -- and one
- * workbook reaches us with `;egendary druid` where the Planner says `legendary
- * druid`. The sheet's COUNTIF answered that with a silent zero across the whole
- * block, which is 123 power points that simply were not there, so the name is
- * matched forgivingly against the progression instead.
- */
-/**
  * The ExtrasNotes worksheet: three "Range" columns of free jottings and an
  * Approvals table (App / Approved by / Link). The template also ships eight
  * lines of hint text in the first two columns ("This sheet is not referenced
