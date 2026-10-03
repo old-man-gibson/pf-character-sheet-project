@@ -25,7 +25,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  closestName, evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
+  evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -384,19 +384,6 @@ export function poolStepper(cls, home) {
 }
 
 /**
- * What taking a sphere itself gets you, for the row that records it.
- *
- * A base pick is not a talent -- it is the sphere, and what it grants is the
- * sphere's base abilities. The row reads as the sphere and what it opened
- * (`Destruction Sphere (Destructive Blast)`), which is the name a player
- * scanning their own list wants; the abilities' full text is far too long for
- * a name, so it goes in the note beside it where the rest of the rules live.
- *
- * `isBasePick` already reads that shape as a base pick -- it strips
- * parentheses before looking for the word -- so the label counts as one for
- * the sphere tallies the moment it is written.
- */
-/**
  * The sphere's own abilities and packages that a row's parenthesis names.
  *
  * "Nature Sphere (Water)", "Boxing (Counter Punch)", "Expanded Geomancing
@@ -520,6 +507,19 @@ export function talentPackage(hit, typed) {
 /** What a matched talent's note says: the package it names, or else its own text. */
 export const talentNoteText = (hit, typed) => talentPackage(hit, typed)?.text || hit?.text || '';
 
+/**
+ * What taking a sphere itself gets you, for the row that records it.
+ *
+ * A base pick is not a talent -- it is the sphere, and what it grants is the
+ * sphere's base abilities. The row reads as the sphere and what it opened
+ * (`Destruction Sphere (Destructive Blast)`), which is the name a player
+ * scanning their own list wants; the abilities' full text is far too long for
+ * a name, so it goes in the note beside it where the rest of the rules live.
+ *
+ * `isBasePick` already reads that shape as a base pick -- it strips
+ * parentheses before looking for the word -- so the label counts as one for
+ * the sphere tallies the moment it is written.
+ */
 export function sphereBasePick(sphere, picked = '', model = null) {
   const s = sphereEntry(sphere);
   if (!s || !s.abilities.length) return null;
@@ -718,19 +718,6 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
     type: 'set-item', path, index, field: talentField, value: row[talentField], filled,
   });
   return model;
-}
-
-/** Every tag and source in the catalogue, with how many talents carry each. */
-export function talentTagCounts() {
-  const out = new Map();
-  for (const t of sphereTalents()) {
-    for (const x of [...t.tags, ...t.sources]) {
-      const k = String(x).trim();
-      if (k) out.set(k, (out.get(k) || 0) + 1);
-    }
-  }
-  return [...out.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([tag, count]) => ({ tag, count }));
 }
 
 /**
@@ -1234,13 +1221,6 @@ export function setCustomizationActive(model, index, setIndex) {
 }
 
 /**
- * Count sphere occurrences across a training side's talent sources.
- *
- * `side` is the side's own block, which does not say which side it is, so
- * technique talents -- the only source that has to know -- are keyed off the
- * caller's `sideKey`.
- */
-/**
  * Whether a ladder row's talent is one the character has: a slot the class
  * grants, at a level the character has reached. Every tally counts by this
  * -- the sphere sides, a blended pool, a guile class -- and so does the
@@ -1305,6 +1285,13 @@ export function* ownTalentRows(model, side, { sideKey = null, includeTradition =
   }
 }
 
+/**
+ * Count sphere occurrences across a training side's talent sources.
+ *
+ * `side` is the side's own block, which does not say which side it is, so
+ * technique talents -- the only source that has to know -- are keyed off the
+ * caller's `sideKey`.
+ */
 export function sphereTally(model, side, { includeTradition = true, sideKey = null, customizations = 'active' } = {}) {
   const tally = {};
   const bump = (s, n = 1) => {
@@ -1557,14 +1544,14 @@ export function blendedClasses(model) {
   return pairs;
 }
 
+/** The types each sphere side's classes may take. */
+const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
+
 /**
  * Recompute both training sides: per-class talent progressions, tradition
  * spell points and boons, and the global casting numbers. Runs before the
  * skills loop because sphere talents grant skill ranks.
  */
-/** The types each sphere side's classes may take. */
-const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
-
 export function recomputeTraining(model) {
   const t = model.data.training;
   if (!t) return;

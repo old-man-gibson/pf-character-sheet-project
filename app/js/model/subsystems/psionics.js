@@ -93,6 +93,25 @@ export const PSIONIC_DERIVED = [
   },
 ];
 
+/**
+ * Read the workbook's Psionics tab into manifesting classes and a point pool.
+ *
+ * Six blocks across, five columns apart, each holding a class name, one or two
+ * manifesting abilities, the **PP@20** cell that picks which power-point curve
+ * the class runs on, and then a list of powers with the level each is manifested
+ * at. Beside them the tab keeps a Power Points panel -- one line per block, a
+ * hand-entered Bonus PP, and a total.
+ *
+ * Every number in that panel was a formula, and a Google-only one, so it arrived
+ * frozen. They are recomputed in `#recomputePsionics`; only Bonus PP is kept,
+ * because on the sheet it is the one that was typed rather than worked out.
+ *
+ * The class name is free text -- a dropdown warned but did not refuse -- and one
+ * workbook reaches us with `;egendary druid` where the Planner says `legendary
+ * druid`. The sheet's COUNTIF answered that with a silent zero across the whole
+ * block, which is 123 power points that simply were not there, so the name is
+ * matched forgivingly against the progression instead.
+ */
 export function importPsionics(tab, identity = {}) {
   const g = sheetReader(tab);
   const { at, text, num, mark, rightOf } = g;
@@ -103,22 +122,8 @@ export function importPsionics(tab, identity = {}) {
   for (const [ri, ci] of g.findAll('Power Known')) mark(ri, ci);
   g.dropCounterColumns();
 
-  /*
-   * The technique panel: a heading, the odd levels it advances on, and what each
-   * grants. It is the same fixed list on every sheet -- it shows in full even on
-   * a character whose technique is something else -- so it is template furniture.
-   */
-  for (const [ri, ci] of g.scan(/\bTechnique$/)) {
-    mark(ri, ci);
-    for (let r = ri + 1; r < g.rows.length; r++) {
-      if (!/^Level \d+$/.test(text(at(r, ci)))) continue;
-      // The level, what it grants, and the note the sheet put beside it when the
-      // character's technique is the one this panel describes.
-      for (let n = 0; n <= 3; n++) mark(r, ci + n);
-    }
-  }
-  const technique = text(identity.primordiaTechnique);
-  if (technique) for (const [ri, ci] of g.findAll(technique)) mark(ri, ci);
+  // The technique panel the sheet parked on this tab is template furniture.
+  g.skipTechniquePanel(identity.primordiaTechnique);
 
   const classes = [];
   for (const [ri, ci] of g.findAll('Ability 1')) {

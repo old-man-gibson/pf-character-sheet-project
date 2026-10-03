@@ -279,6 +279,14 @@ export function recomputeManeuvers(model) {
   };
 }
 
+/**
+ * Ready or unready one maneuver on a discipline.
+ *
+ * `path` addresses the discipline (`maneuvers.disciplines.0`) and the
+ * maneuver is named rather than indexed, because the row it sits on comes
+ * from the shared catalogue and its position there is not the character's
+ * to depend on.
+ */
 export function toggleManeuver(model, path, name, ready) {
   const d = getPath(model.data, path);
   if (!d) return model;

@@ -79,13 +79,6 @@ export function renderTrackersPanel(model, ctx) {
 }
 
 /**
- * One tracker. An ordinary pool runs 0..max and `current` counts what has
- * been spent. A tracker whose min is below zero is a two-sided meter
- * (Hellfire Qi: -7..+7): `current` is a signed position, negative pips grow
- * leftwards from a zero mark, and the value is shown red while negative.
- */
-
-/**
  * A formula shown under the thing it drives -- a tracker's max, its min.
  *
  * Coloured rather than plain, spaced out rather than as typed, and carrying
@@ -122,7 +115,12 @@ export function trackerReading(t) {
   return { shown: trackerShown(t), range, draining, twoSided };
 }
 
-
+/**
+ * One tracker. An ordinary pool runs 0..max and `current` counts what has
+ * been spent. A tracker whose min is below zero is a two-sided meter
+ * (Hellfire Qi: -7..+7): `current` is a signed position, negative pips grow
+ * leftwards from a zero mark, and the value is shown red while negative.
+ */
 function trackerRow(model, ctx, t) {
   if (ctx.editTracker === t.id) return trackerEditRow(model, ctx, t);
   const {

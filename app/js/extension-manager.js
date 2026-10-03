@@ -22,6 +22,7 @@
  * JSON only: they are big, regular, and usually built by a tool.
  */
 
+import { downloadFile } from './download.js';
 import { runtime } from './extension-runtime.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
@@ -1630,12 +1631,7 @@ Hit Die: d12.
   }
 
   function download(doc) {
-    const blob = new Blob([JSON.stringify(doc, null, 1)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${doc.id || 'extension'}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadFile(`${doc.id || 'extension'}.json`, JSON.stringify(doc, null, 1));
   }
 
   return {

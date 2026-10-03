@@ -30,10 +30,6 @@ export function setVancianTables(doc) {
   };
 }
 
-export function vancianTables() {
-  return VANCIAN_TABLES;
-}
-
 /** Every class name the shared table can supply, for pickers and matching. */
 export function castingTableNames() {
   return VANCIAN_TABLES.classes.map((c) => c.name);
@@ -117,23 +113,8 @@ export function importVancian(tab, identity = {}) {
   // Three columns of the literal integers 1..156, left over from a dropdown.
   g.dropCounterColumns();
 
-  // The technique picker the sheet parked on this tab: a heading, the odd
-  // levels it advances on, and the character's own choice -- which the
-  // identity block already carries, so none of it is character data.
-  for (const [ri, ci] of g.findAll('Keen Mind Technique')) {
-    mark(ri, ci);
-    for (let r = ri + 1; r < g.rows.length; r++) {
-      if (!/^Level \d+$/.test(text(at(r, ci)))) continue;
-      mark(r, ci);
-      // What the level grants sits beside it. The panel is the same fixed list
-      // on every sheet -- it appears in full even on a character whose
-      // technique is something else entirely -- so it is template furniture,
-      // not this character's data.
-      mark(r, ci + 1);
-    }
-  }
-  const technique = text(identity.primordiaTechnique);
-  if (technique) for (const [ri, ci] of g.findAll(technique)) mark(ri, ci);
+  // The technique panel the sheet parked on this tab is template furniture.
+  g.skipTechniquePanel(identity.primordiaTechnique);
 
   const classes = [];
   for (const [ri, ci, m] of g.scan(/^Casting Class(?: (\d+))?$/)) {

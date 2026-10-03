@@ -293,6 +293,7 @@
   import { inspectDocument } from './js/model.js';
   import { historyFor, forget } from './js/history.js';
   import { zip, safeName } from './js/zip.js';
+  import { downloadFile } from './js/download.js';
   import { runtime as extensions } from './js/extension-runtime.js';
   import { mountExtensionManager, looksLikeExtension } from './js/extension-manager.js';
   import { mountMonsterTool } from './js/monster/picker.js';
@@ -570,11 +571,7 @@
 
       const stamp = new Date().toISOString().slice(0, 10);
       const blob = new Blob([await zip(files)], { type: 'application/zip' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `character-sheets-${stamp}.zip`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      downloadFile(`character-sheets-${stamp}.zip`, blob);
 
       const size = (blob.size / 1024).toFixed(0);
       say(missing.length ? 'info' : 'ok',

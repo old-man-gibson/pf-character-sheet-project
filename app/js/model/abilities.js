@@ -14,6 +14,13 @@ import {
 } from '../rules.js';
 import { forwardedSplit } from './scope.js';
 
+/** Mythic tier derives from level (with a manual override). */
+export function applyMythic(model) {
+  const m = model.data.mythic || (model.data.mythic = {});
+  m.computedTier = tierAtLevel(model.data.identity?.level);
+  model.data.identity.mythicTier = m.tierOverride ?? m.computedTier;
+}
+
 /**
  * Recompute ability scores from the Stats-tab build, when one is present.
  *
@@ -22,13 +29,6 @@ import { forwardedSplit } from './scope.js';
  * character's current level (the Planner is a full 20-level plan, so a level
  * 15 character has picks recorded for levels they have not reached).
  */
-/** Mythic tier derives from level (with a manual override). */
-export function applyMythic(model) {
-  const m = model.data.mythic || (model.data.mythic = {});
-  m.computedTier = tierAtLevel(model.data.identity?.level);
-  model.data.identity.mythicTier = m.tierOverride ?? m.computedTier;
-}
-
 export function refreshAbilities(model) {
   const build = model.data.statsBuild;
   const applied = new Set();

@@ -13,9 +13,6 @@
  * only the shape, so the model never depends on the converter.
  */
 
-/** Is this document a monster -- one carrying a block? */
-export const isMonster = (model) => !!model?.data?.monster;
-
 /** The build bar a monster opens on: the block first, then what a GM reaches for. */
 export const MONSTER_TAB_ORDER = ['statblock', 'overview', 'skills', 'features', 'gear', 'trackers', 'lore'];
 
@@ -72,6 +69,11 @@ export const emptyMonster = () => normalizeMonster({});
 /**
  * The fields of the block that are prose -- read for {…} tokens, so a save
  * DC written as `{= 10 + con.mod + floor(level / 2)}` moves with the score.
+ *
+ * Not read yet. The panel renders each field's tokens where it stands, but
+ * the prose walk in model/scope.js does not visit these, so a name defined
+ * here (`{breath.dc = …}`) or a bonus sent from here (`{ac += 2}`) reaches
+ * nothing else. This is the list that walk should take when it is wired up.
  */
 export const MONSTER_PROSE_FIELDS = [
   'senses', 'aura', 'healing', 'saveNote', 'defensiveAbilities', 'specialAttacks',

@@ -11,9 +11,9 @@
  *  five lines of output instead.
  *
  *  It checks that a panel renders, not that it renders *correctly* — that
- *  still wants `tools/panel-snapshot.js` in a browser. And the few panels that
- *  are still methods on the element rather than modules (Feats & Mythic, the
- *  Technique List, Auto-Cooking) cannot be reached from here at all.
+ *  still wants `tools/panel-snapshot.js` in a browser. Every tab's panel is a
+ *  module now; the ⚙ manager's tab lists are the element's to work out, so it
+ *  is drawn here with empty ones.
  *
  *  Every character is swept four times: folds shut and folds open, in each of
  *  the two view modes. The open pass is not thoroughness for its own sake — a
@@ -37,6 +37,9 @@ import * as lore from '../app/js/ui/panels/lore.js';
 import * as admin from '../app/js/ui/panels/admin.js';
 import * as gear from '../app/js/ui/panels/gear.js';
 import * as trackers from '../app/js/ui/panels/trackers.js';
+import * as feats from '../app/js/ui/panels/feats.js';
+import * as techniques from '../app/js/ui/panels/techniques.js';
+import * as manager from '../app/js/ui/panels/manager.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
@@ -75,6 +78,10 @@ const shutCtx = () => ({
     formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: false, tab: 'formulas',
   },
   skills: { showAllSkills: false },
+  feats: { openCell: null },
+  manager: {
+    tabEntries: [], barEntries: [], draft: {}, confirmDelete: null, extFilter: '', extSearch: '',
+  },
 });
 
 /**
@@ -127,6 +134,11 @@ const openCtx = (model) => {
       formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaValueQuery: 'mod', formulaTargetQuery: 'will', formulaRefOpen: true, tab: 'audit',
     },
     skills: { showAllSkills: true },
+    feats: { openCell: 'mythic:0:effect' },
+    manager: {
+      tabEntries: [], barEntries: [], draft: { newSystem: 'New' },
+      confirmDelete: (d.sheetTabs || []).length ? 0 : null, extFilter: '', extSearch: 'a',
+    },
   };
 };
 
@@ -159,6 +171,11 @@ const panelsWith = (CTX) => [
   ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX.lore)],
   ['Formulas', (m) => admin.renderFormulaPanel(m, CTX.admin)],
   ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX.admin)],
+  ['Feats & Mythic', (m) => feats.renderFeaturesPanel(m, CTX.feats)],
+  ['Technique List', (m) => techniques.renderTechniqueListPanel(m, {})],
+  ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, {})],
+  ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, {})],
+  ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX.manager)],
 ];
 
 const CTX = shutCtx();

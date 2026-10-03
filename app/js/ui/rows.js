@@ -174,11 +174,6 @@ export function proseText(model, text) {
 }
 
 /**
- * A number a condition or buff has moved, shown in place of the base --
- * red down, green up, with the base and what moved it in the tooltip.
- * The plain base when nothing moved it; the same read on every view.
- */
-/**
  * A breakdown as the sentence a totalled number wears on its tooltip.
  *
  * The parts in the order the sum takes them, each with the note that explains
@@ -225,6 +220,10 @@ export function working(model, key, shown) {
 }
 
 /**
+ * A number a condition or buff has moved, shown in place of the base --
+ * red down, green up, with the base and what moved it in the tooltip.
+ * The plain base when nothing moved it; the same read on every view.
+ *
  * @param model  when given, the tooltip carries the whole working -- every
  *               part the number is made of, in the order they are added. The
  *               figure is printed in a dozen places and the parts in one, so
@@ -337,6 +336,8 @@ export function editLine(label, path, value) {
  * The button is spliced into the panel's own <h3> rather than wrapped around
  * it, so a collapsed panel is the same header in the same place -- nothing
  * moves when it folds, which is the point of folding it.
+ *
+ * The collapsed state lives in uiPrefs and persists with the character.
  */
 export function collapsible(model, key, panelHtml, defaultCollapsed = false) {
   // A panel that is setup rather than reading starts folded; see `isCollapsed`.

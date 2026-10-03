@@ -99,7 +99,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') {
       const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       const file = path.join(here, path.normalize(rel));
-      if (!file.startsWith(here) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      // Inside this folder, not merely starting with its name: "screen-old"
+      // begins the same way and is not ours to serve.
+      if (!file.startsWith(here + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404); return res.end('not found');
       }
       res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream', 'cache-control': 'no-store' });

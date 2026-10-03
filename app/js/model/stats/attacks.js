@@ -61,12 +61,6 @@ export function weaponHandle(name) {
 }
 
 /**
- * Weapons and load. Each weapon's attack is its base mode total plus
- * enhancement and misc; damage is dice + floor(ability × mult) + misc +
- * enhancement. A per-weapon offset reconciles against the workbook's cached
- * attack roll, so imports match and edits still move the number.
- */
-/**
  * The short name each weapon answers to in a formula, in row order.
  *
  * The Formula name field on the row if there is one, the name cut down if
@@ -89,6 +83,12 @@ export function weaponHandles(model) {
   });
 }
 
+/**
+ * Weapons and load. Each weapon's attack is its base mode total plus
+ * enhancement and misc; damage is dice + floor(ability × mult) + misc +
+ * enhancement. A per-weapon offset reconciles against the workbook's cached
+ * attack roll, so imports match and edits still move the number.
+ */
 export function recomputeEquipment(model) {
   const c = model.data;
   const e = c.equipment;
@@ -631,6 +631,7 @@ export function setGearColumns(model, list, kind, delta) {
   return model;
 }
 
+/** The sheet's unarmed practitioner damage, from V65's exact algorithm. */
 export function recomputeUnarmed(model) {
   const t = model.data.training?.combat;
   if (!t?.unarmed) return;

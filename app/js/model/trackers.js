@@ -158,8 +158,11 @@ export function seedTrackers(model) {
     // Mythic Power is the one pool every character has: it is 3 + 2 per tier
     // by the campaign's rules, and all five sheets agree, so it follows the
     // tier instead of freezing the imported number. A sheet that disagrees
-    // keeps its own value rather than being "corrected".
-    const tierDriven = id === MYTHIC_POWER_ID && total === mythicPowerAt(tierNow(model));
+    // keeps its own value rather than being "corrected". Any tier's figure
+    // counts, not just the current one's, or a level-up would turn the seed
+    // into a fixed number and the formula the tracker follows into an edit.
+    const tierDriven = id === MYTHIC_POWER_ID
+      && Array.from({ length: 11 }, (_, t) => mythicPowerAt(t)).includes(total);
     return {
       id,
       name: r.name,

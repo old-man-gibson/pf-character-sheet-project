@@ -13,6 +13,7 @@ import { forgeStore } from './store.js';
 import { forgeToPack, importPack, importWildTalents, looksLikeWildTalents } from './pack.js';
 import { extensionStore, isPackKey, packsWorthMoving } from '../../app/js/extensions.js';
 import { packMedium } from '../../app/js/pack-storage.js';
+import { downloadFile } from '../../app/js/download.js';
 import { mountThemes } from './theme.js';
 
 const $ = (s) => document.querySelector(s);
@@ -481,9 +482,7 @@ function toast(msg, kind, action = null) {
 
 /* ===================== Import / Export ===================== */
 function download(filename, text) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: filename.endsWith('.json') ? 'application/json' : 'text/markdown' }));
-  a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  downloadFile(filename, text, filename.endsWith('.json') ? 'application/json' : 'text/markdown');
 }
 function mdOf(e, depth = 0, seen = new Set()) {
   if (seen.has(e.id)) return ''; seen.add(e.id);

@@ -905,16 +905,17 @@ function maneuverSelect(bindingAttr, value, options, blank) {
 
   /* ---------------- vancian casting ---------------- */
 
-  /**
-   * Casting classes and their spell tables.
-   *
-   * Every number here is derived, the way the workbook derived it before Excel
-   * froze its formulas into what looked like a hand-typed grid: caster level
-   * from the Planner, slots and spells known from the shared casting table,
-   * bonus slots from the casting stats, the DC from the rule. Each cell will
-   * still take a number, which then overrides the one behind it.
-   */
-/** `ctx.armedRemove` is which ask-twice × is armed -- element state, handed in. */
+/**
+ * Casting classes and their spell tables.
+ *
+ * Every number here is derived, the way the workbook derived it before Excel
+ * froze its formulas into what looked like a hand-typed grid: caster level
+ * from the Planner, slots and spells known from the shared casting table,
+ * bonus slots from the casting stats, the DC from the rule. Each cell will
+ * still take a number, which then overrides the one behind it.
+ *
+ * `ctx.armedRemove` is which ask-twice × is armed -- element state, handed in.
+ */
 export function vancianPanel(model, ctx = {}) {
     const v = model.data.vancian;
     if (!v) return '<div class="grid"><p class="empty">No casting data.</p></div>';
@@ -1086,17 +1087,6 @@ function castingStatCell(model, c, i) {
     </div>`;
 }
 
-  /**
-   * The spell list, and where a prepared caster spends.
-   *
-   * A prepared caster commits an exact number of uses to each spell, so the pool
-   * hangs off the row: prepare Cure Light Wounds three times and that row gets
-   * three. The squares shape suits it -- a handful of discrete uses, small enough
-   * to read without counting, giving way to a count when there are more.
-   *
-   * A row with a label and no spell is a section heading the player wrote, and
-   * gets no pool of its own.
-   */
 /**
  * What the spell list offers, as a `<datalist>` behind its name cells.
  *
@@ -1144,6 +1134,17 @@ function powerDatalist(c) {
   });
 }
 
+/**
+ * The spell list, and where a prepared caster spends.
+ *
+ * A prepared caster commits an exact number of uses to each spell, so the pool
+ * hangs off the row: prepare Cure Light Wounds three times and that row gets
+ * three. The squares shape suits it -- a handful of discrete uses, small enough
+ * to read without counting, giving way to a count when there are more.
+ *
+ * A row with a label and no spell is a section heading the player wrote, and
+ * gets no pool of its own.
+ */
 function vancianPreparedPanel(model, v, ctx = {}) {
     const list = 'vancian.prepared';
     const rows = v.prepared || [];
@@ -2699,7 +2700,6 @@ function deckLadderPanel(p, k) {
     </section>`;
   }
 
-  /** Deck manipulations by group, taken against what is available. */
 /**
  * The groups a deck's manipulations are filed under: the four the system
  * names, and any the player invented. Both halves of the panel below want
@@ -2760,6 +2760,8 @@ function deckManipulationsHead(model, p, k) {
   }
 
   /**
+   * Deck manipulations by group, taken against what is available.
+   *
    * One panel per group of manipulations, in a column layout of their own so
    * they sit two or three abreast with room for each note.
    *

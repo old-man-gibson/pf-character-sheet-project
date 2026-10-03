@@ -51,6 +51,11 @@ export const abAttr = (on, value) => (on ? ` data-ab="${abilityKey(value)}"` : '
  */
 export const abKeyAttr = (key) => ` data-ab="${abilityKey(key)}"`;
 
+/**
+ * What the gold left edge on a field means, in the two flavours it comes in:
+ * prose that may carry {…} tokens anywhere in the text, and a field whose
+ * whole value may be written as an expression.
+ */
 export const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 3 + con.mod) '
   + 'instead of a number.';
 

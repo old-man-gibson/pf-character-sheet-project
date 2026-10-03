@@ -13,7 +13,7 @@
  * Bodies keep the indentation they had as methods, because the markup they
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
-import { esc, val } from '../html.js';
+import { esc } from '../html.js';
 import { collapsible } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
@@ -37,11 +37,9 @@ import {
 } from '../../model.js';
 import { guileClassBlock, ladderStack, operativeField, poolCounts, poolField } from './guile.js';
 import {
-  ABILITIES, ABILITY_LABELS,
-  CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
-  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, isBasePick, mergeLayout,
-  parseLadderRule, statMod,
+  ABILITIES, ABILITY_LABELS, CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES,
+  SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS,
+  TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule, statMod,
 } from '../../rules.js';
 import { check, field, autoNum, roField, select, text } from '../fields.js';
 import {
@@ -158,10 +156,6 @@ export function blendTicks(systems, home, attr, counts = null) {
     return `<label class="fld blendticks"><span>Counts as</span><span class="pair">${ticks}${lost}</span></label>`;
   }
 
-  /**
-   * Wrap a panel so its body can be minimized. The collapsed state lives in
-   * uiPrefs and persists with the character.
-   */
   /* ----- training class blocks with per-level talent slots ----- */
 
 
@@ -643,12 +637,6 @@ function magicTraditionPanel(model, m) {
         <span class="value">${check('training.magic.mythicAmt', m.mythicAmt)}</span></div>
     </section>`;
   }
-
-  /**
-   * What each boon was spent on. A boon is a choice the player makes, not a
-   * number that falls out of the drawback count, so each one gets its own row:
-   * spell points for the casting pool, or essence for the veilweaving one.
-   */
 
   /**
    * How each tradition pool was spent: so many of its steps as spell points,

@@ -91,7 +91,6 @@ export function recomputeLanguages(model) {
   };
 }
 
-/** The sheet's unarmed practitioner damage, from V65's exact algorithm. */
 /** How many feats on the character match `re` -- feat groups and granted feats. */
 export function featCount(model, re) {
   const d = model.data;

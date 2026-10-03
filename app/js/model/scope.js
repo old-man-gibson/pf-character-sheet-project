@@ -137,6 +137,10 @@ function skillScope(sk) {
   };
 }
 
+/**
+ * The flat, read-only view player formulas see. Rebuilt on demand so it can
+ * never drift from the model.
+ */
 export function characterScope(model) {
   const c = model.data;
   // What is worn, split: the armour's own bonus, the shields', and the
@@ -1618,8 +1622,9 @@ export function proseSources(model) {
   return out;
 }
 
-/** Rendered segments for a prose field (used by the view layer). */
 /**
+ * Rendered segments for a prose field (used by the view layer).
+ *
  * @param local  scope that exists only where this text was written, such as
  *               `{ essence: { self } }` for a veil's own description.
  */

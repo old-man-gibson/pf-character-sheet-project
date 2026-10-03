@@ -55,36 +55,21 @@
  */
 
 import {
-  Character, inspectDocument, maneuverCatalogue, TEMPLATE_TYPES,
-  castingTableNames,
-  psionicTables, psionicCurveTotals,
-  CARD_COLORS, CARD_MODIFICATIONS, deckManipulationCatalogue, deckManipulation,
-  TECHNIQUE_SLOTS, TECHNIQUE_STATUSES, techniqueTitle,
-  COOKING_COURSES, cookingTables, cookingDish, normalizeDish, emptyDish,
-  MATERIAL_CASTING_PER_LEVEL, optionCatalogues, skillForwardKey, describeSource, weaponHandle,
-  classForwardKey, gearColumnInUse,
-  featsAvailable, featDetails, featCatalogue,
-  spellsAvailable, powersAvailable,
+  Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish, gearColumnInUse,
+  featsAvailable, spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
-import {
-  applyBlock, BLOCK_KINDS, looksLikeExtension, archetypeStatus, removeArchetype, swapLabel,
-} from './extensions.js';
+import { applyBlock, looksLikeExtension, removeArchetype } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
 import {
-  PALETTES, LAYOUTS, WIDTHS, AUTO, paletteOf, isPalette, isLayout, isWidth, resolvePalette, schemeOf,
-  flipped, readThemePrefs, writeThemePrefs,
-  ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS, DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
+  PALETTES, LAYOUTS, WIDTHS, AUTO, isPalette, isLayout, isWidth, resolvePalette, schemeOf, flipped,
+  readThemePrefs, writeThemePrefs, ACTION_MARKS, ACTION_TINTS, DEFAULT_ACTION_MARKS,
+  DEFAULT_ACTION_TINT, isActionMarks, isActionTint,
 } from './themes.js';
-import {
-  esc, val, abilityKey, picksAbility, abAttr, abKeyAttr, EXPR_HINT, ABILITY_LABELS_LIST,
-  nameDatalist, noteCell,
-} from './ui/html.js';
+import { esc, val, abilityKey, nameDatalist } from './ui/html.js';
 import * as fields from './ui/fields.js';
 
-/** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
-const FEAT_LIST_ID = 'cat-feats';
 /*
  * How many suggestions a catalogue cell offers at once. A `<datalist>` is a
  * hint, not a browser: nobody scrolls forty of them, and the whole reason
@@ -109,79 +94,36 @@ import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
-import { slotSpend } from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
 import * as admin from './ui/panels/admin.js';
-import { renderGearPanel, renderCraftingPanel, weaponsPanel, wealthPanel } from './ui/panels/gear.js';
+import { renderGearPanel, renderCraftingPanel } from './ui/panels/gear.js';
 import * as trackerUi from './ui/panels/trackers.js';
-import { round, group, pct, same, PIP_LIMIT } from './ui/format.js';
+import { round, group, same } from './ui/format.js';
 import * as prose from './ui/prose.js';
-import { renderStatsPanel, pickSelect, mythicPickAt } from './ui/panels/stats.js';
+import { renderStatsPanel } from './ui/panels/stats.js';
+import * as feats from './ui/panels/feats.js';
+import * as techniques from './ui/panels/techniques.js';
+import * as manager from './ui/panels/manager.js';
 import { renderSkillsPanel, skillRowIndices } from './ui/panels/skills.js';
 import { readColumnWidths, writeColumnWidths, applyColumnWidths, bindColumnResize } from './ui/column-widths.js';
+import { fmt, SIZE_MODIFIERS, conditionInfo } from './rules.js';
+import { analyse } from './formula.js';
+import { pretty } from './formula-format.js';
 import {
-  fmt, iterativeAttacks, ABILITY_LABELS, ABILITIES, BUILD_TEMPORARY,
-  BUILD_PERMANENT_GROUPS, BUILD_OPTIONAL_KEYS, SAVE_BONUS_TYPES, AC_BONUS_TYPES,
-  BUILD_DERIVED_KEYS, PROWESS_TRACKS, ABP_LEVELS, ARRAY_LEVELS, LEVEL4_LEVELS,
-  ENHANCEMENT_CAP, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, MENTAL_PROWESS_LEVELS,
-  PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, SIZE_MODIFIERS,
-  ABP_LINKED_LEVELS, abpSourceLevel,
-  CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATES, COMBAT_SPHERES, MAGIC_SPHERES,
-  BACKGROUND_SKILLS, UNARMED_SPHERES, TRAIT_CATEGORIES, TRAIT_SLOTS,
-  PERFORM_CATEGORIES, VARIANT_SKILLS, skillVariantKind, skillVariantRoot, skillLabel,
-  parseLevelRule, levelRuleLevels, summariseLevels,
-  MYTHIC_PATH_HP, MYTHIC_STAT_TIERS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS,
-  MYTHIC_TIER_LEVEL, mythicTierGrant,
-  GEAR_BONUS_TYPES, WEAPON_ATTACK_TYPES, WEAPON_GROUPS, WEAPON_HANDEDNESS,
-  WEAPON_FAMILIARITY, WEAPON_CRIT_MULTS, diceString,
-  ARMOR_PROFICIENCIES, SHIELD_PROFICIENCIES,
-  ATTACK_MODES, ATTACK_MODE_LABELS, ALT_ATTACK_OF, ATTACK_MODE_KEY, attackModeTotal,
-  attackModeAbility,
-  CRAFT_SPEED_KINDS, CRAFT_CHECK_MODES, CRAFT_TIME_BASES, CRAFT_SPEED_MULTIPLIER,
-  BLENDED_SPHERES, sphereSide, conditionInfo, trackSpheres, TRACK_SPHERE_SIDES, TRACK_SPHERE_LABELS,
-  TRACK_SPHERE_NOUNS,
-  ABP_DEFENCE_GROUPS, ABP_DEFENCE_CAP, abpGroupTotal,
-  TALENTED_KNUCKLE_TALENTS, BRAWLERS_VEST_TALENTS, ASURA_TALENTS_PER_ESSENCE,
-  VEIL_SLOTS, ESSENCE_SOURCES, SP_PER_TEMP_ESSENCE,
-  MANEUVER_TYPES, SPELL_LEVELS, wikiUrl, WIKI_BASE,
-  PREP_STYLES, CASTING_SOURCES, prepStyle, castingNoun,
-  mergeLayout, GAME_SYSTEMS, CONDITIONS, CONDITION_CATS, BUFF_MOD_KEYS, BUFF_TARGETS,
-  conditionTotals, statModDelta, stepDiceMap, addDice,
-} from './rules.js';
-import {
-  COMPANION_LABELS, NATURAL_ATTACKS, BODY_TYPES, COMPANION_LEVEL_SOURCES,
-  ABILITY_INCREASE_LEVELS,
-} from './companions.js';
-import { evaluateFormula, analyse, resolvePath } from './formula.js';
-import { highlight, highlightFlagging, workingLine, workings, pretty } from './formula-format.js';
-import {
-  formulaPanelHtml, workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups,
-  targetsHtml, targetGroups,
+  workingHtml, browserHtml, myFormulasHtml, forwardedHtml, valueGroups, targetsHtml, targetGroups,
 } from './formula-guide.js';
 import { formulaPlace } from './ui/formula-places.js';
-import { hasTokens, formatValue } from './inline.js';
+import { hasTokens } from './inline.js';
 import {
   historyFor, countChanges, requestPersistence, SNAPSHOT_EVERY, AUTO_KEEP,
 } from './history.js';
+import { downloadFile } from './download.js';
 import {
-  TRACKER_PALETTE, THEME_ACCENT, THEME_NEGATIVE, normalizeStyle, normalizeHex, isDefaultStyle,
-  resolveZones, zoneAt, stepColor, barLayout, squareLayout, barClickValue, pipClickValue, rgba,
-  trackBand, readableOn,
+  TRACKER_PALETTE, THEME_ACCENT, normalizeStyle, normalizeHex, isDefaultStyle, barClickValue,
+  pipClickValue, rgba, readableOn,
 } from './tracker-style.js';
-import {
-  ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, WEAPON_MODE_KEYS, weaponStrikes,
-} from './roll20.js';
+import { ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, weaponStrikes } from './roll20.js';
 
-/**
- * What the gold left edge on a field means, in the two flavours it comes in:
- * prose that may carry {…} tokens anywhere in the text, and a field whose
- * whole value may be written as an expression.
- */
-/**
- * The die on a roll button: a hexagon -- a d20's silhouette -- with the face
- * you would read on top of it. Drawn rather than typed, because Unicode's dice
- * characters are all six-sided and an emoji would take the host page's font.
- */
 /** Which Roll20 shape the buttons copy. A player preference, so it is theirs. */
 const ROLL_FORMAT_KEY = 'cs-roll20-format';
 
@@ -273,13 +215,6 @@ const MODELLED_TAB_IDS = new Set([
  */
 const WEIRD_TAB_LABELS = new Set(['cardcasting', 'technique list', 'autotechnique', 'auto-cooking']);
 const isWeirdTab = (label) => WEIRD_TAB_LABELS.has(String(label || '').trim().toLowerCase());
-
-
-
-/**
- * Past this many steps a row of pips is a wall rather than a reading, so the
- * pip shape draws nothing and a meter falls back to its bar.
- */
 
 
 
@@ -419,7 +354,6 @@ function readControl(input) {
  */
 const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|buffs|effects|statsBuild|progressionPicks|mythic|mythicStatPicks|progression|skills|skillBudget|weapons|classes|equipment|crafting|akashic|maneuvers|vancian|psionics|cardcasting|altTraining|techniques|cooking|wealth|familiar|animalCompanion|eidolon|conjured|training|specialtySkills|traitSlots|raceTraits|formulaNotes|extras|monster|identity\.(level|size|heroPoints|primordiaTechnique|speeds|languageExtra|languages|proficiencies))/;
 
-/** Two names the player typed, or a pack wrote, meaning the same thing. */
 /**
  * The input types a caret can be put back into after a re-render.
  *
@@ -529,16 +463,6 @@ function stackRowKey(row) {
 const HELP_LENGTH = 180;
 
 /**
- * More blocks than this in one supergroup and it arrives folded.
- *
- * Measured rather than chosen per pack, the way `HELP_LENGTH` is: a chakra
- * carrying sixty veils is an index you open one line of, and a class with two
- * option menus and an archetype under it is worth reading whole. Folding that
- * second one by default would put a pack's content behind a click for nothing.
- */
-const EXT_GROUP_FOLD = 12;
-
-/**
  * What the help is about.
  *
  * The multi-paragraph hints already announce their own subject in bold --
@@ -615,6 +539,7 @@ export class CharacterSheetElement extends HTMLElement {
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
+  #changePending = false;   // an edit has announced itself and its one write is queued
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
   #tableWrapObserver = null; // watches the table scroll boxes that may shed their cap
@@ -1273,13 +1198,23 @@ export class CharacterSheetElement extends HTMLElement {
         // saved and announced as they happened.
         return;
       }
-      this.#persist();
-      this.dispatchEvent(new CustomEvent('character-change', {
-        detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
-        bubbles: true,
-        composed: true,
-      }));
-      this.#announceTrackers();
+      // One edit announces itself two or three times -- the recompute, the
+      // edit, an undo mark before a removal -- and each used to write the
+      // whole document again. They are gathered into one write per task, on a
+      // microtask, so it still lands before the tab can close.
+      if (this.#changePending) return;
+      this.#changePending = true;
+      queueMicrotask(() => {
+        this.#changePending = false;
+        if (this.#model !== _model) return;   // another character has opened since
+        this.#persist();
+        this.dispatchEvent(new CustomEvent('character-change', {
+          detail: { character: this.#model.toJSON(), diff: this.#model.diffFromSource() },
+          bubbles: true,
+          composed: true,
+        }));
+        this.#announceTrackers();
+      });
     });
   }
 
@@ -2804,11 +2739,6 @@ export class CharacterSheetElement extends HTMLElement {
   /** The Stats tab lives in ui/panels/stats.js. */
   #statsPanel() { return renderStatsPanel(this.#model, {}); }
 
-  /** Two of its pickers are drawn by the Feats & Mythic tab as well. */
-  #pickSelect(...args) { return pickSelect(...args); }
-
-  #mythicPickAt(tier) { return mythicPickAt(this.#model, tier); }
-
   /* ---------------- skills ---------------- */
 
   /**
@@ -2822,9 +2752,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /* ---------------- the two sphere tabs ---------------- */
-
-  /** Folding a panel down to its heading; the builder is in ui/rows.js. */
-  #collapsible(key, panelHtml) { return rows.collapsible(this.#model, key, panelHtml); }
 
   /** The two sphere tabs and Templates live in ui/panels/combat.js. */
   #combatCtx() { return { showCells: this.#showCells }; }
@@ -2841,98 +2768,8 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- feats & mythic ---------------- */
 
-  /**
-   * Feats something hands you, rather than ones picked at a level.
-   *
-   * Source first, then the feat: what granted it is the fixed part and the feat
-   * is the answer, which is the way round they are actually read. The Drawback
-   * row appears only once a Major Drawback is taken, because until then there
-   * is no feat to name; Specialty is mandatory, so it is always there. Oath and
-   * Attunement feats sit in the same list, each naming its own source.
-   */
-  #grantedFeatsSection() {
-    const c = this.#model.data;
-    const g = c.grantedFeats || { others: [] };
-    const major = c.traitSlots?.majorDrawback || {};
-    const hasMajor = !!(major.name || major.category || major.text);
-    // What bought the feat is the drawback's NAME -- "Spell Vulnerability
-    // (Divination)" -- not what it does to you. Before traits had a name field
-    // the effect was all there was to show, and it read as the source.
-    const majorName = String(major.name || major.category || major.text || '').trim();
-
-    const fixed = (key, label, hint) => `<tr>
-      ${/* No grip: these two are not in the list and cannot be moved out of
-           order. The cell is here so their columns line up with the rows
-           below, which can. */''}
-      <td class="grip"></td>
-      <td data-stack="head"><span class="fsource">${esc(label)}</span>${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</td>
-      <td data-stack="name">${this.#text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
-      <td class="fnote" data-label="Notes">${noteCell(
-    this.#prose(`data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow'),
-    featDetails(g[key] || {}), this.#folds(), `grantedFeats.${key}`,
-  )}</td>
-    </tr>`;
-
-    return `<h4 class="subhead">Granted feats
-        <span class="badge">${(hasMajor ? 2 : 1) + (g.others || []).length}</span>
-      </h4>
-      <div class="tablewrap"><table class="granted stacked">
-        <thead><tr><th class="grip"></th><th class="src">Source</th><th class="fname">Feat</th>
-          <th class="fnote">Notes</th><th></th></tr></thead>
-        <tbody>
-          ${hasMajor ? fixed('drawback', 'Drawback', majorName.slice(0, 60)) : ''}
-          ${fixed('specialty', 'Specialty')}
-          ${(g.others || []).map((f, i) => `<tr ${rows.rowDrop('grantedFeats.others', i)}>
-            ${rows.rowGrip()}
-            <td data-stack="head">${this.#itemText('grantedFeats.others', i, 'source', f.source, 'Oath 2, Attunement…')}</td>
-            <td data-stack="name">${this.#itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
-            <td class="fnote" data-label="Notes">${noteCell(
-    this.#prose(`data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), this.#folds(), `grantedFeats.others|${i}`,
-  )}</td>
-            ${this.#rowToolsDragged('grantedFeats.others', i)}
-          </tr>`).join('')}
-        </tbody>
-      </table></div>
-      <div style="margin-top:8px">
-        ${this.#addButton('grantedFeats.others', 'Add granted feat', { source: '', name: '', note: '' })}
-      </div>
-      <p class="hint">
-        ${hasMajor
-          ? 'A Major Drawback buys the Drawback feat.'
-          : 'The Drawback row appears once a Major Drawback is taken on the Overview.'}
-        The Specialty feat is mandatory, so it is always here. Oath and Attunement feats
-        name their own source.
-        ${c.altTraining?.calc?.counts?.feat
-    ? `Technique feats (${c.altTraining.calc.counts.feat} from
-        <strong>${esc(c.altTraining.calc.technique)}</strong>) live on the
-        <strong>Alternate Training</strong> tab, beside the levels that grant them — one home
-        each, so they cannot drift apart.` : ''}
-      </p>`;
-  }
-
-  /**
-   * Every feat a pack carries, as a `<datalist>` the name cells point at.
-   *
-   * A feat is picked here rather than attached from the extension manager,
-   * the way a veil is picked in its chakra: it is content, so the sheet keeps
-   * the *name* and whatever the player wrote beside it, and the rules text
-   * stays in the pack to be read where it stands. That is also why there is
-   * no filter on this one. A veil's chakra narrows its list to a few hundred
-   * and a spell's class list narrows its own, but a feat is open to anyone
-   * who meets its prerequisites, and reading those is a person's job -- so
-   * the honest list is the whole catalogue, typed into rather than scrolled.
-   *
-   * Nothing is emitted where no pack provides one, and the cell is then the
-   * free-text box it has always been: a player writing down a feat nobody has
-   * published is not doing anything wrong.
-   */
-  /** What the player has folded away, as `noteCell` and friends want it. */
-  #folds() { return this.#model.data.uiPrefs?.collapsed || {}; }
-
-  #featDatalistHtml() {
-    return nameDatalist(FEAT_LIST_ID, 'feats', { has: featCatalogue().feats.length > 0 });
-  }
+  /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell }); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -2982,247 +2819,6 @@ export class CharacterSheetElement extends HTMLElement {
     }));
   }
 
-  /**
-   * A feat group's heading: its name, how many it holds, and the × that
-   * removes the whole group. The same three whether the group is the panel on
-   * the right or a section stacked on the left, so the two cannot drift.
-   */
-  #featGroupTitle(group, g) {
-    return `<input class="grouptitle" type="text" value="${esc(group.name)}"
-        data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
-      <span class="badge">${group.entries.length}</span>
-      <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
-  }
-
-  /**
-   * One group's feats: the table and the button that adds a row to it.
-   *
-   * Three columns of writing, not two. A feat's name and where it came from
-   * were all a group held, so what a feat actually *does* had nowhere to go
-   * but the source cell -- and the granted feats beside it had carried a
-   * proper notes column all along. This is that column, on every group, and
-   * it takes formulas like the rest of the prose on the sheet: a feat that
-   * grants a pool can define it where the feat is written down.
-   */
-  #featGroupTable(group, g) {
-    const folds = this.#folds();
-    return `<div class="tablewrap"><table class="feats stacked">
-        <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
-          <th class="fnote">Notes</th><th></th></tr></thead>
-        <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
-          <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
-          <td data-stack="name">${this.#itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
-          <td data-label="Source / level">${this.#itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
-          <td class="fnote" data-label="Notes">${noteCell(
-    this.#prose(`data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), folds, `featGroups.${g}.entries|${i}`,
-  )}</td>
-          ${/* The arrows move a feat within its group only: taking one to
-               another group stays a drag, on a desktop. The granted feats
-               above are the same bargain and write the same cell. */''}
-          ${this.#rowToolsDragged(`featGroups.${g}.entries`, i)}
-        </tr>`).join('')}
-        ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
-          <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
-        </tr>`}</tbody>
-      </table></div>
-      <div style="margin-top:8px">
-        ${this.#addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '', note: '' })}
-      </div>`;
-  }
-
-  #featuresPanel() {
-    const c = this.#model.data;
-    const feats = c.feats || {};
-    const m = c.mythic || {};
-    const tier = Number(c.identity.mythicTier) || 0;
-    /*
-     * The feats stack, each panel the width of the page.
-     *
-     * They used to read as two columns -- the granted feats and the smaller
-     * groups on the left, the level-up list beside them -- which balanced the
-     * row while a feat was a name and a source. It stopped balancing once
-     * every row grew a notes column: half a page is not enough width for
-     * three columns of writing, and the level-up list is the one a character
-     * actually fills. So the first group stands on its own, full width, and
-     * the rest stack under the granted feats as they always did.
-     */
-    const groups = c.featGroups || [];
-    const featured = groups[0]
-      ? this.#collapsible('featgroup-0', `<section class="panel span2 featgroup">
-          <h3>${this.#featGroupTitle(groups[0], 0)}</h3>
-          ${this.#featGroupTable(groups[0], 0)}
-        </section>`)
-      : '';
-    const main = this.#collapsible('feats', `<section class="panel span2 featmain">
-      <h3>Feats</h3>
-      ${this.#grantedFeatsSection()}
-      ${groups.slice(1).map((group, i) => `<div class="featsection">
-        <h4 class="subhead">${this.#featGroupTitle(group, i + 1)}</h4>
-        ${this.#featGroupTable(group, i + 1)}
-      </div>`).join('')}
-    </section>`);
-
-    /*
-     * The catalogue sits at the tab, not inside a panel.
-     *
-     * Every feat cell on this tab points at it -- the groups, the granted
-     * rows, and the mythic abilities in the panel below -- and a `<datalist>`
-     * inside a folded panel is a `<datalist>` that is not in the document.
-     * Fold the Feats panel and the mythic cells would quietly stop offering
-     * anything.
-     */
-    return `<div class="grid">
-      ${this.#featDatalistHtml()}
-      ${featured}${main}
-      <div class="addgroup">
-        ${this.#addButton('featGroups', 'Add group', { name: 'New group', entries: [] })}
-        <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
-          Oaths, Attunement, Class, and so on. The first group stands on its own; the rest
-          stack under the granted feats. Drag a feat by its grip to reorder it, or onto
-          another group to move it there.</span>
-      </div>
-
-      ${this.#collapsible('mythic', `<section class="panel span2">
-        <h3>Mythic <span class="badge">tier ${tier}</span></h3>
-        <div class="fieldgrid">
-          ${this.#field('Path', this.#text('mythic.path', m.path))}
-          ${this.#field(`Tier (auto: ${m.computedTier ?? 0})`, `<span class="pair">
-            <input type="number" value="${m.tierOverride ?? ''}" placeholder="${m.computedTier ?? 0}"
-              data-set="mythic.tierOverride" data-kind="number-or-null" style="width:3.6rem"
-              title="Automatic from level; enter a number to override.">
-            <span class="value">→ ${c.identity.mythicTier ?? 0}</span></span>`)}
-          ${this.#field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
-    `<input type="number" class="autonum${m.bonusHpPerTier == null ? ' auto' : ''}"
-            value="${m.bonusHpPerTier ?? ''}" placeholder="${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0}"
-            data-set="mythic.bonusHpPerTier" data-kind="number-or-null" style="width:3.6rem"
-            title="From the path; enter a number to override it."
-            aria-label="Bonus hit points per mythic tier">`)}
-          ${this.#field('Base path ability', this.#text('mythic.basePathAbility', m.basePathAbility))}
-        </div>
-        <p class="hint">
-          Tier comes from character level (8→1, 10→2, 12→3, 14→4, then one per level to
-          20→10). Bonus HP/tier is ${(Number(this.#model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
-          × ${c.identity.mythicTier ?? 0} = <strong>${this.#model.mythicHp}</strong> hit points, counted
-          into the maximum on the Hit points panel (Champion/Guardian 5, Marshal/Trickster 4,
-          Archmage/Hierophant 3).
-        </p>
-        ${rows.collapsibleSub(this.#model, 'mythic-abilities', 'Mythic path abilities', `
-          <div class="tablewrap"><table class="mythic stacked">
-            <!-- Six columns and one of them prose. The tier, the level it is
-                 reached at, the path and the ability's name are all a few words,
-                 so they are held narrow and Effect takes what is left. -->
-            <colgroup>
-              <col class="tier"><col class="lvl"><col class="mpath"><col class="mname">
-              <col class="meffect"><col class="mstat">
-            </colgroup>
-            <thead><tr>
-              <th class="num">Tier</th>
-              <th class="num" title="The character level this tier is reached at">Level</th>
-              <th>Path</th>
-              <th>Ability</th>
-              <th title="What the path ability does. Formulas work here.">Effect</th>
-              <th title="+2 to one ability, at every even tier">Stat</th>
-            </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
-              const a = (m.abilities || [])[t - 1] || {};
-              const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythladder">
-                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
-                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td data-label="Path">${this.#itemText('mythic.abilities', i, 'path', a.path, '', true)}</td>
-                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'name', a.name, '', { title: true, list: FEAT_LIST_ID })}</td>
-                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:effect`, `data-item="mythic.abilities|${i}|effect"`, a.effect, 'What it does')}</td>
-                ${t % 2 === 0
-                  ? `<td data-label="Stat">${this.#pickSelect('mythicStat', t, 0, this.#mythicPickAt(t), ABILITY_LABELS_LIST, false)}</td>`
-                  : '<td class="noslot"></td>'}
-              </tr>`;
-            }).join('')}</tbody>
-          </table></div>
-          <p class="hint">
-            Ten tiers, one row each, beside the character level it is reached at. A
-            <strong>+2 ability increase</strong> comes at every even tier, which is why
-            only those rows offer a Stat; the same increases are on the
-            <strong>Stats</strong> tab, and either place edits the one set. Rows above
-            tier ${tier} are greyed: planned, not counted yet.
-          </p>`, 'mythladder')}
-
-        ${rows.collapsibleSub(this.#model, 'mythic-feats', 'Mythic Feats', `
-          <div class="tablewrap"><table class="mythic stacked">
-            <!-- The slot, then what was taken for it, then what that does. Off
-                 the ladder above so both halves have room: nine columns across
-                 one table left the two Effects sharing a third of the width. -->
-            <colgroup>
-              <col class="tier"><col class="lvl"><col class="grants"><col class="mname">
-              <col class="meffect">
-            </colgroup>
-            <thead><tr>
-              <th class="num">Tier</th>
-              <th class="num" title="The character level this tier is reached at">Level</th>
-              <th title="What the tier hands over — a feat on odd tiers, an RP power on even ones">Grants</th>
-              <th>Name</th>
-              <th title="What the granted feat does. Formulas work here.">Effect</th>
-            </tr></thead>
-            <tbody>${MYTHIC_TIERS.map((t) => {
-              const a = (m.abilities || [])[t - 1] || {};
-              const i = t - 1;
-              return `<tr class="${t > tier ? 'future' : ''}" data-rowkey="mythfeats">
-                <td class="num" data-stack="head" data-headlabel="Tier">${t}</td>
-                <td class="num derived" data-label="Level" title="Tier ${t} at level ${MYTHIC_TIER_LEVEL[t]}">${MYTHIC_TIER_LEVEL[t] ?? ''}</td>
-                <td data-label="Grants"><span class="fsource">${esc(a.feat || mythicTierGrant(t))}</span></td>
-                <td data-stack="name">${this.#itemText('mythic.abilities', i, 'featChoice', a.featChoice, '', true)}</td>
-                <td data-label="Effect">${this.#foldedProse(`mythic:${i}:featEffect`, `data-item="mythic.abilities|${i}|featEffect"`, a.featEffect, 'What it does')}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table></div>
-          <p class="hint">
-            A mythic feat on the odd tiers, an RP power on the even ones:
-            <strong>Grants</strong> is what the tier hands over, <strong>Name</strong> is
-            what you took for it, and <strong>Effect</strong> says what that thing does —
-            folded to one line to keep the table readable, so click one to open it and
-            click away to shut it again. Formulas work here and in the path abilities
-            above: write “{= tier * 2}” for a value, or “{fort += 2}” to send a bonus
-            somewhere. A bonus written above tier ${tier} does not apply until it is
-            reached.
-          </p>`, 'mythladder')}
-      </section>`)}
-
-      ${this.#collapsible('mythic-tradition', this.#mythicTraditionPanel(m))}
-    </div>`;
-  }
-
-  #mythicTraditionPanel(m) {
-    const tr = m.tradition || {};
-    const filled = (k) => !!(tr[k] && String(tr[k]).trim());
-    return `<section class="panel span2">
-      <h3>Mythic tradition
-        ${!filled('drawback1') ? '<span class="badge err">Drawback 1 is mandatory</span>' : ''}
-        <label class="chk" style="margin-left:auto">
-          <input type="checkbox" ${m.flowingPower ? 'checked' : ''} data-set="mythic.flowingPower" data-kind="bool">
-          <span>Flowing Power</span></label>
-      </h3>
-      <div class="tablewrap"><table class="tradition stacked">
-        <thead><tr><th class="slot">Slot</th><th class="choice">Choice</th><th>Notes</th></tr></thead>
-        <tbody>${MYTHIC_TRADITION_SLOTS.map((def) => {
-          const locked = def.requires && !filled(def.requires);
-          return `<tr class="${locked ? 'lockedslot' : ''}">
-            <td data-stack="head">${esc(def.label)}${def.mandatory ? ' <span class="badge err">required</span>' : ''}
-              ${def.requires ? `<div class="hint">needs ${esc(MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label)}</div>` : ''}
-              ${def.kind === 'quality' ? '<div class="hint">bonus + drawback</div>' : ''}</td>
-            <td data-stack="name">${this.#prose(`data-set="mythic.tradition.${def.key}" placeholder="${esc(locked ? `Take ${MYTHIC_TRADITION_SLOTS.find((s) => s.key === def.requires)?.label} first` : '')}"`, tr[def.key], 1, 'grow')}</td>
-            <td data-label="Notes">${this.#prose(`data-set="mythic.tradition.notes.${def.key}" placeholder="${esc(locked ? '' : 'What it does')}"`, tr.notes?.[def.key], 1, 'grow')}</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
-      <p class="hint">
-        One mandatory drawback unlocks one boon; each further drawback (up to two)
-        unlocks another. The quality carries both a bonus and a drawback. The name and
-        the note both resolve <code>{name = expr}</code>, so a boon that grants a pool
-        can define it where it is written down.
-      </p>
-    </section>`;
-  }
-
   /* ---------------- equipment & crafting ---------------- */
 
   /** Both tabs live in ui/panels/gear.js. */
@@ -3238,12 +2834,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #gearPanel() { return renderGearPanel(this.#model, this.#gearCtx()); }
 
-  /** The session dashboard's offense card draws the weapons table too. */
-  #weaponsPanel(e) { return weaponsPanel(this.#model, e); }
-
   #craftingPanel() { return renderCraftingPanel(this.#model, this.#gearCtx()); }
-
-  #wealthPanel() { return wealthPanel(this.#model, this.#gearCtx()); }
 
   /* ---------------- modelled sub-systems ---------------- */
 
@@ -3268,10 +2859,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
-
-  #systemExtrasPanel(...a) { return subsystems.systemExtrasPanel(...a); }
-
-  #rowRemoveButton(...a) { return subsystems.rowRemoveButton(...a); }
 
   #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
 
@@ -3305,17 +2892,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #trackersPanel() { return trackerUi.renderTrackersPanel(this.#model, this.#trackerCtx()); }
 
-  #formulaMeta(...a) { return trackerUi.formulaMeta(this.#model, ...a); }
-
   #isDraining(...a) { return trackerUi.isDraining(...a); }
-
-  #trackerVisual(...a) { return trackerUi.trackerVisual(...a); }
-
-  #meterVisual(...a) { return trackerUi.meterVisual(...a); }
-
-  #meterStyleButton(...a) { return trackerUi.meterStyleButton(this.#trackerCtx(), ...a); }
-
-  #meterStyleEditor(...a) { return trackerUi.meterStyleEditor(this.#model, this.#trackerCtx(), ...a); }
 
   #styleTarget(...a) { return trackerUi.styleTarget(this.#model, this.#trackerCtx(), ...a); }
 
@@ -3340,285 +2917,12 @@ export class CharacterSheetElement extends HTMLElement {
 
   /* ---------------- techniques: Technique List and AutoTechnique ---------------- */
 
-  /**
-   * The workbook's technique layout, drawn once for both tabs: the name row,
-   * the three sphere rows with their talent grids beside them, the numbers the
-   * formulas derive, range and saves, and the four description lines.
-   *
-   * On the Technique List every field is read off the catalogue (a technique
-   * is edited by copying it to AutoTechnique and adding it back); on
-   * AutoTechnique every field writes to `techniques.draft`.
-   */
-  #techniqueSheet(view, { editable = false, path = 'techniques.draft', mode = 'list' } = {}) {
-    const t = view.technique;
-    const s = view.stats;
-    const ro = (v) => this.#roField(v);
-    const cell = (field, value, opts = {}) => (editable
-      ? this.#text(`${path}.${field}`, value, opts.placeholder || '')
-      : ro(value));
-    const spheres = (key, label, talentKey, talentLabel) => `
-      <tr class="sphererow">
-        <th>${label}</th>
-        ${t[key].map((v, i) => `<td>${cell(`${key}.${i}`, v, { placeholder: 'sphere' })}</td>`).join('')}
-      </tr>
-      <tr class="talentrow">
-        <th>${talentLabel}</th>
-        <td colspan="${TECHNIQUE_SLOTS.spheres}">
-          <div class="talentgrid">
-            ${t[talentKey].map((p, i) => `<div class="talent">
-              ${editable
-    ? this.#select(`${path}.${talentKey}.${i}.sphere`, p.sphere, t[key].filter(Boolean), '—')
-    : ro(p.sphere)}
-              ${cell(`${talentKey}.${i}.talent`, p.talent, { placeholder: 'talent' })}
-            </div>`).join('')}
-          </div>
-        </td>
-      </tr>`;
+  /** All three tabs live in ui/panels/techniques.js. */
+  #techniqueListPanel() { return techniques.renderTechniqueListPanel(this.#model, {}); }
 
-    const stat = (label, value, hint = '') => `<div class="statline">
-      <span class="label" ${hint ? `title="${esc(hint)}"` : ''}>${label}</span>
-      <span class="value">${esc(value)}</span></div>`;
+  #autoTechniquePanel() { return techniques.renderAutoTechniquePanel(this.#model, {}); }
 
-    const numbers = `
-      <div class="techstats">
-        <div>
-          ${stat('Complexity', s.complexity, 'base talents, +(distinct − 2) past two, + every talent named')}
-          ${stat('Base Talents', s.baseText, 'distinct spheres and other entries, less any Feat')}
-          ${stat('Total Talents', s.totalText)}
-          ${stat('Crafting Skill', t.craftingSkill)}
-        </div>
-        <div>
-          ${stat('Crafting Time', `${s.craftingTime} days`, '1 + complexity')}
-          ${stat('Effective Time (−⅓ days)', `${s.effectiveTime} days`)}
-          ${stat('Crafting DC', s.craftDC, '5 + 5 × complexity')}
-          ${stat('Decipher DC', s.decipherDC, '20 + complexity')}
-          ${stat('Learn DC', s.learnDC, '10 + 2 × complexity')}
-        </div>
-        <div>
-          ${stat('Technique Prowess', s.prowessText, 'Yes when the technique uses no magic sphere')}
-          ${stat('Effective Complexity', s.effective, mode === 'auto'
-    ? 'complexity + Instant Initiation + Versatile − Signature − Adept Initiator'
-    : 'with prowess: complexity − 1 − ⌊BAB/5⌋ − Adept Initiator; else complexity − Adept Initiator')}
-          ${stat('Other SP Cost', t.extraSp === '' ? '—' : t.extraSp)}
-          ${stat('Total SP Cost', s.totalSp, 'effective complexity + other SP cost')}
-          ${stat('Other Cost', t.otherCost || '—')}
-        </div>
-      </div>`;
-
-    const flags = mode === 'auto' ? `<div class="techflags">
-        ${this.#check(`${path}.instantInitiation`, t.instantInitiation, 'Instant Initiation (+1)')}
-        <label class="pair"><span>Versatile Technique</span>${this.#num(`${path}.versatile`, t.versatile, 'min="0"')}</label>
-        ${this.#check(`${path}.signature`, t.signature, 'Signature Technique (−1)')}
-        <span class="hint">These are the AutoTechnique tab's crafting choices; they move Effective Complexity and nothing else.</span>
-      </div>` : '';
-
-    return `
-      <div class="tablewrap"><table class="techsheet">
-        <tr>
-          <th>Technique Name</th>
-          <td>${cell('prepend1', t.prepend1, { placeholder: 'style / prefix' })}</td>
-          <td>${cell('prepend2', t.prepend2, { placeholder: 'e.g. Counter' })}</td>
-          <td colspan="3" class="techname">${cell('name', t.name, { placeholder: 'technique name' })}</td>
-        </tr>
-        ${spheres('combatSpheres', 'Combat Spheres', 'combatTalents', 'Combat Talents')}
-        ${spheres('magicSpheres', 'Magic Spheres', 'magicTalents', 'Magic Talents')}
-        ${spheres('others', 'Other', 'otherFeatures', 'Other Features')}
-      </table></div>
-      ${flags}
-      ${editable ? `<div class="fieldgrid" style="margin-top:8px">
-        <label class="fld"><span>Crafting Skill</span>${this.#text(`${path}.craftingSkill`, t.craftingSkill, 'Kn. (martial)')}</label>
-        <label class="fld"><span>Other SP Cost</span>${this.#text(`${path}.extraSp`, t.extraSp, '')}</label>
-        <label class="fld"><span>Other Cost</span>${this.#text(`${path}.otherCost`, t.otherCost, 'e.g. Martial focus')}</label>
-      </div>` : ''}
-      ${numbers}
-      <div class="tablewrap"><table class="techsheet">
-        <tr>
-          <th>Range</th><td colspan="2">${cell('range', t.range)}</td>
-          <th>Duration</th><td colspan="2">${cell('duration', t.duration)}</td>
-        </tr>
-        <tr>
-          <th>Saving Throw</th>
-          ${t.saves.map((p, i) => `<td>${cell(`saves.${i}.save`, p.save, { placeholder: i ? '' : 'None' })}</td>`).join('')}
-          <th>Target</th><td>${cell('target', t.target)}</td>
-        </tr>
-        <tr>
-          <th>Saving Throw Type</th>
-          ${t.saves.map((p, i) => `<td>${cell(`saves.${i}.type`, p.type, { placeholder: 'e.g. Halves' })}</td>`).join('')}
-          <th>Spell Resistance</th><td>${cell('spellResistance', t.spellResistance, { placeholder: 'No' })}</td>
-        </tr>
-      </table></div>
-      <div class="techdesc">
-        ${t.descriptions.map((d, i) => `<label class="fld tall"><span>Description ${i + 1}</span>
-          ${editable ? this.#area(`${path}.descriptions.${i}`, d, 3) : `<div class="ro-text">${esc(d) || '<span class="empty">—</span>'}</div>`}
-        </label>`).join('')}
-      </div>`;
-  }
-
-  /** The Discord application under a technique, and a button that copies it. */
-  #techniqueExportBox(text, id) {
-    return `<section class="panel span2">
-      <h3>Discord application
-        <span class="pair" style="margin-left:auto">
-          <button data-action="copy-text" data-copy="${id}">Copy for Discord</button>
-        </span>
-      </h3>
-      <p class="hint">The workbook's application text — character, what is applied for, and the technique in a code block. Paste it as-is.</p>
-      <textarea id="${id}" class="exportbox" readonly rows="14" spellcheck="false">${esc(text)}</textarea>
-    </section>`;
-  }
-
-  #techniqueListPanel() {
-    const block = this.#model.data.techniques || { catalogue: [], selected: '', draft: null };
-    const cat = block.catalogue;
-    const byStatus = {};
-    for (const t of cat) byStatus[t.status || '—'] = (byStatus[t.status || '—'] || 0) + 1;
-    const selected = cat.find((t) => t.name === block.selected) || cat[0] || null;
-    const idx = selected ? cat.indexOf(selected) : -1;
-    const view = selected ? this.#model.techniqueView(selected, 'list') : null;
-    const options = cat.map((t) => [t.name, `${techniqueTitle(t)}${t.status ? ` · ${t.status}` : ''}`]);
-    const statuses = [...new Set([...TECHNIQUE_STATUSES, ...cat.map((t) => t.status).filter(Boolean)])];
-
-    return `<div class="grid">
-      <section class="panel span2">
-        <h3>Technique List
-          ${Object.entries(byStatus).map(([k, n]) => `<span class="badge">${esc(k)} ${n}</span>`).join('')}
-        </h3>
-        <p class="hint">
-          Every technique on the character's <code>techRef</code>, read one at a time as the
-          workbook's tab does. The list is read-only apart from the approval status; to
-          change a technique, copy it to AutoTechnique, edit it there and add it back — the
-          same name replaces the entry. Missing techniques — a character imported before the
-          catalogue was read, or new ones on the sheet — come in with
-          <strong>Import from workbook</strong>: only the techniques are taken, nothing else
-          on this character changes.
-          <button data-action="tech-import" title="Merge the techniques from a .xlsx export of the workbook into this list">Import from workbook…</button>
-          <input type="file" accept=".xlsx,.xlsm" data-techfile hidden>
-        </p>
-        <div class="pair techpick">
-          <select data-action="tech-select" aria-label="Technique">
-            ${cat.length ? '' : '<option value="">No techniques yet</option>'}
-            ${options.map(([v, l]) => `<option value="${esc(v)}" ${selected?.name === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-          </select>
-          ${selected ? `
-            <label class="pair"><span class="hint">Approval Status</span>
-              ${this.#select(`techniques.catalogue.${idx}.status`, selected.status, statuses, '—')}
-            </label>
-            <label class="pair"><span class="hint">Type</span>${this.#text(`techniques.catalogue.${idx}.subschool`, selected.subschool, 'e.g. Electric')}</label>
-            <button data-action="tech-to-draft" data-name="${esc(selected.name)}" title="Copy this technique into AutoTechnique to edit it">Copy to AutoTechnique</button>
-            <button class="danger" data-action="tech-remove" data-name="${esc(selected.name)}" title="Remove from the list">×</button>` : ''}
-        </div>
-      </section>
-      ${view ? `<section class="panel span2">
-        <h3>${esc(techniqueTitle(selected))}
-          ${selected.status ? `<span class="badge ${/known|approved/i.test(selected.status) ? 'ok' : ''}">${esc(selected.status)}</span>` : ''}
-          ${selected.subschool ? `<span class="badge">${esc(selected.subschool)}</span>` : ''}
-        </h3>
-        ${this.#techniqueSheet(view, { editable: false, mode: 'list' })}
-      </section>
-      ${this.#techniqueExportBox(view.export, 'techListExport')}` : `<section class="panel span2">
-        <p class="empty">Nothing to show. Design a technique on the AutoTechnique tab and add it here.</p>
-      </section>`}
-    </div>`;
-  }
-
-  #autoTechniquePanel() {
-    const block = this.#model.data.techniques || { catalogue: [], selected: '', draft: null };
-    const view = this.#model.techniqueView(block.draft, 'auto');
-    const t = view.technique;
-    const exists = !!t.name && block.catalogue.some((x) => x.name === t.name);
-    return `<div class="grid">
-      <section class="panel span2">
-        <h3>AutoTechnique
-          <span class="pair" style="margin-left:auto">
-            <button class="primary" data-action="tech-add" ${t.name ? '' : 'disabled'}
-              title="${exists ? 'Replace the technique of this name on the list' : 'Add to the Technique List'}">
-              ${exists ? 'Update on Technique List' : '+ Add to Technique List'}</button>
-            <button data-action="tech-new" title="Clear the form">New</button>
-          </span>
-        </h3>
-        <p class="hint">
-          Design a technique: name it, pick its spheres and the talents each contributes,
-          and the complexity, DCs and SP cost work themselves out as the workbook's
-          formulas do. <strong>Add to Technique List</strong> puts it on the list (the
-          workbook's <code>techRef</code>); the application below is ready to paste.
-        </p>
-        ${this.#techniqueSheet(view, { editable: true, path: 'techniques.draft', mode: 'auto' })}
-      </section>
-      ${this.#techniqueExportBox(view.export, 'autoTechExport')}
-    </div>`;
-  }
-
-  /* ---------------- Auto-Cooking: the iron chef's dish ---------------- */
-
-  #cookingPanel() {
-    const dish = this.#model.data.cooking || emptyDish();
-    const view = this.#model.cookingView();
-    const tables = cookingTables();
-    const levelText = dish.level === null ? '' : dish.level;
-    return `<div class="grid">
-      <section class="panel span2">
-        <h3>Iron Chef Dish Maker
-          <span class="badge">Duration: ${view.hours} hours</span>
-          <span class="pair" style="margin-left:auto">
-            <button data-action="cook-clear" title="Empty the plate">Clear dish</button>
-          </span>
-        </h3>
-        <p class="hint">
-          Bryva's iron chef ability, for anyone at the table: pick the courses, and each
-          ingredient's effect is worked out for the chef's level and the combination — a
-          Red Meat entree strengthens Apples and Potatoes, Rice counts the recipe as three
-          levels higher, and so on. Duration is ⌊level ÷ 3⌋ + 1 hours.
-        </p>
-        <div class="fieldgrid" style="margin-bottom:10px">
-          <label class="fld"><span>Iron chef level</span>
-            <input type="number" min="1" max="20" value="${esc(levelText)}" data-set="cooking.level" data-kind="number-or-null"
-              placeholder="${Number(this.#model.data.identity?.level) || ''}" title="Blank uses this character's level"></label>
-          <label class="fld"><span>Chef</span>${this.#text('cooking.chef', dish.chef, String(this.#model.data.identity?.name || 'the chef'))}</label>
-          <label class="fld"><span>Dish name</span>${this.#text('cooking.dishName', dish.dishName, 'optional')}</label>
-        </div>
-        <div class="tablewrap"><table class="techsheet cooksheet">
-          ${COOKING_COURSES.map(([key, label]) => `<tr>
-            <th>${label}</th>
-            ${dish[key].map((v, i) => `<td>${this.#select(`cooking.${key}.${i}`, v, tables[key].map((x) => [x.name, x.name]), '—')}</td>`).join('')}
-          </tr>`).join('')}
-        </table></div>
-      </section>
-
-      <section class="panel span2">
-        <h3>What the meal does</h3>
-        ${view.effects.length ? `<ul class="dishlist">
-          ${view.effects.map((e) => `<li>
-            <span class="badge">${esc(e.course)}</span> <strong>${esc(e.name)}</strong>
-            ${e.unknown ? '<span class="badge err">not in the ingredient list</span>' : ''}
-            <div>${esc(e.text)}</div>
-            ${e.combo ? `<div class="hint">Combo: ${esc(e.combo)}</div>` : ''}
-          </li>`).join('')}
-        </ul>` : '<p class="empty">An empty plate. Pick some ingredients above.</p>'}
-      </section>
-
-      <section class="panel span2">
-        <h3>For Discord
-          <span class="pair" style="margin-left:auto">
-            <button data-action="copy-text" data-copy="cookExport">Copy for Discord</button>
-          </span>
-        </h3>
-        <textarea id="cookExport" class="exportbox" readonly rows="10" spellcheck="false">${esc(view.export)}</textarea>
-      </section>
-
-      ${this.#collapsible('cooking-ref', `<section class="panel span2">
-        <h3>Ingredient list <span class="badge">at level ${view.level}</span></h3>
-        <p class="hint">Every ingredient and what it grants at the chef's level above, with the combos that raise it.</p>
-        <div class="tablewrap"><table class="gridtab dishref">
-          ${COOKING_COURSES.map(([key, label]) => tables[key].map((x, i) => {
-    const one = normalizeDish({ level: view.level, [key]: [x.name] });
-    const resolved = cookingDish(one, { level: view.level }).effects[0]?.text || '';
-    return `<tr>${i === 0 ? `<th rowspan="${tables[key].length}">${label}</th>` : ''}
-              <td class="ingname">${esc(x.name)}</td><td>${esc(resolved)}${x.combo ? `<div class="hint">Combo: ${esc(x.combo)}</div>` : ''}</td></tr>`;
-  }).join('')).join('')}
-        </table></div>
-      </section>`)}
-    </div>`;
-  }
+  #cookingPanel() { return techniques.renderCookingPanel(this.#model, {}); }
 
   /* ---------------- formulas & audit ---------------- */
 
@@ -3650,11 +2954,6 @@ export class CharacterSheetElement extends HTMLElement {
    */
 
   /**
-   * Push the character's colour onto the host element, where it overrides the
-   * theme's accent for everything inside the shadow root. Removing it hands
-   * the theme back its own.
-   */
-  /**
    * The surface a player-chosen colour has to be legible on.
    *
    * `--cs-panel-2` rather than `--cs-panel`: it is the ground under buttons,
@@ -3679,6 +2978,10 @@ export class CharacterSheetElement extends HTMLElement {
    * raw one: they are backgrounds and borders, they have no ratio to meet, and
    * they are most of what makes the sheet still look like the colour that was
    * picked. See `readableOn`.
+   *
+   * Pushed onto the host element, where it overrides the theme's accent for
+   * everything inside the shadow root. Removing it hands the theme back its
+   * own.
    */
   #applyCharacterColor() {
     const hex = normalizeHex(this.#model?.data?.identity?.color);
@@ -3690,27 +2993,13 @@ export class CharacterSheetElement extends HTMLElement {
     this.style.setProperty('--cs-formula-strong', rgba(hex, 0.85));
   }
 
-  #field(label, control) { return fields.field(label, control); }
-
   /* ----- prose fields -----
    * The two-layer prose control and everything that renders a token live in
    * ui/prose.js, because two dozen panels put one somewhere. These pass on
    * what the module cannot see: the model, and which folded cell is open.
    */
 
-  #prose(...a) { return prose.prose(this.#model, ...a); }
-
-  #itemArea(...a) { return prose.itemArea(this.#model, ...a); }
-
   #foldedProse(...a) { return prose.foldedProse(this.#model, { openCell: this.#openCell }, ...a); }
-
-  #renderedProse(...a) { return prose.renderedProse(this.#model, ...a); }
-
-  #tokenScope(...a) { return prose.tokenScope(this.#model, ...a); }
-
-  #tokenTitle(...a) { return prose.tokenTitle(this.#model, ...a); }
-
-  #targetLabels(...a) { return prose.targetLabels(this.#model, ...a); }
 
 
   /**
@@ -3739,311 +3028,16 @@ export class CharacterSheetElement extends HTMLElement {
     </div>`;
   }
 
-  /**
-   * The ⚙ manager: the tab bar as a list to rearrange, then everything that
-   * is off it -- alphabetical, so a tab is found by name rather than by where
-   * the workbook happened to put it -- with the odd sub-systems in a corner
-   * of their own. Worksheets can be renamed, deleted or added here too.
-   */
+  /** The ⚙ manager lives in ui/panels/manager.js. */
   #systemManagerPanel() {
-    const entries = this.#tabEntries();
-    const bar = this.#barEntries();
-    const onBar = new Set(bar.map((e) => e.key));
-    const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-    const off = entries.filter((e) => !onBar.has(e.key)).sort(byLabel);
-    const hidden = off.filter((e) => !e.weird);
-    const weird = off.filter((e) => e.weird);
-    const all = (this.#model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
-
-    const badges = (e) => `${e.renamed ? `<span class="badge player" title="${esc(e.title || '')}">${
-      this.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
-      ${e.kind === 'system' && e.tab.hidden ? '<span class="badge">hidden in source</span>' : ''}
-      ${e.kind === 'system' && e.tab.custom ? '<span class="badge player">custom</span>' : ''}
-      ${e.kind === 'system' ? `<span class="badge">${e.tab.rows.length} rows</span>` : ''}
-      ${e.kind === 'modelled' ? (e.has ? '<span class="badge ok">in use</span>'
-    : e.tagged ? '<span class="badge ok" title="A class on the Overview marks this system">marked</span>'
-      : '<span class="badge">empty</span>') : ''}`;
-    const name = (e) => (e.kind === 'system'
-      ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
-      : esc(e.label));
-    const del = (e) => (e.kind === 'system'
-      ? `<button class="danger" data-action="delete-system" data-index="${e.index}"
-           title="Delete this tab and its data" aria-label="Delete tab">×</button>` : '');
-
-    // The same panel the tabs' own right-click opens, reached from a row.
-    const colorBtn = (e) => {
-      const hex = this.#model.tabColor(e.key);
-      return `<button class="swatch tabswatch${hex ? '' : ' none'}" data-tabcolor-open="${esc(e.key)}"
-        data-tabcolor-label="${esc(e.label)}"${hex ? ` style="background:${hex}"` : ''}
-        title="${esc(hex ? `Colour: ${hex}` : 'Colour this tab')}" aria-label="Colour ${esc(e.label)}"></button>`;
-    };
-    const barRow = (e, i) => `<div class="item statline tabrow" data-tabkey="${esc(e.key)}">
-      <span class="label pair" style="flex:1">
-        <span class="grip" data-tabdrag title="Drag to reorder" aria-hidden="true">⋮⋮</span>
-        ${name(e)} ${badges(e)}
-      </span>
-      <span class="value pair">
-        ${colorBtn(e)}
-        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} left" title="Move left">↑</button>
-        <button data-action="tab-move" data-key="${esc(e.key)}" data-dir="1" ${i === bar.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(e.label)} right" title="Move right">↓</button>
-        <button data-action="tab-hide" data-key="${esc(e.key)}" ${bar.length === 1 ? 'disabled' : ''}>Hide</button>
-        ${del(e)}
-      </span>
-    </div>`;
-    const offRow = (e) => `<div class="item statline">
-      <span class="label pair" style="flex:1">${name(e)} ${badges(e)}</span>
-      <span class="value pair">
-        <button data-action="tab-show" data-key="${esc(e.key)}">Show</button>
-        ${del(e)}
-      </span>
-    </div>`;
-
-    const mode = this.#model.viewMode();
-    return `<div class="grid"><section class="panel span2">
-      <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
-        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
-    ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
-          Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
-      </h3>
-      <p class="hint">
-        The tabs across the top, in order. Drag a row -- or a tab on the bar itself --
-        to rearrange; <strong>Hide</strong> moves a tab down into the lists below with
-        its data intact, and it stays hidden. The swatch on each row colours and renames
-        that tab (right-clicking the tab itself opens the same panel); the colour and the
-        name are the tab's own and show on both bars. Each view keeps its own bar: the
-        <em>build</em> view
-        starts from Overview, Stats, Lore, Skills, Progression, Feats &amp; Mythic,
-        Alternate Training, Trackers and Equipment, <em>plus every sub-system this character
-        uses</em>; the <em>session</em> view starts from what comes up at the table --
-        those sub-systems again, minus the build machinery.
-        <button data-action="tab-reset">Reset this view's bar</button>
-      </p>
-      <div class="rowlist tabbar-list">
-        ${bar.map(barRow).join('') || '<p class="empty">Nothing on the bar — show a tab below.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Hidden tabs</h3>
-      <p class="hint">
-        Everything else the sheet can show, alphabetically: the rest of the built-in
-        tabs, the modelled sub-systems (Martial and Magic Spheres, Crafting, Akashic, Maneuvers,
-        Vancian, Psionics, the companions…), and the workbook's own worksheets.
-        <em>In use</em> marks a sub-system that already holds this character's data;
-        <em>marked</em> means a class on the Overview names the system but its tab is
-        still empty.
-      </p>
-      <div class="rowlist">
-        ${hidden.map(offRow).join('') || '<p class="empty">Every tab is on the bar.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Extra — weird systems</h3>
-      <p class="hint">
-        The unusual machinery: casting off a deck, and a workbook's technique list
-        and its auto-technique sheet. Off the bar unless the character uses them.
-      </p>
-      <div class="rowlist">
-        ${weird.map(offRow).join('') || '<p class="empty">All of these are on the bar.</p>'}
-      </div>
-    </section>
-
-    <section class="panel span2">
-      <h3>Worksheets</h3>
-      <p class="hint">
-        Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
-        Rename any worksheet by typing over its name above; × deletes one and its data.
-      </p>
-      <div class="pair">
-        <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(this.#draft.newSystem || '')}" style="max-width:16rem">
-        <button class="primary" data-action="add-system">+ Add system tab</button>
-      </div>
-      ${this.#confirmDelete !== null ? `<p class="hint warn">
-        Delete “${esc(all[this.#confirmDelete]?.tab.name)}” and all its rows?
-        <button class="danger" data-action="delete-system-confirm">Delete</button>
-        <button data-action="delete-system-cancel">Keep</button></p>` : ''}
-    </section>
-    ${this.#extensionBlocksPanel()}</div>`;
-  }
-
-  /**
-   * The building blocks the enabled extension packs offer -- a class, a race,
-   * a feature, a tracker -- each with a button that copies it into this
-   * character. The packs themselves are managed by the host page; this is
-   * only the shelf.
-   */
-  #extensionBlocksPanel() {
-    const packs = extensionRuntime.active();
-    const blocks = extensionRuntime.blocks();
-    const kinds = [...new Set(blocks.map((b) => b.kind))];
-    const filter = kinds.includes(this.#extFilter) ? this.#extFilter : '';
-    const byKind = filter ? blocks.filter((b) => b.kind === filter) : blocks;
-    // A pack of thirty archetypes is a list to search, not one to scroll. The
-    // words are looked for in the block's name, its pack and what it is for,
-    // so "warrior" finds an archetype that replaces warrior's grace.
-    const words = this.#extSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const haystack = (b) => [b.name, b.kind, BLOCK_KINDS[b.kind]?.label, b.extName, b.class, b.group, b.feature,
-      ...(b.features || []).flatMap((f) => [f.name, ...(f.replaces || []), ...(f.alters || [])]),
-      ...(b.options || []).map((o) => o.name)].filter(Boolean).join(' ').toLowerCase();
-    const shown = words.length ? byKind.filter((b) => { const h = haystack(b); return words.every((w) => h.includes(w)); }) : byKind;
-    const byPack = new Map();
-    for (const b of shown) {
-      if (!byPack.has(b.extId)) byPack.set(b.extId, { name: b.extName, blocks: [] });
-      byPack.get(b.extId).blocks.push(b);
-    }
-    // Searching looks through what a block is for as well as what it is called,
-    // so "warrior" finds an archetype that replaces warrior's grace. A block
-    // the words name outright comes first all the same.
-    if (words.length) {
-      const named = (b) => words.every((w) => String(b.name || '').toLowerCase().includes(w));
-      for (const p of byPack.values()) p.blocks.sort((a, b) => Number(named(b)) - Number(named(a)));
-    }
-    const detail = (b) => {
-      switch (b.kind) {
-        case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
-        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
-        case 'template': return `${b.features.length} feature(s)`;
-        case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
-        case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
-        case 'veil': return `${b.slot || 'no slot'} slot${b.descriptor ? ` · ${b.descriptor}` : ''}`;
-        case 'trait': return b.replaces.length ? `replaces ${b.replaces.join(', ')}` : '';
-        case 'archetype': {
-          // "warriors grace@10" is how a swap of one grant is filed; here it reads.
-          const rep = [...new Set(b.features.flatMap((f) => f.replaces))].map(swapLabel);
-          const alt = [...new Set(b.features.flatMap((f) => f.alters))].map(swapLabel);
-          return [`for ${b.class || 'its class'}`, rep.length ? `replaces ${rep.join(', ')}` : '', alt.length ? `alters ${alt.join(', ')}` : '',
-            b.stacksWith.length ? `combines with ${b.stacksWith.join(', ')}` : ''].filter(Boolean).join(' · ');
-        }
-        default: return '';
-      }
-    };
-    // An archetype's button says whether it can go on right now, and why not.
-    const gate = (b) => {
-      if (b.kind !== 'archetype') return { on: true, why: '' };
-      const s = archetypeStatus(this.#model, b);
-      if (s.ok) return { on: true, why: '' };
-      if (s.reason === 'applied') return { on: false, why: 'on the sheet' };
-      if (s.reason === 'no-class') return { on: false, why: `needs ${s.className} on the Classes table` };
-      return { on: false, why: `blocked: ${s.with} also changes ${s.shared.join(', ')}` };
-    };
-    const blockRow = (id, b) => { const g = gate(b); return `<div class="item statline">
-        <span class="label pair" style="flex:1">
-          <span class="badge">${esc(BLOCK_KINDS[b.kind]?.label || b.kind)}</span>
-          <strong>${esc(b.name || '(unnamed)')}</strong>
-          <span class="hint" style="margin:0">${esc(detail(b))}</span>
-        </span>
-        <span class="value pair">
-          ${g.why ? `<span class="hint ${/^blocked/.test(g.why) ? 'warn' : ''}" style="margin:0">${esc(g.why)}</span>` : ''}
-          <button class="primary" data-action="ext-add-block" data-ext="${esc(id)}" data-index="${b.index}" ${g.on ? '' : 'disabled'}
-            title="${esc(BLOCK_KINDS[b.kind]?.lands || '')}">+ Add</button>
-        </span>
-      </div>`; };
-
-    /*
-     * Which supergroup a block sits in, inside its pack.
-     *
-     * What the pack says first, so a block can always be filed by hand; then
-     * the class it is for, which is how an archetype and an option menu name
-     * theirs; then, for a class, its own name -- so the class heads the group
-     * its archetypes and menus have already joined, and folding it takes the
-     * lot. A veil groups by the chakra it is worn on, an alternate trait by
-     * the race it is an alternative for.
-     *
-     * A block with none of those is loose in its pack rather than filed under
-     * a guess. Notes are the ones that land there: a note carries no link to
-     * what it is about, so a pack that wants "Favored class options" to fold
-     * with its class says `"group": "<class name>"` on it.
-     */
-    const groupOf = (b) => b.group
-      || b.class
-      || (b.kind === 'class' ? b.name : '')
-      || (b.kind === 'veil' ? b.slot : '')
-      || (b.kind === 'trait' ? b.race : '')
-      || '';
-    // Searching folds nothing: a hit inside a shut group is a hit you cannot
-    // see, which reads as the search having missed it.
-    const seeking = words.length > 0;
-    const packList = [...byPack.entries()].map(([id, p]) => {
-      const groups = new Map();
-      for (const b of p.blocks) {
-        const key = groupOf(b);
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(b);
-      }
-      const loose = groups.get('') || [];
-      groups.delete('');
-      /*
-       * A note, filed by what it is called.
-       *
-       * Every other kind says where it belongs -- an option menu and an
-       * archetype name their class, a veil its chakra -- and a note says
-       * nothing at all: `kind, name, text, source` is the whole of it. So a
-       * note whose name contains one of its own pack's group names is taken to
-       * be about it, which is what "Favored class options — Legendary Samurai"
-       * plainly is. Notes only: the other kinds have a field to be believed
-       * instead of a string to be guessed at, and `group` overrides this for a
-       * pack that would rather say so outright.
-       *
-       * Longest name first, so a pack holding both Samurai and Legendary
-       * Samurai files the note under the one it actually named.
-       */
-      const groupNames = [...groups.keys()].sort((a, b) => b.length - a.length);
-      for (const note of [...loose]) {
-        if (note.kind !== 'note') continue;
-        const hay = String(note.name || '').toLowerCase();
-        const owner = groupNames.find((n) => n && hay.includes(n.toLowerCase()));
-        if (!owner) continue;
-        groups.get(owner).push(note);
-        loose.splice(loose.indexOf(note), 1);
-      }
-      const packKey = `extpack:${id}`;
-      const packShut = !seeking && rows.isCollapsed(this.#model, packKey);
-      const groupHtml = [...groups.entries()].map(([name, list]) => {
-        const key = `extgrp:${id}:${name}`;
-        // Big groups arrive folded, small ones open. A chakra of sixty veils
-        // is an index to open one line of; a class with three menus under it
-        // is worth reading whole, and folding it by default would hide the
-        // pack's content behind a click for nothing.
-        const shut = !seeking && rows.isCollapsed(this.#model, key, list.length > EXT_GROUP_FOLD);
-        return `<div class="foldsub extgroup${shut ? ' collapsed' : ''}">
-          <h4 class="subhead">${esc(name)}
-            <span class="badge">${list.length}</span>
-            ${rows.foldButton(this.#model, key, shut)}</h4>
-          ${shut ? '' : list.map((b) => blockRow(id, b)).join('')}
-        </div>`;
-      }).join('');
-      return `<div class="foldsub extpack${packShut ? ' collapsed' : ''}">
-        <h4 class="subhead ext-pack">${esc(p.name)}
-          <span class="badge">${p.blocks.length}</span>
-          ${rows.foldButton(this.#model, packKey, packShut)}</h4>
-        ${packShut ? '' : `${loose.map((b) => blockRow(id, b)).join('')}${groupHtml}`}
-      </div>`;
-    }).join('');
-
-    return `<section class="panel span2">
-      <h3>Extensions — building blocks</h3>
-      <p class="hint">
-        What the enabled extension packs offer this character: ${packs.length
-    ? `${packs.length} pack${packs.length === 1 ? '' : 's'} on, ${blocks.length} block${blocks.length === 1 ? '' : 's'}.`
-    : 'no packs are enabled.'} <strong>+ Add</strong> copies a block onto the sheet — a class into
-        the Classes table, a race into the Overview, a feature onto the Template tab, a tracker
-        onto Trackers — where it is then yours to edit like anything typed in. Packs are managed
-        from the page's <em>Extensions</em> button.
-      </p>
-      ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
-        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
-        <input type="search" data-ext-search="1" value="${esc(this.#extSearch)}" spellcheck="false"
-          placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
-          title="By name, pack, class, or what a block's features are called and replace">
-        ${words.length ? `<span class="hint" style="margin:0">${shown.length} of ${byKind.length}</span>` : ''}
-      </p>` : ''}
-      <div class="rowlist">
-        ${packList || `<p class="empty">${words.length ? `Nothing matches “${esc(this.#extSearch)}”.`
-    : packs.length ? 'The enabled packs carry tables only — no blocks.' : 'Nothing to offer yet.'}</p>`}
-      </div>
-    </section>`;
+    return manager.renderSystemManagerPanel(this.#model, {
+      tabEntries: this.#tabEntries(),
+      barEntries: this.#barEntries(),
+      draft: this.#draft,
+      confirmDelete: this.#confirmDelete,
+      extFilter: this.#extFilter,
+      extSearch: this.#extSearch,
+    });
   }
 
 
@@ -4058,85 +3052,8 @@ export class CharacterSheetElement extends HTMLElement {
    * from outside the class.
    */
 
-  #text(path, value, placeholder = '', opts = {}) { return fields.text(path, value, placeholder, opts); }
-
-  #num(path, value, extra = '') { return fields.num(path, value, extra); }
-
-  #roField(value, title = '', extra = '') { return fields.roField(value, title, extra); }
-
-  #area(path, value, rowCount = 3) { return fields.area(path, value, rowCount); }
-
-  #check(path, value, label = '', title = '') { return fields.check(path, value, label, title); }
-
-  #select(path, value, options, blank = '—') { return fields.select(path, value, options, blank); }
-
-  #abilitySelect(path, value) { return fields.abilitySelect(path, value); }
-
-
-  /* ----- list rows ----- */
-
-  #itemText(list, i, field, value, placeholder = '', opts = false) {
-    return rows.itemText(list, i, field, value, placeholder, opts);
-  }
-
-  #itemNum(list, i, field, value) { return rows.itemNum(list, i, field, value); }
-
-  #itemCheck(list, i, field, value) { return rows.itemCheck(list, i, field, value); }
-
-  #exprField(bindingAttr, raw, opts = {}) { return rows.exprField(bindingAttr, raw, opts); }
-
-  #itemExpr(list, i, field, obj, opts = {}) { return rows.itemExpr(list, i, field, obj, opts); }
-
-  #itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
-    return rows.itemSelect(list, i, field, value, options, blank, abOf);
-  }
-
-  /* `rows.rowTools` is the plain three-button cell, which every panel that
-     wants one imports for itself; the element only writes the dragged kind. */
-  #rowToolsDragged(list, i) { return rows.rowToolsDragged(list, i); }
-
-  #rowRemove(list, i) { return rows.rowRemove(list, i); }
-
-  /** Which × is armed is element state, so it is handed over here. */
-  #rowRemoveArmed(list, i, what = 'row') {
-    return rows.rowRemoveArmed(list, i, what, this.#armedRemove);
-  }
-
-  /** Resolving tokens needs the model, so it is handed over here. */
-  #proseText(text) { return rows.proseText(this.#model, text); }
-
-  #movedInline(cs, key, base, format = fmt) { return rows.movedInline(cs, key, base, format); }
-
-  #addButton(list, label, template) { return rows.addButton(list, label, template); }
-
-  #bigStat(k, v, sub, now = '', roll = '') { return rows.bigStat(k, v, sub, now, roll); }
-
-  #miniStat(k, v, title = '') { return rows.miniStat(k, v, title); }
-
-  #line(label, value, big = false) { return rows.line(label, value, big); }
-
-  #lineHtml(label, html, big = false) { return rows.lineHtml(label, html, big); }
-
-  #editLine(label, path, value) { return rows.editLine(label, path, value); }
 
   /* ---------------- rolling ---------------- */
-
-  /**
-   * The d20 beside a row: one click puts that row's roll on the clipboard.
-   *
-   * The button carries only which row it is (`skill|12`, `save|will`); the text
-   * is built at the moment it is pressed, so a sheet that has been edited since
-   * it was drawn -- or a condition ticked on another tab -- copies the number
-   * that is true now rather than the one that was true when the table was.
-   *
-   * The tooltip shows the formula anyway, because a roll that quietly differs
-   * from the total printed next to it is worse than no button: conditions move
-   * these numbers, and the tooltip is where that becomes visible before the
-   * paste rather than after it.
-   */
-  #rollButton(kind, ref, what, cs = null) {
-    return roll.rollButton(this.#model, kind, ref, what, cs);
-  }
 
   /**
    * What was copied, shown back.
@@ -4445,11 +3362,6 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Say what an undo did, on the toast: what came back, or why it could not.
-   * A play action can be refused -- a card drawn and since played cannot be
-   * un-drawn -- and the reason names what to take back first.
-   */
-  /**
    * What a plain field write is called on the Undo button when it is play --
    * a condition ticked, hit points typed, a buff switched -- or null when it
    * is an edit to the character, which the field's own Ctrl+Z covers.
@@ -4474,6 +3386,11 @@ export class CharacterSheetElement extends HTMLElement {
     return null;
   }
 
+  /**
+   * Say what an undo did, on the toast: what came back, or why it could not.
+   * A play action can be refused -- a card drawn and since played cannot be
+   * un-drawn -- and the reason names what to take back first.
+   */
   #reportUndo(r) {
     this.#playMenu = false;
     if (!r) { this.#showUndoToast('Nothing left to undo'); return; }
@@ -7035,7 +5952,6 @@ export class CharacterSheetElement extends HTMLElement {
     this.#bindTrackerStyle(block);
   }
 
-  /** Update a formula preview box in place, without re-rendering the panel. */
   /**
    * The Formulas tab's live parts.
    *
@@ -7279,6 +6195,7 @@ export class CharacterSheetElement extends HTMLElement {
     }
   }
 
+  /** Update a formula preview box in place, without re-rendering the panel. */
   #refreshPreview(root, kind, maxSrc, minSrc) {
     const box = root.querySelector(`.preview.${kind}`);
     if (!box) return;
@@ -7520,11 +6437,7 @@ export class CharacterSheetElement extends HTMLElement {
           ? this.#history.load(button.dataset.key, { includeStale: true }).then((data) => ({ data }))
           : this.#history.readSaved({ includeStale: true })).then((saved) => {
           if (!saved?.data) throw new Error('The saved version could not be read.');
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(new Blob([JSON.stringify(saved.data, null, 2)], { type: 'application/json' }));
-          a.download = `${this.#model.data.id}-saved-recovery.json`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          downloadFile(`${this.#model.data.id}-saved-recovery.json`, JSON.stringify(saved.data, null, 2));
         }).catch((error) => {
           this.#historyNote = error.message;
           this.#renderHeader();
@@ -7538,20 +6451,11 @@ export class CharacterSheetElement extends HTMLElement {
           const saved = JSON.parse(content);
           if (saved?.data) content = JSON.stringify(saved.data, null, 2);
         } catch { /* malformed JSON is still worth recovering byte for byte */ }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
-        a.download = `${this.#model.data.id}-recovery-${Number(button.dataset.index) + 1}.json`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        downloadFile(`${this.#model.data.id}-recovery-${Number(button.dataset.index) + 1}.json`, content);
         break;
       }
       case 'export': {
-        const blob = new Blob([JSON.stringify(this.#model.toJSON(), null, 1)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${this.#model.data.id}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        downloadFile(`${this.#model.data.id}.json`, JSON.stringify(this.#model.toJSON(), null, 1));
         break;
       }
       case 'preview-published':

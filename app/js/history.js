@@ -34,6 +34,7 @@
  */
 
 import { SCHEMA_VERSION } from './model.js';
+import { isComputedPath } from './model/computed-paths.js';
 
 /** How many automatic snapshots survive per character; the oldest goes first. */
 export const AUTO_KEEP = 5;
@@ -95,14 +96,18 @@ export function requestPersistence() {
  * counting changes
  * ---------------------------------------------------------------------- */
 
-/** Leaves in a value, which is what an added or removed subtree is worth. */
-function leaves(value) {
+/**
+ * Leaves in a value, which is what an added or removed subtree is worth --
+ * less the ones the engine works out (model/computed-paths.js).
+ */
+function leaves(value, path) {
+  if (isComputedPath(path)) return 0;
   if (value === null || typeof value !== 'object') return 1;
   if (Array.isArray(value)) {
-    return value.length ? value.reduce((n, v) => n + leaves(v), 0) : 1;
+    return value.length ? value.reduce((n, v, i) => n + leaves(v, [...path, i]), 0) : 1;
   }
   const keys = Object.keys(value).filter((k) => value[k] !== undefined);
-  return keys.length ? keys.reduce((n, k) => n + leaves(value[k]), 0) : 1;
+  return keys.length ? keys.reduce((n, k) => n + leaves(value[k], [...path, k]), 0) : 1;
 }
 
 /**
@@ -118,31 +123,35 @@ function leaves(value) {
  * whether the count has reached a threshold -- there is no reason to finish
  * counting a document that has been rewritten wholesale.
  *
+ * Only what the player wrote counts. A document saves its totals too, and one
+ * level edit moves a couple of hundred of them; `isComputedPath` names those,
+ * and a difference there is not a change.
+ *
  * A key set to `undefined` counts as absent. A document that has been through
  * `JSON.stringify` has dropped those keys and one read back from IndexedDB has
  * kept them, and the same sheet must not read as changed depending on which
  * store it came from.
  */
 export function countChanges(before, after, cap = Infinity) {
-  const walk = (a, b) => {
-    if (a === b) return 0;
+  const walk = (a, b, path) => {
+    if (a === b || isComputedPath(path)) return 0;
 
     const aObj = a !== null && typeof a === 'object';
     const bObj = b !== null && typeof b === 'object';
     if (!aObj || !bObj) {
       // One side is a leaf. If the other is not, the whole subtree is new.
-      if (aObj || bObj) return Math.max(leaves(a), leaves(b));
+      if (aObj || bObj) return Math.max(leaves(a, path), leaves(b, path));
       return Object.is(a, b) ? 0 : 1;
     }
-    if (Array.isArray(a) !== Array.isArray(b)) return Math.max(leaves(a), leaves(b));
+    if (Array.isArray(a) !== Array.isArray(b)) return Math.max(leaves(a, path), leaves(b, path));
 
     let n = 0;
     if (Array.isArray(a)) {
       const len = Math.max(a.length, b.length);
       for (let i = 0; i < len && n < cap; i++) {
-        if (i >= a.length) n += leaves(b[i]);
-        else if (i >= b.length) n += leaves(a[i]);
-        else n += walk(a[i], b[i]);
+        if (i >= a.length) n += leaves(b[i], [...path, i]);
+        else if (i >= b.length) n += leaves(a[i], [...path, i]);
+        else n += walk(a[i], b[i], [...path, i]);
       }
       return n;
     }
@@ -153,13 +162,13 @@ export function countChanges(before, after, cap = Infinity) {
       const av = a[k];
       const bv = b[k];
       if (av === undefined && bv === undefined) continue;
-      if (av === undefined) n += leaves(bv);
-      else if (bv === undefined) n += leaves(av);
-      else n += walk(av, bv);
+      if (av === undefined) n += leaves(bv, [...path, k]);
+      else if (bv === undefined) n += leaves(av, [...path, k]);
+      else n += walk(av, bv, [...path, k]);
     }
     return n;
   };
-  return walk(before, after);
+  return walk(before, after, []);
 }
 
 /* ---------------------------------------------------------------------- *

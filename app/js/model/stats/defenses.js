@@ -174,25 +174,6 @@ export function sizeNow(model) {
 }
 
 /**
- * What a set of counted conditions and buffs does to the numbers *through the
- * ability scores*: the modifier each ability is left with, and the share of
- * each headline number that follows from that -- a save's slot, an attack's,
- * the AC's (capped by the armour either way, and dropped outright by a
- * condition that takes the Dexterity bonus: a penalty is not a bonus, so a
- * negative modifier stays), CMD's Dexterity, initiative's.
- *
- * Kept apart from the direct channels, and taking the totals rather than
- * reading them off the model, for one reason: the working. `breakdown()` runs
- * this over the sources one at a time to say whose Dexterity bonus moved the
- * AC and by how much, and it has to be the same arithmetic `conditionState`
- * adds into the deltas below, or the shares would not add up to the move.
- *
- * `scores` are the ability scores as the conditions leave them, against the
- * temporary score every derived stat is already built from; `deltas` the
- * change to each modifier; `byKey` the ability-borne share of every key in
- * `delta`, zero for the ones no ability reaches.
- */
-/**
  * The ability slots each headline number is built on, whose movement reaches
  * it. The one list: `abilityMoves` sums by it, and the breakdown names its
  * "through Dex" line by it, so the label cannot say Dex while the sum read
@@ -216,6 +197,25 @@ export function abilitySlots(c) {
   };
 }
 
+/**
+ * What a set of counted conditions and buffs does to the numbers *through the
+ * ability scores*: the modifier each ability is left with, and the share of
+ * each headline number that follows from that -- a save's slot, an attack's,
+ * the AC's (capped by the armour either way, and dropped outright by a
+ * condition that takes the Dexterity bonus: a penalty is not a bonus, so a
+ * negative modifier stays), CMD's Dexterity, initiative's.
+ *
+ * Kept apart from the direct channels, and taking the totals rather than
+ * reading them off the model, for one reason: the working. `breakdown()` runs
+ * this over the sources one at a time to say whose Dexterity bonus moved the
+ * AC and by how much, and it has to be the same arithmetic `conditionState`
+ * adds into the deltas below, or the shares would not add up to the move.
+ *
+ * `scores` are the ability scores as the conditions leave them, against the
+ * temporary score every derived stat is already built from; `deltas` the
+ * change to each modifier; `byKey` the ability-borne share of every key in
+ * `delta`, zero for the ones no ability reaches.
+ */
 export function abilityMoves(c, totals) {
   const deltas = {};
   const scores = {};
@@ -479,12 +479,6 @@ export function availableConditions(model) {
 }
 
 /**
- * Current/temporary/nonlethal hit points.
- *
- * The source sheets only record a maximum, so play state is initialised to
- * full the first time it is needed and then tracked here.
- */
-/**
  * Bonus hit points from mythic tiers (bonus HP/tier × tier).
  *
  * A component of `hp.base` rather than something added on top of it, since
@@ -533,6 +527,10 @@ export function tempHpGrant(model) {
  * does. The stored figure is the undrained one -- `baseCurrent`, against
  * `baseMax` -- so damage and healing move it, and the 5 come back with the
  * level. Being out, dying and dead read the figure as it stands now.
+ *
+ * Current/temporary/nonlethal hit points: the source sheets only record a
+ * maximum, so play state is initialised to full the first time it is needed
+ * and then tracked here.
  */
 export function hpState(model) {
   const hp = model.data.hp;

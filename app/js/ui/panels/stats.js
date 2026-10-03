@@ -10,7 +10,7 @@
  * `pickSelect` and `mythicPickAt` are exported because the Feats & Mythic tab
  * draws the same pickers; everything else here is local.
  */
-import { esc, val, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
+import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from '../html.js';
 import { roField } from '../fields.js';
 import { exprField } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
@@ -215,15 +215,6 @@ function showOptionalBuildColumns(model, build) {
 }
 
 /**
- * The two milestone ladders, side by side.
- *
- * Level/4 and mythic are the same shape -- one ability at each of five
- * milestones -- and each was a narrow table with a column of empty space
- * beside it, so they share one panel. They are greyed independently: a level
- * you have not reached and a tier you have not reached are different things.
- */
-
-/**
  * Saves and AC, broken down by bonus type -- the sheet's own two tables.
  *
  * They live here rather than on the Overview because this is where the sheet
@@ -309,7 +300,14 @@ function defenceBonusPanel(model) {
     </section>`;
 }
 
-
+/**
+ * The two milestone ladders, side by side.
+ *
+ * Level/4 and mythic are the same shape -- one ability at each of five
+ * milestones -- and each was a narrow table with a column of empty space
+ * beside it, so they share one panel. They are greyed independently: a level
+ * you have not reached and a tier you have not reached are different things.
+ */
 function milestonePicksPanel(model) {
   const c = model.data;
   const level = Number(c.identity.level) || 0;

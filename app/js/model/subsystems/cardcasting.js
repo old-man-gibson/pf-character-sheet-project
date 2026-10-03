@@ -1342,10 +1342,6 @@ export function tableReveal(model, id) {
 }
 
 /**
- * Roll a card's dice: its Dice field, or the first dice in its text.
- * `4d6+int.mod` rolls four dice and adds the modifier from the sheet.
- */
-/**
  * A card's rolls, from its Dice field: several may be listed, separated by
  * ";" or newlines, each optionally labelled -- "8d6; boost: 15d6; milled: 8d4".
  * The first is what a cast rolls on its own; the rest are offered by name.
@@ -1367,6 +1363,10 @@ export function cardRolls(model, card) {
   return inText ? [{ label: 'roll', expr: inText[0], sp: 0 }] : [];
 }
 
+/**
+ * Roll a card's dice: its Dice field, or the first dice in its text.
+ * `4d6+int.mod` rolls four dice and adds the modifier from the sheet.
+ */
 export function tableRoll(model, id, { quiet = false, which = 0 } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table) return model;
