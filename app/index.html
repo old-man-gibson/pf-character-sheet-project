@@ -141,8 +141,33 @@
   .picker[slot="rail"] .chip.import,
   .picker[slot="rail"] .chip.exportall,
   .picker[slot="rail"] .chip.fold { justify-content: flex-start; padding: 5px 10px; }
-  .picker[slot="rail"] .chip.import:first-of-type,
-  .picker[slot="rail"] .chip.fold { margin-top: 8px; }
+  .picker[slot="rail"] .chip.import:first-of-type { margin-top: 8px; }
+  /* In the header the roster is the strip it always was -- the list and its
+     scroll box dissolve into it, and Fold stays at the end. */
+  .picker:not([slot="rail"]) .rosterwrap,
+  .picker:not([slot="rail"]) .roster { display: contents; }
+  .picker:not([slot="rail"]) .more { display: none; }
+  .picker:not([slot="rail"]) .chip.fold { order: 1; }
+  /* In the rail, Fold heads the column and the characters scroll in a box of
+     their own -- at most 35% of the window, so a long roster cannot push the
+     tabs below it off the screen. A bar at the top or bottom says how many
+     are out of sight that way; a click on one scrolls a page. */
+  .picker[slot="rail"] .chip.fold { margin-bottom: 4px; }
+  .picker[slot="rail"] .rosterwrap { position: relative; min-height: 0; }
+  .picker[slot="rail"] .roster {
+    display: flex; flex-direction: column; gap: 3px;
+    max-height: 35svh; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain;
+  }
+  .picker[slot="rail"] .more {
+    position: absolute; left: 0; right: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    height: 22px; padding: 0; border: 0; border-radius: 0;
+    font: inherit; font-size: 11px; color: var(--ink2); cursor: pointer;
+  }
+  .picker[slot="rail"] .more[hidden] { display: none; }
+  .picker[slot="rail"] .more:hover { color: var(--accent); }
+  .picker[slot="rail"] .more.up { top: 0; background: linear-gradient(var(--cs-bg) 55%, transparent); }
+  .picker[slot="rail"] .more.down { bottom: 0; background: linear-gradient(transparent, var(--cs-bg) 45%); }
   /* The 1500px column is for the page before a sheet is up -- the welcome
      card, a banner over nothing. Once the sheet has said how wide it is the
      cap comes off, so "Full width" is the window and "90%" is 90% of it,
@@ -478,16 +503,25 @@
       : `<span class="member"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
            <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b>
          </button></span>`);
-    picker.innerHTML = `${shown.map(chip).join('')}
-      ${folded
+    // Where the list was scrolled, so a redraw -- a colour picked, a level
+    // changed -- does not throw the player back to the top of it.
+    const oldBox = picker.querySelector('.roster');
+    const keptScroll = picker.slot === 'rail' && oldBox?.clientHeight ? oldBox.scrollTop : null;
+    picker.innerHTML = `${folded
     ? `<button class="chip fold" id="unfoldBtn" aria-expanded="false"
           title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
-    : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+    : `<button class="chip fold" id="foldBtn" aria-expanded="true"
+        title="Fold the picker to just the open character">▾ Fold</button>`}
+      <div class="rosterwrap">
+        <button type="button" class="more up" hidden tabindex="-1" aria-hidden="true"></button>
+        <div class="roster">${shown.map(chip).join('')}</div>
+        <button type="button" class="more down" hidden tabindex="-1" aria-hidden="true"></button>
+      </div>
+      ${folded ? '' : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
       <button class="chip import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
       <button class="chip exportall" id="exportAllBtn"
-        title="Download every character in this picker as one .zip">Export all</button>
-      <button class="chip fold" id="foldBtn" aria-expanded="true"
-        title="Fold the picker to just the open character">▾ Fold</button>`}`;
+        title="Download every character in this picker as one .zip">Export all</button>`}`;
+    bindRosterScroll(keptScroll);
 
     picker.querySelectorAll('button.pick').forEach((b) => {
       b.addEventListener('click', () => { current = b.dataset.id; rememberOpen(); select(); draw(); });
@@ -511,6 +545,57 @@
     picker.querySelector('#foldBtn')?.addEventListener('click', () => { setPickerFolded(true); draw(); });
     picker.querySelector('#unfoldBtn')?.addEventListener('click', () => { setPickerFolded(false); draw(); });
   }
+
+  /*
+   * The rail's roster box: how many characters are out of sight above and
+   * below, said on the bar at that edge, and a click on a bar scrolls a box's
+   * worth that way. Only in the rail -- in the header the box is not one.
+   */
+  function bindRosterScroll(keptScroll) {
+    const box = picker.querySelector('.roster');
+    const up = picker.querySelector('.more.up');
+    const down = picker.querySelector('.more.down');
+    if (!box || !up || !down) return;
+    const update = () => {
+      const inRail = picker.slot === 'rail';
+      const rows = [...box.children];
+      const top = box.scrollTop;
+      const bottom = top + box.clientHeight;
+      // A row counts as out of sight once less than half of it shows.
+      const above = inRail ? rows.filter((r) => r.offsetTop + r.offsetHeight / 2 < top).length : 0;
+      const below = inRail ? rows.filter((r) => r.offsetTop + r.offsetHeight / 2 > bottom).length : 0;
+      up.hidden = !above;
+      down.hidden = !below;
+      up.textContent = `▲ ${above} more`;
+      down.textContent = `▼ ${below} more`;
+    };
+    up.addEventListener('click', () => box.scrollBy({ top: -box.clientHeight * 0.8, behavior: 'smooth' }));
+    down.addEventListener('click', () => box.scrollBy({ top: box.clientHeight * 0.8, behavior: 'smooth' }));
+    box.addEventListener('scroll', update, { passive: true });
+    // The open character in view, without moving the page around it.
+    const reveal = () => {
+      const open = box.querySelector('[aria-pressed="true"]');
+      if (!open) return;
+      const r = open.closest('.member') || open;
+      if (r.offsetTop < box.scrollTop || r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) {
+        box.scrollTop = r.offsetTop - (box.clientHeight - r.offsetHeight) / 2;
+      }
+      update();
+    };
+    rosterUpdate = update;
+    rosterReveal = reveal;
+    if (keptScroll !== null) { box.scrollTop = keptScroll; update(); } else reveal();
+    // The box has no height until the sheet has drawn its rail, and changes
+    // with the window: recount on every resize, and bring the open character
+    // into view the first time there is a box to bring it into.
+    let shown = keptScroll !== null;
+    new ResizeObserver(() => {
+      if (!shown && box.clientHeight) { shown = true; reveal(); } else update();
+    }).observe(box);
+    requestAnimationFrame(update);
+  }
+  let rosterUpdate = () => {};
+  let rosterReveal = () => {};
 
   /*
    * A character from nothing. `blankDocument` is the converter's own output for
@@ -954,8 +1039,12 @@
       picker.removeAttribute('slot');
       if (picker.parentElement === sheet) document.querySelector('header.app h1').after(picker);
     }
+    // The box only scrolls in the rail, so the open character is brought into
+    // view once it has arrived there.
+    requestAnimationFrame(() => rosterReveal());
   }
   railFits.addEventListener('change', placePicker);
+  window.addEventListener('resize', () => rosterUpdate());
 
   // The header is pinned, so the sheet's rail has to stop under it: its height
   // goes onto the element as `--cs-sticky-top`, and follows every change to it
