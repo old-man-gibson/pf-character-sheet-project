@@ -580,12 +580,10 @@ function dashOffenseCard(model, ctx, openNow) {
     const cs = model.conditionState;
     const weapons = c.equipment?.weapons || [];
     // Moved numbers replace the base in place, coloured by direction, with the
-    // base in the tooltip -- the same read as AC and the saves, everywhere.
+    // base in the tooltip -- the same read as AC and the saves, everywhere, and
+    // the same breakdown on hover the Defense card opens.
     const stat = (label, value, nowKey, kind, ref, rollLabel) => {
-      const delta = cs.changed ? (cs.delta[nowKey] || 0) : 0;
-      const shown = delta
-        ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(value)} — with ${cs.sources} applied`)}">${fmt(cs.adjusted[nowKey])}</strong>`
-        : `<strong>${fmt(value)}</strong>`;
+      const shown = `<strong>${movedInline(cs, nowKey, value, fmt, model)}</strong>`;
       // Three cells -- name, figure, die -- so the grid lines them up in columns.
       return `<span class="dashstat"><span class="k">${esc(label)}</span><span class="n">${shown}</span><span class="r">${rollButton(model, kind, ref, rollLabel, cs)}</span></span>`;
     };

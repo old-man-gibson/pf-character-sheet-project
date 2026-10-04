@@ -623,5 +623,15 @@ console.log('skill rows stay put while the player is on the tab');
   check('except one hidden with the eye', skillRowIndices(c, { keep: new Set(all) }).includes(1), false);
 }
 
+console.log('\nthe dashboard Offense card opens the same breakdowns as the Defense card');
+{
+  const c = new Character(blankDocument({ name: 'Striker', level: 5 }));
+  const html = overview.renderDashboardPanel(c, CTX.overview);
+  const card = (title) => html.slice(html.indexOf(`<h3>${title}`), html.indexOf('</section>', html.indexOf(`<h3>${title}`)));
+  const keys = (title) => (card(title).match(/data-bd="([a-z]+)"/g) || []).map((m) => m.slice(9, -1));
+  check('Melee, Ranged, CMB and Init each open theirs', keys('Offense'), ['melee', 'ranged', 'cmb', 'initiative']);
+  ok('as the Defense card does', keys('Defense').includes('ac'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
