@@ -296,6 +296,9 @@ export function trainingSideInUse(model, key) {
     && (x[flag] || (k !== 'guile' && key !== 'guile' && x.blended))));
 }
 
+/** Text with something in it. */
+const filled = (v) => String(v ?? '').trim() !== '';
+
 /**
  * Which modelled sub-system tabs already hold this character's data, keyed
  * by tab id -- the single source for the ⚙ manager's "in use"/"empty"
@@ -318,9 +321,11 @@ export function systemTabsInUse(model) {
     // a class named, essence allocated -- which is what the manager's `in use`
     // badge has always claimed to mean.
     akashic: akashicInUse(d.akashic),
-    maneuvers: !!(d.maneuvers?.disciplines || []).length,
-    vancian: !!(d.vancian?.classes || []).length,
-    psionics: !!(d.psionics?.classes || []).length,
+    // A row with something in it, as Martial and Magic ask for a class's
+    // name: an empty one left by "Add" is not a system in use.
+    maneuvers: (d.maneuvers?.disciplines || []).some((x) => filled(x?.name) || (x?.entries || []).length),
+    vancian: (d.vancian?.classes || []).some((c) => filled(c?.name) || filled(c?.slotType)),
+    psionics: (d.psionics?.classes || []).some((c) => filled(c?.name) || (c?.powers || []).length),
     // A deck, or the Card Casting drawback on the tradition, is enough.
     cardcasting: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled,
     techniques: !!(d.techniques?.catalogue || []).length,

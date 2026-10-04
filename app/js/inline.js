@@ -39,6 +39,7 @@
 import {
   parse, evaluateFormula, collectReferences, resolvePath, FormulaError,
 } from './formula.js';
+import { formatNumber } from './formula-format.js';
 
 const TOKEN_RE = /\{([^{}]*)\}/g;
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -797,8 +798,11 @@ export function plainTokens(segments) {
   }).join('');
 }
 
+/**
+ * A value as prose shows it: the same rounding as its tooltip and the formula
+ * tools (formula-format.js formatNumber), so the two never disagree.
+ */
 export function formatValue(v) {
-  if (typeof v === 'number') return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
-  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  if (typeof v === 'number' || typeof v === 'boolean') return formatNumber(v);
   return String(v ?? '');
 }

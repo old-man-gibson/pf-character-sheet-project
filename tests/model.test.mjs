@@ -3188,6 +3188,22 @@ console.log('a formula in a leftover cell is read on every tab, Crafting include
   check('both define their names', [c.scope().armigerBlocks, c.scope().extraNote], [4, 2]);
 }
 
+console.log('small ones: an empty row is not a system in use, and a picked curve stays a number');
+{
+  const c = new Character(blankDocument({ name: 'Rows', level: 5 }));
+  c.listAdd('vancian.classes', { name: '', slotType: '', stat: '', stat2: '', spells: [] });
+  c.listAdd('psionics.classes', { name: '', stat: '', stat2: '', curveTotal: 0, manifesterLevelOverride: null, powers: [] });
+  c.listAdd('maneuvers.disciplines', { name: '', entries: [] });
+  const used = () => { const u = c.systemTabsInUse(); return [u.vancian, u.psionics, u.maneuvers]; };
+  check('an empty row each: none in use', used(), [false, false, false]);
+  c.setItem('vancian.classes', 0, 'name', 'Wizard');
+  c.setItem('psionics.classes', 0, 'name', 'Psion');
+  c.setItem('maneuvers.disciplines', 0, 'name', 'Iron Tortoise');
+  check('named: all three', used(), [true, true, true]);
+  c.set('psionics.classes.0.curveTotal', '343');
+  check('the curve the select wrote is kept as a number', c.data.psionics.classes[0].curveTotal, 343);
+}
+
 console.log('removals that leave an undo step');
 {
   const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));
@@ -6299,6 +6315,7 @@ console.log('weapon damage/to-hit tokens');
 console.log('inline formulas in prose');
 {
   const { tokenize, resolveDefinitions, renderTokens, formatValue } = await import('../app/js/inline.js');
+  const { formatNumber } = await import('../app/js/formula-format.js');
 
   // Token grammar.
   const segs = tokenize('AC {= 10 + 2} and {arms.hp = 3 * con.mod} then {arms.hp} again');
@@ -6308,7 +6325,9 @@ console.log('inline formulas in prose');
   check('define token expr', segs[3].expr, '3 * con.mod');
   check('ref token', segs[5].kind, 'ref');
   check('"a + b = c" is a value, not a define', tokenize('{a + b = c}')[0].kind, 'value');
-  check('formatValue rounds', formatValue(2.3333), '2.33');
+  // The same three places as the tooltip and the formula tools, so prose and
+  // its working never show two different answers.
+  check('formatValue rounds as the tooltip does', [formatValue(2.3333), formatNumber(2.3333)], ['2.333', '2.333']);
 
   // Dependency-ordered resolution, regardless of definition order.
   const base = { con: { mod: 12 }, level: 20 };
