@@ -13,6 +13,7 @@ import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
 import { positionedRows } from '../templates.js';
 import { cleanText, pad } from '../util.js';
+import { markUndo, rowLabel } from '../undo.js';
 
 /** How many of each slot the layout carries: five spheres, eight talent pairs, three saves, four description lines. */
 export const TECHNIQUE_SLOTS = { spheres: 5, talents: 8, saves: 3, descriptions: 4 };
@@ -420,6 +421,7 @@ export function addDraftTechnique(model, status = '') {
 /** Start the draft over from empty. */
 export function resetDraftTechnique(model) {
   if (!model.data.techniques) return model;
+  markUndo(model, 'Cleared the technique draft');
   model.data.techniques.draft = emptyTechnique();
   model.recompute();
   return model;
@@ -465,6 +467,7 @@ export function mergeTechniquesFrom(model, doc) {
 export function removeTechnique(model, name) {
   const block = model.data.techniques;
   if (!block) return model;
+  markUndo(model, `Removed ${rowLabel(name, 'technique')}`);
   block.catalogue = block.catalogue.filter((t) => t.name !== name);
   if (block.selected === name) block.selected = block.catalogue[0]?.name ?? '';
   model.recompute();

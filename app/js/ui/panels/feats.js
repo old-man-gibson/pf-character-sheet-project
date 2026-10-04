@@ -124,7 +124,25 @@ function featGroupTitle(model, ctx, group, g) {
     return `<input class="grouptitle" type="text" value="${esc(group.name)}"
         data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
       <span class="badge">${group.entries.length}</span>
-      <button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+      ${removeGroupButton(group, g, ctx.armedRemove ?? null)}`;
+}
+
+/**
+ * The group's ×. A group holding feats asks twice -- the same two-click ×
+ * the spell and talent lists use -- because one click takes every feat in it;
+ * an empty one goes on the first.
+ */
+function removeGroupButton(group, g, armedKey) {
+    if (!group.entries.length) {
+      return `<button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+    }
+    const key = `featGroups|${g}`;
+    const armed = armedKey === key;
+    const n = group.entries.length;
+    const what = `${String(group.name || '').trim() || 'this group'} and its ${n} feat${n === 1 ? '' : 's'}`;
+    return `<button class="danger${armed ? ' armed' : ''}" data-remove-armed="${key}"
+        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
+        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>`;
 }
 
 /**

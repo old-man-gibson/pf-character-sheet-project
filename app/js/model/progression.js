@@ -655,6 +655,7 @@ export function removeClassFeatureRuleGroup(model, className, index, groupIndex)
   const col = g?.columns?.[index];
   const list = g?.rules?.[col];
   if (!list?.[groupIndex]) return model;
+  markUndo(model, `Removed a ${rowLabel(col, 'feature')} rule group`);
   list.splice(groupIndex, 1);
   if (!list.length) delete g.rules[col];
   model.recompute();

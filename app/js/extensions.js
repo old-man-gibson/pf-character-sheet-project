@@ -45,6 +45,7 @@ import { storageMedium } from './pack-storage.js';
 // else here wants the model. Narrow on purpose -- akashic.js imports nothing
 // from this file, so there is no cycle to think about.
 import { veilEntry } from './model/subsystems/akashic.js';
+import { markUndo } from './model/undo.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -2063,6 +2064,7 @@ export function removeArchetype(model, className, name) {
   if (at === -1) return `${name} is not on ${row.name}.`;
   const e = stack[at];
   const cls = row.name;
+  markUndo(model, `Removed ${e.name || 'the archetype'} from ${cls}`);
   const d = model.data;
   // its own additions go
   for (const { level, name: n } of e.addedCells) {

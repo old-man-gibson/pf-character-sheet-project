@@ -3163,6 +3163,30 @@ console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
   check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
 }
 
+console.log('removals that leave an undo step');
+{
+  const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));
+  // Each: set something up, remove it, check one undo puts it back.
+  const back = (label, setup, remove, read) => {
+    setup();
+    const before = JSON.stringify(read());
+    remove();
+    const removed = JSON.stringify(read());
+    const undone = c.undo();
+    check(`${label}: undo names it and restores it`, [removed !== before, !!undone, JSON.stringify(read())], [true, true, before]);
+  };
+  back('a ledger line', () => c.addWealthEntry({ amount: 500, label: 'Loot', kind: 'reward' }),
+    () => c.removeWealthEntry(c.data.wealth.ledger.length - 1), () => c.data.wealth);
+  c.set('buffs', [{ name: 'Bless', on: true, bonuses: [{ target: 'attack', value: 1 }] }]);
+  back('a template column', () => {
+    c.set('templates', [{ name: 'T', features: [{ name: 'F', type: '', text: '', tables: [{ columns: ['A', 'B'], rows: [{ cells: [1, 2] }] }] }] }]);
+  }, () => c.removeTemplateTableColumn('templates.0.features.0.tables.0', 1), () => c.data.templates[0].features[0].tables[0]);
+  back('a technique', () => c.set('techniques', { catalogue: [{ name: 'Kata' }], selected: 'Kata', draft: {} }),
+    () => c.removeTechnique('Kata'), () => c.data.techniques.catalogue);
+  back('the technique draft', () => c.set('techniques.draft', { name: 'Half-written' }),
+    () => c.resetDraftTechnique(), () => c.data.techniques.draft);
+}
+
 console.log('crafting reads the cell beside a label, even a blank one');
 {
   // A fresh tab: no item value, and the next label two cells over.

@@ -9,6 +9,7 @@
 
 import { emit } from '../events.js';
 import { numOrNull } from '../util.js';
+import { markUndo, rowLabel } from '../undo.js';
 
 export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
 
@@ -172,8 +173,9 @@ export function addWealthEntry(model, { amount, label = '', kind = 'reward', dat
 
 export function removeWealthEntry(model, index) {
   const w = model.data.wealth = normalizeWealth(model.data.wealth);
+  if (!w.ledger[index]) return model;
+  markUndo(model, `Removed ${rowLabel(w.ledger[index], 'ledger line')}`);
   const [gone] = w.ledger.splice(index, 1);
-  if (!gone) return model;
   // Undoing the line undoes what it did to the wallet.
   w.current -= gone.amount;
   if (gone.kind === 'session') w.sessionMana = Math.max(0, w.sessionMana - gone.amount);
@@ -190,6 +192,7 @@ export function removeWealthEntry(model, index) {
 export function makeOffering(model, today = new Date()) {
   const view = model.wealthView(today);
   if (!view.due) return null;
+  markUndo(model, 'Made an offering');
   const w = model.data.wealth;
   const entry = { date: isoDay(today), label: 'Oath of Offerings' + (view.expected.casting ? ' & material casting' : ''), amount: -view.expected.total, kind: 'offering' };
   w.ledger.push(entry);

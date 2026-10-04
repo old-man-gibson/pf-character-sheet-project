@@ -2769,7 +2769,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- feats & mythic ---------------- */
 
   /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
-  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell }); }
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove }); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -4933,6 +4933,7 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', (e) => {
         e.preventDefault();
         const conds = this.#model.data.conditions || {};
+        this.#model.markUndo(`Removed ${b.dataset.removeCondition}`);
         delete conds[b.dataset.removeCondition];
         this.#model.recompute();
         this.#render();
@@ -6803,6 +6804,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'buff-bonus-remove': {
         const b = (this.#model.data.buffs || [])[Number(button?.dataset.index)];
         if (b && Array.isArray(b.bonuses)) {
+          this.#model.markUndo(`Removed a bonus from ${String(b.name || '').trim() || 'a buff'}`);
           b.bonuses.splice(Number(button?.dataset.j), 1);
           this.#model.recompute();
         }
@@ -6969,6 +6971,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'cook-clear':
+        this.#model.markUndo('Cleared the dish');
         this.#model.set('cooking', { ...emptyDish(), level: this.#model.data.cooking?.level ?? null, chef: this.#model.data.cooking?.chef ?? '' });
         this.#render();
         break;
