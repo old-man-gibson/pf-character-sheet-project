@@ -13,6 +13,7 @@ import { COMPANION_KINDS, companionsInUse } from '../companions.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
 import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
+import { lockedFeatList } from './feats.js';
 import { COOKING_COURSES } from './subsystems/cooking.js';
 import { guileInUse } from './subsystems/guile.js';
 import { markUndo, rowLabel } from './undo.js';
@@ -41,6 +42,7 @@ export function listAt(model, path) {
 
 /** Append an item to a list section and return it. */
 export function listAdd(model, path, item = {}) {
+  if (lockedFeatList(model.data, path)) return null;
   const arr = model.list(path);
   arr.push(item);
   model.recompute();
@@ -51,6 +53,7 @@ export function listAdd(model, path, item = {}) {
 export function listRemove(model, path, index) {
   const arr = model.list(path);
   if (index < 0 || index >= arr.length) return model;
+  if (lockedFeatList(model.data, path, index)) return model;
   // The one place thirty `×` buttons pass through, which is why the undo
   // hangs here rather than on each of them.
   markUndo(model, `Removed ${rowLabel(arr[index], path.split('.').pop())}`);
@@ -126,6 +129,7 @@ export function listMoveTo(model, path, from, to) {
  */
 export function listMoveInto(model, fromPath, from, toPath, to) {
   if (fromPath === toPath) return model.listMoveTo(fromPath, from, to);
+  if (lockedFeatList(model.data, fromPath) || lockedFeatList(model.data, toPath)) return model;
   const src = model.list(fromPath);
   if (from < 0 || from >= src.length) return model;
   const dest = model.list(toPath);

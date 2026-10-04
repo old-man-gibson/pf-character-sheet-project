@@ -572,7 +572,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* What was last written to the view store, so a render that changed nothing
      does not write. */
   #tabWritten = null;
-  #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '' };
+  #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '', fill: 'spent' };
   #menuLists = new Map();   // option menus a render's feature cells offer, name -> {id, menu}
   #editTracker = null;   // id of the custom tracker being edited in place
   #editMeter = null;     // key of the built-in meter whose style is open ('hp', 'essence')
@@ -6319,6 +6319,9 @@ export class CharacterSheetElement extends HTMLElement {
         // An empty group's placeholder is always position 0.
         if (row.classList.contains('featempty')) return { el: row, cls: 'drop-before', g, to: 0 };
         if (g === fg && i === fi) return null;
+        // The level-up slots trade places among themselves only.
+        const fixed = (x) => this.#model.data.featGroups?.[x]?.levelUp === true;
+        if (g !== fg && (fixed(g) || fixed(fg))) return null;
         const after = half(row, point);
         return { el: row, cls: side(after), g, to: i + (after ? 1 : 0) };
       },
@@ -6593,7 +6596,7 @@ export class CharacterSheetElement extends HTMLElement {
         this.#renderHeader();
         break;
       case 'add-tracker': {
-        const { name: n, formula, minFormula, refresh, note } = this.#draft;
+        const { name: n, formula, minFormula, refresh, note, fill } = this.#draft;
         if (!n.trim()) return;
         // The preview already shows why a formula does not parse.
         if (formula.trim() && !analyse(formula).ok) return;
@@ -6604,8 +6607,10 @@ export class CharacterSheetElement extends HTMLElement {
           minFormula: (minFormula || '').trim() || null,
           refresh,
           note: note || '',
+          // Only a draining tracker needs a style; a filling one is the default.
+          style: fill === 'remaining' ? { fill: 'remaining' } : null,
         });
-        this.#draft = { name: '', formula: '', minFormula: '', refresh: '', note: '' };
+        this.#draft = { name: '', formula: '', minFormula: '', refresh: '', note: '', fill: 'spent' };
         this.#render();
         break;
       }

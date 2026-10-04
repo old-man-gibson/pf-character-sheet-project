@@ -71,7 +71,8 @@ registerTables(mergeTables(bundledPacks()), model);
   // No pack at all now: what the sheet reads is the cited text.
   model.setFeatCatalogue({ feats: [] });
   const reopened = new Character(out).toJSON();
-  const back = reopened.featGroups[0].entries[0];
+  // Reopening gives the character its Level Up slots, ahead of this group.
+  const back = reopened.featGroups.find((g) => g.name === 'Feats').entries[0];
   check('with no pack, the published feat still shows its text, and says where it came from',
     [model.featDetails(back).known, model.featDetails(back).text, model.featDetails(back).cited], [true, 'Trade attack for damage.', true]);
   check('and an unpublished one shows nothing, as before', model.featDetails({ name: 'Power Attack' }).known, false);

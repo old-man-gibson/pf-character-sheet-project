@@ -4203,6 +4203,59 @@ console.log('dragging a feat -- up its own group, or across into another');
   check('an index off the end of the source is refused', [names(A), names(B), names(C)], before);
 }
 
+console.log('level-up feats -- ten fixed slots, one per odd level');
+{
+  const doc = blankDocument({ id: 'lvl', name: 'Lvl' });
+  doc.feats = {
+    'Level Up': [{ name: 'Dodge', detail: '3' }, { name: 'Toughness', detail: '1' }, { name: 'Undated', detail: '' }],
+    Class: [{ name: 'Bonus', detail: 'Fighter 1' }],
+  };
+  const c = new Character(doc);
+  const L = `featGroups.${c.data.featGroups.findIndex((g) => g.levelUp)}.entries`;
+  const K = `featGroups.${c.data.featGroups.findIndex((g) => g.name === 'Class')}.entries`;
+  const rows = () => c.list(L).map((f) => `${f.detail}:${f.name}`);
+  check('feats are seated by their level, the undated one in the first free slot', rows().slice(0, 3),
+    ['1:Toughness', '3:Dodge', '5:Undated']);
+  check('and every odd level to 19 has a slot', c.list(L).map((f) => f.detail),
+    ['1', '3', '5', '7', '9', '11', '13', '15', '17', '19']);
+  c.listMove(L, 0, 1);
+  check('a feat moved takes the level of where it lands', rows().slice(0, 2), ['1:Dodge', '3:Toughness']);
+  c.listMoveTo(L, 2, 10);
+  check('dragged to the end, it is the level-19 feat', [rows()[2], rows()[9]], ['5:', '19:Undated']);
+  check('nothing is added', [c.listAdd(L, { name: 'Extra' }), c.list(L).length], [null, 10]);
+  c.listRemove(L, 0);
+  check('nothing is removed', rows()[0], '1:Dodge');
+  c.listMoveInto(L, 0, K, 0);
+  c.listMoveInto(K, 0, L, 0);
+  check('nothing is dragged out or in', [rows()[0], c.list(K).map((f) => f.name)], ['1:Dodge', ['Bonus']]);
+  const before = c.data.featGroups.length;
+  c.listRemove('featGroups', c.data.featGroups.findIndex((g) => g.levelUp));
+  check('and the group itself stays', c.data.featGroups.length, before);
+  check('a blank character starts with the ten slots', new Character(blankDocument({ name: 'New' })).data.featGroups
+    .find((g) => g.levelUp)?.entries.length, 10);
+
+  const over = blankDocument({ id: 'over', name: 'Over' });
+  over.feats = { 'Level Up': Array.from({ length: 12 }, (_, i) => ({ name: `F${i}`, detail: '' })) };
+  const o = new Character(over);
+  check('more feats than slots: the extras move to Other/Flex, not lost',
+    o.data.featGroups.find((g) => g.name === 'Other/Flex')?.entries.map((f) => f.name), ['F10', 'F11']);
+}
+
+console.log('tags() -- feats counted by a tag in brackets');
+{
+  const c = new Character(blankDocument({ id: 'tags', name: 'Tags' }));
+  c.data.featGroups.push({ name: 'Other', entries: [
+    { name: 'Lucky Break [Chance]' }, { name: 'Card Shark [Chance, Deck]' },
+    { name: 'Heart of the Cards [Deck]' }, { name: 'Chance Encounter' },
+  ] });
+  c.recompute();
+  const s = c.scope();
+  check('each tag counted, a feat with two counted toward both, an unbracketed word not at all',
+    resolvePath(s, 'tags'), { chance: 2, deck: 2 });
+  check('tags() reads the count', evaluateFormula('tags("Chance") + tags("Deck")', s), 4);
+  check('and is 0 for a tag nobody has', evaluateFormula('tags("Kismet")', s), 0);
+}
+
 console.log('hit points at the table');
 {
   const c = new Character(load('bryva'));
@@ -4609,9 +4662,11 @@ console.log('unarmed practitioner damage');
   check('dropping the vest drops a bracket', u().dice, '12d6');
   c.set('training.combat.unarmed.brawlersVest', true);
   check('Unorthodox Unarmed Training: one feat, two picks, both taken', [u().unorthodoxFeats, u().unorthodoxSlots, u().otherSpheres], [1, 2, ['Tech', 'Berserker']]);
-  c.listAdd('featGroups.0.entries', { name: 'Unorthodox Unarmed Training', detail: '' });
+  // Level Up is ten fixed slots and all ten are taken, so the second one goes in a free group.
+  const free = `featGroups.${c.data.featGroups.findIndex((g) => !g.levelUp)}.entries`;
+  c.listAdd(free, { name: 'Unorthodox Unarmed Training', detail: '' });
   check('a second feat opens two more', [u().unorthodoxFeats, u().unorthodoxSlots], [2, 4]);
-  c.listRemove('featGroups.0.entries', c.data.featGroups[0].entries.length - 1);
+  c.listRemove(free, c.list(free).length - 1);
   // The Bands of the Asura veil: 4 Open Hand talents per essence, only when it is shaped.
   check('no essence in the Bands, nothing added', u().asuraEssence, 0);
   const asuraSlot = c.data.akashic.slots.findIndex((s) => (s.veils || []).some((v) => /asura/i.test(v.name)));

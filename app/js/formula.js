@@ -272,7 +272,25 @@ export const FUNCTIONS = {
       return `${count}d${size}${b ? (b > 0 ? `+${b}` : `${b}`) : ''}`;
     },
   },
+
+  // Reading the sheet. A `scoped` function is handed the scope first.
+  /** tags("Chance") -> how many feats carry [Chance]. The scope publishes
+   *  the same count as tags.chance, but only for tags someone has; this is 0
+   *  for the rest, so a pool can be written before its first feat is taken. */
+  tags: {
+    arity: [1, 1],
+    scoped: true,
+    fn: (scope, tag) => {
+      const n = scope.lookup(`tags.${tagKey(tag)}`);
+      return typeof n === 'number' ? n : 0;
+    },
+  },
 };
+
+/** The name a bracketed tag is published under: "Heart of Cards" -> heart_of_cards. */
+export function tagKey(tag) {
+  return String(tag ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
 
 /* ------------------------------------------------------------------ *
  * Evaluator
@@ -354,7 +372,7 @@ function evaluate(node, scope, depth = 0) {
           : (node.args[2] ? evaluate(node.args[2], scope, depth + 1) : 0);
       }
       const args = node.args.map((a) => evaluate(a, scope, depth + 1));
-      return def.fn(...args);
+      return def.scoped ? def.fn(scope, ...args) : def.fn(...args);
     }
 
     default:

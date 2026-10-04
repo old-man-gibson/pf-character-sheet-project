@@ -121,6 +121,13 @@ function featDatalistHtml(model, ctx) {
  * the right or a section stacked on the left, so the two cannot drift.
  */
 function featGroupTitle(model, ctx, group, g) {
+    // The level-up group is fixed slots (model/feats.js): no rename, no ×,
+    // and the badge counts the slots filled rather than the rows.
+    if (group.levelUp) {
+      const filled = group.entries.filter((e) => String(e.name ?? '').trim()).length;
+      return `<span class="grouptitle">${esc(group.name)}</span>
+      <span class="badge" title="Slots filled, one per odd level">${filled} / ${group.entries.length}</span>`;
+    }
     return `<input class="grouptitle" type="text" value="${esc(group.name)}"
         data-item="featGroups|${g}|name" data-kind="text" aria-label="Group name">
       <span class="badge">${group.entries.length}</span>
@@ -154,13 +161,19 @@ function removeGroupButton(group, g, armedKey) {
  */
 function featGroupTable(model, ctx, group, g) {
     const folds = foldsOf(model);
+    // The level-up group's rows are fixed slots: the level comes from the
+    // slot, and a row can be moved among them but not added or removed.
+    const fixed = group.levelUp === true;
+    const list = `featGroups.${g}.entries`;
     return `<div class="tablewrap"><table class="feats stacked">
         <thead><tr><th class="grip"></th><th class="fname">Feat</th><th class="src">Source / level</th>
           <th class="fnote">Notes</th><th></th></tr></thead>
         <tbody>${group.entries.map((f, i) => `<tr data-featdrop="${g}|${i}">
-          <td class="grip"><span class="grip" data-featgrip title="Drag to reorder — or onto another group">&#10495;</span></td>
+          <td class="grip"><span class="grip" data-featgrip title="${fixed ? 'Drag to another level' : 'Drag to reorder — or onto another group'}">&#10495;</span></td>
           <td data-stack="name">${rows.itemText(`featGroups.${g}.entries`, i, 'name', f.name, '', { list: FEAT_LIST_ID })}</td>
-          <td data-label="Source / level">${rows.itemText(`featGroups.${g}.entries`, i, 'detail', f.detail)}</td>
+          <td data-label="Source / level">${fixed
+    ? `<span class="dim" title="Set by the slot; move the feat to change its level">Level ${esc(f.detail)}</span>`
+    : rows.itemText(list, i, 'detail', f.detail)}</td>
           <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
     featDetails(f), folds, `featGroups.${g}.entries|${i}`,
@@ -168,15 +181,15 @@ function featGroupTable(model, ctx, group, g) {
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
                above are the same bargain and write the same cell. */''}
-          ${rows.rowToolsDragged(`featGroups.${g}.entries`, i)}
+          ${fixed ? rows.rowToolsMoveOnly(list, i) : rows.rowToolsDragged(list, i)}
         </tr>`).join('')}
         ${group.entries.length ? '' : `<tr class="featempty" data-featdrop="${g}|0">
           <td colspan="5" class="empty">No feats here yet — add one, or drag one in.</td>
         </tr>`}</tbody>
       </table></div>
-      <div style="margin-top:8px">
-        ${rows.addButton(`featGroups.${g}.entries`, 'Add feat', { name: '', detail: '', note: '' })}
-      </div>`;
+      ${fixed ? '' : `<div style="margin-top:8px">
+        ${rows.addButton(list, 'Add feat', { name: '', detail: '', note: '' })}
+      </div>`}`;
 }
 
 export function renderFeaturesPanel(model, ctx) {
@@ -228,7 +241,8 @@ export function renderFeaturesPanel(model, ctx) {
         <span class="hint">Groups mirror the columns on the sheet's Feats tab — Level Up,
           Oaths, Attunement, Class, and so on. The first group stands on its own; the rest
           stack under the granted feats. Drag a feat by its grip to reorder it, or onto
-          another group to move it there.</span>
+          another group to move it there. Level Up is one slot per odd level, 1 to 19: its
+          feats move between levels but are not added, removed or dragged out.</span>
       </div>
 
       ${rows.collapsible(model, 'mythic', `<section class="panel span2">

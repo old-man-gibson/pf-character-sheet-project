@@ -34,6 +34,7 @@ import { PSIONIC_DERIVED, importPsionics } from './subsystems/psionics.js';
 import { importTechniques, normalizeTechniques } from './subsystems/techniques.js';
 import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vancian.js';
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
+import { shapeLevelUpFeats } from './feats.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
 import { normalizeName, skillKey, slug } from './util.js';
 import { MONSTER_TAB_ORDER } from '../monster/block.js';
@@ -863,6 +864,9 @@ export function normalise(model) {
     d.grantedFeats = { drawback, specialty: { name: specialty, note: '' }, others };
   }
   if (!Array.isArray(d.grantedFeats.others)) d.grantedFeats.others = [];
+  // After the Drawback, Oath and Attunement columns have left the groups, so
+  // what is left first is the Level Up column the sheet always had.
+  shapeLevelUpFeats(d, { create: true });
 
   /*
    * A trait's name, which the workbook had nowhere to put.

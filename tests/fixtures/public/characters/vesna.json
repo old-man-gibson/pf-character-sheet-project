@@ -3554,7 +3554,64 @@
   }
  },
  "named": {},
- "featGroups": [],
+ "featGroups": [
+  {
+   "name": "Level Up",
+   "entries": [
+    {
+     "name": "",
+     "detail": "1",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "3",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "5",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "7",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "9",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "11",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "13",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "15",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "17",
+     "note": ""
+    },
+    {
+     "name": "",
+     "detail": "19",
+     "note": ""
+    }
+   ],
+   "levelUp": true
+  }
+ ],
  "backgroundSections": [
   {
    "label": "Personality",

@@ -135,6 +135,14 @@ export function rowToolsDragged(list, i) {
     </td>`;
 }
 
+/** The same arrows without the ×, for fixed slots that move but are never removed. */
+export function rowToolsMoveOnly(list, i) {
+  return `<td class="tools">
+      <button class="cardmove" data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
+      <button class="cardmove" data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
+    </td>`;
+}
+
 /**
  * The grip cell for a row of a dragged list, and the attribute that row
  * carries so the element knows which list and place it is. Any list can use
