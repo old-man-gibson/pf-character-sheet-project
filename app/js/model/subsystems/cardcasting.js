@@ -103,6 +103,22 @@ export function deckManipulation(name) {
 }
 
 /**
+ * The entry a taken manipulation row reads: the catalogue's, or the copy a
+ * published sheet brought with it (publish.js) where no pack here knows it.
+ */
+export function manipulationEntry(m) {
+  const entry = deckManipulation(m?.name);
+  if (entry) return entry;
+  const c = m?.cited;
+  if (!c || typeof c !== 'object') return null;
+  return {
+    name: String(c.name || m.name || ''), group: String(c.group || 'General'),
+    requires: Array.isArray(c.requires) ? c.requires.map(String) : [], needs: String(c.needs || ''),
+    repeat: !!c.repeat, max: Number(c.max) || 0, text: String(c.text || ''),
+  };
+}
+
+/**
  * What a picked manipulation is called, the one name every reader uses: the
  * catalogue's spelling when the catalogue knows it ("Loaded-Hand" is Loaded
  * Hand), else what was typed, trimmed. '' for a row with no name.
@@ -715,7 +731,7 @@ export function recomputeCardcasting(model) {
   const flagOn = { cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
     singleton: mods.singleton, gradualRamp: mods.gradualRamp, notManaGraveyard: !p.manaGraveyard };
   for (const m of p.manipulations) {
-    const entry = deckManipulation(m.name);
+    const entry = manipulationEntry(m);
     const unmet = entry && m.count > 0 ? entry.requires.filter((r) => !flagOn[r]) : [];
     const overMax = entry && entry.max && m.count > entry.max;
     m.calc = { known: !!entry, unmet, overMax: !!overMax };

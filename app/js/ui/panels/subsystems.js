@@ -44,14 +44,11 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, deckManipulation,
-  deckManipulationCatalogue, maneuverCatalogue, maneuverDetails, maneuverIsWritten,
-  maneuverOwn,
-  altTrainingLink, altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques,
-  psionicCurveTotals, psionicTables,
-  spellCatalogue, spellDetails, powerCatalogue, powerDetails,
-  veilsAvailable, veilDetails, veilOwn, slug,
-  manifesterForwardKey, vancianForwardKey,
+  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, deckManipulationCatalogue,
+  maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
+  altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
+  spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
+  slug, manifesterForwardKey, vancianForwardKey,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell } from '../html.js';
 import { round } from '../format.js';
@@ -2257,7 +2254,7 @@ function companionAbilityRow(model, cc, name) {
     const { kind, p, b } = cc;
     const key = abilityTextKey(name);
     const mine = String(b.abilityNotes?.[key] ?? '');
-    const shared = companionAbilityText(name);
+    const shared = companionAbilityText(name) || b.citedAbilities?.[key] || null;
     // Folded per companion by its stable id, so opening Evasion on one wolf
     // does not open it on the other three.
     const foldKey = `${kind}-${b.id || cc.i}-ability-${key}`;
@@ -2791,7 +2788,7 @@ function deckManipulationsPanel(model, p, k) {
           <th>Manipulation · note</th><th style="width:3.4rem">Taken</th><th></th>
         </tr></thead><tbody>
           ${rows.map(({ m, i }) => {
-    const entry = deckManipulation(m.name);
+    const entry = manipulationEntry(m);
     const mc = m.calc || {};
     const tip = entry ? `${entry.name}${entry.needs || entry.requires.length ? ` (${[...entry.requires.map((r) => NEED[r]), entry.needs].filter(Boolean).join(', ')})` : ''}: ${entry.text}` : 'Not in the catalogue — a homebrew or a name it does not know';
     return `<tr class="${mc.unmet?.length || mc.overMax ? 'unmet' : ''}">
