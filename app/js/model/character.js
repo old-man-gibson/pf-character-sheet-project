@@ -42,6 +42,7 @@ import {
   setMythicPick, setPick,
 } from './abilities.js';
 import { breakdown } from './breakdown.js';
+import { shapeLevelUpFeats } from './feats.js';
 import { normalise, toDocument } from './document.js';
 import {
   addSystemTab, hideTab, listAdd, listAt, listMove, listMoveInto, listMoveTo, listRemove,
@@ -228,6 +229,8 @@ export class Character {
 
   #computePass() {
     const c = this.data;
+    // The level-up feats read their levels off their slots; see feats.js.
+    shapeLevelUpFeats(c);
     this.#applyMythic();
     this.#refreshAbilities();
     // An offset written as a formula is worked out here, once per pass and

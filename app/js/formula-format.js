@@ -511,6 +511,11 @@ export const FUNCTION_HELP = [
     what: 'Builds dice text instead of a number, for a weapon’s Dice field or a name a weapon reads. dice(4, 8) is 4d8.',
     eg: 'dice(floor(level / 4) + 1, 6)',
   },
+  {
+    name: 'tags', sig: 'tags("name")', group: 'Pathfinder',
+    what: 'How many feats carry a tag in square brackets: tags("Chance") counts every [Chance] feat, granted feat and bought-off drawback. Only a tag inside brackets counts, and [Chance, Deck] counts once toward each. A tag nobody has is 0, where tags.chance would be an unknown value.',
+    eg: 'tags("Chance") + tags("Deck")',
+  },
 ];
 
 /** Operators, loosest-binding first, which is roughly the order they read in. */
@@ -544,6 +549,7 @@ export const VALUE_GUIDE = [
   { prefix: 'skill.<name>', what: 'Any skill total, by its name in lower case with underscores for spaces.', eg: 'skill.perception + 5' },
   { prefix: 'skill.<name>.ranks, skill.<name>.classSkill', what: 'Ranks in the skill, and 1 or 0 for class skill. skill.<name> alone is still the total.', eg: 'if(skill.stealth.ranks >= 10, 6, 3)' },
   { prefix: 'speed.<type>', what: 'Each movement rate by its type in lower case — speed.land, speed.fly, speed.climb — as the Speed panel totals it, before conditions. A speed may read the speeds listed above it and not the ones below.', eg: 'floor(speed.land / 2)' },
+  { prefix: 'tags.<tag>', what: 'How many feats, granted feats and bought-off drawbacks carry each tag written in square brackets — tags.chance for [Chance]. Only tags somebody has are listed; tags("chance") reads the same count and is 0 for the rest.', eg: 'tags.deck * 2' },
   { prefix: 'mythic.tier', what: 'Mythic tier, and 0 for a character who has none.', eg: 'if(mythic.tier = 0, 0, 3 + mythic.tier * 2)' },
   { prefix: 'tracker.<id>.max .current .remaining .min .spent .pct', what: 'Every tracker publishes its numbers under the id shown on its own row. That id never changes when the tracker is renamed, so a formula pointing at one cannot be broken by renaming it.', eg: 'tracker.burn.max - 2' },
   { prefix: 'familiar.*  animalCompanion.*  eidolon.*  conjured.*', what: 'A companion’s own numbers, on a character that has one, under the id shown on its tab: the kind’s bare name for the first of a kind, and the kind with a number appended — eidolon2, eidolon3 — for each one added after. The id stays with the creature through a rename or a reordering.', eg: 'eidolon.hd + eidolon2.hd' },

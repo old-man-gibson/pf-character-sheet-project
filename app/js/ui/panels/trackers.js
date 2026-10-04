@@ -47,6 +47,11 @@ export function renderTrackersPanel(model, ctx) {
             <input class="mono" data-draft="formula" placeholder="Max, as a formula (e.g. 3 + mythic.tier * 2)" value="${esc(draft.formula)}">
             <input class="mono" data-draft="minFormula" placeholder="Min (optional, e.g. -floor(qi.max / 2))" value="${esc(draft.minFormula || '')}">
             <input data-draft="refresh" placeholder="Refresh (Daily)" value="${esc(draft.refresh)}">
+            <select data-draft="fill" aria-label="Fill or drain"
+              title="Fill lights up as the pool is spent; Drain shows what is left">
+              <option value="spent" ${draft.fill !== 'remaining' ? 'selected' : ''}>Fill — lights up as it is spent</option>
+              <option value="remaining" ${draft.fill === 'remaining' ? 'selected' : ''}>Drain — shows what is left</option>
+            </select>
           </div>
           ${preview}
           <input data-draft="note" placeholder="Note (optional) — {= self.current * level} reads the pool as it fills"
@@ -58,7 +63,7 @@ export function renderTrackersPanel(model, ctx) {
           evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
-          <code>mod</code> <code>iterations</code>.
+          <code>mod</code> <code>iterations</code> <code>dice</code> <code>tags</code>.
           <button data-action="formulas" class="linkish"
             title="The guide, a scratchpad, and every value with its current number"
             >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
