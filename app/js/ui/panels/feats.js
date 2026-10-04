@@ -137,12 +137,9 @@ function removeGroupButton(group, g, armedKey) {
       return `<button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
     }
     const key = `featGroups|${g}`;
-    const armed = armedKey === key;
     const n = group.entries.length;
     const what = `${String(group.name || '').trim() || 'this group'} and its ${n} feat${n === 1 ? '' : 's'}`;
-    return `<button class="danger${armed ? ' armed' : ''}" data-remove-armed="${key}"
-        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
-        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>`;
+    return rows.armedButton(key, `data-remove-armed="${key}"`, what, armedKey);
 }
 
 /**

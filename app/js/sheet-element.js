@@ -603,9 +603,6 @@ export class CharacterSheetElement extends HTMLElement {
   #lastTab = null;
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
   #armedGearCol = null;
-  #confirmDelete = null;
-  /** The class whose feature group is one click from being deleted, or null. */
-  #confirmGroup = null;
   /** Which Classes row has its sub-system picker open (index, or null). */
   #openClassSystems = null;
   /** Whether the dashboard's grouped condition picker is unfolded. */
@@ -2926,7 +2923,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- progression, lore & leftover tabs ---------------- */
 
   /** All three live in ui/panels/lore.js. */
-  #loreCtx() { return { menuLists: this.#menuLists, confirmGroup: this.#confirmGroup }; }
+  #loreCtx() { return { menuLists: this.#menuLists, armedRemove: this.#armedRemove }; }
 
   #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#loreCtx()); }
 
@@ -3055,7 +3052,7 @@ export class CharacterSheetElement extends HTMLElement {
       tabEntries: this.#tabEntries(),
       barEntries: this.#barEntries(),
       draft: this.#draft,
-      confirmDelete: this.#confirmDelete,
+      armedRemove: this.#armedRemove,
       extFilter: this.#extFilter,
       extSearch: this.#extSearch,
     });
@@ -6400,6 +6397,12 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #action(name, button) {
+    // A two-click ×: the first press only arms it (rows.armedButton).
+    const arm = button?.dataset?.arm;
+    if (arm) {
+      if (this.#armedRemove !== arm) { this.#armedRemove = arm; this.#render(); return; }
+      this.#armedRemove = null;
+    }
     switch (name) {
       case 'add-training-class': {
         const side = button?.dataset.side === 'magic' ? 'magic' : 'combat';
@@ -7040,19 +7043,8 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'delete-system':
-        this.#confirmDelete = Number(button?.dataset.index);
-        this.#render();
-        break;
-      case 'delete-system-confirm': {
-        const idx = this.#confirmDelete;
-        this.#confirmDelete = null;
-        if (idx !== null) this.#model.removeSystemTab(idx);
+        this.#model.removeSystemTab(Number(button?.dataset.index));
         this.#tab = 'systabs';
-        this.#render();
-        break;
-      }
-      case 'delete-system-cancel':
-        this.#confirmDelete = null;
         this.#render();
         break;
       case 'ext-add-block': {
@@ -7140,18 +7132,9 @@ export class CharacterSheetElement extends HTMLElement {
       // Deleting a whole feature group takes a second click even now that
       // Ctrl+Z can put it back: it is a column of the player's own writing per
       // level, and twenty levels of it is more than a toast should be the only
-      // thing standing between you and losing.
+      // thing standing between you and losing. The button asks (data-arm).
       case 'remove-cf-group':
-        this.#confirmGroup = button?.dataset.class ?? null;
-        this.#render();
-        break;
-      case 'remove-cf-group-confirm':
         this.#model.removeClassFeatureGroup(button?.dataset.class);
-        this.#confirmGroup = null;
-        this.#render();
-        break;
-      case 'remove-cf-group-cancel':
-        this.#confirmGroup = null;
         this.#render();
         break;
       case 'add-rule-group':

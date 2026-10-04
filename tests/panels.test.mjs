@@ -80,7 +80,7 @@ const shutCtx = () => ({
   skills: { showAllSkills: false },
   feats: { openCell: null },
   manager: {
-    tabEntries: [], barEntries: [], draft: {}, confirmDelete: null, extFilter: '', extSearch: '',
+    tabEntries: [], barEntries: [], draft: {}, armedRemove: null, extFilter: '', extSearch: '',
   },
 });
 
@@ -137,7 +137,7 @@ const openCtx = (model) => {
     feats: { openCell: 'mythic:0:effect' },
     manager: {
       tabEntries: [], barEntries: [], draft: { newSystem: 'New' },
-      confirmDelete: (d.sheetTabs || []).length ? 0 : null, extFilter: '', extSearch: 'a',
+      armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null, extFilter: '', extSearch: 'a',
     },
   };
 };
@@ -647,6 +647,21 @@ console.log('\nCounts as waits for a class name, on every training tab');
   const guileHtml = guile.renderGuilePanel(c);
   check('nor the unnamed guile class', [live(guileHtml, 'data-blendguile'), guileHtml.includes('Pick the class first')], [0, true]);
   ok('and it says why', martial.includes('Pick the class first'));
+}
+
+console.log('\none way of asking twice: the worksheet and feature-group ×');
+{
+  const c = new Character(blankDocument({ name: 'Asker', level: 3 }));
+  c.set('sheetTabs', [{ name: 'Scratch', custom: true, rows: [{ cells: ['a'] }] }]);
+  // A feature group whose class has gone: the only kind with a ×.
+  c.set('progression.classFeatures', { ...(c.data.progression?.classFeatures || {}), Ghost: { columns: ['Old'], byLevel: {}, rules: {}, optionsFrom: {} } });
+  const sheet = { id: 'sys-0', key: 'sys:Scratch', label: 'Scratch', kind: 'system', index: 0, tab: c.data.sheetTabs[0] };
+  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX.manager, tabEntries: [sheet], armedRemove: armed });
+  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX.lore, armedRemove: armed });
+  const sure = (html, key) => new RegExp(`data-arm="${key.replace('|', '\\|')}"[^>]*>sure\\?<`).test(html.replace(/\n\s*/g, ' '));
+  check('the worksheet × arms, then says sure?', [sure(mgr(null), 'systab|0'), sure(mgr('systab|0'), 'systab|0')], [false, true]);
+  check('so does the feature group ×', [sure(prog(null), 'cfgroup|Ghost'), sure(prog('cfgroup|Ghost'), 'cfgroup|Ghost')], [false, true]);
+  check('and no Delete / Keep sentence is left', /delete-system-confirm|remove-cf-group-confirm/.test(mgr('systab|0') + prog('cfgroup|Ghost')), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

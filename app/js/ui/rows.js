@@ -152,18 +152,27 @@ export function rowRemove(list, i) {
 }
 
 /**
- * A × that asks twice: the first click arms it (it says so), the second
- * removes. For rows a stray click would genuinely hurt to lose.
+ * The sheet's one way of asking before a removal: a × that the first click
+ * arms -- it turns into "sure?" -- and the second carries out. Every removal
+ * can be taken back with Ctrl+Z as well; this is for the ones a stray click
+ * would take a lot with. (Reset, which cannot be undone, has its own panel.)
  *
- * `armedKey` is whichever × is currently armed, which the element holds.
+ * `attrs` is what the button does: `data-remove-armed="list|i"` for a row,
+ * or a `data-action` with `data-arm="key"`, which the element runs on the
+ * second click. `armedKey` is whichever one is armed, which the element holds.
  */
+export function armedButton(key, attrs, what, armedKey = null, style = '') {
+  const armed = armedKey === key;
+  return `<button class="danger${armed ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''}
+        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
+        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>`;
+}
+
+/** A row's two-click ×, in its tools cell. */
 export function rowRemoveArmed(list, i, what = 'row', armedKey = null) {
   const key = `${list}|${i}`;
-  const armed = armedKey === key;
   return `<td class="tools">
-      <button class="danger${armed ? ' armed' : ''}" data-remove-armed="${key}"
-        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
-        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>
+      ${armedButton(key, `data-remove-armed="${key}"`, what, armedKey)}
     </td>`;
 }
 
