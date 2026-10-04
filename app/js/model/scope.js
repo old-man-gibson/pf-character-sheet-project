@@ -21,7 +21,7 @@ import {
   collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
-import { NameIndex, SCOPE_INFO, resolvePath } from '../formula.js';
+import { NameIndex, SCOPE_INFO, resolvePath, tagKey } from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
@@ -372,6 +372,9 @@ export function characterScope(model) {
       manaUntapped: Number(c.cardcasting?.table?.calc?.manaUntapped) || 0,
     },
   };
+  // How many feats carry each bracketed tag: tags.chance, tags.deck. The
+  // tags() function reads these and gives 0 for a tag nobody has.
+  s.tags = tagCounts(c);
   // Named as the row shows it, and nothing for a row nobody has named (it
   // would be deck.manip.x). Rows that are one manipulation however they are
   // spelled -- "Loaded-Hand" and "Loaded Hand" -- add into one name, the
@@ -1660,6 +1663,33 @@ export function proseText(model, text, local = null) {
  * full its own tracker is without naming it. Character-wide, the same numbers
  * are `tracker.<id>.*`.
  */
+/**
+ * Every bracketed tag on a feat, a granted feat or a bought-off drawback, and
+ * how many of them carry it. Only text inside brackets is a tag: "Lucky Break
+ * [Chance]" counts toward chance, "Chance Encounter" toward nothing, and
+ * "Card Shark [Chance, Deck]" once toward each.
+ */
+export function tagCounts(d) {
+  const names = [];
+  for (const g of d?.featGroups || []) for (const f of g.entries || []) names.push(f?.name);
+  const granted = d?.grantedFeats || {};
+  names.push(granted.drawback?.name, granted.specialty?.name, ...(granted.others || []).map((f) => f?.name));
+  for (const side of Object.values(d?.training || {})) names.push(...(side?.tradition?.boughtOff || []));
+
+  const counts = {};
+  for (const name of names) {
+    const keys = new Set();
+    for (const [, inside] of String(name ?? '').matchAll(/\[([^\]]*)\]/g)) {
+      for (const tag of inside.split(/[,/;]/)) {
+        const key = tagKey(tag);
+        if (key) keys.add(key);
+      }
+    }
+    for (const key of keys) counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
 export function trackerScope(model, t) {
   // Read at the value the row shows, as its badge is: what is left on a
   // draining tracker.

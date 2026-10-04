@@ -68,7 +68,7 @@ const DEFENCE_KEYS = new Set(['hp', 'ac', 'saves', 'defenses', 'dr', 'resistance
 // The unarmed strike is the character's, spheres or no spheres: a monk's
 // class ladder reads it as surely as a practitioner's talents do.
 const CHARACTER_KEYS = new Set(['level', 'size', 'initiative', 'mythic', 'bab', 'class', 'speed',
-  'mana', 'actions', 'unarmed']);
+  'mana', 'actions', 'unarmed', 'tags']);
 
 /**
  * The sub-systems, each a family of its own. They used to share one fold,
@@ -102,7 +102,7 @@ const DECK_TABLE = new Set(['round', 'inHand', 'inDeck', 'inPlay', 'inDiscard', 
 export const VALUE_SECTIONS = [
   { key: 'mine', label: 'Named by you', blurb: 'Every {name = …} written in prose on this character.' },
   { key: 'tracker', label: 'Trackers', blurb: 'Each tracker under the id on its own row — that id never changes when the tracker is renamed.' },
-  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, BAB, mythic tier; speeds, class levels, the unarmed strike, and wealth.' },
+  { key: 'character', label: 'The character', blurb: 'Level, size, initiative, BAB, mythic tier; speeds, class levels, the unarmed strike, wealth, and feat tags.' },
   { key: 'ability', label: 'Abilities', blurb: 'Score, modifier, and the temporary pair.' },
   { key: 'defence', label: 'Health, armour, saves', blurb: 'As the sheet totals them.' },
   { key: 'offence', label: 'Attack', blurb: 'The attack numbers.' },
