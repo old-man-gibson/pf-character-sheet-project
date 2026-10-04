@@ -3163,6 +3163,23 @@ console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
   check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
 }
 
+console.log('a class-feature column or group takes its saved width with it');
+{
+  const c = new Character(blankDocument({ name: 'Widths', level: 3 }));
+  c.listAdd('classes', { name: 'Fighter', hd: 10, bab: 1, goodFort: true, goodRef: false, goodWill: false,
+    skillRanks: 2, archetypes: '', levelsOverride: null, systems: [] });
+  c.addClassFeatureColumn('Fighter', 'Bonus feat');
+  c.addClassFeatureColumn('Fighter', 'Bravery');
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 180);
+  c.setColumnWidth('progfeat-Fighter', 'Bravery', 120);
+  const widths = () => c.data.uiPrefs.colWidths?.['progfeat-Fighter'];
+  c.removeClassFeatureColumn('Fighter', c.data.progression.classFeatures.Fighter.columns.indexOf('Bravery'));
+  check('a removed column drops its width and keeps the others', widths(), { 'Bonus feat': 180 });
+  c.listRemove('classes', 0);
+  c.removeClassFeatureGroup('Fighter');
+  check('a removed group drops them all', widths(), undefined);
+}
+
 console.log('removals that leave an undo step');
 {
   const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));
