@@ -70,7 +70,7 @@
      chip rule does the drawing. */
   .member.local .chip.tinted + .drop { border-color: color-mix(in srgb, var(--entry-color) 55%, var(--line)); }
   .banner {
-    max-width: 1500px; margin: 12px auto 0; padding: 8px 12px; border-radius: 6px;
+    margin: 8px 12px 0; padding: 8px 12px; border-radius: 6px;
     font-size: 13px; display: flex; gap: 10px; align-items: flex-start;
   }
   .banner.err { color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); }
@@ -87,8 +87,12 @@
     display: flex; align-items: center; gap: 6px;
     font-size: 12.5px; color: var(--ink2); cursor: pointer; white-space: nowrap;
   }
-  main { padding: 18px; max-width: 1500px; margin: 0 auto; }
-  character-sheet { border: 1px solid var(--line); }
+  /* The app is the screen: the bar across the top at the window's width, and
+     the sheet filling everything under it, edge to edge. The sheet's own
+     Width setting still narrows it inside that, centred. */
+  body { min-height: 100svh; display: flex; flex-direction: column; margin: 0; }
+  main { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; }
+  character-sheet { flex: 1 0 auto; border: 0; }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
@@ -99,8 +103,13 @@
   .welcome p.hint { margin: 14px 0 0; }
   .welcome code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
   .welcome .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .note { color: var(--ink2); font-size: 12.5px; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
-  .note code { background: var(--surface); padding: 1px 5px; border-radius: 3px; }
+  /* How the app works, in a dialog of its own rather than under the sheet:
+     the Help button opens it, and it opens by itself on a browser's first
+     visit. */
+  dialog#helpDialog { width: min(40rem, 92vw); max-width: min(40rem, 92vw); }
+  dialog#helpDialog .helpbody { overflow-y: auto; font-size: 13px; line-height: 1.55; color: var(--ink2); }
+  dialog#helpDialog .helpbody p { margin: 0 0 10px; }
+  dialog#helpDialog .helpbody code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
   /* The dialogs take the chrome's box; what is left is their forms. */
   dialog.box label { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
   dialog.box label input, dialog.box select {
@@ -168,16 +177,6 @@
   .picker[slot="rail"] .more:hover { color: var(--accent); }
   .picker[slot="rail"] .more.up { top: 0; background: linear-gradient(var(--cs-bg) 55%, transparent); }
   .picker[slot="rail"] .more.down { bottom: 0; background: linear-gradient(transparent, var(--cs-bg) 45%); }
-  /* The 1500px column is for the page before a sheet is up -- the welcome
-     card, a banner over nothing. Once the sheet has said how wide it is the
-     cap comes off, so "Full width" is the window and "90%" is 90% of it,
-     whichever layout is up: a share of the window, not of a column that on a
-     wide screen left a fifth of it empty either side. The banner and the
-     note follow the sheet to the edges when it takes them all; under a
-     narrower sheet they keep the column, which is about as wide as it is. */
-  html[data-layout="side"] main, html[data-layout="side"] .banner, html[data-layout="side"] .note { max-width: none; }
-  html[data-width] main { max-width: none; }
-  html[data-width="100"] .banner, html[data-width="100"] .note { max-width: none; }
   /* Printing: the sheet does its own print styling (see app/css/sheet.css).
      All this page has to do is get out of the way -- the picker, the roster
      chrome and the dark backdrop are for choosing a character, not for the
@@ -186,6 +185,7 @@
     :root { color-scheme: light; }
     body { background: #fff; color: #000; }
     header.app, .picker, #banner, .welcome, .skiplink, dialog { display: none !important; }
+    body { min-height: 0; display: block; }
     character-sheet { border: 0; }
   }
 </style>
@@ -202,6 +202,7 @@
   <div class="tools">
     <button type="button" class="btn" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
     <a class="btn" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <button type="button" class="btn" id="helpBtn" title="How this app works: new characters, importing, saving and history">? Help</button>
     <label class="role">
       <input type="checkbox" id="adminToggle"> GM / inspector view
     </label>
@@ -285,33 +286,35 @@
   </form>
 </dialog>
 
-<p class="note">
-  <strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
-  name and a level, and you get a blank sheet with 10 in every score and the standard
-  skill list; it is saved in this browser exactly like an import.
-  <br><br>
-  <strong>Add your own character:</strong> in Google Sheets choose
-  <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
-  — or drop the file anywhere on this page. The workbook is read here in your browser
-  and thrown away once it has been transcribed; it is never uploaded. A
-  <code>.json</code> this app exported can be dropped back the same way.
-  <br><br>
-  Everything is saved to this browser only — nobody else sees it, and clearing your
-  browser data clears it.
-  <br><br>
-  <strong>Saving and going back:</strong> your edits are kept as you make them, so a
-  closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
-  and anything edited after it is offered back to you next time rather than assumed.
-  A snapshot is taken automatically every 20 changes and the last 5 are kept; a
-  <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
-  <strong>History</strong> lists all of them. “Reset” goes back to the character as
-  imported and keeps your named checkpoints.
-  <br><br>
-  <strong>Export JSON</strong> downloads one character, which is how you send a build to
-  someone else; <strong>Export all</strong> downloads every character in the picker as a
-  <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
-  reveal the Formula Audit tab, which lists every player-authored formula as plain text.
-</p>
+<dialog id="helpDialog" class="box" aria-labelledby="helpTitle">
+  <h2 id="helpTitle">How this works</h2>
+  <div class="helpbody">
+    <p><strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
+    name and a level, and you get a blank sheet with 10 in every score and the standard
+    skill list; it is saved in this browser exactly like an import.</p>
+    <p><strong>Add your own character:</strong> in Google Sheets choose
+    <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
+    — or drop the file anywhere on this page. The workbook is read here in your browser
+    and thrown away once it has been transcribed; it is never uploaded. A
+    <code>.json</code> this app exported can be dropped back the same way.</p>
+    <p>Everything is saved to this browser only — nobody else sees it, and clearing your
+    browser data clears it.</p>
+    <p><strong>Saving and going back:</strong> your edits are kept as you make them, so a
+    closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
+    and anything edited after it is offered back to you next time rather than assumed.
+    A snapshot is taken automatically every 20 changes and the last 5 are kept; a
+    <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
+    <strong>History</strong> lists all of them. “Reset” goes back to the character as
+    imported and keeps your named checkpoints.</p>
+    <p><strong>Export JSON</strong> downloads one character, which is how you send a build to
+    someone else; <strong>Export all</strong> downloads every character in the picker as a
+    <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
+    reveal the Formula Audit tab, which lists every player-authored formula as plain text.</p>
+  </div>
+  <div class="actions">
+    <button type="button" id="helpClose" class="btn primary">Got it</button>
+  </div>
+</dialog>
 
 <script type="module">
   import './js/sheet-element.js';
@@ -343,6 +346,18 @@
     importDialog.close('go');
   });
   const removeDialog = document.getElementById('removeDialog');
+
+  // Help: on the button, and on a browser's first visit, once.
+  const helpDialog = document.getElementById('helpDialog');
+  const HELP_SEEN = 'character-sheet:help-seen';
+  document.getElementById('helpBtn').addEventListener('click', () => helpDialog.showModal());
+  document.getElementById('helpClose').addEventListener('click', () => helpDialog.close());
+  helpDialog.addEventListener('close', () => {
+    try { localStorage.setItem(HELP_SEEN, '1'); } catch { /* not fatal */ }
+  });
+  try {
+    if (!localStorage.getItem(HELP_SEEN)) helpDialog.showModal();
+  } catch { /* no storage: no first-visit popup either */ }
   const removeForm = document.getElementById('removeForm');
   document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
   document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
