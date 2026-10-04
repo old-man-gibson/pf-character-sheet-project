@@ -393,13 +393,29 @@ function caretToEnd(el) {
 const CONTROL_ATTRS = ['data-set', 'data-item', 'data-build', 'data-offset', 'data-pick',
   'data-sphere-bonus', 'data-ext-search', 'data-cfeat'];
 
+/** Data attributes that describe a control's state rather than which one it is. */
+const VOLATILE_ATTRS = new Set(['data-showing']);
+
 /**
  * A stable identifier for a control, so focus survives a re-render: the
  * selector that finds its copy in the markup the render writes.
+ *
+ * The attributes above name most controls on their own. Any other control --
+ * a maneuver cell, a class-feature note, a rule group, a session card field
+ * -- is known by all its data attributes together, as long as that picks out
+ * this one control and no other; a key that matched two could put the caret
+ * in the wrong cell.
  */
 function controlKey(input) {
   const attr = CONTROL_ATTRS.find((a) => input?.getAttribute?.(a));
-  return attr ? `[${attr}="${CSS.escape(input.getAttribute(attr))}"]` : null;
+  if (attr) return `[${attr}="${CSS.escape(input.getAttribute(attr))}"]`;
+  if (!input?.attributes) return null;
+  const parts = [...input.attributes]
+    .filter((a) => a.name.startsWith('data-') && a.value !== '' && !VOLATILE_ATTRS.has(a.name))
+    .map((a) => `[${a.name}="${CSS.escape(a.value)}"]`);
+  if (!parts.length) return null;
+  const key = input.tagName.toLowerCase() + parts.join('');
+  return input.getRootNode().querySelectorAll(key).length === 1 ? key : null;
 }
 
 /**
@@ -4601,7 +4617,9 @@ export class CharacterSheetElement extends HTMLElement {
       // Roll references contain card positions. Dismiss before a layout edit
       // can make the toast's format switch refer to a different option.
       this.#rollToast = null;
-      this.#render();
+      // Through the re-render that keeps focus, so a card field edited in
+      // session view keeps the caret.
+      this.#rerender(this.shadowRoot.activeElement);
     });
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
@@ -5526,7 +5544,7 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         const [path, name] = maneuverRef(input.dataset.mfield);
         this.#model.setManeuverField(path, name, input.dataset.mf, input.value);
-        this.#render();
+        this.#rerender(input);
       });
     });
 
