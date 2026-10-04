@@ -31,11 +31,12 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, rowRemove, rowTools,
+  itemNum, itemSelect, itemText, line, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
+import { systemExtrasPanel } from './subsystems.js';
 import { itemArea, prose } from '../prose.js';
 
 export function renderGearPanel(model, ctx) {
@@ -753,7 +754,7 @@ export function renderCraftingPanel(model, ctx) {
       ${craftCostPanel(cr)}
       ${craftCrafterPanel(model, cr)}
       ${craftProjectsPanel(ctx, model, cr)}
-      ${craftExtrasPanel(cr)}
+      ${systemExtrasPanel(cr, 'crafting', 'Item Crafting')}
     </div>`;
   }
 
@@ -991,32 +992,7 @@ function craftPost(ctx, id, label, text, rows) {
     </details>`;
   }
 
-  /**
-   * Cells from the workbook's Item Crafting tab that no label claimed --
-   * Bryva's Armiger customisation block. Kept editable so nothing from the
-   * source sheet is lost, but not part of the calculation.
-   */
-function craftExtrasPanel(cr) {
-    const rows = cr.sourceExtras || [];
-    if (!rows.length) return '';
-    const list = 'crafting.sourceExtras';
-    const width = Math.min(14, Math.max(...rows.map((r) => r.cells.length), 2));
-    return `<section class="panel span2">
-      <h3>From the source tab <span class="badge">${rows.length} rows</span></h3>
-      <p class="hint">
-        Cells the workbook's Item Crafting tab carried beside the calculator.
-        They are kept as written and do not feed anything above.
-      </p>
-      <div class="tablewrap" style="margin-top:8px"><table class="gridtab"><tbody>
-        ${rows.map((r, ri) => `<tr>
-          ${Array.from({ length: width }, (_, ci) => `<td>${itemText(list, ri, `cells.${ci}`, r.cells[ci])}</td>`).join('')}
-          ${rowTools(list, ri)}
-        </tr>`).join('')}
-      </tbody></table></div>
-    </section>`;
-  }
-
-/* ----- wealth: what the character owns and what it came to ----- */
+  /* ----- wealth: what the character owns and what it came to ----- */
 
   /**
    * The wallet on the Overview: current mana, the offering owed under the Oath

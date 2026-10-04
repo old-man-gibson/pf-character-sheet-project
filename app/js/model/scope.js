@@ -1600,7 +1600,7 @@ export function proseSources(model) {
   }
   for (const [key, block] of [['akashic', d.akashic], ['maneuvers', d.maneuvers],
     ['vancian', d.vancian], ['psionics', d.psionics], ['cardcasting', d.cardcasting],
-    ['extras', d.extras]]) {
+    ['extras', d.extras], ['crafting', d.crafting]]) {
     (block?.sourceExtras || []).forEach((row, ri) => {
       (row.cells || []).forEach((cell, ci) => push(`${key}Extra:${ri}:${ci}`, cell));
     });

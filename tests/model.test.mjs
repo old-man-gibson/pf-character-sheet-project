@@ -3180,6 +3180,14 @@ console.log('a class-feature column or group takes its saved width with it');
   check('a removed group drops them all', widths(), undefined);
 }
 
+console.log('a formula in a leftover cell is read on every tab, Crafting included');
+{
+  const c = new Character(blankDocument({ name: 'Leftovers', level: 3 }));
+  c.set('crafting.sourceExtras', [{ cells: ['Armiger', '{armigerBlocks = 4}'] }]);
+  c.set('extras.sourceExtras', [{ cells: ['{extraNote = 2}'] }]);
+  check('both define their names', [c.scope().armigerBlocks, c.scope().extraNote], [4, 2]);
+}
+
 console.log('removals that leave an undo step');
 {
   const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));
