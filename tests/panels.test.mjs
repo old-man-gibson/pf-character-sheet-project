@@ -633,5 +633,21 @@ console.log('\nthe dashboard Offense card opens the same breakdowns as the Defen
   ok('as the Defense card does', keys('Defense').includes('ac'));
 }
 
+console.log('\nCounts as waits for a class name, on every training tab');
+{
+  const c = new Character(blankDocument({ name: 'Unnamed', level: 5 }));
+  const blank = { type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 5,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) };
+  c.listAdd('training.combat.classes', { name: '', ...blank });
+  c.listAdd('training.combat.classes', { name: 'Sentinel', ...blank });
+  c.addGuileClass('');
+  const live = (html, attr) => (html.match(new RegExp(`<input type="checkbox"[^>]*${attr}="[^"]*"`, 'g')) || []).length;
+  const martial = combat.renderMartialPanel(c);
+  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-blend(?:skill)?'), 2);
+  const guileHtml = guile.renderGuilePanel(c);
+  check('nor the unnamed guile class', [live(guileHtml, 'data-blendguile'), guileHtml.includes('Pick the class first')], [0, true]);
+  ok('and it says why', martial.includes('Pick the class first'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

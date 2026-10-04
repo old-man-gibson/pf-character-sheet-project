@@ -176,7 +176,8 @@ export function guileClassBlock(model, g, cls, ci) {
     { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
               <span class="hint">${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility</span>
             </span></label>
-          ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems))}
+          ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems),
+    !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
         ${systems.length > 1 ? ladderStack(model, list, ci, cls, systems, spheres)
@@ -629,7 +630,7 @@ function guileBonusPanel(model, g) {
     const spheres = guileSphereList();
     return `<section class="panel span2">
       <h3>Bonus skill talents ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      <div class="tablewrap"><table class="talents bonus">
+      <div class="tablewrap"><table class="talents bonus stacked">
         <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes">
           <col class="tool"><col class="tool"><col class="tools"></colgroup>
         <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>
@@ -638,13 +639,13 @@ function guileBonusPanel(model, g) {
           <th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
           ${rowGrip()}
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere', notes: 'notes' })}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
-          <td>${itemText(list, i, 'source', e.source, 'Feat, archetype…')}</td>
-          <td>${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
-          <td class="mid">${itemCheck(list, i, 'utility', e.utility)}</td>
-          <td class="mid">${itemCheck(list, i, 'free', e.free)}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
+          <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, archetype…')}</td>
+          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
+          <td class="mid" data-label="Utility">${itemCheck(list, i, 'utility', e.utility)}</td>
+          <td class="mid" data-label="Free">${itemCheck(list, i, 'free', e.free)}</td>
           ${rowToolsDragged(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>
@@ -688,15 +689,15 @@ function tradeTraditionPanel(model, g) {
         bonus talents on top. A class of 5 + Int ranks per level or more is adroit; 4 + Int or
         fewer is competent.
       </p>
-      <div class="tablewrap" style="margin-top:6px"><table class="talents">
+      <div class="tablewrap" style="margin-top:6px"><table class="talents stacked">
         <colgroup><col class="talent"><col class="sphere"><col class="tool"><col class="tool"></colgroup>
         <thead><tr><th>Grants</th><th>Sphere</th>
           <th class="num" title="Only at adroit rank">adroit</th><th></th></tr></thead>
         <tbody>${rows.map((e, i) => `<tr class="${e.adroit && !adroit ? 'future' : ''}">
-          <td>${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
     { sphere: 'sphere' })}</td>
-          <td>${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
-          <td class="mid">${itemCheck(list, i, 'adroit', e.adroit)}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
+          <td class="mid" data-label="Adroit">${itemCheck(list, i, 'adroit', e.adroit)}</td>
           ${rowRemove(list, i)}
         </tr>`).join('')}</tbody>
       </table></div>
