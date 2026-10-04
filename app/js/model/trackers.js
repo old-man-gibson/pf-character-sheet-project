@@ -56,13 +56,17 @@ export const SYSTEM_POOLS = [
   {
     pool: 'sp', id: SPELL_POINTS_ID, name: 'Spell Points', match: /^spell\s*points?$|^sp$/i,
     what: 'the spell points available on Magic Spheres',
-    has: (d) => (Number(d.training?.magic?.totalSP) || 0) > 0,
+    // A caster is a caster before the points add up to anything: a named
+    // casting class is enough, as is a pool from anywhere else.
+    has: (d) => (d.training?.magic?.classes || []).some((c) => String(c?.name ?? '').trim())
+      || (Number(d.training?.magic?.totalSP) || 0) > 0,
     max: (d) => Number(d.training?.magic?.availableSP ?? d.training?.magic?.totalSP) || 0,
   },
   {
     pool: 'pp', id: POWER_POINTS_ID, name: 'Power Points', match: /^power\s*points?$|^pp$/i,
     what: 'the power point pool on Psionics',
-    has: (d) => (Number(d.psionics?.pool) || 0) > 0,
+    has: (d) => (d.psionics?.classes || []).some((c) => String(c?.name ?? '').trim())
+      || (Number(d.psionics?.pool) || 0) > 0,
     max: (d) => Number(d.psionics?.pool) || 0,
     spent: {
       get: (d) => Math.max(0, Math.floor(Number(d.psionics?.spent) || 0)),
@@ -86,29 +90,52 @@ export function poolTracker(model, pool) {
 
 /** Give every caster the pool trackers their systems grant. */
 export function ensureSystemPools(model) {
-  const d = model.data;
   for (const def of SYSTEM_POOLS) {
-    if (!def.has(d)) continue;
-    const found = poolTracker(model, def.pool);
-    if (found) { found.pool = def.pool; continue; }
-    let id = def.id;
-    for (let n = 2; model.trackers.some((t) => t.id === id); n++) id = `${def.id}_${n}`;
-    model.trackers.push({
-      id,
-      name: def.name,
-      pool: def.pool,
-      current: def.spent ? def.spent.get(d) : 0,
-      maxFormula: null,
-      max: 0,
-      minFormula: null,
-      min: 0,
-      refresh: 'Daily',
-      note: '',
-      style: drainStyle(),
-      source: 'player',
-      createdAt: null,
-    });
+    if (def.has(model.data)) addPoolTracker(model, def);
   }
+}
+
+/** The built-in pools this character has no tracker for, as [{ pool, name, what, max }]. */
+export function missingSystemPools(model) {
+  return SYSTEM_POOLS.filter((def) => !poolTracker(model, def.pool))
+    .map((def) => ({ pool: def.pool, name: def.name, what: def.what, max: def.max(model.data) }));
+}
+
+/**
+ * Put one built-in pool on the Trackers tab on request, caster or not: the
+ * Trackers tab offers it wherever there is none. Its maximum is the sheet's
+ * calculated pool, as it is for the ones made automatically.
+ */
+export function addSystemPool(model, pool) {
+  const def = poolDef(pool);
+  if (!def || poolTracker(model, pool)) return model;
+  addPoolTracker(model, def);
+  model.recompute();
+  return model;
+}
+
+/** The pool's tracker, made if there is none (one named for it is adopted). */
+function addPoolTracker(model, def) {
+  const d = model.data;
+  const found = poolTracker(model, def.pool);
+  if (found) { found.pool = def.pool; return; }
+  let id = def.id;
+  for (let n = 2; model.trackers.some((t) => t.id === id); n++) id = `${def.id}_${n}`;
+  model.trackers.push({
+    id,
+    name: def.name,
+    pool: def.pool,
+    current: def.spent ? def.spent.get(d) : 0,
+    maxFormula: null,
+    max: 0,
+    minFormula: null,
+    min: 0,
+    refresh: 'Daily',
+    note: '',
+    style: drainStyle(),
+    source: 'player',
+    createdAt: null,
+  });
 }
 
 /**

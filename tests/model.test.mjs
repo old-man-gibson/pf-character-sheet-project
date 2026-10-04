@@ -3204,6 +3204,18 @@ console.log('small ones: an empty row is not a system in use, and a picked curve
   check('the curve the select wrote is kept as a number', c.data.psionics.classes[0].curveTotal, 343);
 }
 
+console.log('a caster gets the calculated pool, and anyone can add it');
+{
+  const c = new Character(blankDocument({ name: 'Pools', level: 1 }));
+  check('no casting class, no pool', c.trackers.some((t) => t.pool), false);
+  check('both offered on the Trackers tab', c.missingSystemPools().map((p) => p.pool), ['sp', 'pp']);
+  c.listAdd('training.magic.classes', { name: 'Incanter', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 0, levels: [] });
+  check('a named casting class has its pool even at 0 points', c.trackers.filter((t) => t.pool).map((t) => t.id), ['spell_points']);
+  c.addSystemPool('pp');
+  check('the other added on request', c.trackers.filter((t) => t.pool).map((t) => t.id), ['spell_points', 'power_points']);
+  check('and nothing left to offer', c.missingSystemPools(), []);
+}
+
 console.log('removals that leave an undo step');
 {
   const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));

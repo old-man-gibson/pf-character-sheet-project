@@ -58,6 +58,17 @@ export function renderTrackersPanel(model, ctx) {
             value="${esc(draft.note || '')}" aria-label="Note">
           <div><button class="primary" data-action="add-tracker">Add tracker</button></div>
         </div>
+        ${(() => {
+    // The built-in pools, offered wherever there is none: the sheet's own
+    // calculated spell or power point pool, kept as a drain tracker.
+    const missing = model.missingSystemPools();
+    if (!missing.length) return '';
+    return `<div class="pair" style="margin-top:8px">
+          <span class="hint">Built-in pools:</span>
+          ${missing.map((p) => `<button data-action="add-system-pool" data-pool="${esc(p.pool)}"
+            title="${esc(`A tracker for ${p.what}: its maximum is the sheet's own count, now ${p.max}`)}">+ ${esc(p.name)} (${p.max})</button>`).join('')}
+        </div>`;
+  })()}
         <p class="hint">
           Formulas are plain text and are never executed as code — they are parsed and
           evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.

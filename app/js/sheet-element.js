@@ -6598,6 +6598,10 @@ export class CharacterSheetElement extends HTMLElement {
         this.#historyNote = null;
         this.#renderHeader();
         break;
+      case 'add-system-pool':
+        this.#model.addSystemPool(button?.dataset.pool);
+        this.#render();
+        break;
       case 'add-tracker': {
         const { name: n, formula, minFormula, refresh, note, fill } = this.#draft;
         if (!n.trim()) return;
