@@ -252,7 +252,11 @@ function loadTablesFor(el) {
  * Everything here moves the reader around the character or takes a copy of it;
  * nothing here changes it. `data-collapse` folds a panel, `data-tab` opens one,
  * `data-mopen` and `data-mclose` open and shut a maneuver's card, `data-gearopen`
- * does the same for an item, `data-foldcell` unfolds a cell of prose. The named
+ * does the same for an item, `data-foldcell` unfolds a cell of prose,
+ * `data-textopen` is a pack text's Read all, `data-deck-view` switches the
+ * deck between cards and table, and `data-copy` takes the languages or a
+ * post onto the clipboard. Choosing which companion a tab shows is a view
+ * preference too, so `companion-select` stays live. The named
  * actions are the sheet's own furniture -- search, the view switch, the theme,
  * the formula tab -- plus Export JSON, because a read-only sheet is still the
  * reader's to take away, and the two dismiss buttons, which only close a notice
@@ -267,6 +271,7 @@ function loadTablesFor(el) {
 const READERS_KEEP = [
   '[data-tab]', '[data-collapse]', '[data-foldcell]', '[data-wiki]',
   '[data-mopen]', '[data-mclose]', '[data-gearopen]', '[data-cfpeek]',
+  '[data-textopen]', '[data-deck-view]', '[data-copy]', '[data-action="companion-select"]',
   '[data-action="palette"]', '[data-action="view-mode"]', '[data-action="formulas"]',
   '[data-action="theme"]', '[data-action="export"]', '[data-action="copy-text"]',
   '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
