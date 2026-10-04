@@ -2144,6 +2144,9 @@ export class CharacterSheetElement extends HTMLElement {
       if (this.#bdPop?.contains(e.target)) return;
       this.#closeBreakdown();
     }, true);
+    // The element itself, where a host scrolls the sheet inside its own box
+    // (the app page does): that scroll is on the host, not in the shadow root.
+    this.addEventListener('scroll', () => this.#closeBreakdown());
     // Leaving the sheet altogether. `pointerover` only fires on arrival, so
     // without this the last panel would be left standing over the host page.
     this.addEventListener('pointerleave', () => this.#closeBreakdown());

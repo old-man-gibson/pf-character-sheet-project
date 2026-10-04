@@ -90,9 +90,18 @@
   /* The app is the screen: the bar across the top at the window's width, and
      the sheet filling everything under it, edge to edge. The sheet's own
      Width setting still narrows it inside that, centred. */
-  body { min-height: 100svh; display: flex; flex-direction: column; margin: 0; }
-  main { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; }
-  character-sheet { flex: 1 0 auto; border: 0; }
+  /* The window itself never scrolls: the bar stays where it is and the sheet
+     scrolls in the space under it, as an app's own pane does. The pinned tab
+     bar and side rail then rest against the top of that pane, and are told
+     its height (see pinUnderHeader below). */
+  html, body { height: 100%; }
+  body { height: 100svh; overflow: hidden; display: flex; flex-direction: column; margin: 0; }
+  header.app, #banner { flex: none; }
+  main {
+    flex: 1 1 auto; min-height: 0; overflow: auto;
+    display: flex; flex-direction: column; width: 100%; box-sizing: border-box;
+  }
+  character-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; border: 0; }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
@@ -185,7 +194,9 @@
     :root { color-scheme: light; }
     body { background: #fff; color: #000; }
     header.app, .picker, #banner, .welcome, .skiplink, dialog { display: none !important; }
-    body { min-height: 0; display: block; }
+    html, body { height: auto; }
+    body { overflow: visible; display: block; }
+    main, character-sheet { overflow: visible; }
     character-sheet { border: 0; }
   }
 </style>
@@ -1061,12 +1072,16 @@
   railFits.addEventListener('change', placePicker);
   window.addEventListener('resize', () => rosterUpdate());
 
-  // The header is pinned, so the sheet's rail has to stop under it: its height
-  // goes onto the element as `--cs-sticky-top`, and follows every change to it
-  // -- the roster strip wrapping to a second row, the picker moving to the rail.
-  const header = document.querySelector('header.app');
-  const pinUnderHeader = () => sheet.style.setProperty('--cs-sticky-top', `${header.offsetHeight}px`);
-  new ResizeObserver(pinUnderHeader).observe(header);
+  // The sheet scrolls in its own pane under the bar, so its pinned rail rests
+  // at the top of that pane (`--cs-sticky-top` 0) and is as tall as the pane
+  // (`--cs-view-height`), which follows every change to it -- the window, the
+  // roster strip wrapping to a second row, the picker moving to the rail.
+  const pinUnderHeader = () => {
+    sheet.style.setProperty('--cs-sticky-top', '0px');
+    // Not before it has a height: a hidden sheet would size its rail to nothing.
+    if (sheet.clientHeight) sheet.style.setProperty('--cs-view-height', `${sheet.clientHeight}px`);
+  };
+  new ResizeObserver(pinUnderHeader).observe(sheet);
   pinUnderHeader();
   // The roster is drawn again as well: a row's ink is picked to be read on the
   // panel it sits on, and the panel has just changed colour.
