@@ -38,6 +38,11 @@ import { MANEUVER_FIELDS } from './rules.js';
 import { veilDetails } from './model/subsystems/akashic.js';
 import { disciplineEntries, maneuverDetails } from './model/subsystems/maneuvers.js';
 import { featDetails, powerDetails, spellDetails } from './model/subsystems/catalogues.js';
+import { castingTable } from './model/subsystems/vancian.js';
+import { psionicCurve } from './model/subsystems/psionics.js';
+import { deckManipulation } from './model/subsystems/cardcasting.js';
+import { COMPANION_KINDS, abilityTextKey, companionAbilityText } from './companions.js';
+import { Character } from './model.js';
 
 /**
  * The catalogue's own words about a veil, kept beside the text.
@@ -157,6 +162,64 @@ function publishCatalogueRows(doc, report) {
 }
 
 /**
+ * The numbers a pack's tables supply: each Vancian class's casting-table row
+ * and each manifesting class's power-point curve, as `cited` on the class.
+ * Without them a reader with no casting packs saw no spell slots and no power
+ * points. The model reads them only where no pack here answers.
+ */
+function publishTables(doc, report) {
+  for (const c of doc.vancian?.classes || []) {
+    const table = c && castingTable(c.slotType);
+    if (!table) continue;
+    c.cited = { ...(c.cited || {}), table: clone(table) };
+    carry(report, 'casting table');
+  }
+  for (const c of doc.psionics?.classes || []) {
+    const curve = c && psionicCurve(c.curveTotal);
+    if (!curve) continue;
+    c.cited = { ...(c.cited || {}), curve: clone(curve) };
+    carry(report, 'power-point curve');
+  }
+}
+
+/** Every deck manipulation taken, with the catalogue's entry beside it. */
+function publishManipulations(doc, report) {
+  for (const m of doc.cardcasting?.manipulations || []) {
+    if (!m || !String(m.name ?? '').trim()) continue;
+    const entry = deckManipulation(m.name);
+    if (entry) {
+      m.cited = clone(entry);
+      if (entry.text.trim()) carry(report, 'manipulation');
+      else report.blank.push(`manipulation: ${m.name}`);
+    } else if (!m.cited) report.unknown.push(`manipulation: ${m.name}`);
+  }
+}
+
+/**
+ * The text of every ability a companion shows, by the ability's name. The
+ * list is the companion table's, up to its level, which only the model works
+ * out -- so it is read off a Character built from the document.
+ */
+function publishCompanionAbilities(doc, report) {
+  let model;
+  try { model = new Character(clone(doc)); } catch { return; }
+  for (const kind of COMPANION_KINDS) {
+    (doc[kind] || []).forEach((b, i) => {
+      const gains = model.data[kind]?.[i]?.calc?.gains || [];
+      const names = gains.flatMap((g) => g.abilities || [g.text]).filter(Boolean);
+      for (const name of new Set(names)) {
+        const key = abilityTextKey(name);
+        if (String(b.abilityNotes?.[key] ?? '').trim()) continue;   // their own words travel already
+        const shared = companionAbilityText(name);
+        if (!shared) continue;
+        b.citedAbilities = { ...(b.citedAbilities || {}), [key]: clone(shared) };
+        carry(report, 'companion ability');
+      }
+    });
+  }
+}
+
+/**
  * Drop what describes a session rather than the character.
  *
  * The card table is an encounter in progress: a deck order, a hand, a round.
@@ -208,6 +271,9 @@ export function publishDocument(doc) {
   publishVeils(out, report);
   publishManeuvers(out, report);
   publishCatalogueRows(out, report);
+  publishTables(out, report);
+  publishManipulations(out, report);
+  publishCompanionAbilities(out, report);
   dropOffered(out, report);
   return { doc: out, report };
 }

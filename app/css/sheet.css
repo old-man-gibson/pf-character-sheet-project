@@ -363,7 +363,8 @@
 /* Positioned so the tab-colour panel can be placed against the sheet rather
    than the page: `:host` carries no padding or border, so this box and the
    host's line up and a coordinate measured off the host lands here unchanged. */
-.wrap { padding: 14px; position: relative; }
+/* The padding has a name so the side rail can allow for it (see the rail). */
+.wrap { --cs-wrap-pad: 14px; padding: var(--cs-wrap-pad); position: relative; }
 
 /* ---------- header ---------- */
 .head {
@@ -1323,7 +1324,11 @@ select.jumpto[hidden] { display: none; }
   :host([layout="side"]) .tabrail {
     grid-area: rail; align-self: start;
     display: flex; flex-direction: column;
-    height: var(--cs-view-height);
+    /* It starts the sheet's padding below the top of the view, so it pins
+       that far down and is that much shorter: a view tall would run past its
+       bottom by the same amount. */
+    top: calc(var(--cs-sticky-top) + var(--cs-wrap-pad));
+    height: calc(var(--cs-view-height) - var(--cs-wrap-pad));
     margin: 0; padding: 0 12px 0 0;
     border-bottom: 0; border-right: 1px solid var(--cs-line);
   }
@@ -3801,7 +3806,7 @@ input[type="color"] {
     border-color: var(--cs-line); border-radius: 5px;
   }
   button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
-  .wrap { padding: 8px; }
+  .wrap { --cs-wrap-pad: 8px; }
   .panel { padding: 9px 8px; }
   .supergroup { padding: 8px 8px 9px; }
   .supergroup-body { gap: 8px; }

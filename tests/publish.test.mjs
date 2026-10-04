@@ -19,6 +19,7 @@ import * as model from '../app/js/model.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { describePublish, publishDocument } from '../app/js/publish.js';
 import { blankDocument } from '../app/js/convert.js';
+import { COMPANION_KINDS, companionAbilityText as companionText } from '../app/js/companions.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
 
 let pass = 0;
@@ -126,7 +127,20 @@ const referenced = [...(richest.doc.akashic?.slots || []), ...(richest.doc.akash
   + (richest.doc.featGroups || []).reduce((n, grp) => n + named(grp.entries), 0)
   + named([g.drawback, g.specialty, ...(g.others || [])])
   + named(richest.doc.vancian?.prepared)
-  + (richest.doc.psionics?.classes || []).reduce((n, c) => n + named(c.powers), 0);
+  + (richest.doc.psionics?.classes || []).reduce((n, c) => n + named(c.powers), 0)
+  // The tables a class reads its numbers from, and the manipulations taken.
+  + (richest.doc.vancian?.classes || []).filter((c) => model.castingTable(c.slotType)).length
+  + (richest.doc.psionics?.classes || []).filter((c) => model.psionicCurve(c.curveTotal)).length
+  + named(richest.doc.cardcasting?.manipulations)
+  // Companion abilities with pack text and none of the player's own.
+  + (() => {
+    const m = new Character(richest.doc);
+    return COMPANION_KINDS.reduce((n, kind) => n + (m.data[kind] || []).reduce((k, b) => {
+      const names = new Set((b.calc?.gains || []).flatMap((x) => x.abilities || [x.text]).filter(Boolean));
+      return k + [...names].filter((nm) => companionText(nm)
+        && !String(b.abilityNotes?.[nm.trim().toLowerCase()] ?? '').trim()).length;
+    }, 0), 0);
+  })();
 check('every referenced entry is accounted for exactly once',
   report.carried + report.outline.length + report.blank.length + report.unknown.length,
   referenced);
@@ -220,6 +234,35 @@ check('the published one still carries its veil text', seen.published.veil.lengt
 check('and what its maneuvers are', seen.published.maneuver.length > 0, true);
 check('a stranger is shown no more entries than the author had',
   seen.published.veilCount, seen.plain.veilCount);
+
+console.log('publish: the numbers and texts a reader with no packs could not get');
+{
+  const { setCompanionAbilityText } = await import('../app/js/companions.js');
+  model.setCardcastingTables({ manipulations: [{ name: 'Loaded Hand', group: 'Hand', text: 'Hold one more card.' }] });
+  setCompanionAbilityText([{ name: 'Alertness', text: 'The master gains Alertness.', source: 'Core' }]);
+  const c = new Character(blankDocument({ name: 'Packed', level: 8 }));
+  c.listAdd('classes', { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true,
+    skillRanks: 2, archetypes: '', levelsOverride: 8, systems: [] });
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: 'Wizard', stat: 'Int', stat2: '', prep: 'prepared', source: 'arcane',
+    casterLevelOverride: 8, concentration: 0, spells: [0, 1, 2, 3, 4].map((level) => ({ level, perDay: null, known: null })) });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 8, powers: [] });
+  c.set('cardcasting.manipulations', [{ name: 'Loaded Hand', count: 1, group: 'Hand', note: '' }]);
+  c.addCompanion('familiar');
+  const author = { slots: c.data.vancian.classes[0].spells.map((s) => s.slots), pp: c.data.psionics.classes[0].points };
+  const { doc } = publishDocument(c.toJSON());
+  // The reader: no casting, manifesting, manipulation or companion text at all.
+  model.setVancianTables({ classes: [] });
+  model.setPsionicTables({ curves: [] });
+  model.setCardcastingTables({ manipulations: [] });
+  setCompanionAbilityText([]);
+  const reader = new Character(doc);
+  check('the reader sees the author\'s spell slots', reader.data.vancian.classes[0].spells.map((s) => s.slots), author.slots);
+  check('and power points', reader.data.psionics.classes[0].points, author.pp);
+  check('a manipulation keeps its text', model.manipulationEntry(reader.data.cardcasting.manipulations[0])?.text, 'Hold one more card.');
+  check('a companion ability keeps its text', reader.data.familiar[0].citedAbilities?.alertness?.text, 'The master gains Alertness.');
+  check('the author saw some slots in the first place', author.slots.some((n) => n > 0), true);
+  registerTables(mergeTables(bundledPacks()), model);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

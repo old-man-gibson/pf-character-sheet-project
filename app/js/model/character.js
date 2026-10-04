@@ -132,8 +132,8 @@ import {
   nudgeTemplateChild, removeTemplateTableColumn,
 } from './templates.js';
 import {
-  addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, recomputeBuffs,
-  recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
+  addSystemPool, addTracker, ensureMythicPower, isProtectedTracker, loadTrackers, missingSystemPools,
+  recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
 import { getPath, safe, setPath, skillForwardKey, skillKey } from './util.js';
@@ -589,6 +589,8 @@ export class Character {
   updateTracker(...a) { return updateTracker(this, ...a); }
   isProtectedTracker(...a) { return isProtectedTracker(this, ...a); }
   removeTracker(...a) { return removeTracker(this, ...a); }
+  addSystemPool(...a) { return addSystemPool(this, ...a); }
+  missingSystemPools(...a) { return missingSystemPools(this, ...a); }
   #recomputeBuffs(...a) { return recomputeBuffs(this, ...a); }
 
   // traits.js

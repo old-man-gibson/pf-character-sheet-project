@@ -245,8 +245,13 @@ export function recomputePsionics(model) {
     // Blank is no curve chosen, which is not the curve that reaches 0.
     if (c.curveTotal === undefined || String(c.curveTotal ?? '').trim() === '') c.curveTotal = null;
     else if (Number.isFinite(Number(c.curveTotal))) c.curveTotal = Number(c.curveTotal);
-    const base = psionicPoints(c.curveTotal, level);
-    c.curveKnown = psionicCurve(c.curveTotal) !== null;
+    // A published class carries its curve (publish.js), for a reader with no
+    // manifesting pack; a pack that has the curve still wins.
+    const cited = c.cited?.curve && Number(c.cited.curve.total) === c.curveTotal
+      && Array.isArray(c.cited.curve.points) ? c.cited.curve : null;
+    const curve = psionicCurve(c.curveTotal) || cited;
+    const base = curve && level >= 1 && level <= curve.points.length ? curve.points[level - 1] : null;
+    c.curveKnown = curve !== null;
     c.basePoints = base;
     // No curve, or no level on it, means the class manifests nothing at all --
     // so it earns no ability share either. The sheet gated the whole sum the

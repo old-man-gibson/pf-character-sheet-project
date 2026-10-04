@@ -31,6 +31,12 @@ export function setVancianTables(doc) {
 }
 
 /** Every class name the shared table can supply, for pickers and matching. */
+/** The casting-table row a published class brought with it, or null. */
+function citedTable(c) {
+  const t = c?.cited?.table;
+  return t && typeof t === 'object' && Array.isArray(t.perDay) ? t : null;
+}
+
 export function castingTableNames() {
   return VANCIAN_TABLES.classes.map((c) => c.name);
 }
@@ -297,7 +303,9 @@ export function recomputeVancian(model) {
     const style = prepStyle(c.prep);
     const mod = statMod(model.data, c.stat, c.stat2);
     const score = statScore(model.data, c.stat, c.stat2);
-    const table = castingTable(c.slotType);
+    // A published sheet carries the row it read (publish.js), for a reader
+    // with no casting pack; a pack that knows the class still wins.
+    const table = castingTable(c.slotType) || citedTable(c);
 
     /*
      * Caster level follows the Planner, because that is where it came from: the
