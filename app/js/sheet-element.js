@@ -4093,9 +4093,10 @@ export class CharacterSheetElement extends HTMLElement {
     const menu = root.querySelector('.tabmenu');
     if (!menu) return;
     const hexBox = menu.querySelector('[data-tabhex]');
+    const picker = menu.querySelector('[data-tabpick]');
 
     /** Write the colour, then repaint everything wearing it, in place. */
-    const apply = (hex, { fromHexBox = false } = {}) => {
+    const apply = (hex, { fromHexBox = false, fromPicker = false } = {}) => {
       const { key, kind } = this.#tabColorFor;
       if (kind === 'character') {
         // The character's colour: onto the host's properties, and onto the
@@ -4134,6 +4135,9 @@ export class CharacterSheetElement extends HTMLElement {
         hexBox.value = hex || '';
         hexBox.classList.remove('bad');
       }
+      // The picker shows the colour a swatch or the hex box chose, as it does
+      // when the panel opens; not while it is the one being dragged.
+      if (picker && !fromPicker) picker.value = hex || THEME_ACCENT.hex;
     };
 
     /*
@@ -4155,8 +4159,8 @@ export class CharacterSheetElement extends HTMLElement {
     menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
       b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
     });
-    menu.querySelector('[data-tabpick]')?.addEventListener('input', (e) => {
-      apply(normalizeHex(e.target.value));
+    picker?.addEventListener('input', (e) => {
+      apply(normalizeHex(e.target.value), { fromPicker: true });
     });
     hexBox?.addEventListener('input', () => {
       // Typed a character at a time, so an incomplete hex is not an error yet
@@ -4207,6 +4211,16 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.#chromeMenu && !path.some((n) => n?.classList?.contains?.('chromemenu')
       || n?.dataset?.action === 'chrome-menu')) {
       this.#chromeMenu = false;
+      this.#renderHeader();
+    }
+    // The theme panel too -- except while one of its selects has focus, whose
+    // open list is browser chrome a press on reads as somewhere else (the
+    // colour picker below has the same trouble), and except on the button that
+    // toggles it.
+    if (this.#themeMenu && !path.some((n) => n?.classList?.contains?.('thememenu')
+      || n?.dataset?.action === 'theme')
+      && !this.shadowRoot.activeElement?.matches?.('.thememenu select')) {
+      this.#themeMenu = false;
       this.#renderHeader();
     }
     if (!this.#tabColorFor) return;
