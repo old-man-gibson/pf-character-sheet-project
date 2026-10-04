@@ -19,6 +19,7 @@ import * as model from '../app/js/model.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { describePublish, publishDocument } from '../app/js/publish.js';
 import { blankDocument } from '../app/js/convert.js';
+import { COMPANION_KINDS, companionAbilityText as companionText } from '../app/js/companions.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
 
 let pass = 0;
@@ -126,7 +127,20 @@ const referenced = [...(richest.doc.akashic?.slots || []), ...(richest.doc.akash
   + (richest.doc.featGroups || []).reduce((n, grp) => n + named(grp.entries), 0)
   + named([g.drawback, g.specialty, ...(g.others || [])])
   + named(richest.doc.vancian?.prepared)
-  + (richest.doc.psionics?.classes || []).reduce((n, c) => n + named(c.powers), 0);
+  + (richest.doc.psionics?.classes || []).reduce((n, c) => n + named(c.powers), 0)
+  // The tables a class reads its numbers from, and the manipulations taken.
+  + (richest.doc.vancian?.classes || []).filter((c) => model.castingTable(c.slotType)).length
+  + (richest.doc.psionics?.classes || []).filter((c) => model.psionicCurve(c.curveTotal)).length
+  + named(richest.doc.cardcasting?.manipulations)
+  // Companion abilities with pack text and none of the player's own.
+  + (() => {
+    const m = new Character(richest.doc);
+    return COMPANION_KINDS.reduce((n, kind) => n + (m.data[kind] || []).reduce((k, b) => {
+      const names = new Set((b.calc?.gains || []).flatMap((x) => x.abilities || [x.text]).filter(Boolean));
+      return k + [...names].filter((nm) => companionText(nm)
+        && !String(b.abilityNotes?.[nm.trim().toLowerCase()] ?? '').trim()).length;
+    }, 0), 0);
+  })();
 check('every referenced entry is accounted for exactly once',
   report.carried + report.outline.length + report.blank.length + report.unknown.length,
   referenced);
