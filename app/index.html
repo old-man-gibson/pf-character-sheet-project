@@ -70,7 +70,7 @@
      chip rule does the drawing. */
   .member.local .chip.tinted + .drop { border-color: color-mix(in srgb, var(--entry-color) 55%, var(--line)); }
   .banner {
-    max-width: 1500px; margin: 12px auto 0; padding: 8px 12px; border-radius: 6px;
+    margin: 8px 12px 0; padding: 8px 12px; border-radius: 6px;
     font-size: 13px; display: flex; gap: 10px; align-items: flex-start;
   }
   .banner.err { color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); }
@@ -87,8 +87,21 @@
     display: flex; align-items: center; gap: 6px;
     font-size: 12.5px; color: var(--ink2); cursor: pointer; white-space: nowrap;
   }
-  main { padding: 18px; max-width: 1500px; margin: 0 auto; }
-  character-sheet { border: 1px solid var(--line); }
+  /* The app is the screen: the bar across the top at the window's width, and
+     the sheet filling everything under it, edge to edge. The sheet's own
+     Width setting still narrows it inside that, centred. */
+  /* The window itself never scrolls: the bar stays where it is and the sheet
+     scrolls in the space under it, as an app's own pane does. The pinned tab
+     bar and side rail then rest against the top of that pane, and are told
+     its height (see pinUnderHeader below). */
+  html, body { height: 100%; }
+  body { height: 100svh; overflow: hidden; display: flex; flex-direction: column; margin: 0; }
+  header.app, #banner { flex: none; }
+  main {
+    flex: 1 1 auto; min-height: 0; overflow: auto;
+    display: flex; flex-direction: column; width: 100%; box-sizing: border-box;
+  }
+  character-sheet { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; border: 0; }
   character-sheet[hidden], .welcome[hidden] { display: none; }
   .welcome {
     max-width: 40rem; margin: 8vh auto 0; padding: 28px 30px; text-align: center;
@@ -99,8 +112,13 @@
   .welcome p.hint { margin: 14px 0 0; }
   .welcome code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
   .welcome .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .note { color: var(--ink2); font-size: 12.5px; padding: 14px 18px 26px; max-width: 1500px; margin: 0 auto; }
-  .note code { background: var(--surface); padding: 1px 5px; border-radius: 3px; }
+  /* How the app works, in a dialog of its own rather than under the sheet:
+     the Help button opens it, and it opens by itself on a browser's first
+     visit. */
+  dialog#helpDialog { width: min(40rem, 92vw); max-width: min(40rem, 92vw); }
+  dialog#helpDialog .helpbody { overflow-y: auto; font-size: 13px; line-height: 1.55; color: var(--ink2); }
+  dialog#helpDialog .helpbody p { margin: 0 0 10px; }
+  dialog#helpDialog .helpbody code { background: var(--bg); padding: 1px 5px; border-radius: 3px; }
   /* The dialogs take the chrome's box; what is left is their forms. */
   dialog.box label { display: flex; align-items: center; gap: 10px; margin: 6px 0; font-size: 13px; }
   dialog.box label input, dialog.box select {
@@ -141,18 +159,33 @@
   .picker[slot="rail"] .chip.import,
   .picker[slot="rail"] .chip.exportall,
   .picker[slot="rail"] .chip.fold { justify-content: flex-start; padding: 5px 10px; }
-  .picker[slot="rail"] .chip.import:first-of-type,
-  .picker[slot="rail"] .chip.fold { margin-top: 8px; }
-  /* The 1500px column is for the page before a sheet is up -- the welcome
-     card, a banner over nothing. Once the sheet has said how wide it is the
-     cap comes off, so "Full width" is the window and "90%" is 90% of it,
-     whichever layout is up: a share of the window, not of a column that on a
-     wide screen left a fifth of it empty either side. The banner and the
-     note follow the sheet to the edges when it takes them all; under a
-     narrower sheet they keep the column, which is about as wide as it is. */
-  html[data-layout="side"] main, html[data-layout="side"] .banner, html[data-layout="side"] .note { max-width: none; }
-  html[data-width] main { max-width: none; }
-  html[data-width="100"] .banner, html[data-width="100"] .note { max-width: none; }
+  .picker[slot="rail"] .chip.import:first-of-type { margin-top: 8px; }
+  /* In the header the roster is the strip it always was -- the list and its
+     scroll box dissolve into it, and Fold stays at the end. */
+  .picker:not([slot="rail"]) .rosterwrap,
+  .picker:not([slot="rail"]) .roster { display: contents; }
+  .picker:not([slot="rail"]) .more { display: none; }
+  .picker:not([slot="rail"]) .chip.fold { order: 1; }
+  /* In the rail, Fold heads the column and the characters scroll in a box of
+     their own -- at most 35% of the window, so a long roster cannot push the
+     tabs below it off the screen. A bar at the top or bottom says how many
+     are out of sight that way; a click on one scrolls a page. */
+  .picker[slot="rail"] .chip.fold { margin-bottom: 4px; }
+  .picker[slot="rail"] .rosterwrap { position: relative; min-height: 0; }
+  .picker[slot="rail"] .roster {
+    display: flex; flex-direction: column; gap: 3px;
+    max-height: 35svh; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain;
+  }
+  .picker[slot="rail"] .more {
+    position: absolute; left: 0; right: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    height: 22px; padding: 0; border: 0; border-radius: 0;
+    font: inherit; font-size: 11px; color: var(--ink2); cursor: pointer;
+  }
+  .picker[slot="rail"] .more[hidden] { display: none; }
+  .picker[slot="rail"] .more:hover { color: var(--accent); }
+  .picker[slot="rail"] .more.up { top: 0; background: linear-gradient(var(--cs-bg) 55%, transparent); }
+  .picker[slot="rail"] .more.down { bottom: 0; background: linear-gradient(transparent, var(--cs-bg) 45%); }
   /* Printing: the sheet does its own print styling (see app/css/sheet.css).
      All this page has to do is get out of the way -- the picker, the roster
      chrome and the dark backdrop are for choosing a character, not for the
@@ -161,6 +194,9 @@
     :root { color-scheme: light; }
     body { background: #fff; color: #000; }
     header.app, .picker, #banner, .welcome, .skiplink, dialog { display: none !important; }
+    html, body { height: auto; }
+    body { overflow: visible; display: block; }
+    main, character-sheet { overflow: visible; }
     character-sheet { border: 0; }
   }
 </style>
@@ -177,6 +213,7 @@
   <div class="tools">
     <button type="button" class="btn" id="extBtn" title="Content packs: catalogues, tables and building blocks">Extensions</button>
     <a class="btn" href="../forge/" title="Homebrew Workbench: write homebrew here, publish it to this sheet as a pack">Workbench</a>
+    <button type="button" class="btn" id="helpBtn" title="How this app works: new characters, importing, saving and history">? Help</button>
     <label class="role">
       <input type="checkbox" id="adminToggle"> GM / inspector view
     </label>
@@ -260,33 +297,35 @@
   </form>
 </dialog>
 
-<p class="note">
-  <strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
-  name and a level, and you get a blank sheet with 10 in every score and the standard
-  skill list; it is saved in this browser exactly like an import.
-  <br><br>
-  <strong>Add your own character:</strong> in Google Sheets choose
-  <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
-  — or drop the file anywhere on this page. The workbook is read here in your browser
-  and thrown away once it has been transcribed; it is never uploaded. A
-  <code>.json</code> this app exported can be dropped back the same way.
-  <br><br>
-  Everything is saved to this browser only — nobody else sees it, and clearing your
-  browser data clears it.
-  <br><br>
-  <strong>Saving and going back:</strong> your edits are kept as you make them, so a
-  closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
-  and anything edited after it is offered back to you next time rather than assumed.
-  A snapshot is taken automatically every 20 changes and the last 5 are kept; a
-  <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
-  <strong>History</strong> lists all of them. “Reset” goes back to the character as
-  imported and keeps your named checkpoints.
-  <br><br>
-  <strong>Export JSON</strong> downloads one character, which is how you send a build to
-  someone else; <strong>Export all</strong> downloads every character in the picker as a
-  <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
-  reveal the Formula Audit tab, which lists every player-authored formula as plain text.
-</p>
+<dialog id="helpDialog" class="box" aria-labelledby="helpTitle">
+  <h2 id="helpTitle">How this works</h2>
+  <div class="helpbody">
+    <p><strong>Start a character from nothing:</strong> press <strong>+ New</strong>, give it a
+    name and a level, and you get a blank sheet with 10 in every score and the standard
+    skill list; it is saved in this browser exactly like an import.</p>
+    <p><strong>Add your own character:</strong> in Google Sheets choose
+    <em>File → Download → Microsoft Excel (.xlsx)</em>, then press <strong>+ Import</strong>
+    — or drop the file anywhere on this page. The workbook is read here in your browser
+    and thrown away once it has been transcribed; it is never uploaded. A
+    <code>.json</code> this app exported can be dropped back the same way.</p>
+    <p>Everything is saved to this browser only — nobody else sees it, and clearing your
+    browser data clears it.</p>
+    <p><strong>Saving and going back:</strong> your edits are kept as you make them, so a
+    closed tab loses nothing. <strong>Save</strong> marks the version the sheet opens on,
+    and anything edited after it is offered back to you next time rather than assumed.
+    A snapshot is taken automatically every 20 changes and the last 5 are kept; a
+    <strong>checkpoint</strong> you name — “before respec” — is kept until you delete it.
+    <strong>History</strong> lists all of them. “Reset” goes back to the character as
+    imported and keeps your named checkpoints.</p>
+    <p><strong>Export JSON</strong> downloads one character, which is how you send a build to
+    someone else; <strong>Export all</strong> downloads every character in the picker as a
+    <code>.zip</code> of those same files. Tick <strong>GM / inspector view</strong> to
+    reveal the Formula Audit tab, which lists every player-authored formula as plain text.</p>
+  </div>
+  <div class="actions">
+    <button type="button" id="helpClose" class="btn primary">Got it</button>
+  </div>
+</dialog>
 
 <script type="module">
   import './js/sheet-element.js';
@@ -318,6 +357,18 @@
     importDialog.close('go');
   });
   const removeDialog = document.getElementById('removeDialog');
+
+  // Help: on the button, and on a browser's first visit, once.
+  const helpDialog = document.getElementById('helpDialog');
+  const HELP_SEEN = 'character-sheet:help-seen';
+  document.getElementById('helpBtn').addEventListener('click', () => helpDialog.showModal());
+  document.getElementById('helpClose').addEventListener('click', () => helpDialog.close());
+  helpDialog.addEventListener('close', () => {
+    try { localStorage.setItem(HELP_SEEN, '1'); } catch { /* not fatal */ }
+  });
+  try {
+    if (!localStorage.getItem(HELP_SEEN)) helpDialog.showModal();
+  } catch { /* no storage: no first-visit popup either */ }
   const removeForm = document.getElementById('removeForm');
   document.getElementById('removeCancel').addEventListener('click', () => removeDialog.close());
   document.getElementById('welcomeNew').addEventListener('click', () => newDialog.showModal());
@@ -478,16 +529,25 @@
       : `<span class="member"><button${tint(c)} data-id="${esc(c.id)}" aria-pressed="${c.id === current}" title="${esc(c.name)}. Right-click to colour">
            <span class="cname">${esc(c.name)}</span> <b>L${esc(c.level)}</b>
          </button></span>`);
-    picker.innerHTML = `${shown.map(chip).join('')}
-      ${folded
+    // Where the list was scrolled, so a redraw -- a colour picked, a level
+    // changed -- does not throw the player back to the top of it.
+    const oldBox = picker.querySelector('.roster');
+    const keptScroll = picker.slot === 'rail' && oldBox?.clientHeight ? oldBox.scrollTop : null;
+    picker.innerHTML = `${folded
     ? `<button class="chip fold" id="unfoldBtn" aria-expanded="false"
           title="Show every character, and the new/import/export controls">▸ ${others > 0 ? `${others} more` : 'roster'}…</button>`
-    : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
+    : `<button class="chip fold" id="foldBtn" aria-expanded="true"
+        title="Fold the picker to just the open character">▾ Fold</button>`}
+      <div class="rosterwrap">
+        <button type="button" class="more up" hidden tabindex="-1" aria-hidden="true"></button>
+        <div class="roster">${shown.map(chip).join('')}</div>
+        <button type="button" class="more down" hidden tabindex="-1" aria-hidden="true"></button>
+      </div>
+      ${folded ? '' : `<button class="chip import" id="newBtn" title="Start a character from a blank sheet">+ New</button>
       <button class="chip import" id="importBtn" title="Add a character: a .xlsx workbook, or a JSON this app exported">+ Import</button>
       <button class="chip exportall" id="exportAllBtn"
-        title="Download every character in this picker as one .zip">Export all</button>
-      <button class="chip fold" id="foldBtn" aria-expanded="true"
-        title="Fold the picker to just the open character">▾ Fold</button>`}`;
+        title="Download every character in this picker as one .zip">Export all</button>`}`;
+    bindRosterScroll(keptScroll);
 
     picker.querySelectorAll('button.pick').forEach((b) => {
       b.addEventListener('click', () => { current = b.dataset.id; rememberOpen(); select(); draw(); });
@@ -511,6 +571,57 @@
     picker.querySelector('#foldBtn')?.addEventListener('click', () => { setPickerFolded(true); draw(); });
     picker.querySelector('#unfoldBtn')?.addEventListener('click', () => { setPickerFolded(false); draw(); });
   }
+
+  /*
+   * The rail's roster box: how many characters are out of sight above and
+   * below, said on the bar at that edge, and a click on a bar scrolls a box's
+   * worth that way. Only in the rail -- in the header the box is not one.
+   */
+  function bindRosterScroll(keptScroll) {
+    const box = picker.querySelector('.roster');
+    const up = picker.querySelector('.more.up');
+    const down = picker.querySelector('.more.down');
+    if (!box || !up || !down) return;
+    const update = () => {
+      const inRail = picker.slot === 'rail';
+      const rows = [...box.children];
+      const top = box.scrollTop;
+      const bottom = top + box.clientHeight;
+      // A row counts as out of sight once less than half of it shows.
+      const above = inRail ? rows.filter((r) => r.offsetTop + r.offsetHeight / 2 < top).length : 0;
+      const below = inRail ? rows.filter((r) => r.offsetTop + r.offsetHeight / 2 > bottom).length : 0;
+      up.hidden = !above;
+      down.hidden = !below;
+      up.textContent = `▲ ${above} more`;
+      down.textContent = `▼ ${below} more`;
+    };
+    up.addEventListener('click', () => box.scrollBy({ top: -box.clientHeight * 0.8, behavior: 'smooth' }));
+    down.addEventListener('click', () => box.scrollBy({ top: box.clientHeight * 0.8, behavior: 'smooth' }));
+    box.addEventListener('scroll', update, { passive: true });
+    // The open character in view, without moving the page around it.
+    const reveal = () => {
+      const open = box.querySelector('[aria-pressed="true"]');
+      if (!open) return;
+      const r = open.closest('.member') || open;
+      if (r.offsetTop < box.scrollTop || r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) {
+        box.scrollTop = r.offsetTop - (box.clientHeight - r.offsetHeight) / 2;
+      }
+      update();
+    };
+    rosterUpdate = update;
+    rosterReveal = reveal;
+    if (keptScroll !== null) { box.scrollTop = keptScroll; update(); } else reveal();
+    // The box has no height until the sheet has drawn its rail, and changes
+    // with the window: recount on every resize, and bring the open character
+    // into view the first time there is a box to bring it into.
+    let shown = keptScroll !== null;
+    new ResizeObserver(() => {
+      if (!shown && box.clientHeight) { shown = true; reveal(); } else update();
+    }).observe(box);
+    requestAnimationFrame(update);
+  }
+  let rosterUpdate = () => {};
+  let rosterReveal = () => {};
 
   /*
    * A character from nothing. `blankDocument` is the converter's own output for
@@ -954,15 +1065,23 @@
       picker.removeAttribute('slot');
       if (picker.parentElement === sheet) document.querySelector('header.app h1').after(picker);
     }
+    // The box only scrolls in the rail, so the open character is brought into
+    // view once it has arrived there.
+    requestAnimationFrame(() => rosterReveal());
   }
   railFits.addEventListener('change', placePicker);
+  window.addEventListener('resize', () => rosterUpdate());
 
-  // The header is pinned, so the sheet's rail has to stop under it: its height
-  // goes onto the element as `--cs-sticky-top`, and follows every change to it
-  // -- the roster strip wrapping to a second row, the picker moving to the rail.
-  const header = document.querySelector('header.app');
-  const pinUnderHeader = () => sheet.style.setProperty('--cs-sticky-top', `${header.offsetHeight}px`);
-  new ResizeObserver(pinUnderHeader).observe(header);
+  // The sheet scrolls in its own pane under the bar, so its pinned rail rests
+  // at the top of that pane (`--cs-sticky-top` 0) and is as tall as the pane
+  // (`--cs-view-height`), which follows every change to it -- the window, the
+  // roster strip wrapping to a second row, the picker moving to the rail.
+  const pinUnderHeader = () => {
+    sheet.style.setProperty('--cs-sticky-top', '0px');
+    // Not before it has a height: a hidden sheet would size its rail to nothing.
+    if (sheet.clientHeight) sheet.style.setProperty('--cs-view-height', `${sheet.clientHeight}px`);
+  };
+  new ResizeObserver(pinUnderHeader).observe(sheet);
   pinUnderHeader();
   // The roster is drawn again as well: a row's ink is picked to be read on the
   // panel it sits on, and the panel has just changed colour.

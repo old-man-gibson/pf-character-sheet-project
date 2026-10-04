@@ -241,6 +241,10 @@ export function recomputePsionics(model) {
     c.manifesterLevelWaiting = level ? 0 : c.manifesterLevelForwarded;
     c.manifesterLevel = Math.max(0, level + (level ? c.manifesterLevelForwarded : 0));
 
+    // A select writes its option as text; the curve is a number, and stays one.
+    // Blank is no curve chosen, which is not the curve that reaches 0.
+    if (c.curveTotal === undefined || String(c.curveTotal ?? '').trim() === '') c.curveTotal = null;
+    else if (Number.isFinite(Number(c.curveTotal))) c.curveTotal = Number(c.curveTotal);
     const base = psionicPoints(c.curveTotal, level);
     c.curveKnown = psionicCurve(c.curveTotal) !== null;
     c.basePoints = base;

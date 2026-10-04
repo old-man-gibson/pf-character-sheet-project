@@ -94,13 +94,18 @@
      height, and the rail sits under it instead of behind it. Public --
      see docs/embedding.md. */
   --cs-sticky-top: 0px;
+  /* How much of the sheet is on screen at once: the window under that same
+     top, unless the host makes the sheet scroll inside a box of its own and
+     sets this to the box's height (the app page does). The rail and the long
+     tables are sized from it. Public -- see docs/embedding.md. */
+  --cs-view-height: calc(100svh - var(--cs-sticky-top));
   /* How tall a table is allowed to get before it scrolls inside its own box
      rather than dragging the page down. A screen, less the rail and the panel
      furniture above it, so a table shorter than the window is untouched and
      only the long ones gain a scrollbar -- which is also what gives their
      headings something to stick to. `svh` rather than `dvh` on purpose: a
      mobile toolbar sliding away must not resize the box mid-scroll. */
-  --cs-table-max: calc(100svh - var(--cs-sticky-top) - 10rem);
+  --cs-table-max: calc(var(--cs-view-height) - 10rem);
 
   display: block;
   font-family: var(--cs-font);
@@ -1318,7 +1323,7 @@ select.jumpto[hidden] { display: none; }
   :host([layout="side"]) .tabrail {
     grid-area: rail; align-self: start;
     display: flex; flex-direction: column;
-    height: calc(100svh - var(--cs-sticky-top));
+    height: var(--cs-view-height);
     margin: 0; padding: 0 12px 0 0;
     border-bottom: 0; border-right: 1px solid var(--cs-line);
   }

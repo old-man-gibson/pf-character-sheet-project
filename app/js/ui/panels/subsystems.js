@@ -171,7 +171,11 @@ export function modelledSystems(model) {
     return out;
   }
 
-  /** Cells from a source tab that no label claimed. Kept, shown, not modelled. */
+  /**
+   * Cells from a source tab that no label claimed. Kept and shown; a {…}
+   * formula in one works as it does in any cell, but nothing on the tab reads
+   * the cells themselves.
+   */
 export function systemExtrasPanel(block, path, tabName) {
     const rows = block?.sourceExtras || [];
     if (!rows.length) return '';
@@ -180,8 +184,9 @@ export function systemExtrasPanel(block, path, tabName) {
     return `<section class="panel span2">
       <h3>From the source tab <span class="badge">${rows.length} rows</span></h3>
       <p class="hint">
-        Cells the workbook's ${esc(tabName)} tab carried that no heading claimed.
-        They are kept as written and do not feed anything above.
+        Cells the workbook's ${esc(tabName)} tab carried that no heading claimed, kept as
+        written. Nothing above reads them, but a <code>{…}</code> formula in one works as it
+        does in any other cell.
       </p>
       <div class="tablewrap" style="margin-top:8px"><table class="gridtab"><tbody>
         ${rows.map((r, ri) => `<tr>

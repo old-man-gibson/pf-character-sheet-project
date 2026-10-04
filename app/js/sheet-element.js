@@ -252,7 +252,11 @@ function loadTablesFor(el) {
  * Everything here moves the reader around the character or takes a copy of it;
  * nothing here changes it. `data-collapse` folds a panel, `data-tab` opens one,
  * `data-mopen` and `data-mclose` open and shut a maneuver's card, `data-gearopen`
- * does the same for an item, `data-foldcell` unfolds a cell of prose. The named
+ * does the same for an item, `data-foldcell` unfolds a cell of prose,
+ * `data-textopen` is a pack text's Read all, `data-deck-view` switches the
+ * deck between cards and table, and `data-copy` takes the languages or a
+ * post onto the clipboard. Choosing which companion a tab shows is a view
+ * preference too, so `companion-select` stays live. The named
  * actions are the sheet's own furniture -- search, the view switch, the theme,
  * the formula tab -- plus Export JSON, because a read-only sheet is still the
  * reader's to take away, and the two dismiss buttons, which only close a notice
@@ -267,6 +271,7 @@ function loadTablesFor(el) {
 const READERS_KEEP = [
   '[data-tab]', '[data-collapse]', '[data-foldcell]', '[data-wiki]',
   '[data-mopen]', '[data-mclose]', '[data-gearopen]', '[data-cfpeek]',
+  '[data-textopen]', '[data-deck-view]', '[data-copy]', '[data-action="companion-select"]',
   '[data-action="palette"]', '[data-action="view-mode"]', '[data-action="formulas"]',
   '[data-action="theme"]', '[data-action="export"]', '[data-action="copy-text"]',
   '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
@@ -393,13 +398,29 @@ function caretToEnd(el) {
 const CONTROL_ATTRS = ['data-set', 'data-item', 'data-build', 'data-offset', 'data-pick',
   'data-sphere-bonus', 'data-ext-search', 'data-cfeat'];
 
+/** Data attributes that describe a control's state rather than which one it is. */
+const VOLATILE_ATTRS = new Set(['data-showing']);
+
 /**
  * A stable identifier for a control, so focus survives a re-render: the
  * selector that finds its copy in the markup the render writes.
+ *
+ * The attributes above name most controls on their own. Any other control --
+ * a maneuver cell, a class-feature note, a rule group, a session card field
+ * -- is known by all its data attributes together, as long as that picks out
+ * this one control and no other; a key that matched two could put the caret
+ * in the wrong cell.
  */
 function controlKey(input) {
   const attr = CONTROL_ATTRS.find((a) => input?.getAttribute?.(a));
-  return attr ? `[${attr}="${CSS.escape(input.getAttribute(attr))}"]` : null;
+  if (attr) return `[${attr}="${CSS.escape(input.getAttribute(attr))}"]`;
+  if (!input?.attributes) return null;
+  const parts = [...input.attributes]
+    .filter((a) => a.name.startsWith('data-') && a.value !== '' && !VOLATILE_ATTRS.has(a.name))
+    .map((a) => `[${a.name}="${CSS.escape(a.value)}"]`);
+  if (!parts.length) return null;
+  const key = input.tagName.toLowerCase() + parts.join('');
+  return input.getRootNode().querySelectorAll(key).length === 1 ? key : null;
 }
 
 /**
@@ -582,9 +603,6 @@ export class CharacterSheetElement extends HTMLElement {
   #lastTab = null;
   /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
   #armedGearCol = null;
-  #confirmDelete = null;
-  /** The class whose feature group is one click from being deleted, or null. */
-  #confirmGroup = null;
   /** Which Classes row has its sub-system picker open (index, or null). */
   #openClassSystems = null;
   /** Whether the dashboard's grouped condition picker is unfolded. */
@@ -2126,6 +2144,9 @@ export class CharacterSheetElement extends HTMLElement {
       if (this.#bdPop?.contains(e.target)) return;
       this.#closeBreakdown();
     }, true);
+    // The element itself, where a host scrolls the sheet inside its own box
+    // (the app page does): that scroll is on the host, not in the shadow root.
+    this.addEventListener('scroll', () => this.#closeBreakdown());
     // Leaving the sheet altogether. `pointerover` only fires on arrival, so
     // without this the last panel would be left standing over the host page.
     this.addEventListener('pointerleave', () => this.#closeBreakdown());
@@ -2769,7 +2790,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- feats & mythic ---------------- */
 
   /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
-  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell }); }
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove }); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -2905,7 +2926,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- progression, lore & leftover tabs ---------------- */
 
   /** All three live in ui/panels/lore.js. */
-  #loreCtx() { return { menuLists: this.#menuLists, confirmGroup: this.#confirmGroup }; }
+  #loreCtx() { return { menuLists: this.#menuLists, armedRemove: this.#armedRemove }; }
 
   #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#loreCtx()); }
 
@@ -3034,7 +3055,7 @@ export class CharacterSheetElement extends HTMLElement {
       tabEntries: this.#tabEntries(),
       barEntries: this.#barEntries(),
       draft: this.#draft,
-      confirmDelete: this.#confirmDelete,
+      armedRemove: this.#armedRemove,
       extFilter: this.#extFilter,
       extSearch: this.#extSearch,
     });
@@ -4072,9 +4093,10 @@ export class CharacterSheetElement extends HTMLElement {
     const menu = root.querySelector('.tabmenu');
     if (!menu) return;
     const hexBox = menu.querySelector('[data-tabhex]');
+    const picker = menu.querySelector('[data-tabpick]');
 
     /** Write the colour, then repaint everything wearing it, in place. */
-    const apply = (hex, { fromHexBox = false } = {}) => {
+    const apply = (hex, { fromHexBox = false, fromPicker = false } = {}) => {
       const { key, kind } = this.#tabColorFor;
       if (kind === 'character') {
         // The character's colour: onto the host's properties, and onto the
@@ -4113,6 +4135,9 @@ export class CharacterSheetElement extends HTMLElement {
         hexBox.value = hex || '';
         hexBox.classList.remove('bad');
       }
+      // The picker shows the colour a swatch or the hex box chose, as it does
+      // when the panel opens; not while it is the one being dragged.
+      if (picker && !fromPicker) picker.value = hex || THEME_ACCENT.hex;
     };
 
     /*
@@ -4134,8 +4159,8 @@ export class CharacterSheetElement extends HTMLElement {
     menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
       b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
     });
-    menu.querySelector('[data-tabpick]')?.addEventListener('input', (e) => {
-      apply(normalizeHex(e.target.value));
+    picker?.addEventListener('input', (e) => {
+      apply(normalizeHex(e.target.value), { fromPicker: true });
     });
     hexBox?.addEventListener('input', () => {
       // Typed a character at a time, so an incomplete hex is not an error yet
@@ -4186,6 +4211,16 @@ export class CharacterSheetElement extends HTMLElement {
     if (this.#chromeMenu && !path.some((n) => n?.classList?.contains?.('chromemenu')
       || n?.dataset?.action === 'chrome-menu')) {
       this.#chromeMenu = false;
+      this.#renderHeader();
+    }
+    // The theme panel too -- except while one of its selects has focus, whose
+    // open list is browser chrome a press on reads as somewhere else (the
+    // colour picker below has the same trouble), and except on the button that
+    // toggles it.
+    if (this.#themeMenu && !path.some((n) => n?.classList?.contains?.('thememenu')
+      || n?.dataset?.action === 'theme')
+      && !this.shadowRoot.activeElement?.matches?.('.thememenu select')) {
+      this.#themeMenu = false;
       this.#renderHeader();
     }
     if (!this.#tabColorFor) return;
@@ -4601,7 +4636,9 @@ export class CharacterSheetElement extends HTMLElement {
       // Roll references contain card positions. Dismiss before a layout edit
       // can make the toast's format switch refer to a different option.
       this.#rollToast = null;
-      this.#render();
+      // Through the re-render that keeps focus, so a card field edited in
+      // session view keeps the caret.
+      this.#rerender(this.shadowRoot.activeElement);
     });
 
     root.querySelectorAll('[data-tab]').forEach((b) => {
@@ -4933,6 +4970,7 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', (e) => {
         e.preventDefault();
         const conds = this.#model.data.conditions || {};
+        this.#model.markUndo(`Removed ${b.dataset.removeCondition}`);
         delete conds[b.dataset.removeCondition];
         this.#model.recompute();
         this.#render();
@@ -5525,7 +5563,7 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         const [path, name] = maneuverRef(input.dataset.mfield);
         this.#model.setManeuverField(path, name, input.dataset.mf, input.value);
-        this.#render();
+        this.#rerender(input);
       });
     });
 
@@ -6365,6 +6403,12 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #action(name, button) {
+    // A two-click ×: the first press only arms it (rows.armedButton).
+    const arm = button?.dataset?.arm;
+    if (arm) {
+      if (this.#armedRemove !== arm) { this.#armedRemove = arm; this.#render(); return; }
+      this.#armedRemove = null;
+    }
     switch (name) {
       case 'add-training-class': {
         const side = button?.dataset.side === 'magic' ? 'magic' : 'combat';
@@ -6808,6 +6852,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'buff-bonus-remove': {
         const b = (this.#model.data.buffs || [])[Number(button?.dataset.index)];
         if (b && Array.isArray(b.bonuses)) {
+          this.#model.markUndo(`Removed a bonus from ${String(b.name || '').trim() || 'a buff'}`);
           b.bonuses.splice(Number(button?.dataset.j), 1);
           this.#model.recompute();
         }
@@ -6974,6 +7019,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'cook-clear':
+        this.#model.markUndo('Cleared the dish');
         this.#model.set('cooking', { ...emptyDish(), level: this.#model.data.cooking?.level ?? null, chef: this.#model.data.cooking?.chef ?? '' });
         this.#render();
         break;
@@ -7005,19 +7051,8 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'delete-system':
-        this.#confirmDelete = Number(button?.dataset.index);
-        this.#render();
-        break;
-      case 'delete-system-confirm': {
-        const idx = this.#confirmDelete;
-        this.#confirmDelete = null;
-        if (idx !== null) this.#model.removeSystemTab(idx);
+        this.#model.removeSystemTab(Number(button?.dataset.index));
         this.#tab = 'systabs';
-        this.#render();
-        break;
-      }
-      case 'delete-system-cancel':
-        this.#confirmDelete = null;
         this.#render();
         break;
       case 'ext-add-block': {
@@ -7105,18 +7140,9 @@ export class CharacterSheetElement extends HTMLElement {
       // Deleting a whole feature group takes a second click even now that
       // Ctrl+Z can put it back: it is a column of the player's own writing per
       // level, and twenty levels of it is more than a toast should be the only
-      // thing standing between you and losing.
+      // thing standing between you and losing. The button asks (data-arm).
       case 'remove-cf-group':
-        this.#confirmGroup = button?.dataset.class ?? null;
-        this.#render();
-        break;
-      case 'remove-cf-group-confirm':
         this.#model.removeClassFeatureGroup(button?.dataset.class);
-        this.#confirmGroup = null;
-        this.#render();
-        break;
-      case 'remove-cf-group-cancel':
-        this.#confirmGroup = null;
         this.#render();
         break;
       case 'add-rule-group':

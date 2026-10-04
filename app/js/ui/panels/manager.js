@@ -39,7 +39,6 @@ export function renderSystemManagerPanel(model, ctx) {
     const off = entries.filter((e) => !onBar.has(e.key)).sort(byLabel);
     const hidden = off.filter((e) => !e.weird);
     const weird = off.filter((e) => e.weird);
-    const all = (model.data.sheetTabs || []).map((tab, index) => ({ tab, index }));
 
     const badges = (e) => `${e.renamed ? `<span class="badge player" title="${esc(e.title || '')}">${
       this.isAdmin ? `player: “${esc(e.renamed)}”` : `originally ${esc(e.base)}`}</span>` : ''}
@@ -53,8 +52,8 @@ export function renderSystemManagerPanel(model, ctx) {
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
       : esc(e.label));
     const del = (e) => (e.kind === 'system'
-      ? `<button class="danger" data-action="delete-system" data-index="${e.index}"
-           title="Delete this tab and its data" aria-label="Delete tab">×</button>` : '');
+      ? rows.armedButton(`systab|${e.index}`, `data-action="delete-system" data-index="${e.index}" data-arm="systab|${e.index}"`,
+        `“${e.label}” and all its rows`, ctx.armedRemove) : '');
 
     // The same panel the tabs' own right-click opens, reached from a row.
     const colorBtn = (e) => {
@@ -145,10 +144,6 @@ export function renderSystemManagerPanel(model, ctx) {
         <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="max-width:16rem">
         <button class="primary" data-action="add-system">+ Add system tab</button>
       </div>
-      ${ctx.confirmDelete !== null ? `<p class="hint warn">
-        Delete “${esc(all[ctx.confirmDelete]?.tab.name)}” and all its rows?
-        <button class="danger" data-action="delete-system-confirm">Delete</button>
-        <button data-action="delete-system-cancel">Keep</button></p>` : ''}
     </section>
     ${extensionBlocksPanel(model, ctx)}</div>`;
 }

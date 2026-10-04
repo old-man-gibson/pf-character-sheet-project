@@ -80,7 +80,7 @@ const shutCtx = () => ({
   skills: { showAllSkills: false },
   feats: { openCell: null },
   manager: {
-    tabEntries: [], barEntries: [], draft: {}, confirmDelete: null, extFilter: '', extSearch: '',
+    tabEntries: [], barEntries: [], draft: {}, armedRemove: null, extFilter: '', extSearch: '',
   },
 });
 
@@ -137,7 +137,7 @@ const openCtx = (model) => {
     feats: { openCell: 'mythic:0:effect' },
     manager: {
       tabEntries: [], barEntries: [], draft: { newSystem: 'New' },
-      confirmDelete: (d.sheetTabs || []).length ? 0 : null, extFilter: '', extSearch: 'a',
+      armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null, extFilter: '', extSearch: 'a',
     },
   };
 };
@@ -621,6 +621,47 @@ console.log('skill rows stay put while the player is on the tab');
   check('but the rows shown a moment ago are kept', skillRowIndices(c, { keep: new Set(all) }).length, all.length);
   c.setItem('skills', 1, 'hidden', true);
   check('except one hidden with the eye', skillRowIndices(c, { keep: new Set(all) }).includes(1), false);
+}
+
+console.log('\nthe dashboard Offense card opens the same breakdowns as the Defense card');
+{
+  const c = new Character(blankDocument({ name: 'Striker', level: 5 }));
+  const html = overview.renderDashboardPanel(c, CTX.overview);
+  const card = (title) => html.slice(html.indexOf(`<h3>${title}`), html.indexOf('</section>', html.indexOf(`<h3>${title}`)));
+  const keys = (title) => (card(title).match(/data-bd="([a-z]+)"/g) || []).map((m) => m.slice(9, -1));
+  check('Melee, Ranged, CMB and Init each open theirs', keys('Offense'), ['melee', 'ranged', 'cmb', 'initiative']);
+  ok('as the Defense card does', keys('Defense').includes('ac'));
+}
+
+console.log('\nCounts as waits for a class name, on every training tab');
+{
+  const c = new Character(blankDocument({ name: 'Unnamed', level: 5 }));
+  const blank = { type: 'Expert', talentsPerLevel: 'Expert', mod1: null, mod2: null, classLevelsOverride: 5,
+    levels: Array.from({ length: 20 }, (_, i) => ({ level: i + 1, talent: null, sphere: null, notes: null })) };
+  c.listAdd('training.combat.classes', { name: '', ...blank });
+  c.listAdd('training.combat.classes', { name: 'Sentinel', ...blank });
+  c.addGuileClass('');
+  const live = (html, attr) => (html.match(new RegExp(`<input type="checkbox"[^>]*${attr}="[^"]*"`, 'g')) || []).length;
+  const martial = combat.renderMartialPanel(c);
+  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-blend(?:skill)?'), 2);
+  const guileHtml = guile.renderGuilePanel(c);
+  check('nor the unnamed guile class', [live(guileHtml, 'data-blendguile'), guileHtml.includes('Pick the class first')], [0, true]);
+  ok('and it says why', martial.includes('Pick the class first'));
+}
+
+console.log('\none way of asking twice: the worksheet and feature-group ×');
+{
+  const c = new Character(blankDocument({ name: 'Asker', level: 3 }));
+  c.set('sheetTabs', [{ name: 'Scratch', custom: true, rows: [{ cells: ['a'] }] }]);
+  // A feature group whose class has gone: the only kind with a ×.
+  c.set('progression.classFeatures', { ...(c.data.progression?.classFeatures || {}), Ghost: { columns: ['Old'], byLevel: {}, rules: {}, optionsFrom: {} } });
+  const sheet = { id: 'sys-0', key: 'sys:Scratch', label: 'Scratch', kind: 'system', index: 0, tab: c.data.sheetTabs[0] };
+  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX.manager, tabEntries: [sheet], armedRemove: armed });
+  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX.lore, armedRemove: armed });
+  const sure = (html, key) => new RegExp(`data-arm="${key.replace('|', '\\|')}"[^>]*>sure\\?<`).test(html.replace(/\n\s*/g, ' '));
+  check('the worksheet × arms, then says sure?', [sure(mgr(null), 'systab|0'), sure(mgr('systab|0'), 'systab|0')], [false, true]);
+  check('so does the feature group ×', [sure(prog(null), 'cfgroup|Ghost'), sure(prog('cfgroup|Ghost'), 'cfgroup|Ghost')], [false, true]);
+  check('and no Delete / Keep sentence is left', /delete-system-confirm|remove-cf-group-confirm/.test(mgr('systab|0') + prog('cfgroup|Ghost')), false);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

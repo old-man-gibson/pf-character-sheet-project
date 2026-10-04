@@ -133,8 +133,12 @@ export function blendedSection(model, wrap, tab) {
    * and fixed; each of the other two toggles through `attr`, which names the
    * control that does it. `counts`, when given, puts how many talents so far
    * went each way beside the kinds the pool reaches.
+   *
+   * A class counts as another kind by its name -- the other tab's copy is
+   * found by it -- so until one is picked the other two ticks are drawn but
+   * cannot be used, and say so.
    */
-export function blendTicks(systems, home, attr, counts = null) {
+export function blendTicks(systems, home, attr, counts = null, named = true) {
     const where = { combat: 'Martial Spheres', magic: 'Magic Spheres', guile: 'Guile Spheres' };
     const ticks = TRAINING_SYSTEMS.map((sys) => {
       const on = systems.includes(sys);
@@ -142,10 +146,11 @@ export function blendTicks(systems, home, attr, counts = null) {
       const n = counts && on && systems.length > 1 ? ` <span class="num">${counts[sys] || 0}</span>` : '';
       const title = sys === home
         ? `This class's own talents, which always count as ${noun}.`
+        : !named ? `Pick the class first: its talents count as ${noun} by the class's name.`
         : `${on ? 'Untick to stop' : 'Tick to let'} this class's talents count as ${noun} as well — `
           + `a row whose sphere is on the ${where[sys]} tab counts there${sys === 'guile' ? ' and buys skill ranks' : ''}.`;
       return `<label class="chk" title="${esc(title)}">
-              <input type="checkbox"${on ? ' checked' : ''}${sys === home ? ' disabled' : ` ${attr(sys)}`}>
+              <input type="checkbox"${on ? ' checked' : ''}${sys === home || !named ? ' disabled' : ` ${attr(sys)}`}>
               <span class="hint">${noun}${n}</span></label>`;
     }).join('');
     // Talents in a sphere of a kind the class does not reach count nowhere;
@@ -230,7 +235,7 @@ function trainingSide(model, sideKey, side) {
               <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
             </span></label>
           ${blendTicks([sideKey], sideKey, (sys) => (sys === 'guile'
-    ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`))}
+    ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`), null, !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
         <div class="tablewrap"><table class="talents stacked">
@@ -484,7 +489,8 @@ function blendedPanel(model, pairs) {
                 : `talents: ${cls.totalTalents ?? 0}`}</span>
             </span></label>
           ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
-    ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts)}
+    ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts,
+    !!String(cls.name || '').trim())}
         </div>
         ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
           <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>

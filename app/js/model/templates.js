@@ -8,6 +8,7 @@
 import { sheetReader } from './document.js';
 import { emit } from './events.js';
 import { getPath } from './util.js';
+import { markUndo, rowLabel } from './undo.js';
 
 /** The tab names the workbook uses; a sheet carries one or the other. */
 export const TEMPLATE_TABS = ['Template', 'Copy of Template'];
@@ -382,6 +383,7 @@ export function addTemplateTableColumn(model, path, label = '') {
 export function removeTemplateTableColumn(model, path, index) {
   const table = getPath(model.data, path);
   if (!table || !Array.isArray(table.columns) || index < 0) return model;
+  markUndo(model, `Removed the ${rowLabel(table.columns[index], 'table')} column`);
   table.columns.splice(index, 1);
   for (const row of table.rows || []) (row.cells || []).splice(index, 1);
   model.recompute();

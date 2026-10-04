@@ -292,6 +292,8 @@ export function removeClassFeatureGroup(model, className) {
   if (classLevelsIn(model, className).length) return model;
   markUndo(model, `Removed the ${rowLabel(className, 'class')} features`);
   delete p.classFeatures[className];
+  // Its column widths go with it, as a rename carries them along.
+  if (model.data.uiPrefs?.colWidths) delete model.data.uiPrefs.colWidths[`progfeat-${className}`];
   model.recompute();
   return model;
 }
@@ -655,6 +657,7 @@ export function removeClassFeatureRuleGroup(model, className, index, groupIndex)
   const col = g?.columns?.[index];
   const list = g?.rules?.[col];
   if (!list?.[groupIndex]) return model;
+  markUndo(model, `Removed a ${rowLabel(col, 'feature')} rule group`);
   list.splice(groupIndex, 1);
   if (!list.length) delete g.rules[col];
   model.recompute();
@@ -1127,6 +1130,12 @@ export function removeClassFeatureColumn(model, className, index) {
   for (const row of Object.values(g.byLevel)) delete row[name];
   delete g.rules[name];
   delete g.optionsFrom[name];
+  // And its saved width, as a rename carries it along.
+  const widths = model.data.uiPrefs?.colWidths?.[`progfeat-${className}`];
+  if (widths) {
+    delete widths[name];
+    if (!Object.keys(widths).length) delete model.data.uiPrefs.colWidths[`progfeat-${className}`];
+  }
   model.recompute();
   return model;
 }

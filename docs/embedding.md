@@ -105,11 +105,16 @@ own should set this to that header's height, or the rail pins behind it:
 character-sheet { --cs-sticky-top: 56px; }
 ```
 
+`--cs-view-height` is how much of the sheet is on screen at once. It defaults to
+`calc(100svh - var(--cs-sticky-top))`, the window under the rail. A host that gives
+the sheet a box of its own to scroll in — `overflow-y: auto` on the element, as the
+app page does so its window never scrolls — sets `--cs-sticky-top` to `0px` and this
+to the box's height; the side rail and the long tables are sized from it.
+
 `--cs-table-max` is how tall a table may get before it scrolls inside its own box
 instead of running the page down; that inner scroll is also what holds its column
-headings in place. It defaults to `calc(100svh - var(--cs-sticky-top) - 10rem)`,
-which reads the *window* — so a sheet embedded in a short container of the host's
-wants its own value, and `none` turns the behaviour off entirely.
+headings in place. It defaults to `calc(var(--cs-view-height) - 10rem)`, so it follows
+the value above; `none` turns the behaviour off entirely.
 
 `--cs-tablebg` is what a scroll box paints its edges against. A table that can scroll
 sideways carries a shadow at whichever end has something past it, and the trick that

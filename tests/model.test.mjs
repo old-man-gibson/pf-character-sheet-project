@@ -3163,6 +3163,71 @@ console.log('a weapon\u2019s dice follow its size, and the wielder\u2019s');
   check('a size buff shows on the Gear tab\u2019s weapon card', /bigroll dmg adj up[^>]*>2d6/.test(html), true);
 }
 
+console.log('a class-feature column or group takes its saved width with it');
+{
+  const c = new Character(blankDocument({ name: 'Widths', level: 3 }));
+  c.listAdd('classes', { name: 'Fighter', hd: 10, bab: 1, goodFort: true, goodRef: false, goodWill: false,
+    skillRanks: 2, archetypes: '', levelsOverride: null, systems: [] });
+  c.addClassFeatureColumn('Fighter', 'Bonus feat');
+  c.addClassFeatureColumn('Fighter', 'Bravery');
+  c.setColumnWidth('progfeat-Fighter', 'Bonus feat', 180);
+  c.setColumnWidth('progfeat-Fighter', 'Bravery', 120);
+  const widths = () => c.data.uiPrefs.colWidths?.['progfeat-Fighter'];
+  c.removeClassFeatureColumn('Fighter', c.data.progression.classFeatures.Fighter.columns.indexOf('Bravery'));
+  check('a removed column drops its width and keeps the others', widths(), { 'Bonus feat': 180 });
+  c.listRemove('classes', 0);
+  c.removeClassFeatureGroup('Fighter');
+  check('a removed group drops them all', widths(), undefined);
+}
+
+console.log('a formula in a leftover cell is read on every tab, Crafting included');
+{
+  const c = new Character(blankDocument({ name: 'Leftovers', level: 3 }));
+  c.set('crafting.sourceExtras', [{ cells: ['Armiger', '{armigerBlocks = 4}'] }]);
+  c.set('extras.sourceExtras', [{ cells: ['{extraNote = 2}'] }]);
+  check('both define their names', [c.scope().armigerBlocks, c.scope().extraNote], [4, 2]);
+}
+
+console.log('small ones: an empty row is not a system in use, and a picked curve stays a number');
+{
+  const c = new Character(blankDocument({ name: 'Rows', level: 5 }));
+  c.listAdd('vancian.classes', { name: '', slotType: '', stat: '', stat2: '', spells: [] });
+  c.listAdd('psionics.classes', { name: '', stat: '', stat2: '', curveTotal: 0, manifesterLevelOverride: null, powers: [] });
+  c.listAdd('maneuvers.disciplines', { name: '', entries: [] });
+  const used = () => { const u = c.systemTabsInUse(); return [u.vancian, u.psionics, u.maneuvers]; };
+  check('an empty row each: none in use', used(), [false, false, false]);
+  c.setItem('vancian.classes', 0, 'name', 'Wizard');
+  c.setItem('psionics.classes', 0, 'name', 'Psion');
+  c.setItem('maneuvers.disciplines', 0, 'name', 'Iron Tortoise');
+  check('named: all three', used(), [true, true, true]);
+  c.set('psionics.classes.0.curveTotal', '343');
+  check('the curve the select wrote is kept as a number', c.data.psionics.classes[0].curveTotal, 343);
+}
+
+console.log('removals that leave an undo step');
+{
+  const c = new Character(blankDocument({ name: 'Undoer', level: 5 }));
+  // Each: set something up, remove it, check one undo puts it back.
+  const back = (label, setup, remove, read) => {
+    setup();
+    const before = JSON.stringify(read());
+    remove();
+    const removed = JSON.stringify(read());
+    const undone = c.undo();
+    check(`${label}: undo names it and restores it`, [removed !== before, !!undone, JSON.stringify(read())], [true, true, before]);
+  };
+  back('a ledger line', () => c.addWealthEntry({ amount: 500, label: 'Loot', kind: 'reward' }),
+    () => c.removeWealthEntry(c.data.wealth.ledger.length - 1), () => c.data.wealth);
+  c.set('buffs', [{ name: 'Bless', on: true, bonuses: [{ target: 'attack', value: 1 }] }]);
+  back('a template column', () => {
+    c.set('templates', [{ name: 'T', features: [{ name: 'F', type: '', text: '', tables: [{ columns: ['A', 'B'], rows: [{ cells: [1, 2] }] }] }] }]);
+  }, () => c.removeTemplateTableColumn('templates.0.features.0.tables.0', 1), () => c.data.templates[0].features[0].tables[0]);
+  back('a technique', () => c.set('techniques', { catalogue: [{ name: 'Kata' }], selected: 'Kata', draft: {} }),
+    () => c.removeTechnique('Kata'), () => c.data.techniques.catalogue);
+  back('the technique draft', () => c.set('techniques.draft', { name: 'Half-written' }),
+    () => c.resetDraftTechnique(), () => c.data.techniques.draft);
+}
+
 console.log('crafting reads the cell beside a label, even a blank one');
 {
   // A fresh tab: no item value, and the next label two cells over.
@@ -6305,6 +6370,7 @@ console.log('weapon damage/to-hit tokens');
 console.log('inline formulas in prose');
 {
   const { tokenize, resolveDefinitions, renderTokens, formatValue } = await import('../app/js/inline.js');
+  const { formatNumber } = await import('../app/js/formula-format.js');
 
   // Token grammar.
   const segs = tokenize('AC {= 10 + 2} and {arms.hp = 3 * con.mod} then {arms.hp} again');
@@ -6314,7 +6380,9 @@ console.log('inline formulas in prose');
   check('define token expr', segs[3].expr, '3 * con.mod');
   check('ref token', segs[5].kind, 'ref');
   check('"a + b = c" is a value, not a define', tokenize('{a + b = c}')[0].kind, 'value');
-  check('formatValue rounds', formatValue(2.3333), '2.33');
+  // The same three places as the tooltip and the formula tools, so prose and
+  // its working never show two different answers.
+  check('formatValue rounds as the tooltip does', [formatValue(2.3333), formatNumber(2.3333)], ['2.333', '2.333']);
 
   // Dependency-ordered resolution, regardless of definition order.
   const base = { con: { mod: 12 }, level: 20 };
