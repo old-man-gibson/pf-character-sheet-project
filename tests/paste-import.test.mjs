@@ -496,6 +496,11 @@ Privacy policyAbout Library of MetzofitzDisclaimersTerms of UseDonate to Mirahez
     [['class:Legendary Samurai', 'note:Favored class options — Legendary Samurai', 'note:Legendary Samurai — archetypes'], 0]);
   const c = r.blocks[0];
   check('numbers, with the source from the info box', [c.hd, c.bab, c.goodFort, c.goodRef, c.goodWill, c.skillRanks, c.source], [10, 1, true, false, true, 4, 'Legendary Samurai, pgs. 2–10']);
+  // A box that says "Good" for its BAB means the full progression, as the
+  // pack route (babFromText) reads it.
+  // (A page with no level table, so the box is what gives the BAB.)
+  const boxOnly = parsePaste('Test Knight (class)\nInformation\nHit Die\nd10\nBAB\tFort\nSave\tRef\nSave\tWill\nSave\nGood\tGood\tPoor\tGood\nThe knight\'s class skills are Climb (Str).').blocks[0];
+  check('a "Good" BAB in the info box is full', [boxOnly.hd, boxOnly.bab, boxOnly.goodFort, boxOnly.goodRef], [10, 1, true, false]);
   check('the missing comma between two Knowledge skills is healed', c.classSkills, ['Bluff', 'Climb', 'Knowledge (local)', 'Knowledge (nobility)', 'Perception', 'Swim']);
   ok('description carries the flavour, Role, Legendary Class and the sidebar', /^Role: Masters/.test(c.text) && /Few warriors/.test(c.text) && /Legendary Class: Unlike/.test(c.text) && /JAPANESE CLASSES AND WESTERN FANTASY\n\nOne of the things/.test(c.text));
   const f = (n) => c.features.find((x) => x.name.toLowerCase() === n);
