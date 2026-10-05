@@ -85,7 +85,7 @@ import {
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
 import {
-  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileLadders, recomputeGuileSpheres,
+  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
 } from './subsystems/guile.js';
 import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
@@ -265,7 +265,6 @@ export class Character {
     this.#recomputeSpeeds();
     // A guile class blended into the sphere sides spends talents there, so its
     // ladders are known before either side is counted.
-    this.#recomputeGuileLadders();
     this.#recomputeTraining();
     this.#recomputeGuile();
 
@@ -636,7 +635,6 @@ export class Character {
 
   // subsystems/guile.js
   #recomputeGuile(...a) { return recomputeGuile(this, ...a); }
-  #recomputeGuileLadders(...a) { return recomputeGuileLadders(this, ...a); }
   #guileRanksBySkill(...a) { return guileRanksBySkill(this, ...a); }
   #recomputeGuileSpheres(...a) { return recomputeGuileSpheres(this, ...a); }
   addGuileClass(...a) { return addGuileClass(this, ...a); }

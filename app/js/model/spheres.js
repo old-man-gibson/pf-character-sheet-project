@@ -1302,8 +1302,7 @@ export function* ownTalentRows(model, side, { sideKey = null, includeTradition =
         if (cls.blended && !cls.blendedMirror) yield* ladder(cls, otherKey, poolHasUtility(cls, otherKey));
       }
       // A guile class that reaches this side spends both of its ladders here
-      // when the sphere is one of this side's. The ladder flags are worked out
-      // before this pass runs (recomputeGuileLadders).
+      // when the sphere is one of this side's.
       for (const cls of training.guile?.classes || []) {
         if (poolSystems(cls, 'guile').includes(sideKey)) yield* ladder(cls, 'guile', true);
       }
@@ -1588,6 +1587,93 @@ const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
  * spell points and boons, and the global casting numbers. Runs before the
  * skills loop because sphere talents grant skill ranks.
  */
+/**
+ * One class's ladder, level by level, on any of the three sides: which
+ * levels the class has (its pin or the Planner), the talent slots each level
+ * grants, and the counts. A martial or magic class grows by its Talents /
+ * level rate and, when its pool reaches skill talents, by a second
+ * [utility] ladder too; a guile class is always the two ladders, sized by
+ * its tier or its rules (poolStepper). Sets the slot flags every tally reads
+ * (`granted`, `utilityGranted`, `future`) and the class's totals.
+ */
+export function walkClassLadder(model, cls, home, level) {
+  cls.side = home;
+  const guile = home === 'guile';
+  let rate = 0;
+  let progRate = 0;
+  if (!guile) {
+    // Several sheets fill in only one of type / talents-per-level; each falls
+    // back to the other. The fallback only reads a rate that belongs to this
+    // side: a blended class's other half copies the martial rate, and how
+    // fast a class learns martial talents says nothing about its caster
+    // level. Expert on the magic side is not a casting type, so the half has
+    // none until one is picked.
+    const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
+    const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+    const type = cls.type || (guess && SIDE_TYPES[home].includes(guess) ? guess : null);
+    rate = TALENT_RATES[tpl] ?? 0;
+    progRate = TYPE_RATES[type] ?? 0;
+    cls.effectiveType = type;
+    cls.effectiveTalentsPerLevel = tpl;
+  }
+  // Sparse planners list a class once rather than on every row; the
+  // override lets the player state the real class level count directly.
+  const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
+  let cum = 0;
+  let prog = 0;
+  let classLevels = 0;
+  let classLevelsCurrent = 0;
+  // A pool that reaches skill talents is two ladders, sized however its pool
+  // setting says; one that does not is the Talents / level rate alone, and
+  // the utility flags a skill tick once left are cleared, so nothing counts
+  // them. What was typed in those slots stays put.
+  const step = poolHasUtility(cls, home) ? poolStepper(cls, home) : null;
+  let pool = guile ? { count: 0, utilityCount: 0 } : null;
+  for (const lv of cls.levels || []) {
+    const has = classHasLevel(model, cls.name, lv.level, override);
+    const before = Math.floor(cum);
+    if (has) {
+      cum += rate;
+      prog += progRate;
+      classLevels += 1;
+      if (lv.level <= level) classLevelsCurrent += 1;
+    }
+    // A mirror shares the owner's rows; it counts its own talents off them
+    // but must not restate the slot flags in its own rate's terms.
+    if (cls.blendedMirror) continue;
+    if (!guile) lv.progression = Math.floor(prog);
+    lv.future = lv.level > level;
+    if (step) {
+      pool = step(has, classLevels, lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
+      lv.count = pool.count;
+      lv.granted = pool.granted;
+      lv.utilityCount = pool.utilityCount;
+      lv.utilityGranted = pool.utilityGranted;
+    } else {
+      lv.count = Math.floor(cum * 100) / 100;
+      lv.granted = Math.floor(cum) > before;
+      delete lv.utilityCount;
+      delete lv.utilityGranted;
+    }
+  }
+  if (!guile && (cls.extended || !(cls.levels || []).length)) {
+    // Blocks from the extended page carry no level rows of their own, and nor
+    // does a block added by hand before its rows are filled in; count their
+    // class levels straight from the override or the Planner.
+    for (let l = 1; l <= 20; l++) {
+      if (classHasLevel(model, cls.name, l, override)) {
+        classLevels += 1;
+        if (l <= level) classLevelsCurrent += 1;
+      }
+    }
+  }
+  cls.classLevels = classLevels;
+  cls.classLevelsCurrent = classLevelsCurrent;
+  cls.totalTalents = guile ? pool.count : pool ? Math.floor(pool.count) : Math.floor(cum);
+  if (pool) cls.totalUtility = pool.utilityCount;
+  else delete cls.totalUtility;
+}
+
 export function recomputeTraining(model) {
   const t = model.data.training;
   if (!t) return;
@@ -1599,91 +1685,15 @@ export function recomputeTraining(model) {
   // this opens.
   if (t.combat) recomputeCustomizations(model, t.combat);
 
-  for (const sideKey of ['combat', 'magic']) {
-    const side = t[sideKey];
-    if (!side) continue;
-
-    for (const cls of side.classes || []) {
-      cls.side = sideKey;
-      // Several sheets fill in only one of type / talents-per-level;
-      // each falls back to the other.
-      // The fallback only reads a rate that belongs to this side: a blended
-      // class's other half copies the martial rate, and how fast a class
-      // learns martial talents says nothing about its caster level. Expert on
-      // the magic side is not a casting type, so the half has none until one
-      // is picked.
-      const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
-      const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
-      const type = cls.type || (guess && SIDE_TYPES[sideKey].includes(guess) ? guess : null);
-      const rate = TALENT_RATES[tpl] ?? 0;
-      const progRate = TYPE_RATES[type] ?? 0;
-      cls.effectiveType = type;
-      cls.effectiveTalentsPerLevel = tpl;
-      // Sparse planners list a class once rather than on every row; the
-      // override lets the player state the real class level count directly.
-      const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
-      let cum = 0;
-      let prog = 0;
-      let classLevels = 0;
-      let classLevelsCurrent = 0;
-      // A pool that reaches skill talents is two ladders, sized however its
-      // pool setting says; one that does not is the Talents / level rate
-      // alone, and the utility flags a skill tick once left are cleared, so
-      // nothing counts them. What was typed in those slots stays put.
-      const twoLadders = poolHasUtility(cls, sideKey);
-      const step = twoLadders ? poolStepper(cls, sideKey) : null;
-      let pool = null;
-      for (const lv of cls.levels || []) {
-        const has = classHasLevel(model, cls.name, lv.level, override);
-        const before = Math.floor(cum);
-        if (has) {
-          cum += rate;
-          prog += progRate;
-          classLevels += 1;
-          if (lv.level <= level) classLevelsCurrent += 1;
-        }
-        // A mirror shares the owner's rows; it counts its own talents off
-        // them but must not restate the slot flags in its own rate's terms.
-        if (!cls.blendedMirror) {
-          lv.progression = Math.floor(prog);
-          lv.future = lv.level > level;
-          if (step) {
-            pool = step(has, classLevels, lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
-            lv.count = pool.count;
-            lv.granted = pool.granted;
-            lv.utilityCount = pool.utilityCount;
-            lv.utilityGranted = pool.utilityGranted;
-          } else {
-            lv.count = Math.floor(cum * 100) / 100;
-            lv.granted = Math.floor(cum) > before;
-            delete lv.utilityCount;
-            delete lv.utilityGranted;
-          }
-        }
-      }
-      if (cls.extended || !(cls.levels || []).length) {
-        // Blocks from the extended page carry no level rows of their own, and
-        // nor does a block added by hand before its rows are filled in; count
-        // their class levels straight from the override or the Planner.
-        for (let l = 1; l <= 20; l++) {
-          const has = classHasLevel(model, cls.name, l, override);
-          if (has) {
-            classLevels += 1;
-            if (l <= level) classLevelsCurrent += 1;
-          }
-        }
-      }
-      cls.classLevels = classLevels;
-      cls.classLevelsCurrent = classLevelsCurrent;
-      cls.totalTalents = pool ? Math.floor(pool.count) : Math.floor(cum);
-      if (pool) cls.totalUtility = pool.utilityCount;
-      else delete cls.totalUtility;
-    }
+  // Every class on all three sides is worked out before any side is counted:
+  // a blended pool owned on one side spends talents on another, and counting
+  // reads the slot flags this sets. Guile's classes included, which is why
+  // there is no separate guile ladder pass to run first.
+  for (const sideKey of ['combat', 'magic', 'guile']) {
+    for (const cls of t[sideKey]?.classes || []) walkClassLadder(model, cls, sideKey, level);
   }
 
-  // Every class on both sides is worked out before either side is counted:
-  // a blended pool owned on the magic side spends talents on the martial one,
-  // and counting reads the slot flags the loop above has just set.
+  // The martial and magic tallies; the guile side's are recomputeGuile's.
   for (const sideKey of ['combat', 'magic']) {
     const side = t[sideKey];
     if (!side) continue;
