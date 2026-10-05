@@ -23,12 +23,9 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  Character, changesByGroup, compareRevisions,
-  setManeuverCatalogue, setVancianTables, setPsionicTables,
-  setCardcastingTables, setCookingTables,
-} from '../app/js/model.js';
-import { mergeTables, registerTables } from '../app/js/extensions.js';
+import { Character, changesByGroup, compareRevisions } from '../app/js/model.js';
+import { normalizeExtension } from '../app/js/extensions.js';
+import { registerPacks } from '../app/js/extension-runtime.js';
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith('--')));
@@ -54,9 +51,8 @@ function bundledPacks() {
   return packs;
 }
 
-registerTables(mergeTables(bundledPacks()), {
-  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
-});
+// Read as the app reads a fetched pack, then registered as it does.
+registerPacks(bundledPacks().map(normalizeExtension));
 
 const read = (path) => new Character(JSON.parse(readFileSync(path, 'utf8'))).toJSON();
 const { changes, counts } = compareRevisions(read(beforePath), read(afterPath));
