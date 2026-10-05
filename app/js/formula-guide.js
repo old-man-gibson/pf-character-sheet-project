@@ -30,9 +30,7 @@ import {
   FUNCTION_HELP, OPERATOR_HELP, VALUE_GUIDE, PLACES_GUIDE, TOKEN_FORMS, CONTEXTUAL_VALUES,
 } from './formula-format.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
+import { esc } from './esc.js';
 
 /* ------------------------------------------------------------------ *
  * Grouping the character's values

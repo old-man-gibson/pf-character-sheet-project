@@ -11,7 +11,7 @@
  * See ui/rows.js for the same idea applied to rows of a list (`data-item`).
  */
 import { esc, abAttr, picksAbility, ABILITY_LABELS_LIST } from './html.js';
-import { numOrNull } from '../model/util.js';
+import { isPinned, numOrNull } from '../model/util.js';
 
 /**
  * `opts.list` points the cell at a `<datalist>`, the way `rows.itemText` does.
@@ -110,4 +110,23 @@ export function abilitySelect(path, value) {
  */
 export function field(label, control, extra = '') {
   return `<label class="fld${extra ? ` ${extra}` : ''}"><span>${esc(label)}</span>${control}</label>`;
+}
+
+/**
+ * A box that pins a class's level, or follows the Planner when blank: the
+ * Planner's count is its placeholder and its tooltip. Vancian caster level
+ * and Psionic manifester level are both one.
+ */
+export function levelPin(path, override, planner, { width = '' } = {}) {
+  return autoNum(`data-set="${path}"`, override, {
+    placeholder: planner ?? 0,
+    width,
+    title: `Auto: ${planner ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
+  });
+}
+
+/** The note under a pinned level that the Planner now counts differently, or ''. */
+export function levelPinHint(override, base, planner) {
+  if (!isPinned(override) || Number(base) === Number(planner)) return '';
+  return `<p class="hint">The Planner gives ${planner} level${planner === 1 ? '' : 's'} of this class.</p>`;
 }

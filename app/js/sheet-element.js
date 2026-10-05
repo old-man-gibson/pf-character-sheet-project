@@ -59,6 +59,7 @@ import {
   featsAvailable, spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
+import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
 import { applyBlock, looksLikeExtension, removeArchetype } from './extensions.js';
 import { describePublish, publishDocument } from './publish.js';
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
@@ -172,10 +173,7 @@ const TABS = [
   ['autoTechnique', 'AutoTechnique'],
   ['cooking', 'Auto-Cooking'],
   ['template', 'Template'],
-  ['familiar', 'Familiar'],
-  ['animalCompanion', 'Animal Companion'],
-  ['eidolon', 'Eidolon'],
-  ['conjured', 'Conjured Companion'],
+  ...COMPANION_KINDS.map((k) => [k, COMPANION_LABELS[k]]),
   ['trackers', 'Trackers'],
   ['progression', 'Progression'],
   ['extras', 'Extras & Notes'],
@@ -205,7 +203,7 @@ const BREAKDOWN_GRACE = 140;
 const MODELLED_TAB_IDS = new Set([
   'akashic', 'maneuvers', 'vancian', 'psionics', 'cardcasting', 'template',
   'techniques', 'autoTechnique', 'cooking',
-  'familiar', 'animalCompanion', 'eidolon', 'conjured',
+  ...COMPANION_KINDS,
 ]);
 
 /**
@@ -2790,7 +2788,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- feats & mythic ---------------- */
 
   /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
-  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove }); }
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove, openText: this.#openText }); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -2887,7 +2885,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#systemCtx()); }
 
-  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove }); }
+  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove, openText: this.#openText }); }
 
   #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#systemCtx()); }
 

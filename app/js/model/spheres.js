@@ -16,7 +16,7 @@ import {
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
-import { ownLevelCount, plannerHasClass } from './progression.js';
+import { classHasLevel, ownLevelCount } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
@@ -25,7 +25,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -64,7 +64,7 @@ let SPHERE_CATALOGUE = { spheres: [] };
 function dedupeTalents(talents) {
   const byName = new Map();
   for (const t of talents) {
-    const key = t.name.trim().toLowerCase();
+    const key = talentKey(t.name);
     if (!key) continue;
     const had = byName.get(key);
     if (!had) { byName.set(key, t); continue; }
@@ -185,12 +185,7 @@ export function talentsTagged(tag) {
  * the pack's "...And Stay Down" -- an ellipsis character is three dots
  * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
-const talentKey = (s) => String(s ?? '')
-  .normalize('NFKC')
-  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"')
-  .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
-  .replace(/[!?]+$/, '')
-  .trim().toLowerCase().replace(/\s+/g, ' ');
+export const talentKey = (s) => normalizeName(splitTags(s).name.replace(/[!?]+$/, ''));
 
 /**
  * What the catalogue knows about a talent somebody typed on their sheet.
@@ -1015,10 +1010,25 @@ export function ownClassLevels(model, className) {
   const name = String(className || '').trim().toLowerCase();
   const t = model.data.training || {};
   const cls = name && ['combat', 'magic', 'guile'].flatMap((k) => t[k]?.classes || [])
-    .find((x) => String(x?.name || '').trim().toLowerCase() === name && x.classLevelsOverride != null);
+    .find((x) => String(x?.name || '').trim().toLowerCase() === name && isPinned(x.classLevelsOverride));
   const level = Number(model.data.identity?.level) || 20;
   if (cls) return Math.max(0, Math.min(level, Math.floor(Number(cls.classLevelsOverride) || 0)));
   return ownLevelCount(model, className).own;
+}
+
+/**
+ * The Spheres of Power caster level: `caster.level` in a formula, and what
+ * the sheet charges material-casting upkeep against, conjures a companion at
+ * and rolls card dice with.
+ *
+ * Only Spheres casting has one. A Vancian caster level and a manifester level
+ * belong to their own systems (`vancian.<class>.cl`, `manifester.<class>.level`),
+ * and none of the three stands in for another -- a feature that grants that
+ * kind of transparency would be the place to join them. A character with no
+ * magic side has none, where this used to fall back to the character's level.
+ */
+export function casterLevel(model) {
+  return Number(model.data.training?.magic?.globalCL) || 0;
 }
 
 /**
@@ -1598,9 +1608,7 @@ export function recomputeTraining(model) {
       const step = twoLadders ? poolStepper(cls, sideKey) : null;
       let pool = null;
       for (const lv of cls.levels || []) {
-        const has = override != null
-          ? lv.level <= override
-          : plannerHasClass(model, cls.name, lv.level);
+        const has = classHasLevel(model, cls.name, lv.level, override);
         const before = Math.floor(cum);
         if (has) {
           cum += rate;
@@ -1632,7 +1640,7 @@ export function recomputeTraining(model) {
         // nor does a block added by hand before its rows are filled in; count
         // their class levels straight from the override or the Planner.
         for (let l = 1; l <= 20; l++) {
-          const has = override != null ? l <= override : plannerHasClass(model, cls.name, l);
+          const has = classHasLevel(model, cls.name, l, override);
           if (has) {
             classLevels += 1;
             if (l <= level) classLevelsCurrent += 1;
@@ -1711,7 +1719,7 @@ export function recomputeTraining(model) {
     // level arrives, as `classLevelCount` does for every other system.
     const effectiveLevels = (x) => {
       const own = x.classLevelsCurrent ?? 0;
-      const bonus = forwarded(model, `class.${slug(x.name)}.level`);
+      const bonus = forwarded(model, classForwardKey(x.name));
       x.levelWaiting = own ? 0 : bonus;
       return own + (own ? bonus : 0);
     };

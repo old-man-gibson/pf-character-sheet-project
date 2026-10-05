@@ -33,7 +33,7 @@ import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import {
   classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
-  speedForwardKey, sphereForwardKey, vancianForwardKey,
+  inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
 } from './util.js';
 
 /**
@@ -819,7 +819,7 @@ export function forwardTargets(model) {
   // the talent that grants it, not typed into the max and left to go stale.
   for (const t of model.trackers || []) {
     for (const edge of ['max', 'min']) {
-      const name = `tracker.${t.id}.${edge}`;
+      const name = trackerForwardKey(t.id, edge);
       if (!expand.has(name)) add(name, `${t.name || t.id} ${edge}`, { under: String(t.name || '').trim() || t.id });
     }
   }
@@ -1715,8 +1715,5 @@ export function forwardsEarly(model) {
   const companions = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b?.id ?? ''))));
   return Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value
-      && (FORWARD_EARLY.has(name) || name.startsWith('class.') || name.startsWith('speed.')
-        || name.startsWith('spheres.') || name.startsWith('sphere.')
-        || name.startsWith('vancian.') || name.startsWith('manifester.')
-        || companions.has(name.split('.')[0])));
+      && (FORWARD_EARLY.has(name) || inEarlyFamily(name) || companions.has(name.split('.')[0])));
 }

@@ -11,7 +11,7 @@ import {
   prepStyle, spellDC, statMod, statScore,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { forwarded } from '../scope.js';
+import { levelFollowingPin } from '../progression.js';
 import { closestName, evaluateAmount, vancianForwardKey } from '../util.js';
 
 let VANCIAN_TABLES = { classes: [] };
@@ -320,10 +320,8 @@ export function recomputeVancian(model) {
     // Counted off the class the block is, which its name may only describe:
     // "Wizard (Evoker)" counts Wizard levels (see blockClassName).
     c.levelClass = model.blockClassName(c.name, c.slotType);
-    const fromProgression = model.classLevelCount(c.levelClass);
-    const pinned = c.casterLevelOverride;
-    const level = Math.max(0, Math.min(20,
-      pinned === null || pinned === undefined ? fromProgression : Math.floor(Number(pinned) || 0)));
+    const counted = levelFollowingPin(model, c.levelClass, c.casterLevelOverride, { forwardKey: vancianForwardKey(c) });
+    const level = counted.base;
     /*
      * A bonus forwarded to `vancian.<class>.cl` raises the caster level and
      * nothing else. The slots and spells known are still read off `level`,
@@ -336,11 +334,10 @@ export function recomputeVancian(model) {
     //
     // A class with no levels yet cannot cast, so a bonus to its caster level
     // waits (`casterLevelWaiting`) until its first level arrives.
-    const key = vancianForwardKey(c);
     c.casterLevelBase = level;
-    c.casterLevelForwarded = key ? forwarded(model, key) : 0;
-    c.casterLevelWaiting = level ? 0 : c.casterLevelForwarded;
-    c.casterLevel = Math.max(0, level + (level ? c.casterLevelForwarded : 0));
+    c.casterLevelForwarded = counted.forwarded;
+    c.casterLevelWaiting = counted.waiting;
+    c.casterLevel = counted.level;
 
     /*
      * Concentration is caster level + the casting modifier unless the player
@@ -364,7 +361,7 @@ export function recomputeVancian(model) {
 
     c.statMod = mod;
     c.statScore = score;
-    c.plannerLevel = fromProgression;
+    c.plannerLevel = counted.planner;
     c.tableName = table?.name || '';
     c.slotTypeUnknown = Boolean(String(c.slotType || '').trim() && !table);
     c.noun = castingNoun(c.source);

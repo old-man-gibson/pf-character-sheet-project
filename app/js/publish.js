@@ -36,7 +36,7 @@
 
 import { MANEUVER_FIELDS } from './rules.js';
 import { veilDetails } from './model/subsystems/akashic.js';
-import { disciplineEntries, maneuverDetails } from './model/subsystems/maneuvers.js';
+import { disciplineEntries, maneuverDetails, noteKeyOf } from './model/subsystems/maneuvers.js';
 import { featDetails, powerDetails, spellDetails } from './model/subsystems/catalogues.js';
 import { castingTable } from './model/subsystems/vancian.js';
 import { psionicCurve } from './model/subsystems/psionics.js';
@@ -110,7 +110,10 @@ function publishManeuvers(doc, report) {
         if (value) written[key] = value;
       }
       if (Object.keys(written).length) {
-        discipline.notes[name] = { ...(discipline.notes[name] || {}), ...written };
+        // `written` already holds the player's own cells over the pack's. A
+        // note saved as a bare string (the description alone) is replaced
+        // rather than spread, and one saved under another spelling is reused.
+        discipline.notes[noteKeyOf(discipline, name) ?? name] = written;
         // Classification is not description. The bundled Path of War catalogue
         // fills in `type` and nothing else on purpose -- the rest is a
         // publisher's rules text -- so an entry can travel complete as far as

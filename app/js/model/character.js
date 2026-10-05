@@ -78,7 +78,7 @@ import {
   proseSources, renderProse, resolveInlineNames, scopeNames, trackerScope,
 } from './scope.js';
 import {
-  addCustomization, applyBudget, blendedClasses, checkCustomizationBases, customizationFor,
+  addCustomization, applyBudget, blendedClasses, casterLevel, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
   setTalentEntry, blankTalentNotes, fillTalentNotes, setAltTrainingPick, altTrainingLookup,
   removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setCustomizationRule, setSphereBonus,
@@ -99,7 +99,7 @@ import {
 import { rest } from './rest.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
-  addWealthEntry, casterLevel, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
+  addWealthEntry, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
 } from './stats/wealth.js';
 import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {

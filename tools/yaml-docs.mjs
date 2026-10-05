@@ -39,6 +39,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { slugId } from '../app/js/extensions.js';
 
 /* ---------------- arguments ---------------- */
 
@@ -221,8 +222,8 @@ function entryDoc(d, pack, sources) {
 
 const walk = (dir) => readdirSync(dir, { withFileTypes: true })
   .flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
-  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'untitled';
+// The app's id rule (slugId), so a folder, a file and a pack id agree.
+const slug = (s) => slugId(s) || 'untitled';
 const plural = (s) => titleCase(/[^aeiou]y$/.test(s) ? `${s.slice(0, -1)}ies` : /(?:s|x|z|ch|sh)$/.test(s) ? `${s}es` : `${s}s`);
 
 /*

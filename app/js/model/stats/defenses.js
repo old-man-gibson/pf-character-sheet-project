@@ -596,31 +596,17 @@ function spendTemp(model, want) {
 }
 
 /** Apply damage, spending temporary hit points first. */
+// The HP panel's buttons. The same damage and healing as the session's
+// quick actions (applyDamage, applyNonlethal, applyHealing), returning the
+// model rather than what happened.
 export function takeDamage(model, amount, { nonlethal = false } = {}) {
-  const hp = model.data.hp;
-  const state = model.hpState;
-  // Whole points, rounded down, as the Quick actions card and companions
-  // take them: 2.5 damage is 2.
-  let left = Math.max(0, Math.floor(Number(amount) || 0));
-  if (nonlethal) {
-    hp.nonlethal = state.nonlethal + left;
-  } else {
-    left -= spendTemp(model, left);
-    hp.current = state.baseCurrent - left;
-  }
-  model.recompute();
+  if (nonlethal) applyNonlethal(model, amount);
+  else applyDamage(model, amount);
   return model;
 }
 
-// Healing stops at the maximum. The stored figure is the undrained one, so it
-// stops at the undrained maximum, which is the same point as it stands now.
 export function healDamage(model, amount) {
-  const hp = model.data.hp;
-  const state = model.hpState;
-  const n = Math.max(0, Math.floor(Number(amount) || 0));
-  hp.current = Math.min(state.baseMax, state.baseCurrent + n);
-  hp.nonlethal = Math.max(0, state.nonlethal - n);
-  model.recompute();
+  applyHealing(model, amount);
   return model;
 }
 
@@ -634,8 +620,11 @@ export function applyDamage(model, amount) {
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   if (!n) return { taken: 0, fromTemp: 0 };
   const hp = model.data.hp;
+  // Read through hpState, which writes the default a fresh sheet lacks
+  // (current is the maximum), so the first damage is not taken from 0.
+  const before = model.hpState.baseCurrent;
   const fromTemp = spendTemp(model, n);
-  hp.current = (Number(hp.current) || 0) - (n - fromTemp);
+  hp.current = before - (n - fromTemp);
   model.recompute();
   emit(model, { type: 'quick-action', action: 'damage', amount: n });
   return { taken: n, fromTemp };

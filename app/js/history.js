@@ -35,6 +35,7 @@
 
 import { SCHEMA_VERSION } from './model.js';
 import { isComputedPath } from './model/computed-paths.js';
+import { databaseOpener, finished, result } from './idb.js';
 
 /** How many automatic snapshots survive per character; the oldest goes first. */
 export const AUTO_KEEP = 5;
@@ -213,55 +214,14 @@ export function evictable(records, keep = AUTO_KEEP) {
  * IndexedDB
  * ---------------------------------------------------------------------- */
 
-let dbPromise = null;
-
-function openDb() {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB is not available here'));
-      return;
-    }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const store = req.result.createObjectStore(STORE, { keyPath: 'key' });
-      store.createIndex(BY_CHARACTER, 'id');
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      /*
-       * Let go when something else needs to.
-       *
-       * A held-open connection blocks a schema upgrade or a delete from any
-       * other tab -- indefinitely, since this one has no reason to close on its
-       * own. So the tab that wants to change the database gets to: close, forget
-       * the handle, and let the next call open a fresh one. Without this, a
-       * player with the sheet open in two tabs would find that a new version of
-       * the app could never upgrade the store in either.
-       */
-      db.onversionchange = () => { db.close(); dbPromise = null; };
-      resolve(db);
-    };
-    req.onerror = () => reject(req.error);
-    // Another tab holding an old version open. Nothing to do but say so; the
-    // sheet carries on with its working state.
-    req.onblocked = () => reject(new Error('another tab is holding the database open'));
-  });
-  // A failure must not be remembered forever -- a later attempt may succeed
-  // once the other tab has gone.
-  dbPromise.catch(() => { dbPromise = null; });
-  return dbPromise;
-}
-
-const result = (req) => new Promise((resolve, reject) => {
-  req.onsuccess = () => resolve(req.result);
-  req.onerror = () => reject(req.error);
-});
-
-const finished = (tx) => new Promise((resolve, reject) => {
-  tx.oncomplete = () => resolve();
-  tx.onerror = () => reject(tx.error);
-  tx.onabort = () => reject(tx.error || new Error('transaction aborted'));
+// Opened and let go of the way pack-storage.js opens its own (idb.js).
+const openDb = databaseOpener({
+  name: DB_NAME,
+  version: DB_VERSION,
+  upgrade: (db) => {
+    const store = db.createObjectStore(STORE, { keyPath: 'key' });
+    store.createIndex(BY_CHARACTER, 'id');
+  },
 });
 
 /* ---------------------------------------------------------------------- *

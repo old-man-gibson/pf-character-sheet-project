@@ -23,7 +23,7 @@
  * Pure: text in, blocks and leftovers out. No DOM, no storage.
  */
 
-import { normalizeBlock, featureKey } from './extensions.js';
+import { babFromText, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
@@ -664,7 +664,9 @@ function readInfoBox(trimmed, mark) {
     if (/^BAB\b/i.test(t) || /^Save\b/i.test(t)) { mark(i); i++; continue; }         // the little BAB/saves table header
     const m = t.match(/^(1|3\/4|1\/2|0\.75|0\.5|Full|Medium|Slow|Fast|Poor|Good)\t(Good|Poor)\t(Good|Poor)\t(Good|Poor)$/i);
     if (m) {
-      out.bab = /^(1|full|fast)$/i.test(m[1]) ? 1 : /^(1\/2|0\.5|slow|poor)$/i.test(m[1]) ? 0.5 : 0.75;
+      // The pack route's reading, so a page means the same thing either way:
+      // a "Good" BAB is the full progression.
+      out.bab = babFromText(m[1]);
       out.saves = { fort: /good/i.test(m[2]), ref: /good/i.test(m[3]), will: /good/i.test(m[4]) };
       mark(i); i++; continue;
     }

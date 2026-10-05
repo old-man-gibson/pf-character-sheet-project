@@ -90,6 +90,36 @@ export function manifesterForwardKey(c) {
   return key === 'x' ? null : `manifester.${key}.level`;
 }
 
+/** The name a tracker's range is forwarded to: `tracker.<id>.max` or `.min`. */
+export const trackerForwardKey = (id, edge = 'max') => `tracker.${id}.${edge}`;
+
+/**
+ * The families of destination a bonus can be sent to by a name built from
+ * something on the sheet, each with the key builder above that names it.
+ *
+ * `early` is a family the recompute reads before the prose is (a class level
+ * feeds the training pass, a speed resolves before the prose, the sphere and
+ * casting numbers are worked out early so a formula can read them), so a
+ * bonus landing in one takes the second pass -- see `forwardsEarly`. A family
+ * added here is early or not by saying so, rather than by remembering a
+ * prefix list elsewhere. The fixed names (FORWARD_STATS, FORWARD_LATE) and
+ * the companions, whose prefixes are their ids, are listed where they live.
+ */
+export const FORWARD_KEY_FAMILIES = [
+  { prefix: 'skill', keyOf: skillForwardKey, early: false },
+  { prefix: 'class', keyOf: classForwardKey, early: true },
+  { prefix: 'speed', keyOf: speedForwardKey, early: true },
+  { prefix: 'spheres', keyOf: null, early: true },
+  { prefix: 'sphere', keyOf: sphereForwardKey, early: true },
+  { prefix: 'vancian', keyOf: vancianForwardKey, early: true },
+  { prefix: 'manifester', keyOf: manifesterForwardKey, early: true },
+  { prefix: 'tracker', keyOf: trackerForwardKey, early: false },
+];
+
+/** Whether a destination name is in a family the recompute reads before the prose. */
+export const inEarlyFamily = (name) => FORWARD_KEY_FAMILIES
+  .some((f) => f.early && String(name).startsWith(`${f.prefix}.`));
+
 /**
  * A bonus that may be a number or a formula, worked out either way.
  *
@@ -110,6 +140,34 @@ export function evaluateAmount(raw, scope) {
   }
   return { value: Number(raw) || 0, error: null };
 }
+
+/**
+ * A name split into what it is called and the brackets written after it.
+ *
+ * A cell is the player's own text and carries two kinds of bracket: the
+ * entry's own tag, `(tradition)` or `[plan]`, and what they took it for,
+ * `(Wrath)`. Every trailing one is peeled, so "Daevic's Tradition
+ * (tradition) (Wrath)" gives up both and leaves the name. `tags` come back
+ * lower-cased, innermost last. Every catalogue that matches a name with its
+ * tags off reads the name from here.
+ */
+export function splitTags(raw) {
+  let name = String(raw ?? '').trim();
+  const tags = [];
+  for (;;) {
+    const m = /\s*(?:\(([^()]*)\)|\[([^\][]*)\])\s*$/.exec(name);
+    if (!m) break;
+    tags.push(String(m[1] ?? m[2] ?? '').trim().toLowerCase());
+    name = name.slice(0, m.index).trim();
+  }
+  return { name, tags };
+}
+
+/**
+ * Whether a level box pins its number. Blank -- null, undefined or an empty
+ * string -- follows what the sheet works out; anything else, 0 included, pins.
+ */
+export const isPinned = (v) => v !== null && v !== undefined && String(v).trim() !== '';
 
 /** A stored amount, kept as the formula it was typed as or read as a number. */
 export const amountOrText = (v) => (typeof v === 'string' && v.trim() !== '' && !/^-?\d+(\.\d+)?$/.test(v.trim())
@@ -185,7 +243,16 @@ const isPlaceholder = (v) => v === null || v === undefined
  * knows, they simply have no maneuvers to offer.
  * ------------------------------------------------------------------ */
 
-export const normalizeName = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+/**
+ * A name as every table matches it: case, surrounding and doubled spaces, and
+ * typography do not count. An ellipsis is three dots (NFKC), curly quotes are
+ * straight ones and a typographic dash is a hyphen, so "Seraph’s Wrath" typed
+ * on a sheet finds the pack's "Seraph's Wrath" in every catalogue alike.
+ */
+export const normalizeName = (v) => String(v ?? '')
+  .normalize('NFKC')
+  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[‐-―]/g, '-')
+  .trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
  * Edit distance, abandoned once it cannot come in under `limit`.

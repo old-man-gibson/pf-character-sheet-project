@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
-  blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  blocksFromCharacter, describeSummary, summarize, TABLE_KINDS, looksLikeExtension, loadBundledExtensions, parseReplaces,
   isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
@@ -17,7 +17,7 @@ import {
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
-  setSphereCatalogue, sphereBasePick, isBasePickOf, talentNoteText, setAltTrainingTables, sphereEntry, sphereNames, sphereTalent, talentsTagged,
+  setSphereCatalogue, sphereCatalogue, sphereBasePick, isBasePickOf, talentNoteText, setAltTrainingTables, sphereEntry, sphereNames, sphereTalent, talentsTagged,
   setVeilCatalogue, veilCatalogue, veilEntry, veilClasses, veilSlots, veilsAvailable,
   veilDetails, veilOwn, veilIsWritten,
 } from '../app/js/model.js';
@@ -185,6 +185,24 @@ check('parseReplaces: nothing', parseReplaces('Dwarves gain a +2 bonus.'), []);
 check('trait block reads replaces off its text', normalizeBlock({ kind: 'trait', name: 'X', text: 'This replaces hatred and greed.' }).replaces, ['hatred', 'greed']);
 check('describeSummary', describeSummary({ tables: { maneuvers: 30, vancian: 1 }, blocks: { class: 2, race: 1 } }), '30 disciplines · 1 casting table · 2 classes · 1 race');
 check('describeSummary empty', describeSummary({ tables: {}, blocks: {} }), 'empty');
+{
+  // Alternate Training is a table kind like the others: counted by its
+  // techniques, not by how many keys its document has.
+  const alt = normalizeExtension({ id: 'alt', name: 'Alt', provides: { altTraining: {
+    levels: [1, 3], repeatFrom: 5, links: {}, techniques: [{ name: 'A' }, { name: 'B' }] } } });
+  check('an Alternate Training pack is summarised by its techniques', describeSummary(summarize(alt)), '2 training techniques');
+  check('and listed among the table kinds', TABLE_KINDS.includes('altTraining'), true);
+}
+{
+  // One descriptor for every table kind: each names a setter the model has,
+  // and mergeTables starts every kind from it.
+  const { TABLES } = await import('../app/js/extensions.js');
+  const model = await import('../app/js/model.js');
+  check('every table kind has a model setter', TABLES.filter((t) => typeof model[t.setter] !== 'function').map((t) => t.kind), []);
+  check('and a merged table, empty or not', Object.keys(mergeTables([])), TABLES.map((t) => t.kind));
+  check('a tag is peeled however many follow the name',
+    model.splitTags("Daevic's Tradition (tradition) [plan] (Wrath)"), { name: "Daevic's Tradition", tags: ['wrath', 'plan', 'tradition'] });
+}
 
 console.log('store -- save, list, read, enable, remove; bundled toggles remembered');
 {
@@ -745,6 +763,26 @@ console.log('spheres -- a whole sphere as a shared table, tags and all');
   const pasted = mergeSphere(pack.provides.spheres.spheres[0], handbook.provides.spheres.spheres[0]);
   check('the editor’s join is the loader’s', [pasted.talents.map((t) => [t.name, t.text]), pasted.abilities.length],
     [joined[0].talents.map((t) => [t.name, t.text]), joined[0].abilities.length]);
+  // A page that lists a talent twice (its main list and a topical section)
+  // and a later pack that corrects it: the correction replaces both copies,
+  // so the catalogue's keep-the-longest dedupe has no older text to prefer.
+  {
+    const older = normalizeExtension({ id: 'old', name: 'Old', provides: { spheres: { spheres: [{ name: 'Duelist', talents: [
+      { name: 'Riposte', text: 'The older and much longer wording of this talent.' },
+      { name: 'Feint', text: 'Feint.' },
+      { name: 'Riposte (counter)', group: 'Counters', text: 'The older and much longer wording of this talent.' },
+    ] }] } } });
+    const fix = normalizeExtension({ id: 'fix', name: 'Fix', provides: { spheres: { spheres: [{ name: 'Duelist', talents: [
+      { name: 'Riposte', text: 'Corrected.' },
+    ] }] } } });
+    const before = sphereCatalogue();
+    const both = mergeTables([older, fix]).spheres;
+    check('a correction replaces every older copy, in the first one\'s place',
+      both.spheres[0].talents.map((t) => [t.name, t.text]), [['Riposte', 'Corrected.'], ['Feint', 'Feint.']]);
+    setSphereCatalogue(both);
+    check('so the corrected text is what a sheet reads', sphereTalent('Duelist', 'Riposte')?.text, 'Corrected.');
+    setSphereCatalogue(before);
+  }
   // And a reference entry is the same entry only for the same class and
   // option: two classes' Evasion are two entries.
   const evasion = (cls) => ({ name: 'Evasion', fields: [['Class', cls], ['Option', 'Talent']] });

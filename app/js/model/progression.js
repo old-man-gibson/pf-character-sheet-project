@@ -16,7 +16,7 @@ import { orphans } from './reconcile.js';
 import { forwarded } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, normalizeName, resolveNumberFields, slug } from './util.js';
+import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
 
 /**
  * The key a rule group's text is stored under within a feature cell.
@@ -414,7 +414,7 @@ export function classLevelCount(model, className) {
   // dice, base saves and BAB that are built from which class ran when.
   // Nothing is conjured out of nothing -- a class with no levels stays at 0,
   // because an effective level is a multiplier on a class you have.
-  return own + (own ? forwarded(model, `class.${slug(match)}.level`) : 0);
+  return own + (own ? forwarded(model, classForwardKey(match)) : 0);
 }
 
 /**
@@ -1420,6 +1420,31 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
  * comparison answers "never" for every level -- which the caller then reads
  * as a class the Planner does not mention at all.
  */
+/**
+ * Whether a class has character level `lvl`: by its pinned levels when a
+ * block pins them (the first N), else by the Planner's row.
+ */
+export function classHasLevel(model, className, lvl, override = null) {
+  return isPinned(override) ? lvl <= Math.floor(Number(override) || 0) : plannerHasClass(model, className, lvl);
+}
+
+/**
+ * A casting block's level: the class's levels counted off the Planner, or the
+ * block's pin, capped at the table's 20; then what is forwarded to
+ * `forwardKey` on top, which waits while the class has no levels. Vancian
+ * caster level and Psionic manifester level both read it.
+ */
+export function levelFollowingPin(model, className, override, { forwardKey = '', cap = 20 } = {}) {
+  const planner = model.classLevelCount(className);
+  const base = Math.max(0, Math.min(cap, isPinned(override) ? Math.floor(Number(override) || 0) : planner));
+  const sent = forwardKey ? forwarded(model, forwardKey) : 0;
+  return {
+    planner, base, forwarded: sent,
+    waiting: base ? 0 : sent,
+    level: Math.max(0, base + (base ? sent : 0)),
+  };
+}
+
 export function plannerHasClass(model, className, lvl) {
   const row = model.data.progression?.levels?.[lvl - 1];
   if (!row) return false;

@@ -22,11 +22,9 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { blankDocument, indexEntry } from '../app/js/convert.js';
-import {
-  Character, setManeuverCatalogue, setVancianTables, setPsionicTables,
-  setCardcastingTables, setCookingTables,
-} from '../app/js/model.js';
-import { mergeTables, registerTables } from '../app/js/extensions.js';
+import { Character } from '../app/js/model.js';
+import { normalizeExtension } from '../app/js/extensions.js';
+import { registerPacks } from '../app/js/extension-runtime.js';
 
 const OUT_DIR = join('tests', 'fixtures', 'public', 'characters');
 const ID = 'vesna';
@@ -41,9 +39,8 @@ const CREATED_AT_UTC = `${CREATED_AT}.000Z`;
 const index = JSON.parse(readFileSync(join('data', 'extensions', 'index.json'), 'utf8'));
 const packs = index.extensions
   .map((e) => JSON.parse(readFileSync(join('data', 'extensions', e.file), 'utf8')));
-registerTables(mergeTables(packs), {
-  setManeuverCatalogue, setVancianTables, setPsionicTables, setCardcastingTables, setCookingTables,
-});
+// Read as the app reads a fetched pack, then registered as it does.
+registerPacks(packs.map(normalizeExtension));
 
 /**
  * A twelfth-level gestalt Wizard/Psion, invented for this repository.

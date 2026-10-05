@@ -18,6 +18,7 @@ import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
 import { SYSTEM_POOLS, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
+import { trackerForwardKey } from '../../model/util.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
@@ -168,7 +169,7 @@ function trackerRow(model, ctx, t) {
     : t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
         ${t.minFormula ? formulaMeta(model, 'min', t.minFormula) : ''}
         ${['max', 'min'].map((edge) => {
-        const badge = forwardedBadge(model, `tracker.${t.id}.${edge}`);
+        const badge = forwardedBadge(model, trackerForwardKey(t.id, edge));
         return badge ? `<div class="tmeta">${esc(edge)} ${badge}</div>` : '';
       }).join('')}
         ${t.note ? `<div class="tnote">${hasTokens(t.note)

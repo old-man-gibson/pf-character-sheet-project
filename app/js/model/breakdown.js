@@ -21,7 +21,7 @@
 
 import {
   AC_BONUS_TYPES, ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY,
-  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abpGroupTotal, armorParts, conditionTotals, sizeAttackMod, sizeMod, statMod,
+  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abilityOf, abpGroupTotal, armorParts, conditionTotals, sizeAttackMod, sizeMod, statMod,
 } from '../rules.js';
 import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
@@ -307,10 +307,7 @@ const CHANNEL_LABELS = {
 };
 
 /** 'Dex', 'dex', 'Dexterity' -> 'dex'; anything else -> null. */
-const abilityKeyOf = (x) => {
-  const s = String(x || '').trim().toLowerCase().slice(0, 3);
-  return ABILITIES.includes(s) ? s : null;
-};
+const abilityKeyOf = abilityOf;
 
 /** The ability slots a key is built on: the list `abilityMoves` sums by. */
 const slotsOf = (c, key) => abilitySlots(c)[key] || [];

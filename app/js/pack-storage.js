@@ -39,6 +39,8 @@
  * localStorage, which is what every version before this one ran on.
  */
 
+import { databaseOpener, finished, result } from './idb.js';
+
 export const PACK_DB = 'character-sheet-extensions';
 export const PACK_DB_VERSION = 1;
 export const PACK_STORE = 'packs';
@@ -93,17 +95,6 @@ export function storageMedium(storage, { holds = () => true } = {}) {
 
 /* ---------------- IndexedDB ---------------- */
 
-const result = (req) => new Promise((resolve, reject) => {
-  req.onsuccess = () => resolve(req.result);
-  req.onerror = () => reject(req.error);
-});
-
-const finished = (tx) => new Promise((resolve, reject) => {
-  tx.oncomplete = () => resolve();
-  tx.onerror = () => reject(tx.error);
-  tx.onabort = () => reject(tx.error || new Error('transaction aborted'));
-});
-
 /**
  * A medium over IndexedDB: one object store of `{key, value}` records, keyed
  * exactly the way localStorage was, so what moves across is the same pair of
@@ -115,31 +106,14 @@ const finished = (tx) => new Promise((resolve, reject) => {
  * way.
  */
 export function indexedDbMedium({ factory = globalThis.indexedDB, name = PACK_DB, store = PACK_STORE } = {}) {
-  let dbPromise = null;
-
-  const openDb = () => {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      if (!factory) { reject(new Error('IndexedDB is not available here')); return; }
-      const req = factory.open(name, PACK_DB_VERSION);
-      req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains(store)) req.result.createObjectStore(store, { keyPath: 'key' });
-      };
-      req.onsuccess = () => {
-        const db = req.result;
-        // Let go when another tab needs to upgrade or delete the database: a
-        // held-open connection blocks that indefinitely, and this one has no
-        // reason to close on its own. The same bargain history.js makes.
-        db.onversionchange = () => { db.close(); dbPromise = null; };
-        resolve(db);
-      };
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error('another tab is holding the database open'));
-    });
-    // A failure must not be remembered forever; a later attempt may succeed.
-    dbPromise.catch(() => { dbPromise = null; });
-    return dbPromise;
-  };
+  // A factory passed as null or undefined means there is none: say so on
+  // use, rather than reaching for the page's own.
+  const openDb = factory ? databaseOpener({
+    factory,
+    name,
+    version: PACK_DB_VERSION,
+    upgrade: (db) => { if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: 'key' }); },
+  }) : () => Promise.reject(new Error('IndexedDB is not available here'));
 
   return {
     name: 'IndexedDB',

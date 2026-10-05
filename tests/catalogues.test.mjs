@@ -210,6 +210,16 @@ console.log('the character keeps the name, not the book');
     [unknown.known, unknown.text, unknown.own.note], [false, '', 'mine']);
   check('a face is drawn for a known entry and not for an unknown one',
     [catalogueFace(d).includes('catface'), catalogueFace(unknown)], [true, '']);
+
+  // A long text is never cut: it sits whole in the Read all box, which the
+  // sheet opens by its key.
+  const long = { ...d, text: `${'word '.repeat(200)}the last word.` };
+  const shut = catalogueFace(long, { ctx: { openText: new Set() }, key: 'featGroups.0.entries|3' });
+  check('a long pack text is all there, in a box with Read all',
+    [shut.includes('the last word.'), shut.includes('data-textopen="cat:featGroups.0.entries|3"'), shut.includes('Read all')],
+    [true, true, true]);
+  const open = catalogueFace(long, { ctx: { openText: new Set(['cat:featGroups.0.entries|3']) }, key: 'featGroups.0.entries|3' });
+  check('and opens by that key', open.includes('Show less'), true);
 }
 
 /* ---------------- the pickers on the tabs ---------------- */

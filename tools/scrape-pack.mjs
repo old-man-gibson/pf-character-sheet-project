@@ -40,6 +40,9 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'n
 import { join, basename, extname } from 'node:path';
 import { parsePaste, readStructured } from '../app/js/paste-import.js';
 import { convertPack } from './veils-to-table.mjs';
+// The app's own id rule, so a pack built here and one built in the app from the
+// same name ("Café" -> cafe) replace each other on import.
+import { slugId } from '../app/js/extensions.js';
 
 /* ---------------- arguments ---------------- */
 
@@ -82,7 +85,6 @@ if (!files.length) { console.error(`Nothing matched ${match || 'a markdown file'
 
 /* ---------------- reading ---------------- */
 
-const slugId = (s) => String(s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 const titleOf = (file) => basename(file, extname(file)).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   .replace(/\b\w/g, (c) => c.toUpperCase());
 // `new Date()` rather than a fixed stamp: a pack records when it was built,

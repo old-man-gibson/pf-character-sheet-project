@@ -3061,6 +3061,103 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('the Cardcasting table and tab read one set of rules');
+{
+  const M = await import('../app/js/model.js');
+  check('a card costs its number, or nothing', [M.cardCost({ cost: '3' }), M.cardCost({ cost: '' }), M.cardCost({ cost: '-2' }), M.cardCost(null)], [3, 0, 0, 0]);
+  check('maximum ante is 2, +1 per 4 levels past 1st', [1, 4, 5, 9, 20].map(M.maxAnte), [2, 2, 3, 4, 6]);
+  const kw = (text, o) => [...text.matchAll(M.cardKeywordPattern(o))].map((m) => [m[1].toLowerCase(), m[2] ?? null]);
+  check('every keyword is read, [Deck] and [Ante] too', kw('[Draw 2] [Deck] [Ante] [Mill3] [OnMill]'), [['draw', '2'], ['deck', null], ['ante', null], ['mill', '3']]);
+  check('and a trigger only when asked for', kw('[OnMill] [Exile]', { triggers: true }), [['onmill', null], ['exile', null]]);
+  const c = new Character(blankDocument({ name: 'Dealer' }));
+  c.data.cardcasting = { ...(c.data.cardcasting || {}), manipulations: [{ name: 'Mulligan', count: 1 }, { name: 'Read the Cards', count: 1 }, { name: 'read the cards', count: 1 }],
+    table: { hand: ['a', 'b', 'c'], mana: ['m'], round: 1, redraws: 0 } };
+  check('a first redraw under Mulligan keeps the number, mana drawn at initiative included', M.redrawSize(c), { size: 4, mulligan: true, next: 4 });
+  c.data.cardcasting.table.redraws = 1;
+  check('a second is one fewer', M.redrawSize(c).next, 3);
+  check('a manipulation taken on two rows counts twice', M.manipulationCount(c, 'Read the Cards'), 2);
+  check('a tracker range holds a value either way round', [M.clampTracker({ min: 0, max: 5 }, 9), M.clampTracker({ min: 5, max: 0 }, -1), M.clampTracker({ min: 0, max: 5 }, 3)], [5, 0, 3]);
+}
+
+console.log('a level box pins the same way everywhere: blank follows, 0 pins');
+{
+  const M = await import('../app/js/model.js');
+  check('blank is not a pin, 0 is', [null, undefined, '', '  ', 0, '0', 3].map(M.isPinned), [false, false, false, false, true, true, true]);
+  const c = new Character(blankDocument({ name: 'Pinned', level: 5 }));
+  c.listAdd('classes', { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true,
+    skillRanks: 2, archetypes: '', levelsOverride: 5, systems: [] });
+  const follow = (override) => M.levelFollowingPin(c, 'Wizard', override);
+  check('a blank pin follows the class\'s levels', [follow(null).level, follow('').level], [5, 5]);
+  check('a pin holds, capped at 20', [follow(3).level, follow(0).level, follow(25).base], [3, 0, 20]);
+  check('a class has a level by its pin when pinned', [M.classHasLevel(c, 'Wizard', 3, 2), M.classHasLevel(c, 'Wizard', 2, 2)], [false, true]);
+}
+
+console.log('every forward family names its keys under its own prefix');
+{
+  const M = await import('../app/js/model.js');
+  const samples = {
+    skill: { name: 'Knowledge', spec: 'arcana' }, class: 'Legendary Kineticist', speed: { type: 'Fly (average)' },
+    sphere: 'Dark', vancian: { name: 'Wizard' }, manifester: { name: 'Psion' }, tracker: 'ki',
+  };
+  check('each key builder answers under its family\'s prefix',
+    M.FORWARD_KEY_FAMILIES.filter((f) => f.keyOf).map((f) => String(f.keyOf(samples[f.prefix])).startsWith(`${f.prefix}.`)),
+    M.FORWARD_KEY_FAMILIES.filter((f) => f.keyOf).map(() => true));
+  check('early families are early, the rest are not',
+    ['class.wizard.level', 'speed.fly', 'spheres.cl', 'sphere.dark.dc', 'vancian.wizard.cl', 'manifester.psion.level', 'skill.bluff', 'tracker.ki.max', 'spheresx'].map(M.inEarlyFamily),
+    [true, true, true, true, true, true, false, false, false]);
+}
+
+console.log('the HP buttons and the quick actions take damage the one way');
+{
+  const fresh = () => {
+    const c = new Character(blankDocument({ name: 'Hurt', level: 3 }));
+    delete c.data.hp.current;          // a sheet that never stored a current figure
+    return c;
+  };
+  const a = fresh(); const max = a.hpState.max;
+  delete a.data.hp.current;
+  a.applyDamage(5);
+  const b = fresh();
+  b.damage(5);
+  check('the first damage comes off the maximum, either way', [a.hpState.current, b.hpState.current], [max - 5, max - 5]);
+  b.damage(2, { nonlethal: true });
+  b.heal(3);
+  check('and healing takes back lethal and nonlethal alike', [b.hpState.current, b.data.hp.nonlethal], [max - 2, 0]);
+}
+
+console.log('dice text reads one way: a typeset minus, and names that are dice');
+{
+  const R = await import('../app/js/rules.js');
+  check('a typeset minus subtracts', [R.parseDiceExpr('2d6 − 1').flat, R.parseDiceExpr('2d6 - 1').flat], [-1, -1]);
+  const value = (n) => ({ 'fist.simple': '4d6', 'str.mod': 3 })[n] ?? (Number.isFinite(Number(n)) ? Number(n) : (() => { throw new Error(`unknown ${n}`); })());
+  check('a name whose value is dice is spliced in; others are left alone',
+    R.spliceDiceNames('2d6 + fist.simple + str.mod + nobody + d8', value), '2d6 + 4d6 + str.mod + nobody + d8');
+  check('and parseDiceExpr reads it so', R.parseDiceExpr('fist.simple + 2', value), { dice: { 6: 4 }, flat: 2, notes: [], error: null });
+  check('every weapon attack type has a mode', Object.keys(R.ATTACK_TYPE_MODE), ['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged', 'CMB', 'Alt CMB']);
+}
+
+console.log('every catalogue matches names the same way');
+{
+  const M = await import('../app/js/model.js');
+  const spheres = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Duelist', kind: 'combat', talents: [{ name: 'Riposte', tags: ['plan'], text: 'Strike back.' }] }] });
+  check('a talent written with two tags is still found', sphereTalent('Duelist', 'Riposte (greater) [plan]')?.name, 'Riposte');
+  check('and with doubled spaces', sphereTalent('Duelist', '  riposte ')?.name, 'Riposte');
+  setSphereCatalogue(spheres);
+
+  const veils = veilCatalogue();
+  setVeilCatalogue({ veils: [{ name: "Seraph's Wings", text: 'Wings.' }] });
+  check('a curly apostrophe finds a veil', M.veilEntry('Seraph’s  Wings')?.name, "Seraph's Wings");
+  setVeilCatalogue(veils);
+
+  const feats = featCatalogue();
+  setFeatCatalogue({ feats: [{ name: "Fighter's Grit", type: 'Combat', text: 'Grit.' }] });
+  check('and a feat', M.featEntry('Fighter’s   Grit')?.name, "Fighter's Grit");
+  setFeatCatalogue(feats);
+
+  check('and a maneuver', M.maneuverKey('Seraph’s  Wrath'), M.maneuverKey("seraph's wrath"));
+}
+
 console.log('a weapon talent missing its base says so in its hover card');
 {
   const c = new Character(blankDocument({ name: 'Armiger' }));

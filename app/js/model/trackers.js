@@ -13,7 +13,7 @@ import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
-import { slug } from './util.js';
+import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
 /**
  * Mythic Power is the one tracker every character carries -- granted at tier 1
@@ -301,8 +301,8 @@ export function recomputeTrackers(model) {
     const errs = [];
     // Forwarded first, so a bad max formula still leaves the bonus visible
     // rather than taking the whole range down with it.
-    t.forwardedMax = forwarded(model, `tracker.${t.id}.max`);
-    t.forwardedMin = forwarded(model, `tracker.${t.id}.min`);
+    t.forwardedMax = forwarded(model, trackerForwardKey(t.id, 'max'));
+    t.forwardedMin = forwarded(model, trackerForwardKey(t.id, 'min'));
     // Worked out from nothing every pass. A formula that fails comes to 0, as
     // a failed formula does everywhere else; keeping last pass's number and
     // adding the bonus to it again made the range grow on every recompute.
@@ -371,10 +371,14 @@ export function addTracker(model, { name, maxFormula, minFormula = null, current
 export function stepTracker(model, id, delta) {
   const t = model.trackers.find((x) => x.id === id);
   if (!t) return null;
-  const min = Number(t.min) || 0;
-  const max = Number(t.max) || 0;
-  const next = Math.max(min, Math.min(max, (Number(t.current) || 0) + (Number(delta) || 0)));
-  return model.updateTracker(id, { current: next });
+  return model.updateTracker(id, { current: clampTracker(t, (Number(t.current) || 0) + (Number(delta) || 0)) });
+}
+
+/** A value held to a tracker's range, whichever way round its ends are. */
+export function clampTracker(t, value) {
+  const lo = Math.min(Number(t?.min) || 0, Number(t?.max) || 0);
+  const hi = Math.max(Number(t?.min) || 0, Number(t?.max) || 0);
+  return Math.max(lo, Math.min(hi, Number(value) || 0));
 }
 
 /** Whether a tracker drains: a pool from 0 drawn as what is left. */
@@ -416,9 +420,7 @@ function setTracker(model, t, patch) {
   // a pool of 5 used to be stored as 99. Only a value being set is clamped: a
   // range that shrinks under a spent pool keeps the spend, as it always has.
   if (patch && 'current' in patch) {
-    const lo = Math.min(Number(t.min) || 0, Number(t.max) || 0);
-    const hi = Math.max(Number(t.min) || 0, Number(t.max) || 0);
-    const held = Math.max(lo, Math.min(hi, Number(t.current) || 0));
+    const held = clampTracker(t, t.current);
     if (held !== t.current) {
       t.current = held;
       if (linked) linked.set(model.data, held);
@@ -465,18 +467,13 @@ export function recomputeBuffs(model) {
   for (const b of buffs) {
     if (!b || typeof b !== 'object') continue;
     const errs = [];
+    // Every number-or-formula field resolves the one way (evaluateAmount); a
+    // dial is a whole number either way.
     const resolve = (raw, name, setError) => {
-      setError(null);
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        try {
-          return Math.floor(Number(evaluateFormula(raw, scope)) || 0);
-        } catch (err) {
-          setError(err.message);
-          errs.push(`${name}: ${err.message}`);
-          return 0;
-        }
-      }
-      return Math.floor(Number(raw) || 0);
+      const { value, error } = evaluateAmount(raw, scope);
+      setError(error);
+      if (error) errs.push(`${name}: ${error}`);
+      return Math.floor(value);
     };
     for (const [key] of BUFF_MOD_KEYS) {
       b[`${key}Num`] = resolve(b[key], key, (e) => { b[`${key}Error`] = e; });

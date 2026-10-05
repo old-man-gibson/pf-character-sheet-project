@@ -45,14 +45,11 @@ import { MONSTER_TAB_ORDER } from '../monster/block.js';
 const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded',
   'castingUnlocked', 'clWaiting', { path: 'classes', keys: ['levelWaiting'] }];
 
-/**
- * The document shape this build understands, written by tools/convert.py.
- *
- * Bumped whenever a section is added or restructured. Saved edits and imported
- * files are both refused when they disagree: an older document is missing
- * whatever has been added since, and loading it would quietly drop sections.
- */
-export const SCHEMA_VERSION = 9;
+// The document shape this build understands: one number for the model and
+// the converter, kept in schema.js.
+import { SCHEMA_VERSION } from '../schema.js';
+
+export { SCHEMA_VERSION };
 
 /**
  * The tabs a fresh sheet puts on its tab bar, in order. Everything else --
@@ -587,27 +584,32 @@ export function normalise(model) {
   }
   delete d.extraTabs;
 
-  // Item Crafting is a calculator, not a grid: read the workbook's tab into
-  // the structured block the Crafting tab edits, then retire the raw copy so
-  // the two cannot drift apart.
-  const craftIndex = d.sheetTabs.findIndex((t) => t.name === 'Item Crafting');
-  if (!d.crafting) {
-    d.crafting = importCrafting(craftIndex < 0 ? null : d.sheetTabs[craftIndex], d.identity);
-  }
-  if (craftIndex >= 0) d.sheetTabs.splice(craftIndex, 1);
+  /*
+   * Every modelled sub-system reads its worksheet the same way: take the
+   * workbook's grid once, then retire it so the structured block and the raw
+   * copy cannot drift apart. A document saved after this point no longer
+   * carries the grid at all, which is most of what these tabs weighed.
+   * `takeTab` is that move: the tab a name or test finds, taken off the list
+   * (null when there is none). The read only happens while the block is
+   * missing; the tab goes either way.
+   */
+  const takeTab = (match) => {
+    const test = typeof match === 'function' ? match : (t) => t.name === match;
+    const i = d.sheetTabs.findIndex(test);
+    return i < 0 ? null : d.sheetTabs.splice(i, 1)[0];
+  };
 
-  // The three sub-systems that were worth modelling read the same way: take
-  // the workbook's grid once, then retire it so the structured block and the
-  // raw copy cannot drift apart. A document saved after this point no longer
-  // carries the grid at all, which is most of what these tabs weighed.
+  // Item Crafting is a calculator rather than a grid, but it reads the same
+  // way into the block the Crafting tab edits, beside the three that were
+  // worth modelling.
   for (const [name, key, read] of [
+    ['Item Crafting', 'crafting', importCrafting],
     ['Akashic', 'akashic', importAkashic],
     ['Maneuvers', 'maneuvers', importManeuvers],
     ['Psionics', 'psionics', importPsionics],
   ]) {
-    const index = d.sheetTabs.findIndex((t) => t.name === name);
-    if (!d[key]) d[key] = read(index < 0 ? null : d.sheetTabs[index], d.identity);
-    if (index >= 0) d.sheetTabs.splice(index, 1);
+    const tab = takeTab(name);
+    if (!d[key]) d[key] = read(tab, d.identity);
   }
 
   // The card caster's deck reads the same way. Its tab is one character's
@@ -615,12 +617,11 @@ export function normalise(model) {
   // by an exact name, and the tradition's drawbacks seed the switches for a
   // caster who took Card Casting without ever building the tab.
   {
-    const index = d.sheetTabs.findIndex((t) => /card\s*-?cast/i.test(String(t?.name || '')));
+    const tab = takeTab((t) => /card\s*-?cast/i.test(String(t?.name || '')));
     if (!d.cardcasting) {
-      d.cardcasting = importCardcasting(index < 0 ? null : d.sheetTabs[index],
+      d.cardcasting = importCardcasting(tab,
         d.training?.magic?.tradition?.drawbacks || [], d.training?.magic?.classes || [], deckFeatNames(d));
     }
-    if (index >= 0) d.sheetTabs.splice(index, 1);
   }
 
   /*
@@ -629,15 +630,14 @@ export function normalise(model) {
    * table becomes rows, and the grid is retired.
    */
   {
-    const index = d.sheetTabs.findIndex((t) => t.name === 'ExtrasNotes');
+    const tab = takeTab('ExtrasNotes');
     if (!d.extras) {
-      const got = importExtras(index < 0 ? null : d.sheetTabs[index]);
+      const got = importExtras(tab);
       d.extras = { approvals: got.approvals, sourceExtras: got.sourceExtras };
       if (!Array.isArray(d.notes)) d.notes = [];
       d.notes.push(...got.notes);
     }
     if (!Array.isArray(d.extras.approvals)) d.extras.approvals = [];
-    if (index >= 0) d.sheetTabs.splice(index, 1);
   }
 
   /*
@@ -705,13 +705,11 @@ export function normalise(model) {
   // workbook carrying both tabs contributes both.
   const importedTemplates = d.templates.length > 0;
   for (const name of TEMPLATE_TABS) {
-    const index = d.sheetTabs.findIndex((t) => t.name === name);
-    const grid = index < 0 ? null : d.sheetTabs[index];
+    const grid = takeTab(name);
     if (grid && !importedTemplates) {
       const doc = importTemplateTab(grid, name);
       if (doc) d.templates.push(doc);
     }
-    if (index >= 0) d.sheetTabs.splice(index, 1);
   }
   d.templates = d.templates.map((tp) => ({
     ...tp,
@@ -727,16 +725,12 @@ export function normalise(model) {
    * Auto-Cooking -- are imported once into their blocks and retired.
    */
   {
-    const take = (name) => {
-      const i = d.sheetTabs.findIndex((t) => t.name === name);
-      return i < 0 ? null : d.sheetTabs.splice(i, 1)[0];
-    };
-    const refTab = take('techRef');
-    const listTab = take('Technique List');
-    const autoTab = take('AutoTechnique');
+    const refTab = takeTab('techRef');
+    const listTab = takeTab('Technique List');
+    const autoTab = takeTab('AutoTechnique');
     if (!d.techniques) d.techniques = importTechniques(refTab, listTab, autoTab);
     d.techniques = normalizeTechniques(d.techniques);
-    const cookTab = take('Auto-Cooking');
+    const cookTab = takeTab('Auto-Cooking');
     if (!d.cooking) d.cooking = importCooking(cookTab);
     d.cooking = normalizeDish(d.cooking);
   }

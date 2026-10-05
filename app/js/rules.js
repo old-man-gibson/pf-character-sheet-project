@@ -194,9 +194,8 @@ export function foldPicks(picks, level) {
   const zero = () => Object.fromEntries(ABILITIES.map((k) => [k, 0]));
   const out = { abp: zero(), array: zero(), level4: zero() };
   if (!picks) return out;
-  const key = (name) => String(name || '').trim().toLowerCase().slice(0, 3);
   const bump = (bucket, name, amount) => {
-    const k = key(name);
+    const k = abilityKey(name);
     if (k in bucket) bucket[k] += amount;
   };
 
@@ -2289,22 +2288,12 @@ export function mergeLayout(grid) {
  */
 export function parseDiceExpr(text, evaluate) {
   const notes = [];
-  let s = String(text ?? '').replace(/\([^)]*\)/g, (m) => { notes.push(m.trim()); return ' '; });
+  let s = minusSign(text).replace(/\([^)]*\)/g, (m) => { notes.push(m.trim()); return ' '; });
   const formula = typeof evaluate === 'function' && evaluate !== Number;
   // A bare name whose value is dice text -- `[[kinetic.fist.simple crit]]` --
   // is spliced in as those dice before they are read, as the session roller
   // does. Evaluated as a number it came to nothing and said nothing.
-  if (formula) {
-    s = s.replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, (name) => {
-      if (/^d\d+$/i.test(name)) return name;
-      try {
-        const v = evaluate(name);
-        return typeof v === 'string' && DICE_TEXT.test(v) ? ` ${v.trim()} ` : name;
-      } catch {
-        return name;
-      }
-    });
-  }
+  if (formula) s = spliceDiceNames(s, evaluate, { pad: true });
   const dice = {};
   // `d6` is one die, as everywhere else on the sheet. Bounded on both sides so
   // `speed30` or `wand4` is a name and not a die.
@@ -2329,6 +2318,37 @@ export function parseDiceExpr(text, evaluate) {
   }
   return { dice, flat, notes, error };
 }
+
+/** A typeset minus (U+2212) or dash read as the minus sign it stands for in dice text. */
+export const minusSign = (text) => String(text ?? '').replace(/[\u2212\u2013]/g, '-');
+
+/**
+ * Bare names in dice text whose value is itself dice ("2d6 + kinetic.fist.simple")
+ * spliced in as those dice. A name that is a number, unknown, a function or a
+ * die (`d6`) is left for whatever reads the text next. `pad` puts a space
+ * either side, for a reader that splits on them.
+ */
+export function spliceDiceNames(text, value, { pad = false } = {}) {
+  return String(text ?? '').replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, (name) => {
+    if (/^d\d+$/i.test(name)) return name;
+    try {
+      const v = value(name);
+      if (typeof v !== 'string' || !DICE_TEXT.test(v)) return name;
+      return pad ? ` ${v.trim()} ` : v.trim();
+    } catch {
+      return name;
+    }
+  });
+}
+
+/**
+ * Which attack mode a weapon row's attack type is rolled and penalised as.
+ * The weapon rows, the condition layer and the Roll20 export all read it.
+ */
+export const ATTACK_TYPE_MODE = {
+  Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
+  'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
+};
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
 export const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;
@@ -3168,6 +3188,12 @@ export function abilityKey(name) {
   return String(name || '').trim().toLowerCase().slice(0, 3);
 }
 
+/** 'Dex', 'dex' and 'Dexterity' are 'dex'; anything that names no ability is null. */
+export function abilityOf(name) {
+  const k = abilityKey(name);
+  return ABILITIES.includes(k) ? k : null;
+}
+
 /** Modifier for a stat slot, adding a second stat only when it differs. */
 export function statMod(c, stat1, stat2) {
   const one = abilityKey(stat1);
@@ -3259,11 +3285,8 @@ export const ATTACK_MODE_KEY = Object.fromEntries(
 export function attackModeAbility(c, mode) {
   const slot = c?.attack?.modes?.[mode];
   if (!slot) return '';
-  const key = (name) => {
-    const k = String(name ?? '').trim().toLowerCase();
-    return ABILITIES.includes(k) ? k : '';
-  };
-  return key(slot.stat1) || key(slot.stat2);
+  // "Str" and "Strength" alike: the slot holds whatever the select wrote.
+  return abilityOf(slot.stat1) || abilityOf(slot.stat2) || '';
 }
 
 /**

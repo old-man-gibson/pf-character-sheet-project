@@ -22,9 +22,12 @@
  * function each catalogue is given rather than a third copy of the rest.
  */
 
+import { normalizeName } from '../util.js';
+
 const str = (v) => (v === null || v === undefined ? '' : String(v));
 const arr = (v) => (Array.isArray(v) ? v : []);
-const lower = (s) => str(s).trim().toLowerCase();
+// Names, kinds and types alike: case, spacing and typography do not count.
+const lower = normalizeName;
 
 /** Unique by name, first spelling winning, as every catalogue here wants. */
 const uniqueBy = (list, key = (s) => lower(s)) => {

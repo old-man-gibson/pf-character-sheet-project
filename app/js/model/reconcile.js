@@ -9,7 +9,9 @@
  * forwarded bonus and says where each part came from.
  */
 
-import { DERIVED, FORWARD_BY_DERIVED, diceString, flatFootedLoss, skillLabel } from '../rules.js';
+import {
+  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, diceString, flatFootedLoss, skillLabel,
+} from '../rules.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
 import { contextualNote } from '../formula-format.js';
@@ -343,6 +345,214 @@ export function diffFromSource(model) {
 }
 
 /**
+ * Every field that takes a number or a formula, for the Formula Audit.
+ *
+ * Each entry lists, for one kind of field, the places on this character where
+ * one holds a formula rather than a number: `id`, `place` (what the Formulas
+ * tab's go-to opens), `name`, the `formula`, the `value` and `error` its
+ * resolver left beside it, and `where` when the tab should say so. The audit
+ * turns each into a row the one way (`fieldRow`), so a new formula field is
+ * one entry here and cannot be missing from the audit. Fields whose rows are
+ * shaped differently -- skill ranks (which may read only `level`), the prose's
+ * own definitions, weapon tokens and the trackers -- are built in `audit`.
+ */
+const stringFormula = (v) => typeof v === 'string' && v.trim() !== '';
+const SAVE_NAMES = { fortitude: 'Fortitude', reflex: 'Reflex', will: 'Will' };
+
+export const FORMULA_FIELDS = [
+  {
+    key: 'skillMisc', source: 'skill',
+    collect: (model) => (model.data.skills || []).flatMap((s, i) => (stringFormula(s.offset) ? [{
+      id: `skill-misc-${i}`, place: `skillMisc:${i}`, name: `${skillLabel(s.name, s.spec)} misc`,
+      formula: s.offset, value: s.miscResolved, error: s.miscError,
+    }] : [])),
+  },
+  {
+    key: 'weaponMisc', source: 'weapon', where: 'a weapon’s Misc dmg',
+    collect: (model) => (model.data.equipment?.weapons || []).flatMap((w, i) => (stringFormula(w.miscDamage) ? [{
+      id: `weapon-misc-${i}`, place: `weaponMisc:${i}`, name: `${w.name || `Weapon ${i + 1}`} misc damage`,
+      formula: w.miscDamage, value: w.miscDamageNum, error: w.miscDamageError,
+      // Its {…} tokens are the prose's, checked there; what is left is the formula.
+      read: String(w.miscDamage).replace(/\{[^{}]*\}/g, '0'),
+    }] : [])),
+  },
+  {
+    key: 'saveCell', source: 'player', where: 'the Stats tab',
+    collect: (model) => Object.entries(SAVE_NAMES).flatMap(([k, label]) => {
+      const save = model.data.saves?.[k];
+      return SAVE_BONUS_TYPES.flatMap(([key, what]) => (stringFormula(save?.bonuses?.[key]) ? [{
+        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label} — ${what}`,
+        formula: save.bonuses[key], value: save.bonusesResolved?.[key], error: save.bonusErrors?.[key],
+      }] : []));
+    }),
+  },
+  {
+    key: 'acCell', source: 'player', where: 'the Stats tab',
+    collect: (model) => {
+      const d = model.data.defenses;
+      return AC_BONUS_TYPES.flatMap(([key, what]) => (stringFormula(d?.acBonuses?.[key]) ? [{
+        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC — ${what}`,
+        formula: d.acBonuses[key], value: d.acBonusesResolved?.[key], error: d.acBonusErrors?.[key],
+      }] : []));
+    },
+  },
+  {
+    key: 'speed', source: 'player',
+    collect: (model) => (model.data.identity?.speeds || []).flatMap((sp, i) => (stringFormula(sp.bonus) ? [{
+      id: `speed-${i}`, place: `speed:${i}`, name: `${sp.type || `Speed ${i + 1}`} bonus`,
+      formula: sp.bonus, value: sp.bonusNum, error: sp.bonusError,
+    }] : [])),
+  },
+  {
+    key: 'other', source: 'player',
+    collect: (model) => Object.entries(model.data.otherFormulas || {})
+      .filter(([key, text]) => stringFormula(text) && offsetKey(key))
+      .map(([key, text]) => ({
+        id: `other-${key}`, place: `offset:${key}`, name: `${offsetLabel(key)} — Other`,
+        formula: text, value: offsetOf(model, key), error: offsetError(model, key),
+      })),
+  },
+  {
+    // The sphere tables: a CL+, BAB+, Rank+ or DC+ written as a rule. By the
+    // sphere's name where the table is the catalogue and a sphere appears
+    // once; by position on the guile side, where a row is the player's and
+    // two may name the same sphere.
+    key: 'sphereCell', source: 'player',
+    collect: (model) => {
+      const training = model.data.training || {};
+      const sides = [
+        ['magic', training.magic?.sphereRows, [['clBonus', 'CL+'], ['dcBonus', 'DC+']]],
+        ['combat', training.combat?.sphereRows, [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']]],
+        ['guile', training.guile?.sphereRows, [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']]],
+      ];
+      return sides.flatMap(([side, rows, columns]) => (rows || []).flatMap((row, i) => columns
+        .filter(([field]) => stringFormula(row[field]))
+        .map(([field, label]) => {
+          const at = side === 'guile' ? i : (sphereForwardKey(row.sphere) || `sphere.${i}`).slice('sphere.'.length);
+          return {
+            id: `sphere-${side}-${at}-${field}`,
+            place: `sphereCell:${side}:${side === 'guile' ? i : row.sphere}:${field}`,
+            name: `${row.sphere || 'Sphere'} ${label}`,
+            formula: row[field], value: row[`${field}Num`], error: row[`${field}Error`],
+          };
+        })));
+    },
+  },
+  {
+    key: 'languages', source: 'player',
+    collect: (model) => (stringFormula(model.data.identity?.languageExtra) ? [{
+      id: 'languages-extra', place: 'languages', name: 'Extra language slots',
+      formula: model.data.identity.languageExtra,
+      value: model.data.identity.languageSlots?.extra, error: model.data.identity.languageSlots?.extraError,
+    }] : []),
+  },
+  {
+    // The three typed parts of the hit-point maximum, and the death threshold.
+    key: 'hp', source: 'player',
+    collect: (model) => {
+      const hp = model.data.hp || {};
+      return [
+        ['fcb', 'Favoured class hit points'], ['toughness', 'Toughness per level'],
+        ['misc', 'Misc hit points'], ['deathBonus', 'Death threshold'],
+      ].filter(([key]) => stringFormula(hp[key])).map(([key, name]) => ({
+        id: `hp-${key}`, place: `hp:${key}`, name,
+        formula: hp[key], value: hp[`${key}Resolved`], error: hp[`${key}Error`],
+      }));
+    },
+  },
+  {
+    // Any speed increase, cost reduction, item value or DC typed as a formula.
+    // `place` is the list and field the number lives in.
+    key: 'crafting', source: 'crafting',
+    collect: (model) => {
+      const cr = model.data.crafting || {};
+      const fields = [
+        ...(cr.speedIncreases || []).map((s, i) => ({
+          id: `crafting-speed-${i}`, name: `Speed increase — ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
+          place: `craftNumber:crafting.speedIncreases|${i}|value`,
+        })),
+        ...(cr.costReductions || []).map((r, i) => ({
+          id: `crafting-reduction-${i}`, name: `Cost reduction — ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
+          place: `craftNumber:crafting.costReductions|${i}|value`,
+        })),
+        ...(cr.projects || []).flatMap((p, i) => {
+          const item = p.name || `Project ${i + 1}`;
+          return [
+            { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
+            { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
+            ...(p.dcAdjustments || []).map((a, j) => ({
+              id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
+              place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,
+            })),
+          ];
+        }),
+      ];
+      return fields.filter(({ obj, field }) => stringFormula(obj[field])).map(({ id, name, obj, field, place }) => ({
+        id, place, name, formula: obj[field], value: obj[`${field}Num`], error: obj[`${field}Error`],
+      }));
+    },
+  },
+  {
+    key: 'deckManipulations', source: 'player',
+    collect: (model) => {
+      const cc = model.data.cardcasting;
+      return stringFormula(cc?.manipulationsAvailable) ? [{
+        id: 'deck-manipulations', place: 'deckManipulations', name: 'Deck manipulations available',
+        formula: cc.manipulationsAvailable, value: cc.calc?.manipulationsAvailable, error: cc.calc?.manipulationsError,
+      }] : [];
+    },
+  },
+  {
+    key: 'vancianConcentration', source: 'player', where: 'the Vancian tab',
+    collect: (model) => (model.data.vancian?.classes || []).flatMap((c, i) => (stringFormula(c.concentration) ? [{
+      id: `vancian-${i}-concentration`, place: `vancianConcentration:${i}`,
+      name: `${String(c.name || c.slotType || 'Casting class').trim()} concentration`,
+      formula: c.concentration, value: c.concentrationNum, error: c.concentrationError,
+    }] : [])),
+  },
+  {
+    // A buff's six dials and its extra bonuses, each a number or a rule.
+    key: 'buff', source: 'player', where: 'a buff',
+    collect: (model) => (model.data.buffs || []).flatMap((b, i) => {
+      if (!b || typeof b !== 'object') return [];
+      const own = String(b.name || '').trim() || `Buff ${i + 1}`;
+      return [
+        ...BUFF_MOD_KEYS.filter(([key]) => stringFormula(b[key])).map(([key, label]) => ({
+          id: `buff-${i}-${key}`, place: `buff:${i}:${key}`, name: `${own} — ${label}`,
+          formula: b[key], value: b[`${key}Num`], error: b[`${key}Error`],
+        })),
+        ...(b.bonuses || []).flatMap((row, j) => (row && stringFormula(row.value) ? [{
+          id: `buff-${i}-bonus-${j}`, place: `buff:${i}:bonuses.${j}.value`, name: `${own} — ${row.target || 'bonus'}`,
+          formula: row.value, value: row.valueNum, error: row.valueError,
+        }] : [])),
+      ];
+    }),
+  },
+];
+
+/** One field's formula as an audit row: what it reads, and what is wrong with it. */
+function fieldRow(entry, it, known) {
+  const info = analyse(it.read ?? it.formula);
+  const unknown = info.variables.filter((v) => !known.has(v));
+  const error = it.error || info.error || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
+  return {
+    id: it.id,
+    place: it.place,
+    name: it.name,
+    source: entry.source,
+    formula: it.formula,
+    reads: info.variables,
+    functions: info.functions,
+    unknownReferences: unknown,
+    value: error ? null : it.value ?? null,
+    error,
+    status: error ? 'error' : 'ok',
+    createdAt: null,
+    ...(entry.where ? { where: entry.where } : null),
+  };
+}
+
+/**
  * Full audit of every player-authored formula on this character.
  * Returns plain data so an admin view (or a server-side checker) can render
  * the exact text a player wrote, what it reads, and what it evaluates to.
@@ -370,29 +580,6 @@ export function audit(model) {
         error: s.boughtError || info.error
           || (info.variables.some((v) => v !== 'level') ? 'Rank formulas may only read "level"' : null),
         status: (s.boughtError || info.error || info.variables.some((v) => v !== 'level')) ? 'error' : 'ok',
-        createdAt: null,
-      };
-    });
-
-  // Skill misc bonuses entered as formulas.
-  const skillMiscFormulas = (model.data.skills || [])
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => typeof s.offset === 'string' && s.offset.trim())
-    .map(({ s, i }) => {
-      const info = analyse(s.offset);
-      const unknown = info.variables.filter((v) => !known.has(v));
-      return {
-        id: `skill-misc-${i}`,
-        place: `skillMisc:${i}`,
-        name: `${skillLabel(s.name, s.spec)} misc`,
-        source: 'skill',
-        formula: s.offset,
-        reads: info.variables,
-        functions: info.functions,
-        unknownReferences: unknown,
-        value: s.miscResolved ?? null,
-        error: s.miscError || info.error || null,
-        status: (s.miscError || info.error) ? 'error' : 'ok',
         createdAt: null,
       };
     });
@@ -452,29 +639,6 @@ export function audit(model) {
     };
   });
 
-  // Misc damage written as a rule rather than a number.
-  const weaponMiscFormulas = (model.data.equipment?.weapons || [])
-    .map((w, i) => ({ w, i }))
-    .filter(({ w }) => typeof w.miscDamage === 'string' && w.miscDamage.trim())
-    .map(({ w, i }) => {
-      const info = analyse(String(w.miscDamage).replace(/\{[^{}]*\}/g, '0'));
-      return {
-        id: `weapon-misc-${i}`,
-        place: `weaponMisc:${i}`,
-        name: `${w.name || `Weapon ${i + 1}`} misc damage`,
-        source: 'weapon',
-        formula: w.miscDamage,
-        reads: info.variables,
-        functions: info.functions,
-        unknownReferences: info.variables.filter((v) => !known.has(v)),
-        value: w.miscDamageError ? null : w.miscDamageNum ?? null,
-        error: w.miscDamageError || null,
-        status: w.miscDamageError ? 'error' : 'ok',
-        createdAt: null,
-        where: 'a weapon\u2019s Misc dmg',
-      };
-    });
-
   // Weapon damage/to-hit tokens written into special properties.
   const weaponFormulas = (model.data.equipment?.weapons || []).flatMap((w, wi) => {
     const items = [
@@ -495,242 +659,6 @@ export function audit(model) {
       status: t.error ? 'error' : 'ok',
       createdAt: null,
     }));
-  });
-
-  // Movement: a speed bonus written as a rule rather than a number.
-  const speedFormulas = (model.data.identity?.speeds || [])
-    .map((sp, i) => ({ sp, i }))
-    .filter(({ sp }) => typeof sp.bonus === 'string' && sp.bonus.trim())
-    .map(({ sp, i }) => {
-      const info = analyse(sp.bonus);
-      const unknown = info.variables.filter((v) => !known.has(v));
-      const error = sp.bonusError || info.error
-        || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-      return {
-        id: `speed-${i}`,
-        place: `speed:${i}`,
-        name: `${sp.type || `Speed ${i + 1}`} bonus`,
-        source: 'player',
-        formula: sp.bonus,
-        reads: info.variables,
-        functions: info.functions,
-        unknownReferences: unknown,
-        value: error ? null : sp.bonusNum ?? null,
-        error,
-        status: error ? 'error' : 'ok',
-        createdAt: null,
-      };
-    });
-
-  // The Other column, where it holds a rule rather than a number.
-  const otherFormulas = Object.entries(model.data.otherFormulas || {})
-    .filter(([key, text]) => typeof text === 'string' && text.trim() && offsetKey(key))
-    .map(([key, text]) => {
-      const info = analyse(text);
-      const unknown = info.variables.filter((v) => !known.has(v));
-      const error = offsetError(model, key) || info.error
-        || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-      return {
-        id: `other-${key}`,
-        place: `offset:${key}`,
-        name: `${offsetLabel(key)} — Other`,
-        source: 'player',
-        formula: text,
-        reads: info.variables,
-        functions: info.functions,
-        unknownReferences: unknown,
-        value: error ? null : offsetOf(model, key),
-        error,
-        status: error ? 'error' : 'ok',
-        createdAt: null,
-      };
-    });
-
-  // The sphere tables: a CL+, BAB+, Rank+ or DC+ written as a rule.
-  const training = model.data.training || {};
-  const sphereFormulas = [];
-  const sphereRules = (side, rows, columns) => {
-    (rows || []).forEach((row, i) => {
-      for (const [field, label] of columns) {
-        const text = row[field];
-        if (typeof text !== 'string' || !text.trim()) continue;
-        const info = analyse(text);
-        const unknown = info.variables.filter((v) => !known.has(v));
-        const error = row[`${field}Error`] || info.error
-          || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-        // By the sphere's name where the table is the catalogue and a
-        // sphere appears once; by position on the guile side, where a row
-        // is the player's and two may name the same sphere.
-        const at = side === 'guile' ? i : (sphereForwardKey(row.sphere) || `sphere.${i}`).slice('sphere.'.length);
-        sphereFormulas.push({
-          id: `sphere-${side}-${at}-${field}`,
-          place: `sphereCell:${side}:${side === 'guile' ? i : row.sphere}:${field}`,
-          name: `${row.sphere || 'Sphere'} ${label}`,
-          source: 'player',
-          formula: text,
-          reads: info.variables,
-          functions: info.functions,
-          unknownReferences: unknown,
-          value: error ? null : row[`${field}Num`] ?? null,
-          error,
-          status: error ? 'error' : 'ok',
-          createdAt: null,
-        });
-      }
-    });
-  };
-  sphereRules('magic', training.magic?.sphereRows, [['clBonus', 'CL+'], ['dcBonus', 'DC+']]);
-  sphereRules('combat', training.combat?.sphereRows, [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']]);
-  sphereRules('guile', training.guile?.sphereRows, [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']]);
-
-  // Extra language slots, when written as a rule.
-  const langExtra = model.data.identity?.languageExtra;
-  const languageFormulas = typeof langExtra === 'string' && langExtra.trim() ? [(() => {
-    const info = analyse(langExtra);
-    const unknown = info.variables.filter((v) => !known.has(v));
-    const error = model.data.identity.languageSlots?.extraError || info.error
-      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-    return {
-      id: 'languages-extra',
-      place: 'languages',
-      name: 'Extra language slots',
-      source: 'player',
-      formula: langExtra,
-      reads: info.variables,
-      functions: info.functions,
-      unknownReferences: unknown,
-      value: error ? null : model.data.identity.languageSlots?.extra ?? null,
-      error,
-      status: error ? 'error' : 'ok',
-      createdAt: null,
-    };
-  })()] : [];
-
-  // The hit-point fields that take a rule rather than a number: the three
-  // typed parts of the maximum, and the death threshold.
-  const hp = model.data.hp || {};
-  const hpFormulas = [
-    ['fcb', 'Favoured class hit points'],
-    ['toughness', 'Toughness per level'],
-    ['misc', 'Misc hit points'],
-    ['deathBonus', 'Death threshold'],
-  ].filter(([key]) => typeof hp[key] === 'string' && hp[key].trim()).map(([key, name]) => {
-    const info = analyse(hp[key]);
-    const unknown = info.variables.filter((v) => !known.has(v));
-    const error = hp[`${key}Error`] || info.error
-      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-    return {
-      id: `hp-${key}`,
-      place: `hp:${key}`,
-      name,
-      source: 'player',
-      formula: hp[key],
-      reads: info.variables,
-      functions: info.functions,
-      unknownReferences: unknown,
-      value: error ? null : hp[`${key}Resolved`] ?? null,
-      error,
-      status: error ? 'error' : 'ok',
-      createdAt: null,
-    };
-  });
-
-  // Crafting: any speed increase, cost reduction, item value or DC the
-  // player typed as a formula rather than a number.
-  const cr = model.data.crafting || {};
-  // `place` is the list and field the number lives in, for the Formulas tab's
-  // jump back to it: `crafting.projects|2|itemDC`.
-  const craftFields = [
-    ...(cr.speedIncreases || []).map((s, i) => ({
-      id: `crafting-speed-${i}`, name: `Speed increase — ${s.label || `#${i + 1}`}`, obj: s, field: 'value',
-      place: `craftNumber:crafting.speedIncreases|${i}|value`,
-    })),
-    ...(cr.costReductions || []).map((r, i) => ({
-      id: `crafting-reduction-${i}`, name: `Cost reduction — ${r.label || `#${i + 1}`}`, obj: r, field: 'value',
-      place: `craftNumber:crafting.costReductions|${i}|value`,
-    })),
-    ...(cr.projects || []).flatMap((p, i) => {
-      const item = p.name || `Project ${i + 1}`;
-      return [
-        { id: `crafting-value-${i}`, name: `${item} — market value`, obj: p, field: 'value', place: `craftNumber:crafting.projects|${i}|value` },
-        { id: `crafting-dc-${i}`, name: `${item} — item DC`, obj: p, field: 'itemDC', place: `craftNumber:crafting.projects|${i}|itemDC` },
-        ...(p.dcAdjustments || []).map((a, j) => ({
-          id: `crafting-dc-${i}-${j}`, name: `${item} — DC ${a.label || `adjustment ${j + 1}`}`, obj: a, field: 'value',
-          place: `craftNumber:crafting.projects.${i}.dcAdjustments|${j}|value`,
-        })),
-      ];
-    }),
-  ];
-  const craftingFormulas = craftFields
-    .filter(({ obj, field }) => typeof obj[field] === 'string' && obj[field].trim())
-    .map(({ id, name, obj, field, place }) => {
-      const formula = obj[field];
-      const info = analyse(formula);
-      const unknown = info.variables.filter((v) => !known.has(v));
-      const error = obj[`${field}Error`] || info.error
-        || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-      return {
-        id,
-        place,
-        name,
-        source: 'crafting',
-        formula,
-        reads: info.variables,
-        functions: info.functions,
-        unknownReferences: unknown,
-        value: error ? null : obj[`${field}Num`] ?? null,
-        error,
-        status: error ? 'error' : 'ok',
-        createdAt: null,
-      };
-    });
-
-  // The card caster's deck manipulations available, when written as a rule.
-  const cc = model.data.cardcasting;
-  const deckFormulas = typeof cc?.manipulationsAvailable === 'string' && cc.manipulationsAvailable.trim() ? [(() => {
-    const info = analyse(cc.manipulationsAvailable);
-    const unknown = info.variables.filter((v) => !known.has(v));
-    const error = cc.calc?.manipulationsError || info.error
-      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-    return {
-      id: 'deck-manipulations',
-      place: 'deckManipulations',
-      name: 'Deck manipulations available',
-      source: 'player',
-      formula: cc.manipulationsAvailable,
-      reads: info.variables,
-      functions: info.functions,
-      unknownReferences: unknown,
-      value: error ? null : cc.calc?.manipulationsAvailable ?? null,
-      error,
-      status: error ? 'error' : 'ok',
-      createdAt: null,
-    };
-  })()] : [];
-
-  // A Vancian casting class's concentration, when written as a rule.
-  const vancianFormulas = (model.data.vancian?.classes || []).flatMap((c, i) => {
-    const text = c.concentration;
-    if (typeof text !== 'string' || !text.trim()) return [];
-    const info = analyse(text);
-    const unknown = info.variables.filter((v) => !known.has(v));
-    const error = c.concentrationError || info.error
-      || (unknown.length ? `Unknown value(s): ${unknown.join(', ')}` : null);
-    return [{
-      id: `vancian-${i}-concentration`,
-      place: `vancianConcentration:${i}`,
-      name: `${String(c.name || c.slotType || 'Casting class').trim()} concentration`,
-      source: 'player',
-      formula: text,
-      reads: info.variables,
-      functions: info.functions,
-      unknownReferences: unknown,
-      value: error ? null : c.concentrationNum ?? null,
-      error,
-      status: error ? 'error' : 'ok',
-      createdAt: null,
-      where: 'the Vancian tab',
-    }];
   });
 
   // Trackers: the max formula, and the min formula when the tracker has one
@@ -809,12 +737,11 @@ export function audit(model) {
     });
   });
 
-  return skillFormulas.concat(skillMiscFormulas).concat(inlineFormulas)
-    .concat(weaponMiscFormulas).concat(weaponFormulas)
-    .concat(speedFormulas).concat(otherFormulas).concat(sphereFormulas)
-    .concat(languageFormulas).concat(hpFormulas)
-    .concat(craftingFormulas).concat(deckFormulas).concat(vancianFormulas)
-    .concat(trackerFormulas);
+  // Every number-or-formula field, from the one registry.
+  const fieldFormulas = FORMULA_FIELDS.flatMap((entry) => entry.collect(model).map((it) => fieldRow(entry, it, known)));
+
+  return skillFormulas.concat(inlineFormulas).concat(weaponFormulas)
+    .concat(fieldFormulas).concat(trackerFormulas);
 }
 
 /**

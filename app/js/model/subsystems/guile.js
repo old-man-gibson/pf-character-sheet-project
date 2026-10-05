@@ -43,7 +43,7 @@ import {
   EXPERTISE_CHOICES, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT, TRADE_RANKS,
   guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
-import { plannerHasClass } from '../progression.js';
+import { classHasLevel } from '../progression.js';
 import { altTrainingTalents } from './alt-training.js';
 import { forwarded } from '../scope.js';
 import {
@@ -281,9 +281,7 @@ export function recomputeGuileLadders(model) {
     let classLevelsCurrent = 0;
     let pool = { count: 0, utilityCount: 0 };
     for (const lv of cls.levels || []) {
-      const has = override != null
-        ? lv.level <= override
-        : plannerHasClass(model, cls.name, lv.level);
+      const has = classHasLevel(model, cls.name, lv.level, override);
       if (has) {
         classLevels += 1;
         if (lv.level <= level) classLevelsCurrent += 1;
@@ -368,7 +366,9 @@ function recomputeGuilePools(model, g, level) {
       if (String(row.talent || '').trim()) unnamedPlans.push(row.talent);
       continue;
     }
-    const tags = hit.tags.map((t) => String(t).toLowerCase());
+    // Either list, as talentsTagged reads them: a page may write [plan] as a
+    // source rather than a tag.
+    const tags = [...hit.tags, ...hit.sources].map((t) => String(t).trim().toLowerCase());
     if (!tags.includes('plan')) continue;
     if (tags.includes('utility')) utilityPlan += 1;
     else plan += 1;

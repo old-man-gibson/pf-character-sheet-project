@@ -210,7 +210,11 @@ function everywhere() {
   d.backgroundSections = [{ label: 'History', text: 'history {a.bg = 3}' }];
   d.defenses.dr = 'DR {= 5 + floor(level / 2)}/magic';
   d.raceTraits = [{ name: 'Fiendish', text: 'racial {skill.disguise += 2}' }];
-  d.buffs = [{ name: 'Rage', on: true, note: 'raging {rage.bonus = 2}', bonuses: [] }];
+  d.buffs = [{ name: 'Rage', on: true, note: 'raging {rage.bonus = 2}', attack: 'floor(level / 4)',
+    bonuses: [{ target: 'str', value: 'floor(level / 2)' }] }];
+  // A save's and the AC's typed-bonus cells, written as rules.
+  d.saves.will.bonuses = { ...(d.saves.will.bonuses || {}), morale: 'floor(level / 4)' };
+  d.defenses.acBonuses = { ...(d.defenses.acBonuses || {}), dodge: 'floor(level / 8)' };
   d.equipment.weapons[0] = { ...d.equipment.weapons[0], name: 'Glaive', dice: '1d10', special: 'reach {glaive.reach = 10}', miscDamage: 'floor(level / 4)' };
   d.formulaNotes = 'house rule {house.rule = 1}';
   d.identity.languageExtra = 'floor(level / 4)';
@@ -313,6 +317,9 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
   const c = everywhere();
   const rows = c.audit();
   check('the character has formulas in many places', rows.length > 10, true);
+  check('save and AC cells and a buff\'s dial and bonus are audited, worked out',
+    ['save-will-morale', 'ac-dodge', 'buff-0-attack', 'buff-0-bonus-0'].map((id) => rows.find((r) => r.id === id)).map((r) => [r?.status, r?.value]),
+    [['ok', 2], ['ok', 1], ['ok', 2], ['ok', 4]]);
   for (const r of rows) checkPlace(c, r.place, `formula ${r.name}`);
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);
   const forwarded = admin.forwardedRows(c);

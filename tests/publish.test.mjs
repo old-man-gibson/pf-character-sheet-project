@@ -264,5 +264,21 @@ console.log('publish: the numbers and texts a reader with no packs could not get
   registerTables(mergeTables(bundledPacks()), model);
 }
 
+/*  A maneuver note saved as a bare string -- the description alone, the shape
+ *  the notes map has always used for it -- leaves as one entry, not one key
+ *  per character; and a note kept under another spelling of the name is the
+ *  one that travels, not a second copy beside it. */
+{
+  const doc = new Character(blankDocument({ name: 'Noted' })).toJSON();
+  doc.maneuvers = { ...(doc.maneuvers || {}), disciplines: [{
+    name: 'Homebrew Path', known: ['Rising Strike', 'Low Sweep'], custom: [],
+    notes: { 'Rising Strike': 'My own words.', 'low sweep': 'Kept in lower case.' },
+  }] };
+  const notes = publishDocument(doc).doc.maneuvers.disciplines[0].notes;
+  check('a string note leaves as its text', notes['Rising Strike'], { text: 'My own words.' });
+  check('under the key it was saved with, and only that one', Object.keys(notes).sort(), ['Rising Strike', 'low sweep']);
+  check('which keeps its text', notes['low sweep'], { text: 'Kept in lower case.' });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

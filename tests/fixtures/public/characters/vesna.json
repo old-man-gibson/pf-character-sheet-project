@@ -5066,7 +5066,7 @@
      "spec": "",
      "ability": "Dex",
      "trained": false,
-     "classSkill": false,
+     "classSkill": true,
      "ranks": 0,
      "misc": 0
     },

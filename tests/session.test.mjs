@@ -97,5 +97,18 @@ assert.ok(pickers.standard.includes('maneuver:Odd Trick') && pickers.free.includ
 assert.ok(pickers.standard.includes("veil:Marilith") && pickers.swift.includes("veil:Marilith"), 'a veil is offered everywhere');
 m.set('session.cards', [{ title: 'Gutstrike', type: 'swift', source: 'maneuver:Gutstrike' }]);
 assert.match(renderSessionBoard(m), /normally a standard action/, 'a moved maneuver says what it normally costs');
+// A veil card reads what the Akashic tab shows: the player's own description
+// over the catalogue's, a homebrew veil's own text, and the Kheshig veils.
+// The akashic block's classes and other receptacles are not abilities.
+m.set('akashic.slots', [{ slot: 'Shoulders', veils: [{ name: "Marilith's Aspect", essence: 2, desc: 'My own arms.' }, { name: 'Homebrew Hood', essence: 1, desc: 'A hood of my own.' }] }]);
+m.set('akashic.kheshig', [{ label: 'Kheshig Veil', slot: '', veils: [{ name: "Marilith's Aspect II", essence: 0 }] }]);
+m.set('akashic.classes', [{ name: 'Vizier', essenceCap: 2 }]);
+m.set('akashic.otherReceptacles', [{ name: 'Lucky Coin', essence: 1 }]);
+assert.equal(byKey("veil:Marilith's Aspect").note, 'My own arms.', "the player's description wins over the catalogue's");
+assert.equal(byKey('veil:Homebrew Hood').note, 'A hood of my own.', 'a homebrew veil keeps its own text');
+assert.equal(byKey("veil:Marilith's Aspect II").detail, 'Kheshig Veil', 'a Kheshig veil is a veil');
+const akashicTitles = sessionShortcuts(m).filter(s => s.kind === 'ability').map(s => s.title);
+assert.ok(!akashicTitles.includes('Vizier') && !akashicTitles.includes('Lucky Coin') && !akashicTitles.includes("Marilith's Aspect II"),
+  'akashic classes, receptacles and Kheshig veils are not empty abilities');
 setManeuverCatalogue({ disciplines: [] }); setVeilCatalogue({ veils: [] });
 console.log('Session actions: relationships, formulas, costs, undo, persistence and shortcuts passed');

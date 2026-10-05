@@ -45,16 +45,40 @@ import { storageMedium } from './pack-storage.js';
 // else here wants the model. Narrow on purpose -- akashic.js imports nothing
 // from this file, so there is no cycle to think about.
 import { veilEntry } from './model/subsystems/akashic.js';
+import { talentKey } from './model/spheres.js';
 import { markUndo } from './model/undo.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
 
-/** The shared tables a pack can provide, and what each one's document holds. */
-export const TABLE_KINDS = [
-  'maneuvers', 'spheres', 'veils', 'feats', 'spells', 'powers', 'catalogues',
-  'vancian', 'psionics', 'cardcasting', 'cooking',
+const COOKING_LISTS = ['entrees', 'flavors', 'sides', 'aroma', 'garnish'];
+
+/**
+ * The shared tables a pack can provide, said once: the key under `provides`,
+ * the merged table's empty shape, how many entries a pack's copy counts as,
+ * what one entry is called, and the model setter it is registered with.
+ * TABLE_KINDS, the pack summary, mergeTables' starting point, registerTables
+ * and the runtime's setters all read this, so a new table kind is one row.
+ * How two packs' copies of a kind are joined stays in mergeTables, where each
+ * rule is explained.
+ */
+export const TABLES = [
+  { kind: 'maneuvers', empty: () => ({ disciplines: [] }), count: (t) => arr(t.disciplines).length, words: ['discipline', 'disciplines'], setter: 'setManeuverCatalogue' },
+  { kind: 'spheres', empty: () => ({ spheres: [] }), count: (t) => arr(t.spheres).length, words: ['sphere', 'spheres'], setter: 'setSphereCatalogue' },
+  { kind: 'veils', empty: () => ({ veils: [] }), count: (t) => arr(t.veils).length, words: ['veil', 'veils'], setter: 'setVeilCatalogue' },
+  { kind: 'feats', empty: () => ({ feats: [] }), count: (t) => arr(t.feats).length, words: ['feat', 'feats'], setter: 'setFeatCatalogue' },
+  { kind: 'spells', empty: () => ({ spells: [] }), count: (t) => arr(t.spells).length, words: ['spell', 'spells'], setter: 'setSpellCatalogue' },
+  { kind: 'powers', empty: () => ({ powers: [] }), count: (t) => arr(t.powers).length, words: ['power', 'powers'], setter: 'setPowerCatalogue' },
+  { kind: 'catalogues', empty: () => ({ catalogues: [] }), count: (t) => arr(t.catalogues).reduce((n, g) => n + arr(g?.entries).length, 0), words: ['reference entry', 'reference entries'], setter: 'setReferenceCatalogue' },
+  { kind: 'vancian', empty: () => ({ spellLevels: null, classes: [] }), count: (t) => arr(t.classes).length, words: ['casting table', 'casting tables'], setter: 'setVancianTables' },
+  { kind: 'psionics', empty: () => ({ powerLevels: null, curves: [], classes: [] }), count: (t) => arr(t.curves).length + arr(t.classes).length, words: ['manifesting table', 'manifesting tables'], setter: 'setPsionicTables' },
+  { kind: 'cardcasting', empty: () => ({ manipulations: [] }), count: (t) => arr(t.manipulations).length, words: ['deck manipulation', 'deck manipulations'], setter: 'setCardcastingTables' },
+  { kind: 'cooking', empty: () => ({ durationHours: null, ...Object.fromEntries(COOKING_LISTS.map((k) => [k, []])) }), count: (t) => COOKING_LISTS.reduce((n, k) => n + arr(t[k]).length, 0), words: ['ingredient', 'ingredients'], setter: 'setCookingTables' },
+  { kind: 'altTraining', empty: () => ({ levels: null, repeatFrom: null, techniques: [], links: {} }), count: (t) => arr(t.techniques).length, words: ['training technique', 'training techniques'], setter: 'setAltTrainingTables' },
 ];
+
+/** The keys a pack can carry under `provides`. */
+export const TABLE_KINDS = TABLES.map((t) => t.kind);
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
 export const BLOCK_KINDS = {
@@ -616,34 +640,14 @@ export function summarize(ext) {
 
 function tableCount(kind, table) {
   const t = obj(table);
-  switch (kind) {
-    case 'maneuvers': return arr(t.disciplines).length;
-    case 'spheres': return arr(t.spheres).length;
-    case 'veils': return arr(t.veils).length;
-    case 'feats': return arr(t.feats).length;
-    case 'spells': return arr(t.spells).length;
-    case 'powers': return arr(t.powers).length;
-    case 'catalogues': return arr(t.catalogues).reduce((n, g) => n + arr(g?.entries).length, 0);
-    case 'vancian': return arr(t.classes).length;
-    case 'psionics': return arr(t.curves).length + arr(t.classes).length;
-    case 'cardcasting': return arr(t.manipulations).length;
-    case 'cooking': return ['entrees', 'flavors', 'sides', 'aroma', 'garnish'].reduce((n, k) => n + arr(t[k]).length, 0);
-    default: return Object.keys(t).length;
-  }
+  const known = TABLES.find((x) => x.kind === kind);
+  return known ? known.count(t) : Object.keys(t).length;
 }
 
 /** A short line for a pack: "30 disciplines · 34 casting tables · 5 blocks". */
 export function describeSummary(s) {
   const parts = [];
-  const words = {
-    maneuvers: ['discipline', 'disciplines'], spheres: ['sphere', 'spheres'],
-    veils: ['veil', 'veils'],
-    feats: ['feat', 'feats'], spells: ['spell', 'spells'], powers: ['power', 'powers'],
-    catalogues: ['reference entry', 'reference entries'],
-    vancian: ['casting table', 'casting tables'],
-    psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
-    cooking: ['ingredient', 'ingredients'],
-  };
+  const words = Object.fromEntries(TABLES.map((t) => [t.kind, t.words]));
   for (const [kind, n] of Object.entries(s.tables || {})) {
     if (!n) continue;
     const w = words[kind] || [`${kind} entry`, `${kind} entries`];
@@ -914,6 +918,12 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch, 
  * A correction still works, one entry at a time: a talent or base ability of
  * the same name is the later copy's, and so is any field it fills. What a
  * later copy cannot do is take a talent away, which nothing has wanted to.
+ *
+ * "The same name" is the key the catalogue looks talents up by (`talentKey`),
+ * and a correction replaces *every* earlier copy under it. A page often lists
+ * a talent twice, in its main list and a topical section, and the catalogue
+ * keeps the longest of a sphere's copies; replacing only one left the older
+ * text there to win against the correction.
  * Used by `mergeTables` when packs load, and by the pack editor when a sphere
  * is pasted into a pack that already has it, so the two file it alike.
  */
@@ -924,17 +934,25 @@ export function mergeSphere(had, sphere) {
     if (value === null || value === undefined || value === '') continue;
     merged[key] = value;
   }
-  const byName = (a, b) => {
-    const outList = [...arr(a)];
-    const where = new Map(outList.map((e, j) => [lower(e?.name), j]));
+  const byName = (a, b, key) => {
+    const later = new Map();
     for (const e of arr(b)) {
-      const j = where.get(lower(e?.name));
-      if (j === undefined) { where.set(lower(e?.name), outList.length); outList.push(e); } else outList[j] = e;
+      const k = key(e?.name);
+      if (!later.has(k)) later.set(k, []);
+      later.get(k).push(e);
     }
+    const outList = [];
+    for (const e of arr(a)) {
+      const k = key(e?.name);
+      const copies = later.get(k);
+      if (!copies) outList.push(e);
+      else if (copies.length) { outList.push(...copies); later.set(k, []); }
+    }
+    for (const copies of later.values()) outList.push(...copies);
     return outList;
   };
-  merged.talents = byName(had?.talents, sphere?.talents);
-  merged.abilities = byName(had?.abilities, sphere?.abilities);
+  merged.talents = byName(had?.talents, sphere?.talents, talentKey);
+  merged.abilities = byName(had?.abilities, sphere?.abilities, lower);
   return merged;
 }
 
@@ -966,20 +984,7 @@ export function catalogueEntryKey(e) {
  * *remove* an entry, which nothing has ever wanted to do.
  */
 export function mergeTables(extensions) {
-  const out = {
-    maneuvers: { disciplines: [] },
-    spheres: { spheres: [] },
-    veils: { veils: [] },
-    feats: { feats: [] },
-    spells: { spells: [] },
-    powers: { powers: [] },
-    catalogues: { catalogues: [] },
-    vancian: { spellLevels: null, classes: [] },
-    psionics: { powerLevels: null, curves: [], classes: [] },
-    cardcasting: { manipulations: [] },
-    cooking: { durationHours: null, entrees: [], flavors: [], sides: [], aroma: [], garnish: [] },
-    altTraining: { levels: null, repeatFrom: null, techniques: [], links: {} },
-  };
+  const out = Object.fromEntries(TABLES.map((t) => [t.kind, t.empty()]));
   /*
    * An index per list, because a scan per entry is quadratic and these lists
    * got long. Merging the whole wiki -- 117 packs, 32,592 entries, 8,912 of
@@ -1127,7 +1132,7 @@ export function mergeTables(extensions) {
     for (const c of arr(p.psionics?.classes)) upsert(out.psionics.classes, c);
     for (const m of arr(p.cardcasting?.manipulations)) upsert(out.cardcasting.manipulations, m);
     if (p.cooking?.durationHours) out.cooking.durationHours = str(p.cooking.durationHours);
-    for (const k of ['entrees', 'flavors', 'sides', 'aroma', 'garnish']) {
+    for (const k of COOKING_LISTS) {
       for (const x of arr(p.cooking?.[k])) upsert(out.cooking[k], x);
     }
     // Alternate Training: a technique replaces a technique of the same name
@@ -1169,18 +1174,7 @@ export function registerTables(merged, registrars) {
       try { set(undefined); } catch { /* every setter reads nothing as an empty table */ }
     }
   };
-  register('setManeuverCatalogue', merged.maneuvers);
-  register('setSphereCatalogue', merged.spheres);
-  register('setVeilCatalogue', merged.veils);
-  register('setFeatCatalogue', merged.feats);
-  register('setSpellCatalogue', merged.spells);
-  register('setPowerCatalogue', merged.powers);
-  register('setReferenceCatalogue', merged.catalogues);
-  register('setVancianTables', merged.vancian);
-  register('setPsionicTables', merged.psionics);
-  register('setCardcastingTables', merged.cardcasting);
-  register('setCookingTables', merged.cooking);
-  register('setAltTrainingTables', merged.altTraining);
+  for (const t of TABLES) register(t.setter, merged[t.kind]);
   return failed;
 }
 

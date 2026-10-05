@@ -9,7 +9,7 @@ import {
   COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionSkillKey,
   computeCompanion, defaultCompanion, seedSkills,
 } from '../../companions.js';
-import { ABILITIES } from '../../rules.js';
+import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
@@ -24,10 +24,7 @@ export const COMPANION_DERIVED = [
   { path: 'attacks', keys: ['damageType', 'primaryResolved', 'toHit', 'damageBonus'] },
 ];
 
-const abilityKey = (label) => {
-  const s = String(label || '').trim().toLowerCase().slice(0, 3);
-  return ABILITIES.includes(s) ? s : null;
-};
+const abilityKey = abilityOf;
 
 /**
  * Read the workbook's Animal Companion tab into a companion block.

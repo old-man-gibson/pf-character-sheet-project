@@ -8,7 +8,7 @@
 import { MANEUVER_FIELDS } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
-import { getPath, packRows } from '../util.js';
+import { getPath, normalizeName, packRows } from '../util.js';
 
 let MANEUVER_CATALOGUE = { disciplines: [] };
 
@@ -59,10 +59,10 @@ export function maneuverCatalogue() {
  * do not count, the way the pack merge already reads them -- so a later pack
  * that spells a maneuver differently does not orphan one already readied.
  */
-export const maneuverKey = (name) => String(name ?? '').trim().toLowerCase();
+export const maneuverKey = normalizeName;
 
 /** The key a discipline's notes hold a maneuver under, however it is spelled there. */
-function noteKeyOf(discipline, name) {
+export function noteKeyOf(discipline, name) {
   const want = maneuverKey(name);
   const notes = discipline?.notes;
   if (!notes || typeof notes !== 'object') return null;
