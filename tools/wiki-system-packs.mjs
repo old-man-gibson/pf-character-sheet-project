@@ -29,6 +29,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
+import { slugId } from '../app/js/extensions.js';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback = null) => {
@@ -47,7 +48,8 @@ if (inputs.length !== 1 || !out) {
 
 const scrapePack = join(dirname(fileURLToPath(import.meta.url)), 'scrape-pack.mjs');
 const OWN_PACK = 1024 * 1024;
-const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+// The app's id rule, so a pack id built here is the one the app would give it.
+const slug = slugId;
 
 /*
  * Builds are queued and run a few at a time. A dozen folders do not need it;

@@ -58,6 +58,7 @@ import {
   unwrapTemplates, delist, stripMarkers, emphasis, delink, collapseFamilies,
 } from './wikitext.mjs';
 import { systemClassifier, GENERAL } from './wiki-systems.mjs';
+import { slugId } from '../app/js/extensions.js';
 
 /* ---------------- arguments ---------------- */
 
@@ -623,8 +624,8 @@ function sphereIntro(rec, unknown) {
 
 /* ---------------- grouping ---------------- */
 
-const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
-  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'untitled';
+// The app's id rule (slugId), so a folder, a file and a pack id agree.
+const slug = (s) => slugId(s) || 'untitled';
 const titleCase = (s) => String(s).replace(/\b\w/g, (c) => c.toUpperCase());
 /** Enough plural for a document title: "martial ability" is not "Martial Abilitys". */
 const plural = (s) => titleCase(/[^aeiou]y$/.test(s) ? `${s.slice(0, -1)}ies`

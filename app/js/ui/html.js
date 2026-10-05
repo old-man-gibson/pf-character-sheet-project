@@ -11,9 +11,9 @@
  */
 import { ABILITIES, ABILITY_LABELS } from '../rules.js';
 
-export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
+import { esc } from '../esc.js';
+
+export { esc };
 
 /** A value as a cell shows it: an em dash where there is nothing to show. */
 export const val = (v) => (v === null || v === undefined || v === '' ? '—' : esc(v));

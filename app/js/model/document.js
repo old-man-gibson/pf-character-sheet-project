@@ -45,14 +45,11 @@ import { MONSTER_TAB_ORDER } from '../monster/block.js';
 const MAGIC_DERIVED = ['sphereRows', 'clForwarded', 'dcForwarded', 'msbForwarded', 'msdForwarded',
   'castingUnlocked', 'clWaiting', { path: 'classes', keys: ['levelWaiting'] }];
 
-/**
- * The document shape this build understands, written by tools/convert.py.
- *
- * Bumped whenever a section is added or restructured. Saved edits and imported
- * files are both refused when they disagree: an older document is missing
- * whatever has been added since, and loading it would quietly drop sections.
- */
-export const SCHEMA_VERSION = 9;
+// The document shape this build understands: one number for the model and
+// the converter, kept in schema.js.
+import { SCHEMA_VERSION } from '../schema.js';
+
+export { SCHEMA_VERSION };
 
 /**
  * The tabs a fresh sheet puts on its tab bar, in order. Everything else --

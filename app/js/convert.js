@@ -25,8 +25,10 @@
 import { readWorkbook, columnIndex, destinations } from './xlsx.js';
 import { POINT_BUY_COST, STANDARD_SKILLS, abpDefence } from './rules.js';
 
-/** Bump in step with SCHEMA_VERSION in model.js and convert.py. */
-export const SCHEMA_VERSION = 9;
+// One number for the converter and the model (schema.js).
+import { SCHEMA_VERSION } from './schema.js';
+
+export { SCHEMA_VERSION };
 
 const ABILITIES = ['Str', 'Dex', 'Con', 'Int', 'Wis', 'Cha'];
 
@@ -56,12 +58,10 @@ const STRUCTURED_TABS = new Set([
  * Value normalisation — the Python `clean`, `num`, `slug` and `str`
  * ---------------------------------------------------------------------- */
 
-/** A filename- and URL-safe id, matching the app's own slug rule. */
-export function slug(s) {
-  return String(s ?? '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'x';
-}
+// A filename- and URL-safe id: the app's own slug rule, not a copy of it.
+import { slug } from './model/util.js';
+
+export { slug };
 
 /** `datetime.isoformat()`: seconds precision, microseconds only when non-zero. */
 function isoFromDate(d) {
