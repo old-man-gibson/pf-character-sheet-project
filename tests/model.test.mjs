@@ -3107,6 +3107,24 @@ console.log('every forward family names its keys under its own prefix');
     [true, true, true, true, true, true, false, false, false]);
 }
 
+console.log('the HP buttons and the quick actions take damage the one way');
+{
+  const fresh = () => {
+    const c = new Character(blankDocument({ name: 'Hurt', level: 3 }));
+    delete c.data.hp.current;          // a sheet that never stored a current figure
+    return c;
+  };
+  const a = fresh(); const max = a.hpState.max;
+  delete a.data.hp.current;
+  a.applyDamage(5);
+  const b = fresh();
+  b.damage(5);
+  check('the first damage comes off the maximum, either way', [a.hpState.current, b.hpState.current], [max - 5, max - 5]);
+  b.damage(2, { nonlethal: true });
+  b.heal(3);
+  check('and healing takes back lethal and nonlethal alike', [b.hpState.current, b.data.hp.nonlethal], [max - 2, 0]);
+}
+
 console.log('dice text reads one way: a typeset minus, and names that are dice');
 {
   const R = await import('../app/js/rules.js');
