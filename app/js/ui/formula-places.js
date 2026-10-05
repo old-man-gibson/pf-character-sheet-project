@@ -205,9 +205,10 @@ function placeOf(model, ref) {
     case 'raceTrait': return overviewPlace([item('raceTraits', a, 'text')]);
     // A buff's note is in its editor, on the Overview's Buffs panel -- and on
     // the session dashboard's Buffs card, so this one needs no Build view.
+    // `buff:<i>` is its note; `buff:<i>:<field>` one of its dials or bonuses.
     case 'buff':
       return {
-        tab: 'overview', sel: [item('buffs', a, 'note')], expand: 'buffs',
+        tab: 'overview', sel: [item('buffs', a, b || 'note')], expand: 'buffs',
         open: [shutFold('buffs'), shut(`${attr('data-action', 'buff-open')}${attr('data-index', a)}`)],
       };
     case 'weapon': return weaponPlace(model, a, 'special');
@@ -395,6 +396,8 @@ function placeOf(model, ref) {
       const [list, i, field] = ref.slice('craftNumber:'.length).split('|');
       return { tab: 'crafting', sel: [item(list, i, field)] };
     }
+    // A save's or the AC's typed-bonus cell on the Stats tab: `statCell:<path>`.
+    case 'statCell': return { tab: 'stats', sel: [set(ref.slice('statCell:'.length))] };
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);

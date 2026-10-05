@@ -13,7 +13,7 @@ import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
-import { slug, trackerForwardKey } from './util.js';
+import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
 /**
  * Mythic Power is the one tracker every character carries -- granted at tier 1
@@ -467,18 +467,13 @@ export function recomputeBuffs(model) {
   for (const b of buffs) {
     if (!b || typeof b !== 'object') continue;
     const errs = [];
+    // Every number-or-formula field resolves the one way (evaluateAmount); a
+    // dial is a whole number either way.
     const resolve = (raw, name, setError) => {
-      setError(null);
-      if (typeof raw === 'string' && raw.trim() !== '') {
-        try {
-          return Math.floor(Number(evaluateFormula(raw, scope)) || 0);
-        } catch (err) {
-          setError(err.message);
-          errs.push(`${name}: ${err.message}`);
-          return 0;
-        }
-      }
-      return Math.floor(Number(raw) || 0);
+      const { value, error } = evaluateAmount(raw, scope);
+      setError(error);
+      if (error) errs.push(`${name}: ${error}`);
+      return Math.floor(value);
     };
     for (const [key] of BUFF_MOD_KEYS) {
       b[`${key}Num`] = resolve(b[key], key, (e) => { b[`${key}Error`] = e; });
