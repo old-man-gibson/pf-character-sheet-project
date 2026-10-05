@@ -11,17 +11,12 @@ in it, and a table's content travels separately.
 
 A pack carries two kinds of thing:
 
-- **Shared tables** the whole app reads — a discipline catalogue (`maneuvers`), a sphere
-  catalogue (`spheres`), casting tables (`vancian`), manifesting curves (`psionics`), deck
-  manipulations (`cardcasting`), cooking ingredients (`cooking`) — under `provides`. Every enabled
-  pack's tables are merged at load and registered with the model; a later pack's entry
-  replaces an earlier one of the same name, so a player can correct a bundled table by
-  shipping a fixed copy in their own pack. **A discipline is the exception** — two packs
-  naming the same one join maneuver by maneuver, and only an entry of the same name is
-  replaced, because a discipline is a list of thirty rather than one fact and a pack
-  carrying a single corrected maneuver must not delete the twenty-nine it had no opinion
-  about. Tables are **not** copied into a character: the sheet reads them where they
-  stand, so a corrected pack corrects every sheet already in play.
+- **Shared tables** the whole app reads, under `provides` (the full list is below). Every
+  enabled pack's tables are merged at load and registered with the model; a later pack's
+  entry replaces an earlier one of the same name, so a player can correct a bundled table
+  by shipping a fixed copy in their own pack. Tables are **not** copied into a character:
+  the sheet reads them where they stand, so a corrected pack corrects every sheet already
+  in play.
 - **Blocks** a player attaches to one character: a `class` (hit die, BAB, saves, ranks,
   class skills, features by level), a `race` (size, speed, ability modifiers, traits,
   languages), a single race `trait`, a `feature` (joins a named group on the Template
@@ -61,6 +56,26 @@ A pack carries two kinds of thing:
   ]
 }
 ```
+
+**The shared tables.** Each key under `provides`, what it holds, and how two packs carrying
+the same one are merged (`mergeTables` in `app/js/extensions.js`; `TABLE_KINDS` lists the
+keys). "Later wins" means a later pack's entry of the same name replaces the earlier one;
+names match however they are capitalised.
+
+| Key | Holds | Two packs |
+|---|---|---|
+| `maneuvers` | `disciplines`, each with its maneuvers and stances | join maneuver by maneuver: only an entry of the same name is replaced, so a pack carrying one corrected maneuver does not delete the others |
+| `spheres` | `spheres`, each with its base `abilities` and `talents` | join talent by talent: a later copy of a talent replaces every earlier copy of it, and any field the later sphere fills is its |
+| `veils` | `veils` | later wins field by field; the class lists are pooled |
+| `feats` | `feats` | later wins |
+| `spells` | `spells` | later wins |
+| `powers` | `powers` (and wild talents, by `kind`) | later wins |
+| `catalogues` | `catalogues`: reference entries grouped by `kind` (deities, class options…) | a kind joins entry by entry, like a discipline |
+| `vancian` | `spellLevels`, casting-table `classes` | later wins per class; the last `spellLevels` given is used |
+| `psionics` | `powerLevels`, power-point `curves` (by `total`), manifesting `classes` | later wins per curve and per class |
+| `cardcasting` | deck `manipulations` | later wins |
+| `cooking` | `durationHours`, `entrees`, `flavors`, `sides`, `aroma`, `garnish` | later wins per ingredient |
+| `altTraining` | Alternate Training `levels`, `repeatFrom`, `techniques`, cite `links` | later wins per technique and for the ladder; links are pooled |
 
 **Where packs come from.** *Bundled* packs are listed in an `index.json` and sit beside
 it, in either of two folders. `data/extensions/` is the repository's own — the same
