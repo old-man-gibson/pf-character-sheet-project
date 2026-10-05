@@ -44,7 +44,7 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, deckManipulationCatalogue,
+  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
@@ -2709,15 +2709,13 @@ function deckLadderPanel(p, k) {
  * so it is worked out once here rather than twice.
  */
 function manipulationGroups(p) {
+  // The four the system names, any a pack files its manipulations under --
+  // or the picker would leave that pack's out -- and any the player invented.
   return [...new Set(['General', 'Cooldown', 'Mana Pool', 'Specialized Mana Cards',
+    ...deckManipulationCatalogue().map((m) => String(m.group || 'General')),
     ...(p.manipulations || []).map((m) => String(m.group || 'General'))])];
 }
 
-/** What a manipulation's `requires` are called when a row is missing one. */
-const MANIP_NEED = {
-  cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana',
-  singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard',
-};
 
 /**
  * The totals and the picker, which head the manipulations.
@@ -2734,7 +2732,7 @@ function deckManipulationsHead(model, p, k) {
     const left = k.manipulationsLeft ?? 0;
     const catalogue = deckManipulationCatalogue();
     const featList = (k.deckFeats || []).map((f) => f.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
-    const NEED = MANIP_NEED;
+    const NEED = MANIPULATION_NEEDS;
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
         <span class="badge ${left < 0 ? 'err' : ''}">${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
@@ -2778,7 +2776,7 @@ function deckManipulationsPanel(model, p, k) {
     const items = (p.manipulations || []).map((m, i) => ({ m, i }));
     const groups = manipulationGroups(p);
     const groupOptions = groups.map((g) => [g, g]);
-    const NEED = MANIP_NEED;
+    const NEED = MANIPULATION_NEEDS;
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
@@ -2791,16 +2789,22 @@ function deckManipulationsPanel(model, p, k) {
     const entry = manipulationEntry(m);
     const mc = m.calc || {};
     const tip = entry ? `${entry.name}${entry.needs || entry.requires.length ? ` (${[...entry.requires.map((r) => NEED[r]), entry.needs].filter(Boolean).join(', ')})` : ''}: ${entry.text}` : 'Not in the catalogue — a homebrew or a name it does not know';
+    // Folded to its name by default: the card's text is a hover away, and
+    // the player's note instead once they have written one. Folded by the
+    // manipulation's name, so a removal above does not open another row.
+    const foldKey = manipulationFoldKey(m, i);
+    const shut = isCollapsed(model, foldKey, true);
+    const peek = shut ? ` data-tpop="${esc(JSON.stringify({ k: 'manip', p: `${list}|${i}` }))}"` : '';
     return `<tr class="${mc.unmet?.length || mc.overMax ? 'unmet' : ''}">
             <td class="what">
-              <span class="pair"><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
-                placeholder="Manipulation" title="${esc(tip)}">
+              <span class="pair">${foldButton(model, foldKey, shut)}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
+                placeholder="Manipulation"${shut ? '' : ` title="${esc(tip)}"`}></span>
                 ${entry ? '' : '<span class="badge" title="Not in the catalogue">?</span>'}
                 ${(mc.unmet || []).map((r) => `<span class="badge err">needs ${esc(NEED[r])}</span>`).join('')}
                 ${mc.overMax ? `<span class="badge err">max ${entry.max}</span>` : ''}
               </span>
-              ${prose(model, `data-item="${list}|${i}|note"`, m.note, 1, 'grow note')}
-              ${entry ? `<p class="rule">${esc(entry.text)}</p>` : ''}
+              ${shut ? '' : `${prose(model, `data-item="${list}|${i}|note"`, m.note, 1, 'grow note')}
+              ${entry ? `<p class="rule">${esc(entry.text)}</p>` : ''}`}
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">

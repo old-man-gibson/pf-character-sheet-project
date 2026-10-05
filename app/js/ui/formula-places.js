@@ -31,6 +31,7 @@
  * every tab a jump names, presses its openers, and checks the field is there.
  */
 import { COMPANION_KINDS } from '../companions.js';
+import { manipulationFoldKey } from '../model/subsystems/cardcasting.js';
 
 /** A training side's tab: the sphere systems are named for what they train. */
 const SIDE_TABS = { combat: 'martial', magic: 'magic', guile: 'guile' };
@@ -223,8 +224,10 @@ function placeOf(model, ref) {
     case 'card': return deckPlace(b === 'notes' ? null : item('cardcasting.cards', a, 'effect'));
     case 'sideboard': return deckPlace(b === 'notes' ? null : item('cardcasting.sideboard', a, 'effect'));
     case 'deckManipulation': {
-      const group = d.cardcasting?.manipulations?.[Number(a)]?.group || 'General';
-      return deckPlace(item('cardcasting.manipulations', a, 'note'), [`deck-manip-${groupSlug(group)}`]);
+      const row = d.cardcasting?.manipulations?.[Number(a)];
+      // Its group's panel, then the row itself, which is folded to its name.
+      return deckPlace(item('cardcasting.manipulations', a, 'note'),
+        [`deck-manip-${groupSlug(row?.group || 'General')}`, manipulationFoldKey(row, Number(a))]);
     }
     case 'cardcasting': return deckPlace(set('cardcasting.notes'));
     case 'altTraining':

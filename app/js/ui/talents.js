@@ -13,6 +13,7 @@ import { prose } from './prose.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
   basePickSphere, isBasePickOf, sphereBasePick, sphereCatalogue, sphereTalent, talentPackage,
+  manipulationEntry, MANIPULATION_NEEDS,
 } from '../model.js';
 
 /**
@@ -315,6 +316,22 @@ export function talentPopHtml(model, spec) {
       <div class="peektext">${note || info?.text ? richText(note || info.text) : '<span class="empty">Nothing written — open the note with ▸ to add one.</span>'}</div>
       ${!note && info?.source ? `<div class="bdsub peeksource">${esc(info.source)}</div>` : ''}
     </div>`;
+  }
+  // A deck manipulation, folded to its name: the player's note when one is
+  // written, the card's text from the pack when not -- the same rule as a
+  // customized weapon's talent.
+  if (s?.k === 'manip') {
+    const [list, index] = String(s.p ?? '').split('|');
+    const row = model.list(list)?.[Number(index)];
+    const name = String(row?.name ?? '').trim();
+    if (!name) return '';
+    const raw = String(row?.note ?? '').trim();
+    const note = hasTokens(raw) ? plainTokens(model.renderProse(raw)) : raw;
+    const entry = manipulationEntry(row);
+    const needs = entry ? [...entry.requires.map((r) => MANIPULATION_NEEDS[r] || r), entry.needs].filter(Boolean).join(', ') : '';
+    return panel(entry?.name || name, [row?.group, needs && `needs ${needs}`].filter(Boolean).join(' · '),
+      [note ? 'Your note — open the row with ▸ to edit it' : ''],
+      note || entry?.text || '', note ? '' : (entry ? '' : 'Not in the catalogue'));
   }
   if (s?.k === 'note') {
     const where = String(s.p ?? '');

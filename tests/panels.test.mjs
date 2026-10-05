@@ -664,5 +664,26 @@ console.log('\none way of asking twice: the worksheet and feature-group ×');
   check('and no Delete / Keep sentence is left', /delete-system-confirm|remove-cf-group-confirm/.test(mgr('systab|0') + prog('cfgroup|Ghost')), false);
 }
 
+console.log('\ndeck manipulations fold to their names, and the hover says the card or the note');
+{
+  const model = await import('../app/js/model.js');
+  const { talentPopHtml } = await import('../app/js/ui/talents.js');
+  const kept = model.deckManipulationCatalogue();
+  model.setCardcastingTables({ manipulations: [{ name: 'Loaded Hand', group: 'General', requires: ['cooldown'], text: 'Hold one more card.' }] });
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.set('cardcasting.manipulations', [
+    { name: 'Loaded Hand', count: 1, group: 'General', note: '' },
+    { name: 'Loaded Hand', count: 1, group: 'Cooldown', note: 'Mine: {= 2 + 2} cards' },
+  ]);
+  const html = subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' });
+  check('shut by default: rows drawn, no rule text in them', [/class="manipname"/.test(html), /class="rule"/.test(html)], [true, false]);
+  const pop = (i) => talentPopHtml(c, JSON.stringify({ k: 'manip', p: `cardcasting.manipulations|${i}` }));
+  ok('an empty note shows the card', pop(0).includes('Hold one more card.'));
+  check('a written note shows instead, worked out', [pop(1).includes('Mine: 4 cards'), pop(1).includes('Hold one more card.')], [true, false]);
+  c.set('uiPrefs.collapsed', { 'manip:loaded hand': false });
+  ok('opened, the row shows the card and the note field', /class="rule"/.test(subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' })));
+  model.setCardcastingTables({ manipulations: kept });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
