@@ -32,7 +32,10 @@ const CARD_FRAMES = {
 };
 
 /** [Draw 2], [Shuffle], [Exile]… in a card's rendered text, marked as keyword chips. */
-const KEYWORD_RE = /\[\s*(on\s*mill|on\s*redraw|on\s*draw|on\s*discard|on\s*exile|draw|discard|shuffle|tap|untap|mill|peek|wild|exile|bottom|top|return|deck|ante)(\s+\d+)?\s*\]/gi;
+const KEYWORD_RE = cardKeywordPattern({ triggers: true });
+
+/** The number the hint shows beside a keyword that takes one. */
+const KEYWORD_EXAMPLE = { draw: 2, mill: 3, tap: 2 };
 
 /**
  * Maneuver types, short enough for a narrow column.
@@ -44,7 +47,8 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
+  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern,
+  hasManipulation, manipulationCount, redrawSize, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
@@ -2399,11 +2403,12 @@ function tablePanel(model, ctx, p, k) {
     const t = p.table || {};
     const tc = t.calc || {};
     const active = !!t.active;
-    const manips = p.manipulations || [];
-    const has = (re) => manips.some((m) => re.test(String(m.name || '')) && Number(m.count) > 0);
-    const readTwice = manips.some((m) => /^read the cards/i.test(String(m.name || '')) && Number(m.count) >= 2);
+    // What is taken is asked of the model, matched the way the catalogue
+    // matches, rather than by a pattern of the panel's own.
+    const has = (name) => hasManipulation(model, name);
+    const readTwice = manipulationCount(model, 'Read the Cards') >= 2;
     const loaded = 2 * (k.loadedHand || 0);
-    const redrawTo = Math.max(0, t.hand?.length + (t.round === 1 ? t.mana?.length : 0) - (t.redraws === 0 && has(/^mulligan/i) ? 0 : 1));
+    const redraw = redrawSize(model);
     // Spell points, from the tracker if the character keeps one.
     const sp = model.spellPointTracker();
     const spLeft = sp ? (Number(sp.max) || 0) - (Number(sp.current) || 0) : null;
@@ -2412,9 +2417,9 @@ function tablePanel(model, ctx, p, k) {
     const controls = active ? `
         ${tableBtn('next', '', 'Next round', { title: p.mods.exposedGrip ? 'Exposed Grip: no automatic draw' : 'Draw one card' + (p.mods.stagnantPool ? '; untap Stagnant Pool mana' : ''), cls: 'primary' })}
         ${tableBtn('draw', '', 'Draw a card', { title: 'Rapid Fill, Life Draw, Prize Card, Primed Hand — any draw the rules hand you' })}
-        ${tableBtn('redraw', '', `Redraw hand → ${redrawTo}`, { title: 'Shuffle the hand back and draw one fewer' + (has(/^mulligan/i) ? ' (Mulligan: the same number the first time)' : ''), disabled: (t.hand?.length || 0) + (t.round === 1 ? t.mana?.length || 0 : 0) <= 1 })}
+        ${tableBtn('redraw', '', `Redraw hand → ${redraw.next}`, { title: 'Shuffle the hand back and draw one fewer' + (has('Mulligan') ? ' (Mulligan: the same number the first time)' : ''), disabled: redraw.size <= 1 })}
         ${p.cooldown ? tableBtn('shuffle', '', 'Shuffle discard in', { title: 'A full-round action: the discard pile shuffled into the deck', disabled: !(t.discard?.length) }) : ''}
-        ${has(/^read the cards/i) ? tableBtn('peek', '', `Read the cards (${readTwice ? 3 : 1})`, { arg: readTwice ? 3 : 1, title: 'Look at the top of the deck' }) : ''}
+        ${has('Read the Cards') ? tableBtn('peek', '', `Read the cards (${readTwice ? 3 : 1})`, { arg: readTwice ? 3 : 1, title: 'Look at the top of the deck' }) : ''}
         ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'A spell point on something the cards do not know about — Retrace, Read the Cards, Fresh Hand…' }) : ''}
         ${tableBtn('end', '', 'End encounter', { title: 'Everything shuffled back into the deck', cls: 'danger' })}`
       : `${tableBtn('start', '', `Start encounter — draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
@@ -2427,9 +2432,7 @@ function tablePanel(model, ctx, p, k) {
     if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
 
     const zoneMoves = (id, from) => {
-      const opts = [['hand', 'hand'], ['play', 'in play'], ['mana', 'mana in play'], ['discard', 'discard'], ['exile', 'exile'],
-        ['deckTop', 'top of deck'], ['deckBottom', 'bottom of deck'], ['deck', 'shuffled into deck']];
-      if (p.mods.lifeboundDeck) opts.push(['stun', 'Stun pile'], ['wounds', 'Wounds pile'], ['death', 'Death pile']);
+      const opts = TABLE_DESTINATIONS.filter(([v]) => p.mods.lifeboundDeck || !LIFEBOUND_PILES.includes(v));
       return `<select class="movesel" data-table-move="${esc(id)}" aria-label="Move this card" title="Move this card by hand">
         <option value="">move…</option>${opts.filter(([v]) => v !== from).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
       </select>`;
@@ -2530,9 +2533,8 @@ function tablePanel(model, ctx, p, k) {
         ${p.manaPool ? ` Mana Point cards drawn go straight to the table${p.mods.gradualRamp ? ' — except under Gradual Ramp, where they wait in hand and one is played a round' : ''}.` : ''}
         ${p.cooldown ? ' Resolved cards go to the discard; a full-round action shuffles it back, and so does running dry' + (p.mods.deckout ? ' — except that Deckout forbids both' : '') + '.' : ' Resolved cards shuffle straight back into the deck.'}
         Out of combat there is no hand: search the deck and cast at +1 minute.
-        Keywords in a card's text fire when it is cast: <code>[Draw 2]</code> <code>[Discard]</code> <code>[Shuffle]</code>
-        <code>[Mill 3]</code> <code>[Peek]</code> <code>[Tap 2]</code> <code>[Untap]</code> <code>[Wild]</code> <code>[Exile]</code>
-        <code>[Bottom]</code> <code>[Top]</code> <code>[Return]</code> — the ones that stand in for a manipulation want it taken.
+        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}
+        — the ones that stand in for a manipulation want it taken.
         A card with dice in its text, or in its Dice field, gets a 🎲.</p>` : ''}
     </section>
 
@@ -2556,7 +2558,7 @@ function tablePanel(model, ctx, p, k) {
     buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: a spell point puts it on the bottom of the deck' })}
       ${readTwice ? tableBtn('move', id, 'discard', { arg: 'discard', title: 'Read the Cards taken twice: discard it' }) : ''}`,
   })).join('')}</div>` : `<div class="deckback"><span>${t.deck.length}</span></div>`}
-      ${p.mods.lifeboundDeck ? ['stun', 'wounds', 'death'].map((z) => `<h4 class="subhead" style="margin-top:10px">${z[0].toUpperCase()}${z.slice(1)} pile <span class="badge">${t[z].length}</span></h4>
+      ${p.mods.lifeboundDeck ? LIFEBOUND_PILES.map((z) => `<h4 class="subhead" style="margin-top:10px">${z[0].toUpperCase()}${z.slice(1)} pile <span class="badge">${t[z].length}</span></h4>
         ${t[z].length ? `<div class="zonelist">${listZone(t[z], z)}</div>` : '<p class="empty">Empty.</p>'}`).join('')
     + `<p class="hint">Lifebound value ${k.lifebound ?? '—'}: each multiple lost moves a card down the piles (deck → Stun → Wounds → Death); each multiple healed moves one back.</p>` : ''}
     </section>
@@ -2574,7 +2576,7 @@ function tablePanel(model, ctx, p, k) {
         <h3>Discard <span class="badge">${t.discard.length}</span>
           ${t.discard.length ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
         </h3>
-        ${t.discard.length ? `<div class="zonelist">${listZone(t.discard, 'discard', (id) => `${rollBtn(id, model.tableCard(id))}${spBtn(id)}${has(/^recollection|^resupply/i) ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has(/^retrace/i) ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard' }) : ''}`)}</div>`
+        ${t.discard.length ? `<div class="zonelist">${listZone(t.discard, 'discard', (id) => `${rollBtn(id, model.tableCard(id))}${spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard' }) : ''}`)}</div>`
     : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded — resolved cards shuffle straight back.'}</p>`}
       </section>
       <section class="panel">

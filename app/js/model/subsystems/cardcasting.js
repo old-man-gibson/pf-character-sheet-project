@@ -12,9 +12,10 @@
 import { parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
+import { evaluateAmount } from '../util.js';
 import { sphereTally } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
-import { poolTracker } from '../trackers.js';
+import { clampTracker, poolTracker } from '../trackers.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
 export const CARD_COLORS = [
@@ -728,18 +729,11 @@ export function recomputeCardcasting(model) {
   // Available: one per deck feat, plus one for Card Shark -- unless a
   // number or a formula is written over it.
   const autoAvailable = deckFeats.length + (deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
-  let manipulationsAvailable = autoAvailable;
-  let manipulationsError = null;
-  if (typeof p.manipulationsAvailable === 'string' && p.manipulationsAvailable.trim() !== '') {
-    try {
-      const v = Number(evaluateFormula(p.manipulationsAvailable, model.scope()));
-      manipulationsAvailable = Number.isFinite(v) ? Math.floor(v) : 0;
-    } catch (err) {
-      manipulationsError = err.message;
-    }
-  } else if (p.manipulationsAvailable !== null && p.manipulationsAvailable !== undefined && p.manipulationsAvailable !== '') {
-    manipulationsAvailable = Math.floor(Number(p.manipulationsAvailable) || 0);
-  }
+  const written = p.manipulationsAvailable !== null && p.manipulationsAvailable !== undefined
+    && String(p.manipulationsAvailable).trim() !== '';
+  const typed = written ? evaluateAmount(p.manipulationsAvailable, model.scope()) : null;
+  const manipulationsAvailable = typed && !typed.error ? Math.floor(typed.value) : autoAvailable;
+  const manipulationsError = typed?.error ?? null;
   // What each pick needs, checked against the switches.
   const flagOn = { cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
     singleton: mods.singleton, gradualRamp: mods.gradualRamp, notManaGraveyard: !p.manaGraveyard };
@@ -791,6 +785,61 @@ export function recomputeCardcasting(model) {
   recomputeTable(model);
 }
 
+/* ------------------------------------------------------------------ *
+ * What the table and the Cardcasting tab both read, said once.
+ * ------------------------------------------------------------------ */
+
+/** The zones that hold card ids. Mana in play is `{id, tapped}` and kept apart. */
+export const TABLE_ZONES = ['deck', 'hand', 'play', 'discard', 'exile', 'stun', 'wounds', 'death'];
+
+/** Lifebound Deck's three piles, in the order a card moves down them. */
+export const LIFEBOUND_PILES = ['stun', 'wounds', 'death'];
+
+/** Where a card can be moved by hand, and what the move is called. */
+export const TABLE_DESTINATIONS = [
+  ['hand', 'hand'], ['play', 'in play'], ['mana', 'mana in play'], ['discard', 'discard'], ['exile', 'exile'],
+  ['deckTop', 'top of deck'], ['deckBottom', 'bottom of deck'], ['deck', 'shuffled into deck'],
+  ['stun', 'Stun pile'], ['wounds', 'Wounds pile'], ['death', 'Death pile'],
+];
+
+/** The keywords a card's text can carry, which fire when it is cast: [Draw 2], [Shuffle]… */
+export const CARD_KEYWORDS = ['draw', 'discard', 'shuffle', 'tap', 'untap', 'mill', 'peek', 'wild', 'exile', 'bottom', 'top', 'return', 'deck', 'ante'];
+
+/** What can happen to a card that a trigger tag names: [OnMill], [OnRedraw]… */
+export const CARD_TRIGGERS = ['mill', 'redraw', 'draw', 'discard', 'exile'];
+
+/**
+ * A card keyword in text, `[Mill 3]`, or with `triggers` a trigger tag too,
+ * `[OnMill]`. The keyword is group 1 and its number, if any, group 2.
+ */
+export function cardKeywordPattern({ triggers = false } = {}) {
+  const words = [...(triggers ? CARD_TRIGGERS.map((w) => `on\\s*${w}`) : []), ...CARD_KEYWORDS];
+  return new RegExp(`\\[\\s*(${words.join('|')})\\s*(\\d+)?\\s*\\]`, 'gi');
+}
+
+/** A card's spell point cost as a number, 0 when it names none. */
+export function cardCost(card) {
+  const cost = parseInt(String(card?.cost ?? '').trim(), 10);
+  return Number.isFinite(cost) ? Math.max(0, cost) : 0;
+}
+
+/** Perfect Draw's maximum ante: 2, and 1 more for every 4 levels past 1st. */
+export function maxAnte(level) {
+  return 2 + Math.floor(Math.max(0, (Number(level) || 0) - 1) / 4);
+}
+
+/**
+ * A redraw now: the hand it shuffles back (with the mana drawn into play at
+ * initiative, in the first round), and how many come back -- one fewer, or
+ * the same number the first time under Mulligan.
+ */
+export function redrawSize(model) {
+  const t = model.data.cardcasting?.table || {};
+  const size = (t.hand?.length || 0) + (t.round === 1 ? t.mana?.length || 0 : 0);
+  const mulligan = (Number(t.redraws) || 0) === 0 && hasManipulation(model, 'Mulligan');
+  return { size, mulligan, next: Math.max(0, mulligan ? size : size - 1) };
+}
+
 /**
  * The encounter's zones, kept on `cardcasting.table` as card instance ids
  * (`<card index>#<copy>`) so a deck of 54 saves as a few short lists.
@@ -808,7 +857,7 @@ export function recomputeTable(model) {
   t.round = Math.max(0, Math.floor(Number(t.round) || 0));
   t.redraws = Math.max(0, Math.floor(Number(t.redraws) || 0));
   t.manaPlayed = Math.max(0, Math.floor(Number(t.manaPlayed) || 0));
-  for (const zone of ['deck', 'hand', 'play', 'discard', 'exile', 'stun', 'wounds', 'death', 'faceDown']) {
+  for (const zone of [...TABLE_ZONES, 'faceDown']) {
     t[zone] = (Array.isArray(t[zone]) ? t[zone] : []).filter((id) => model.tableCard(id));
   }
   // A trap is a card in play that is face down; the list is the flag.
@@ -825,7 +874,7 @@ export function recomputeTable(model) {
   t.log = (Array.isArray(t.log) ? t.log : []).slice(-30).map(String);
 
   const k = p.calc;
-  const seen = new Set([...t.deck, ...t.hand, ...t.play, ...t.discard, ...t.exile, ...t.stun, ...t.wounds, ...t.death, ...t.mana.map((m) => m.id)]);
+  const seen = new Set([...TABLE_ZONES.flatMap((z) => t[z]), ...t.mana.map((m) => m.id)]);
   // Gradual Ramp: one Mana Point card from the hand a round -- a Mana Rock
   // (for a spell point) or a Moxen may still be played.
   const manaBlocked = !!(p.mods.gradualRamp && t.manaPlayed >= 1);
@@ -857,9 +906,15 @@ export function hasDeckFeat(model, re) {
   return (model.data.cardcasting?.calc?.deckFeats || []).some((f) => re.test(f));
 }
 
+/** How many times a manipulation is taken, across every row naming it. */
+export function manipulationCount(model, name) {
+  return (model.data.cardcasting?.manipulations || [])
+    .filter((m) => isManipulation(m, name)).reduce((n, m) => n + Math.max(0, Number(m.count) || 0), 0);
+}
+
 /** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches. */
 export function hasManipulation(model, name) {
-  return (model.data.cardcasting?.manipulations || []).some((m) => isManipulation(m, name) && Number(m.count) > 0);
+  return manipulationCount(model, name) > 0;
 }
 
 /** May this card go onto the table as mana right now? */
@@ -899,8 +954,7 @@ export function castCheck(model, id) {
   const card = model.tableCard(id);
   if (!card) return { ok: false, why: 'no such card' };
   const isEffect = String(card.effect || '').trim() !== '';
-  const cost = parseInt(String(card.cost || '').trim(), 10);
-  const need = Number.isFinite(cost) ? Math.max(0, cost) : 0;
+  const need = cardCost(card);
   if (!isEffect) return { ok: true, need: 0, have: 0, mana: true };
   if (!p.manaPool) return { ok: true, need, have: need };
   const colors = String(card.calc?.colors || '');
@@ -1002,8 +1056,8 @@ export function tableStart(model) {
   if (!p) return model;
   const t = p.table;
   const k = p.calc;
-  const piles = { stun: [...(t.stun || [])], wounds: [...(t.wounds || [])], death: [...(t.death || [])] };
-  const held = new Set([...piles.stun, ...piles.wounds, ...piles.death]);
+  const piles = Object.fromEntries(LIFEBOUND_PILES.map((z) => [z, [...(t[z] || [])]]));
+  const held = new Set(LIFEBOUND_PILES.flatMap((z) => piles[z]));
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
@@ -1020,10 +1074,7 @@ export function tableRedraw(model) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
-  const k = p.calc;
-  const size = t.hand.length + (t.round === 1 ? t.mana.length : 0);
-  const mulligan = t.redraws === 0 && (p.manipulations || []).some((m) => /^mulligan/i.test(m.name) && m.count > 0);
-  const next = Math.max(0, mulligan ? size : size - 1);
+  const { size, mulligan, next } = redrawSize(model);
   if (size <= 1) { tableLog(model, t, 'cannot redraw a hand of one'); return model.recompute(); }
   // Mana drawn into play at initiative goes back with the hand.
   const back = [...t.hand];
@@ -1048,10 +1099,8 @@ export function tableNextRound(model) {
   // Perfect Draw's counters: Early ones tick down each turn; once they are
   // gone and the card is still in the deck, a Late one arrives each turn.
   if (t.counters && !t.counters.drawn) {
-    const level = Number(model.data.identity?.level) || 0;
-    const maxAnte = 2 + Math.floor(Math.max(0, level - 1) / 4);
     if (t.counters.early > 0) t.counters.early -= 1;
-    else if (t.counters.late < maxAnte) t.counters.late += 1;
+    else if (t.counters.late < maxAnte(model.data.identity?.level)) t.counters.late += 1;
     tableLog(model, t, `[Ante] ${tableName(model, t.counters.id)}: ${t.counters.early} Early, ${t.counters.late} Late`);
   }
   if (p.mods.exposedGrip) tableLog(model, t, 'round begins — Exposed Grip: no automatic draw');
@@ -1166,7 +1215,7 @@ export function tableRetrace(model, id) {
   if (!card) return model;
   t.discard.splice(at, 1);
   const name = tableName(model, id);
-  const cost = parseInt(String(card.cost || '').trim(), 10) || 0;
+  const cost = cardCost(card);
   tableLog(model, t, `Retrace: ${name} cast from the discard${cost ? ` for ${cost}` : ''} + 1 spell point`);
   spendSP(model, cost + 1, `${name} (Retrace)`);
   rollFor(model, id);
@@ -1217,7 +1266,7 @@ export function tableKeywords(model, id, card) {
   const t = p.table;
   let fate = null;
   const text = String(card.effect || '');
-  const re = /\[\s*(draw|discard|shuffle|tap|untap|mill|peek|wild|exile|bottom|top|return|deck|ante)\s*(\d+)?\s*\]/gi;
+  const re = cardKeywordPattern();
   // What a card does to itself -- exile, bottom, top, return -- is its own
   // rule; only the keywords that stand in for a manipulation want it taken.
   const may = {
@@ -1260,11 +1309,10 @@ export function tableKeywords(model, id, card) {
           t.counters = null;
           tableLog(model, t, `[Ante] ${tableName(model, id)} played after its draw — exiled`);
         } else {
-          const level = Number(model.data.identity?.level) || 0;
-          const maxAnte = 2 + Math.floor(Math.max(0, level - 1) / 4);
-          t.counters = { id, early: maxAnte, late: 0, drawn: false };
+          const early = maxAnte(model.data.identity?.level);
+          t.counters = { id, early, late: 0, drawn: false };
           fate = 'deck';
-          tableLog(model, t, `[Ante] ${tableName(model, id)} shuffled back with ${maxAnte} Early counters`);
+          tableLog(model, t, `[Ante] ${tableName(model, id)} shuffled back with ${early} Early counters`);
         }
         break;
       }
@@ -1318,7 +1366,7 @@ export function tableResolve(model, id) {
   const card = model.tableCard(id);
   // A trap that springs is cast then: it is paid for and its keywords fire now.
   if (wasTrap) {
-    const cost = parseInt(String(card?.cost || '').trim(), 10);
+    const cost = cardCost(card);
     if (cost > 0) spendSP(model, cost, tableName(model, id));
     rollFor(model, id);
   }
@@ -1345,7 +1393,8 @@ export function spendSP(model, n, why) {
   if (!sp || !(n > 0)) return null;
   const max = Number(sp.max) || 0;
   const before = Number(sp.current) || 0;
-  const after = Math.max(Number(sp.min) || 0, Math.min(max, before + n));
+  // Held to the tracker's range the way every step of it is.
+  const after = clampTracker(sp, before + n);
   sp.current = after;
   const left = max - after;
   if (t) tableLog(model, t, `${why}: ${after - before} spell point${after - before === 1 ? '' : 's'} spent, ${left} left${after - before < n ? ' — the pool ran out' : ''}`);
@@ -1449,7 +1498,7 @@ export function tableMove(model, id, to) {
   if (!p?.table) return model;
   const t = p.table;
   let from = null;
-  for (const zone of ['deck', 'hand', 'play', 'discard', 'exile', 'stun', 'wounds', 'death']) {
+  for (const zone of TABLE_ZONES) {
     const at = t[zone].indexOf(id);
     if (at >= 0) { t[zone].splice(at, 1); from = zone; }
   }

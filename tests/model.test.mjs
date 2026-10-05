@@ -3061,6 +3061,24 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('the Cardcasting table and tab read one set of rules');
+{
+  const M = await import('../app/js/model.js');
+  check('a card costs its number, or nothing', [M.cardCost({ cost: '3' }), M.cardCost({ cost: '' }), M.cardCost({ cost: '-2' }), M.cardCost(null)], [3, 0, 0, 0]);
+  check('maximum ante is 2, +1 per 4 levels past 1st', [1, 4, 5, 9, 20].map(M.maxAnte), [2, 2, 3, 4, 6]);
+  const kw = (text, o) => [...text.matchAll(M.cardKeywordPattern(o))].map((m) => [m[1].toLowerCase(), m[2] ?? null]);
+  check('every keyword is read, [Deck] and [Ante] too', kw('[Draw 2] [Deck] [Ante] [Mill3] [OnMill]'), [['draw', '2'], ['deck', null], ['ante', null], ['mill', '3']]);
+  check('and a trigger only when asked for', kw('[OnMill] [Exile]', { triggers: true }), [['onmill', null], ['exile', null]]);
+  const c = new Character(blankDocument({ name: 'Dealer' }));
+  c.data.cardcasting = { ...(c.data.cardcasting || {}), manipulations: [{ name: 'Mulligan', count: 1 }, { name: 'Read the Cards', count: 1 }, { name: 'read the cards', count: 1 }],
+    table: { hand: ['a', 'b', 'c'], mana: ['m'], round: 1, redraws: 0 } };
+  check('a first redraw under Mulligan keeps the number, mana drawn at initiative included', M.redrawSize(c), { size: 4, mulligan: true, next: 4 });
+  c.data.cardcasting.table.redraws = 1;
+  check('a second is one fewer', M.redrawSize(c).next, 3);
+  check('a manipulation taken on two rows counts twice', M.manipulationCount(c, 'Read the Cards'), 2);
+  check('a tracker range holds a value either way round', [M.clampTracker({ min: 0, max: 5 }, 9), M.clampTracker({ min: 5, max: 0 }, -1), M.clampTracker({ min: 0, max: 5 }, 3)], [5, 0, 3]);
+}
+
 console.log('every catalogue matches names the same way');
 {
   const M = await import('../app/js/model.js');

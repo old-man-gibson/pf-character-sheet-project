@@ -371,10 +371,14 @@ export function addTracker(model, { name, maxFormula, minFormula = null, current
 export function stepTracker(model, id, delta) {
   const t = model.trackers.find((x) => x.id === id);
   if (!t) return null;
-  const min = Number(t.min) || 0;
-  const max = Number(t.max) || 0;
-  const next = Math.max(min, Math.min(max, (Number(t.current) || 0) + (Number(delta) || 0)));
-  return model.updateTracker(id, { current: next });
+  return model.updateTracker(id, { current: clampTracker(t, (Number(t.current) || 0) + (Number(delta) || 0)) });
+}
+
+/** A value held to a tracker's range, whichever way round its ends are. */
+export function clampTracker(t, value) {
+  const lo = Math.min(Number(t?.min) || 0, Number(t?.max) || 0);
+  const hi = Math.max(Number(t?.min) || 0, Number(t?.max) || 0);
+  return Math.max(lo, Math.min(hi, Number(value) || 0));
 }
 
 /** Whether a tracker drains: a pool from 0 drawn as what is left. */
@@ -416,9 +420,7 @@ function setTracker(model, t, patch) {
   // a pool of 5 used to be stored as 99. Only a value being set is clamped: a
   // range that shrinks under a spent pool keeps the spend, as it always has.
   if (patch && 'current' in patch) {
-    const lo = Math.min(Number(t.min) || 0, Number(t.max) || 0);
-    const hi = Math.max(Number(t.min) || 0, Number(t.max) || 0);
-    const held = Math.max(lo, Math.min(hi, Number(t.current) || 0));
+    const held = clampTracker(t, t.current);
     if (held !== t.current) {
       t.current = held;
       if (linked) linked.set(model.data, held);
