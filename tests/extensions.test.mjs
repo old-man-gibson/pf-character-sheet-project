@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
-  blocksFromCharacter, describeSummary, summarize, looksLikeExtension, loadBundledExtensions, parseReplaces,
+  blocksFromCharacter, describeSummary, summarize, TABLE_KINDS, looksLikeExtension, loadBundledExtensions, parseReplaces,
   isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
@@ -185,6 +185,14 @@ check('parseReplaces: nothing', parseReplaces('Dwarves gain a +2 bonus.'), []);
 check('trait block reads replaces off its text', normalizeBlock({ kind: 'trait', name: 'X', text: 'This replaces hatred and greed.' }).replaces, ['hatred', 'greed']);
 check('describeSummary', describeSummary({ tables: { maneuvers: 30, vancian: 1 }, blocks: { class: 2, race: 1 } }), '30 disciplines · 1 casting table · 2 classes · 1 race');
 check('describeSummary empty', describeSummary({ tables: {}, blocks: {} }), 'empty');
+{
+  // Alternate Training is a table kind like the others: counted by its
+  // techniques, not by how many keys its document has.
+  const alt = normalizeExtension({ id: 'alt', name: 'Alt', provides: { altTraining: {
+    levels: [1, 3], repeatFrom: 5, links: {}, techniques: [{ name: 'A' }, { name: 'B' }] } } });
+  check('an Alternate Training pack is summarised by its techniques', describeSummary(summarize(alt)), '2 training techniques');
+  check('and listed among the table kinds', TABLE_KINDS.includes('altTraining'), true);
+}
 
 console.log('store -- save, list, read, enable, remove; bundled toggles remembered');
 {

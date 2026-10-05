@@ -54,7 +54,7 @@ export const EXTENSION_VERSION = 1;
 /** The shared tables a pack can provide, and what each one's document holds. */
 export const TABLE_KINDS = [
   'maneuvers', 'spheres', 'veils', 'feats', 'spells', 'powers', 'catalogues',
-  'vancian', 'psionics', 'cardcasting', 'cooking',
+  'vancian', 'psionics', 'cardcasting', 'cooking', 'altTraining',
 ];
 
 /** What each block kind is called on a picker, and what it lands on the sheet as. */
@@ -629,6 +629,7 @@ function tableCount(kind, table) {
     case 'psionics': return arr(t.curves).length + arr(t.classes).length;
     case 'cardcasting': return arr(t.manipulations).length;
     case 'cooking': return ['entrees', 'flavors', 'sides', 'aroma', 'garnish'].reduce((n, k) => n + arr(t[k]).length, 0);
+    case 'altTraining': return arr(t.techniques).length;
     default: return Object.keys(t).length;
   }
 }
@@ -644,6 +645,7 @@ export function describeSummary(s) {
     vancian: ['casting table', 'casting tables'],
     psionics: ['manifesting table', 'manifesting tables'], cardcasting: ['deck manipulation', 'deck manipulations'],
     cooking: ['ingredient', 'ingredients'],
+    altTraining: ['training technique', 'training techniques'],
   };
   for (const [kind, n] of Object.entries(s.tables || {})) {
     if (!n) continue;
