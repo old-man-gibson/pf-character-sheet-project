@@ -1,7 +1,7 @@
 import { evaluateFormula } from '../formula.js';
 import { forwarded } from './scope.js';
 import { maneuverDetails } from './subsystems/maneuvers.js';
-import { veilEntry } from './subsystems/akashic.js';
+import { veilDetails } from './subsystems/akashic.js';
 
 // A maneuver's catalogue "Action" as the session's action type. Anything else
 // ("See text") leaves the card free to be placed by hand.
@@ -136,17 +136,18 @@ export function sessionShortcuts(model) {
   };
   // Feat groups are slots ("Level Up", "Class"), not abilities: only their entries count.
   for (const group of model.data.featGroups || []) walk(group.entries);
-  // A shaped veil is its own kind, read from the veil catalogue: the slot row
-  // holds only a name and essence, the catalogue holds the text.
-  const { slots: veilSlots, ...akashicRest } = model.data.akashic || {};
-  for (const slot of veilSlots || []) {
-    for (const veil of slot.veils || []) {
-      const entry = veilEntry(veil?.name);
-      add('veil', veil?.name, entry?.text || '', { detail: [slot.slot, entry?.descriptor].filter(Boolean).join(' · ') });
+  // A shaped veil is its own kind, read the way the Akashic tab reads it: the
+  // player's own description where they wrote one, the catalogue's under it.
+  // The Kheshig receptacles hold veils too. Nothing else in the akashic block
+  // -- its classes, the other receptacles -- is an ability to put on a card.
+  const akashic = model.data.akashic || {};
+  for (const holder of [...(akashic.slots || []), ...(akashic.kheshig || [])]) {
+    for (const veil of holder.veils || []) {
+      const v = veilDetails(veil);
+      add('veil', veil?.name, v.desc, { detail: [holder.slot || holder.label, v.descriptor].filter(Boolean).join(' · ') });
     }
   }
   for (const key of ['grantedFeats', 'templates', 'training']) walk(model.data[key]);
-  walk(akashicRest);
   // A known maneuver or stance carries its catalogue card: the action it is
   // initiated with decides which group offers it, and the rest fills the card.
   for (const discipline of model.data.maneuvers?.disciplines || []) {
