@@ -25,7 +25,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  classForwardKey, evaluateAmount, isPinned, normalizeName, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isPinned, normalizeName, splitTags, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -185,9 +185,7 @@ export function talentsTagged(tag) {
  * the pack's "...And Stay Down" -- an ellipsis character is three dots
  * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
-export const talentKey = (s) => normalizeName(String(s ?? '')
-  .replace(/(?:\s*(?:\([^()]*\)|\[[^\][]*\]))+\s*$/, '')
-  .trim().replace(/[!?]+$/, ''));
+export const talentKey = (s) => normalizeName(splitTags(s).name.replace(/[!?]+$/, ''));
 
 /**
  * What the catalogue knows about a talent somebody typed on their sheet.

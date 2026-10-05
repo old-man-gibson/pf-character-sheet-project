@@ -193,6 +193,16 @@ check('describeSummary empty', describeSummary({ tables: {}, blocks: {} }), 'emp
   check('an Alternate Training pack is summarised by its techniques', describeSummary(summarize(alt)), '2 training techniques');
   check('and listed among the table kinds', TABLE_KINDS.includes('altTraining'), true);
 }
+{
+  // One descriptor for every table kind: each names a setter the model has,
+  // and mergeTables starts every kind from it.
+  const { TABLES } = await import('../app/js/extensions.js');
+  const model = await import('../app/js/model.js');
+  check('every table kind has a model setter', TABLES.filter((t) => typeof model[t.setter] !== 'function').map((t) => t.kind), []);
+  check('and a merged table, empty or not', Object.keys(mergeTables([])), TABLES.map((t) => t.kind));
+  check('a tag is peeled however many follow the name',
+    model.splitTags("Daevic's Tradition (tradition) [plan] (Wrath)"), { name: "Daevic's Tradition", tags: ['wrath', 'plan', 'tradition'] });
+}
 
 console.log('store -- save, list, read, enable, remove; bundled toggles remembered');
 {

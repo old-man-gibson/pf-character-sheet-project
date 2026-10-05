@@ -15,14 +15,10 @@
  *   runtime.addEventListener('change', …)   the sheet re-renders on this
  */
 
+import * as model from './model.js';
+import { setOptionCatalogues } from './model.js';
 import {
-  setAltTrainingTables, setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue,
-  setFeatCatalogue, setSpellCatalogue, setPowerCatalogue, setReferenceCatalogue,
-  setVancianTables, setPsionicTables,
-  setCardcastingTables, setCookingTables, setOptionCatalogues,
-} from './model.js';
-import {
-  extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
+  TABLES, extensionStore, loadBundledExtensions, activeExtensions, activeBlocks, mergeTables, registerTables,
   optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, namedTextFrom, isPackKey, packsWorthMoving,
 } from './extensions.js';
 // Straight from the module rather than through model.js, which does not
@@ -30,11 +26,8 @@ import {
 import { setCompanionAbilityText } from './companions.js';
 import { packMedium } from './pack-storage.js';
 
-const REGISTRARS = {
-  setManeuverCatalogue, setSphereCatalogue, setVeilCatalogue, setVancianTables, setPsionicTables,
-  setCardcastingTables, setCookingTables, setAltTrainingTables,
-  setFeatCatalogue, setSpellCatalogue, setPowerCatalogue, setReferenceCatalogue,
-};
+// The model's setter for every table kind, by the name TABLES gives it.
+const REGISTRARS = Object.fromEntries(TABLES.map((t) => [t.setter, model[t.setter]]));
 
 /**
  * Merge these packs and register everything the sheet reads from them: the

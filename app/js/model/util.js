@@ -142,6 +142,28 @@ export function evaluateAmount(raw, scope) {
 }
 
 /**
+ * A name split into what it is called and the brackets written after it.
+ *
+ * A cell is the player's own text and carries two kinds of bracket: the
+ * entry's own tag, `(tradition)` or `[plan]`, and what they took it for,
+ * `(Wrath)`. Every trailing one is peeled, so "Daevic's Tradition
+ * (tradition) (Wrath)" gives up both and leaves the name. `tags` come back
+ * lower-cased, innermost last. Every catalogue that matches a name with its
+ * tags off reads the name from here.
+ */
+export function splitTags(raw) {
+  let name = String(raw ?? '').trim();
+  const tags = [];
+  for (;;) {
+    const m = /\s*(?:\(([^()]*)\)|\[([^\][]*)\])\s*$/.exec(name);
+    if (!m) break;
+    tags.push(String(m[1] ?? m[2] ?? '').trim().toLowerCase());
+    name = name.slice(0, m.index).trim();
+  }
+  return { name, tags };
+}
+
+/**
  * Whether a level box pins its number. Blank -- null, undefined or an empty
  * string -- follows what the sheet works out; anything else, 0 included, pins.
  */

@@ -11,7 +11,7 @@ import {
 import { sheetReader } from '../document.js';
 import { classPresence } from '../progression.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
-import { closestName, normalizeName, slug } from '../util.js';
+import { closestName, normalizeName, slug, splitTags } from '../util.js';
 
 // The level and the two DCs are worked out now; what a player pins is kept
 // in the `…Override` beside each (see applyVeilweaving).
@@ -41,26 +41,6 @@ export const TRADITION_TAG = 'tradition';
 
 /** The three the book prints, for a test to name and a reader to recognise. */
 export const VEIL_TRADITIONS = ['Daevic', 'Guru', 'Vizier'];
-
-/**
- * A talent cell split into what it is called and what is bracketed after it.
- *
- * The cell is the player's own text and carries two different kinds of
- * bracket: the talent's own tag, `(tradition)`, and what they took it for,
- * `(Wrath)`. Both are peeled, innermost last, so a cell reading
- * "Daevic's Tradition (tradition) (Wrath)" gives up both and leaves the name.
- */
-function peelTags(raw) {
-  let name = String(raw ?? '').trim();
-  const tags = [];
-  for (;;) {
-    const m = /\s*(?:\(([^()]*)\)|\[([^\][]*)\])\s*$/.exec(name);
-    if (!m) break;
-    tags.push(String(m[1] ?? m[2] ?? '').trim().toLowerCase());
-    name = name.slice(0, m.index).trim();
-  }
-  return { name, tags };
-}
 
 /**
  * Which class a tradition talent opens.
@@ -99,7 +79,7 @@ export function veilTraditionClasses(model) {
   }
   const out = [];
   for (const cell of cells) {
-    const { name, tags } = peelTags(cell);
+    const { name, tags } = splitTags(cell);
     const entry = sphereTalent('Veilweaving', name);
     const tagged = [...tags, ...(entry?.tags || [])]
       .some((t) => String(t).trim().toLowerCase() === TRADITION_TAG);
