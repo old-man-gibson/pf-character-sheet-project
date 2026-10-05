@@ -685,5 +685,13 @@ console.log('\ndeck manipulations fold to their names, and the hover says the ca
   model.setCardcastingTables({ manipulations: kept });
 }
 
+console.log('\nmanipulation groups keep their columns');
+{
+  const { manipColumns } = await import('../app/js/ui/panels/subsystems.js');
+  check('four groups into three even runs, in order', manipColumns([17, 8, 4, 10], 3), [[0], [1, 2], [3]]);
+  check('fewer groups than columns: one each', manipColumns([5, 5], 3), [[0], [1]]);
+  check('none: no columns', manipColumns([], 3), []);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
