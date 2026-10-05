@@ -103,6 +103,19 @@ export function deckManipulation(name) {
 }
 
 /**
+ * The key a taken manipulation's row folds under: its name, so removing a row
+ * above does not open another. The Cardcasting tab draws the fold with it and
+ * the Formulas tab opens it to reach a formula in the row's note.
+ */
+export const manipulationFoldKey = (m, i) => `manip:${String(m?.name ?? '').trim().toLowerCase() || i}`;
+
+/** What a manipulation's `requires` are called when a row is missing one. */
+export const MANIPULATION_NEEDS = {
+  cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana',
+  singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard',
+};
+
+/**
  * The entry a taken manipulation row reads: the catalogue's, or the copy a
  * published sheet brought with it (publish.js) where no pack here knows it.
  */

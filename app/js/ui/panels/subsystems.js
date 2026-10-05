@@ -44,7 +44,7 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, deckManipulationCatalogue,
+  CARD_COLORS, CARD_MODIFICATIONS, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
@@ -2709,15 +2709,13 @@ function deckLadderPanel(p, k) {
  * so it is worked out once here rather than twice.
  */
 function manipulationGroups(p) {
+  // The four the system names, any a pack files its manipulations under --
+  // or the picker would leave that pack's out -- and any the player invented.
   return [...new Set(['General', 'Cooldown', 'Mana Pool', 'Specialized Mana Cards',
+    ...deckManipulationCatalogue().map((m) => String(m.group || 'General')),
     ...(p.manipulations || []).map((m) => String(m.group || 'General'))])];
 }
 
-/** What a manipulation's `requires` are called when a row is missing one. */
-const MANIP_NEED = {
-  cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana',
-  singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard',
-};
 
 /**
  * The totals and the picker, which head the manipulations.
@@ -2734,7 +2732,7 @@ function deckManipulationsHead(model, p, k) {
     const left = k.manipulationsLeft ?? 0;
     const catalogue = deckManipulationCatalogue();
     const featList = (k.deckFeats || []).map((f) => f.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
-    const NEED = MANIP_NEED;
+    const NEED = MANIPULATION_NEEDS;
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
         <span class="badge ${left < 0 ? 'err' : ''}">${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
@@ -2777,8 +2775,7 @@ function deckManipulationsPanel(model, p, k) {
     const list = 'cardcasting.manipulations';
     const items = (p.manipulations || []).map((m, i) => ({ m, i }));
     const groups = manipulationGroups(p);
-    const groupOptions = groups.map((g) => [g, g]);
-    const NEED = MANIP_NEED;
+    const NEED = MANIPULATION_NEEDS;
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
@@ -2791,20 +2788,25 @@ function deckManipulationsPanel(model, p, k) {
     const entry = manipulationEntry(m);
     const mc = m.calc || {};
     const tip = entry ? `${entry.name}${entry.needs || entry.requires.length ? ` (${[...entry.requires.map((r) => NEED[r]), entry.needs].filter(Boolean).join(', ')})` : ''}: ${entry.text}` : 'Not in the catalogue — a homebrew or a name it does not know';
+    // Folded to its name by default: the card's text is a hover away, and
+    // the player's note instead once they have written one. Folded by the
+    // manipulation's name, so a removal above does not open another row.
+    const foldKey = manipulationFoldKey(m, i);
+    const shut = isCollapsed(model, foldKey, true);
+    const peek = shut ? ` data-tpop="${esc(JSON.stringify({ k: 'manip', p: `${list}|${i}` }))}"` : '';
     return `<tr class="${mc.unmet?.length || mc.overMax ? 'unmet' : ''}">
             <td class="what">
-              <span class="pair"><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
-                placeholder="Manipulation" title="${esc(tip)}">
+              <span class="pair">${foldButton(model, foldKey, shut)}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
+                placeholder="Manipulation"${shut ? '' : ` title="${esc(tip)}"`}></span>
                 ${entry ? '' : '<span class="badge" title="Not in the catalogue">?</span>'}
                 ${(mc.unmet || []).map((r) => `<span class="badge err">needs ${esc(NEED[r])}</span>`).join('')}
                 ${mc.overMax ? `<span class="badge err">max ${entry.max}</span>` : ''}
               </span>
-              ${prose(model, `data-item="${list}|${i}|note"`, m.note, 1, 'grow note')}
-              ${entry ? `<p class="rule">${esc(entry.text)}</p>` : ''}
+              ${shut ? '' : `${prose(model, `data-item="${list}|${i}|note"`, m.note, 1, 'grow note')}
+              ${entry ? `<p class="rule">${esc(entry.text)}</p>` : ''}`}
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              ${itemSelect(list, i, 'group', m.group || 'General', groupOptions, null)}
               <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
             </span></td>
           </tr>`;
@@ -2812,9 +2814,36 @@ function deckManipulationsPanel(model, p, k) {
         </tbody></table></div>` : '<p class="empty">None listed.</p>'}
         <div style="margin-top:6px">${addButton(list, `Add to ${g}`, { group: g, name: '', note: '', count: 1 })}</div>
       </section>`);
-    }).join('');
-    return `<div class="span2 grid manipgrid">${panels}</div>`;
+    });
+    // Fixed columns, not the browser's balancing: opening a row grows its own
+    // column and moves no other group (manipColumns).
+    const sizes = groups.map((g) => items.filter(({ m }) => String(m.group || 'General') === g).length + 3);
+    const columns = manipColumns(sizes, 3);
+    return `<div class="span2 manipgrid" style="--manip-cols:${columns.length}">${columns
+      .map((col) => `<div class="manipcol">${col.map((i) => panels[i]).join('')}</div>`).join('')}</div>`;
   }
+
+/**
+ * The groups in at most `n` columns, in their order, as even as their folded
+ * sizes allow: every way of cutting the list into runs is tried (four groups
+ * into three runs is three ways) and the one whose runs are closest in size
+ * wins. Worked out from the folded sizes, so it does not change as rows open.
+ */
+export function manipColumns(sizes, n) {
+  const k = Math.max(1, Math.min(n, sizes.length));
+  let best = null;
+  const walk = (start, left, cuts) => {
+    if (left === 1) {
+      const runs = [...cuts, [start, sizes.length]];
+      const cost = runs.reduce((t, [a, b]) => t + sizes.slice(a, b).reduce((x, y) => x + y, 0) ** 2, 0);
+      if (!best || cost < best.cost) best = { cost, runs };
+      return;
+    }
+    for (let end = start + 1; end <= sizes.length - left + 1; end++) walk(end, left - 1, [...cuts, [start, end]]);
+  };
+  if (sizes.length) walk(0, k, []);
+  return best ? best.runs.map(([a, b]) => Array.from({ length: b - a }, (_, j) => a + j)) : [];
+}
 
   /** Land-attuned magic: which spheres each colour covers, and which are attuned. */
 function landAttunedPanel(p, k) {
