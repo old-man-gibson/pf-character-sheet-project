@@ -675,9 +675,8 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
    * somebody who wrote "Destruction Sphere (from the feat)" said something,
    * and it is not ours to replace.
    */
-  const base = isBasePickOf(row[talentField], sphereField ? row[sphereField] : null)
-    ? sphereBasePick(basePickSphere(row[talentField], sphereField ? row[sphereField] : null), row[talentField], model)
-    : null;
+  const pick = catalogueEntry(sphereField ? row[sphereField] : null, row[talentField], model);
+  const base = pick.base ? pick.entry : null;
   if (base) {
     // Only a pick the sheet's own rule already reads as one is relabelled. A
     // bare "Boxing" is recognised with the catalogue's help, and writing the
@@ -760,12 +759,26 @@ function notedTalentRows(model, sideKey) {
   return out;
 }
 
+/**
+ * What a talent cell is in the catalogue: a base pick -- the sphere itself,
+ * which is what its base abilities say -- or a talent of the sphere. `base`
+ * says which was asked, and `entry` is what the catalogue had (null when
+ * nothing). Every reader that turns a typed row into catalogue text asks
+ * here, so a base pick is told apart from a talent one way.
+ */
+export function catalogueEntry(sphere, talent, model = null) {
+  if (isBasePickOf(talent, sphere)) {
+    return { base: true, entry: sphereBasePick(basePickSphere(talent, sphere), talent, model) };
+  }
+  return { base: false, entry: sphereTalent(sphere, talent) };
+}
+
 /** What the catalogue would put in a row's note, or '' when it knows nothing. */
 function noteFromCatalogue(model, row, f) {
   const talent = row?.[f.talent];
   if (!String(talent ?? '').trim()) return '';
-  if (isBasePickOf(talent, row[f.sphere])) return sphereBasePick(basePickSphere(talent, row[f.sphere]), talent, model)?.text || '';
-  return talentNoteText(sphereTalent(row[f.sphere], talent), talent);
+  const { base, entry } = catalogueEntry(row[f.sphere], talent, model);
+  return base ? entry?.text || '' : talentNoteText(entry, talent);
 }
 
 /**
@@ -801,10 +814,11 @@ function altTrainingTalentText(model, row) {
   const typed = altTrainingLookup(model, row);
   if (!typed) return '';
   const sphere = model.data.altTraining?.calc?.talents?.sphere;
-  if (isBasePickOf(typed, sphere)) return sphereBasePick(basePickSphere(typed, sphere), typed, model)?.text || '';
+  const { base, entry } = catalogueEntry(sphere, typed, model);
+  if (base) return entry?.text || '';
   // The technique's own sphere first; a talent it may take from elsewhere is
   // still found, by the whole catalogue.
-  return talentNoteText(sphereTalent(sphere, typed) || sphereTalent(null, typed), typed);
+  return talentNoteText(entry || sphereTalent(null, typed), typed);
 }
 
 /**
@@ -920,7 +934,7 @@ export function fillTalentNotes(model, sideKey) {
     row[f.notes] = text;
     // An empty sphere is settled the same way it would have been on typing.
     if (!String(row[f.sphere] ?? '').trim()) {
-      const hit = isBasePickOf(row[f.talent]) ? sphereBasePick(basePickSphere(row[f.talent], null), row[f.talent]) : sphereTalent(null, row[f.talent]);
+      const hit = catalogueEntry(null, row[f.talent]).entry;
       if (hit?.sphere) row[f.sphere] = hit.sphere;
     }
     filled++;
