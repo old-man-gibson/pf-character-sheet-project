@@ -24,7 +24,7 @@
  */
 
 import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, abilityMod, skillTotal } from './rules.js';
-import { slug } from './model/util.js';
+import { normalizeName, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -343,8 +343,8 @@ export const bodyType = (name) => BODY_TYPES.find((b) => b.name === name) || nul
  */
 let ABILITY_TEXT = new Map();
 
-/** The key an ability is found by: its name, however it was capitalised. */
-export const abilityTextKey = (name) => String(name ?? '').trim().toLowerCase();
+/** The key an ability is found by: its name, however it was capitalised or typeset. */
+export const abilityTextKey = normalizeName;
 
 export function setCompanionAbilityText(list) {
   ABILITY_TEXT = new Map();

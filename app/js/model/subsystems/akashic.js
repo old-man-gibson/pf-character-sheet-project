@@ -11,7 +11,7 @@ import {
 import { sheetReader } from '../document.js';
 import { classPresence } from '../progression.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
-import { closestName, slug } from '../util.js';
+import { closestName, normalizeName, slug } from '../util.js';
 
 // The level and the two DCs are worked out now; what a player pins is kept
 // in the `…Override` beside each (see applyVeilweaving).
@@ -615,11 +615,11 @@ export function veilCatalogue() {
   return VEIL_CATALOGUE;
 }
 
-/** One veil by name, however it was capitalised, or null. */
+/** One veil by name, however it was capitalised or typeset, or null. */
 export function veilEntry(name) {
-  const key = String(name || '').trim().toLowerCase();
+  const key = normalizeName(name);
   if (!key) return null;
-  return VEIL_CATALOGUE.veils.find((v) => v.name.toLowerCase() === key) || null;
+  return VEIL_CATALOGUE.veils.find((v) => normalizeName(v.name) === key) || null;
 }
 
 /**

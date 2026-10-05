@@ -185,7 +185,16 @@ const isPlaceholder = (v) => v === null || v === undefined
  * knows, they simply have no maneuvers to offer.
  * ------------------------------------------------------------------ */
 
-export const normalizeName = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+/**
+ * A name as every table matches it: case, surrounding and doubled spaces, and
+ * typography do not count. An ellipsis is three dots (NFKC), curly quotes are
+ * straight ones and a typographic dash is a hyphen, so "Seraph’s Wrath" typed
+ * on a sheet finds the pack's "Seraph's Wrath" in every catalogue alike.
+ */
+export const normalizeName = (v) => String(v ?? '')
+  .normalize('NFKC')
+  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[‐-―]/g, '-')
+  .trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
  * Edit distance, abandoned once it cannot come in under `limit`.

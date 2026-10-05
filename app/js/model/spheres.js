@@ -64,7 +64,7 @@ let SPHERE_CATALOGUE = { spheres: [] };
 function dedupeTalents(talents) {
   const byName = new Map();
   for (const t of talents) {
-    const key = t.name.trim().toLowerCase();
+    const key = talentKey(t.name);
     if (!key) continue;
     const had = byName.get(key);
     if (!had) { byName.set(key, t); continue; }
@@ -185,12 +185,9 @@ export function talentsTagged(tag) {
  * the pack's "...And Stay Down" -- an ellipsis character is three dots
  * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
-const talentKey = (s) => String(s ?? '')
-  .normalize('NFKC')
-  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"')
-  .replace(/\s*(?:\([^()]*\)|\[[^\][]*\])\s*$/g, '')
-  .replace(/[!?]+$/, '')
-  .trim().toLowerCase().replace(/\s+/g, ' ');
+const talentKey = (s) => normalizeName(String(s ?? '')
+  .replace(/(?:\s*(?:\([^()]*\)|\[[^\][]*\]))+\s*$/, '')
+  .trim().replace(/[!?]+$/, ''));
 
 /**
  * What the catalogue knows about a talent somebody typed on their sheet.

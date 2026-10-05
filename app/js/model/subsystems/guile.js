@@ -368,7 +368,9 @@ function recomputeGuilePools(model, g, level) {
       if (String(row.talent || '').trim()) unnamedPlans.push(row.talent);
       continue;
     }
-    const tags = hit.tags.map((t) => String(t).toLowerCase());
+    // Either list, as talentsTagged reads them: a page may write [plan] as a
+    // source rather than a tag.
+    const tags = [...hit.tags, ...hit.sources].map((t) => String(t).trim().toLowerCase());
     if (!tags.includes('plan')) continue;
     if (tags.includes('utility')) utilityPlan += 1;
     else plan += 1;

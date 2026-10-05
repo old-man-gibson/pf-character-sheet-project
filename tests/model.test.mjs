@@ -3061,6 +3061,28 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('every catalogue matches names the same way');
+{
+  const M = await import('../app/js/model.js');
+  const spheres = sphereCatalogue();
+  setSphereCatalogue({ spheres: [{ name: 'Duelist', kind: 'combat', talents: [{ name: 'Riposte', tags: ['plan'], text: 'Strike back.' }] }] });
+  check('a talent written with two tags is still found', sphereTalent('Duelist', 'Riposte (greater) [plan]')?.name, 'Riposte');
+  check('and with doubled spaces', sphereTalent('Duelist', '  riposte ')?.name, 'Riposte');
+  setSphereCatalogue(spheres);
+
+  const veils = veilCatalogue();
+  setVeilCatalogue({ veils: [{ name: "Seraph's Wings", text: 'Wings.' }] });
+  check('a curly apostrophe finds a veil', M.veilEntry('Seraph’s  Wings')?.name, "Seraph's Wings");
+  setVeilCatalogue(veils);
+
+  const feats = featCatalogue();
+  setFeatCatalogue({ feats: [{ name: "Fighter's Grit", type: 'Combat', text: 'Grit.' }] });
+  check('and a feat', M.featEntry('Fighter’s   Grit')?.name, "Fighter's Grit");
+  setFeatCatalogue(feats);
+
+  check('and a maneuver', M.maneuverKey('Seraph’s  Wrath'), M.maneuverKey("seraph's wrath"));
+}
+
 console.log('a weapon talent missing its base says so in its hover card');
 {
   const c = new Character(blankDocument({ name: 'Armiger' }));

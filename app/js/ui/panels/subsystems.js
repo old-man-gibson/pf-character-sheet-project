@@ -1111,7 +1111,9 @@ function spellDatalist(v) {
   // counts levels from -- not the block's own name, which may be an
   // archetype's: "Wizard (Evoker)" casts from the wizard list.
   const classes = (v?.classes || [])
-    .map((c) => String(c?.slotType || c?.levelClass || c?.name || '').trim()).filter(Boolean);
+    // The table the slots came from first: it forgives a misspelt slot type,
+    // and the list should answer to the same class the slots did.
+    .map((c) => String(c?.tableName || c?.slotType || c?.levelClass || c?.name || '').trim()).filter(Boolean);
   return nameDatalist(SPELL_LIST_ID, 'spells', {
     classes, has: spellCatalogue().spells.length > 0,
   });
