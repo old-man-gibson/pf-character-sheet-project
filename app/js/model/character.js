@@ -97,6 +97,7 @@ import {
   takeDamage,
 } from './stats/defenses.js';
 import { rest } from './rest.js';
+import { addTrainingClass } from './training.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
   addWealthEntry, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
@@ -638,6 +639,7 @@ export class Character {
   #guileRanksBySkill(...a) { return guileRanksBySkill(this, ...a); }
   #recomputeGuileSpheres(...a) { return recomputeGuileSpheres(this, ...a); }
   addGuileClass(...a) { return addGuileClass(this, ...a); }
+  addTrainingClass(...a) { return addTrainingClass(this, ...a); }
   addGuileSphere(...a) { return addGuileSphere(this, ...a); }
 
   // stats/saves.js

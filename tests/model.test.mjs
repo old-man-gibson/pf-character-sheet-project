@@ -3062,6 +3062,20 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('a training class is added the same way on every side');
+{
+  const c = new Character(blankDocument({ name: 'Adder', level: 3 }));
+  c.addTrainingClass('magic');
+  c.addTrainingClass('combat', 'Armiger');
+  const magic = c.data.training.magic.classes.at(-1);
+  check('a magic class: one ladder of twenty', [magic.name, magic.levels.length, 'utilityTalent' in magic.levels[0]], ['', 20, false]);
+  check('a named martial one keeps its name', c.data.training.combat.classes.at(-1).name, 'Armiger');
+  const before = c.data.training.guile?.classes?.length ?? 0;
+  c.addTrainingClass('guile');
+  check('a guile class: two ladders', 'utilityTalent' in c.data.training.guile.classes.at(-1).levels[0], true);
+  check('one more guile class', c.data.training.guile.classes.length, before + 1);
+}
+
 console.log('a guile class shows a bonus sent to its levels, as the other sides do');
 {
   const { addGuileClass } = await import('../app/js/model/subsystems/guile.js');

@@ -6410,17 +6410,7 @@ export class CharacterSheetElement extends HTMLElement {
     }
     switch (name) {
       case 'add-training-class': {
-        const side = button?.dataset.side === 'magic' ? 'magic' : 'combat';
-        this.#model.listAdd(`training.${side}.classes`, {
-          name: '',
-          type: null,
-          talentsPerLevel: null,
-          mod1: null,
-          mod2: null,
-          levels: Array.from({ length: 20 }, (_, i) => ({
-            level: i + 1, talent: null, sphere: null, notes: null,
-          })),
-        });
+        this.#model.addTrainingClass(button?.dataset.side === 'magic' ? 'magic' : 'combat');
         this.#render();
         break;
       }
