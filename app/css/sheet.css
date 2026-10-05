@@ -2959,8 +2959,7 @@ table.gear th.colhead { white-space: nowrap; }
 .weaponcards { columns: 34rem; column-gap: 9px; }
 /* Columns rather than a grid: a grid row is as tall as its tallest card, so
    one weapon opened for editing left the collapsed ones beside it floating
-   over a row of nothing. Columns pack a short card under the last, the way
-   the deck manipulations do (`.manipgrid`). */
+   over a row of nothing. Columns pack a short card under the last. */
 .weaponcards > .weapon { break-inside: avoid; page-break-inside: avoid; margin: 0 0 9px; min-width: 0; }
 /* A collapsed card is one line: the name, the attack, the damage, the roll.
    The formula handle is an editing detail and comes back with the fields;
@@ -4318,9 +4317,20 @@ table.mythic input[type="text"], table.mythic select { width: 100%; min-width: 0
    for the rule text under each pick. */
 /* Not a grid but columns, so the groups stack: General fills one column and
    the shorter groups pile up in the next rather than each taking a row. */
-.grid.manipgrid { grid-column: 1 / -1; display: block; columns: 440px; column-gap: 12px; }
-.grid.manipgrid > .panel { break-inside: avoid; page-break-inside: avoid; margin: 0 0 12px; }
+/* Fixed columns (see manipColumns): a group stays where it is when a row in
+   another opens. One column, in the same order, on a narrow sheet. */
+.manipgrid {
+  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
+  grid-template-columns: repeat(var(--manip-cols, 1), minmax(0, 1fr));
+}
+.manipgrid > .manipcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.manipgrid .panel { margin: 0; }
+@container (max-width: 960px) { .manipgrid { grid-template-columns: minmax(0, 1fr); } }
 table.manips td { vertical-align: top; }
+/* The group and the × stay on one line: an opened row's note and text wrap
+   inside the first column rather than pushing the tools onto two. */
+table.manips td.tools { width: 1%; }
+table.manips td.tools > .pair { flex-wrap: nowrap; }
 table.manips td.what { min-width: 14rem; }
 table.manips td.what > .pair { display: flex; }
 table.manips td.what > .pair input[type="text"] { flex: 1; min-width: 8rem; }

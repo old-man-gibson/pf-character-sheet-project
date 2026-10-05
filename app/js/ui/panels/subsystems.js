@@ -2816,9 +2816,36 @@ function deckManipulationsPanel(model, p, k) {
         </tbody></table></div>` : '<p class="empty">None listed.</p>'}
         <div style="margin-top:6px">${addButton(list, `Add to ${g}`, { group: g, name: '', note: '', count: 1 })}</div>
       </section>`);
-    }).join('');
-    return `<div class="span2 grid manipgrid">${panels}</div>`;
+    });
+    // Fixed columns, not the browser's balancing: opening a row grows its own
+    // column and moves no other group (manipColumns).
+    const sizes = groups.map((g) => items.filter(({ m }) => String(m.group || 'General') === g).length + 3);
+    const columns = manipColumns(sizes, 3);
+    return `<div class="span2 manipgrid" style="--manip-cols:${columns.length}">${columns
+      .map((col) => `<div class="manipcol">${col.map((i) => panels[i]).join('')}</div>`).join('')}</div>`;
   }
+
+/**
+ * The groups in at most `n` columns, in their order, as even as their folded
+ * sizes allow: every way of cutting the list into runs is tried (four groups
+ * into three runs is three ways) and the one whose runs are closest in size
+ * wins. Worked out from the folded sizes, so it does not change as rows open.
+ */
+export function manipColumns(sizes, n) {
+  const k = Math.max(1, Math.min(n, sizes.length));
+  let best = null;
+  const walk = (start, left, cuts) => {
+    if (left === 1) {
+      const runs = [...cuts, [start, sizes.length]];
+      const cost = runs.reduce((t, [a, b]) => t + sizes.slice(a, b).reduce((x, y) => x + y, 0) ** 2, 0);
+      if (!best || cost < best.cost) best = { cost, runs };
+      return;
+    }
+    for (let end = start + 1; end <= sizes.length - left + 1; end++) walk(end, left - 1, [...cuts, [start, end]]);
+  };
+  if (sizes.length) walk(0, k, []);
+  return best ? best.runs.map(([a, b]) => Array.from({ length: b - a }, (_, j) => a + j)) : [];
+}
 
   /** Land-attuned magic: which spheres each colour covers, and which are attuned. */
 function landAttunedPanel(p, k) {
