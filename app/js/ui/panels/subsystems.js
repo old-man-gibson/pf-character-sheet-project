@@ -50,7 +50,7 @@ import {
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
   slug, manifesterForwardKey, vancianForwardKey,
 } from '../../model.js';
-import { ABILITY_LABELS_LIST, nameDatalist, noteCell } from '../html.js';
+import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -593,30 +593,6 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
     </div>`;
   }
 
-  /**
- * A block's rules text, in a box you can open.
- *
- * A pack's text is as long as its publisher wrote it, and the two places the
- * sheet shows one used to fail in opposite directions: a veil's was penned
- * into 11em with a scrollbar inside it, which for a 34,000-character veil is
- * 1.1% of it visible at a time -- a peephole, not a panel -- and a maneuver's
- * had no ceiling at all, so one long one ran its card off the screen.
- *
- * Both are this box now. Shut it is a paragraph's worth, which is the whole of
- * most of them; open it is most of a screen with its own scroll, which is a
- * thing you can read without being a card twelve screens tall. `Read all`
- * appears only where there is more, which `#markLongText` decides by measuring
- * -- a control offering to show you what you can already see is worse than no
- * control.
- */
-export function packText(ctx, key, className, html) {
-  const open = !!ctx?.openText?.has(key);
-  return `<div class="packwrap${open ? ' is-open' : ''}">
-      <div class="${className} packtext">${html}</div>
-      <button class="packmore" data-textopen="${esc(key)}"
-        aria-expanded="${open}">${open ? 'Show less' : 'Read all'}</button>
-    </div>`;
-}
 
 /** The × from #rowRemove, without the surrounding table cell. */
 export function rowRemoveButton(list, i, title) {
@@ -1178,7 +1154,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
           <td>${itemText(list, i, 'name', r.name, 'Spell', { list: SPELL_LIST_ID })}</td>
           <td>${r.name ? noteCell(
     prose(model, `data-item="${list}|${i}|note"`, r.note, 1, 'grow'),
-    spellDetails(r), model.data.uiPrefs?.collapsed || {}, `${list}|${i}`,
+    spellDetails(r), model.data.uiPrefs?.collapsed || {}, `${list}|${i}`, ctx,
   ) : ''}</td>
           <td class="num">${r.name ? itemNum(list, i, 'uses', r.uses) : ''}</td>
           <td class="spendcell">${r.name ? slotSpend({
@@ -1458,7 +1434,7 @@ export function psionicsPanel(model, ctx) {
         ${(p.classes || []).length ? '' : '<p class="empty">No manifesting classes yet.</p>'}
       </section>
 
-      ${(p.classes || []).map((c, i) => manifestingClassPanel(model, c, i)).join('')}
+      ${(p.classes || []).map((c, i) => manifestingClassPanel(model, c, i, ctx)).join('')}
 
       <section class="panel span2">
         ${addButton('psionics.classes', 'Add manifesting class', {
@@ -1479,7 +1455,7 @@ function curveOptions() {
   }
 
 
-function manifestingClassPanel(model, c, i) {
+function manifestingClassPanel(model, c, i, ctx = {}) {
     const base = `psionics.classes.${i}`;
     const list = `${base}.powers`;
     const levels = psionicTables().powerLevels || [];
@@ -1521,7 +1497,7 @@ function manifestingClassPanel(model, c, i) {
           <td>${itemSelect(list, wi, 'level', w.level, levels)}</td>
           <td>${w.name ? noteCell(
     prose(model, `data-item="${list}|${wi}|note"`, w.note, 1, 'grow'),
-    powerDetails(w), model.data.uiPrefs?.collapsed || {}, `${list}|${wi}`,
+    powerDetails(w), model.data.uiPrefs?.collapsed || {}, `${list}|${wi}`, ctx,
   ) : ''}</td>
           ${rowRemove(list, wi)}
         </tr>`).join('')}

@@ -2790,7 +2790,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- feats & mythic ---------------- */
 
   /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
-  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove }); }
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove, openText: this.#openText }); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -2887,7 +2887,7 @@ export class CharacterSheetElement extends HTMLElement {
 
   #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#systemCtx()); }
 
-  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove }); }
+  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove, openText: this.#openText }); }
 
   #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#systemCtx()); }
 

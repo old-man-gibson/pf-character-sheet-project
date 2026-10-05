@@ -82,15 +82,20 @@ export const EXPR_HINT = 'Formulas work here: write an expression (level * 100, 
  * a published sheet carries the text as `cited` for a reader with no pack,
  * and a sphere talent's Fill copies it into the note -- see fillTalentNotes.)
  */
-export function catalogueFace(details, { compact = true } = {}) {
+export function catalogueFace(details, { compact = true, ctx = null, key = '' } = {}) {
   if (!details?.known) return '';
   const fields = (details.fields || [])
     .map(([k, v]) => `<span class="catfield"><i>${esc(k)}</i> ${esc(v)}</span>`).join('');
   const text = String(details.text ?? '').trim();
-  const shown = compact && text.length > 400 ? `${text.slice(0, 400).replace(/\s+\S*$/, '')}…` : text;
+  const html = esc(text).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  // Compact, the whole text sits in the Read all box veils and maneuvers use
+  // (packText), rather than being cut at some length with no way to the rest.
+  const body = !text ? ''
+    : compact ? packText(ctx, `cat:${key}`, 'cattext', html)
+      : `<div class="cattext">${html}</div>`;
   return `<div class="catface">
     ${fields ? `<div class="catfields">${fields}</div>` : ''}
-    ${shown ? `<div class="cattext">${esc(shown).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</div>` : ''}
+    ${body}
     ${details.source ? `<div class="catsource">${esc(details.source)}</div>` : ''}
   </div>`;
 }
@@ -137,6 +142,31 @@ export function nameDatalist(id, fill, { classes = [], has = true } = {}) {
 export const catFoldKey = (path) => `catref:${path}`;
 
 /**
+ * A block's rules text, in a box you can open.
+ *
+ * A pack's text is as long as its publisher wrote it, and the two places the
+ * sheet shows one used to fail in opposite directions: a veil's was penned
+ * into 11em with a scrollbar inside it, which for a 34,000-character veil is
+ * 1.1% of it visible at a time -- a peephole, not a panel -- and a maneuver's
+ * had no ceiling at all, so one long one ran its card off the screen.
+ *
+ * Both are this box now. Shut it is a paragraph's worth, which is the whole of
+ * most of them; open it is most of a screen with its own scroll, which is a
+ * thing you can read without being a card twelve screens tall. `Read all`
+ * appears only where there is more, which `#markLongText` decides by measuring
+ * -- a control offering to show you what you can already see is worse than no
+ * control.
+ */
+export function packText(ctx, key, className, html) {
+  const open = !!ctx?.openText?.has(key);
+  return `<div class="packwrap${open ? ' is-open' : ''}">
+      <div class="${className} packtext">${html}</div>
+      <button class="packmore" data-textopen="${esc(key)}"
+        aria-expanded="${open}">${open ? 'Show less' : 'Read all'}</button>
+    </div>`;
+}
+
+/**
  * A notes cell: what the player wrote, and the pack's own words under it.
  *
  * Three shapes rather than two, and which one you get depends only on
@@ -154,8 +184,8 @@ export const catFoldKey = (path) => `catref:${path}`;
  * the book away for that row and leave it open on the next one. `path` is
  * what tells the rows apart -- see `catFoldKey`.
  */
-export function noteCell(proseHtml, details, collapsed = {}, path = '') {
-  const face = catalogueFace(details);
+export function noteCell(proseHtml, details, collapsed = {}, path = '', ctx = null) {
+  const face = catalogueFace(details, { ctx, key: path });
   if (!face) return proseHtml;
   const key = catFoldKey(path);
   const shut = !!collapsed[key];

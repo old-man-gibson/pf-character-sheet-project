@@ -53,7 +53,7 @@ function grantedFeatsSection(model, ctx) {
       <td data-stack="name">${fields.text(`grantedFeats.${key}.name`, g[key]?.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
       <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-set="grantedFeats.${key}.note"`, g[key]?.note, 1, 'grow'),
-    featDetails(g[key] || {}), foldsOf(model), `grantedFeats.${key}`,
+    featDetails(g[key] || {}), foldsOf(model), `grantedFeats.${key}`, ctx,
   )}</td>
     </tr>`;
 
@@ -72,7 +72,7 @@ function grantedFeatsSection(model, ctx) {
             <td data-stack="name">${rows.itemText('grantedFeats.others', i, 'name', f.name, 'Which feat?', { list: FEAT_LIST_ID })}</td>
             <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-item="grantedFeats.others|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), foldsOf(model), `grantedFeats.others|${i}`,
+    featDetails(f), foldsOf(model), `grantedFeats.others|${i}`, ctx,
   )}</td>
             ${rows.rowToolsDragged('grantedFeats.others', i)}
           </tr>`).join('')}
@@ -176,7 +176,7 @@ function featGroupTable(model, ctx, group, g) {
     : rows.itemText(list, i, 'detail', f.detail)}</td>
           <td class="fnote" data-label="Notes">${noteCell(
     prose.prose(model, `data-item="featGroups.${g}.entries|${i}|note"`, f.note, 1, 'grow'),
-    featDetails(f), folds, `featGroups.${g}.entries|${i}`,
+    featDetails(f), folds, `featGroups.${g}.entries|${i}`, ctx,
   )}</td>
           ${/* The arrows move a feat within its group only: taking one to
                another group stays a drag, on a desktop. The granted feats
