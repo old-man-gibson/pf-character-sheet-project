@@ -23,7 +23,7 @@
  * sums here follow the table and the rulebook -- see the notes on each.
  */
 
-import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, abilityMod, skillTotal } from './rules.js';
+import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, STANDARD_SKILLS, abilityMod, abilityOf, skillTotal } from './rules.js';
 import { isPinned, normalizeName, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
@@ -387,38 +387,17 @@ const S = (name, ability, trained = false, classSkill = false, spec = '') => ({
   name, spec, ability, trained, classSkill, ranks: 0, misc: 0,
 });
 
-/** The familiar's and eidolon's full list (the worksheet's, less the blank repeats). */
-const FULL_SKILLS = (cls) => [
-  S('Acrobatics', 'Dex', false, cls.has('Acrobatics')),
-  S('Appraise', 'Int'),
-  S('Autohypnosis', 'Wis', true),
-  S('Bluff', 'Cha', false, cls.has('Bluff')),
-  S('Climb', 'Str', false, cls.has('Climb')),
-  S('Craft', 'Int', false, cls.has('Craft')),
-  S('Diplomacy', 'Cha'),
-  S('Disable Device', 'Dex', true),
-  S('Disguise', 'Cha'),
-  S('Escape Artist', 'Dex'),
-  S('Fly', 'Dex'),
-  S('Handle Animal', 'Cha', true),
-  S('Heal', 'Wis'),
-  S('Intimidate', 'Cha'),
-  ...['arcana', 'dungeoneering', 'engineering', 'geography', 'history', 'local', 'martial',
-    'nature', 'nobility', 'planes', 'psionics', 'religion']
-    .map((k) => S(`Kn. (${k})`, 'Int', true, cls.has(`Kn. (${k})`))),
-  S('Linguistics', 'Int', true),
-  S('Perception', 'Wis', false, cls.has('Perception')),
-  S('Perform', 'Cha'),
-  S('Profession', 'Wis', true),
-  S('Ride', 'Dex'),
-  S('Sense Motive', 'Wis', false, cls.has('Sense Motive')),
-  S('Sleight of Hand', 'Dex', true),
-  S('Spellcraft', 'Int', true),
-  S('Stealth', 'Dex', false, cls.has('Stealth')),
-  S('Survival', 'Wis'),
-  S('Swim', 'Str', false, cls.has('Swim')),
-  S('Use Magic Device', 'Cha', true),
-];
+/**
+ * The familiar's and eidolon's full list: the character's skills
+ * (STANDARD_SKILLS), one row each, less Artistry and Lore, which the
+ * companion worksheets never carried.
+ */
+const COMPANION_SKILL_NAMES = [...new Set(STANDARD_SKILLS.map((s) => s.name))]
+  .filter((n) => n !== 'Artistry' && n !== 'Lore');
+const FULL_SKILLS = (cls) => COMPANION_SKILL_NAMES.map((name) => {
+  const s = STANDARD_SKILLS.find((x) => x.name === name);
+  return S(name, s.ability, s.trained, cls.has(name));
+});
 
 /** The rows each worksheet seeds, with the class skills it ticked. */
 export function seedSkills(kind) {
@@ -737,10 +716,7 @@ export const companionScopeName = (kind, block) => String(block?.id || kind);
 // The worksheet progressions stop at 20; the wiki's conjured table runs to 40.
 const clampLevel = (n, max = 20) => Math.max(0, Math.min(max, Math.floor(Number(n) || 0)));
 const levelCap = (kind) => (kind === 'conjured' ? 40 : 20);
-const abilityKey = (label) => {
-  const s = String(label || '').trim().toLowerCase().slice(0, 3);
-  return ABILITIES.includes(s) ? s : null;
-};
+const abilityKey = abilityOf;
 
 /**
  * The companion's level before the master-level penalty.

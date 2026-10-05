@@ -41,7 +41,7 @@
  */
 import { esc } from './html.js';
 import { trackerReading } from './panels/trackers.js';
-import { companionInUse } from '../companions.js';
+import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
 import { fmt, ABILITIES, ABILITY_LABELS } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 
@@ -906,8 +906,8 @@ function progression(model, add) {
 
 /** The companions, each kind on its own tab -- and a kind may keep several. */
 function companions(model, add) {
-  for (const [kind, label] of [['familiar', 'Familiar'], ['animalCompanion', 'Animal companion'],
-    ['eidolon', 'Eidolon'], ['conjured', 'Conjured companion']]) {
+  // Every kind there is, called as the tab calls it but in sentence case.
+  for (const [kind, label] of COMPANION_KINDS.map((k) => [k, COMPANION_LABELS[k][0] + COMPANION_LABELS[k].slice(1).toLowerCase()])) {
     (model.data[kind] || []).forEach((co, ci) => {
       // The roll dispatcher's spelling for which of the kind: bare for the
       // first, `eidolon:1` after -- the same string the tab's buttons carry.

@@ -8,7 +8,7 @@
 
 import {
   ABILITIES, ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL, BUILD_DERIVED_KEYS, MYTHIC_STAT_BONUS,
-  POINT_BUY_COST, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
+  POINT_BUY_COST, abilityKey, abilityMod, abpFollowers, arrayFollowers, foldPicks, pointBuyCost,
   resolveAbility,
   tierAtLevel,
 } from '../rules.js';
@@ -41,7 +41,7 @@ export function refreshAbilities(model) {
     folded.mythic = Object.fromEntries(ABILITIES.map((k) => [k, 0]));
     for (const p of model.data.mythicStatPicks || []) {
       if (Number(p.tier) > tier) continue;
-      const k = String(p.ability || '').trim().toLowerCase().slice(0, 3);
+      const k = abilityKey(p.ability);
       if (k in folded.mythic) folded.mythic[k] += MYTHIC_STAT_BONUS;
     }
     for (const key of ABILITIES) {

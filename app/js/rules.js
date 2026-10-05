@@ -194,9 +194,8 @@ export function foldPicks(picks, level) {
   const zero = () => Object.fromEntries(ABILITIES.map((k) => [k, 0]));
   const out = { abp: zero(), array: zero(), level4: zero() };
   if (!picks) return out;
-  const key = (name) => String(name || '').trim().toLowerCase().slice(0, 3);
   const bump = (bucket, name, amount) => {
-    const k = key(name);
+    const k = abilityKey(name);
     if (k in bucket) bucket[k] += amount;
   };
 
@@ -3189,6 +3188,12 @@ export function abilityKey(name) {
   return String(name || '').trim().toLowerCase().slice(0, 3);
 }
 
+/** 'Dex', 'dex' and 'Dexterity' are 'dex'; anything that names no ability is null. */
+export function abilityOf(name) {
+  const k = abilityKey(name);
+  return ABILITIES.includes(k) ? k : null;
+}
+
 /** Modifier for a stat slot, adding a second stat only when it differs. */
 export function statMod(c, stat1, stat2) {
   const one = abilityKey(stat1);
@@ -3280,11 +3285,8 @@ export const ATTACK_MODE_KEY = Object.fromEntries(
 export function attackModeAbility(c, mode) {
   const slot = c?.attack?.modes?.[mode];
   if (!slot) return '';
-  const key = (name) => {
-    const k = String(name ?? '').trim().toLowerCase();
-    return ABILITIES.includes(k) ? k : '';
-  };
-  return key(slot.stat1) || key(slot.stat2);
+  // "Str" and "Strength" alike: the slot holds whatever the select wrote.
+  return abilityOf(slot.stat1) || abilityOf(slot.stat2) || '';
 }
 
 /**
