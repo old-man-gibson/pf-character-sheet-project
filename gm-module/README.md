@@ -28,8 +28,7 @@ campaigns/
 node gm-module/screen/server.mjs 8765 --board gm-module/campaigns/<name>/state/board.json
 ```
 
-or via the `gm-screen` entry in `.claude/launch.json` (serves the sandbox
-board by default). The page is the *player view*: the server strips hidden
+Without `--board` it serves the sandbox board. The page is the *player view*: the server strips hidden
 tokens, `gmNote` fields, and the `gm` block before anything reaches the
 browser. The GM edits `board.json` directly; the page polls and re-renders.
 The player drags tokens; moves write back into the same file.
@@ -47,8 +46,8 @@ node gm-module/tools/roll.mjs --label "Fighter attack" 1d20+9 1d8+5
 node gm-module/tools/roll.mjs --secret campaigns/<name>/gm-rolls.log 1d20+12
 ```
 
-All dice come from `crypto.randomInt`. The GM procedure (`/gm-session` skill)
-requires quoting roller output verbatim and forbids fudging.
+All dice come from `crypto.randomInt`. The GM procedure (a local
+Claude Code skill, kept outside the repository) requires quoting roller output verbatim and forbids fudging.
 
 ## Spoiler discipline
 
