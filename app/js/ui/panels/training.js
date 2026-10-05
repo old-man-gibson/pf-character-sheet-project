@@ -52,12 +52,7 @@ export function guileClassBlock(model, g, cls, ci) {
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
           ${poolField(list, ci, cls, 'guile')}
           ${operativeField(model, g)}
-          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
-    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
-              <span class="hint">${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility</span>
-            </span></label>
+          ${classLevelsField(model, list, ci, cls, `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`)}
           ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems),
     !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
@@ -389,6 +384,21 @@ export function blendedSection(model, wrap, tab) {
    * found by it -- so until one is picked the other two ticks are drawn but
    * cannot be used, and say so.
    */
+/**
+ * A training class's level count: blank follows the Planner (its count is the
+ * placeholder), a number pins it; a bonus forwarded to the class's level shows
+ * in gold beside it, and `hint` says what the levels have granted.
+ */
+export function classLevelsField(model, list, ci, cls, hint) {
+  return `<label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
+            <span class="pair">
+              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
+    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
+              ${forwardedBadge(model, classForwardKey(cls.name))}
+              <span class="hint">${hint}</span>
+            </span></label>`;
+}
+
 export function blendTicks(systems, home, attr, counts = null, named = true) {
     const where = { combat: 'Martial Spheres', magic: 'Magic Spheres', guile: 'Guile Spheres' };
     const ticks = TRAINING_SYSTEMS.map((sys) => {
@@ -502,14 +512,8 @@ export function blendedPanel(model, pairs) {
           ${systems.includes('combat') ? head(martial, 'Practitioner', PRACTITIONER_TYPES) : ''}
           ${systems.includes('magic') ? head(casting, 'Casting', CASTING_TYPES) : ''}
           ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
-          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              ${autoNum(`data-item="${list}|${owner.index}|classLevelsOverride"`, cls.classLevelsOverride,
-    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
-              ${forwardedBadge(model, classForwardKey(cls.name))}
-              <span class="hint">${skill ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`
-                : `talents: ${cls.totalTalents ?? 0}`}</span>
-            </span></label>
+          ${classLevelsField(model, list, owner.index, cls, skill
+    ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility` : `talents: ${cls.totalTalents ?? 0}`)}
           ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
     ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts,
     !!String(cls.name || '').trim())}

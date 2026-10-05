@@ -22,13 +22,13 @@ import { forwardedBadge } from '../badges.js';
 import { fillNotesButton, noteField, talentCell, talentLegend, talentNote } from '../talents.js';
 import { rollButton } from '../roll.js';
 import {
-  TEMPLATE_TYPES, classForwardKey, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide,
+  TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide,
 } from '../../model.js';
 import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
-import { check, field, autoNum, roField, select, text } from '../fields.js';
-import { classNames, blendTicks, blendedSection, abilityField } from './training.js';
+import { check, field, roField, select, text } from '../fields.js';
+import { classNames, blendTicks, blendedSection, abilityField, classLevelsField } from './training.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
 const TEMPLATE_TYPE_HINTS = {
@@ -137,13 +137,7 @@ function trainingSide(model, sideKey, side) {
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
           ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
-          <label class="fld lvlpick"><span>Class levels ${cls.classLevelsOverride == null ? '(auto)' : '(override)'}</span>
-            <span class="pair">
-              ${autoNum(`data-item="${list}|${ci}|classLevelsOverride"`, cls.classLevelsOverride,
-    { placeholder: cls.classLevels ?? 0, width: '3.6rem' })}
-              ${forwardedBadge(model, classForwardKey(cls.name))}
-              <span class="hint">talents: ${cls.totalTalents ?? 0}</span>
-            </span></label>
+          ${classLevelsField(model, list, ci, cls, `talents: ${cls.totalTalents ?? 0}`)}
           ${blendTicks([sideKey], sideKey, (sys) => (sys === 'guile'
     ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`), null, !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>

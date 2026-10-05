@@ -3062,6 +3062,18 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('a guile class shows a bonus sent to its levels, as the other sides do');
+{
+  const { addGuileClass } = await import('../app/js/model/subsystems/guile.js');
+  const c = new Character(blankDocument({ name: 'Operative', level: 5 }));
+  c.listAdd('classes', { name: 'Operative', hd: 8, bab: 0.75, goodFort: false, goodRef: true, goodWill: false,
+    skillRanks: 6, archetypes: '', levelsOverride: 5, systems: [] });
+  addGuileClass(c, 'Operative');
+  c.data.formulaNotes = 'counts as higher {class.operative.level += 2}';
+  c.recompute();
+  check('its class-levels field carries the gold badge', /class="fwd"[^>]*>\+2</.test(guilePanels.renderGuilePanel(c)), true);
+}
+
 console.log('the Cardcasting table and tab read one set of rules');
 {
   const M = await import('../app/js/model.js');
