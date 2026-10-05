@@ -185,7 +185,7 @@ export function talentsTagged(tag) {
  * the pack's "...And Stay Down" -- an ellipsis character is three dots
  * (NFKC), curly quotes are straight ones, and a closing ! or ? is dropped.
  */
-const talentKey = (s) => normalizeName(String(s ?? '')
+export const talentKey = (s) => normalizeName(String(s ?? '')
   .replace(/(?:\s*(?:\([^()]*\)|\[[^\][]*\]))+\s*$/, '')
   .trim().replace(/[!?]+$/, ''));
 

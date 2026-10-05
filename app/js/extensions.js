@@ -45,6 +45,7 @@ import { storageMedium } from './pack-storage.js';
 // else here wants the model. Narrow on purpose -- akashic.js imports nothing
 // from this file, so there is no cycle to think about.
 import { veilEntry } from './model/subsystems/akashic.js';
+import { talentKey } from './model/spheres.js';
 import { markUndo } from './model/undo.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
@@ -914,6 +915,12 @@ export async function loadBundledExtensions(base, { fetcher = globalThis.fetch, 
  * A correction still works, one entry at a time: a talent or base ability of
  * the same name is the later copy's, and so is any field it fills. What a
  * later copy cannot do is take a talent away, which nothing has wanted to.
+ *
+ * "The same name" is the key the catalogue looks talents up by (`talentKey`),
+ * and a correction replaces *every* earlier copy under it. A page often lists
+ * a talent twice, in its main list and a topical section, and the catalogue
+ * keeps the longest of a sphere's copies; replacing only one left the older
+ * text there to win against the correction.
  * Used by `mergeTables` when packs load, and by the pack editor when a sphere
  * is pasted into a pack that already has it, so the two file it alike.
  */
@@ -924,17 +931,25 @@ export function mergeSphere(had, sphere) {
     if (value === null || value === undefined || value === '') continue;
     merged[key] = value;
   }
-  const byName = (a, b) => {
-    const outList = [...arr(a)];
-    const where = new Map(outList.map((e, j) => [lower(e?.name), j]));
+  const byName = (a, b, key) => {
+    const later = new Map();
     for (const e of arr(b)) {
-      const j = where.get(lower(e?.name));
-      if (j === undefined) { where.set(lower(e?.name), outList.length); outList.push(e); } else outList[j] = e;
+      const k = key(e?.name);
+      if (!later.has(k)) later.set(k, []);
+      later.get(k).push(e);
     }
+    const outList = [];
+    for (const e of arr(a)) {
+      const k = key(e?.name);
+      const copies = later.get(k);
+      if (!copies) outList.push(e);
+      else if (copies.length) { outList.push(...copies); later.set(k, []); }
+    }
+    for (const copies of later.values()) outList.push(...copies);
     return outList;
   };
-  merged.talents = byName(had?.talents, sphere?.talents);
-  merged.abilities = byName(had?.abilities, sphere?.abilities);
+  merged.talents = byName(had?.talents, sphere?.talents, talentKey);
+  merged.abilities = byName(had?.abilities, sphere?.abilities, lower);
   return merged;
 }
 
