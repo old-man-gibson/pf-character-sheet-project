@@ -24,7 +24,7 @@
  */
 
 import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, abilityMod, skillTotal } from './rules.js';
-import { normalizeName, slug } from './model/util.js';
+import { isPinned, normalizeName, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -768,7 +768,7 @@ function rawLevel(kind, b, master) {
 }
 
 /** A level typed into the override field, which wins over every source. */
-const pinnedLevel = (b) => b.levelOverride !== null && b.levelOverride !== undefined && b.levelOverride !== '';
+const pinnedLevel = (b) => isPinned(b.levelOverride);
 
 /**
  * Where the level came from, in words: the first line of the level's working

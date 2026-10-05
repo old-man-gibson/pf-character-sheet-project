@@ -108,42 +108,6 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
   };
 }
 
-/* ------------------------------------------------------------------ *
- * custom techniques: the Technique List and AutoTechnique tabs.
- *
- * A technique is a recipe of spheres, talents and "other" features; its
- * complexity, DCs and SP cost fall out of how many of each it uses. The
- * workbook keeps every technique the character knows or is designing in one
- * column each of `techRef`, with the Technique List tab reading one of them by
- * name (HLOOKUP row by row) and the AutoTechnique tab being the same layout
- * typed by hand for a new one, with a Discord application built underneath.
- *
- * All three grids are read once, here, into `techniques`: the catalogue, the
- * name the list is open on, and the AutoTechnique draft. The grids are then
- * retired, so the block and the copy it came from cannot drift apart.
- *
- * The maths below is each tab's own. They agree on complexity, talents and the
- * DCs; they differ on effective complexity (Technique List applies the
- * Technique Prowess discount, AutoTechnique applies its Instant / Versatile /
- * Signature adjustments) and each is reproduced as written -- see
- * `techniqueStats`.
- * ------------------------------------------------------------------ */
-
-/**
- * The Spheres of Power caster level: `caster.level` in a formula, and what
- * the sheet charges material-casting upkeep against, conjures a companion at
- * and rolls card dice with.
- *
- * Only Spheres casting has one. A Vancian caster level and a manifester level
- * belong to their own systems (`vancian.<class>.cl`, `manifester.<class>.level`),
- * and none of the three stands in for another -- a feature that grants that
- * kind of transparency would be the place to join them. A character with no
- * magic side has none, where this used to fall back to the character's level.
- */
-export function casterLevel(model) {
-  return Number(model.data.training?.magic?.globalCL) || 0;
-}
-
 /** The wallet today: current mana, the offering owed part by part, and what is left after it. */
 export function wealthViewOf(model, today = new Date()) {
   return wealthView(model.data.wealth, today, model.casterLevel);

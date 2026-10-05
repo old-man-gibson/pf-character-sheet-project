@@ -70,7 +70,7 @@ import {
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
-import { abilitySelect, check, field, num, autoNum, select, text } from '../fields.js';
+import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
   itemSelect, itemText, line,
@@ -952,9 +952,6 @@ function castingClassPanel(model, c, i) {
      * one spell is a different thing from one each of two.
      */
     const spends = style.slots === 'pool';
-    // Worth saying when a block has been pinned away from what the Planner counts.
-    const drift = c.casterLevelOverride !== null && c.casterLevelOverride !== undefined
-      && Number(c.casterLevelBase ?? c.casterLevel) !== Number(c.plannerLevel);
 
     return `<section class="panel vclass">
       <h3>
@@ -979,11 +976,7 @@ function castingClassPanel(model, c, i) {
         </div>
         <div class="vcast-row">
           ${field('Slot table', select(`${base}.slotType`, c.slotType, castingTableNames()), 'vtable')}
-          ${field('Caster level', autoNum(`data-set="${base}.casterLevelOverride"`, c.casterLevelOverride, {
-    placeholder: c.plannerLevel ?? 0,
-    width: '4.2rem',
-    title: `Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
-  }))}
+          ${field('Caster level', levelPin(`${base}.casterLevelOverride`, c.casterLevelOverride, c.plannerLevel, { width: '4.2rem' }))}
           ${field('Concentration', `<span class="rollpair">${
     exprField(`data-set="${base}.concentration"`,
       typeof c.concentration === 'string' || Number(c.concentration) ? c.concentration : '', {
@@ -1001,8 +994,7 @@ function castingClassPanel(model, c, i) {
       </div>
       ${c.tableName && c.tableName !== c.slotType
     ? `<p class="hint">Reading <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
-      ${drift ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'}
-        of this class.</p>` : ''}
+      ${levelPinHint(c.casterLevelOverride, c.casterLevelBase ?? c.casterLevel, c.plannerLevel)}
       ${c.levelClass && c.levelClass !== String(c.name || '').trim()
     ? `<p class="hint">Counts <strong>${esc(c.levelClass)}</strong> levels.</p>` : ''}
       <table class="build vslots"><thead><tr>
@@ -1463,7 +1455,6 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
     const base = `psionics.classes.${i}`;
     const list = `${base}.powers`;
     const levels = psionicTables().powerLevels || [];
-    const pinned = c.manifesterLevelOverride !== null && c.manifesterLevelOverride !== undefined;
 
     return `<section class="panel span2">
       <h3>
@@ -1482,15 +1473,11 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
         ${field('Ability 1', select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST))}
         ${field('Ability 2', select(`${base}.stat2`, c.stat2, ABILITY_LABELS_LIST))}
         ${field('Points at 20', select(`${base}.curveTotal`, c.curveTotal, curveOptions()))}
-        ${field('Manifester level', autoNum(`data-set="${base}.manifesterLevelOverride"`, c.manifesterLevelOverride, {
-    placeholder: c.plannerLevel ?? 0,
-    title: `Auto: ${c.plannerLevel ?? 0} level(s) of this class in the Planner. Enter a number to pin it.`,
-  }))}
+        ${field('Manifester level', levelPin(`${base}.manifesterLevelOverride`, c.manifesterLevelOverride, c.plannerLevel))}
       </div>
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
-      ${pinned && Number(c.manifesterLevelBase ?? c.manifesterLevel) !== Number(c.plannerLevel)
-    ? `<p class="hint">The Planner gives ${c.plannerLevel} level${c.plannerLevel === 1 ? '' : 's'} of this class.</p>` : ''}
+      ${levelPinHint(c.manifesterLevelOverride, c.manifesterLevelBase ?? c.manifesterLevel, c.plannerLevel)}
       ${powerDatalist(c)}
       ${(c.powers || []).length ? `<table style="margin-top:8px"><thead><tr>
         <th>Power</th><th style="width:7rem">Level</th>

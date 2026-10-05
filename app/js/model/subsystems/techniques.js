@@ -15,6 +15,27 @@ import { positionedRows } from '../templates.js';
 import { cleanText, pad } from '../util.js';
 import { markUndo, rowLabel } from '../undo.js';
 
+/* ------------------------------------------------------------------ *
+ * custom techniques: the Technique List and AutoTechnique tabs.
+ *
+ * A technique is a recipe of spheres, talents and "other" features; its
+ * complexity, DCs and SP cost fall out of how many of each it uses. The
+ * workbook keeps every technique the character knows or is designing in one
+ * column each of `techRef`, with the Technique List tab reading one of them by
+ * name (HLOOKUP row by row) and the AutoTechnique tab being the same layout
+ * typed by hand for a new one, with a Discord application built underneath.
+ *
+ * All three grids are read once, here, into `techniques`: the catalogue, the
+ * name the list is open on, and the AutoTechnique draft. The grids are then
+ * retired, so the block and the copy it came from cannot drift apart.
+ *
+ * The maths below is each tab's own. They agree on complexity, talents and the
+ * DCs; they differ on effective complexity (Technique List applies the
+ * Technique Prowess discount, AutoTechnique applies its Instant / Versatile /
+ * Signature adjustments) and each is reproduced as written -- see
+ * `techniqueStats`.
+ * ------------------------------------------------------------------ */
+
 /** How many of each slot the layout carries: five spheres, eight talent pairs, three saves, four description lines. */
 export const TECHNIQUE_SLOTS = { spheres: 5, talents: 8, saves: 3, descriptions: 4 };
 

@@ -16,7 +16,7 @@ import {
 } from '../rules.js';
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
-import { ownLevelCount, plannerHasClass } from './progression.js';
+import { classHasLevel, ownLevelCount } from './progression.js';
 import { forwarded } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
@@ -25,7 +25,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  evaluateAmount, normalizeName, packRows, packWords, slug, sphereForwardKey,
+  evaluateAmount, isPinned, normalizeName, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -1012,10 +1012,25 @@ export function ownClassLevels(model, className) {
   const name = String(className || '').trim().toLowerCase();
   const t = model.data.training || {};
   const cls = name && ['combat', 'magic', 'guile'].flatMap((k) => t[k]?.classes || [])
-    .find((x) => String(x?.name || '').trim().toLowerCase() === name && x.classLevelsOverride != null);
+    .find((x) => String(x?.name || '').trim().toLowerCase() === name && isPinned(x.classLevelsOverride));
   const level = Number(model.data.identity?.level) || 20;
   if (cls) return Math.max(0, Math.min(level, Math.floor(Number(cls.classLevelsOverride) || 0)));
   return ownLevelCount(model, className).own;
+}
+
+/**
+ * The Spheres of Power caster level: `caster.level` in a formula, and what
+ * the sheet charges material-casting upkeep against, conjures a companion at
+ * and rolls card dice with.
+ *
+ * Only Spheres casting has one. A Vancian caster level and a manifester level
+ * belong to their own systems (`vancian.<class>.cl`, `manifester.<class>.level`),
+ * and none of the three stands in for another -- a feature that grants that
+ * kind of transparency would be the place to join them. A character with no
+ * magic side has none, where this used to fall back to the character's level.
+ */
+export function casterLevel(model) {
+  return Number(model.data.training?.magic?.globalCL) || 0;
 }
 
 /**
@@ -1595,9 +1610,7 @@ export function recomputeTraining(model) {
       const step = twoLadders ? poolStepper(cls, sideKey) : null;
       let pool = null;
       for (const lv of cls.levels || []) {
-        const has = override != null
-          ? lv.level <= override
-          : plannerHasClass(model, cls.name, lv.level);
+        const has = classHasLevel(model, cls.name, lv.level, override);
         const before = Math.floor(cum);
         if (has) {
           cum += rate;
@@ -1629,7 +1642,7 @@ export function recomputeTraining(model) {
         // nor does a block added by hand before its rows are filled in; count
         // their class levels straight from the override or the Planner.
         for (let l = 1; l <= 20; l++) {
-          const has = override != null ? l <= override : plannerHasClass(model, cls.name, l);
+          const has = classHasLevel(model, cls.name, l, override);
           if (has) {
             classLevels += 1;
             if (l <= level) classLevelsCurrent += 1;

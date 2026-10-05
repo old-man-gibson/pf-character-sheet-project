@@ -111,6 +111,12 @@ export function evaluateAmount(raw, scope) {
   return { value: Number(raw) || 0, error: null };
 }
 
+/**
+ * Whether a level box pins its number. Blank -- null, undefined or an empty
+ * string -- follows what the sheet works out; anything else, 0 included, pins.
+ */
+export const isPinned = (v) => v !== null && v !== undefined && String(v).trim() !== '';
+
 /** A stored amount, kept as the formula it was typed as or read as a number. */
 export const amountOrText = (v) => (typeof v === 'string' && v.trim() !== '' && !/^-?\d+(\.\d+)?$/.test(v.trim())
   ? v : Number(v) || 0);

@@ -3079,6 +3079,19 @@ console.log('the Cardcasting table and tab read one set of rules');
   check('a tracker range holds a value either way round', [M.clampTracker({ min: 0, max: 5 }, 9), M.clampTracker({ min: 5, max: 0 }, -1), M.clampTracker({ min: 0, max: 5 }, 3)], [5, 0, 3]);
 }
 
+console.log('a level box pins the same way everywhere: blank follows, 0 pins');
+{
+  const M = await import('../app/js/model.js');
+  check('blank is not a pin, 0 is', [null, undefined, '', '  ', 0, '0', 3].map(M.isPinned), [false, false, false, false, true, true, true]);
+  const c = new Character(blankDocument({ name: 'Pinned', level: 5 }));
+  c.listAdd('classes', { name: 'Wizard', hd: 6, bab: 0.5, goodFort: false, goodRef: false, goodWill: true,
+    skillRanks: 2, archetypes: '', levelsOverride: 5, systems: [] });
+  const follow = (override) => M.levelFollowingPin(c, 'Wizard', override);
+  check('a blank pin follows the class\'s levels', [follow(null).level, follow('').level], [5, 5]);
+  check('a pin holds, capped at 20', [follow(3).level, follow(0).level, follow(25).base], [3, 0, 20]);
+  check('a class has a level by its pin when pinned', [M.classHasLevel(c, 'Wizard', 3, 2), M.classHasLevel(c, 'Wizard', 2, 2)], [false, true]);
+}
+
 console.log('every catalogue matches names the same way');
 {
   const M = await import('../app/js/model.js');

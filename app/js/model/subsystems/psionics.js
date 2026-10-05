@@ -8,7 +8,7 @@
 
 import { abilityKey, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { forwarded } from '../scope.js';
+import { levelFollowingPin } from '../progression.js';
 import { closestName, manifesterForwardKey } from '../util.js';
 
 let PSIONIC_TABLES = { powerLevels: [], curves: [], classes: [] };
@@ -224,22 +224,18 @@ export function recomputePsionics(model) {
     // Manifester level is levels of the class, counted off the Planner the way
     // the sheet's COUNTIF did, unless a block pins it.
     c.levelClass = model.blockClassName(c.name);
-    const fromProgression = model.classLevelCount(c.levelClass);
-    const pinned = c.manifesterLevelOverride;
-    const level = Math.max(0, Math.min(20,
-      pinned === null || pinned === undefined
-        ? fromProgression : Math.floor(Number(pinned) || 0)));
-    c.plannerLevel = fromProgression;
+    const counted = levelFollowingPin(model, c.levelClass, c.manifesterLevelOverride, { forwardKey: manifesterForwardKey(c) });
+    const level = counted.base;
+    c.plannerLevel = counted.planner;
     // A bonus forwarded to `manifester.<class>.level` raises the manifester
     // level and not the power points below, which are keyed to levels of the
     // class; a rule that grants those forwards to `class.<slug>.level`.
-    const key = manifesterForwardKey(c);
     c.manifesterLevelBase = level;
-    c.manifesterLevelForwarded = key ? forwarded(model, key) : 0;
+    c.manifesterLevelForwarded = counted.forwarded;
     // A class with no levels yet cannot manifest: the bonus waits for its
     // first level (`manifesterLevelWaiting`).
-    c.manifesterLevelWaiting = level ? 0 : c.manifesterLevelForwarded;
-    c.manifesterLevel = Math.max(0, level + (level ? c.manifesterLevelForwarded : 0));
+    c.manifesterLevelWaiting = counted.waiting;
+    c.manifesterLevel = counted.level;
 
     // A select writes its option as text; the curve is a number, and stays one.
     // Blank is no curve chosen, which is not the curve that reaches 0.
