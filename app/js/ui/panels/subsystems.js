@@ -2775,7 +2775,6 @@ function deckManipulationsPanel(model, p, k) {
     const list = 'cardcasting.manipulations';
     const items = (p.manipulations || []).map((m, i) => ({ m, i }));
     const groups = manipulationGroups(p);
-    const groupOptions = groups.map((g) => [g, g]);
     const NEED = MANIPULATION_NEEDS;
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
@@ -2808,7 +2807,6 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              ${itemSelect(list, i, 'group', m.group || 'General', groupOptions, null)}
               <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
             </span></td>
           </tr>`;
