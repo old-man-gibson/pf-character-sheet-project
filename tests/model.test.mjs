@@ -3092,6 +3092,21 @@ console.log('a level box pins the same way everywhere: blank follows, 0 pins');
   check('a class has a level by its pin when pinned', [M.classHasLevel(c, 'Wizard', 3, 2), M.classHasLevel(c, 'Wizard', 2, 2)], [false, true]);
 }
 
+console.log('every forward family names its keys under its own prefix');
+{
+  const M = await import('../app/js/model.js');
+  const samples = {
+    skill: { name: 'Knowledge', spec: 'arcana' }, class: 'Legendary Kineticist', speed: { type: 'Fly (average)' },
+    sphere: 'Dark', vancian: { name: 'Wizard' }, manifester: { name: 'Psion' }, tracker: 'ki',
+  };
+  check('each key builder answers under its family\'s prefix',
+    M.FORWARD_KEY_FAMILIES.filter((f) => f.keyOf).map((f) => String(f.keyOf(samples[f.prefix])).startsWith(`${f.prefix}.`)),
+    M.FORWARD_KEY_FAMILIES.filter((f) => f.keyOf).map(() => true));
+  check('early families are early, the rest are not',
+    ['class.wizard.level', 'speed.fly', 'spheres.cl', 'sphere.dark.dc', 'vancian.wizard.cl', 'manifester.psion.level', 'skill.bluff', 'tracker.ki.max', 'spheresx'].map(M.inEarlyFamily),
+    [true, true, true, true, true, true, false, false, false]);
+}
+
 console.log('every catalogue matches names the same way');
 {
   const M = await import('../app/js/model.js');

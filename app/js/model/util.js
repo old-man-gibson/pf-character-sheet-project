@@ -90,6 +90,36 @@ export function manifesterForwardKey(c) {
   return key === 'x' ? null : `manifester.${key}.level`;
 }
 
+/** The name a tracker's range is forwarded to: `tracker.<id>.max` or `.min`. */
+export const trackerForwardKey = (id, edge = 'max') => `tracker.${id}.${edge}`;
+
+/**
+ * The families of destination a bonus can be sent to by a name built from
+ * something on the sheet, each with the key builder above that names it.
+ *
+ * `early` is a family the recompute reads before the prose is (a class level
+ * feeds the training pass, a speed resolves before the prose, the sphere and
+ * casting numbers are worked out early so a formula can read them), so a
+ * bonus landing in one takes the second pass -- see `forwardsEarly`. A family
+ * added here is early or not by saying so, rather than by remembering a
+ * prefix list elsewhere. The fixed names (FORWARD_STATS, FORWARD_LATE) and
+ * the companions, whose prefixes are their ids, are listed where they live.
+ */
+export const FORWARD_KEY_FAMILIES = [
+  { prefix: 'skill', keyOf: skillForwardKey, early: false },
+  { prefix: 'class', keyOf: classForwardKey, early: true },
+  { prefix: 'speed', keyOf: speedForwardKey, early: true },
+  { prefix: 'spheres', keyOf: null, early: true },
+  { prefix: 'sphere', keyOf: sphereForwardKey, early: true },
+  { prefix: 'vancian', keyOf: vancianForwardKey, early: true },
+  { prefix: 'manifester', keyOf: manifesterForwardKey, early: true },
+  { prefix: 'tracker', keyOf: trackerForwardKey, early: false },
+];
+
+/** Whether a destination name is in a family the recompute reads before the prose. */
+export const inEarlyFamily = (name) => FORWARD_KEY_FAMILIES
+  .some((f) => f.early && String(name).startsWith(`${f.prefix}.`));
+
 /**
  * A bonus that may be a number or a formula, worked out either way.
  *

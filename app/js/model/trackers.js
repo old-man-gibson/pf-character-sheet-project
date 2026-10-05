@@ -13,7 +13,7 @@ import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
-import { slug } from './util.js';
+import { slug, trackerForwardKey } from './util.js';
 
 /**
  * Mythic Power is the one tracker every character carries -- granted at tier 1
@@ -301,8 +301,8 @@ export function recomputeTrackers(model) {
     const errs = [];
     // Forwarded first, so a bad max formula still leaves the bonus visible
     // rather than taking the whole range down with it.
-    t.forwardedMax = forwarded(model, `tracker.${t.id}.max`);
-    t.forwardedMin = forwarded(model, `tracker.${t.id}.min`);
+    t.forwardedMax = forwarded(model, trackerForwardKey(t.id, 'max'));
+    t.forwardedMin = forwarded(model, trackerForwardKey(t.id, 'min'));
     // Worked out from nothing every pass. A formula that fails comes to 0, as
     // a failed formula does everywhere else; keeping last pass's number and
     // adding the bonus to it again made the range grow on every recompute.

@@ -16,7 +16,7 @@ import { orphans } from './reconcile.js';
 import { forwarded } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
-import { closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
+import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
 
 /**
  * The key a rule group's text is stored under within a feature cell.
@@ -414,7 +414,7 @@ export function classLevelCount(model, className) {
   // dice, base saves and BAB that are built from which class ran when.
   // Nothing is conjured out of nothing -- a class with no levels stays at 0,
   // because an effective level is a multiplier on a class you have.
-  return own + (own ? forwarded(model, `class.${slug(match)}.level`) : 0);
+  return own + (own ? forwarded(model, classForwardKey(match)) : 0);
 }
 
 /**

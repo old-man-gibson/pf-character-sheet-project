@@ -25,7 +25,7 @@ import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
 import { markUndo, rowLabel } from './undo.js';
 import {
-  evaluateAmount, isPinned, normalizeName, packRows, packWords, slug, sphereForwardKey,
+  classForwardKey, evaluateAmount, isPinned, normalizeName, packRows, packWords, slug, sphereForwardKey,
 } from './util.js';
 
 /* ------------------------------------------------------------------ *
@@ -1721,7 +1721,7 @@ export function recomputeTraining(model) {
     // level arrives, as `classLevelCount` does for every other system.
     const effectiveLevels = (x) => {
       const own = x.classLevelsCurrent ?? 0;
-      const bonus = forwarded(model, `class.${slug(x.name)}.level`);
+      const bonus = forwarded(model, classForwardKey(x.name));
       x.levelWaiting = own ? 0 : bonus;
       return own + (own ? bonus : 0);
     };
