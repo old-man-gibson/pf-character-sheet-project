@@ -1312,7 +1312,14 @@ select.jumpto[hidden] { display: none; }
     grid-template-rows: auto minmax(0, 1fr);
     grid-template-areas: "rail head" "rail main";
     column-gap: 18px; align-items: start;
+    /* No padding above or below: the rail runs from the very top of the view
+       to its bottom and its grid area is the whole scroll height, so it pins
+       at once and is never pushed, and does not move as the sheet scrolls.
+       The column beside it keeps the space instead. */
+    padding-block: 0;
   }
+  :host([layout="side"]) .head { margin-top: var(--cs-wrap-pad); }
+  :host([layout="side"]) .main { padding-bottom: var(--cs-wrap-pad); }
   :host([layout="side"]) .head { grid-area: head; }
   :host([layout="side"]) .main { grid-area: main; min-width: 0; }
   /* The rail runs the whole height of the window, from the top of the sheet,
@@ -1324,11 +1331,7 @@ select.jumpto[hidden] { display: none; }
   :host([layout="side"]) .tabrail {
     grid-area: rail; align-self: start;
     display: flex; flex-direction: column;
-    /* It starts the sheet's padding below the top of the view, so it pins
-       that far down and is that much shorter: a view tall would run past its
-       bottom by the same amount. */
-    top: calc(var(--cs-sticky-top) + var(--cs-wrap-pad));
-    height: calc(var(--cs-view-height) - var(--cs-wrap-pad));
+    height: var(--cs-view-height);
     margin: 0; padding: 0 12px 0 0;
     border-bottom: 0; border-right: 1px solid var(--cs-line);
   }

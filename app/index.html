@@ -1067,7 +1067,8 @@
     }
     // The box only scrolls in the rail, so the open character is brought into
     // view once it has arrived there.
-    requestAnimationFrame(() => rosterReveal());
+    pinUnderHeader();
+    requestAnimationFrame(() => { pinUnderHeader(); rosterReveal(); });
   }
   railFits.addEventListener('change', placePicker);
   window.addEventListener('resize', () => rosterUpdate());
@@ -1076,12 +1077,15 @@
   // at the top of that pane (`--cs-sticky-top` 0) and is as tall as the pane
   // (`--cs-view-height`), which follows every change to it -- the window, the
   // roster strip wrapping to a second row, the picker moving to the rail.
-  const pinUnderHeader = () => {
+  // A function declaration, so placePicker can call it too: moving the roster
+  // between the bar and the rail changes the bar's height, and the pane's.
+  function pinUnderHeader() {
     sheet.style.setProperty('--cs-sticky-top', '0px');
     // Not before it has a height: a hidden sheet would size its rail to nothing.
     if (sheet.clientHeight) sheet.style.setProperty('--cs-view-height', `${sheet.clientHeight}px`);
-  };
+  }
   new ResizeObserver(pinUnderHeader).observe(sheet);
+  window.addEventListener('resize', pinUnderHeader);
   pinUnderHeader();
   // The roster is drawn again as well: a row's ink is picked to be read on the
   // panel it sits on, and the panel has just changed colour.
