@@ -76,6 +76,7 @@ import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
+import * as trainingPanels from '../app/js/ui/panels/training.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
@@ -2696,7 +2697,7 @@ console.log('the training class picker offers the Planner’s classes');
   const c = new Character(blankDocument({ name: 'Planned' }));
   c.set('identity.level', 3);
   c.setProgressionClass(1, 0, 'Incanter');
-  check('a class only on the Planner can be picked', combatPanels.classNames(c).includes('Incanter'), true);
+  check('a class only on the Planner can be picked', trainingPanels.classNames(c).includes('Incanter'), true);
 }
 
 console.log('a training side is in use by one rule');
@@ -9610,7 +9611,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   check('one blended class, reaching martial and skill',
     c.blendedClasses().map((p) => [p.name, p.kind, p.systems, p.twin]), [['Champion', 'sphere', ['combat', 'guile'], null]]);
   check('what went where, and the one that went nowhere',
-    guilePanels.poolCounts(champ(c), ['combat', 'guile']), { combat: 1, magic: 0, guile: 1, none: 1 });
+    trainingPanels.poolCounts(champ(c), ['combat', 'guile']), { combat: 1, magic: 0, guile: 1, none: 1 });
   const martialHtml = combatPanels.renderMartialPanel(c);
   check('the unreached pick is marked on its row and in the ticks',
     [martialHtml.includes('side-none'), martialHtml.includes('1 not counted')], [true, true]);
@@ -9728,7 +9729,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   s.set(`training.guile.classes.0.levels.${anyAt2}.sphere`, 'Infiltration');
   s.set(`training.guile.classes.0.levels.${utilAt}.utilitySphere`, 'Nature');
   check('unblended, a skill class counts only its skill spheres; the rest count nowhere',
-    [tallies(s)[2], guilePanels.poolCounts(g(), ['guile']).none], [{ Infiltration: 1 }, 2]);
+    [tallies(s)[2], trainingPanels.poolCounts(g(), ['guile']).none], [{ Infiltration: 1 }, 2]);
   check('which its block says', guilePanels.renderGuilePanel(s).includes('2 not counted'), true);
 
   s.setGuileBlend(0, 'combat', true);
@@ -9771,7 +9772,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   L.setBlendedSkill('combat', 0, true);
   const key = 'ladder:training.combat.classes:Champion';
   const r2 = (n) => Math.round(n * 100) / 100;
-  const lay = () => guilePanels.ladderLayout(L, key, champ(L), ['Boxing', 'Study', 'Nature']);
+  const lay = () => trainingPanels.ladderLayout(L, key, champ(L), ['Boxing', 'Study', 'Nature']);
   check('a pool with no [utility] rule: nothing to choose between, that ladder drawn narrow',
     [lay().toggles, lay().focus, lay().utility.shrunk, lay().any.shrunk], [false, 'any', true, false]);
   check('and no switch on its headings', combatPanels.renderMartialPanel(L).includes('data-ladderfocus'), false);
