@@ -3107,6 +3107,17 @@ console.log('every forward family names its keys under its own prefix');
     [true, true, true, true, true, true, false, false, false]);
 }
 
+console.log('dice text reads one way: a typeset minus, and names that are dice');
+{
+  const R = await import('../app/js/rules.js');
+  check('a typeset minus subtracts', [R.parseDiceExpr('2d6 − 1').flat, R.parseDiceExpr('2d6 - 1').flat], [-1, -1]);
+  const value = (n) => ({ 'fist.simple': '4d6', 'str.mod': 3 })[n] ?? (Number.isFinite(Number(n)) ? Number(n) : (() => { throw new Error(`unknown ${n}`); })());
+  check('a name whose value is dice is spliced in; others are left alone',
+    R.spliceDiceNames('2d6 + fist.simple + str.mod + nobody + d8', value), '2d6 + 4d6 + str.mod + nobody + d8');
+  check('and parseDiceExpr reads it so', R.parseDiceExpr('fist.simple + 2', value), { dice: { 6: 4 }, flat: 2, notes: [], error: null });
+  check('every weapon attack type has a mode', Object.keys(R.ATTACK_TYPE_MODE), ['Melee', 'Alt Melee', 'Ranged', 'Alt Ranged', 'CMB', 'Alt CMB']);
+}
+
 console.log('every catalogue matches names the same way');
 {
   const M = await import('../app/js/model.js');

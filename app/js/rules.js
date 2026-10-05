@@ -2289,22 +2289,12 @@ export function mergeLayout(grid) {
  */
 export function parseDiceExpr(text, evaluate) {
   const notes = [];
-  let s = String(text ?? '').replace(/\([^)]*\)/g, (m) => { notes.push(m.trim()); return ' '; });
+  let s = minusSign(text).replace(/\([^)]*\)/g, (m) => { notes.push(m.trim()); return ' '; });
   const formula = typeof evaluate === 'function' && evaluate !== Number;
   // A bare name whose value is dice text -- `[[kinetic.fist.simple crit]]` --
   // is spliced in as those dice before they are read, as the session roller
   // does. Evaluated as a number it came to nothing and said nothing.
-  if (formula) {
-    s = s.replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, (name) => {
-      if (/^d\d+$/i.test(name)) return name;
-      try {
-        const v = evaluate(name);
-        return typeof v === 'string' && DICE_TEXT.test(v) ? ` ${v.trim()} ` : name;
-      } catch {
-        return name;
-      }
-    });
-  }
+  if (formula) s = spliceDiceNames(s, evaluate, { pad: true });
   const dice = {};
   // `d6` is one die, as everywhere else on the sheet. Bounded on both sides so
   // `speed30` or `wand4` is a name and not a die.
@@ -2329,6 +2319,37 @@ export function parseDiceExpr(text, evaluate) {
   }
   return { dice, flat, notes, error };
 }
+
+/** A typeset minus (U+2212) or dash read as the minus sign it stands for in dice text. */
+export const minusSign = (text) => String(text ?? '').replace(/[\u2212\u2013]/g, '-');
+
+/**
+ * Bare names in dice text whose value is itself dice ("2d6 + kinetic.fist.simple")
+ * spliced in as those dice. A name that is a number, unknown, a function or a
+ * die (`d6`) is left for whatever reads the text next. `pad` puts a space
+ * either side, for a reader that splits on them.
+ */
+export function spliceDiceNames(text, value, { pad = false } = {}) {
+  return String(text ?? '').replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, (name) => {
+    if (/^d\d+$/i.test(name)) return name;
+    try {
+      const v = value(name);
+      if (typeof v !== 'string' || !DICE_TEXT.test(v)) return name;
+      return pad ? ` ${v.trim()} ` : v.trim();
+    } catch {
+      return name;
+    }
+  });
+}
+
+/**
+ * Which attack mode a weapon row's attack type is rolled and penalised as.
+ * The weapon rows, the condition layer and the Roll20 export all read it.
+ */
+export const ATTACK_TYPE_MODE = {
+  Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
+  'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
+};
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
 export const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;

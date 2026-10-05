@@ -43,7 +43,7 @@
  */
 import {
   ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
-  attackModeTotal, parseDiceExpr, stepDiceMap,
+  ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, stepDiceMap,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
 import { evaluateFormula } from './formula.js';
@@ -692,10 +692,7 @@ export function skillRollSpec(c, index, cs = null) {
 }
 
 /** Which condition slot a weapon's attack type is penalised through. */
-export const WEAPON_MODE_KEYS = {
-  Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
-  'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
-};
+export const WEAPON_MODE_KEYS = ATTACK_TYPE_MODE;
 /** ... and whether that slot iterates. A maneuver does not. */
 const iterates = (modeKey) => !!MODE_ROLLS[modeKey]?.iteratives;
 

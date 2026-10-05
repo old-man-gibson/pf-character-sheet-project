@@ -8,7 +8,7 @@
  */
 
 import {
-  ALT_ATTACK_OF, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL, BRAWLERS_VEST_TALENTS,
+  ALT_ATTACK_OF, ASURA_TALENTS_PER_ESSENCE, ASURA_VEIL, ATTACK_TYPE_MODE, BRAWLERS_VEST_TALENTS,
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
@@ -96,11 +96,7 @@ export function recomputeEquipment(model) {
   const handles = model.weaponHandles();
 
   const modeBase = (type) => {
-    const modes = {
-      Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
-      'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
-    };
-    const key = modes[type];
+    const key = ATTACK_TYPE_MODE[type];
     if (!key) return null;
     const m = c.attack.modes[key];
     // The same sum the Overview's own melee/ranged/CMB totals are built from,

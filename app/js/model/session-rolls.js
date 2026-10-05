@@ -1,5 +1,5 @@
 import { evaluateFormula } from '../formula.js';
-import { DICE_TEXT, diceString } from '../rules.js';
+import { DICE_TEXT, diceString, minusSign, spliceDiceNames } from '../rules.js';
 import { d20, weaponRollSpec, queryText, shiftD20 as shiftAttack } from '../roll20.js';
 import { sessionShortcuts, sessionState } from './session.js';
 import { effectiveAction } from './action-features.js';
@@ -19,7 +19,7 @@ function splitTopLevel(text) {
 
 /** "2d6 + 1d8 - 3" (already expanded) as a dice map and the flat part its formula leaves. */
 function parseDamage(expanded, number) {
-  expanded = expanded.replace(/\s+/g, '');
+  expanded = minusSign(expanded).replace(/\s+/g, '');
   const dice = {};
   const scalar = expanded.replace(/(\d*)d(\d+)/gi, (match, n, sides, offset) => {
     const before = expanded.slice(0, offset), after = expanded.slice(offset + match.length);
@@ -64,10 +64,7 @@ export function sessionRolls(model, card, answers = null) {
   // The same for a bare name in a damage expression -- "2d6 + kinetic.fist.simple"
   // -- so a dice value needs no braces there. Names that are numbers, unknown
   // or functions are left for the formula to handle.
-  const expandDice = text => expand(text).replace(/(?<![\w.])[A-Za-z_][\w.]*(?![\w.(])/g, name => {
-    try { const v = value(name); return typeof v === 'string' && DICE_TEXT.test(v) ? v.trim() : name; }
-    catch { return name; }
-  });
+  const expandDice = text => spliceDiceNames(expand(text), value);
   let rolls = (inherited?.rolls || []).map(r => ({ ...r })), errors = [];
   const attack = String(card.attackFormula ?? '').trim();
   const damage = String(card.damageFormula ?? '').trim();
