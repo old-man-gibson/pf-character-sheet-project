@@ -26,6 +26,7 @@
  */
 import { esc } from './html.js';
 import { fmt } from '../rules.js';
+import { stackingNote } from '../model/scope.js';
 
 /** How far the panel stands off the number it explains. */
 const GAP = 8;
@@ -91,15 +92,56 @@ export function breakdownHtml(b, extra = '') {
       : '<div class="bdsub">Nothing is adding to it.</div>');
 }
 
+/**
+ * A forwarded bonus as the panel shows it: what arrives, and where each share
+ * of it was written.
+ *
+ * `groups` is one `{ name, f }` a destination the badge stands for, `f` being
+ * `forwardedInto`'s answer for it (or null). One row a rule -- the place it
+ * was written as the label, what it says under it, and which destination it
+ * went to when the badge stands for more than one -- and that includes the
+ * rules that are not adding: a bonus a bigger one of its type outranks, or
+ * one its column already gives. Those are greyed and say why, because they
+ * are the reason the total is smaller than the rows above it, and a reader
+ * who cannot see them will write them in again.
+ *
+ * The rest is the badge's own. `tag` ("temp", "crit") goes in the heading;
+ * `shown` is the figure, when the badge says something other than the
+ * amount -- a defence box's line, the temporary hit points still unspent --
+ * and `waiting` and `note` are sentences about it, under the heading.
+ */
+export function forwardedPopHtml(groups, { tag = '', waiting = '', shown: figure = '', note = '' } = {}) {
+  const live = (groups || []).filter((g) => g.f?.from?.length);
+  if (!live.length) return '';
+  const many = groups.length > 1;
+  const total = live.reduce((sum, g) => sum + (Number(g.f.total) || 0), 0);
+  const rows = live.flatMap((g) => g.f.from.map((x) => {
+    const kind = [x.temporary ? 'temporary' : '', x.type || ''].filter(Boolean).join(' ');
+    const said = [many ? `to ${g.name}` : '', kind ? `${kind} bonus` : '',
+      `${x.sign < 0 ? '-=' : '+='} ${x.expr}`].filter(Boolean).join(' · ');
+    const why = stackingNote(x).trim().replace(/^\((.*)\)$/, '$1');
+    const idle = !x.counts || (x.column && x.adds <= 0);
+    return partRow(fmt(x.value), x.where, [said, why], idle ? ' idle' : '');
+  }));
+  const subs = [waiting ? `Waiting: ${waiting}` : '', note].filter(Boolean);
+  return `<div class="bdhead"><span class="bdname">Forwarded here${tag ? ` (${esc(tag)})` : ''}</span>`
+    + `<span class="bdtotal">${esc(figure || fmt(total))}</span></div>`
+    + subs.map((s) => `<div class="bdsub">${esc(s)}</div>`).join('')
+    + `<div class="bdparts">${rows.join('')}</div>`;
+}
+
 /** A part's figure: signed, because it is something added -- unless it is the number the sum starts from. */
 const shown = (p) => (p.plain ? String(p.value) : fmt(p.value));
 
 /** Which way a share moved the number, as the class that colours it. */
 const dir = (value) => (value > 0 ? ' up' : value < 0 ? ' down' : '');
 
+/** One row: the figure, its label, and a note or a list of them under the label. */
 function partRow(value, label, note, cls = '') {
+  const notes = [].concat(note || []).filter(Boolean)
+    .map((n) => `<span class="bdnote">${esc(n)}</span>`).join('');
   return `<div class="bdrow${cls}">`
-    + `<span class="k">${esc(label)}${note ? `<span class="bdnote">${esc(note)}</span>` : ''}</span>`
+    + `<span class="k">${esc(label)}${notes}</span>`
     + `<span class="v">${esc(value)}</span>`
     + '</div>';
 }

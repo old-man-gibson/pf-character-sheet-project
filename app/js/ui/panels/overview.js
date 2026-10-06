@@ -23,7 +23,7 @@ import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetB
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
 import {
-  guileTalentRows, ownTalentRows, plannerHasClass, stackingNote, trackTalentSide, trainingSideInUse,
+  guileTalentRows, ownTalentRows, plannerHasClass, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
 import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
 import { rowRemoveButton, slotSpend } from './subsystems.js';
@@ -1419,22 +1419,14 @@ function defenceBox(model, key, label, example) {
       : key === 'dr' ? calc.drText
         : key === 'resistance' ? calc.resistanceText
           : key === 'weakness' ? calc.weaknessText : calc.immunitiesText;
-    // Where each part's bonus came from, gathered across the family
-    // destination and every named part -- one line per rule.
-    const froms = [];
-    for (const name of [spec.dest, ...parts.map((p) => p.key)]) {
-      const f = name ? model.forwardedInto(name) : null;
-      if (!f) continue;
-      for (const x of f.from) {
-        froms.push(`${fmt(x.value)} to ${name} from ${x.where}`
-          + stackingNote(x));
-      }
-    }
+    // One badge for the box, gathered across the family destination and
+    // every named part, saying the line as it now stands; its panel has one
+    // row a rule, each naming the part it went to.
+    const names = [spec.dest, ...parts.map((p) => p.key)];
     return `<div class="statline">
       <span class="label" title="${esc(`For example: ${example}`)}">${esc(label)}</span>
       <span class="value">${prose(model, `data-set="defenses.${key}"`, d[key], 1, 'grow')}
-        ${moved ? `<span class="fwd" title="${esc(`With every bonus forwarded here:\n${
-      froms.join('\n')}`)}">${esc(now || '—')}</span>` : ''}</span></div>`;
+        ${moved ? forwardedBadge(model, names, { shown: now || '—' }) : ''}</span></div>`;
   }
 
 
@@ -2032,10 +2024,12 @@ function hitPointsPanel(ctx, model) {
           `<span class="value">${forwardedBadge(model, 'hp.total')}</span>`)}</div>` : ''}
       <div class="fieldgrid two">
         ${field('Temporary', `${num('hp.temp', hp.typedTemp)}${
-          hp.tempGranted ? `<span class="fwd" title="${esc(`${hp.tempGranted} temporary hit point${
-            hp.tempGranted === 1 ? '' : 's'} forwarded here${hp.tempGranted === hp.tempGrantLeft ? ''
-            : `, ${hp.tempGranted - hp.tempGrantLeft} of them already spent`}. Damage spends the box first, then these.`)}"
-            >+${hp.tempGrantLeft}</span>` : ''}`)}
+          hp.tempGranted ? forwardedBadge(model, 'hp.temp', {
+            shown: `+${hp.tempGrantLeft}`,
+            note: `${hp.tempGranted} temporary hit point${hp.tempGranted === 1 ? '' : 's'} forwarded here${
+              hp.tempGranted === hp.tempGrantLeft ? '' : `, ${hp.tempGranted - hp.tempGrantLeft} of them already spent`
+            }. Damage spends the box first, then these.`,
+          }) : ''}`)}
         ${field('Nonlethal', num('hp.nonlethal', hp.nonlethal))}
       </div>
       <div class="fieldgrid two">

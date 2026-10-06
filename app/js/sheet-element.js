@@ -2103,10 +2103,10 @@ export class CharacterSheetElement extends HTMLElement {
     const at = (e) => {
       const t = e.target;
       if (t && this.#bdPop && (t === this.#bdPop || this.#bdPop.contains(t))) return this.#bdAnchor;
-      // A sphere talent's ✦ and a folded talent note open the same panel: it
-      // wraps and scrolls, which a native tooltip holding a page of rules
-      // text does neither of.
-      return t?.closest?.('[data-bd], [data-tpop]') ?? null;
+      // A sphere talent's ✦, a folded talent note and a forwarded bonus's
+      // badge open the same panel: it wraps and scrolls, which a native
+      // tooltip holding a page of rules text does neither of.
+      return t?.closest?.('[data-bd], [data-tpop], [data-fwd]') ?? null;
     };
     root.addEventListener('pointerover', (e) => {
       if (e.pointerType !== 'mouse' || this.#bdPinned) return;
@@ -2190,11 +2190,15 @@ export class CharacterSheetElement extends HTMLElement {
   #openBreakdown(el) {
     clearTimeout(this.#bdTimer);
     if (el === this.#bdAnchor) return;
-    // What goes in it depends on what was pointed at: a number's working, or
-    // what the sphere catalogue says about a talent. Both are asked for now.
+    // What goes in it depends on what was pointed at: a number's working,
+    // what the sphere catalogue says about a talent, or the rules forwarding a
+    // bonus to where its badge sits. All are asked for now.
     const talent = el.dataset.tpop !== undefined;
-    const b = talent ? null : this.#model?.breakdown?.(el.dataset.bd);
-    const html = talent ? talentPopHtml(this.#model, el.dataset.tpop) : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
+    const fwd = el.dataset.fwd;
+    const b = talent || fwd ? null : this.#model?.breakdown?.(el.dataset.bd);
+    const html = talent ? talentPopHtml(this.#model, el.dataset.tpop)
+      : fwd ? badges.forwardedPop(this.#model, fwd, el.dataset.fwdx || '')
+        : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
     if (!html) { this.#closeBreakdown(); return; }
     const pop = this.#breakdownPanel();
     if (typeof pop.showPopover !== 'function') return;

@@ -429,8 +429,8 @@ function magicGlobalsPanel(model, m) {
     return `<section class="panel">
       <h3>Casting numbers</h3>
       <div class="statline"><span class="label">Caster level</span>
-        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', '', '',
-    m.castingUnlocked === false ? 'no casting class has a level yet' : '')}</span></div>
+        <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', {
+    waiting: m.castingUnlocked === false ? 'no casting class has a level yet' : '' })}</span></div>
       ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
       ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
         is held back until one does.</p>` : ''}
@@ -496,8 +496,8 @@ function sphereBonusPanel(model, sideKey, side) {
         error: r[`${field}Error`],
         title: `A number, or a formula — e.g. ${example}`,
       },
-    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '', '', '',
-      into === 'cl' && r.clWaiting ? 'no casting class has a level yet' : '');
+    ) + forwardedBadge(model, sphereForwardKey(r.sphere) ? `${sphereForwardKey(r.sphere)}.${into}` : '', {
+      waiting: into === 'cl' && r.clWaiting ? 'no casting class has a level yet' : '' });
     const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>

@@ -137,17 +137,17 @@ export const LEVEL4_LEVELS = [4, 8, 12, 16, 20];
  * reads.
  */
 export const BUILD_PERMANENT_GROUPS = [
-  { cols: [['pointBuy', 'Point buy'], ['race', 'Race']] },
+  { cols: [['pointBuy', 'PB', 'Point buy'], ['race', 'Race', 'Race']] },
   {
     label: 'Enhancement',
     hint: `ABP and gear are the same kind of bonus: they stack with each other, then stop at +${ENHANCEMENT_CAP}`,
-    cols: [['abp', 'ABP'], ['gear', 'Gear']],
+    cols: [['abp', 'ABP', 'Automatic Bonus Progression'], ['gear', 'Gear', 'Gear']],
     sum: 'enhancement',
     cap: ENHANCEMENT_CAP,
   },
   {
-    cols: [['attunement', 'Attuned'], ['inherent', 'Inherent'], ['array', 'Array'],
-      ['level4', 'Level/4'], ['mythic', 'Mythic'], ['size', 'Size'], ['untyped', 'Untyped']],
+    cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent'], ['array', 'Arr', 'Array'],
+      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['size', 'Size', 'Size'], ['untyped', 'Unt', 'Untyped']],
   },
 ];
 
@@ -158,13 +158,17 @@ export const BUILD_PERMANENT_GROUPS = [
  */
 export const BUILD_OPTIONAL_KEYS = ['inherent'];
 
-/** The temporary parts, which produce the Temp Score. */
+/**
+ * The temporary parts, which produce the Temp Score. Each column is
+ * `[key, short, full]`: the Stats tab heads it with the short label and says
+ * the full name on hover, as it does every column.
+ */
 export const BUILD_TEMPORARY = [
-  ['alchemical', 'Alchemical'],
-  ['circumstance', 'Circumstance'],
-  ['morale', 'Morale'],
-  ['tempEnhancement', 'Enhancement'],
-  ['tempSize', 'Size'],
+  ['alchemical', 'Alch', 'Alchemical'],
+  ['circumstance', 'Circ', 'Circumstance'],
+  ['morale', 'Mor', 'Morale'],
+  ['tempEnhancement', 'Enh', 'Enhancement'],
+  ['tempSize', 'Size', 'Size'],
 ];
 
 /** Keys the player edits directly; these columns come from pick selectors. */
@@ -225,7 +229,9 @@ export function resolveAbility(entry = {}) {
   const abp = n(entry.abp);
   const gear = n(entry.gear);
   const rawEnhancement = abp + gear;
-  const enhancement = Math.min(ENHANCEMENT_CAP, rawEnhancement);
+  // ABP and gear are one enhancement bonus, capped together as the defence
+  // pairs are (abpPairTotal).
+  const enhancement = abpPairTotal(abp, gear, ENHANCEMENT_CAP);
 
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
@@ -1050,67 +1056,94 @@ export const MYTHIC_TRADITION_SLOTS = [
  * ------------------------------------------------------------------ */
 
 /** Saves, from `Stats!C11:Q11`. */
-export const SAVE_BONUS_TYPES = [
-  ['abpResistance', 'ABP (Resist)'],
-  ['resistance', 'Resist.'],
-  ['template', 'Template'],
-  ['alchemical', 'Alch.'],
-  ['circumstance', 'Circum.'],
-  ['competence', 'Compet.'],
-  ['enhancement', 'Enhan.'],
-  ['insight', 'Insight'],
-  ['luck', 'Luck'],
-  ['trait', 'Trait'],
-  ['morale', 'Morale'],
-  ['profane', 'Profane'],
-  ['racial', 'Racial'],
-  ['sacred', 'Sacred'],
-  ['untyped', 'Untyped'],
-  ['sheet', 'Sheet'],
-];
+/**
+ * Every bonus type the sheet knows, said once: what it is called, its short
+ * label (a column header, a gear row's picker), whether it stacks with
+ * itself, and -- `ac` -- what it does not reach on the AC row. The save and
+ * AC rows, the gear picker, a gear bonus's token and the stacking rule are
+ * all read off this.
+ *
+ * `touch: false` marks the armour-side types a touch attack ignores -- what
+ * the sheet's own "AC No Nat" row leaves out -- and `flatFooted: false` marks
+ * dodge, which you lose when caught unaware. `cmd: false` marks a type whose
+ * *bonus* does not reach Combat Maneuver Defence. The rule names the ones
+ * that do, and it is a closed list: "A creature can also add any
+ * circumstance, deflection, dodge, insight, luck, morale, profane, and sacred
+ * bonuses to AC to its CMD." A *penalty* reaches CMD whatever its type: "Any
+ * penalties to a creature's AC also apply to its CMD" -- see cmdBonusTotal.
+ */
+export const BONUS_TYPES = {
+  alchemical: { name: 'Alchemical', short: 'Alch' },
+  armor: { name: 'Armor', short: 'Arm' },
+  circumstance: { name: 'Circumstance', short: 'Circ', stacks: true },
+  competence: { name: 'Competence', short: 'Comp' },
+  deflection: { name: 'Deflection', short: 'Defl' },
+  dodge: { name: 'Dodge', short: 'Ddg', stacks: true, ac: { flatFooted: false } },
+  enhancement: { name: 'Enhancement', short: 'Enh', ac: { touch: false, cmd: false } },
+  inherent: { name: 'Inherent', short: 'Inh' },
+  insight: { name: 'Insight', short: 'Ins' },
+  luck: { name: 'Luck', short: 'Luck' },
+  morale: { name: 'Morale', short: 'Mor' },
+  natural: { name: 'Natural Armor', short: 'Nat', ac: { touch: false, cmd: false } },
+  profane: { name: 'Profane', short: 'Prof' },
+  racial: { name: 'Racial', short: 'Rac' },
+  resistance: { name: 'Resistance', short: 'Res' },
+  sacred: { name: 'Sacred', short: 'Sacr' },
+  shield: { name: 'Shield', short: 'Shld' },
+  // Not the modifier for being Large -- that is already in the formula, the
+  // other way round, as the special size modifier. This is a size-typed bonus.
+  size: { name: 'Size', short: 'Size', ac: { cmd: false } },
+  trait: { name: 'Trait', short: 'Trt' },
+  untyped: { name: 'Untyped', short: 'Unt', stacks: true, ac: { cmd: false } },
+};
 
 /**
- * AC, from `Stats!C16:R16`.
- *
- * `touch: false` marks the armour-side types a touch attack ignores -- which is
- * what the sheet's own "AC No Nat" row leaves out -- and `flatFooted: false`
- * marks dodge, which you lose when caught unaware.
+ * The columns of a save or AC row that are not a bonus type of their own:
+ * Automatic Bonus Progression's half of each capped pair (ABP_DEFENCE_GROUPS),
+ * and the template's and the imported sheet's remainders.
  */
-/*
- * `cmd: false` marks a column whose *bonus* does not reach Combat Maneuver
- * Defence. The rule names the ones that do, and it is a closed list:
- * "A creature can also add any circumstance, deflection, dodge, insight, luck,
- * morale, profane, and sacred bonuses to AC to its CMD." Armour, shields,
- * natural armour and enhancement are not on it, and neither is an untyped
- * bonus -- which is why the flag is on those columns rather than a filter
- * written out somewhere else.
- *
- * A *penalty* is a different sentence and reaches CMD whatever column it is
- * in: "Any penalties to a creature's AC also apply to its CMD." So the flag
- * only ever turns off the positive half; see cmdBonusTotal.
+const ROW_COLUMNS = {
+  abpResistance: { name: 'ABP resistance', short: 'ABP' },
+  abpDeflection: { name: 'ABP deflection', short: 'ABP' },
+  abpNatural: { name: 'ABP natural armor', short: 'ABP', ac: { touch: false, cmd: false } },
+  enhancedNatural: { name: 'Enhancement to natural armor', short: 'ENat', ac: { touch: false, cmd: false } },
+  template: { name: 'Template', short: 'Tmpl', ac: { cmd: false } },
+  sheet: { name: 'Sheet', short: 'Sht', ac: { cmd: false } },
+};
+
+/** A row's columns as `[key, label, flags]`, in the order given; flags only on the AC row. */
+const bonusRow = (keys, row) => keys.map((key) => {
+  const t = BONUS_TYPES[key] || ROW_COLUMNS[key];
+  const flags = row === 'ac' ? t.ac : null;
+  return flags ? [key, t.short, flags] : [key, t.short];
+});
+
+/** What a column is called in full: the hover on its short header, a breakdown line, an audit row. */
+export const bonusColumnName = (key) => BONUS_TYPES[key]?.name || ROW_COLUMNS[key]?.name || key;
+
+/**
+ * A bonus type's key from its name as a gear row or a pack writes it --
+ * "Natural Armor" is `natural` -- or the name slugged, for one the table
+ * does not know.
  */
-export const AC_BONUS_TYPES = [
-  ['abpDeflection', 'ABP Deflect'],
-  ['deflection', 'Deflect.'],
-  ['abpNatural', 'ABP Nat', { touch: false, cmd: false }],
-  ['enhancedNatural', 'E. Nat', { touch: false, cmd: false }],
-  ['natural', 'Natural', { touch: false, cmd: false }],
-  ['enhancement', 'Enhan.', { touch: false, cmd: false }],
-  ['dodge', 'Dodge', { flatFooted: false }],
-  ['circumstance', 'Circ.'],
-  ['insight', 'Insight'],
-  ['luck', 'Luck'],
-  ['morale', 'Morale'],
-  ['sacred', 'Sacred'],
-  ['profane', 'Profane'],
-  ['untyped', 'Untyped', { cmd: false }],
-  // Not the modifier for being Large -- that is already in the formula, the
-  // other way round, as the special size modifier. This column is a
-  // size-typed bonus, and no such type is on the list above.
-  ['size', 'Size', { cmd: false }],
-  ['template', 'Template', { cmd: false }],
-  ['sheet', 'Sheet', { cmd: false }],
-];
+export function bonusTypeKey(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  const known = Object.entries(BONUS_TYPES).find(([key, t]) => key === lower || t.name.toLowerCase() === lower);
+  return known ? known[0] : lower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+export const SAVE_BONUS_TYPES = bonusRow([
+  'abpResistance', 'resistance', 'template', 'alchemical', 'circumstance', 'competence', 'enhancement',
+  'insight', 'luck', 'trait', 'morale', 'profane', 'racial', 'sacred', 'untyped', 'sheet',
+], 'save');
+
+/** AC, from `Stats!C16:R16`; what each type reaches is BONUS_TYPES' `ac`. */
+export const AC_BONUS_TYPES = bonusRow([
+  'abpDeflection', 'deflection', 'abpNatural', 'enhancedNatural', 'natural', 'enhancement', 'dodge',
+  'circumstance', 'insight', 'luck', 'morale', 'sacred', 'profane', 'untyped', 'size', 'template', 'sheet',
+], 'ac');
 
 /**
  * Automatic Bonus Progression's defence ladder, from the workbook's `dataSheet`
@@ -1155,11 +1188,57 @@ export const ABP_DEFENCE_GROUPS = [
   ['abpNatural', 'enhancedNatural'],
 ];
 
-/** One ABP-plus-typed pair, capped as above. */
-export function abpGroupTotal(abp, typed) {
+/**
+ * The bonus types that stack with themselves: untyped, dodge and
+ * circumstance. Every other type counts once, at its best. "as temp" alone
+ * is untyped (see parseType in inline.js); "as temp.dodge" is a dodge bonus.
+ * The forwarded-bonus resolver reads this, and so do the typed columns a
+ * forwarded bonus settles against (columnTypes).
+ */
+export const STACKING_TYPES = new Set(['', ...Object.keys(BONUS_TYPES).filter((k) => BONUS_TYPES[k].stacks)]);
+export const baseType = (type) => String(type || '').toLowerCase().replace(/^temp(\.|$)/, '');
+export const stacksWithItself = (type) => STACKING_TYPES.has(baseType(type));
+
+/**
+ * The columns of a save or AC row that are not a bonus type of their own:
+ * the template's and the imported sheet's remainders, and ABP's enhancement
+ * to natural armour, which is the ABP half of its pair.
+ */
+const NOT_A_BONUS_TYPE = new Set(['template', 'sheet', 'enhancedNatural']);
+
+/**
+ * A bonus row's columns by the bonus type each holds, as `{type: [columns]}`:
+ * every column that is a type and does not stack (a forwarded bonus of that
+ * type counts only for what it adds past the column), an ABP pair as both
+ * its columns. Worked out from the row's own list, so a column added there
+ * is settled against with no second list to remember.
+ */
+export function columnTypes(types) {
+  const abpOf = new Map(ABP_DEFENCE_GROUPS.map(([abp, typed]) => [typed, abp]));
+  const isAbp = new Set(ABP_DEFENCE_GROUPS.map(([abp]) => abp));
+  const out = {};
+  for (const [key] of types) {
+    if (isAbp.has(key) || NOT_A_BONUS_TYPE.has(key) || stacksWithItself(key)) continue;
+    out[key] = abpOf.has(key) ? [abpOf.get(key), key] : [key];
+  }
+  return out;
+}
+
+/**
+ * Automatic Bonus Progression's bonus and an item's of the same kind, capped
+ * together: the pair sums to at most `cap`, unless the item is past the cap
+ * on its own, in which case it simply stands. The defence pairs use
+ * ABP_DEFENCE_CAP, an ability score's enhancement ENHANCEMENT_CAP.
+ */
+export function abpPairTotal(abp, typed, cap) {
   const a = Number(abp) || 0;
   const t = Number(typed) || 0;
-  return t > ABP_DEFENCE_CAP ? t : Math.min(ABP_DEFENCE_CAP, a + t);
+  return t > cap ? t : Math.min(cap, a + t);
+}
+
+/** One ABP-plus-typed defence pair, capped as above. */
+export function abpGroupTotal(abp, typed) {
+  return abpPairTotal(abp, typed, ABP_DEFENCE_CAP);
 }
 
 /**
@@ -1252,6 +1331,17 @@ export function flatFootedCmd(c, extra = 0) {
 export function gestaltSaveBase(perLevelGood, anyGood) {
   const sixths = perLevelGood.reduce((t, good) => t + (good == null ? 0 : (good ? 3 : 2)), 0);
   return (anyGood ? 2 : 0) + Math.floor(sixths / 6);
+}
+
+/**
+ * One save's base over `level` levels of a single progression: 2 + half the
+ * levels when good, a third when poor -- the same whole-sixths count as
+ * gestaltSaveBase, of which it is the one-progression case. A conjured
+ * companion's Hit Dice and a pasted monster's read it.
+ */
+export function saveBase(level, good) {
+  const n = Math.max(0, Math.floor(Number(level) || 0));
+  return gestaltSaveBase(Array.from({ length: n }, () => !!good), !!good && n >= 1);
 }
 
 /* ----- feature-column level rules ----- */
@@ -1840,9 +1930,11 @@ export function skillTotal({ ranks = 0, classSkill = false, abilityMod: am = 0, 
  * penalties, exactly as the workbook's named ranges did.
  * ------------------------------------------------------------------ */
 
-export const GEAR_BONUS_TYPES = ['Enhancement', 'Armor', 'Shield', 'Deflection',
-  'Natural Armor', 'Dodge', 'Resistance', 'Competence', 'Insight', 'Luck', 'Morale',
-  'Sacred', 'Profane', 'Alchemical', 'Circumstance', 'Size', 'Inherent', 'Untyped'];
+/** The types a gear row's bonus can be, in the picker's order, by name (BONUS_TYPES). */
+const GEAR_TYPE_KEYS = ['enhancement', 'armor', 'shield', 'deflection', 'natural', 'dodge', 'resistance',
+  'competence', 'insight', 'luck', 'morale', 'sacred', 'profane', 'alchemical', 'circumstance', 'size',
+  'inherent', 'untyped'];
+export const GEAR_BONUS_TYPES = GEAR_TYPE_KEYS.map((k) => BONUS_TYPES[k].name);
 
 /**
  * The same types as a gear row prints them: a column of "Enhancement" is
@@ -1850,12 +1942,7 @@ export const GEAR_BONUS_TYPES = ['Enhancement', 'Armor', 'Shield', 'Deflection',
  * short form and says the whole word on hover. The stored value is still the
  * full name -- these are labels, not a second vocabulary.
  */
-export const GEAR_BONUS_TYPE_SHORT = {
-  Enhancement: 'Enh.', Armor: 'Armor', Shield: 'Shield', Deflection: 'Defl.',
-  'Natural Armor': 'Nat.', Dodge: 'Dodge', Resistance: 'Resist.', Competence: 'Comp.',
-  Insight: 'Insight', Luck: 'Luck', Morale: 'Morale', Sacred: 'Sacred', Profane: 'Profane',
-  Alchemical: 'Alch.', Circumstance: 'Circ.', Size: 'Size', Inherent: 'Inher.', Untyped: 'Untyped',
-};
+export const GEAR_BONUS_TYPE_SHORT = Object.fromEntries(GEAR_TYPE_KEYS.map((k) => [BONUS_TYPES[k].name, BONUS_TYPES[k].short]));
 
 /**
  * A gear bonus as the forwarded-bonus token it amounts to, or null when it
@@ -1880,9 +1967,10 @@ export function gearBonusToken(bonus) {
   const raw = bonus.value;
   const expr = raw === null || raw === undefined ? '' : String(raw).trim();
   if (!target || !expr || /[{}]/.test(expr) || /[{}]/.test(target)) return null;
-  const type = String(bonus.type ?? '').trim();
-  const key = type && type !== 'Untyped'
-    ? type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') : '';
+  // The type's own key ("Natural Armor" is natural), so a gear bonus meets a
+  // prose bonus and a column of the same type as that type.
+  const typeKey = bonusTypeKey(bonus.type);
+  const key = typeKey === 'untyped' ? '' : typeKey;
   return `{${target} += ${expr}${key ? ` as ${key}` : ''}}`;
 }
 
@@ -2782,6 +2870,42 @@ export function conditionCount(info, value) {
  * to grey out. Speed takes the harshest multiplier rather than a product --
  * entangled and exhausted together is half speed, not a quarter.
  */
+/**
+ * Which channels of the condition totals reach each number. A key's move is
+ * the sum of its channels, what reaches it through the abilities it is built
+ * on (abilityMoves), and -- for the two CMDs -- every AC penalty (see
+ * acPenaltyToCmd). conditionState sums by this, and the breakdown names each
+ * source's share by it, so the two cannot disagree about what reaches what.
+ */
+export const CONDITION_CHANNELS = {
+  melee: ['attack', 'melee'], altMelee: ['attack', 'melee'],
+  ranged: ['attack', 'ranged'], altRanged: ['attack', 'ranged'],
+  cmb: ['attack', 'cmb'], altCmb: ['attack', 'cmb'],
+  ac: ['ac'], touch: ['ac'], flatFooted: ['ac'],
+  cmd: ['cmd'], ffCmd: ['cmd'],
+  fortitude: ['saves', 'fortitude'], reflex: ['saves', 'reflex'], will: ['saves', 'will'],
+  initiative: ['initiative'],
+  skills: ['skills'], abilityChecks: ['abilityChecks'], damage: ['damage'], hp: ['hp'],
+  // Display-level channels: shown where DCs and the essence pool are read.
+  dc: ['dc'], essence: ['essence'],
+};
+
+/** The numbers every AC penalty reaches as well: "any penalties to a creature's AC also apply to its CMD". */
+export const AC_PENALTY_KEYS = new Set(['cmd', 'ffCmd']);
+
+/**
+ * What one condition or buff's AC penalty does to CMD, per count: its AC
+ * penalty, unless it says what it does to CMD itself -- one that does has
+ * already said, and adding its AC penalty too would count one rule twice
+ * (the size rows are the case that matters, where the AC change is the size
+ * modifier and CMD carries it the other way round).
+ */
+export function acPenaltyToCmd(info) {
+  if (info?.mods?.cmd !== undefined) return 0;
+  const ac = Number(info?.mods?.ac) || 0;
+  return ac < 0 ? ac : 0;
+}
+
 export function conditionTotals(active) {
   const worst = new Map();
   for (const { info } of active) {
@@ -2808,23 +2932,17 @@ export function conditionTotals(active) {
   let speed = 1;
   let acVsMelee = 0;
   let acVsRanged = 0;
-  // What the AC penalties among these come to, kept apart from the net `ac`.
-  // "Any penalties to a creature's AC also apply to its CMD" -- so blinded's
-  // −2 is −2 CMD as well, and a buff that happens to be raising AC at the
-  // same time must not cancel it out. Only entries that say nothing about
-  // CMD themselves: one that does has already said what it does, and adding
-  // its AC penalty on top would be counting the same rule twice (the size
-  // rows are the case that matters, where the AC change *is* the size
-  // modifier and CMD carries it the other way round).
+  // What the AC penalties among these come to, kept apart from the net `ac`:
+  // blinded's −2 is −2 CMD as well, and a buff that happens to be raising AC
+  // at the same time must not cancel it out (see acPenaltyToCmd).
   let acPenalty = 0;
 
   for (const { info, count } of counted) {
     const n = Math.max(1, count);
-    const statesCmd = info.mods?.cmd !== undefined;
     for (const [key, value] of Object.entries(info.mods || {})) {
       mods[key] = (mods[key] || 0) + value * n;
-      if (key === 'ac' && value < 0 && !statesCmd) acPenalty += value * n;
     }
+    acPenalty += acPenaltyToCmd(info) * n;
     for (const [key, value] of Object.entries(info.ability || {})) {
       ability[key] = (ability[key] || 0) + value * n;
     }
@@ -2852,6 +2970,148 @@ export function conditionTotals(active) {
  * sheet added (gear, ABP, traits), so the imported value matches the source
  * sheet exactly while still responding correctly to edits.
  */
+/* -------------------------------------------------------------- *
+ * Stat recipes
+ *
+ * What initiative, the saves, the armour classes, CMD and the attacks are
+ * made of, line by line. Each DERIVED entry below is the sum of its recipe,
+ * and the breakdown shown beside the number (model/breakdown.js) lists the
+ * same lines with the reconciliation offset and any forwarded bonus after
+ * them -- so the number and the account of it cannot drift apart.
+ *
+ * A line is { label, value, note, key }; `plain` marks the number a sum
+ * starts from (Base 10, a save's base) rather than a bonus laid on it, and
+ * `key` names what the line stands for -- a bonus column's own key, or
+ * 'base', 'ability', 'sizeMod', 'miscAC', 'armor', 'shield' -- for a reader that
+ * lays the same lines out its own way (the Stat Block's AC line).
+ * -------------------------------------------------------------- */
+
+export const recipePart = (label, value, note = '', key = undefined) => ({
+  label, value: Number(value) || 0, note, ...(key ? { key } : null),
+});
+export const recipePlain = (label, value, note = '', key = 'base') => ({
+  label, value: Number(value) || 0, note, plain: true, key,
+});
+export const sumParts = (parts) => parts.reduce((t, p) => t + p.value, 0);
+
+/**
+ * The typed bonus columns of a save or the AC, one line each, as bonusTotal
+ * sums them. An ABP pair is one line -- the progression's bonus and the typed
+ * one of the same kind are capped together, and two lines adding to more than
+ * the total would be a worse answer than one that says so. `filter` drops the
+ * columns a flag excludes (touch, flatFooted, cmd).
+ */
+export function bonusParts(resolved, types, filter = null) {
+  const keys = new Set(types.map(([key]) => key));
+  const pairs = new Map(ABP_DEFENCE_GROUPS.filter(([abp, typed]) => keys.has(abp) && keys.has(typed)));
+  const paired = new Set(pairs.values());
+  const out = [];
+  for (const [key, label, flags] of types) {
+    if (filter && flags && flags[filter] === false) continue;
+    if (paired.has(key)) continue;                      // shown with its ABP partner
+    const typed = pairs.get(key);
+    const value = typed
+      ? abpGroupTotal(resolved?.[key], resolved?.[typed])
+      : Number(resolved?.[key]) || 0;
+    if (!value) continue;
+    const other = typed ? Number(resolved?.[typed]) || 0 : 0;
+    const name = bonusColumnName(key);
+    out.push(recipePart(typed && other ? `${name} + typed` : name, value,
+      typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : '', key));
+  }
+  return out;
+}
+
+/** The ability slot a defence or an attack reads, as one line, under any cap the armour sets. */
+export function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability' } = {}) {
+  const raw = statMod(c, stat1, stat2);
+  const value = Math.min(cap, raw);
+  const names = [stat1, stat2].filter(Boolean).join(' + ') || label;
+  return recipePart(names, value, value === raw ? '' : `${raw} before the armour’s maximum Dexterity of ${cap}`, 'ability');
+}
+
+/** Initiative: the ability the row names -- Dex unless something says otherwise -- and the flat bonus. */
+export function initiativeParts(c) {
+  return [
+    abilityPart(c, c.hp.initAbility || 'Dex', c.hp.initAbility2),
+    recipePart('misc', Number(c.hp.initMisc) || 0),
+  ];
+}
+
+/** A save: its base off the Classes table, its ability, and its typed bonus columns. */
+export function saveParts(c, key) {
+  const sv = c.saves?.[key] || {};
+  return [
+    recipePlain('Base', sv.base, 'from the Classes table'),
+    abilityPart(c, sv.stat1, sv.stat2),
+    ...bonusParts(sv.bonusesResolved, SAVE_BONUS_TYPES),
+  ];
+}
+
+/**
+ * An armour class: `which` is 'ac', 'touch' or 'flatFooted'. Touch drops the
+ * armour-side lines and the columns touch attacks ignore; flat-footed drops
+ * the ability (uncanny dodge keeps it) and the columns lost while flat-footed.
+ */
+export function acParts(c, which = 'ac') {
+  const d = c.defenses;
+  const worn = armorParts(c);
+  const filter = which === 'ac' ? null : which;
+  const parts = [recipePlain('Base', 10)];
+  if (which !== 'flatFooted') {
+    parts.push(abilityPart(c, d.acStat1, d.acStat2, { cap: worn.maxDex }));
+  } else if (d.uncannyDodge) {
+    parts.push({ ...abilityPart(c, d.acStat1, d.acStat2, { cap: worn.maxDex }), note: 'uncanny dodge keeps it while flat-footed' });
+  }
+  parts.push(recipePart('size', sizeMod(c), '', 'sizeMod'));
+  if (which !== 'touch') {
+    parts.push(recipePart('misc AC', d.miscAC, '', 'miscAC'));
+    parts.push(recipePart('armour', worn.armor, '', 'armor'));
+    parts.push(recipePart('shield', worn.shield, '', 'shield'));
+  }
+  parts.push(...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, filter));
+  return parts;
+}
+
+/**
+ * CMD: 10 + BAB + Str + Dex + the special size modifier (the AC one, the
+ * other way round), the AC bonuses CMD is allowed, and every AC penalty
+ * there is, whatever column it was typed in -- "any penalties to a
+ * creature's AC also apply to its CMD" (see cmdBonusTotal).
+ */
+export function cmdParts(c) {
+  const d = c.defenses;
+  return [
+    recipePlain('Base', 10),
+    recipePart('BAB', c.attack.bab),
+    recipePart('Str', c.abilities.str.totalMod),
+    recipePart('Dex', c.abilities.dex.totalMod),
+    recipePart('special size', sizeModifiers(c.identity.size).special),
+    recipePart('misc CMD', d.miscCMD),
+    ...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, 'cmd'),
+    ...AC_BONUS_TYPES.filter(([, , flags]) => flags?.cmd === false).map(([key, label]) => recipePart(
+      `${label} penalty`, Math.min(0, Number(d.acBonusesResolved?.[key]) || 0),
+      'a penalty to AC applies to CMD whatever type it is',
+    )),
+    recipePart('misc AC penalty', Math.min(0, Number(d.miscAC) || 0),
+      'a penalty to AC applies to CMD whatever column it was typed in'),
+  ];
+}
+
+/**
+ * An attack: BAB, the mode's ability, size (melee and ranged take it as AC
+ * does, CMB the special size modifier -- see sizeAttackMod), and the flat bonus.
+ */
+export function attackParts(c, mode) {
+  const m = c.attack.modes?.[mode] || {};
+  return [
+    recipePart('BAB', c.attack.bab),
+    abilityPart(c, m.stat1, m.stat2),
+    recipePart(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode)),
+    recipePart('misc', c.attack.miscBonus),
+  ];
+}
+
 export const DERIVED = [
   {
     key: 'initiative',
@@ -2862,83 +3122,57 @@ export const DERIVED = [
     // workbook's own column for it -- plus a second one where a rule adds
     // it, plus the player's own flat bonus. Everything the workbook summed
     // that this cannot see stays in the offset, as it always did.
-    compute: (c) => statMod(c, c.hp.initAbility || 'Dex', c.hp.initAbility2)
-      + (Number(c.hp.initMisc) || 0),
+    parts: initiativeParts,
   },
   {
     key: 'saves.fortitude.total',
     label: 'Fortitude',
     deps: ['con.mod', 'saves.fortitude.base'],
     reconcile: true,
-    compute: (c) => c.saves.fortitude.base + statMod(c, c.saves.fortitude.stat1, c.saves.fortitude.stat2)
-      + bonusTotal(c.saves.fortitude.bonusesResolved, SAVE_BONUS_TYPES),
+    parts: (c) => saveParts(c, 'fortitude'),
   },
   {
     key: 'saves.reflex.total',
     label: 'Reflex',
     deps: ['dex.mod', 'saves.reflex.base'],
     reconcile: true,
-    compute: (c) => c.saves.reflex.base + statMod(c, c.saves.reflex.stat1, c.saves.reflex.stat2)
-      + bonusTotal(c.saves.reflex.bonusesResolved, SAVE_BONUS_TYPES),
+    parts: (c) => saveParts(c, 'reflex'),
   },
   {
     key: 'saves.will.total',
     label: 'Will',
     deps: ['wis.mod', 'saves.will.base'],
     reconcile: true,
-    compute: (c) => c.saves.will.base + statMod(c, c.saves.will.stat1, c.saves.will.stat2)
-      + bonusTotal(c.saves.will.bonusesResolved, SAVE_BONUS_TYPES),
+    parts: (c) => saveParts(c, 'will'),
   },
   {
     key: 'defenses.ac',
     label: 'AC',
     deps: ['dex.mod', 'equipment.armor'],
     reconcile: true,
-    compute: (c) => {
-      const a = armorParts(c);
-      return 10 + Math.min(a.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2))
-        + sizeMod(c) + c.defenses.miscAC + a.ac
-        + bonusTotal(c.defenses.acBonusesResolved, AC_BONUS_TYPES);
-    },
+    parts: (c) => acParts(c, 'ac'),
   },
   {
     key: 'defenses.touch',
     label: 'Touch AC',
     deps: ['dex.mod'],
     reconcile: true,
-    compute: (c) => {
-      const a = armorParts(c);
-      return 10 + Math.min(a.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2))
-        + sizeMod(c)
-        + bonusTotal(c.defenses.acBonusesResolved, AC_BONUS_TYPES, 'touch');
-    },
+    parts: (c) => acParts(c, 'touch'),
   },
   {
     key: 'defenses.flatFooted',
     label: 'Flat-Footed AC',
     deps: ['equipment.armor'],
     reconcile: true,
-    compute: (c) => {
-      const a = armorParts(c);
-      return 10 + sizeMod(c) + c.defenses.miscAC + a.ac
-        + bonusTotal(c.defenses.acBonusesResolved, AC_BONUS_TYPES, 'flatFooted')
-        + (c.defenses.uncannyDodge
-          ? Math.min(a.maxDex, statMod(c, c.defenses.acStat1, c.defenses.acStat2)) : 0);
-    },
+    parts: (c) => acParts(c, 'flatFooted'),
   },
   {
     key: 'defenses.cmd',
     label: 'CMD',
     deps: ['str.mod', 'dex.mod', 'attack.bab'],
     reconcile: true,
-    // 10 + BAB + Str + Dex + the special size modifier (the AC one, the other
-    // way round), plus the AC bonuses CMD is allowed and every AC penalty
-    // there is -- see cmdBonusTotal. Misc AC is armour-side, so only a
-    // penalty typed there carries over.
-    compute: (c) => 10 + c.attack.bab + c.abilities.str.totalMod + c.abilities.dex.totalMod
-      - sizeMod(c) + c.defenses.miscCMD
-      + cmdBonusTotal(c.defenses.acBonusesResolved)
-      + Math.min(0, Number(c.defenses.miscAC) || 0),
+    // Misc AC is armour-side, so only a penalty typed there carries over.
+    parts: cmdParts,
   },
   // Melee and ranged take the size modifier as AC does (a Large creature is
   // -1 to hit); CMB takes the special size modifier, which is the same number
@@ -2948,23 +3182,26 @@ export const DERIVED = [
     label: 'Melee Attack',
     deps: ['attack.bab', 'str.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'melee') + sizeAttackMod(c, 'melee') + c.attack.miscBonus,
+    parts: (c) => attackParts(c, 'melee'),
   },
   {
     key: 'attack.totalRanged',
     label: 'Ranged Attack',
     deps: ['attack.bab', 'dex.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'ranged') + sizeAttackMod(c, 'ranged') + c.attack.miscBonus,
+    parts: (c) => attackParts(c, 'ranged'),
   },
   {
     key: 'attack.totalCmb',
     label: 'CMB',
     deps: ['attack.bab', 'str.mod'],
     reconcile: true,
-    compute: (c) => c.attack.bab + modeMod(c, 'cmb') + sizeAttackMod(c, 'cmb') + c.attack.miscBonus,
+    parts: (c) => attackParts(c, 'cmb'),
   },
 ];
+
+// Every entry's number is the sum of its recipe.
+for (const d of DERIVED) d.compute = (c) => sumParts(d.parts(c));
 
 /* -------------------------------------------------------------- *
  * Forwarded bonuses
@@ -3233,8 +3470,19 @@ export function statScore(c, stat1, stat2) {
   return scores.length ? Math.max(...scores) : 0;
 }
 
+/**
+ * What a size does to the numbers built on it: the size modifier, which AC
+ * and attack rolls take as it is (Large −1, Small +1), and the special size
+ * modifier, which CMB and CMD take the other way round. Every reader of a
+ * size goes through this, so none picks the sign for itself.
+ */
+export function sizeModifiers(size) {
+  const m = SIZE_MODIFIERS[size] ?? 0;
+  return { ac: m, attack: m, special: -m };
+}
+
 export function sizeMod(c) {
-  return SIZE_MODIFIERS[c.identity.size] ?? 0;
+  return sizeModifiers(c.identity.size).ac;
 }
 
 /**
@@ -3245,12 +3493,8 @@ export function sizeMod(c) {
  * character 2 above an enlarged Medium one.
  */
 export function sizeAttackMod(c, mode) {
-  return /cmb/i.test(String(mode)) ? -sizeMod(c) : sizeMod(c);
-}
-
-function modeMod(c, mode) {
-  const m = c.attack.modes[mode];
-  return m ? statMod(c, m.stat1, m.stat2) : 0;
+  const s = sizeModifiers(c.identity.size);
+  return /cmb/i.test(String(mode)) ? s.special : s.attack;
 }
 
 /** The six attack slots the sheet keeps, and what to call each one. */

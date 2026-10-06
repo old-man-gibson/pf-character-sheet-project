@@ -281,8 +281,8 @@ export function weaponsPanel(model, e) {
             title="Ability multiplier — usually 1, 1.5 or 2, but anything goes">`)}
           ${field('Misc dmg', itemExpr('equipment.weapons', i, 'miscDamage', w, { width: '4.5rem' })
             + forwardedBadge(model, `weapon.${i}.damage`)
-            + forwardedBadge(model, `weapon.${i}.damage.mult`, 'mult')
-            + forwardedBadge(model, `weapon.${i}.damage.crit`, 'crit'))}
+            + forwardedBadge(model, `weapon.${i}.damage.mult`, { tag: 'mult' })
+            + forwardedBadge(model, `weapon.${i}.damage.crit`, { tag: 'crit' }))}
           <span class="wsep"></span>
           ${field('Crit', itemNum('equipment.weapons', i, 'critRange', w.critRange))}
           ${field('Mult', itemSelect('equipment.weapons', i, 'critMult', w.critMult, WEAPON_CRIT_MULTS))}

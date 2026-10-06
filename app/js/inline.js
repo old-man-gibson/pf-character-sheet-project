@@ -40,6 +40,7 @@ import {
   parse, evaluateFormula, collectReferences, resolvePath, FormulaError,
 } from './formula.js';
 import { formatNumber } from './formula-format.js';
+import { STACKING_TYPES, baseType, stacksWithItself } from './rules.js';
 
 const TOKEN_RE = /\{([^{}]*)\}/g;
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -712,14 +713,9 @@ export function resolveContributions(contributions, names, baseScope, targets) {
   return { totals, entries, errors, by, countedAt, overlapAt, targets: targets || null };
 }
 
-/**
- * The bonus types that stack with themselves: untyped, dodge and
- * circumstance. Every other type counts once, at its best. "as temp" alone
- * is untyped (see parseType); "as temp.dodge" is a dodge bonus.
- */
-export const STACKING_TYPES = new Set(['', 'untyped', 'dodge', 'circumstance']);
-export const baseType = (type) => String(type || '').toLowerCase().replace(/^temp(\.|$)/, '');
-export const stacksWithItself = (type) => STACKING_TYPES.has(baseType(type));
+// Which bonus types stack is a rule about bonuses, kept with the bonus
+// columns in rules.js; re-exported for the readers that import it from here.
+export { STACKING_TYPES, baseType, stacksWithItself };
 
 /**
  * Evaluate the tokens in one text, given the resolved names and base scope.

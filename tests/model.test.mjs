@@ -73,7 +73,7 @@ import { positionedRows } from '../app/js/model/templates.js';
 import { blankGuileClass, guileTally } from '../app/js/model/subsystems/guile.js';
 import { veilTraditionClasses } from '../app/js/model/subsystems/akashic.js';
 import { BREAKDOWNS } from '../app/js/model/breakdown.js';
-import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
+import { breakdownHtml, forwardedPopHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
 import * as trainingPanels from '../app/js/ui/panels/training.js';
@@ -753,7 +753,7 @@ for (const id of IDS) {
   }
   check(`${id} every breakdown adds up to the number it explains`, off, []);
   const ac = c.breakdown('ac');
-  check(`${id} AC starts at 10, a number rather than a bonus`, ac.parts[0], { label: 'Base', value: 10, note: '', plain: true });
+  check(`${id} AC starts at 10, a number rather than a bonus`, ac.parts[0], { label: 'Base', value: 10, note: '', plain: true, key: 'base' });
   check(`${id} and is the number the sheet shows`, ac.total, c.data.defenses.ac);
   check(`${id} a zero part is not shown`, ac.parts.every((p) => p.value !== 0), true);
   check(`${id} an unknown key has no working`, c.breakdown('nonsense'), null);
@@ -981,6 +981,46 @@ console.log('the working, as the panel draws it');
   const plain = breakdownHtml({ ...b, sum: 43, parts: [{ label: 'Base', value: 10, note: '', plain: true }, ...b.parts.slice(1)] });
   check('a base is drawn without a sign', plain.includes('<span class="k">Base</span><span class="v">10</span>'), true);
   check('and the parts laid on it keep theirs', plain.includes('<span class="v">+6</span>'), true);
+}
+
+console.log('...a forwarded bonus, in the same panel');
+{
+  const f = {
+    total: 4,
+    from: [
+      { where: 'Feats → Iron Will', value: 4, expr: '4', sign: 1, type: 'size', temporary: true, counts: true },
+      { where: 'Buffs → Enlarge', value: 2, expr: '2', sign: 1, type: 'size', temporary: true, counts: false },
+      { where: 'Notes', value: 1, expr: 'floor(level / 20)', sign: 1, type: '', temporary: false, counts: true },
+    ],
+  };
+  const one = [{ name: 'str.temp', f }];
+  const html = forwardedPopHtml(one, { tag: 'temp' });
+  check('the heading says what it is, with the badge\'s tag, and the total',
+    html.startsWith('<div class="bdhead"><span class="bdname">Forwarded here (temp)</span><span class="bdtotal">+4</span></div>'), true);
+  check('one row a rule, where it was written beside what it gives',
+    html.includes('<span class="k">Feats → Iron Will<span class="bdnote">temporary size bonus · += 4</span></span><span class="v">+4</span>'), true);
+  check('one outranked by a bigger bonus of its type is greyed, and says why',
+    html.includes('<div class="bdrow idle"><span class="k">Buffs → Enlarge<span class="bdnote">temporary size bonus · += 2</span><span class="bdnote">does not stack with the other size</span>'), true);
+  check('an untyped permanent one says only what it is written as',
+    html.includes('<span class="k">Notes<span class="bdnote">+= floor(level / 20)</span></span>'), true);
+  check('a column of its type that covers it all greys it too',
+    forwardedPopHtml([{ name: 'x', f: { total: 0, from: [{ where: 'X', value: 2, expr: '2', sign: 1, type: 'luck', counts: true, column: 3, adds: 0 }] } }])
+      .includes('<div class="bdrow idle">'), true);
+  check('a held-back bonus says what it waits for',
+    forwardedPopHtml(one, { waiting: 'casting is not unlocked yet' }).includes('<div class="bdsub">Waiting: casting is not unlocked yet</div>'), true);
+  // A badge that stands for several destinations -- a defence box -- says
+  // which one each rule went to, and heads the panel with what it shows.
+  const box = forwardedPopHtml([
+    { name: 'defenses.dr', f: { total: 1, from: [{ where: 'Notes', value: 1, expr: '1', sign: 1, counts: true }] } },
+    { name: 'dr.magic', f: { total: 3, from: [{ where: 'Notes', value: 3, expr: '3', sign: 1, counts: true }] } },
+    { name: 'dr.none', f: null },
+  ], { shown: '9/magic, 3/—', note: 'The box keeps what was typed.' });
+  check('several destinations: each row says where it went',
+    [box.includes('<span class="bdnote">to defenses.dr · += 1</span>'), box.includes('<span class="bdnote">to dr.magic · += 3</span>')], [true, true]);
+  check('the heading is the figure the badge shows', box.includes('<span class="bdtotal">9/magic, 3/—</span>'), true);
+  check('and its note goes under it', box.includes('<div class="bdsub">The box keeps what was typed.</div>'), true);
+  check('one destination: no "to"', html.includes('to str.temp'), false);
+  check('nothing forwarded draws nothing', [forwardedPopHtml(null), forwardedPopHtml([{ name: 'x', f: null }])], ['', '']);
 }
 
 console.log('...and where the panel stands');
@@ -3062,6 +3102,22 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('the typed columns a forwarded bonus settles against come from the bonus rows');
+{
+  const R = await import('../app/js/rules.js');
+  const sorted = (o) => Object.fromEntries(Object.entries(o).sort());
+  check('the save row: every non-stacking type, resistance with its ABP half', sorted(R.columnTypes(R.SAVE_BONUS_TYPES)), sorted({
+    resistance: ['abpResistance', 'resistance'], alchemical: ['alchemical'], competence: ['competence'],
+    enhancement: ['enhancement'], insight: ['insight'], luck: ['luck'], trait: ['trait'], morale: ['morale'],
+    profane: ['profane'], racial: ['racial'], sacred: ['sacred'],
+  }));
+  check('the AC row: no dodge, circumstance, untyped, template, sheet or enhanced natural', sorted(R.columnTypes(R.AC_BONUS_TYPES)), sorted({
+    deflection: ['abpDeflection', 'deflection'], natural: ['natural'], enhancement: ['enhancement'],
+    insight: ['insight'], luck: ['luck'], morale: ['morale'], sacred: ['sacred'], profane: ['profane'], size: ['size'],
+  }));
+  check('and the stacking rule is the one the resolver reads', [R.stacksWithItself('temp.dodge'), R.stacksWithItself('luck')], [true, false]);
+}
+
 console.log('every "counts as" tick goes through setPoolReach');
 {
   const c = new Character(blankDocument({ name: 'Reach', level: 3 }));
@@ -3104,6 +3160,8 @@ console.log('a guile class shows a bonus sent to its levels, as the other sides 
   c.data.formulaNotes = 'counts as higher {class.operative.level += 2}';
   c.recompute();
   check('its class-levels field carries the gold badge', /class="fwd"[^>]*>\+2</.test(guilePanels.renderGuilePanel(c)), true);
+  check('which names its destination, for the hover panel to ask about',
+    guilePanels.renderGuilePanel(c).includes('class="fwd" data-fwd="class.operative.level"'), true);
 }
 
 console.log('the Cardcasting table and tab read one set of rules');
@@ -6203,7 +6261,7 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Untyped');
   check('an untyped one adds', ac(), ac0 + 3);
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Natural Armor');
-  check('a two-word type is one stacking key', c.contributions.entries.find((e) => e.path === 'gearBonus:1:0').type, 'natural_armor');
+  check('a two-word type is its type’s own key, the one the AC column and prose use', c.contributions.entries.find((e) => e.path === 'gearBonus:1:0').type, 'natural');
 
   // The amount as a formula.
   c.setItem('equipment.gear', 0, 'bonuses.0.value', 'floor(level / 4)');

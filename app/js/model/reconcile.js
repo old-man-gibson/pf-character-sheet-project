@@ -10,7 +10,8 @@
  */
 
 import {
-  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, diceString, flatFootedLoss, skillLabel,
+  AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
+  flatFootedLoss, skillLabel,
 } from '../rules.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
@@ -381,8 +382,8 @@ export const FORMULA_FIELDS = [
     key: 'saveCell', source: 'player', where: 'the Stats tab',
     collect: (model) => Object.entries(SAVE_NAMES).flatMap(([k, label]) => {
       const save = model.data.saves?.[k];
-      return SAVE_BONUS_TYPES.flatMap(([key, what]) => (stringFormula(save?.bonuses?.[key]) ? [{
-        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label} — ${what}`,
+      return SAVE_BONUS_TYPES.flatMap(([key]) => (stringFormula(save?.bonuses?.[key]) ? [{
+        id: `save-${k}-${key}`, place: `statCell:saves.${k}.bonuses.${key}`, name: `${label} — ${bonusColumnName(key)}`,
         formula: save.bonuses[key], value: save.bonusesResolved?.[key], error: save.bonusErrors?.[key],
       }] : []));
     }),
@@ -391,8 +392,8 @@ export const FORMULA_FIELDS = [
     key: 'acCell', source: 'player', where: 'the Stats tab',
     collect: (model) => {
       const d = model.data.defenses;
-      return AC_BONUS_TYPES.flatMap(([key, what]) => (stringFormula(d?.acBonuses?.[key]) ? [{
-        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC — ${what}`,
+      return AC_BONUS_TYPES.flatMap(([key]) => (stringFormula(d?.acBonuses?.[key]) ? [{
+        id: `ac-${key}`, place: `statCell:defenses.acBonuses.${key}`, name: `AC — ${bonusColumnName(key)}`,
         formula: d.acBonuses[key], value: d.acBonusesResolved?.[key], error: d.acBonusErrors?.[key],
       }] : []));
     },

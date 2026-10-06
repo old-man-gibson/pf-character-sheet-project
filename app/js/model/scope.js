@@ -11,7 +11,7 @@
 import {
   ABILITIES, AC_BONUS_TYPES, DEFENCE_PART_FAMILIES, FORWARD_FAMILIES, FORWARD_LATE,
   FORWARD_STATS, MANEUVER_FIELDS, SAVE_BONUS_TYPES, SHEET_ALIASES, armorParts, gearBonusToken, skillLabel,
-  abpGroupTotal, resolveAbility, statMod,
+  abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
 import {
   COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
@@ -1080,16 +1080,9 @@ export function forwardTargets(model) {
 }
 
 /** A save's bonus columns, by the bonus type each one is. */
-const SAVE_COLUMN_TYPES = {
-  resistance: ['abpResistance', 'resistance'], alchemical: ['alchemical'], competence: ['competence'],
-  enhancement: ['enhancement'], insight: ['insight'], luck: ['luck'], trait: ['trait'], morale: ['morale'],
-  profane: ['profane'], racial: ['racial'], sacred: ['sacred'],
-};
+const SAVE_COLUMN_TYPES = columnTypes(SAVE_BONUS_TYPES);
 /** The AC row's columns, by type; `natural` is the armour itself. */
-const AC_COLUMN_TYPES = {
-  deflection: ['abpDeflection', 'deflection'], natural: ['natural'], enhancement: ['enhancement'],
-  insight: ['insight'], luck: ['luck'], morale: ['morale'], sacred: ['sacred'], profane: ['profane'], size: ['size'],
-};
+const AC_COLUMN_TYPES = columnTypes(AC_BONUS_TYPES);
 /** An ability score's build columns, by type; `temp.` ones are the temporary table. */
 const ABILITY_COLUMN_TYPES = {
   enhancement: null, 'temp.enhancement': 'tempEnhancement', size: 'size', 'temp.size': 'tempSize',
@@ -1121,7 +1114,8 @@ function typedColumns(model, key) {
   const ac = { 'ac.total': null, 'ac.touch': 'touch', 'ac.flatFooted': 'flatFooted', 'ac.cmd': 'cmd' };
   if (key in ac) {
     const out = row(c.defenses?.acBonusesResolved, AC_COLUMN_TYPES, AC_BONUS_TYPES, ac[key]);
-    // A gear row's "Natural Armor" arrives as `natural_armor`.
+    // A gear row's "Natural Armor" arrives as `natural` now (bonusTypeKey);
+    // `natural_armor` is what it used to arrive as, kept for text written so.
     if ('natural' in out) out.natural_armor = out.natural;
     // The armour and shield worn are bonuses of those types too, on every
     // armour class a touch attack does not ignore, and never on CMD.
