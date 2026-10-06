@@ -80,7 +80,7 @@ const DATALIST_MAX = 40;
 import * as rows from './ui/rows.js';
 import { bindDrag, half, side } from './ui/drag.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
-import { breakdownHtml, forwardedPopHtml, placeAt } from './ui/breakdown-popover.js';
+import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import { talentPopHtml } from './ui/talents.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
@@ -2197,8 +2197,7 @@ export class CharacterSheetElement extends HTMLElement {
     const fwd = el.dataset.fwd;
     const b = talent || fwd ? null : this.#model?.breakdown?.(el.dataset.bd);
     const html = talent ? talentPopHtml(this.#model, el.dataset.tpop)
-      : fwd ? forwardedPopHtml(this.#model?.forwardedInto?.(fwd, el.dataset.fwdonly || ''),
-        el.dataset.fwdtag || '', el.dataset.fwdwait || '')
+      : fwd ? badges.forwardedPop(this.#model, fwd, el.dataset.fwdx || '')
         : (b ? breakdownHtml(b, el.dataset.bdx || '') : '');
     if (!html) { this.#closeBreakdown(); return; }
     const pop = this.#breakdownPanel();

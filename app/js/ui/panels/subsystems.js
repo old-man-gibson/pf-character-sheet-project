@@ -957,8 +957,8 @@ function castingClassPanel(model, c, i) {
       <h3>
         ${itemText('vancian.classes', i, 'name', c.name, 'Casting class')}
         <span class="badge">CL ${c.casterLevel ?? 0}</span>${
-  forwardedBadge(model, vancianForwardKey(c) || '', '', '', c.casterLevelWaiting
-    ? 'this class has no levels yet, so the bonus is held until its first level' : '')}
+  forwardedBadge(model, vancianForwardKey(c) || '', { waiting: c.casterLevelWaiting
+    ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
         <span class="badge">${spends && c.totalLeft !== c.totalPerDay ? `${c.totalLeft ?? 0} of ` : ''}${c.totalPerDay ?? 0} ${esc(noun.many.toLowerCase())}/day</span>
         ${c.highestLevel ? `<span class="badge">up to level ${c.highestLevel}</span>` : ''}
         ${c.slotTypeUnknown ? '<span class="badge">no table</span>' : ''}
@@ -1460,8 +1460,8 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
       <h3>
         ${itemText('psionics.classes', i, 'name', c.name, 'Manifesting class')}
         <span class="badge">ML ${c.manifesterLevel ?? 0}</span>${
-  forwardedBadge(model, manifesterForwardKey(c) || '', '', '', c.manifesterLevelWaiting
-    ? 'this class has no levels yet, so the bonus is held until its first level' : '')}
+  forwardedBadge(model, manifesterForwardKey(c) || '', { waiting: c.manifesterLevelWaiting
+    ? 'this class has no levels yet, so the bonus is held until its first level' : '' })}
         <span class="badge">${c.points ?? 0} pp</span>
         ${c.powerCount ? `<span class="badge">${c.powerCount} power${c.powerCount === 1 ? '' : 's'}</span>` : ''}
         ${c.curveTotal && !c.curveKnown ? '<span class="badge">no curve</span>' : ''}
@@ -1857,6 +1857,12 @@ function companionAttacksPanel(model, cc) {
     const list = `${p}.attacks`;
     const rows = b.attacks || [];
     const types = NATURAL_ATTACKS.map((a) => a.name);
+    // What a rule adds to a row's damage: the bonus to every natural attack
+    // and the one to this attack by name, together on one badge.
+    const damageInto = (a) => {
+      const key = companionAttackKey(a);
+      return [`${sn}.damage`, ...(key && key !== 'x' ? [`${sn}.damage.${key}`] : [])];
+    };
     const cap = kind === 'eidolon' && k.maxAttacks ? ` <span class="badge${rows.length > k.maxAttacks ? ' err' : ''}">${rows.length} of ${k.maxAttacks} attacks</span>` : '';
     return `<section class="panel span2">
       <h3>Attacks <span class="badge">${fmt(k.totalAttack ?? 0)} to hit</span>${cap}
@@ -1874,9 +1880,7 @@ function companionAttacksPanel(model, cc) {
           <td>${itemSelect(list, i, 'type', a.type, types)}</td>
           <td>${itemText(list, i, 'damage', a.damage, '1d6')}</td>
           <td class="num">${itemNum(list, i, 'dmgBonus', a.dmgBonus)}${
-            (a.damageBonus ?? 0) !== (Number(a.dmgBonus) || 0)
-              ? `<span class="fwd" title="${esc(`${fmt(a.damageBonus)} damage in total once every bonus `
-                + 'forwarded here is counted. The roll adds it to the flat part.')}">${fmt(a.damageBonus)}</span>` : ''}</td>
+            forwardedBadge(model, damageInto(a), { note: 'The roll adds it to the flat part of the damage.' })}</td>
           <td>${itemText(list, i, 'crit', a.crit, '20/×2')}</td>
           <td>${itemSelect(list, i, 'primary', a.primary === true ? 'primary' : a.primary === false ? 'secondary' : String(a.primary || ''),
     [['primary', 'Primary'], ['secondary', 'Secondary']], `auto (${a.primaryResolved ? 'primary' : 'secondary'})`)}</td>

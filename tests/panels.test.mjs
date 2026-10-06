@@ -712,5 +712,56 @@ console.log('\nThe Sheet column on Stats stays only while it holds something');
   check('cleared, both go', tables(), [false, false]);
 }
 
+console.log('\nevery gold badge is the one badge, and opens the same panel');
+{
+  const { forwardedPop } = await import('../app/js/ui/badges.js');
+  const c = new Character(blankDocument({ name: 'Badges', level: 8 }));
+  c.data.defenses.dr = '5/magic, 2/—';
+  c.addCompanion('eidolon');
+  const id = c.data.eidolon[0].id || 'eidolon';
+  c.listAdd('eidolon.0.attacks', { type: 'Bite', damage: '1d8', crit: '20/×2', primary: null, bonus: 0, dmgBonus: 2, qualities: '' });
+  c.data.notes = [{
+    title: 'Aegis',
+    body: `{dr.magic += 3} {defenses.dr += 1} {hp.temp += 10} {${id}.damage += 2} {${id}.damage.bite += 1}`,
+  }];
+  c.recompute();
+  c.data.hp.tempSpent = 3;
+  c.recompute();
+  const html = overview.renderOverviewPanel(c, CTX.overview);
+  const mate = subsystems.companionPanel(c, 'eidolon');
+  // A badge written by hand would carry the class and not the names.
+  const loose = (h) => (h.match(/<span class="fwd[^"]*"(?! data-fwd=)/g) || []).length;
+  check('no badge on the Overview is drawn by hand', loose(html), 0);
+  check('nor on a companion', loose(mate), 0);
+
+  const dr = html.match(/<span class="fwd" data-fwd="defenses\.dr dr\.magic dr\.none" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
+  ok('the DR box: one badge for the family and every part', dr);
+  check('saying the line as it stands', dr && dr[2], c.data.defenses.calc.drText);
+  const drPop = forwardedPop(c, 'defenses.dr dr.magic dr.none', dr ? dr[1].replace(/&quot;/g, '"') : '');
+  ok('its panel names the part each rule went to',
+    drPop.includes('to dr.magic · += 3') && drPop.includes('to defenses.dr · += 1'));
+  ok('under the line it is explaining', drPop.includes(`<span class="bdtotal">${c.data.defenses.calc.drText}</span>`));
+
+  const temp = html.match(/<span class="fwd" data-fwd="hp\.temp" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
+  check('temporary hit points: the ones still unspent', temp && temp[2], '+7');
+  const tempPop = forwardedPop(c, 'hp.temp', temp ? temp[1].replace(/&quot;/g, '"') : '');
+  ok('and the panel says how many were spent',
+    tempPop.includes('<div class="bdsub">10 temporary hit points forwarded here, 3 of them already spent.'));
+  ok('above the rule that granted them', tempPop.includes('<span class="v">+10</span>'));
+
+  const bite = mate.match(new RegExp(`<span class="fwd" data-fwd="${id}\\.damage ${id}\\.damage\\.bite"[^>]*>([^<]*)<`));
+  check('a companion attack\'s damage: the bonus to every attack and to this one', bite && bite[1], '+3');
+  ok('the typed Dmg + is not in it', !mate.includes('>+5</span>'));
+
+  // The Stats tab asks for each half of what reaches a score on its own.
+  c.data.notes.push({ title: 'Bull', body: '{str.score += 1} {str.score += 2 as temp.size}' });
+  c.recompute();
+  const stats = renderStatsPanel(c, {});
+  const half = (only) => stats.match(new RegExp(
+    `data-fwd="str\\.score" data-fwdx="\\{&quot;only&quot;:&quot;${only}&quot;\\}"[^>]*>([^<]*)<`))?.[1];
+  check('the Stats tab splits a score\'s badge into its permanent and temporary halves',
+    [half('permanent'), half('temporary')], ['+1', '+2']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -106,7 +106,7 @@ export function renderStatsPanel(model, ctx) {
                       title="${esc(r.enhancementWasted
     ? `${r.rawEnhancement} bought, capped at +${g.cap} — ${r.enhancementWasted} wasted`
     : `${g.cols.map(([k]) => build[ab][k] || 0).join(' + ')} = ${r[g.sum] ?? 0}`)}">${esc(r[g.sum] ?? 0)}</td>` : ''}`).join('')}
-                  <td class="num">${forwardedBadge(model, `${ab}.score`, '', 'permanent') || '—'}</td>
+                  <td class="num">${forwardedBadge(model, `${ab}.score`, { only: 'permanent' }) || '—'}</td>
                   <td class="num total">${c.abilities[ab]?.score ?? r.total ?? 0}</td>
                 </tr>`;
             }).join('')}
@@ -165,7 +165,7 @@ export function renderStatsPanel(model, ctx) {
               return `<tr>
                   <th scope="row"><span class="abmark" data-ab="${ab}">${ABILITY_LABELS[ab]}</span></th>
                   ${BUILD_TEMPORARY.map(([k]) => cell(ab, k)).join('')}
-                  <td class="num">${`${forwardedBadge(model, `${ab}.score`, '', 'temporary')}${
+                  <td class="num">${`${forwardedBadge(model, `${ab}.score`, { only: 'temporary' })}${
                     forwardedBadge(model, `${ab}.temp`)}` || '—'}</td>
                   <td class="num">${r.temporary || a.forwarded?.temporary || a.forwardedTemp?.total
                   ? fmt((r.temporary || 0) + (a.forwarded?.temporary || 0) + (a.forwardedTemp?.total || 0)) : '—'}</td>

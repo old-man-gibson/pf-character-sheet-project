@@ -993,7 +993,8 @@ console.log('...a forwarded bonus, in the same panel');
       { where: 'Notes', value: 1, expr: 'floor(level / 20)', sign: 1, type: '', temporary: false, counts: true },
     ],
   };
-  const html = forwardedPopHtml(f, 'temp');
+  const one = [{ name: 'str.temp', f }];
+  const html = forwardedPopHtml(one, { tag: 'temp' });
   check('the heading says what it is, with the badge\'s tag, and the total',
     html.startsWith('<div class="bdhead"><span class="bdname">Forwarded here (temp)</span><span class="bdtotal">+4</span></div>'), true);
   check('one row a rule, where it was written beside what it gives',
@@ -1003,11 +1004,23 @@ console.log('...a forwarded bonus, in the same panel');
   check('an untyped permanent one says only what it is written as',
     html.includes('<span class="k">Notes<span class="bdnote">+= floor(level / 20)</span></span>'), true);
   check('a column of its type that covers it all greys it too',
-    forwardedPopHtml({ total: 0, from: [{ where: 'X', value: 2, expr: '2', sign: 1, type: 'luck', counts: true, column: 3, adds: 0 }] })
+    forwardedPopHtml([{ name: 'x', f: { total: 0, from: [{ where: 'X', value: 2, expr: '2', sign: 1, type: 'luck', counts: true, column: 3, adds: 0 }] } }])
       .includes('<div class="bdrow idle">'), true);
   check('a held-back bonus says what it waits for',
-    forwardedPopHtml(f, '', 'casting is not unlocked yet').includes('<div class="bdsub">Waiting: casting is not unlocked yet</div>'), true);
-  check('nothing forwarded draws nothing', forwardedPopHtml(null), '');
+    forwardedPopHtml(one, { waiting: 'casting is not unlocked yet' }).includes('<div class="bdsub">Waiting: casting is not unlocked yet</div>'), true);
+  // A badge that stands for several destinations -- a defence box -- says
+  // which one each rule went to, and heads the panel with what it shows.
+  const box = forwardedPopHtml([
+    { name: 'defenses.dr', f: { total: 1, from: [{ where: 'Notes', value: 1, expr: '1', sign: 1, counts: true }] } },
+    { name: 'dr.magic', f: { total: 3, from: [{ where: 'Notes', value: 3, expr: '3', sign: 1, counts: true }] } },
+    { name: 'dr.none', f: null },
+  ], { shown: '9/magic, 3/—', note: 'The box keeps what was typed.' });
+  check('several destinations: each row says where it went',
+    [box.includes('<span class="bdnote">to defenses.dr · += 1</span>'), box.includes('<span class="bdnote">to dr.magic · += 3</span>')], [true, true]);
+  check('the heading is the figure the badge shows', box.includes('<span class="bdtotal">9/magic, 3/—</span>'), true);
+  check('and its note goes under it', box.includes('<div class="bdsub">The box keeps what was typed.</div>'), true);
+  check('one destination: no "to"', html.includes('to str.temp'), false);
+  check('nothing forwarded draws nothing', [forwardedPopHtml(null), forwardedPopHtml([{ name: 'x', f: null }])], ['', '']);
 }
 
 console.log('...and where the panel stands');

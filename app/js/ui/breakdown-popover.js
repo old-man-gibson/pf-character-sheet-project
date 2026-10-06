@@ -96,28 +96,37 @@ export function breakdownHtml(b, extra = '') {
  * A forwarded bonus as the panel shows it: what arrives, and where each share
  * of it was written.
  *
- * `f` is `forwardedInto`'s answer. One row a rule -- the place it was written
- * as the label, what it says under it -- and that includes the rules that are
- * not adding: a bonus a bigger one of its type outranks, or one its column
- * already gives. Those are greyed and say why, because they are the reason the
- * total is smaller than the rows above it, and a reader who cannot see them
- * will write them in again.
+ * `groups` is one `{ name, f }` a destination the badge stands for, `f` being
+ * `forwardedInto`'s answer for it (or null). One row a rule -- the place it
+ * was written as the label, what it says under it, and which destination it
+ * went to when the badge stands for more than one -- and that includes the
+ * rules that are not adding: a bonus a bigger one of its type outranks, or
+ * one its column already gives. Those are greyed and say why, because they
+ * are the reason the total is smaller than the rows above it, and a reader
+ * who cannot see them will write them in again.
  *
- * `tag` and `waiting` are the badge's own: "temp", and the reason a bonus
- * with nothing yet to raise is held back.
+ * The rest is the badge's own. `tag` ("temp", "crit") goes in the heading;
+ * `shown` is the figure, when the badge says something other than the
+ * amount -- a defence box's line, the temporary hit points still unspent --
+ * and `waiting` and `note` are sentences about it, under the heading.
  */
-export function forwardedPopHtml(f, tag = '', waiting = '') {
-  if (!f?.from?.length) return '';
-  const rows = f.from.map((x) => {
+export function forwardedPopHtml(groups, { tag = '', waiting = '', shown: figure = '', note = '' } = {}) {
+  const live = (groups || []).filter((g) => g.f?.from?.length);
+  if (!live.length) return '';
+  const many = groups.length > 1;
+  const total = live.reduce((sum, g) => sum + (Number(g.f.total) || 0), 0);
+  const rows = live.flatMap((g) => g.f.from.map((x) => {
     const kind = [x.temporary ? 'temporary' : '', x.type || ''].filter(Boolean).join(' ');
-    const said = [kind ? `${kind} bonus` : '', `${x.sign < 0 ? '-=' : '+='} ${x.expr}`].filter(Boolean).join(' · ');
+    const said = [many ? `to ${g.name}` : '', kind ? `${kind} bonus` : '',
+      `${x.sign < 0 ? '-=' : '+='} ${x.expr}`].filter(Boolean).join(' · ');
     const why = stackingNote(x).trim().replace(/^\((.*)\)$/, '$1');
     const idle = !x.counts || (x.column && x.adds <= 0);
     return partRow(fmt(x.value), x.where, [said, why], idle ? ' idle' : '');
-  });
+  }));
+  const subs = [waiting ? `Waiting: ${waiting}` : '', note].filter(Boolean);
   return `<div class="bdhead"><span class="bdname">Forwarded here${tag ? ` (${esc(tag)})` : ''}</span>`
-    + `<span class="bdtotal">${esc(fmt(f.total))}</span></div>`
-    + (waiting ? `<div class="bdsub">Waiting: ${esc(waiting)}</div>` : '')
+    + `<span class="bdtotal">${esc(figure || fmt(total))}</span></div>`
+    + subs.map((s) => `<div class="bdsub">${esc(s)}</div>`).join('')
     + `<div class="bdparts">${rows.join('')}</div>`;
 }
 
