@@ -22,10 +22,10 @@ import { forwardedBadge } from '../badges.js';
 import { fillNotesButton, noteField, talentCell, talentLegend } from '../talents.js';
 import { rollButton } from '../roll.js';
 import {
-  TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide,
+  TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide, TRAINING_SIDES, sideSphereNames,
 } from '../../model.js';
 import {
-  CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
+  COMBAT_SPHERES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
 import {
@@ -109,10 +109,9 @@ export function renderMagicPanel(model) {
   }
 
 function trainingSide(model, sideKey, side) {
-    const isMagic = sideKey === 'magic';
-    const title = isMagic ? 'Magic training' : 'Combat training';
-    const spheres = sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat');
-    const types = isMagic ? CASTING_TYPES : PRACTITIONER_TYPES;
+    const about = TRAINING_SIDES[sideKey];
+    const { title, types } = about;
+    const spheres = sideSphereNames(sideKey);
     // A class gains talents the way its own system grants them: a caster is
     // Low, Mid or High and a practitioner Proficient, Adept or Expert. The
     // one list used to offer all nine rates, guile's included, on every tab.
@@ -133,11 +132,11 @@ function trainingSide(model, sideKey, side) {
         <div class="trainhead">
           <label class="fld classpick"><span>Class</span>
             ${itemSelect(list, ci, 'name', cls.name, classNames(model))}</label>
-          <label class="fld ratepick"><span>${isMagic ? 'Casting type' : 'Practitioner type'}</span>
+          <label class="fld ratepick"><span>${about.typeLabel}</span>
             ${itemSelect(list, ci, 'type', cls.type, types)}</label>
           <label class="fld ratepick"><span>Talents / level</span>
             ${itemSelect(list, ci, 'talentsPerLevel', cls.talentsPerLevel, tplOptions)}</label>
-          ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
+          ${abilityField(model, list, ci, 'mod1', cls.mod1, about.modLabel)}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           ${classLevelsField(model, list, ci, cls, `talents: ${cls.totalTalents ?? 0}`)}
           ${blendTicks([sideKey], sideKey, ci, null, !!String(cls.name || '').trim())}
@@ -146,21 +145,21 @@ function trainingSide(model, sideKey, side) {
         ${singleLadderTable(model, `${list}.${ci}.levels`, cls, spheres)}
       </div>`;
       }).join('')}
-      ${extended.length ? `<p class="hint">Also counted as ${isMagic ? 'casting' : 'practitioner'} classes:
+      ${extended.length ? `<p class="hint">Also counted as ${about.role} classes:
         ${extended.map((x) => esc(x.name)).join(', ')} (extended-level page).</p>` : ''}
-      ${blended.length ? `<p class="hint">Also counted as ${isMagic ? 'casting' : 'practitioner'} classes:
+      ${blended.length ? `<p class="hint">Also counted as ${about.role} classes:
         ${blended.map((x) => esc(x.name)).join(', ')} — blended, so their talents are
         listed once under <strong>Blended training</strong> and counted here by sphere.</p>` : ''}
       <div style="margin-top:8px">
         <button class="primary" data-action="add-training-class" data-side="${sideKey}">+ Add class</button>
-        ${isMagic ? '' : `<button data-action="add-customization"
+        ${sideKey !== 'combat' ? '' : `<button data-action="add-customization"
           title="For a class whose talents arrive on several tracks at once, one of them live — an armiger's customized weapons">+ Customized weapons</button>`}
         ${fillNotesButton(model, sideKey)}
       </div>
       ${talentLegend()}
       <p class="hint">
         A level's talent fields unlock when that level grants a talent — from the class's
-        levels in the Planner and the Talents/level rate (Type drives ${isMagic ? 'caster level' : 'practitioner level'}
+        levels in the Planner and the Talents/level rate (Type drives ${about.levelNoun}
         separately, for classes where the two differ). Set Class levels to override a sparse Planner.
       </p>
     </section>`;
@@ -328,13 +327,12 @@ function combatTraditionPanel(model, t) {
    * the width to write it in.
    */
 function bonusTalentPanel(model, sideKey, side) {
-    const isMagic = sideKey === 'magic';
     const list = `training.${sideKey}.bonusTalents`;
     const rows = side.bonusTalents || [];
     return `<section class="panel span2">
-      <h3>Bonus ${isMagic ? 'magic' : 'combat'} talents
+      <h3>Bonus ${TRAINING_SIDES[sideKey].talentNoun} talents
         ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      ${bonusTalentTable(model, list, rows, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}
+      ${bonusTalentTable(model, list, rows, sideSphereNames(sideKey))}
     </section>`;
   }
 
@@ -483,6 +481,7 @@ function sphereBonusPanel(model, sideKey, side) {
     const active = rows.filter((r) => r.talents > 0 || r.rankBonus || r.dcBonus || r.clBonus
       || r.clForwarded || r.babForwarded || r.dcForwarded);
     const isMagic = sideKey === 'magic';
+    const [[rankField, rankLabel]] = TRAINING_SIDES[sideKey].sphereColumns;
     // A number, or a rule: the model resolves it into `<field>Num` and flags
     // a bad one in `<field>Error`, so the cell shows the answer and the
     // source on a click, like every other formula field. A bonus forwarded
@@ -502,14 +501,12 @@ function sphereBonusPanel(model, sideKey, side) {
     const render = (r) => `<tr>
         <td>${esc(r.sphere)}</td>
         <td class="num">${r.talents || ''}</td>
-        <td class="num">${isMagic
-    ? bonus(r, 'clBonus', 'floor(level / 4)', 'cl')
-    : bonus(r, 'rankBonus', 'floor(level / 4)', 'bab')}</td>
+        <td class="num">${bonus(r, rankField, 'floor(level / 4)', TRAINING_SIDES[sideKey].rankInto)}</td>
         <td class="num">${bonus(r, 'dcBonus', 'floor(level / 6)', 'dc')}</td>
         <td class="num total">${isMagic ? `${r.cl} / ${r.dc}` : `${fmt(r.attack)} / ${r.dc}`}</td>
       </tr>`;
     return `<section class="panel">
-      <h3>${isMagic ? 'Sphere CL / DC' : 'Sphere BAB / DC'}</h3>
+      <h3>Sphere ${TRAINING_SIDES[sideKey].totalLabel}</h3>
       <div class="tablewrap"><table>
         <thead><tr><th>Sphere</th><th class="num">Talents</th>
           ${/* BAB+, not Rank+: the column adds to the sphere's attack bonus,
@@ -520,9 +517,9 @@ function sphereBonusPanel(model, sideKey, side) {
           <th class="num" title="${esc(isMagic
     ? 'A bonus to this sphere’s caster level only'
     : 'A bonus to this sphere’s attack bonus only — its BAB, or the skill ranks Alchemy and Beastmastery use instead')}">${
-  isMagic ? 'CL+' : 'BAB+'}</th>
+  rankLabel}</th>
           <th class="num" title="A bonus to this sphere’s save DC only">DC+</th>
-          <th class="num">${isMagic ? 'CL / DC' : 'BAB / DC'}</th></tr></thead>
+          <th class="num">${TRAINING_SIDES[sideKey].totalLabel}</th></tr></thead>
         <tbody>${active.length ? active.map(render).join('')
     : `<tr><td colspan="5" class="hint">No spheres yet — a talent in one, from a class level, the tradition or a bonus talent, puts it here. Every sphere is worked out below.</td></tr>`}</tbody>
       </table></div>

@@ -19,10 +19,10 @@
 import { esc } from '../html.js';
 import { collapsible, bigStat, editLine, exprField, itemSelect, line, rowRemove } from '../rows.js';
 import { fillNotesButton, talentLegend } from '../talents.js';
-import { sphereForwardKey, sphereNames, talentsIn, DAILY_LEVERAGE_EXTRA } from '../../model.js';
+import { sphereForwardKey, talentsIn, DAILY_LEVERAGE_EXTRA, sideSphereNames } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
-  GUILE_SPHERES, RANKS_PER_TALENT, TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, fmt, guilePackages, guileSkillHint, skillLabel,
+  RANKS_PER_TALENT, TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, fmt, guilePackages, guileSkillHint, skillLabel,
 } from '../../rules.js';
 import { check, select, text } from '../fields.js';
 import { blendedSection, bonusTalentTable, guileClassBlock, traditionTable } from './training.js';
@@ -31,7 +31,7 @@ import { blendedSection, bonusTalentTable, guileClassBlock, traditionTable } fro
 const DEFAULT_GUILE_SKILL_HINT = 'Any skill the sphere names';
 
 /** Every skill sphere a picker offers: the engine's list, plus a pack's. */
-const guileSphereList = () => sphereNames(GUILE_SPHERES, 'guile');
+const guileSphereList = () => sideSphereNames('guile');
 
 /**
  * The character's own skills, by the name the Skills tab shows them under.

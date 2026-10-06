@@ -9,18 +9,18 @@
 import { esc } from '../html.js';
 import { talentCell, talentNote } from '../talents.js';
 import {
-  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, sphereNames, talentLandsOn, TRAINING_SYSTEMS, classForwardKey,
+  SYSTEM_NOUNS, poolMode, poolSpheres, poolSystems, talentLandsOn, TRAINING_SYSTEMS, classForwardKey, sideSphereNames,
 } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
-  ABILITY_LABELS, EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, EXPERTISE_CUSTOM, fmt, parseLadderRule, ABILITIES, CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATE_OPTIONS, statMod,
+  ABILITY_LABELS, EXPERTISE_TIERS, OPERATIVE_ABILITIES, EXPERTISE_CUSTOM, fmt, parseLadderRule, ABILITIES, CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATE_OPTIONS, statMod,
 } from '../../rules.js';
 import { autoNum, select, text, field } from '../fields.js';
 import {
   addButton, itemCheck, itemSelect, itemText, rowDrop, rowGrip, rowRemove, rowToolsDragged,
 } from '../rows.js';
 
-const guileSphereList = () => sphereNames(GUILE_SPHERES, 'guile');
+const guileSphereList = () => sideSphereNames('guile');
 
   /**
    * The operative modifier, where the other two tabs put a class's casting

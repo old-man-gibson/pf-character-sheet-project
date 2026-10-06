@@ -245,6 +245,37 @@ export const TRAINING_SYSTEMS = ['combat', 'magic', 'guile'];
 export const SYSTEM_NOUNS = { combat: 'martial', magic: 'magical', guile: 'skill' };
 
 /**
+ * The three training sides, said once: the side across from it (a blended
+ * class's other half; guile has none), its sphere list, its class types, what
+ * its talents and its class roles are called, and the sphere table's two
+ * bonus columns. The tabs, the sphere tables and the Formula Audit read these
+ * rather than asking "is this the magic side?" each time.
+ */
+export const TRAINING_SIDES = {
+  combat: {
+    other: 'magic', spheres: COMBAT_SPHERES, types: PRACTITIONER_TYPES, title: 'Combat training',
+    talentNoun: 'combat', role: 'practitioner', typeLabel: 'Practitioner type', modLabel: 'Practitioner mod',
+    levelNoun: 'practitioner level', rankInto: 'bab', totalLabel: 'BAB / DC',
+    sphereColumns: [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']],
+  },
+  magic: {
+    other: 'combat', spheres: MAGIC_SPHERES, types: CASTING_TYPES, title: 'Magic training',
+    talentNoun: 'magic', role: 'casting', typeLabel: 'Casting type', modLabel: 'Casting score',
+    levelNoun: 'caster level', rankInto: 'cl', totalLabel: 'CL / DC',
+    sphereColumns: [['clBonus', 'CL+'], ['dcBonus', 'DC+']],
+  },
+  guile: {
+    other: null, spheres: GUILE_SPHERES, types: [], title: 'Skill expertise',
+    talentNoun: 'skill', role: 'operative', typeLabel: '', modLabel: 'Operative modifier',
+    levelNoun: '', rankInto: 'ranks', totalLabel: 'Ranks / DC',
+    sphereColumns: [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']],
+  },
+};
+
+/** A side's spheres as its pickers offer them: the engine's list and the packs'. */
+export const sideSphereNames = (sideKey) => sphereNames(TRAINING_SIDES[sideKey].spheres, sideKey);
+
+/**
  * The system a sphere belongs to: the engine's three lists first, then a
  * pack's word for it. Null for a name nobody knows -- homebrew, or a typo.
  */
@@ -2063,7 +2094,7 @@ export function sphereTableNames(model, sideKey) {
   // A pack sphere whose page never said which kind it is would pass both
   // sides' filters; it is on a table only once a talent or a bonus puts it
   // there, so it does not sit on both by default.
-  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) {
+  for (const s of sideSphereNames(sideKey)) {
     if (sphereSystem(s) === sideKey) take(s);
   }
   for (const r of side.sphereBonuses || []) take(r.sphere);
@@ -2081,7 +2112,7 @@ export function sphereTableNames(model, sideKey) {
  */
 export function setSphereBonus(model, sideKey, sphere, field, value) {
   const side = model.data.training?.[sideKey];
-  const fields = sideKey === 'magic' ? ['clBonus', 'dcBonus'] : ['rankBonus', 'dcBonus'];
+  const fields = (TRAINING_SIDES[sideKey]?.sphereColumns || []).map(([f]) => f);
   const name = String(sphere ?? '').trim();
   if (!side || !fields.includes(field) || !name) return model;
   side.sphereBonuses ??= [];
