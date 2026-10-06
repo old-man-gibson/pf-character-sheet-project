@@ -196,6 +196,13 @@ function renders(who, name, draw, model) {
     console.log(`  FAIL ${who} — ${name} returned ${typeof html}, not markup`);
     return null;
   }
+  // Every gold badge is forwardedBadge's, which is what makes it open the
+  // hover panel; one written by hand has the class and not the names.
+  if (/<span class="fwd[^"]*"(?! data-fwd=)/.test(html)) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
+    return html;
+  }
   pass++;
   return html;
 }
@@ -727,12 +734,11 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
   c.recompute();
   c.data.hp.tempSpent = 3;
   c.recompute();
+  // Every panel, every view, with badges actually up -- `renders` fails on
+  // one drawn by hand.
+  sweep('a character with forwarded bonuses', c);
   const html = overview.renderOverviewPanel(c, CTX.overview);
   const mate = subsystems.companionPanel(c, 'eidolon');
-  // A badge written by hand would carry the class and not the names.
-  const loose = (h) => (h.match(/<span class="fwd[^"]*"(?! data-fwd=)/g) || []).length;
-  check('no badge on the Overview is drawn by hand', loose(html), 0);
-  check('nor on a companion', loose(mate), 0);
 
   const dr = html.match(/<span class="fwd" data-fwd="defenses\.dr dr\.magic dr\.none" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
   ok('the DR box: one badge for the family and every part', dr);
