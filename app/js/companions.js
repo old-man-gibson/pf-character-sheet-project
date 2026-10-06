@@ -24,7 +24,8 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, saveBase, sizeModifiers, skillTotal,
+  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, recipePart, recipePlain, saveBase,
+  sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { isPinned, normalizeName, slug } from './model/util.js';
 
@@ -924,7 +925,6 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const atkKey = abilityKey(b.attackAbility)
     || (kind === 'familiar' ? (scores.str.total >= scores.dex.total ? 'str' : 'dex') : 'str');
   const attackMod = mod(atkKey) + size.attack;
-  const totalAttack = bab + attackMod + (Number(b.attackBonus) || 0) + fwd.attack;
   const multiattack = (b.feats || []).some((f) => /multiattack/i.test(String(f?.name || f || '')));
 
   // Saves: a familiar uses its master's base saves (never below +2 on this
@@ -951,35 +951,28 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   // The conjured companion's base form has natural armour of its own (+2, or
   // +4 for the ooze and serpentine) under the table's growing bonus.
   const tableNatural = (level >= 1 ? row.naturalArmor : 0) + (form ? form.natural : 0);
-  const all = Number(b.ac?.all) || 0;
-  const touchOnly = Number(b.ac?.touch) || 0;
-  const ffOnly = Number(b.ac?.ff) || 0;
-  const ac = 10 + mod('dex') + sizeAC + all + touchOnly + ffOnly + tableNatural + fwd.ac;
-  const touch = 10 + mod('dex') + sizeAC + all + touchOnly + fwd.touch;
-  const flatFooted = 10 + sizeAC + all + ffOnly + tableNatural + fwd.ff;
-  // CMD takes the AC bonuses the character's CMD takes: everything in the
-  // "all" bucket (deflection, luck, insight, sacred…) and dodge, but not
-  // armour or natural armour -- and every penalty, whichever bucket it is in,
-  // because a penalty to AC applies to CMD. Flat-footed, it loses the Dex
-  // bonus and the dodge, keeping a Dex penalty, as the character's does.
-  const cmdOther = Number(b.cmdOther) || 0;
-  const cmdAc = all + touchOnly + Math.min(0, ffOnly);
-  const ffCmdAc = all + Math.min(0, touchOnly) + Math.min(0, ffOnly);
-  const cmd = 10 + bab + mod('str') + mod('dex') + size.special + cmdAc + cmdOther + fwd.cmd;
-  const ffCmd = 10 + bab + mod('str') + Math.min(0, mod('dex')) + size.special + ffCmdAc + cmdOther + fwd.cmd;
-  // Combat maneuvers, which the worksheet never worked out at all: BAB plus
-  // Strength plus the *special* size modifier, which is the size modifier to
-  // AC and attack the other way round -- exactly as CMD above already has it.
-  // A companion that trips, grapples or bull rushes had nowhere to read this
-  // and no way to be given a bonus to it.
-  //
-  // A Tiny or smaller creature uses Dexterity instead, and a feat such as
-  // Agile Maneuvers lets any creature: `cmbAbility` picks, blank for the rule.
-  const cmbOther = Number(b.cmbOther) || 0;
+  // Combat maneuvers use Strength, but a Tiny or smaller creature uses
+  // Dexterity instead, and a feat such as Agile Maneuvers lets any creature:
+  // `cmbAbility` picks, blank for the rule.
   const tiny = ['Tiny', 'Diminutive', 'Fine'].includes(b.size);
   const cmbKey = abilityKey(b.cmbAbility) || (tiny ? 'dex' : 'str');
-  const cmb = bab + mod(cmbKey) + size.special + cmbOther + fwd.cmb;
-  const initiative = mod('dex') + (Number(b.initBonus) || 0) + fwd.init;
+  // The armour classes, CMD, CMB, initiative and the attack are each the sum
+  // of their recipe (companionRecipe), which the working shown beside each
+  // number lists line by line.
+  const inputs = {
+    scores, bab, sizeAC, tableNatural, formNatural: form ? form.natural : 0,
+    attackAbility: ABILITY_LABELS[atkKey], attackMod, cmbAbility: ABILITY_LABELS[cmbKey],
+    forwarded: { ac: fwd.ac, touch: fwd.touch, ff: fwd.ff, cmd: fwd.cmd, cmb: fwd.cmb, init: fwd.init, attack: fwd.attack },
+  };
+  const sumOf = (stat) => sumParts(companionRecipe(b, inputs, stat));
+  const ac = sumOf('ac');
+  const touch = sumOf('touch');
+  const flatFooted = sumOf('ff');
+  const cmd = sumOf('cmd');
+  const ffCmd = sumOf('ffCmd');
+  const cmb = sumOf('cmb');
+  const initiative = sumOf('init');
+  const totalAttack = sumOf('attack');
 
   // Skills. A familiar's ranks are its own or its master's, whichever is
   // higher; the class-skill +3 applies once there is a rank to apply it to.
@@ -1214,20 +1207,29 @@ export function companionScope(block) {
  * suite checks that they do, on every companion of every fixture, rather
  * than trusting the two to stay in step. Null for a name that is not one.
  */
-export function companionBreakdown(kind, block, stat) {
-  const b = block;
-  const k = b?.calc;
-  if (!k) return null;
-  const part = (label, value, note = '') => ({ label, value: Number(value) || 0, note });
-  // The number a sum starts from, shown without a sign: "Base 10", then
-  // "+2" for everything laid on it.
-  const plain = (label, value, note = '') => ({ label, value: Number(value) || 0, note, plain: true });
-  const base = (value, note = '') => plain('Base', value, note);
+const ELSEWHERE = 'a rule written elsewhere on the sheet — see the gold badge';
+
+/**
+ * What a companion's armour classes, CMD, CMB, initiative and attack are made
+ * of, line by line: the one recipe computeCompanion sums and the working
+ * beside each number lists. `k` is what the numbers are built from -- the
+ * block's `calc`, or the same fields while it is being worked out.
+ *
+ * The three typed AC bonuses split the way the sheet's did: to everything,
+ * to touch only (dodge, deflection), to flat-footed only (natural, armour).
+ * CMD takes the AC bonuses the character's CMD takes -- everything in the
+ * "all" bucket and dodge, but not armour or natural armour -- and every
+ * penalty, whichever bucket it is in, because a penalty to AC applies to
+ * CMD. Flat-footed, it loses the Dex bonus and the dodge, keeping a Dex
+ * penalty, as the character's does.
+ */
+export function companionRecipe(b, k, stat) {
+  const part = recipePart;
+  const base = (value, note = '') => recipePlain('Base', value, note);
   const fwd = k.forwarded || {};
   const mod = (a) => k.scores?.[a]?.mod || 0;
   const size = Number(k.sizeAC) || 0;
-  const elsewhere = 'a rule written elsewhere on the sheet — see the gold badge';
-  const forwarded = (name) => part('forwarded', fwd[name], elsewhere);
+  const forwarded = (name) => part('forwarded', fwd[name], ELSEWHERE);
   // The table's natural armour and, on a conjured companion, the base form's
   // own under it -- computeCompanion keeps the two summed in `tableNatural`.
   const natural = () => {
@@ -1238,6 +1240,49 @@ export function companionBreakdown(kind, block, stat) {
     ];
   };
   const special = () => part('special size', -size, 'the size modifier the other way round');
+  switch (stat) {
+    case 'ac': return [base(10), part('Dex', mod('dex')), part('size', size),
+      part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), part('flat-footed only', b.ac?.ff),
+      ...natural(), forwarded('ac')];
+    case 'touch': return [base(10), part('Dex', mod('dex')), part('size', size),
+      part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), forwarded('touch')];
+    case 'ff': return [base(10), part('size', size), part('bonus AC (all)', b.ac?.all),
+      part('flat-footed only', b.ac?.ff), ...natural(), forwarded('ff')];
+    case 'cmd': return [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
+      part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch, 'dodge counts toward CMD'),
+      part('flat-footed only', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD; armour does not'),
+      part('CMD other', b.cmdOther), forwarded('cmd')];
+    case 'ffCmd': return [base(10), part('BAB', k.bab), part('Str', mod('str')),
+      part('Dex penalty', Math.min(0, mod('dex')), 'flat-footed loses the bonus, not a penalty'), special(),
+      part('bonus AC (all)', b.ac?.all),
+      part('touch-only penalty', Math.min(0, Number(b.ac?.touch) || 0), 'flat-footed loses the dodge, not a penalty'),
+      part('flat-footed-only penalty', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD'),
+      part('CMD other', b.cmdOther), forwarded('cmd')];
+    // Combat maneuvers, which the worksheet never worked out at all: BAB, the
+    // ability, and the special size modifier, as CMD has it.
+    case 'cmb': return [part('BAB', k.bab), part(k.cmbAbility || 'Str', mod(abilityKey(k.cmbAbility) || 'str')), special(),
+      part('CMB other', b.cmbOther), forwarded('cmb')];
+    case 'init': return [part('Dex', mod('dex')), part('initiative bonus', b.initBonus), forwarded('init')];
+    case 'attack': return [part('BAB', k.bab), part(k.attackAbility || 'Str', (Number(k.attackMod) || 0) - size), part('size', size),
+      part('attack bonus', b.attackBonus), forwarded('attack')];
+    default: return null;
+  }
+}
+
+export function companionBreakdown(kind, block, stat) {
+  const b = block;
+  const k = b?.calc;
+  if (!k) return null;
+  const part = recipePart;
+  // The number a sum starts from, shown without a sign: "Base 10", then
+  // "+2" for everything laid on it.
+  const plain = recipePlain;
+  const base = (value, note = '') => plain('Base', value, note);
+  const fwd = k.forwarded || {};
+  const mod = (a) => k.scores?.[a]?.mod || 0;
+  const elsewhere = ELSEWHERE;
+  const forwarded = (name) => part('forwarded', fwd[name], elsewhere);
+  const recipe = (label, total) => ({ label, total, parts: companionRecipe(b, k, stat) });
   switch (stat) {
     case 'hp': {
       let parts;
@@ -1257,60 +1302,14 @@ export function companionBreakdown(kind, block, stat) {
       }
       return { label: 'Hit points', total: k.hpMax, parts: [...parts, part('bonus max HP', b.hp?.bonus), forwarded('hp')] };
     }
-    case 'ac': return {
-      label: 'Armour class',
-      total: k.ac,
-      parts: [base(10), part('Dex', mod('dex')), part('size', size),
-        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), part('flat-footed only', b.ac?.ff),
-        ...natural(), forwarded('ac')],
-    };
-    case 'touch': return {
-      label: 'Touch AC',
-      total: k.touch,
-      parts: [base(10), part('Dex', mod('dex')), part('size', size),
-        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch), forwarded('touch')],
-    };
-    case 'ff': return {
-      label: 'Flat-footed AC',
-      total: k.flatFooted,
-      parts: [base(10), part('size', size), part('bonus AC (all)', b.ac?.all),
-        part('flat-footed only', b.ac?.ff), ...natural(), forwarded('ff')],
-    };
-    case 'cmd': return {
-      label: 'CMD',
-      total: k.cmd,
-      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')), part('Dex', mod('dex')), special(),
-        part('bonus AC (all)', b.ac?.all), part('touch only', b.ac?.touch, 'dodge counts toward CMD'),
-        part('flat-footed only', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD; armour does not'),
-        part('CMD other', b.cmdOther), forwarded('cmd')],
-    };
-    case 'ffCmd': return {
-      label: 'Flat-footed CMD',
-      total: k.ffCmd,
-      parts: [base(10), part('BAB', k.bab), part('Str', mod('str')),
-        part('Dex penalty', Math.min(0, mod('dex')), 'flat-footed loses the bonus, not a penalty'), special(),
-        part('bonus AC (all)', b.ac?.all),
-        part('touch-only penalty', Math.min(0, Number(b.ac?.touch) || 0), 'flat-footed loses the dodge, not a penalty'),
-        part('flat-footed-only penalty', Math.min(0, Number(b.ac?.ff) || 0), 'a penalty to AC applies to CMD'),
-        part('CMD other', b.cmdOther), forwarded('cmd')],
-    };
-    case 'cmb': return {
-      label: 'CMB',
-      total: k.cmb,
-      parts: [part('BAB', k.bab), part(k.cmbAbility || 'Str', mod(abilityKey(k.cmbAbility) || 'str')), special(),
-        part('CMB other', b.cmbOther), forwarded('cmb')],
-    };
-    case 'init': return {
-      label: 'Initiative',
-      total: k.initiative,
-      parts: [part('Dex', mod('dex')), part('initiative bonus', b.initBonus), forwarded('init')],
-    };
-    case 'attack': return {
-      label: 'Attack',
-      total: k.totalAttack,
-      parts: [part('BAB', k.bab), part(k.attackAbility || 'Str', (Number(k.attackMod) || 0) - size), part('size', size),
-        part('attack bonus', b.attackBonus), forwarded('attack')],
-    };
+    case 'ac': return recipe('Armour class', k.ac);
+    case 'touch': return recipe('Touch AC', k.touch);
+    case 'ff': return recipe('Flat-footed AC', k.flatFooted);
+    case 'cmd': return recipe('CMD', k.cmd);
+    case 'ffCmd': return recipe('Flat-footed CMD', k.ffCmd);
+    case 'cmb': return recipe('CMB', k.cmb);
+    case 'init': return recipe('Initiative', k.initiative);
+    case 'attack': return recipe('Attack', k.totalAttack);
     case 'fort': case 'ref': case 'will': {
       const sv = k.saves?.[stat] || {};
       const name = { fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[stat];
