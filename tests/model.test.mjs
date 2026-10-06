@@ -3062,6 +3062,22 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('the typed columns a forwarded bonus settles against come from the bonus rows');
+{
+  const R = await import('../app/js/rules.js');
+  const sorted = (o) => Object.fromEntries(Object.entries(o).sort());
+  check('the save row: every non-stacking type, resistance with its ABP half', sorted(R.columnTypes(R.SAVE_BONUS_TYPES)), sorted({
+    resistance: ['abpResistance', 'resistance'], alchemical: ['alchemical'], competence: ['competence'],
+    enhancement: ['enhancement'], insight: ['insight'], luck: ['luck'], trait: ['trait'], morale: ['morale'],
+    profane: ['profane'], racial: ['racial'], sacred: ['sacred'],
+  }));
+  check('the AC row: no dodge, circumstance, untyped, template, sheet or enhanced natural', sorted(R.columnTypes(R.AC_BONUS_TYPES)), sorted({
+    deflection: ['abpDeflection', 'deflection'], natural: ['natural'], enhancement: ['enhancement'],
+    insight: ['insight'], luck: ['luck'], morale: ['morale'], sacred: ['sacred'], profane: ['profane'], size: ['size'],
+  }));
+  check('and the stacking rule is the one the resolver reads', [R.stacksWithItself('temp.dodge'), R.stacksWithItself('luck')], [true, false]);
+}
+
 console.log('every "counts as" tick goes through setPoolReach');
 {
   const c = new Character(blankDocument({ name: 'Reach', level: 3 }));

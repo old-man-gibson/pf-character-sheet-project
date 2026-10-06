@@ -1155,6 +1155,42 @@ export const ABP_DEFENCE_GROUPS = [
   ['abpNatural', 'enhancedNatural'],
 ];
 
+/**
+ * The bonus types that stack with themselves: untyped, dodge and
+ * circumstance. Every other type counts once, at its best. "as temp" alone
+ * is untyped (see parseType in inline.js); "as temp.dodge" is a dodge bonus.
+ * The forwarded-bonus resolver reads this, and so do the typed columns a
+ * forwarded bonus settles against (columnTypes).
+ */
+export const STACKING_TYPES = new Set(['', 'untyped', 'dodge', 'circumstance']);
+export const baseType = (type) => String(type || '').toLowerCase().replace(/^temp(\.|$)/, '');
+export const stacksWithItself = (type) => STACKING_TYPES.has(baseType(type));
+
+/**
+ * The columns of a save or AC row that are not a bonus type of their own:
+ * the template's and the imported sheet's remainders, and ABP's enhancement
+ * to natural armour, which is the ABP half of its pair.
+ */
+const NOT_A_BONUS_TYPE = new Set(['template', 'sheet', 'enhancedNatural']);
+
+/**
+ * A bonus row's columns by the bonus type each holds, as `{type: [columns]}`:
+ * every column that is a type and does not stack (a forwarded bonus of that
+ * type counts only for what it adds past the column), an ABP pair as both
+ * its columns. Worked out from the row's own list, so a column added there
+ * is settled against with no second list to remember.
+ */
+export function columnTypes(types) {
+  const abpOf = new Map(ABP_DEFENCE_GROUPS.map(([abp, typed]) => [typed, abp]));
+  const isAbp = new Set(ABP_DEFENCE_GROUPS.map(([abp]) => abp));
+  const out = {};
+  for (const [key] of types) {
+    if (isAbp.has(key) || NOT_A_BONUS_TYPE.has(key) || stacksWithItself(key)) continue;
+    out[key] = abpOf.has(key) ? [abpOf.get(key), key] : [key];
+  }
+  return out;
+}
+
 /** One ABP-plus-typed pair, capped as above. */
 export function abpGroupTotal(abp, typed) {
   const a = Number(abp) || 0;
