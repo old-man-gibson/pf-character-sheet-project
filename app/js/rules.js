@@ -225,7 +225,9 @@ export function resolveAbility(entry = {}) {
   const abp = n(entry.abp);
   const gear = n(entry.gear);
   const rawEnhancement = abp + gear;
-  const enhancement = Math.min(ENHANCEMENT_CAP, rawEnhancement);
+  // ABP and gear are one enhancement bonus, capped together as the defence
+  // pairs are (abpPairTotal).
+  const enhancement = abpPairTotal(abp, gear, ENHANCEMENT_CAP);
 
   const total = n(entry.pointBuy) + n(entry.race) + enhancement + n(entry.attunement)
     + n(entry.inherent) + n(entry.array) + n(entry.level4) + n(entry.mythic)
@@ -1050,67 +1052,94 @@ export const MYTHIC_TRADITION_SLOTS = [
  * ------------------------------------------------------------------ */
 
 /** Saves, from `Stats!C11:Q11`. */
-export const SAVE_BONUS_TYPES = [
-  ['abpResistance', 'ABP (Resist)'],
-  ['resistance', 'Resist.'],
-  ['template', 'Template'],
-  ['alchemical', 'Alch.'],
-  ['circumstance', 'Circum.'],
-  ['competence', 'Compet.'],
-  ['enhancement', 'Enhan.'],
-  ['insight', 'Insight'],
-  ['luck', 'Luck'],
-  ['trait', 'Trait'],
-  ['morale', 'Morale'],
-  ['profane', 'Profane'],
-  ['racial', 'Racial'],
-  ['sacred', 'Sacred'],
-  ['untyped', 'Untyped'],
-  ['sheet', 'Sheet'],
-];
+/**
+ * Every bonus type the sheet knows, said once: what it is called, its short
+ * label (a column header, a gear row's picker), whether it stacks with
+ * itself, and -- `ac` -- what it does not reach on the AC row. The save and
+ * AC rows, the gear picker, a gear bonus's token and the stacking rule are
+ * all read off this.
+ *
+ * `touch: false` marks the armour-side types a touch attack ignores -- what
+ * the sheet's own "AC No Nat" row leaves out -- and `flatFooted: false` marks
+ * dodge, which you lose when caught unaware. `cmd: false` marks a type whose
+ * *bonus* does not reach Combat Maneuver Defence. The rule names the ones
+ * that do, and it is a closed list: "A creature can also add any
+ * circumstance, deflection, dodge, insight, luck, morale, profane, and sacred
+ * bonuses to AC to its CMD." A *penalty* reaches CMD whatever its type: "Any
+ * penalties to a creature's AC also apply to its CMD" -- see cmdBonusTotal.
+ */
+export const BONUS_TYPES = {
+  alchemical: { name: 'Alchemical', short: 'Alch.' },
+  armor: { name: 'Armor', short: 'Armor' },
+  circumstance: { name: 'Circumstance', short: 'Circ.', stacks: true },
+  competence: { name: 'Competence', short: 'Comp.' },
+  deflection: { name: 'Deflection', short: 'Defl.' },
+  dodge: { name: 'Dodge', short: 'Dodge', stacks: true, ac: { flatFooted: false } },
+  enhancement: { name: 'Enhancement', short: 'Enh.', ac: { touch: false, cmd: false } },
+  inherent: { name: 'Inherent', short: 'Inher.' },
+  insight: { name: 'Insight', short: 'Insight' },
+  luck: { name: 'Luck', short: 'Luck' },
+  morale: { name: 'Morale', short: 'Morale' },
+  natural: { name: 'Natural Armor', short: 'Nat.', ac: { touch: false, cmd: false } },
+  profane: { name: 'Profane', short: 'Profane' },
+  racial: { name: 'Racial', short: 'Racial' },
+  resistance: { name: 'Resistance', short: 'Resist.' },
+  sacred: { name: 'Sacred', short: 'Sacred' },
+  shield: { name: 'Shield', short: 'Shield' },
+  // Not the modifier for being Large -- that is already in the formula, the
+  // other way round, as the special size modifier. This is a size-typed bonus.
+  size: { name: 'Size', short: 'Size', ac: { cmd: false } },
+  trait: { name: 'Trait', short: 'Trait' },
+  untyped: { name: 'Untyped', short: 'Untyped', stacks: true, ac: { cmd: false } },
+};
 
 /**
- * AC, from `Stats!C16:R16`.
- *
- * `touch: false` marks the armour-side types a touch attack ignores -- which is
- * what the sheet's own "AC No Nat" row leaves out -- and `flatFooted: false`
- * marks dodge, which you lose when caught unaware.
+ * The columns of a save or AC row that are not a bonus type of their own:
+ * Automatic Bonus Progression's half of each capped pair (ABP_DEFENCE_GROUPS),
+ * and the template's and the imported sheet's remainders.
  */
-/*
- * `cmd: false` marks a column whose *bonus* does not reach Combat Maneuver
- * Defence. The rule names the ones that do, and it is a closed list:
- * "A creature can also add any circumstance, deflection, dodge, insight, luck,
- * morale, profane, and sacred bonuses to AC to its CMD." Armour, shields,
- * natural armour and enhancement are not on it, and neither is an untyped
- * bonus -- which is why the flag is on those columns rather than a filter
- * written out somewhere else.
- *
- * A *penalty* is a different sentence and reaches CMD whatever column it is
- * in: "Any penalties to a creature's AC also apply to its CMD." So the flag
- * only ever turns off the positive half; see cmdBonusTotal.
+const ROW_COLUMNS = {
+  abpResistance: { short: 'ABP (Resist)' },
+  abpDeflection: { short: 'ABP Deflect' },
+  abpNatural: { short: 'ABP Nat', ac: { touch: false, cmd: false } },
+  enhancedNatural: { short: 'E. Nat', ac: { touch: false, cmd: false } },
+  template: { short: 'Template', ac: { cmd: false } },
+  sheet: { short: 'Sheet', ac: { cmd: false } },
+};
+
+/** A row's columns as `[key, label, flags]`, in the order given; flags only on the AC row. */
+const bonusRow = (keys, row) => keys.map((key) => {
+  const t = BONUS_TYPES[key] || ROW_COLUMNS[key];
+  const flags = row === 'ac' ? t.ac : null;
+  return flags ? [key, t.short, flags] : [key, t.short];
+});
+
+/** What a column is called in full: its type's name, or its short label for a column that is not a type. */
+export const bonusColumnName = (key) => BONUS_TYPES[key]?.name || ROW_COLUMNS[key]?.short || key;
+
+/**
+ * A bonus type's key from its name as a gear row or a pack writes it --
+ * "Natural Armor" is `natural` -- or the name slugged, for one the table
+ * does not know.
  */
-export const AC_BONUS_TYPES = [
-  ['abpDeflection', 'ABP Deflect'],
-  ['deflection', 'Deflect.'],
-  ['abpNatural', 'ABP Nat', { touch: false, cmd: false }],
-  ['enhancedNatural', 'E. Nat', { touch: false, cmd: false }],
-  ['natural', 'Natural', { touch: false, cmd: false }],
-  ['enhancement', 'Enhan.', { touch: false, cmd: false }],
-  ['dodge', 'Dodge', { flatFooted: false }],
-  ['circumstance', 'Circ.'],
-  ['insight', 'Insight'],
-  ['luck', 'Luck'],
-  ['morale', 'Morale'],
-  ['sacred', 'Sacred'],
-  ['profane', 'Profane'],
-  ['untyped', 'Untyped', { cmd: false }],
-  // Not the modifier for being Large -- that is already in the formula, the
-  // other way round, as the special size modifier. This column is a
-  // size-typed bonus, and no such type is on the list above.
-  ['size', 'Size', { cmd: false }],
-  ['template', 'Template', { cmd: false }],
-  ['sheet', 'Sheet', { cmd: false }],
-];
+export function bonusTypeKey(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  const known = Object.entries(BONUS_TYPES).find(([key, t]) => key === lower || t.name.toLowerCase() === lower);
+  return known ? known[0] : lower.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+export const SAVE_BONUS_TYPES = bonusRow([
+  'abpResistance', 'resistance', 'template', 'alchemical', 'circumstance', 'competence', 'enhancement',
+  'insight', 'luck', 'trait', 'morale', 'profane', 'racial', 'sacred', 'untyped', 'sheet',
+], 'save');
+
+/** AC, from `Stats!C16:R16`; what each type reaches is BONUS_TYPES' `ac`. */
+export const AC_BONUS_TYPES = bonusRow([
+  'abpDeflection', 'deflection', 'abpNatural', 'enhancedNatural', 'natural', 'enhancement', 'dodge',
+  'circumstance', 'insight', 'luck', 'morale', 'sacred', 'profane', 'untyped', 'size', 'template', 'sheet',
+], 'ac');
 
 /**
  * Automatic Bonus Progression's defence ladder, from the workbook's `dataSheet`
@@ -1162,7 +1191,7 @@ export const ABP_DEFENCE_GROUPS = [
  * The forwarded-bonus resolver reads this, and so do the typed columns a
  * forwarded bonus settles against (columnTypes).
  */
-export const STACKING_TYPES = new Set(['', 'untyped', 'dodge', 'circumstance']);
+export const STACKING_TYPES = new Set(['', ...Object.keys(BONUS_TYPES).filter((k) => BONUS_TYPES[k].stacks)]);
 export const baseType = (type) => String(type || '').toLowerCase().replace(/^temp(\.|$)/, '');
 export const stacksWithItself = (type) => STACKING_TYPES.has(baseType(type));
 
@@ -1191,11 +1220,21 @@ export function columnTypes(types) {
   return out;
 }
 
-/** One ABP-plus-typed pair, capped as above. */
-export function abpGroupTotal(abp, typed) {
+/**
+ * Automatic Bonus Progression's bonus and an item's of the same kind, capped
+ * together: the pair sums to at most `cap`, unless the item is past the cap
+ * on its own, in which case it simply stands. The defence pairs use
+ * ABP_DEFENCE_CAP, an ability score's enhancement ENHANCEMENT_CAP.
+ */
+export function abpPairTotal(abp, typed, cap) {
   const a = Number(abp) || 0;
   const t = Number(typed) || 0;
-  return t > ABP_DEFENCE_CAP ? t : Math.min(ABP_DEFENCE_CAP, a + t);
+  return t > cap ? t : Math.min(cap, a + t);
+}
+
+/** One ABP-plus-typed defence pair, capped as above. */
+export function abpGroupTotal(abp, typed) {
+  return abpPairTotal(abp, typed, ABP_DEFENCE_CAP);
 }
 
 /**
@@ -1887,9 +1926,11 @@ export function skillTotal({ ranks = 0, classSkill = false, abilityMod: am = 0, 
  * penalties, exactly as the workbook's named ranges did.
  * ------------------------------------------------------------------ */
 
-export const GEAR_BONUS_TYPES = ['Enhancement', 'Armor', 'Shield', 'Deflection',
-  'Natural Armor', 'Dodge', 'Resistance', 'Competence', 'Insight', 'Luck', 'Morale',
-  'Sacred', 'Profane', 'Alchemical', 'Circumstance', 'Size', 'Inherent', 'Untyped'];
+/** The types a gear row's bonus can be, in the picker's order, by name (BONUS_TYPES). */
+const GEAR_TYPE_KEYS = ['enhancement', 'armor', 'shield', 'deflection', 'natural', 'dodge', 'resistance',
+  'competence', 'insight', 'luck', 'morale', 'sacred', 'profane', 'alchemical', 'circumstance', 'size',
+  'inherent', 'untyped'];
+export const GEAR_BONUS_TYPES = GEAR_TYPE_KEYS.map((k) => BONUS_TYPES[k].name);
 
 /**
  * The same types as a gear row prints them: a column of "Enhancement" is
@@ -1897,12 +1938,7 @@ export const GEAR_BONUS_TYPES = ['Enhancement', 'Armor', 'Shield', 'Deflection',
  * short form and says the whole word on hover. The stored value is still the
  * full name -- these are labels, not a second vocabulary.
  */
-export const GEAR_BONUS_TYPE_SHORT = {
-  Enhancement: 'Enh.', Armor: 'Armor', Shield: 'Shield', Deflection: 'Defl.',
-  'Natural Armor': 'Nat.', Dodge: 'Dodge', Resistance: 'Resist.', Competence: 'Comp.',
-  Insight: 'Insight', Luck: 'Luck', Morale: 'Morale', Sacred: 'Sacred', Profane: 'Profane',
-  Alchemical: 'Alch.', Circumstance: 'Circ.', Size: 'Size', Inherent: 'Inher.', Untyped: 'Untyped',
-};
+export const GEAR_BONUS_TYPE_SHORT = Object.fromEntries(GEAR_TYPE_KEYS.map((k) => [BONUS_TYPES[k].name, BONUS_TYPES[k].short]));
 
 /**
  * A gear bonus as the forwarded-bonus token it amounts to, or null when it
@@ -1927,9 +1963,10 @@ export function gearBonusToken(bonus) {
   const raw = bonus.value;
   const expr = raw === null || raw === undefined ? '' : String(raw).trim();
   if (!target || !expr || /[{}]/.test(expr) || /[{}]/.test(target)) return null;
-  const type = String(bonus.type ?? '').trim();
-  const key = type && type !== 'Untyped'
-    ? type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') : '';
+  // The type's own key ("Natural Armor" is natural), so a gear bonus meets a
+  // prose bonus and a column of the same type as that type.
+  const typeKey = bonusTypeKey(bonus.type);
+  const key = typeKey === 'untyped' ? '' : typeKey;
   return `{${target} += ${expr}${key ? ` as ${key}` : ''}}`;
 }
 
@@ -2974,7 +3011,8 @@ export function bonusParts(resolved, types, filter = null) {
       : Number(resolved?.[key]) || 0;
     if (!value) continue;
     const other = typed ? Number(resolved?.[typed]) || 0 : 0;
-    out.push(recipePart(typed && other ? `${label} + typed` : label, value,
+    const name = BONUS_TYPES[key] ? bonusColumnName(key) : label;
+    out.push(recipePart(typed && other ? `${name} + typed` : name, value,
       typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : '', key));
   }
   return out;

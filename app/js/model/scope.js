@@ -1114,7 +1114,8 @@ function typedColumns(model, key) {
   const ac = { 'ac.total': null, 'ac.touch': 'touch', 'ac.flatFooted': 'flatFooted', 'ac.cmd': 'cmd' };
   if (key in ac) {
     const out = row(c.defenses?.acBonusesResolved, AC_COLUMN_TYPES, AC_BONUS_TYPES, ac[key]);
-    // A gear row's "Natural Armor" arrives as `natural_armor`.
+    // A gear row's "Natural Armor" arrives as `natural` now (bonusTypeKey);
+    // `natural_armor` is what it used to arrive as, kept for text written so.
     if ('natural' in out) out.natural_armor = out.natural;
     // The armour and shield worn are bonuses of those types too, on every
     // armour class a touch attack does not ignore, and never on CMD.

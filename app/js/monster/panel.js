@@ -24,7 +24,7 @@ import { check, field, num, text } from '../ui/fields.js';
 import { hasTokens } from '../inline.js';
 import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
-import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, fmt } from '../rules.js';
+import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, bonusColumnName, fmt } from '../rules.js';
 import { group } from '../ui/format.js';
 
 /** The two-letter alignment a block prints, from the sheet's full words. */
@@ -84,9 +84,9 @@ function acParts(model) {
   push(sum('dodge'), 'dodge');
   push(sum('abpNatural', 'natural'), 'natural');
   push(sum('shield'), 'shield');
-  for (const [key, label] of AC_BONUS_TYPES) {
+  for (const [key] of AC_BONUS_TYPES) {
     if (['abpDeflection', 'deflection', 'dodge', 'abpNatural', 'enhancedNatural', 'natural'].includes(key)) continue;
-    push(sum(key), label.replace(/\.$/, '').toLowerCase());
+    push(sum(key), bonusColumnName(key).toLowerCase());
   }
   push(sum('miscAC'), 'misc');
   // Size last, where a Bestiary puts it.

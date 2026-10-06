@@ -6219,7 +6219,7 @@ console.log('gear bonuses -- amount, type and destination, read as a forwarded b
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Untyped');
   check('an untyped one adds', ac(), ac0 + 3);
   c.setItem('equipment.gear', 1, 'bonuses.0.type', 'Natural Armor');
-  check('a two-word type is one stacking key', c.contributions.entries.find((e) => e.path === 'gearBonus:1:0').type, 'natural_armor');
+  check('a two-word type is its type’s own key, the one the AC column and prose use', c.contributions.entries.find((e) => e.path === 'gearBonus:1:0').type, 'natural');
 
   // The amount as a formula.
   c.setItem('equipment.gear', 0, 'bonuses.0.value', 'floor(level / 4)');
