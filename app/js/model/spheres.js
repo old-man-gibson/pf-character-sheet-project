@@ -245,6 +245,37 @@ export const TRAINING_SYSTEMS = ['combat', 'magic', 'guile'];
 export const SYSTEM_NOUNS = { combat: 'martial', magic: 'magical', guile: 'skill' };
 
 /**
+ * The three training sides, said once: the side across from it (a blended
+ * class's other half; guile has none), its sphere list, its class types, what
+ * its talents and its class roles are called, and the sphere table's two
+ * bonus columns. The tabs, the sphere tables and the Formula Audit read these
+ * rather than asking "is this the magic side?" each time.
+ */
+export const TRAINING_SIDES = {
+  combat: {
+    other: 'magic', spheres: COMBAT_SPHERES, types: PRACTITIONER_TYPES, title: 'Combat training',
+    talentNoun: 'combat', role: 'practitioner', typeLabel: 'Practitioner type', modLabel: 'Practitioner mod',
+    levelNoun: 'practitioner level', rankInto: 'bab', totalLabel: 'BAB / DC',
+    sphereColumns: [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']],
+  },
+  magic: {
+    other: 'combat', spheres: MAGIC_SPHERES, types: CASTING_TYPES, title: 'Magic training',
+    talentNoun: 'magic', role: 'casting', typeLabel: 'Casting type', modLabel: 'Casting score',
+    levelNoun: 'caster level', rankInto: 'cl', totalLabel: 'CL / DC',
+    sphereColumns: [['clBonus', 'CL+'], ['dcBonus', 'DC+']],
+  },
+  guile: {
+    other: null, spheres: GUILE_SPHERES, types: [], title: 'Skill expertise',
+    talentNoun: 'skill', role: 'operative', typeLabel: '', modLabel: 'Operative modifier',
+    levelNoun: '', rankInto: 'ranks', totalLabel: 'Ranks / DC',
+    sphereColumns: [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']],
+  },
+};
+
+/** A side's spheres as its pickers offer them: the engine's list and the packs'. */
+export const sideSphereNames = (sideKey) => sphereNames(TRAINING_SIDES[sideKey].spheres, sideKey);
+
+/**
  * The system a sphere belongs to: the engine's three lists first, then a
  * pack's word for it. Null for a name nobody knows -- homebrew, or a typo.
  */
@@ -675,9 +706,8 @@ export function setTalentEntry(model, path, index, value, fields = {}) {
    * somebody who wrote "Destruction Sphere (from the feat)" said something,
    * and it is not ours to replace.
    */
-  const base = isBasePickOf(row[talentField], sphereField ? row[sphereField] : null)
-    ? sphereBasePick(basePickSphere(row[talentField], sphereField ? row[sphereField] : null), row[talentField], model)
-    : null;
+  const pick = catalogueEntry(sphereField ? row[sphereField] : null, row[talentField], model);
+  const base = pick.base ? pick.entry : null;
   if (base) {
     // Only a pick the sheet's own rule already reads as one is relabelled. A
     // bare "Boxing" is recognised with the catalogue's help, and writing the
@@ -760,12 +790,26 @@ function notedTalentRows(model, sideKey) {
   return out;
 }
 
+/**
+ * What a talent cell is in the catalogue: a base pick -- the sphere itself,
+ * which is what its base abilities say -- or a talent of the sphere. `base`
+ * says which was asked, and `entry` is what the catalogue had (null when
+ * nothing). Every reader that turns a typed row into catalogue text asks
+ * here, so a base pick is told apart from a talent one way.
+ */
+export function catalogueEntry(sphere, talent, model = null) {
+  if (isBasePickOf(talent, sphere)) {
+    return { base: true, entry: sphereBasePick(basePickSphere(talent, sphere), talent, model) };
+  }
+  return { base: false, entry: sphereTalent(sphere, talent) };
+}
+
 /** What the catalogue would put in a row's note, or '' when it knows nothing. */
 function noteFromCatalogue(model, row, f) {
   const talent = row?.[f.talent];
   if (!String(talent ?? '').trim()) return '';
-  if (isBasePickOf(talent, row[f.sphere])) return sphereBasePick(basePickSphere(talent, row[f.sphere]), talent, model)?.text || '';
-  return talentNoteText(sphereTalent(row[f.sphere], talent), talent);
+  const { base, entry } = catalogueEntry(row[f.sphere], talent, model);
+  return base ? entry?.text || '' : talentNoteText(entry, talent);
 }
 
 /**
@@ -801,10 +845,11 @@ function altTrainingTalentText(model, row) {
   const typed = altTrainingLookup(model, row);
   if (!typed) return '';
   const sphere = model.data.altTraining?.calc?.talents?.sphere;
-  if (isBasePickOf(typed, sphere)) return sphereBasePick(basePickSphere(typed, sphere), typed, model)?.text || '';
+  const { base, entry } = catalogueEntry(sphere, typed, model);
+  if (base) return entry?.text || '';
   // The technique's own sphere first; a talent it may take from elsewhere is
   // still found, by the whole catalogue.
-  return talentNoteText(sphereTalent(sphere, typed) || sphereTalent(null, typed), typed);
+  return talentNoteText(entry || sphereTalent(null, typed), typed);
 }
 
 /**
@@ -920,7 +965,7 @@ export function fillTalentNotes(model, sideKey) {
     row[f.notes] = text;
     // An empty sphere is settled the same way it would have been on typing.
     if (!String(row[f.sphere] ?? '').trim()) {
-      const hit = isBasePickOf(row[f.talent]) ? sphereBasePick(basePickSphere(row[f.talent], null), row[f.talent]) : sphereTalent(null, row[f.talent]);
+      const hit = catalogueEntry(null, row[f.talent]).entry;
       if (hit?.sphere) row[f.sphere] = hit.sphere;
     }
     filled++;
@@ -1240,16 +1285,22 @@ export const rowCounts = (lv) => !!lv?.granted && !lv.future;
 export const utilityCounts = (lv) => !!lv?.utilityGranted && !lv.future;
 
 /**
- * Every talent the character has trained on one side: the class ladders
- * (a blended pool's or a guile class's rows land on the side their sphere
- * belongs to, wherever the block itself lives, and both of a two-ladder
- * pool's rows count), bonus talents, and the tradition's when asked. One
- * walk, so the tally and anything that asks which talents are there --
- * a skill-rank requirement, the veil traditions -- read the same rows.
- * Yields { sphere, talent }.
+ * Every talent the character has trained on one side -- Martial, Magic or
+ * Guile: the class ladders (a blended pool's or a guile class's rows land on
+ * the side their sphere belongs to, wherever the block itself lives, and both
+ * of a two-ladder pool's rows count), bonus talents, and the tradition's when
+ * asked. One walk for all three sides, so the tallies and anything that asks
+ * which talents are there -- a skill-rank requirement, the veil traditions,
+ * the guile plans -- read the same rows.
+ *
+ * Yields { sphere, talent, utility, spent }: `utility` for a [utility]
+ * ladder's pick or bonus talent, and `spent` false only for a bonus talent
+ * ticked *free* -- one a base sphere or a drawback handed over, which on the
+ * guile side buys no skill ranks.
  *
  * Every ladder counts only what the character has at the level they are:
  * a slot the class grants (`granted`), at a level reached (`!future`).
+ * A tradition's adroit entries count only at adroit rank.
  */
 export function* ownTalentRows(model, side, { sideKey = null, includeTradition = true } = {}) {
   // A blended class holds one pool of talents spent on either kind, so each
@@ -1260,38 +1311,57 @@ export function* ownTalentRows(model, side, { sideKey = null, includeTradition =
     const systems = poolSystems(cls, home);
     for (const lv of cls.levels || []) {
       if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === sideKey) {
-        yield { sphere: lv.sphere, talent: lv.talent };
+        yield { sphere: lv.sphere, talent: lv.talent, utility: false, spent: true };
       }
       if (utility && utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === sideKey) {
-        yield { sphere: lv.utilitySphere, talent: lv.utilityTalent };
+        yield { sphere: lv.utilitySphere, talent: lv.utilityTalent, utility: true, spent: true };
       }
     }
   }
   if (!side) return;
-  for (const cls of side.classes || []) {
-    if (cls.blendedMirror) continue;
-    if (cls.blended || cls.blendedSkill) {
-      const home = sideKey ?? cls.side;
-      yield* ladder(cls, home, poolHasUtility(cls, home));
-    } else {
-      for (const lv of cls.levels || []) if (rowCounts(lv)) yield { sphere: lv.sphere, talent: lv.talent };
+  const training = model?.data?.training || {};
+  if (sideKey === 'guile') {
+    // Every guile class is a two-ladder pool; a row whose sphere is another
+    // system's lands there instead, or nowhere (talentLandsOn).
+    for (const cls of side.classes || []) yield* ladder(cls, 'guile', true);
+    // A martial or magic class that reaches skill talents spends the rows
+    // whose sphere is a skill sphere here, on both its ladders.
+    for (const key of ['combat', 'magic']) {
+      for (const cls of training[key]?.classes || []) {
+        if (cls.blendedSkill && !cls.blendedMirror) yield* ladder(cls, key, poolHasUtility(cls, key));
+      }
+    }
+  } else {
+    for (const cls of side.classes || []) {
+      if (cls.blendedMirror) continue;
+      if (cls.blended || cls.blendedSkill) {
+        const home = sideKey ?? cls.side;
+        yield* ladder(cls, home, poolHasUtility(cls, home));
+      } else {
+        for (const lv of cls.levels || []) if (rowCounts(lv)) yield { sphere: lv.sphere, talent: lv.talent, utility: false, spent: true };
+      }
+    }
+    if (sideKey) {
+      const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
+      for (const cls of training[otherKey]?.classes || []) {
+        if (cls.blended && !cls.blendedMirror) yield* ladder(cls, otherKey, poolHasUtility(cls, otherKey));
+      }
+      // A guile class that reaches this side spends both of its ladders here
+      // when the sphere is one of this side's.
+      for (const cls of training.guile?.classes || []) {
+        if (poolSystems(cls, 'guile').includes(sideKey)) yield* ladder(cls, 'guile', true);
+      }
     }
   }
-  if (sideKey) {
-    const otherKey = sideKey === 'magic' ? 'combat' : 'magic';
-    for (const cls of model.data.training?.[otherKey]?.classes || []) {
-      if (cls.blended && !cls.blendedMirror) yield* ladder(cls, otherKey, poolHasUtility(cls, otherKey));
-    }
-    // A guile class that reaches this side spends both of its ladders here
-    // when the sphere is one of this side's. The ladder flags are worked out
-    // before this pass runs (recomputeGuileLadders).
-    for (const cls of model.data.training?.guile?.classes || []) {
-      if (poolSystems(cls, 'guile').includes(sideKey)) yield* ladder(cls, 'guile', true);
-    }
+  for (const b of side.bonusTalents || []) {
+    yield { sphere: b.sphere, talent: b.talent, utility: !!b.utility, spent: !b.free };
   }
-  for (const b of side.bonusTalents || []) yield { sphere: b.sphere, talent: b.talent };
   if (includeTradition) {
-    for (const e of side.tradition?.entries || []) yield { sphere: e.sphere, talent: e.talent };
+    const adroit = side.tradition?.rank === 'Adroit';
+    for (const e of side.tradition?.entries || []) {
+      if (e?.adroit && !adroit) continue;
+      yield { sphere: e.sphere, talent: e.talent, utility: false, spent: true };
+    }
   }
 }
 
@@ -1499,6 +1569,18 @@ export function setBlendedSkill(model, sideKey, index, on) {
  * practitioner or caster level with it, only talents. The side itself is
  * conjured if the character has none, so there is somewhere to count them.
  */
+/**
+ * Whether a class's pool reaches one more kind of talent, by the class's own
+ * side and its index there: a martial or magic class reaching the other of
+ * the two (setBlended) or skill talents (setBlendedSkill), or a guile class
+ * reaching either (setGuileBlend). The one thing every "counts as" tick asks.
+ */
+export function setPoolReach(model, home, index, system, on) {
+  if (home === 'guile') return setGuileBlend(model, index, system, on);
+  if (system === 'guile') return setBlendedSkill(model, home, index, on);
+  return setBlended(model, home, index, on);
+}
+
 export function setGuileBlend(model, index, sideKey, on) {
   const t = model.data.training || {};
   const cls = t.guile?.classes?.[index];
@@ -1562,6 +1644,93 @@ const SIDE_TYPES = { magic: CASTING_TYPES, combat: PRACTITIONER_TYPES };
  * spell points and boons, and the global casting numbers. Runs before the
  * skills loop because sphere talents grant skill ranks.
  */
+/**
+ * One class's ladder, level by level, on any of the three sides: which
+ * levels the class has (its pin or the Planner), the talent slots each level
+ * grants, and the counts. A martial or magic class grows by its Talents /
+ * level rate and, when its pool reaches skill talents, by a second
+ * [utility] ladder too; a guile class is always the two ladders, sized by
+ * its tier or its rules (poolStepper). Sets the slot flags every tally reads
+ * (`granted`, `utilityGranted`, `future`) and the class's totals.
+ */
+export function walkClassLadder(model, cls, home, level) {
+  cls.side = home;
+  const guile = home === 'guile';
+  let rate = 0;
+  let progRate = 0;
+  if (!guile) {
+    // Several sheets fill in only one of type / talents-per-level; each falls
+    // back to the other. The fallback only reads a rate that belongs to this
+    // side: a blended class's other half copies the martial rate, and how
+    // fast a class learns martial talents says nothing about its caster
+    // level. Expert on the magic side is not a casting type, so the half has
+    // none until one is picked.
+    const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
+    const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
+    const type = cls.type || (guess && SIDE_TYPES[home].includes(guess) ? guess : null);
+    rate = TALENT_RATES[tpl] ?? 0;
+    progRate = TYPE_RATES[type] ?? 0;
+    cls.effectiveType = type;
+    cls.effectiveTalentsPerLevel = tpl;
+  }
+  // Sparse planners list a class once rather than on every row; the
+  // override lets the player state the real class level count directly.
+  const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
+  let cum = 0;
+  let prog = 0;
+  let classLevels = 0;
+  let classLevelsCurrent = 0;
+  // A pool that reaches skill talents is two ladders, sized however its pool
+  // setting says; one that does not is the Talents / level rate alone, and
+  // the utility flags a skill tick once left are cleared, so nothing counts
+  // them. What was typed in those slots stays put.
+  const step = poolHasUtility(cls, home) ? poolStepper(cls, home) : null;
+  let pool = guile ? { count: 0, utilityCount: 0 } : null;
+  for (const lv of cls.levels || []) {
+    const has = classHasLevel(model, cls.name, lv.level, override);
+    const before = Math.floor(cum);
+    if (has) {
+      cum += rate;
+      prog += progRate;
+      classLevels += 1;
+      if (lv.level <= level) classLevelsCurrent += 1;
+    }
+    // A mirror shares the owner's rows; it counts its own talents off them
+    // but must not restate the slot flags in its own rate's terms.
+    if (cls.blendedMirror) continue;
+    if (!guile) lv.progression = Math.floor(prog);
+    lv.future = lv.level > level;
+    if (step) {
+      pool = step(has, classLevels, lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
+      lv.count = pool.count;
+      lv.granted = pool.granted;
+      lv.utilityCount = pool.utilityCount;
+      lv.utilityGranted = pool.utilityGranted;
+    } else {
+      lv.count = Math.floor(cum * 100) / 100;
+      lv.granted = Math.floor(cum) > before;
+      delete lv.utilityCount;
+      delete lv.utilityGranted;
+    }
+  }
+  if (!guile && (cls.extended || !(cls.levels || []).length)) {
+    // Blocks from the extended page carry no level rows of their own, and nor
+    // does a block added by hand before its rows are filled in; count their
+    // class levels straight from the override or the Planner.
+    for (let l = 1; l <= 20; l++) {
+      if (classHasLevel(model, cls.name, l, override)) {
+        classLevels += 1;
+        if (l <= level) classLevelsCurrent += 1;
+      }
+    }
+  }
+  cls.classLevels = classLevels;
+  cls.classLevelsCurrent = classLevelsCurrent;
+  cls.totalTalents = guile ? pool.count : pool ? Math.floor(pool.count) : Math.floor(cum);
+  if (pool) cls.totalUtility = pool.utilityCount;
+  else delete cls.totalUtility;
+}
+
 export function recomputeTraining(model) {
   const t = model.data.training;
   if (!t) return;
@@ -1573,91 +1742,15 @@ export function recomputeTraining(model) {
   // this opens.
   if (t.combat) recomputeCustomizations(model, t.combat);
 
-  for (const sideKey of ['combat', 'magic']) {
-    const side = t[sideKey];
-    if (!side) continue;
-
-    for (const cls of side.classes || []) {
-      cls.side = sideKey;
-      // Several sheets fill in only one of type / talents-per-level;
-      // each falls back to the other.
-      // The fallback only reads a rate that belongs to this side: a blended
-      // class's other half copies the martial rate, and how fast a class
-      // learns martial talents says nothing about its caster level. Expert on
-      // the magic side is not a casting type, so the half has none until one
-      // is picked.
-      const tpl = cls.talentsPerLevel || TYPE_TO_TALENTS[cls.type] || null;
-      const guess = TALENTS_TO_TYPE[cls.talentsPerLevel] || null;
-      const type = cls.type || (guess && SIDE_TYPES[sideKey].includes(guess) ? guess : null);
-      const rate = TALENT_RATES[tpl] ?? 0;
-      const progRate = TYPE_RATES[type] ?? 0;
-      cls.effectiveType = type;
-      cls.effectiveTalentsPerLevel = tpl;
-      // Sparse planners list a class once rather than on every row; the
-      // override lets the player state the real class level count directly.
-      const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
-      let cum = 0;
-      let prog = 0;
-      let classLevels = 0;
-      let classLevelsCurrent = 0;
-      // A pool that reaches skill talents is two ladders, sized however its
-      // pool setting says; one that does not is the Talents / level rate
-      // alone, and the utility flags a skill tick once left are cleared, so
-      // nothing counts them. What was typed in those slots stays put.
-      const twoLadders = poolHasUtility(cls, sideKey);
-      const step = twoLadders ? poolStepper(cls, sideKey) : null;
-      let pool = null;
-      for (const lv of cls.levels || []) {
-        const has = classHasLevel(model, cls.name, lv.level, override);
-        const before = Math.floor(cum);
-        if (has) {
-          cum += rate;
-          prog += progRate;
-          classLevels += 1;
-          if (lv.level <= level) classLevelsCurrent += 1;
-        }
-        // A mirror shares the owner's rows; it counts its own talents off
-        // them but must not restate the slot flags in its own rate's terms.
-        if (!cls.blendedMirror) {
-          lv.progression = Math.floor(prog);
-          lv.future = lv.level > level;
-          if (step) {
-            pool = step(has, classLevels, lv.level, Math.floor(cum) > before, Math.floor(cum * 100) / 100);
-            lv.count = pool.count;
-            lv.granted = pool.granted;
-            lv.utilityCount = pool.utilityCount;
-            lv.utilityGranted = pool.utilityGranted;
-          } else {
-            lv.count = Math.floor(cum * 100) / 100;
-            lv.granted = Math.floor(cum) > before;
-            delete lv.utilityCount;
-            delete lv.utilityGranted;
-          }
-        }
-      }
-      if (cls.extended || !(cls.levels || []).length) {
-        // Blocks from the extended page carry no level rows of their own, and
-        // nor does a block added by hand before its rows are filled in; count
-        // their class levels straight from the override or the Planner.
-        for (let l = 1; l <= 20; l++) {
-          const has = classHasLevel(model, cls.name, l, override);
-          if (has) {
-            classLevels += 1;
-            if (l <= level) classLevelsCurrent += 1;
-          }
-        }
-      }
-      cls.classLevels = classLevels;
-      cls.classLevelsCurrent = classLevelsCurrent;
-      cls.totalTalents = pool ? Math.floor(pool.count) : Math.floor(cum);
-      if (pool) cls.totalUtility = pool.utilityCount;
-      else delete cls.totalUtility;
-    }
+  // Every class on all three sides is worked out before any side is counted:
+  // a blended pool owned on one side spends talents on another, and counting
+  // reads the slot flags this sets. Guile's classes included, which is why
+  // there is no separate guile ladder pass to run first.
+  for (const sideKey of ['combat', 'magic', 'guile']) {
+    for (const cls of t[sideKey]?.classes || []) walkClassLadder(model, cls, sideKey, level);
   }
 
-  // Every class on both sides is worked out before either side is counted:
-  // a blended pool owned on the magic side spends talents on the martial one,
-  // and counting reads the slot flags the loop above has just set.
+  // The martial and magic tallies; the guile side's are recomputeGuile's.
   for (const sideKey of ['combat', 'magic']) {
     const side = t[sideKey];
     if (!side) continue;
@@ -2001,7 +2094,7 @@ export function sphereTableNames(model, sideKey) {
   // A pack sphere whose page never said which kind it is would pass both
   // sides' filters; it is on a table only once a talent or a bonus puts it
   // there, so it does not sit on both by default.
-  for (const s of sphereNames(sideKey === 'magic' ? MAGIC_SPHERES : COMBAT_SPHERES, sideKey)) {
+  for (const s of sideSphereNames(sideKey)) {
     if (sphereSystem(s) === sideKey) take(s);
   }
   for (const r of side.sphereBonuses || []) take(r.sphere);
@@ -2019,7 +2112,7 @@ export function sphereTableNames(model, sideKey) {
  */
 export function setSphereBonus(model, sideKey, sphere, field, value) {
   const side = model.data.training?.[sideKey];
-  const fields = sideKey === 'magic' ? ['clBonus', 'dcBonus'] : ['rankBonus', 'dcBonus'];
+  const fields = (TRAINING_SIDES[sideKey]?.sphereColumns || []).map(([f]) => f);
   const name = String(sphere ?? '').trim();
   if (!side || !fields.includes(field) || !name) return model;
   side.sphereBonuses ??= [];

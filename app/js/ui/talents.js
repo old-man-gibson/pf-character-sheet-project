@@ -12,7 +12,7 @@ import { esc } from './html.js';
 import { prose } from './prose.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
-  basePickSphere, isBasePickOf, sphereBasePick, sphereCatalogue, sphereTalent, talentPackage,
+  catalogueEntry, sphereCatalogue, sphereTalent, talentPackage,
   manipulationEntry, MANIPULATION_NEEDS,
 } from '../model.js';
 
@@ -178,7 +178,8 @@ export function talentMark(sphere, value, known = undefined, model = null) {
 function talentInfo(model, sphere, value) {
   // A base pick is the sphere itself; what it carries is the sphere's base
   // abilities, which is what somebody hovering the row wants to read.
-  const base = isBasePickOf(value, sphere) ? sphereBasePick(basePickSphere(value, sphere), value, model) : null;
+  const pick = catalogueEntry(sphere, value, model);
+  const base = pick.base ? pick.entry : null;
   if (base) {
     return {
       cls: 'base', head: base.label, sub: `${base.sphere} sphere — what taking it grants`, text: base.text,

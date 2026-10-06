@@ -17,6 +17,7 @@ import { hasTokens, isTargetName } from '../inline.js';
 import { contextualNote } from '../formula-format.js';
 import { applyMythic, refreshAbilities } from './abilities.js';
 import { applyCorrections } from './corrections.js';
+import { TRAINING_SIDES } from './spheres.js';
 import { emit } from './events.js';
 import { applyGestalt } from './progression.js';
 import { forwarded } from './scope.js';
@@ -420,11 +421,8 @@ export const FORMULA_FIELDS = [
     key: 'sphereCell', source: 'player',
     collect: (model) => {
       const training = model.data.training || {};
-      const sides = [
-        ['magic', training.magic?.sphereRows, [['clBonus', 'CL+'], ['dcBonus', 'DC+']]],
-        ['combat', training.combat?.sphereRows, [['rankBonus', 'BAB+'], ['dcBonus', 'DC+']]],
-        ['guile', training.guile?.sphereRows, [['rankBonus', 'Rank+'], ['dcBonus', 'DC+']]],
-      ];
+      const sides = ['magic', 'combat', 'guile']
+        .map((side) => [side, training[side]?.sphereRows, TRAINING_SIDES[side].sphereColumns]);
       return sides.flatMap(([side, rows, columns]) => (rows || []).flatMap((row, i) => columns
         .filter(([field]) => stringFormula(row[field]))
         .map(([field, label]) => {

@@ -76,6 +76,7 @@ import { BREAKDOWNS } from '../app/js/model/breakdown.js';
 import { breakdownHtml, placeAt } from '../app/js/ui/breakdown-popover.js';
 import { movedInline, working, workingTitle } from '../app/js/ui/rows.js';
 import * as combatPanels from '../app/js/ui/panels/combat.js';
+import * as trainingPanels from '../app/js/ui/panels/training.js';
 import * as guilePanels from '../app/js/ui/panels/guile.js';
 import * as overviewPanels from '../app/js/ui/panels/overview.js';
 import * as subsystemPanels from '../app/js/ui/panels/subsystems.js';
@@ -2696,7 +2697,7 @@ console.log('the training class picker offers the Planner’s classes');
   const c = new Character(blankDocument({ name: 'Planned' }));
   c.set('identity.level', 3);
   c.setProgressionClass(1, 0, 'Incanter');
-  check('a class only on the Planner can be picked', combatPanels.classNames(c).includes('Incanter'), true);
+  check('a class only on the Planner can be picked', trainingPanels.classNames(c).includes('Incanter'), true);
 }
 
 console.log('a training side is in use by one rule');
@@ -3059,6 +3060,50 @@ console.log('a talent name matches whatever its typography');
     [sphereTalent('Duelist', '…And Stay Down!')?.name, sphereTalent(null, '…and stay down')?.name], ['...And Stay Down', '...And Stay Down']);
   check('a curly apostrophe finds a straight one', sphereTalent('Duelist', 'Fighter’s Flair')?.name, "Fighter's Flair");
   setSphereCatalogue(before);
+}
+
+console.log('every "counts as" tick goes through setPoolReach');
+{
+  const c = new Character(blankDocument({ name: 'Reach', level: 3 }));
+  c.addTrainingClass('combat', 'Monk');
+  c.addTrainingClass('guile', 'Operative');
+  const ci = c.data.training.combat.classes.length - 1;
+  c.setPoolReach('combat', ci, 'magic', true);
+  check('a martial class reaching magic is blended', [c.data.training.combat.classes[ci].blended,
+    c.data.training.magic.classes.some((x) => x.name === 'Monk')], [true, true]);
+  c.setPoolReach('combat', ci, 'guile', true);
+  check('and reaching skill talents', !!c.data.training.combat.classes[ci].blendedSkill, true);
+  const gi = c.data.training.guile.classes.length - 1;
+  c.setPoolReach('guile', gi, 'magic', true);
+  check('a guile class reaching magic', !!c.data.training.guile.classes[gi].blendedMagic, true);
+  c.setPoolReach('combat', ci, 'magic', false);
+  check('unticking splits the pair again', !!c.data.training.combat.classes[ci].blended, false);
+}
+
+console.log('a training class is added the same way on every side');
+{
+  const c = new Character(blankDocument({ name: 'Adder', level: 3 }));
+  c.addTrainingClass('magic');
+  c.addTrainingClass('combat', 'Armiger');
+  const magic = c.data.training.magic.classes.at(-1);
+  check('a magic class: one ladder of twenty', [magic.name, magic.levels.length, 'utilityTalent' in magic.levels[0]], ['', 20, false]);
+  check('a named martial one keeps its name', c.data.training.combat.classes.at(-1).name, 'Armiger');
+  const before = c.data.training.guile?.classes?.length ?? 0;
+  c.addTrainingClass('guile');
+  check('a guile class: two ladders', 'utilityTalent' in c.data.training.guile.classes.at(-1).levels[0], true);
+  check('one more guile class', c.data.training.guile.classes.length, before + 1);
+}
+
+console.log('a guile class shows a bonus sent to its levels, as the other sides do');
+{
+  const { addGuileClass } = await import('../app/js/model/subsystems/guile.js');
+  const c = new Character(blankDocument({ name: 'Operative', level: 5 }));
+  c.listAdd('classes', { name: 'Operative', hd: 8, bab: 0.75, goodFort: false, goodRef: true, goodWill: false,
+    skillRanks: 6, archetypes: '', levelsOverride: 5, systems: [] });
+  addGuileClass(c, 'Operative');
+  c.data.formulaNotes = 'counts as higher {class.operative.level += 2}';
+  c.recompute();
+  check('its class-levels field carries the gold badge', /class="fwd"[^>]*>\+2</.test(guilePanels.renderGuilePanel(c)), true);
 }
 
 console.log('the Cardcasting table and tab read one set of rules');
@@ -9610,7 +9655,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   check('one blended class, reaching martial and skill',
     c.blendedClasses().map((p) => [p.name, p.kind, p.systems, p.twin]), [['Champion', 'sphere', ['combat', 'guile'], null]]);
   check('what went where, and the one that went nowhere',
-    guilePanels.poolCounts(champ(c), ['combat', 'guile']), { combat: 1, magic: 0, guile: 1, none: 1 });
+    trainingPanels.poolCounts(champ(c), ['combat', 'guile']), { combat: 1, magic: 0, guile: 1, none: 1 });
   const martialHtml = combatPanels.renderMartialPanel(c);
   check('the unreached pick is marked on its row and in the ticks',
     [martialHtml.includes('side-none'), martialHtml.includes('1 not counted')], [true, true]);
@@ -9728,7 +9773,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   s.set(`training.guile.classes.0.levels.${anyAt2}.sphere`, 'Infiltration');
   s.set(`training.guile.classes.0.levels.${utilAt}.utilitySphere`, 'Nature');
   check('unblended, a skill class counts only its skill spheres; the rest count nowhere',
-    [tallies(s)[2], guilePanels.poolCounts(g(), ['guile']).none], [{ Infiltration: 1 }, 2]);
+    [tallies(s)[2], trainingPanels.poolCounts(g(), ['guile']).none], [{ Infiltration: 1 }, 2]);
   check('which its block says', guilePanels.renderGuilePanel(s).includes('2 not counted'), true);
 
   s.setGuileBlend(0, 'combat', true);
@@ -9743,7 +9788,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
     [['Shifter', ['guile', 'combat', 'magic']]]);
   const guileHtml = guilePanels.renderGuilePanel(s);
   check('it moves out of Skill expertise into Blended training',
-    [guileHtml.includes('data-blendguile="0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
+    [guileHtml.includes('data-reach="guile|0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
   check('and heads the martial tab with its ladders, stacked', combatPanels.renderMartialPanel(s).includes('ladderstack'), true);
   check('which puts the martial and magic tabs in use for a character with no classes there',
     (() => { const x = fresh(); x.data.training.combat.classes = []; x.addGuileClass('Only');
@@ -9771,7 +9816,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
   L.setBlendedSkill('combat', 0, true);
   const key = 'ladder:training.combat.classes:Champion';
   const r2 = (n) => Math.round(n * 100) / 100;
-  const lay = () => guilePanels.ladderLayout(L, key, champ(L), ['Boxing', 'Study', 'Nature']);
+  const lay = () => trainingPanels.ladderLayout(L, key, champ(L), ['Boxing', 'Study', 'Nature']);
   check('a pool with no [utility] rule: nothing to choose between, that ladder drawn narrow',
     [lay().toggles, lay().focus, lay().utility.shrunk, lay().any.shrunk], [false, 'any', true, false]);
   check('and no switch on its headings', combatPanels.renderMartialPanel(L).includes('data-ladderfocus'), false);

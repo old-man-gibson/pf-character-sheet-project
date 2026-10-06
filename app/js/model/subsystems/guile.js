@@ -43,11 +43,10 @@ import {
   EXPERTISE_CHOICES, GUILE_SPHERES, OPERATIVE_ABILITIES, RANKS_PER_TALENT, TRADE_RANKS,
   guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
-import { classHasLevel } from '../progression.js';
 import { altTrainingTalents } from './alt-training.js';
 import { forwarded } from '../scope.js';
 import {
-  poolStepper, poolSystems, rowCounts, sphereTalent, talentLandsOn, talentsIn, tallyAdd, utilityCounts,
+  ownTalentRows, sphereTalent, talentsIn, tallyAdd, walkClassLadder,
 } from '../spheres.js';
 import { amountOrText, evaluateAmount, sphereForwardKey } from '../util.js';
 
@@ -199,43 +198,8 @@ export const GUILE_DERIVED = [
  * to a system its class does not reach is counted nowhere (talentLandsOn).
  */
 export function guileTalentRows(side, training = null) {
-  const out = [];
-  (side?.classes || []).forEach((cls, ci) => {
-    const systems = poolSystems(cls, 'guile');
-    (cls.levels || []).forEach((lv, li) => {
-      if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === 'guile') {
-        out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `class:${ci}:${li}` });
-      }
-      if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
-        out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `class:${ci}:${li}:u` });
-      }
-    });
-  });
-  for (const key of ['combat', 'magic']) {
-    (training?.[key]?.classes || []).forEach((cls, ci) => {
-      if (!cls.blendedSkill || cls.blendedMirror) return;
-      const systems = poolSystems(cls, key);
-      (cls.levels || []).forEach((lv, li) => {
-        if (rowCounts(lv) && talentLandsOn(lv.sphere, systems) === 'guile') {
-          out.push({ talent: lv.talent, sphere: lv.sphere, utility: false, spent: true, from: `${key}:${ci}:${li}` });
-        }
-        if (utilityCounts(lv) && talentLandsOn(lv.utilitySphere, systems) === 'guile') {
-          out.push({ talent: lv.utilityTalent, sphere: lv.utilitySphere, utility: true, spent: true, from: `${key}:${ci}:${li}:u` });
-        }
-      });
-    });
-  }
-  (side?.bonusTalents || []).forEach((b, bi) => {
-    out.push({ talent: b.talent, sphere: b.sphere, utility: !!b.utility, spent: !b.free, from: `bonus:${bi}` });
-  });
-  // A tradition's adroit talents are the character's only at adroit rank;
-  // at competent the panel greys them, and they used to count regardless.
-  const adroit = side?.tradition?.rank === 'Adroit';
-  (side?.tradition?.entries || []).forEach((e, ei) => {
-    if (e?.adroit && !adroit) return;
-    out.push({ talent: e.talent, sphere: e.sphere, utility: false, spent: true, from: `tradition:${ei}` });
-  });
-  return out;
+  // The walk every side shares (ownTalentRows), asked for the guile side.
+  return [...ownTalentRows({ data: { training: training || {} } }, side, { sideKey: 'guile' })];
 }
 
 /**
@@ -267,37 +231,10 @@ export function guileTally(side, { spentOnly = false, training = null } = {}) {
  * the slots this has opened.
  */
 export function recomputeGuileLadders(model) {
-  const g = model.data.training?.guile;
-  if (!g) return;
+  // The ladders of all three sides are one walk now (walkClassLadder, run by
+  // recomputeTraining); this stays for a caller that wants guile's alone.
   const level = Number(model.data.identity.level) || 0;
-  for (const cls of g.classes || []) {
-    cls.side = 'guile';
-    const override = cls.classLevelsOverride == null ? null : Number(cls.classLevelsOverride);
-    // A book tier grants a slot where the running total printed for this
-    // class level passes the one before it; a Custom tier grants where its
-    // level rules say. The stepper answers both (spheres.js).
-    const step = poolStepper(cls, 'guile');
-    let classLevels = 0;
-    let classLevelsCurrent = 0;
-    let pool = { count: 0, utilityCount: 0 };
-    for (const lv of cls.levels || []) {
-      const has = classHasLevel(model, cls.name, lv.level, override);
-      if (has) {
-        classLevels += 1;
-        if (lv.level <= level) classLevelsCurrent += 1;
-      }
-      pool = step(has, classLevels, lv.level);
-      lv.count = pool.count;
-      lv.utilityCount = pool.utilityCount;
-      lv.granted = pool.granted;
-      lv.utilityGranted = pool.utilityGranted;
-      lv.future = lv.level > level;
-    }
-    cls.classLevels = classLevels;
-    cls.classLevelsCurrent = classLevelsCurrent;
-    cls.totalTalents = pool.count;
-    cls.totalUtility = pool.utilityCount;
-  }
+  for (const cls of model.data.training?.guile?.classes || []) walkClassLadder(model, cls, 'guile', level);
 }
 
 /**

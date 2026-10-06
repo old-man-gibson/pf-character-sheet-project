@@ -81,11 +81,11 @@ import {
   addCustomization, applyBudget, blendedClasses, casterLevel, checkCustomizationBases, customizationFor,
   ownClassLevels, pairBlended, recomputeCustomizations, recomputeSphereRows, recomputeTraining,
   setTalentEntry, blankTalentNotes, fillTalentNotes, setAltTrainingPick, altTrainingLookup,
-  removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setCustomizationRule, setSphereBonus,
+  removeCustomization, setBlended, setBlendedSkill, setCustomizationActive, setGuileBlend, setPoolReach, setCustomizationRule, setSphereBonus,
   setCustomizationSpec, sphereRanksBySkill, sphereTalentKnowledge, sphereTally,
 } from './spheres.js';
 import {
-  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileLadders, recomputeGuileSpheres,
+  addGuileClass, addGuileSphere, guileRanksBySkill, recomputeGuile, recomputeGuileSpheres,
 } from './subsystems/guile.js';
 import {
   recomputeEquipment, recomputeUnarmed, setGearColumns, weaponHandles,
@@ -97,6 +97,7 @@ import {
   takeDamage,
 } from './stats/defenses.js';
 import { rest } from './rest.js';
+import { addTrainingClass } from './training.js';
 import { resolveSaveBonuses } from './stats/saves.js';
 import {
   addWealthEntry, makeOffering, removeWealthEntry, wealthView, wealthViewOf,
@@ -265,7 +266,6 @@ export class Character {
     this.#recomputeSpeeds();
     // A guile class blended into the sphere sides spends talents there, so its
     // ladders are known before either side is counted.
-    this.#recomputeGuileLadders();
     this.#recomputeTraining();
     this.#recomputeGuile();
 
@@ -623,6 +623,7 @@ export class Character {
   setBlended(...a) { return setBlended(this, ...a); }
   setBlendedSkill(...a) { return setBlendedSkill(this, ...a); }
   setGuileBlend(...a) { return setGuileBlend(this, ...a); }
+  setPoolReach(...a) { return setPoolReach(this, ...a); }
   setTalentEntry(...a) { return setTalentEntry(this, ...a); }
   blankTalentNotes(...a) { return blankTalentNotes(this, ...a); }
   fillTalentNotes(...a) { return fillTalentNotes(this, ...a); }
@@ -636,10 +637,10 @@ export class Character {
 
   // subsystems/guile.js
   #recomputeGuile(...a) { return recomputeGuile(this, ...a); }
-  #recomputeGuileLadders(...a) { return recomputeGuileLadders(this, ...a); }
   #guileRanksBySkill(...a) { return guileRanksBySkill(this, ...a); }
   #recomputeGuileSpheres(...a) { return recomputeGuileSpheres(this, ...a); }
   addGuileClass(...a) { return addGuileClass(this, ...a); }
+  addTrainingClass(...a) { return addTrainingClass(this, ...a); }
   addGuileSphere(...a) { return addGuileSphere(this, ...a); }
 
   // stats/saves.js

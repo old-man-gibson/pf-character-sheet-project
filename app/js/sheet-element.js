@@ -93,6 +93,7 @@ import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
+import * as trainingPanels from './ui/panels/training.js';
 import * as monster from './monster/sheet.js';   // the monster tool's hooks; see docs/monsters.md
 import * as subsystems from './ui/panels/subsystems.js';
 import * as lore from './ui/panels/lore.js';
@@ -2783,7 +2784,7 @@ export class CharacterSheetElement extends HTMLElement {
   #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#combatCtx()); }
 
   /** The class names, which the action dispatcher needs when adding a track. */
-  #classNames(...a) { return combat.classNames(this.#model, ...a); }
+  #classNames(...a) { return trainingPanels.classNames(this.#model, ...a); }
 
   /* ---------------- feats & mythic ---------------- */
 
@@ -5208,28 +5209,14 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // Blending a class adds or drops its block on the other side, so the whole
-    // tab is redrawn rather than the one control.
-    root.querySelectorAll('[data-blend]').forEach((box) => {
+    // A "counts as" tick: which kinds of talent a class's pool reaches. It may
+    // add or drop the class's block on another side, and it moves the class
+    // into or out of the blended group, so the whole tab is redrawn rather
+    // than the one control.
+    root.querySelectorAll('[data-reach]').forEach((box) => {
       box.addEventListener('change', () => {
-        const [side, index] = box.dataset.blend.split('|');
-        this.#model.setBlended(side, Number(index), box.checked);
-        this.#render();
-      });
-    });
-    // Reaching skill talents adds no block, but it moves the class into the
-    // blended group and puts it on the guile tab, so the same full redraw.
-    root.querySelectorAll('[data-blendskill]').forEach((box) => {
-      box.addEventListener('change', () => {
-        const [side, index] = box.dataset.blendskill.split('|');
-        this.#model.setBlendedSkill(side, Number(index), box.checked);
-        this.#render();
-      });
-    });
-    root.querySelectorAll('[data-blendguile]').forEach((box) => {
-      box.addEventListener('change', () => {
-        const [index, side] = box.dataset.blendguile.split('|');
-        this.#model.setGuileBlend(Number(index), side, box.checked);
+        const [home, index, system] = box.dataset.reach.split('|');
+        this.#model.setPoolReach(home, Number(index), system, box.checked);
         this.#render();
       });
     });
@@ -6409,17 +6396,7 @@ export class CharacterSheetElement extends HTMLElement {
     }
     switch (name) {
       case 'add-training-class': {
-        const side = button?.dataset.side === 'magic' ? 'magic' : 'combat';
-        this.#model.listAdd(`training.${side}.classes`, {
-          name: '',
-          type: null,
-          talentsPerLevel: null,
-          mod1: null,
-          mod2: null,
-          levels: Array.from({ length: 20 }, (_, i) => ({
-            level: i + 1, talent: null, sphere: null, notes: null,
-          })),
-        });
+        this.#model.addTrainingClass(button?.dataset.side === 'magic' ? 'magic' : 'combat');
         this.#render();
         break;
       }

@@ -643,9 +643,9 @@ console.log('\nCounts as waits for a class name, on every training tab');
   c.addGuileClass('');
   const live = (html, attr) => (html.match(new RegExp(`<input type="checkbox"[^>]*${attr}="[^"]*"`, 'g')) || []).length;
   const martial = combat.renderMartialPanel(c);
-  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-blend(?:skill)?'), 2);
+  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-reach'), 2);
   const guileHtml = guile.renderGuilePanel(c);
-  check('nor the unnamed guile class', [live(guileHtml, 'data-blendguile'), guileHtml.includes('Pick the class first')], [0, true]);
+  check('nor the unnamed guile class', [live(guileHtml, 'data-reach'), guileHtml.includes('Pick the class first')], [0, true]);
   ok('and it says why', martial.includes('Pick the class first'));
 }
 
@@ -691,6 +691,25 @@ console.log('\nmanipulation groups keep their columns');
   check('four groups into three even runs, in order', manipColumns([17, 8, 4, 10], 3), [[0], [1, 2], [3]]);
   check('fewer groups than columns: one each', manipColumns([5, 5], 3), [[0], [1]]);
   check('none: no columns', manipColumns([], 3), []);
+}
+
+console.log('\nThe Sheet column on Stats stays only while it holds something');
+{
+  const c = new Character(blankDocument({ name: 'Imported', level: 5 }));
+  // The two typed-bonus tables, saves first, as the panel draws them.
+  const tables = () => {
+    const html = renderStatsPanel(c, {});
+    const at = html.indexOf('Save &amp; AC bonuses');
+    return html.slice(at).split('<table').slice(1, 3).map((t) => t.split('</table>')[0].includes('>Sheet<'));
+  };
+  check('a character built here has no Sheet column', tables(), [false, false]);
+  c.set('saves.will.bonuses.sheet', 3);
+  check('an imported save remainder shows it on the saves table only', tables(), [true, false]);
+  c.set('defenses.acBonuses.sheet', 'floor(level / 5)');
+  check('and a formula left on AC shows it there', tables(), [true, true]);
+  c.set('saves.will.bonuses.sheet', 0);
+  c.set('defenses.acBonuses.sheet', '');
+  check('cleared, both go', tables(), [false, false]);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
