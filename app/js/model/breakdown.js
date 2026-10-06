@@ -20,8 +20,9 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY, BUILD_TEMPORARY, abilityOf, acParts, attackParts, cmdParts,
-  conditionTotals, initiativeParts, recipePart, recipePlain, saveParts,
+  ABILITIES, ABILITY_LABELS, AC_PENALTY_KEYS, ATTACK_MODE_KEY, BUILD_TEMPORARY, CONDITION_CHANNELS,
+  abilityOf, acParts, acPenaltyToCmd, attackParts, cmdParts, conditionTotals, initiativeParts, recipePart,
+  recipePlain, saveParts,
 } from '../rules.js';
 import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
@@ -171,22 +172,6 @@ export const BREAKDOWNS = new Map([
  * What the ticked buffs and conditions are doing to it
  * ------------------------------------------------------------------ */
 
-/**
- * The condition-state channels that reach each key -- the same pairings
- * `conditionState` sums into `delta`, written down once more here so that
- * each ticked buff and condition can be shown with its own share of the
- * move. A key with no entry is one the conditions never touch.
- */
-const CHANNELS = {
-  melee: ['attack', 'melee'], altMelee: ['attack', 'melee'],
-  ranged: ['attack', 'ranged'], altRanged: ['attack', 'ranged'],
-  cmb: ['attack', 'cmb'], altCmb: ['attack', 'cmb'],
-  ac: ['ac'], touch: ['ac'], flatFooted: ['ac'],
-  cmd: ['cmd'], ffCmd: ['cmd'],
-  fortitude: ['saves', 'fortitude'], reflex: ['saves', 'reflex'], will: ['saves', 'will'],
-  initiative: ['initiative'], hp: ['hp'],
-};
-
 /** A channel's name, for a share that arrived by a wider road than the key. */
 const CHANNEL_LABELS = {
   attack: 'every attack', melee: 'melee attacks', ranged: 'ranged attacks', cmb: 'CMB',
@@ -227,7 +212,8 @@ function adjustmentParts(model, key, cs) {
   // +2 and a −2 -- are still two entries, under a net of 0.
   const delta = cs.delta[key] || 0;
   const c = model.data;
-  const chans = CHANNELS[key] || [];
+  // The channels conditionState sums for this key (CONDITION_CHANNELS).
+  const chans = CONDITION_CHANNELS[key] || [];
   const counted = cs.counted || [];
   const slots = [...new Set(slotsOf(c, key).map(abilityKeyOf).filter(Boolean))];
   // Named by the abilities this source moved, of the ones the number is built
@@ -273,8 +259,8 @@ function adjustmentParts(model, key, cs) {
     }
     // "Any penalties to a creature's AC also apply to its CMD" -- the
     // acPenalty conditionTotals keeps, source by source.
-    if ((key === 'cmd' || key === 'ffCmd') && info?.mods?.cmd === undefined && (Number(info?.mods?.ac) || 0) < 0) {
-      value += info.mods.ac * n;
+    if (AC_PENALTY_KEYS.has(key) && acPenaltyToCmd(info)) {
+      value += acPenaltyToCmd(info) * n;
       via.push('an AC penalty applies to CMD too');
     }
     const share = through.get(entry);

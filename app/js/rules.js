@@ -2782,6 +2782,42 @@ export function conditionCount(info, value) {
  * to grey out. Speed takes the harshest multiplier rather than a product --
  * entangled and exhausted together is half speed, not a quarter.
  */
+/**
+ * Which channels of the condition totals reach each number. A key's move is
+ * the sum of its channels, what reaches it through the abilities it is built
+ * on (abilityMoves), and -- for the two CMDs -- every AC penalty (see
+ * acPenaltyToCmd). conditionState sums by this, and the breakdown names each
+ * source's share by it, so the two cannot disagree about what reaches what.
+ */
+export const CONDITION_CHANNELS = {
+  melee: ['attack', 'melee'], altMelee: ['attack', 'melee'],
+  ranged: ['attack', 'ranged'], altRanged: ['attack', 'ranged'],
+  cmb: ['attack', 'cmb'], altCmb: ['attack', 'cmb'],
+  ac: ['ac'], touch: ['ac'], flatFooted: ['ac'],
+  cmd: ['cmd'], ffCmd: ['cmd'],
+  fortitude: ['saves', 'fortitude'], reflex: ['saves', 'reflex'], will: ['saves', 'will'],
+  initiative: ['initiative'],
+  skills: ['skills'], abilityChecks: ['abilityChecks'], damage: ['damage'], hp: ['hp'],
+  // Display-level channels: shown where DCs and the essence pool are read.
+  dc: ['dc'], essence: ['essence'],
+};
+
+/** The numbers every AC penalty reaches as well: "any penalties to a creature's AC also apply to its CMD". */
+export const AC_PENALTY_KEYS = new Set(['cmd', 'ffCmd']);
+
+/**
+ * What one condition or buff's AC penalty does to CMD, per count: its AC
+ * penalty, unless it says what it does to CMD itself -- one that does has
+ * already said, and adding its AC penalty too would count one rule twice
+ * (the size rows are the case that matters, where the AC change is the size
+ * modifier and CMD carries it the other way round).
+ */
+export function acPenaltyToCmd(info) {
+  if (info?.mods?.cmd !== undefined) return 0;
+  const ac = Number(info?.mods?.ac) || 0;
+  return ac < 0 ? ac : 0;
+}
+
 export function conditionTotals(active) {
   const worst = new Map();
   for (const { info } of active) {
@@ -2808,23 +2844,17 @@ export function conditionTotals(active) {
   let speed = 1;
   let acVsMelee = 0;
   let acVsRanged = 0;
-  // What the AC penalties among these come to, kept apart from the net `ac`.
-  // "Any penalties to a creature's AC also apply to its CMD" -- so blinded's
-  // −2 is −2 CMD as well, and a buff that happens to be raising AC at the
-  // same time must not cancel it out. Only entries that say nothing about
-  // CMD themselves: one that does has already said what it does, and adding
-  // its AC penalty on top would be counting the same rule twice (the size
-  // rows are the case that matters, where the AC change *is* the size
-  // modifier and CMD carries it the other way round).
+  // What the AC penalties among these come to, kept apart from the net `ac`:
+  // blinded's −2 is −2 CMD as well, and a buff that happens to be raising AC
+  // at the same time must not cancel it out (see acPenaltyToCmd).
   let acPenalty = 0;
 
   for (const { info, count } of counted) {
     const n = Math.max(1, count);
-    const statesCmd = info.mods?.cmd !== undefined;
     for (const [key, value] of Object.entries(info.mods || {})) {
       mods[key] = (mods[key] || 0) + value * n;
-      if (key === 'ac' && value < 0 && !statesCmd) acPenalty += value * n;
     }
+    acPenalty += acPenaltyToCmd(info) * n;
     for (const [key, value] of Object.entries(info.ability || {})) {
       ability[key] = (ability[key] || 0) + value * n;
     }

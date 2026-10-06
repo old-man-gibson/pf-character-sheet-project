@@ -9,8 +9,8 @@
  */
 
 import {
-  ABILITIES, AC_BONUS_TYPES, BUFF_MOD_KEYS, CONDITIONS, SIZE_MODIFIERS, abilityMod, abpDefence,
-  armorParts, conditionCount, conditionInfo, conditionTotals, statMod, statModDelta,
+  ABILITIES, AC_BONUS_TYPES, AC_PENALTY_KEYS, BUFF_MOD_KEYS, CONDITIONS, CONDITION_CHANNELS, SIZE_MODIFIERS,
+  abilityMod, abpDefence, armorParts, conditionCount, conditionInfo, conditionTotals, statMod, statModDelta,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import {
@@ -379,41 +379,16 @@ export function conditionState(model) {
   const { deltas, scores } = through;
   const via = through.byKey;
 
-  const atk = (key) => mods.attack + via[key];
-  const sv = (key) => mods.saves + (mods[key] || 0) + via[key];
-
-  const delta = {
-    melee: atk('melee') + mods.melee,
-    altMelee: atk('altMelee') + mods.melee,
-    ranged: atk('ranged') + mods.ranged,
-    altRanged: atk('altRanged') + mods.ranged,
-    cmb: atk('cmb') + mods.cmb,
-    altCmb: atk('altCmb') + mods.cmb,
-    ac: mods.ac + via.ac,
-    touch: mods.ac + via.touch,
-    flatFooted: mods.ac + via.flatFooted,
-    // Every AC penalty among the ticked conditions and buffs reaches CMD too
-    // (see conditionTotals' acPenalty), on top of whatever they say about CMD
-    // outright -- so blinded is −2 to both, and a flat-footed character's
-    // lost Dexterity comes off both.
-    cmd: via.cmd + mods.cmd + totals.acPenalty,
-    // Flat-footed CMD has no Dexterity bonus in it to lose, so it takes
-    // everything else: its Strength (and any Dexterity penalty), what a
-    // condition says about CMD outright, and every AC penalty.
-    ffCmd: via.ffCmd + mods.cmd + totals.acPenalty,
-    fortitude: sv('fortitude'),
-    reflex: sv('reflex'),
-    will: sv('will'),
-    initiative: mods.initiative + via.initiative,
-    skills: mods.skills,
-    abilityChecks: mods.abilityChecks,
-    damage: mods.damage,
-    hp: mods.hp,
-    // Display-level channels: shown where DCs and the essence pool are
-    // read, without re-running slot tables or investment math.
-    dc: mods.dc,
-    essence: mods.essence,
-  };
+  // Each number's move: its channels (CONDITION_CHANNELS), what reaches it
+  // through the abilities it is built on, and for the two CMDs every AC
+  // penalty among the ticked conditions and buffs, on top of whatever they
+  // say about CMD outright -- so blinded is −2 to both, and a flat-footed
+  // character's lost Dexterity comes off both. Flat-footed CMD has no
+  // Dexterity bonus in it to lose, so its share through the abilities is its
+  // Strength and any Dexterity penalty.
+  const delta = Object.fromEntries(Object.entries(CONDITION_CHANNELS).map(([key, chans]) => [key,
+    chans.reduce((t, ch) => t + (mods[ch] || 0), 0) + (via[key] || 0)
+      + (AC_PENALTY_KEYS.has(key) ? totals.acPenalty : 0)]));
 
   const base = {
     melee: c.attack.totalMelee,
