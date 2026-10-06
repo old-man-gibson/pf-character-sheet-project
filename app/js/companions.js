@@ -24,7 +24,7 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, sizeModifiers, skillTotal,
+  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, saveBase, sizeModifiers, skillTotal,
 } from './rules.js';
 import { isPinned, normalizeName, slug } from './model/util.js';
 
@@ -178,8 +178,8 @@ export const conjuredHD = (cl) => (cl >= 1 ? Math.ceil((cl * 3) / 4) : 0);
 export const conjuredStats = (hd) => ({
   hd,
   bab: hd,
-  goodSave: hd >= 1 ? 2 + Math.floor(hd / 2) : 0,
-  poorSave: Math.floor(hd / 3),
+  goodSave: saveBase(hd, true),
+  poorSave: saveBase(hd, false),
   skills: hd,
   feats: hd >= 1 ? Math.ceil(hd / 2) : 0,
   naturalArmor: Math.floor(hd / 2),

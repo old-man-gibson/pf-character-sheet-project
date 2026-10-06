@@ -1254,6 +1254,17 @@ export function gestaltSaveBase(perLevelGood, anyGood) {
   return (anyGood ? 2 : 0) + Math.floor(sixths / 6);
 }
 
+/**
+ * One save's base over `level` levels of a single progression: 2 + half the
+ * levels when good, a third when poor -- the same whole-sixths count as
+ * gestaltSaveBase, of which it is the one-progression case. A conjured
+ * companion's Hit Dice and a pasted monster's read it.
+ */
+export function saveBase(level, good) {
+  const n = Math.max(0, Math.floor(Number(level) || 0));
+  return gestaltSaveBase(Array.from({ length: n }, () => !!good), !!good && n >= 1);
+}
+
 /* ----- feature-column level rules ----- */
 
 /**

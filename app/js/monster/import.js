@@ -28,7 +28,9 @@
 
 import { blankDocument } from '../convert.js';
 import { naturalAttack } from '../companions.js';
-import { RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, sizeModifiers } from '../rules.js';
+import {
+  RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, saveBase, sizeModifiers,
+} from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 
 export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './block.js';
@@ -640,8 +642,8 @@ export function monsterDocument(block, options = {}) {
   const goodSave = (total, ability) => {
     if (total == null) return false;
     const want = total - mod(ability);
-    const good = 2 + Math.floor(level / 2);
-    const poor = Math.floor(level / 3);
+    const good = saveBase(level, true);
+    const poor = saveBase(level, false);
     return Math.abs(want - good) <= Math.abs(want - poor);
   };
   doc.classes = [{
