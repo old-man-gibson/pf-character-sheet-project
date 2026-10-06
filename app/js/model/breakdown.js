@@ -98,7 +98,7 @@ function abilityBreakdown(model, key, which) {
     // heading that is about the other five.
     parts = [
       plain('Score', a.score, 'everything the permanent columns come to'),
-      ...BUILD_TEMPORARY.map(([k, label]) => part(label, build[k])),
+      ...BUILD_TEMPORARY.map(([k, , full]) => part(full, build[k])),
       part('forwarded', (a.forwarded?.total || 0) + (a.forwardedTemp?.total || 0),
         'a rule written elsewhere on the sheet'),
     ];

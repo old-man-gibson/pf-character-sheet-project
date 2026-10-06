@@ -2272,6 +2272,14 @@ table.build input[type="number"] { width: 3.2rem; padding: 3px 4px; }
 table.build input:disabled { opacity: 0.4; cursor: not-allowed; }
 table.build select { width: 100%; min-width: 3.6rem; padding: 3px 4px; }
 table.build td.mid .hint { margin-left: 3px; }
+/* The two ability tables on Stats: every column one width -- a typed box, a
+   worked-out number, the Attuned tick -- under a short header whose full name
+   is on hover, so the columns line up and take no more room than a number. */
+table.build.statcols { width: auto; }
+table.build.statcols th.num, table.build.statcols td.num, table.build.statcols td.mid {
+  width: 3.2rem; min-width: 3.2rem; text-align: center;
+}
+table.build.statcols input[type="number"] { width: 100%; box-sizing: border-box; }
 
 /* Permanent and temporary bonuses read as one pair and are edited together, so
    they sit side by side wherever the sheet is wide enough for both tables --

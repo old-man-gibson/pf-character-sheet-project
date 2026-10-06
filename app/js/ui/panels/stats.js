@@ -20,7 +20,7 @@ import {
   ATTUNEMENT_BONUS, ATTUNEMENT_MIN_LEVEL,
   BUILD_DERIVED_KEYS, BUILD_OPTIONAL_KEYS, BUILD_PERMANENT_GROUPS, BUILD_TEMPORARY,
   ENHANCEMENT_CAP, LEVEL4_LEVELS, MENTAL_PROWESS_LEVELS, MYTHIC_STAT_TIERS,
-  PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel,
+  PHYSICAL_PROWESS_LEVELS, PROWESS_TRACKS, SAVE_BONUS_TYPES, abpGroupTotal, abpSourceLevel, bonusColumnName,
 } from '../../rules.js';
 
 
@@ -71,14 +71,14 @@ export function renderStatsPanel(model, ctx) {
       <section class="panel">
         <h3>Permanent bonuses
           ${BUILD_OPTIONAL_KEYS.map((k) => {
-          const label = allCols.find(([key]) => key === k)?.[1] || k;
+          const label = allCols.find(([key]) => key === k)?.[2] || k;
           const on = showOptional[k];
           return `<button data-buildcol="${k}" aria-pressed="${on}"
               title="${on ? 'Hide' : 'Show'} the ${esc(label)} column">${on ? 'Hide' : 'Show'} ${esc(label)}</button>`;
         }).join('')}
         </h3>
         <div class="tablewrap">
-          <table class="build">
+          <table class="build statcols">
             <thead>
               <tr class="groups">
                 <th></th>
@@ -90,7 +90,7 @@ export function renderStatsPanel(model, ctx) {
               </tr>
               <tr>
                 <th></th>
-                ${groups.map((g) => `${g.cols.map(([, label], i) => `<th class="num ${band(g, i)}">${esc(label)}</th>`).join('')}${
+                ${groups.map((g) => `${g.cols.map(([, label, full], i) => `<th class="num ${band(g, i)}" title="${esc(full)}">${esc(label)}</th>`).join('')}${
                 g.sum ? '<th class="num grouped groupend" title="What the group actually contributes after its cap">Used</th>' : ''}`).join('')}
                 <th class="num" title="Bonuses forwarded here by a rule written somewhere else on the sheet">Fwd</th>
                 <th class="num">Total</th>
@@ -146,12 +146,12 @@ export function renderStatsPanel(model, ctx) {
       <section class="panel">
         <h3>Temporary bonuses</h3>
         <div class="tablewrap">
-          <table class="build">
+          <table class="build statcols">
             <thead>
               <tr class="groups"><th colspan="${BUILD_TEMPORARY.length + 5}"></th></tr>
               <tr>
                 <th></th>
-                ${BUILD_TEMPORARY.map(([, label]) => `<th class="num">${esc(label)}</th>`).join('')}
+                ${BUILD_TEMPORARY.map(([, label, full]) => `<th class="num" title="${esc(full)}">${esc(label)}</th>`).join('')}
                 <th class="num" title="Bonuses forwarded here as temporary ones — written {str.temp += 2 as size}, or {str.score += 2 as temp.size}, somewhere else on the sheet">Fwd</th>
                 <th class="num" title="Everything the temporary columns add up to">Temp</th>
                 <th class="num" title="Temporary score, used by every derived stat">Score</th>
@@ -255,7 +255,9 @@ function defenceBonusPanel(model) {
     const title = off ? `title="${flags.touch === false ? 'Armour-side: touch attacks ignore it' : 'Lost when flat-footed'}"` : '';
     if (abpOf[key]) {
       return `<td class="num${groupClass(key)}" ${title}>
-          ${roField(resolved?.[key] ?? 0, `From the ABP ladder at level ${c.identity.level}. With the typed bonus beside it, the pair stops at +${ABP_DEFENCE_CAP}.`)}</td>`;
+          ${roField(resolved?.[key] ?? 0, `From the ABP ladder at level ${c.identity.level}. With the typed bonus beside it, the pair stops at +${ABP_DEFENCE_CAP}.`,
+    // As wide as the typed cells beside it, so every column is one width.
+    'style="width:100%;min-width:4.4rem;box-sizing:border-box"')}</td>`;
     }
     const pairTitle = typedOf[key]
       ? ` Counts with the ABP bonus beside it up to +${ABP_DEFENCE_CAP} in all; past +${ABP_DEFENCE_CAP} on its own, it stands alone.` : '';
@@ -269,9 +271,15 @@ function defenceBonusPanel(model) {
       })}</td>`;
   }).join('');
 
-  const head = (types) => types.map(([key, label, flags]) => `<th class="num${groupClass(key)}"
-      ${flags?.touch === false ? 'title="Not counted against touch attacks"'
-  : flags?.flatFooted === false ? 'title="Not counted while flat-footed"' : ''}>${esc(label)}${typedOf[key] ? `<span class="capnote"> ≤ +${ABP_DEFENCE_CAP}</span>` : ''}</th>`).join('');
+  // A short label over each column, its full name and what it does not reach
+  // on hover -- and, for a typed bonus paired with an ABP one, the cap.
+  const head = (types) => types.map(([key, label, flags]) => {
+    const said = [bonusColumnName(key)];
+    if (flags?.touch === false) said.push('not counted against touch attacks');
+    else if (flags?.flatFooted === false) said.push('not counted while flat-footed');
+    if (typedOf[key]) said.push(`with the ABP bonus beside it, at most +${ABP_DEFENCE_CAP}`);
+    return `<th class="num${groupClass(key)}" title="${esc(said.join(' — '))}">${esc(label)}</th>`;
+  }).join('');
 
   return `<section class="panel span2">
       <h3>Save &amp; AC bonuses</h3>

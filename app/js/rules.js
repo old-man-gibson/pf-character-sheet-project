@@ -137,17 +137,17 @@ export const LEVEL4_LEVELS = [4, 8, 12, 16, 20];
  * reads.
  */
 export const BUILD_PERMANENT_GROUPS = [
-  { cols: [['pointBuy', 'Point buy'], ['race', 'Race']] },
+  { cols: [['pointBuy', 'PB', 'Point buy'], ['race', 'Race', 'Race']] },
   {
     label: 'Enhancement',
     hint: `ABP and gear are the same kind of bonus: they stack with each other, then stop at +${ENHANCEMENT_CAP}`,
-    cols: [['abp', 'ABP'], ['gear', 'Gear']],
+    cols: [['abp', 'ABP', 'Automatic Bonus Progression'], ['gear', 'Gear', 'Gear']],
     sum: 'enhancement',
     cap: ENHANCEMENT_CAP,
   },
   {
-    cols: [['attunement', 'Attuned'], ['inherent', 'Inherent'], ['array', 'Array'],
-      ['level4', 'Level/4'], ['mythic', 'Mythic'], ['size', 'Size'], ['untyped', 'Untyped']],
+    cols: [['attunement', 'Att', 'Attuned'], ['inherent', 'Inh', 'Inherent'], ['array', 'Arr', 'Array'],
+      ['level4', 'L/4', 'Level/4'], ['mythic', 'Myth', 'Mythic'], ['size', 'Size', 'Size'], ['untyped', 'Unt', 'Untyped']],
   },
 ];
 
@@ -158,13 +158,17 @@ export const BUILD_PERMANENT_GROUPS = [
  */
 export const BUILD_OPTIONAL_KEYS = ['inherent'];
 
-/** The temporary parts, which produce the Temp Score. */
+/**
+ * The temporary parts, which produce the Temp Score. Each column is
+ * `[key, short, full]`: the Stats tab heads it with the short label and says
+ * the full name on hover, as it does every column.
+ */
 export const BUILD_TEMPORARY = [
-  ['alchemical', 'Alchemical'],
-  ['circumstance', 'Circumstance'],
-  ['morale', 'Morale'],
-  ['tempEnhancement', 'Enhancement'],
-  ['tempSize', 'Size'],
+  ['alchemical', 'Alch', 'Alchemical'],
+  ['circumstance', 'Circ', 'Circumstance'],
+  ['morale', 'Mor', 'Morale'],
+  ['tempEnhancement', 'Enh', 'Enhancement'],
+  ['tempSize', 'Size', 'Size'],
 ];
 
 /** Keys the player edits directly; these columns come from pick selectors. */
@@ -1069,28 +1073,28 @@ export const MYTHIC_TRADITION_SLOTS = [
  * penalties to a creature's AC also apply to its CMD" -- see cmdBonusTotal.
  */
 export const BONUS_TYPES = {
-  alchemical: { name: 'Alchemical', short: 'Alch.' },
-  armor: { name: 'Armor', short: 'Armor' },
-  circumstance: { name: 'Circumstance', short: 'Circ.', stacks: true },
-  competence: { name: 'Competence', short: 'Comp.' },
-  deflection: { name: 'Deflection', short: 'Defl.' },
-  dodge: { name: 'Dodge', short: 'Dodge', stacks: true, ac: { flatFooted: false } },
-  enhancement: { name: 'Enhancement', short: 'Enh.', ac: { touch: false, cmd: false } },
-  inherent: { name: 'Inherent', short: 'Inher.' },
-  insight: { name: 'Insight', short: 'Insight' },
+  alchemical: { name: 'Alchemical', short: 'Alch' },
+  armor: { name: 'Armor', short: 'Arm' },
+  circumstance: { name: 'Circumstance', short: 'Circ', stacks: true },
+  competence: { name: 'Competence', short: 'Comp' },
+  deflection: { name: 'Deflection', short: 'Defl' },
+  dodge: { name: 'Dodge', short: 'Ddg', stacks: true, ac: { flatFooted: false } },
+  enhancement: { name: 'Enhancement', short: 'Enh', ac: { touch: false, cmd: false } },
+  inherent: { name: 'Inherent', short: 'Inh' },
+  insight: { name: 'Insight', short: 'Ins' },
   luck: { name: 'Luck', short: 'Luck' },
-  morale: { name: 'Morale', short: 'Morale' },
-  natural: { name: 'Natural Armor', short: 'Nat.', ac: { touch: false, cmd: false } },
-  profane: { name: 'Profane', short: 'Profane' },
-  racial: { name: 'Racial', short: 'Racial' },
-  resistance: { name: 'Resistance', short: 'Resist.' },
-  sacred: { name: 'Sacred', short: 'Sacred' },
-  shield: { name: 'Shield', short: 'Shield' },
+  morale: { name: 'Morale', short: 'Mor' },
+  natural: { name: 'Natural Armor', short: 'Nat', ac: { touch: false, cmd: false } },
+  profane: { name: 'Profane', short: 'Prof' },
+  racial: { name: 'Racial', short: 'Rac' },
+  resistance: { name: 'Resistance', short: 'Res' },
+  sacred: { name: 'Sacred', short: 'Sacr' },
+  shield: { name: 'Shield', short: 'Shld' },
   // Not the modifier for being Large -- that is already in the formula, the
   // other way round, as the special size modifier. This is a size-typed bonus.
   size: { name: 'Size', short: 'Size', ac: { cmd: false } },
-  trait: { name: 'Trait', short: 'Trait' },
-  untyped: { name: 'Untyped', short: 'Untyped', stacks: true, ac: { cmd: false } },
+  trait: { name: 'Trait', short: 'Trt' },
+  untyped: { name: 'Untyped', short: 'Unt', stacks: true, ac: { cmd: false } },
 };
 
 /**
@@ -1099,12 +1103,12 @@ export const BONUS_TYPES = {
  * and the template's and the imported sheet's remainders.
  */
 const ROW_COLUMNS = {
-  abpResistance: { short: 'ABP (Resist)' },
-  abpDeflection: { short: 'ABP Deflect' },
-  abpNatural: { short: 'ABP Nat', ac: { touch: false, cmd: false } },
-  enhancedNatural: { short: 'E. Nat', ac: { touch: false, cmd: false } },
-  template: { short: 'Template', ac: { cmd: false } },
-  sheet: { short: 'Sheet', ac: { cmd: false } },
+  abpResistance: { name: 'ABP resistance', short: 'ABP' },
+  abpDeflection: { name: 'ABP deflection', short: 'ABP' },
+  abpNatural: { name: 'ABP natural armor', short: 'ABP', ac: { touch: false, cmd: false } },
+  enhancedNatural: { name: 'Enhancement to natural armor', short: 'ENat', ac: { touch: false, cmd: false } },
+  template: { name: 'Template', short: 'Tmpl', ac: { cmd: false } },
+  sheet: { name: 'Sheet', short: 'Sht', ac: { cmd: false } },
 };
 
 /** A row's columns as `[key, label, flags]`, in the order given; flags only on the AC row. */
@@ -1114,8 +1118,8 @@ const bonusRow = (keys, row) => keys.map((key) => {
   return flags ? [key, t.short, flags] : [key, t.short];
 });
 
-/** What a column is called in full: its type's name, or its short label for a column that is not a type. */
-export const bonusColumnName = (key) => BONUS_TYPES[key]?.name || ROW_COLUMNS[key]?.short || key;
+/** What a column is called in full: the hover on its short header, a breakdown line, an audit row. */
+export const bonusColumnName = (key) => BONUS_TYPES[key]?.name || ROW_COLUMNS[key]?.name || key;
 
 /**
  * A bonus type's key from its name as a gear row or a pack writes it --
@@ -3011,7 +3015,7 @@ export function bonusParts(resolved, types, filter = null) {
       : Number(resolved?.[key]) || 0;
     if (!value) continue;
     const other = typed ? Number(resolved?.[typed]) || 0 : 0;
-    const name = BONUS_TYPES[key] ? bonusColumnName(key) : label;
+    const name = bonusColumnName(key);
     out.push(recipePart(typed && other ? `${name} + typed` : name, value,
       typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : '', key));
   }

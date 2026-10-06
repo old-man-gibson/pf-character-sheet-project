@@ -415,7 +415,7 @@ console.log('\nthe gear table: three cells a bonus, and the card grows with its 
     /data-item="equipment\.gear\|0\|bonuses\.0\.value" data-kind="expr-or-null"/.test(html)
       && /class="xf-view"[^>]*>1</.test(html));
   ok('the type picker shows the short form and keeps the whole name',
-    /<option value="Deflection" title="Deflection"[^>]*selected>Defl\.</.test(html));
+    /<option value="Deflection" title="Deflection"[^>]*selected>Defl</.test(html));
   const to = html.match(/<select class="target"[^>]*bonuses\.0\.target[\s\S]*?<\/select>/)?.[0] || '';
   ok('the To cell is a grouped picker showing plain names',
     /<optgroup label="Armour class">/.test(to) && /<option value="ac\.total" selected title="ac\.total">AC</.test(to)
@@ -700,7 +700,7 @@ console.log('\nThe Sheet column on Stats stays only while it holds something');
   const tables = () => {
     const html = renderStatsPanel(c, {});
     const at = html.indexOf('Save &amp; AC bonuses');
-    return html.slice(at).split('<table').slice(1, 3).map((t) => t.split('</table>')[0].includes('>Sheet<'));
+    return html.slice(at).split('<table').slice(1, 3).map((t) => t.split('</table>')[0].includes('>Sht<'));
   };
   check('a character built here has no Sheet column', tables(), [false, false]);
   c.set('saves.will.bonuses.sheet', 3);
