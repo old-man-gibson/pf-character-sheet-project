@@ -20,63 +20,17 @@
  */
 
 import {
-  AC_BONUS_TYPES, ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY,
-  BUILD_TEMPORARY, SAVE_BONUS_TYPES, abilityOf, abpGroupTotal, armorParts, conditionTotals, sizeAttackMod, sizeMod, statMod,
+  ABILITIES, ABILITY_LABELS, ATTACK_MODE_KEY, BUILD_TEMPORARY, abilityOf, acParts, attackParts, cmdParts,
+  conditionTotals, initiativeParts, recipePart, recipePlain, saveParts,
 } from '../rules.js';
 import { forwarded, forwardedSplit } from './scope.js';
 import { abilityMoves, abilitySlots, mythicHp } from './stats/defenses.js';
 import { COMPANION_KINDS, companionBreakdown, companionScopeName } from '../companions.js';
 
-/** A part worth showing: anything but a zero nobody typed. */
-const part = (label, value, note = '') => ({ label, value: Number(value) || 0, note });
-
-/**
- * The number a sum starts from -- the 10 under every AC, a save's base off the
- * Classes table, the score a working score is built on. Shown without a sign,
- * because it is a number and not a bonus to one: "Base 10", then "+14" for
- * everything laid on it.
- */
-const plain = (label, value, note = '') => ({ label, value: Number(value) || 0, note, plain: true });
-const base = (value, note = '') => plain('Base', value, note);
-
-/**
- * The typed bonus columns of a save or the AC, one line each.
- *
- * ABP pairs are shown as the pair the sum treats them as -- the progression's
- * deflection and a typed one are capped together, and two lines that add to
- * more than the total would be a worse answer than one that says so.
- */
-function bonusParts(resolved, types, filter = null) {
-  const keys = new Set(types.map(([key]) => key));
-  const pairs = new Map();
-  for (const [abp, typed] of [['abpResistance', 'resistance'], ['abpDeflection', 'deflection'],
-    ['abpNatural', 'enhancedNatural']]) {
-    if (keys.has(abp) && keys.has(typed)) pairs.set(abp, typed);
-  }
-  const out = [];
-  const paired = new Set(pairs.values());
-  for (const [key, label, flags] of types) {
-    if (filter && flags && flags[filter] === false) continue;
-    if (paired.has(key)) continue;                      // shown with its ABP partner
-    const typed = pairs.get(key);
-    const value = typed
-      ? abpGroupTotal(resolved?.[key], resolved?.[typed])
-      : Number(resolved?.[key]) || 0;
-    if (!value) continue;
-    const other = typed ? Number(resolved?.[typed]) || 0 : 0;
-    out.push(part(typed && other ? `${label} + typed` : label, value,
-      typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : ''));
-  }
-  return out;
-}
-
-/** The ability slot a defence or an attack reads, as one line. */
-function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability' } = {}) {
-  const raw = statMod(c, stat1, stat2);
-  const value = Math.min(cap, raw);
-  const names = [stat1, stat2].filter(Boolean).join(' + ') || label;
-  return part(names, value, value === raw ? '' : `${raw} before the armour’s maximum Dexterity of ${cap}`);
-}
+// The line makers are the recipes' own (rules.js), so a breakdown's lines
+// are the lines its number is summed from.
+const part = recipePart;
+const plain = recipePlain;
 
 /** The reconciliation offset and the forwarded bonus, where either is doing anything. */
 function extras(model, derivedKey, forwardKey) {
@@ -95,76 +49,13 @@ function extras(model, derivedKey, forwardKey) {
  * One builder per headline number.
  * ------------------------------------------------------------------ */
 
-function acBreakdown(model, which) {
-  const c = model.data;
-  const d = c.defenses;
-  const worn = armorParts(c);
-  const filter = which === 'ac' ? null : which === 'touch' ? 'touch' : 'flatFooted';
-  const parts = [base(10)];
-  if (which !== 'flatFooted') {
-    parts.push(abilityPart(c, d.acStat1, d.acStat2, { cap: worn.maxDex }));
-  } else if (d.uncannyDodge) {
-    parts.push({ ...abilityPart(c, d.acStat1, d.acStat2, { cap: worn.maxDex }), note: 'uncanny dodge keeps it while flat-footed' });
-  }
-  parts.push(part('size', sizeMod(c)));
-  if (which !== 'touch') {
-    parts.push(part('misc AC', d.miscAC));
-    parts.push(part('armour', worn.armor));
-    parts.push(part('shield', worn.shield));
-  }
-  parts.push(...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, filter));
-  const key = which === 'ac' ? 'defenses.ac' : which === 'touch' ? 'defenses.touch' : 'defenses.flatFooted';
-  const fwd = which === 'ac' ? 'ac.total' : which === 'touch' ? 'ac.touch' : 'ac.flatFooted';
-  parts.push(...extras(model, key, fwd));
-  return parts;
-}
-
-function cmdBreakdown(model) {
-  const c = model.data;
-  const d = c.defenses;
-  const parts = [
-    base(10),
-    part('BAB', c.attack.bab),
-    part('Str', c.abilities.str.totalMod),
-    part('Dex', c.abilities.dex.totalMod),
-    part('special size', -sizeMod(c)),
-    part('misc CMD', d.miscCMD),
-    // Only the columns CMD is allowed the bonus from -- and every penalty,
-    // whatever column it was typed in, because "any penalties to a creature's
-    // AC also apply to its CMD".
-    ...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, 'cmd'),
-    ...AC_BONUS_TYPES.filter(([, , flags]) => flags?.cmd === false).map(([key, label]) => part(
-      `${label} penalty`, Math.min(0, Number(d.acBonusesResolved?.[key]) || 0),
-      'a penalty to AC applies to CMD whatever type it is',
-    )),
-    part('misc AC penalty', Math.min(0, Number(d.miscAC) || 0),
-      'a penalty to AC applies to CMD whatever column it was typed in'),
-    ...extras(model, 'defenses.cmd', 'ac.cmd'),
-  ];
-  return parts;
-}
-
-function saveBreakdown(model, key) {
-  const sv = model.data.saves[key] || {};
-  return [
-    base(sv.base, 'from the Classes table'),
-    abilityPart(model.data, sv.stat1, sv.stat2),
-    ...bonusParts(sv.bonusesResolved, SAVE_BONUS_TYPES),
-    ...extras(model, `saves.${key}.total`, `saves.${key}`),
-  ];
-}
-
-function attackBreakdown(model, mode) {
-  const c = model.data;
-  const m = c.attack.modes?.[mode] || {};
-  return [
-    part('BAB', c.attack.bab),
-    abilityPart(c, m.stat1, m.stat2),
-    part(/cmb/i.test(mode) ? 'special size' : 'size', sizeAttackMod(c, mode)),
-    part('misc', c.attack.miscBonus),
-    ...extras(model, ATTACK_MODE_KEY[mode], `attack.${mode}`),
-  ];
-}
+/**
+ * A number with a recipe: its lines, then the offset and the forwarded
+ * bonus the recompute adds on top of the recipe's sum.
+ */
+const withExtras = (lines, derivedKey, forwardKey) => (model) => [
+  ...lines(model.data), ...extras(model, derivedKey, forwardKey),
+];
 
 function hpBreakdown(model) {
   const c = model.data;
@@ -245,25 +136,22 @@ function abilityBreakdown(model, key, which) {
  * `breakdown(model, 'ac')` are the same number twice.
  */
 export const BREAKDOWNS = new Map([
-  ['ac', { label: 'Armor Class', build: (m) => acBreakdown(m, 'ac'), total: (m) => m.data.defenses.ac }],
-  ['touch', { label: 'Touch AC', build: (m) => acBreakdown(m, 'touch'), total: (m) => m.data.defenses.touch }],
-  ['flatFooted', { label: 'Flat-footed AC', build: (m) => acBreakdown(m, 'flatFooted'), total: (m) => m.data.defenses.flatFooted }],
-  ['cmd', { label: 'CMD', build: cmdBreakdown, total: (m) => m.data.defenses.cmd }],
-  ['fortitude', { label: 'Fortitude', build: (m) => saveBreakdown(m, 'fortitude'), total: (m) => m.data.saves.fortitude.total }],
-  ['reflex', { label: 'Reflex', build: (m) => saveBreakdown(m, 'reflex'), total: (m) => m.data.saves.reflex.total }],
-  ['will', { label: 'Will', build: (m) => saveBreakdown(m, 'will'), total: (m) => m.data.saves.will.total }],
-  ['melee', { label: 'Melee attack', build: (m) => attackBreakdown(m, 'melee'), total: (m) => m.data.attack.totalMelee }],
-  ['ranged', { label: 'Ranged attack', build: (m) => attackBreakdown(m, 'ranged'), total: (m) => m.data.attack.totalRanged }],
-  ['cmb', { label: 'CMB', build: (m) => attackBreakdown(m, 'cmb'), total: (m) => m.data.attack.totalCmb }],
-  ['initiative', {
-    label: 'Initiative',
-    build: (m) => [
-      abilityPart(m.data, m.data.hp.initAbility || 'Dex', m.data.hp.initAbility2),
-      part('misc', Number(m.data.hp.initMisc) || 0),
-      ...extras(m, 'initiative', 'initiative'),
-    ],
-    total: (m) => m.data.hp.initiative,
-  }],
+  ['ac', { label: 'Armor Class', build: withExtras((c) => acParts(c, 'ac'), 'defenses.ac', 'ac.total'), total: (m) => m.data.defenses.ac }],
+  ['touch', { label: 'Touch AC', build: withExtras((c) => acParts(c, 'touch'), 'defenses.touch', 'ac.touch'), total: (m) => m.data.defenses.touch }],
+  ['flatFooted', { label: 'Flat-footed AC', build: withExtras((c) => acParts(c, 'flatFooted'), 'defenses.flatFooted', 'ac.flatFooted'), total: (m) => m.data.defenses.flatFooted }],
+  ['cmd', { label: 'CMD', build: withExtras(cmdParts, 'defenses.cmd', 'ac.cmd'), total: (m) => m.data.defenses.cmd }],
+  ...['fortitude', 'reflex', 'will'].map((k) => [k, {
+    label: k[0].toUpperCase() + k.slice(1),
+    build: withExtras((c) => saveParts(c, k), `saves.${k}.total`, `saves.${k}`),
+    total: (m) => m.data.saves[k].total,
+  }]),
+  ...[['melee', 'Melee attack', 'totalMelee'], ['ranged', 'Ranged attack', 'totalRanged'], ['cmb', 'CMB', 'totalCmb']]
+    .map(([mode, label, field]) => [mode, {
+      label,
+      build: withExtras((c) => attackParts(c, mode), ATTACK_MODE_KEY[mode], `attack.${mode}`),
+      total: (m) => m.data.attack[field],
+    }]),
+  ['initiative', { label: 'Initiative', build: withExtras(initiativeParts, 'initiative', 'initiative'), total: (m) => m.data.hp.initiative }],
   ['hp', { label: 'Hit points', build: hpBreakdown, total: (m) => m.hpMax }],
   ...ABILITIES.flatMap((k) => [
     [k, {
