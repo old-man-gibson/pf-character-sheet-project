@@ -59,6 +59,11 @@ export function sheetBonusField(model, key, width = '4rem') {
 export function forwardedBadge(model, name, tag = '', only = '', waiting = '') {
   const f = name ? model.forwardedInto(name, only) : null;
   if (!f) return '';
+  // What the hover panel needs to ask the model again when it opens, so the
+  // list it shows is never a render old -- the same bargain as `data-bd`.
+  // See ui/breakdown-popover.js.
+  const pop = ` data-fwd="${esc(name)}"${only ? ` data-fwdonly="${esc(only)}"` : ''}${
+    tag ? ` data-fwdtag="${esc(tag)}"` : ''}${waiting ? ` data-fwdwait="${esc(waiting)}"` : ''}`;
   // A bonus with nothing yet to raise -- a caster level before casting is
   // unlocked -- is shown held back rather than hidden, with the reason.
   if (waiting) tag = tag ? `${tag}, waiting` : 'waiting';
@@ -69,7 +74,7 @@ export function forwardedBadge(model, name, tag = '', only = '', waiting = '') {
     .map((x) => `${fmt(x.value)}${x.type ? ` ${x.type}` : ''} from ${x.where}`
       + ` — ${x.sign < 0 ? '-=' : '+='} ${x.expr}${stackingNote(x)}`)
     .join('\n');
-  return `<span class="fwd${waiting ? ' waiting' : ''}" title="${
+  return `<span class="fwd${waiting ? ' waiting' : ''}"${pop} title="${
     waiting ? `Waiting: ${esc(waiting)}\n` : ''}Forwarded here${tag ? ` (${tag})` : ''}\n${esc(from)}">`
     + `${fmt(f.total)}${tag ? ` <em>${esc(tag)}</em>` : ''}</span>`;
 }

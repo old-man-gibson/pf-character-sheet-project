@@ -734,6 +734,11 @@
 /* The sheet's total and the parts shown disagree. Said in the colour the sheet
    uses for a number that is wrong, because that is what this is. */
 .bdpop .bdrow.odd .k, .bdpop .bdrow.odd .v { color: var(--cs-bad); }
+/* A forwarded bonus that is not adding -- outranked by a bigger one of its
+   type, or already given by its column. Kept on the list, greyed, its figure
+   struck, with the note under it saying why. */
+.bdpop .bdrow.idle { opacity: 0.6; }
+.bdpop .bdrow.idle .v { text-decoration: line-through; }
 /* The temporary half, under the permanent parts it moves: a row that heads
    it with its net -- "Buffs and conditions +1" -- ruled off from the parts,
    then one entry a source, its share in the colour the sheet gives the
