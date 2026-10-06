@@ -224,8 +224,25 @@ function showOptionalBuildColumns(model, build) {
  * Every cell takes a number or a formula, so a conditional bonus can be
  * written as the rule it is rather than a number that goes stale.
  */
+/**
+ * Whether a Sheet cell still holds something: a number other than 0, or a
+ * formula. Blank and 0 are what clearing it leaves.
+ */
+const holdsSheet = (v) => (typeof v === 'string'
+  ? v.trim() !== '' && Number(v.trim()) !== 0
+  : v !== null && v !== undefined && Number(v) !== 0);
+
 function defenceBonusPanel(model) {
   const c = model.data;
+  // The Sheet column is what an imported workbook's total held beyond the
+  // columns the export could read. It is there to be moved into the right
+  // columns, and goes once a table's Sheet cells are all cleared; a
+  // character built here never has one.
+  const saveKeys = ['fortitude', 'reflex', 'will'];
+  const savesSheet = saveKeys.some((k) => holdsSheet(c.saves?.[k]?.bonuses?.sheet));
+  const acSheet = holdsSheet(c.defenses?.acBonuses?.sheet);
+  const saveTypes = SAVE_BONUS_TYPES.filter(([key]) => key !== 'sheet' || savesSheet);
+  const acTypes = AC_BONUS_TYPES.filter(([key]) => key !== 'sheet' || acSheet);
   // The ABP columns are read off the level, and each sits beside the typed
   // bonus of the same kind: the pair sums to the cap, and a typed value past
   // the cap stands alone. The group styling says so.
@@ -259,24 +276,24 @@ function defenceBonusPanel(model) {
   return `<section class="panel span2">
       <h3>Save &amp; AC bonuses</h3>
       <div class="tablewrap"><table class="build bonusgrid">
-        <thead><tr><th></th><th class="num">Total</th>${head(SAVE_BONUS_TYPES)}</tr></thead>
+        <thead><tr><th></th><th class="num">Total</th>${head(saveTypes)}</tr></thead>
         <tbody>${[['fortitude', 'Fortitude'], ['reflex', 'Reflex'], ['will', 'Will']].map(([k, label]) => {
         const s = c.saves[k];
         return `<tr>
             <th scope="row">${label}</th>
             <td class="num total" title="Base ${s.base} + ability + these">${fmt(s.total)}</td>
-            ${cells(s.bonuses, s.bonusesResolved, s.bonusErrors, SAVE_BONUS_TYPES,
+            ${cells(s.bonuses, s.bonusesResolved, s.bonusErrors, saveTypes,
             (key) => `data-set="saves.${k}.bonuses.${key}"`)}
           </tr>`;
       }).join('')}</tbody>
       </table></div>
       <div class="tablewrap" style="margin-top:10px"><table class="build bonusgrid">
-        <thead><tr><th></th><th class="num">Total</th>${head(AC_BONUS_TYPES)}</tr></thead>
+        <thead><tr><th></th><th class="num">Total</th>${head(acTypes)}</tr></thead>
         <tbody><tr>
           <th scope="row">AC</th>
           <td class="num total" title="Touch ${c.defenses.touch} · flat-footed ${c.defenses.flatFooted}">${c.defenses.ac}</td>
           ${cells(c.defenses.acBonuses, c.defenses.acBonusesResolved, c.defenses.acBonusErrors,
-          AC_BONUS_TYPES, (key) => `data-set="defenses.acBonuses.${key}"`)}
+          acTypes, (key) => `data-set="defenses.acBonuses.${key}"`)}
         </tr></tbody>
       </table></div>
       <p class="hint">
@@ -293,9 +310,10 @@ function defenceBonusPanel(model) {
         character's level along the progression's ladder and are not typed; each is paired
         with the typed bonus of the same kind (resistance, deflection, enhanced natural
         armour), and the pair adds up to at most +${ABP_DEFENCE_CAP} — unless the typed side is
-        past +${ABP_DEFENCE_CAP} by itself, in which case it stands alone.
-        <strong>Sheet</strong> is what the source total held beyond the columns the export
-        could read; it is an ordinary field, and starts at 0 on a character built here.
+        past +${ABP_DEFENCE_CAP} by itself, in which case it stands alone.${savesSheet || acSheet ? `
+        <strong>Sheet</strong> is what the imported workbook's total held beyond the columns
+        the export could read. Move it into the columns it belongs in: once a table's Sheet
+        cells are all cleared, the column goes.` : ''}
       </p>
     </section>`;
 }
