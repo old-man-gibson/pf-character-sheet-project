@@ -16,7 +16,9 @@ import {
   ABILITY_LABELS, EXPERTISE_TIERS, GUILE_SPHERES, OPERATIVE_ABILITIES, EXPERTISE_CUSTOM, fmt, parseLadderRule, ABILITIES, CASTING_TYPES, PRACTITIONER_TYPES, TALENT_RATE_OPTIONS, statMod,
 } from '../../rules.js';
 import { autoNum, select, text, field } from '../fields.js';
-import { itemSelect, itemText } from '../rows.js';
+import {
+  addButton, itemCheck, itemSelect, itemText, rowDrop, rowGrip, rowRemove, rowToolsDragged,
+} from '../rows.js';
 
 const guileSphereList = () => sphereNames(GUILE_SPHERES, 'guile');
 
@@ -399,6 +401,98 @@ export function classLevelsField(model, list, ci, cls, hint) {
             </span></label>`;
 }
 
+/**
+ * A class's single ladder of talents: a row per class level, the talent, its
+ * sphere and its note writable only where the level grants a slot. `slots`
+ * is the levels list's path. With `systems` -- a blended pool's kinds -- each
+ * row also says which kind its sphere makes the talent, or that it counts
+ * nowhere. The two-ladder pools are ladderTable and ladderStack.
+ */
+export function singleLadderTable(model, slots, cls, spheres, systems = null) {
+  return `<div class="tablewrap"><table class="talents stacked">
+          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
+          <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
+          <tbody>${(cls.levels || []).map((lv, li) => {
+    const on = !!lv.granted;
+    const state = on ? 'slot-on' : 'slot-off';
+    const side = systems && on && String(lv.sphere || '').trim() ? (talentLandsOn(lv.sphere, systems) ?? 'none') : null;
+    // The running talent count used to be a column of its own; it says the
+    // same thing as a tooltip on the level it belongs to.
+    const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
+      side === 'none' ? ` — ${lv.sphere} is not a sphere this class's talents count as, so it counts nowhere`
+        : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
+      : `Level ${lv.level} grants no talent`;
+    return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
+              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
+              <td class="${state}" data-stack="name">${talentCell(model,
+      `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
+      on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
+              <td class="${state}${side ? ` side-${side}` : ''}" data-label="Sphere">
+                ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
+      : '<select disabled><option></option></select>'}
+              </td>
+              <td class="${state}" data-label="Notes">${talentNote(model,
+      `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
+            </tr>`;
+  }).join('')}</tbody>
+        </table></div>`;
+}
+
+/**
+ * A side's bonus talents: talents from anywhere but a class's own ladder --
+ * a feat, an item, a template -- each with a Source. `guile` adds the two
+ * ticks only the skill side has: a row that had to be a [utility] talent,
+ * and a free one, granted by a base sphere or a drawback, which buys no
+ * skill ranks. Ends with the Add button.
+ */
+export function bonusTalentTable(model, list, rows, spheres, { guile = false, placeholder = 'Feat, item…' } = {}) {
+  return `<div class="tablewrap"><table class="talents bonus stacked">
+        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes">${guile ? `
+          <col class="tool"><col class="tool">` : ''}<col class="tools"></colgroup>
+        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>${guile ? `
+          <th class="num" title="Had to be a [utility] talent">[u]</th>
+          <th class="num" title="Granted by a base sphere or a drawback — not a talent spent, so it buys no skill ranks">free</th>
+          ` : ''}<th></th></tr></thead>
+        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
+          ${rowGrip()}
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere', notes: 'notes' })}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
+          <td data-label="Source">${itemText(list, i, 'source', e.source, placeholder)}</td>
+          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>${guile ? `
+          <td class="mid" data-label="Utility">${itemCheck(list, i, 'utility', e.utility)}</td>
+          <td class="mid" data-label="Free">${itemCheck(list, i, 'free', e.free)}</td>` : ''}
+          ${rowToolsDragged(list, i)}
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="margin-top:6px">${addButton(list, 'Add talent', guile
+    ? { talent: '', sphere: null, source: '', notes: '', utility: false, free: false }
+    : { talent: '', sphere: null, source: '', notes: '' })}</div>`;
+}
+
+/**
+ * A tradition's granted talents. `adroit` -- the trade rank, given only on
+ * the guile side -- adds the tick for a row that waits on adroit rank, and
+ * greys such a row until the rank is reached. Ends with the Add button.
+ */
+export function traditionTable(model, list, rows, spheres, adroit = null) {
+  const trade = adroit !== null;
+  return `<div class="tablewrap" style="margin-top:6px"><table class="talents stacked">
+        <colgroup><col class="talent"><col class="sphere"><col class="tool">${trade ? '<col class="tool">' : ''}</colgroup>
+        <thead><tr><th>Grants</th><th>Sphere</th>${trade ? `
+          <th class="num" title="Only at adroit rank">adroit</th>` : ''}<th></th></tr></thead>
+        <tbody>${rows.map((e, i) => `<tr${trade ? ` class="${e.adroit && !adroit ? 'future' : ''}"` : ''}>
+          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
+    { sphere: 'sphere' })}</td>
+          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>${trade ? `
+          <td class="mid" data-label="Adroit">${itemCheck(list, i, 'adroit', e.adroit)}</td>` : ''}
+          ${rowRemove(list, i)}
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="margin-top:6px">${addButton(list, 'Add entry', trade
+    ? { talent: '', sphere: null, adroit: false } : { talent: '', sphere: null })}</div>`;
+}
+
 export function blendTicks(systems, home, attr, counts = null, named = true) {
     const where = { combat: 'Martial Spheres', magic: 'Magic Spheres', guile: 'Guile Spheres' };
     const ticks = TRAINING_SYSTEMS.map((sys) => {
@@ -518,32 +612,8 @@ export function blendedPanel(model, pairs) {
     ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts,
     !!String(cls.name || '').trim())}
         </div>
-        ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres) : `<div class="tablewrap"><table class="talents stacked">
-          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
-          <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
-          <tbody>${(cls.levels || []).map((lv, li) => {
-      const on = !!lv.granted;
-      const slots = `${list}.${owner.index}.levels`;
-      const state = on ? 'slot-on' : 'slot-off';
-      const side = on && String(lv.sphere || '').trim() ? (talentLandsOn(lv.sphere, systems) ?? 'none') : null;
-      const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}${
-        side === 'none' ? ` — ${lv.sphere} is not a sphere this class's talents count as, so it counts nowhere`
-          : side ? ` — counts as ${SYSTEM_NOUNS[side]}` : ''}`
-        : `Level ${lv.level} grants no talent`;
-      return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
-              <td class="${state}" data-stack="name">${talentCell(model,
-        `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
-        on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
-              <td class="${state}${side ? ` side-${side}` : ''}" data-label="Sphere">
-                ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
-        : '<select disabled><option></option></select>'}
-              </td>
-              <td class="${state}" data-label="Notes">${talentNote(model,
-        `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
-            </tr>`;
-    }).join('')}</tbody>
-        </table></div>`}
+        ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres)
+    : singleLadderTable(model, `${list}.${owner.index}.levels`, cls, spheres, systems)}
       </div>`;
   }).join('')}
       <p class="hint">

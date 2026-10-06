@@ -17,17 +17,15 @@
  * reason: the markup they return is whitespace-sensitive.
  */
 import { esc } from '../html.js';
-import {
-  collapsible, addButton, bigStat, editLine, exprField, itemCheck, itemSelect, itemText, line, rowDrop, rowGrip, rowRemove, rowToolsDragged,
-} from '../rows.js';
-import { fillNotesButton, talentCell, talentLegend, talentNote } from '../talents.js';
+import { collapsible, bigStat, editLine, exprField, itemSelect, line, rowRemove } from '../rows.js';
+import { fillNotesButton, talentLegend } from '../talents.js';
 import { sphereForwardKey, sphereNames, talentsIn, DAILY_LEVERAGE_EXTRA } from '../../model.js';
 import { forwardedBadge } from '../badges.js';
 import {
   GUILE_SPHERES, RANKS_PER_TALENT, TRADE_BACKGROUND_SKILLS, TRADE_CLASS_SKILLS, TRADE_RANKS, fmt, guilePackages, guileSkillHint, skillLabel,
 } from '../../rules.js';
 import { check, select, text } from '../fields.js';
-import { guileClassBlock, blendedSection } from './training.js';
+import { blendedSection, bonusTalentTable, guileClassBlock, traditionTable } from './training.js';
 
 /** What a sphere asks its associated skill to be, when it never said. */
 const DEFAULT_GUILE_SKILL_HINT = 'Any skill the sphere names';
@@ -281,28 +279,7 @@ function guileBonusPanel(model, g) {
     const spheres = guileSphereList();
     return `<section class="panel span2">
       <h3>Bonus skill talents ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      <div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes">
-          <col class="tool"><col class="tool"><col class="tools"></colgroup>
-        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th>
-          <th class="num" title="Had to be a [utility] talent">[u]</th>
-          <th class="num" title="Granted by a base sphere or a drawback — not a talent spent, so it buys no skill ranks">free</th>
-          <th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
-          ${rowGrip()}
-          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
-    { sphere: 'sphere', notes: 'notes' })}</td>
-          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
-          <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, archetype…')}</td>
-          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
-          <td class="mid" data-label="Utility">${itemCheck(list, i, 'utility', e.utility)}</td>
-          <td class="mid" data-label="Free">${itemCheck(list, i, 'free', e.free)}</td>
-          ${rowToolsDragged(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${addButton(list, 'Add talent', {
-    talent: '', sphere: null, source: '', notes: '', utility: false, free: false,
-  })}</div>
+      ${bonusTalentTable(model, list, rows, spheres, { guile: true, placeholder: 'Feat, archetype…' })}
       <p class="hint">
         A talent that arrived with a sphere or with one of its drawbacks is
         <strong>free</strong>: it is not a talent <em>spent</em>, so it does not count toward
@@ -340,19 +317,7 @@ function tradeTraditionPanel(model, g) {
         bonus talents on top. A class of 5 + Int ranks per level or more is adroit; 4 + Int or
         fewer is competent.
       </p>
-      <div class="tablewrap" style="margin-top:6px"><table class="talents stacked">
-        <colgroup><col class="talent"><col class="sphere"><col class="tool"><col class="tool"></colgroup>
-        <thead><tr><th>Grants</th><th>Sphere</th>
-          <th class="num" title="Only at adroit rank">adroit</th><th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr class="${e.adroit && !adroit ? 'future' : ''}">
-          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
-    { sphere: 'sphere' })}</td>
-          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, spheres)}</td>
-          <td class="mid" data-label="Adroit">${itemCheck(list, i, 'adroit', e.adroit)}</td>
-          ${rowRemove(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${addButton(list, 'Add entry', { talent: '', sphere: null, adroit: false })}</div>
+      ${traditionTable(model, list, rows, spheres, adroit)}
       ${rows.some((e) => e.adroit) && !adroit
     ? '<p class="hint warn">Greyed rows are the tradition\'s adroit talents — set the rank above to claim them.</p>'
     : ''}

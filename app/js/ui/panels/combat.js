@@ -15,11 +15,11 @@
  */
 import { esc } from '../html.js';
 import {
-  collapsible, addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml, rowDrop, rowGrip, rowRemove, rowTools, rowToolsDragged,
+  collapsible, addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
-import { fillNotesButton, noteField, talentCell, talentLegend, talentNote } from '../talents.js';
+import { fillNotesButton, noteField, talentCell, talentLegend } from '../talents.js';
 import { rollButton } from '../roll.js';
 import {
   TEMPLATE_TYPES, sphereForwardKey, sphereNames, trackSphereNames, trackTalentSide,
@@ -28,7 +28,9 @@ import {
   CASTING_TYPES, COMBAT_SPHERES, MAGIC_SPHERES, PRACTITIONER_TYPES, SP_PER_TEMP_ESSENCE, TALENT_RATE_OPTIONS, TRACK_SPHERE_LABELS, TRACK_SPHERE_NOUNS, TRACK_SPHERE_SIDES, fmt, mergeLayout, parseLadderRule,
 } from '../../rules.js';
 import { check, field, roField, select, text } from '../fields.js';
-import { classNames, blendTicks, blendedSection, abilityField, classLevelsField } from './training.js';
+import {
+  abilityField, blendTicks, blendedSection, bonusTalentTable, classLevelsField, classNames, singleLadderTable, traditionTable,
+} from './training.js';
 
 /** What a template feature's type means, on the dropdown that sets it. */
 const TEMPLATE_TYPE_HINTS = {
@@ -142,31 +144,7 @@ function trainingSide(model, sideKey, side) {
     ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`), null, !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
-        <div class="tablewrap"><table class="talents stacked">
-          <colgroup><col class="lvl"><col class="talent"><col class="sphere"><col class="notes"></colgroup>
-          <thead><tr><th class="num">Lvl</th><th>Talent</th><th>Sphere</th><th>Notes</th></tr></thead>
-          <tbody>${(cls.levels || []).map((lv, li) => {
-            const on = !!lv.granted;
-            const slots = `${list}.${ci}.levels`;
-            const state = on ? 'slot-on' : 'slot-off';
-            // The running talent count used to be a column of its own; it says
-            // the same thing as a tooltip on the level it belongs to.
-            const count = on ? `Talent #${Math.floor(lv.count)} at level ${lv.level}`
-              : `Level ${lv.level} grants no talent`;
-            return `<tr class="${lv.future ? 'future' : ''}${on ? '' : ' emptyslot'}">
-              <td class="num" data-stack="head" data-headlabel="Level" title="${esc(count)}">${esc(lv.level)}</td>
-              <td class="${state}" data-stack="name">${talentCell(model,
-    `data-item="${slots}|${li}|talent"${on ? ' placeholder="Talent…"' : ' disabled'}`, lv.talent, lv.sphere,
-    on ? { sphere: 'sphere', notes: 'notes' } : null)}</td>
-              <td class="${state}" data-label="Sphere">
-                ${on ? itemSelect(slots, li, 'sphere', lv.sphere, spheres)
-                  : '<select disabled><option></option></select>'}
-              </td>
-              <td class="${state}" data-label="Notes">${talentNote(model,
-    `data-item="${slots}|${li}|notes"${on ? '' : ' disabled'}`, lv.notes, `${slots}|${li}|notes`)}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>
+        ${singleLadderTable(model, `${list}.${ci}.levels`, cls, spheres)}
       </div>`;
       }).join('')}
       ${extended.length ? `<p class="hint">Also counted as ${isMagic ? 'casting' : 'practitioner'} classes:
@@ -338,17 +316,7 @@ function combatTraditionPanel(model, t) {
       <h3>Martial tradition</h3>
       <label class="fld"><span>Tradition</span>
         ${text('training.combat.tradition.name', t.tradition?.name)}</label>
-      <div class="tablewrap" style="margin-top:6px"><table class="talents stacked">
-        <colgroup><col class="talent"><col class="sphere"><col class="tool"></colgroup>
-        <thead><tr><th>Grants</th><th>Sphere</th><th></th></tr></thead>
-        <tbody>${(t.tradition?.entries || []).map((e, i) => `<tr>
-          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
-    { sphere: 'sphere' })}</td>
-          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(COMBAT_SPHERES, 'combat'))}</td>
-          ${rowRemove(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${addButton(list, 'Add entry', { talent: '', sphere: null })}</div>
+      ${traditionTable(model, list, t.tradition?.entries || [], sphereNames(COMBAT_SPHERES, 'combat'))}
       ${line('Practitioner base DC', t.practitionerDC)}
     </section>`;
   }
@@ -367,22 +335,7 @@ function bonusTalentPanel(model, sideKey, side) {
     return `<section class="panel span2">
       <h3>Bonus ${isMagic ? 'magic' : 'combat'} talents
         ${rows.length ? `<span class="badge">${rows.length}</span>` : ''}</h3>
-      <div class="tablewrap"><table class="talents bonus stacked">
-        <colgroup><col class="grip"><col class="talent"><col class="sphere"><col class="source"><col class="notes"><col class="tools"></colgroup>
-        <thead><tr><th class="grip"></th><th>Talent</th><th>Sphere</th><th>Source</th><th>Notes</th><th></th></tr></thead>
-        <tbody>${rows.map((e, i) => `<tr ${rowDrop(list, i)}>
-          ${rowGrip()}
-          <td data-stack="name">${talentCell(model, `data-item="${list}|${i}|talent"`, e.talent, e.sphere,
-    { sphere: 'sphere', notes: 'notes' })}</td>
-          <td data-label="Sphere">${itemSelect(list, i, 'sphere', e.sphere, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}</td>
-          <td data-label="Source">${itemText(list, i, 'source', e.source, 'Feat, item…')}</td>
-          <td data-label="Notes">${talentNote(model, `data-item="${list}|${i}|notes"`, e.notes, `${list}|${i}|notes`)}</td>
-          ${rowToolsDragged(list, i)}
-        </tr>`).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:6px">${addButton(list, 'Add talent', {
-    talent: '', sphere: null, source: '', notes: '',
-  })}</div>
+      ${bonusTalentTable(model, list, rows, sphereNames(isMagic ? MAGIC_SPHERES : COMBAT_SPHERES, isMagic ? 'magic' : 'combat'))}
     </section>`;
   }
 
