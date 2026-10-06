@@ -23,7 +23,9 @@
  * sums here follow the table and the rulebook -- see the notes on each.
  */
 
-import { ABILITIES, ABILITY_LABELS, SIZE_MODIFIERS, STANDARD_SKILLS, abilityMod, abilityOf, skillTotal } from './rules.js';
+import {
+  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, sizeModifiers, skillTotal,
+} from './rules.js';
 import { isPinned, normalizeName, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
@@ -856,7 +858,8 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     : table[Math.max(1, level) - 1] || table[0];
   const hd = kind === 'familiar' ? level : (level >= 1 ? row.hd : 0);
   const form = kind === 'conjured' ? conjuredBaseForm(b.baseForm) : null;
-  const sizeAC = SIZE_MODIFIERS[b.size] ?? 0;
+  const size = sizeModifiers(b.size);
+  const sizeAC = size.ac;
 
   // Ability scores. Str and Dex carry the table's bonus; the chosen abilities
   // carry the +1s at the increase levels; the eidolon's evolutions add on top.
@@ -920,7 +923,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
       : (level >= 1 ? row.bab : 0);
   const atkKey = abilityKey(b.attackAbility)
     || (kind === 'familiar' ? (scores.str.total >= scores.dex.total ? 'str' : 'dex') : 'str');
-  const attackMod = mod(atkKey) + sizeAC;
+  const attackMod = mod(atkKey) + size.attack;
   const totalAttack = bab + attackMod + (Number(b.attackBonus) || 0) + fwd.attack;
   const multiattack = (b.feats || []).some((f) => /multiattack/i.test(String(f?.name || f || '')));
 
@@ -962,8 +965,8 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const cmdOther = Number(b.cmdOther) || 0;
   const cmdAc = all + touchOnly + Math.min(0, ffOnly);
   const ffCmdAc = all + Math.min(0, touchOnly) + Math.min(0, ffOnly);
-  const cmd = 10 + bab + mod('str') + mod('dex') - sizeAC + cmdAc + cmdOther + fwd.cmd;
-  const ffCmd = 10 + bab + mod('str') + Math.min(0, mod('dex')) - sizeAC + ffCmdAc + cmdOther + fwd.cmd;
+  const cmd = 10 + bab + mod('str') + mod('dex') + size.special + cmdAc + cmdOther + fwd.cmd;
+  const ffCmd = 10 + bab + mod('str') + Math.min(0, mod('dex')) + size.special + ffCmdAc + cmdOther + fwd.cmd;
   // Combat maneuvers, which the worksheet never worked out at all: BAB plus
   // Strength plus the *special* size modifier, which is the size modifier to
   // AC and attack the other way round -- exactly as CMD above already has it.
@@ -975,7 +978,7 @@ export function computeCompanion(kind, block, master, bonuses = null) {
   const cmbOther = Number(b.cmbOther) || 0;
   const tiny = ['Tiny', 'Diminutive', 'Fine'].includes(b.size);
   const cmbKey = abilityKey(b.cmbAbility) || (tiny ? 'dex' : 'str');
-  const cmb = bab + mod(cmbKey) - sizeAC + cmbOther + fwd.cmb;
+  const cmb = bab + mod(cmbKey) + size.special + cmbOther + fwd.cmb;
   const initiative = mod('dex') + (Number(b.initBonus) || 0) + fwd.init;
 
   // Skills. A familiar's ranks are its own or its master's, whichever is

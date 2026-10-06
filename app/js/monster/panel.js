@@ -24,9 +24,7 @@ import { check, field, num, text } from '../ui/fields.js';
 import { hasTokens } from '../inline.js';
 import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
-import {
-  ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, SIZE_MODIFIERS, abpGroupTotal, armorParts, fmt, statMod,
-} from '../rules.js';
+import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, fmt } from '../rules.js';
 import { group } from '../ui/format.js';
 
 /** The two-letter alignment a block prints, from the sheet's full words. */
@@ -72,27 +70,27 @@ function speedText(sp, at) {
  * block lists them, with Dex and size worked out the way the total is.
  */
 function acParts(model) {
-  const c = model.data;
-  const d = c.defenses;
-  const r = d.acBonusesResolved || {};
-  const a = armorParts(c);
+  // The AC's own recipe (rules.js acParts), so the parenthetical cannot add
+  // up to anything but the AC: its lines regrouped and renamed the way a
+  // Bestiary writes them. An ABP bonus and its typed partner are already one
+  // line, capped together.
+  const lines = acRecipe(model.data, 'ac');
+  const sum = (...keys) => lines.filter((p) => keys.includes(p.key)).reduce((t, p) => t + p.value, 0);
   const parts = [];
   const push = (n, label) => { if (n) parts.push(`${fmt(n)} ${label}`); };
-  push(a.armor, 'armor');
-  // Each ABP bonus and its typed partner stop at the cap together, as the
-  // total has them (abpGroupTotal), or the parts add up past the AC.
-  push(abpGroupTotal(r.abpDeflection, r.deflection), 'deflection');
-  push(Math.min(a.maxDex, statMod(c, d.acStat1, d.acStat2)), 'Dex');
-  push(r.dodge, 'dodge');
-  push(abpGroupTotal(r.abpNatural, r.enhancedNatural) + (r.natural || 0), 'natural');
-  push(a.shield, 'shield');
+  push(sum('armor'), 'armor');
+  push(sum('abpDeflection'), 'deflection');
+  push(sum('ability'), 'Dex');
+  push(sum('dodge'), 'dodge');
+  push(sum('abpNatural', 'natural'), 'natural');
+  push(sum('shield'), 'shield');
   for (const [key, label] of AC_BONUS_TYPES) {
     if (['abpDeflection', 'deflection', 'dodge', 'abpNatural', 'enhancedNatural', 'natural'].includes(key)) continue;
-    push(r[key], label.replace(/\.$/, '').toLowerCase());
+    push(sum(key), label.replace(/\.$/, '').toLowerCase());
   }
-  push(d.miscAC, 'misc');
+  push(sum('miscAC'), 'misc');
   // Size last, where a Bestiary puts it.
-  push(SIZE_MODIFIERS[c.identity.size] ?? 0, 'size');
+  push(sum('sizeMod'), 'size');
   return parts.join(', ');
 }
 

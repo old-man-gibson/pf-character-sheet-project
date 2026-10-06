@@ -753,7 +753,7 @@ for (const id of IDS) {
   }
   check(`${id} every breakdown adds up to the number it explains`, off, []);
   const ac = c.breakdown('ac');
-  check(`${id} AC starts at 10, a number rather than a bonus`, ac.parts[0], { label: 'Base', value: 10, note: '', plain: true });
+  check(`${id} AC starts at 10, a number rather than a bonus`, ac.parts[0], { label: 'Base', value: 10, note: '', plain: true, key: 'base' });
   check(`${id} and is the number the sheet shows`, ac.total, c.data.defenses.ac);
   check(`${id} a zero part is not shown`, ac.parts.every((p) => p.value !== 0), true);
   check(`${id} an unknown key has no working`, c.breakdown('nonsense'), null);

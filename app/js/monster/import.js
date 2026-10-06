@@ -28,7 +28,7 @@
 
 import { blankDocument } from '../convert.js';
 import { naturalAttack } from '../companions.js';
-import { RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod } from '../rules.js';
+import { RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, sizeModifiers } from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 
 export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './block.js';
@@ -660,10 +660,10 @@ export function monsterDocument(block, options = {}) {
   if (rate === undefined) doc.attack.babOverride = bab;
   // What the sheet will work out, so nothing is left over as an offset: size
   // as AC takes it on the attack rolls, the other way round on CMB.
-  const size = SIZE_MODIFIERS[doc.identity.size] ?? 0;
-  doc.attack.totalMelee = bab + mod('str') + size;
-  doc.attack.totalRanged = bab + mod('dex') + size;
-  doc.attack.totalCmb = b.cmb ?? (bab + mod('str') - size);
+  const size = sizeModifiers(doc.identity.size);
+  doc.attack.totalMelee = bab + mod('str') + size.attack;
+  doc.attack.totalRanged = bab + mod('dex') + size.attack;
+  doc.attack.totalCmb = b.cmb ?? (bab + mod('str') + size.special);
 
   // Hit points: the block's total, with Con behind it; the offset takes the
   // difference between a rolled average and the sheet's full dice.

@@ -2891,12 +2891,19 @@ export function conditionTotals(active) {
  * same lines with the reconciliation offset and any forwarded bonus after
  * them -- so the number and the account of it cannot drift apart.
  *
- * A line is { label, value, note }; `plain` marks the number a sum starts
- * from (Base 10, a save's base) rather than a bonus laid on it.
+ * A line is { label, value, note, key }; `plain` marks the number a sum
+ * starts from (Base 10, a save's base) rather than a bonus laid on it, and
+ * `key` names what the line stands for -- a bonus column's own key, or
+ * 'base', 'ability', 'sizeMod', 'miscAC', 'armor', 'shield' -- for a reader that
+ * lays the same lines out its own way (the Stat Block's AC line).
  * -------------------------------------------------------------- */
 
-export const recipePart = (label, value, note = '') => ({ label, value: Number(value) || 0, note });
-export const recipePlain = (label, value, note = '') => ({ label, value: Number(value) || 0, note, plain: true });
+export const recipePart = (label, value, note = '', key = undefined) => ({
+  label, value: Number(value) || 0, note, ...(key ? { key } : null),
+});
+export const recipePlain = (label, value, note = '', key = 'base') => ({
+  label, value: Number(value) || 0, note, plain: true, key,
+});
 export const sumParts = (parts) => parts.reduce((t, p) => t + p.value, 0);
 
 /**
@@ -2921,7 +2928,7 @@ export function bonusParts(resolved, types, filter = null) {
     if (!value) continue;
     const other = typed ? Number(resolved?.[typed]) || 0 : 0;
     out.push(recipePart(typed && other ? `${label} + typed` : label, value,
-      typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : ''));
+      typed && other ? 'capped together — the progression’s and your own do not stack past the cap' : '', key));
   }
   return out;
 }
@@ -2931,7 +2938,7 @@ export function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability'
   const raw = statMod(c, stat1, stat2);
   const value = Math.min(cap, raw);
   const names = [stat1, stat2].filter(Boolean).join(' + ') || label;
-  return recipePart(names, value, value === raw ? '' : `${raw} before the armour’s maximum Dexterity of ${cap}`);
+  return recipePart(names, value, value === raw ? '' : `${raw} before the armour’s maximum Dexterity of ${cap}`, 'ability');
 }
 
 /** Initiative: the ability the row names -- Dex unless something says otherwise -- and the flat bonus. */
@@ -2967,11 +2974,11 @@ export function acParts(c, which = 'ac') {
   } else if (d.uncannyDodge) {
     parts.push({ ...abilityPart(c, d.acStat1, d.acStat2, { cap: worn.maxDex }), note: 'uncanny dodge keeps it while flat-footed' });
   }
-  parts.push(recipePart('size', sizeMod(c)));
+  parts.push(recipePart('size', sizeMod(c), '', 'sizeMod'));
   if (which !== 'touch') {
-    parts.push(recipePart('misc AC', d.miscAC));
-    parts.push(recipePart('armour', worn.armor));
-    parts.push(recipePart('shield', worn.shield));
+    parts.push(recipePart('misc AC', d.miscAC, '', 'miscAC'));
+    parts.push(recipePart('armour', worn.armor, '', 'armor'));
+    parts.push(recipePart('shield', worn.shield, '', 'shield'));
   }
   parts.push(...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, filter));
   return parts;
@@ -2990,7 +2997,7 @@ export function cmdParts(c) {
     recipePart('BAB', c.attack.bab),
     recipePart('Str', c.abilities.str.totalMod),
     recipePart('Dex', c.abilities.dex.totalMod),
-    recipePart('special size', -sizeMod(c)),
+    recipePart('special size', sizeModifiers(c.identity.size).special),
     recipePart('misc CMD', d.miscCMD),
     ...bonusParts(d.acBonusesResolved, AC_BONUS_TYPES, 'cmd'),
     ...AC_BONUS_TYPES.filter(([, , flags]) => flags?.cmd === false).map(([key, label]) => recipePart(
@@ -3374,8 +3381,19 @@ export function statScore(c, stat1, stat2) {
   return scores.length ? Math.max(...scores) : 0;
 }
 
+/**
+ * What a size does to the numbers built on it: the size modifier, which AC
+ * and attack rolls take as it is (Large −1, Small +1), and the special size
+ * modifier, which CMB and CMD take the other way round. Every reader of a
+ * size goes through this, so none picks the sign for itself.
+ */
+export function sizeModifiers(size) {
+  const m = SIZE_MODIFIERS[size] ?? 0;
+  return { ac: m, attack: m, special: -m };
+}
+
 export function sizeMod(c) {
-  return SIZE_MODIFIERS[c.identity.size] ?? 0;
+  return sizeModifiers(c.identity.size).ac;
 }
 
 /**
@@ -3386,7 +3404,8 @@ export function sizeMod(c) {
  * character 2 above an enlarged Medium one.
  */
 export function sizeAttackMod(c, mode) {
-  return /cmb/i.test(String(mode)) ? -sizeMod(c) : sizeMod(c);
+  const s = sizeModifiers(c.identity.size);
+  return /cmb/i.test(String(mode)) ? s.special : s.attack;
 }
 
 /** The six attack slots the sheet keeps, and what to call each one. */
