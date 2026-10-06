@@ -5209,28 +5209,14 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // Blending a class adds or drops its block on the other side, so the whole
-    // tab is redrawn rather than the one control.
-    root.querySelectorAll('[data-blend]').forEach((box) => {
+    // A "counts as" tick: which kinds of talent a class's pool reaches. It may
+    // add or drop the class's block on another side, and it moves the class
+    // into or out of the blended group, so the whole tab is redrawn rather
+    // than the one control.
+    root.querySelectorAll('[data-reach]').forEach((box) => {
       box.addEventListener('change', () => {
-        const [side, index] = box.dataset.blend.split('|');
-        this.#model.setBlended(side, Number(index), box.checked);
-        this.#render();
-      });
-    });
-    // Reaching skill talents adds no block, but it moves the class into the
-    // blended group and puts it on the guile tab, so the same full redraw.
-    root.querySelectorAll('[data-blendskill]').forEach((box) => {
-      box.addEventListener('change', () => {
-        const [side, index] = box.dataset.blendskill.split('|');
-        this.#model.setBlendedSkill(side, Number(index), box.checked);
-        this.#render();
-      });
-    });
-    root.querySelectorAll('[data-blendguile]').forEach((box) => {
-      box.addEventListener('change', () => {
-        const [index, side] = box.dataset.blendguile.split('|');
-        this.#model.setGuileBlend(Number(index), side, box.checked);
+        const [home, index, system] = box.dataset.reach.split('|');
+        this.#model.setPoolReach(home, Number(index), system, box.checked);
         this.#render();
       });
     });

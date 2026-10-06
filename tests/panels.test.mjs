@@ -643,9 +643,9 @@ console.log('\nCounts as waits for a class name, on every training tab');
   c.addGuileClass('');
   const live = (html, attr) => (html.match(new RegExp(`<input type="checkbox"[^>]*${attr}="[^"]*"`, 'g')) || []).length;
   const martial = combat.renderMartialPanel(c);
-  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-blend(?:skill)?'), 2);
+  check('the named martial class can be ticked, the unnamed one cannot', live(martial, 'data-reach'), 2);
   const guileHtml = guile.renderGuilePanel(c);
-  check('nor the unnamed guile class', [live(guileHtml, 'data-blendguile'), guileHtml.includes('Pick the class first')], [0, true]);
+  check('nor the unnamed guile class', [live(guileHtml, 'data-reach'), guileHtml.includes('Pick the class first')], [0, true]);
   ok('and it says why', martial.includes('Pick the class first'));
 }
 

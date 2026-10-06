@@ -1538,6 +1538,18 @@ export function setBlendedSkill(model, sideKey, index, on) {
  * practitioner or caster level with it, only talents. The side itself is
  * conjured if the character has none, so there is somewhere to count them.
  */
+/**
+ * Whether a class's pool reaches one more kind of talent, by the class's own
+ * side and its index there: a martial or magic class reaching the other of
+ * the two (setBlended) or skill talents (setBlendedSkill), or a guile class
+ * reaching either (setGuileBlend). The one thing every "counts as" tick asks.
+ */
+export function setPoolReach(model, home, index, system, on) {
+  if (home === 'guile') return setGuileBlend(model, index, system, on);
+  if (system === 'guile') return setBlendedSkill(model, home, index, on);
+  return setBlended(model, home, index, on);
+}
+
 export function setGuileBlend(model, index, sideKey, on) {
   const t = model.data.training || {};
   const cls = t.guile?.classes?.[index];

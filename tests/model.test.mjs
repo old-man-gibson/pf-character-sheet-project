@@ -3062,6 +3062,24 @@ console.log('a talent name matches whatever its typography');
   setSphereCatalogue(before);
 }
 
+console.log('every "counts as" tick goes through setPoolReach');
+{
+  const c = new Character(blankDocument({ name: 'Reach', level: 3 }));
+  c.addTrainingClass('combat', 'Monk');
+  c.addTrainingClass('guile', 'Operative');
+  const ci = c.data.training.combat.classes.length - 1;
+  c.setPoolReach('combat', ci, 'magic', true);
+  check('a martial class reaching magic is blended', [c.data.training.combat.classes[ci].blended,
+    c.data.training.magic.classes.some((x) => x.name === 'Monk')], [true, true]);
+  c.setPoolReach('combat', ci, 'guile', true);
+  check('and reaching skill talents', !!c.data.training.combat.classes[ci].blendedSkill, true);
+  const gi = c.data.training.guile.classes.length - 1;
+  c.setPoolReach('guile', gi, 'magic', true);
+  check('a guile class reaching magic', !!c.data.training.guile.classes[gi].blendedMagic, true);
+  c.setPoolReach('combat', ci, 'magic', false);
+  check('unticking splits the pair again', !!c.data.training.combat.classes[ci].blended, false);
+}
+
 console.log('a training class is added the same way on every side');
 {
   const c = new Character(blankDocument({ name: 'Adder', level: 3 }));
@@ -9770,7 +9788,7 @@ console.log('blended guile training -- a pool that reaches skill talents, and a 
     [['Shifter', ['guile', 'combat', 'magic']]]);
   const guileHtml = guilePanels.renderGuilePanel(s);
   check('it moves out of Skill expertise into Blended training',
-    [guileHtml.includes('data-blendguile="0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
+    [guileHtml.includes('data-reach="guile|0|combat"'), guileHtml.includes('Also operative classes')], [true, true]);
   check('and heads the martial tab with its ladders, stacked', combatPanels.renderMartialPanel(s).includes('ladderstack'), true);
   check('which puts the martial and magic tabs in use for a character with no classes there',
     (() => { const x = fresh(); x.data.training.combat.classes = []; x.addGuileClass('Only');

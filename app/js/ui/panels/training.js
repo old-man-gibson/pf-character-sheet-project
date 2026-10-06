@@ -55,7 +55,7 @@ export function guileClassBlock(model, g, cls, ci) {
           ${poolField(list, ci, cls, 'guile')}
           ${operativeField(model, g)}
           ${classLevelsField(model, list, ci, cls, `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`)}
-          ${blendTicks(systems, 'guile', (sys) => `data-blendguile="${ci}|${sys}"`, poolCounts(cls, systems),
+          ${blendTicks(systems, 'guile', ci, poolCounts(cls, systems),
     !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
@@ -378,8 +378,8 @@ export function blendedSection(model, wrap, tab) {
    * The ticks that say which kinds of talent a class's pool counts as.
    *
    * The class's own kind is always one of them, so that tick is drawn ticked
-   * and fixed; each of the other two toggles through `attr`, which names the
-   * control that does it. `counts`, when given, puts how many talents so far
+   * and fixed; each of the other two toggles through `data-reach`, the class
+   * (its side and its index there) and the kind, which setPoolReach reads. `counts`, when given, puts how many talents so far
    * went each way beside the kinds the pool reaches.
    *
    * A class counts as another kind by its name -- the other tab's copy is
@@ -493,7 +493,7 @@ export function traditionTable(model, list, rows, spheres, adroit = null) {
     ? { talent: '', sphere: null, adroit: false } : { talent: '', sphere: null })}</div>`;
 }
 
-export function blendTicks(systems, home, attr, counts = null, named = true) {
+export function blendTicks(systems, home, index, counts = null, named = true) {
     const where = { combat: 'Martial Spheres', magic: 'Magic Spheres', guile: 'Guile Spheres' };
     const ticks = TRAINING_SYSTEMS.map((sys) => {
       const on = systems.includes(sys);
@@ -505,7 +505,7 @@ export function blendTicks(systems, home, attr, counts = null, named = true) {
         : `${on ? 'Untick to stop' : 'Tick to let'} this class's talents count as ${noun} as well — `
           + `a row whose sphere is on the ${where[sys]} tab counts there${sys === 'guile' ? ' and buys skill ranks' : ''}.`;
       return `<label class="chk" title="${esc(title)}">
-              <input type="checkbox"${on ? ' checked' : ''}${sys === home || !named ? ' disabled' : ` ${attr(sys)}`}>
+              <input type="checkbox"${on ? ' checked' : ''}${sys === home || !named ? ' disabled' : ` data-reach="${home}|${index}|${sys}"`}>
               <span class="hint">${noun}${n}</span></label>`;
     }).join('');
     // Talents in a sphere of a kind the class does not reach count nowhere;
@@ -608,8 +608,7 @@ export function blendedPanel(model, pairs) {
           ${systems.includes('guile') && guile ? operativeField(model, guile) : ''}
           ${classLevelsField(model, list, owner.index, cls, skill
     ? `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility` : `talents: ${cls.totalTalents ?? 0}`)}
-          ${blendTicks(systems, owner.side, (sys) => (sys === 'guile'
-    ? `data-blendskill="${owner.side}|${owner.index}"` : `data-blend="${owner.side}|${owner.index}"`), counts,
+          ${blendTicks(systems, owner.side, owner.index, counts,
     !!String(cls.name || '').trim())}
         </div>
         ${skill ? ladderStack(model, list, owner.index, cls, systems, spheres)

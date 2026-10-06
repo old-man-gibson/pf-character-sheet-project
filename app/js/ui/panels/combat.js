@@ -140,8 +140,7 @@ function trainingSide(model, sideKey, side) {
           ${abilityField(model, list, ci, 'mod1', cls.mod1, isMagic ? 'Casting score' : 'Practitioner mod')}
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           ${classLevelsField(model, list, ci, cls, `talents: ${cls.totalTalents ?? 0}`)}
-          ${blendTicks([sideKey], sideKey, (sys) => (sys === 'guile'
-    ? `data-blendskill="${sideKey}|${ci}"` : `data-blend="${sideKey}|${ci}"`), null, !!String(cls.name || '').trim())}
+          ${blendTicks([sideKey], sideKey, ci, null, !!String(cls.name || '').trim())}
           <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
         </div>
         ${singleLadderTable(model, `${list}.${ci}.levels`, cls, spheres)}
