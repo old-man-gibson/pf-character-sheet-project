@@ -82,6 +82,7 @@ import { bindDrag, half, side } from './ui/drag.js';
 import { showBrackets, hideBrackets } from './ui/brackets.js';
 import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import { talentPopHtml } from './ui/talents.js';
+import { blankDraft, blankView } from './ui/view-state.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -571,26 +572,18 @@ export class CharacterSheetElement extends HTMLElement {
   /* What was last written to the view store, so a render that changed nothing
      does not write. */
   #tabWritten = null;
-  #draft = { name: '', formula: '', minFormula: '', refresh: '', note: '', fill: 'spent' };
-  #menuLists = new Map();   // option menus a render's feature cells offer, name -> {id, menu}
-  #editTracker = null;   // id of the custom tracker being edited in place
-  #editMeter = null;     // key of the built-in meter whose style is open ('hp', 'essence')
-  #editDraft = { name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null) };
-  #showAllSkills = false;
+  /**
+   * How the sheet is being looked at: which buff is open, which × is armed,
+   * what the Formulas search says. One object, the same one every panel is
+   * drawn from; see ui/view-state.js.
+   */
+  #view = blankView();
   /**
    * The skill rows shown while the player stays on the Skills tab, so an edit
    * does not pull a row out from under the next click; see skillRowIndices.
    * Dropped when the tab is left, or Hide unused is pressed.
    */
   #skillRowsKept = null;
-  #showAllGear = false;
-  /**
-   * Which gear item is open as a card ("equipment.gear|3"), or null.
-   *
-   * Element state, not the character's: which row somebody is reading is a
-   * way of looking at the list, not a fact about what they are carrying.
-   */
-  #openGear = null;
   /** The last press on the sheet ({ target, at, up }); see `#rerender`. */
   #lastPress = null;
   /**
@@ -600,14 +593,6 @@ export class CharacterSheetElement extends HTMLElement {
   #renderOwed = null;
   /** The last Tab keystroke ({ at, back }); see `#rerender`. */
   #lastTab = null;
-  /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
-  #armedGearCol = null;
-  /** Which Classes row has its sub-system picker open (index, or null). */
-  #openClassSystems = null;
-  /** Whether the dashboard's grouped condition picker is unfolded. */
-  #condPickerOpen = false;
-  /** Which buff row has its editor open (index, or null). */
-  #openBuff = null;
   /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
   #confirmReset = false;
   /** Whether the rail's `⋯` menu is open. */
@@ -623,21 +608,6 @@ export class CharacterSheetElement extends HTMLElement {
   #themePref = null;
   /** The system's light/dark setting, watched while the preference is `auto`. */
   #schemeQuery = null;
-  /** Whether the dashboard's card arranger is open. */
-  #dashArrange = false;
-  /** Which maneuver is open ("<list>|<name>", or null). One at a time. */
-  #openManeuver = null;
-  /** Whether the open maneuver is showing its cells rather than reading them. */
-  #maneuverEdit = false;
-
-  /**
-   * Which shaped veil is showing what the player wrote rather than what its
-   * pack says. Not saved with the character: it is a way of reading the tab.
-   */
-  #veilEdit = null;
-  /* Which long pack texts have been opened out to read. View state, not a
-     preference: it is where you are looking, not how you like the sheet. */
-  #openText = new Set();
   /* Which of the narrow-screen help disclosures are open; see `#clampHints`. */
   #openHelp = new Set();
   /* Which stacked rows the player has moved off the fold their table starts
@@ -646,31 +616,8 @@ export class CharacterSheetElement extends HTMLElement {
      departures rather than the state is what lets a table pick its own default
      without a second set to keep in step; see `#stackRows`. */
   #foldFlips = new Set();
-  /** Which folded table cell is open ("mythic:3:effect", or null). One at a time. */
-  #openCell = null;
-  /** The armed two-click × ("<list>|<index>", or null): first click arms, second removes. */
-  #armedRemove = null;
   /** Takes the column-resize listeners off again; see `ui/column-widths.js`. */
   #unbindColumnResize = null;
-  #openPosts = new Map();   // generated crafting post -> expanded?
-  // Template tables showing every stored cell rather than the merges they
-  // describe. An editing mode rather than a preference, so it is not saved.
-  #showCells = new Set();
-  /** Which face of the Cardcasting tab is up: the table in play, or the deck. */
-  #deckView = 'table';
-  /** Cards peeked at with Read the Cards, by id, until the next action. */
-  #peek = [];
-  /** Which kind of extension block the ⚙ manager's list is narrowed to ('' = all). */
-  #extFilter = '';
-  #extSearch = '';   // what is typed into the block shelf's search box
-  /* The Formulas tab. Working state, not character data: what is in the
-     try-it box, what the one search box is narrowing to, and whether the
-     reference underneath has been unfolded. */
-  #formulaDraft = '';
-  #formulaQuery = '';
-  #formulaValueQuery = '';
-  #formulaTargetQuery = '';
-  #formulaRefOpen = false;
   /** The last roll copied, shown back so the player can see what they got. */
   #rollToast = null;    // { kind, ref, what, text, failed, answers }
   #rollToastTimer = null;
@@ -2722,7 +2669,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'trackers': return this.#trackersPanel();
       case 'progression': return this.#progressionPanel();
       case 'lore': return this.#lorePanel();
-      case 'statblock': return monster.renderStatBlockPanel(this.#model, {});
+      case 'statblock': return monster.renderStatBlockPanel(this.#model, this.#ctx());
       case 'extras': return this.#extrasPanel();
       case 'formulas': return this.#formulaPanel();
       case 'audit': return this.#auditPanel();
@@ -2741,19 +2688,18 @@ export class CharacterSheetElement extends HTMLElement {
    * whether the condition picker is showing, whether the cards are being
    * rearranged.
    */
-  #overviewCtx() {
-    return {
-      condPickerOpen: this.#condPickerOpen,
-      dashArrange: this.#dashArrange,
-      draft: this.#draft,
-      openBuff: this.#openBuff,
-      openClassSystems: this.#openClassSystems,
-    };
-  }
+  /**
+   * What a panel is drawn with besides the model: the whole view (see
+   * ui/view-state.js), the tab the sheet is on, and anything its caller
+   * worked out for this render. A copy each time, so a panel that keeps
+   * scratch on its ctx -- the Lore tab collects its option menus there --
+   * leaves the view as it found it.
+   */
+  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, ...extra }; }
 
-  #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#overviewCtx()); }
+  #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#ctx()); }
 
-  #dashboardPanel() { return overview.renderDashboardPanel(this.#model, this.#overviewCtx()); }
+  #dashboardPanel() { return overview.renderDashboardPanel(this.#model, this.#ctx()); }
 
   /** The action dispatcher needs the card list when the player rearranges it. */
   #dashCardIds(...a) { return overview.dashCardIds(this.#model, ...a); }
@@ -2761,7 +2707,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- stats (ability build) ---------------- */
 
   /** The Stats tab lives in ui/panels/stats.js. */
-  #statsPanel() { return renderStatsPanel(this.#model, {}); }
+  #statsPanel() { return renderStatsPanel(this.#model, this.#ctx()); }
 
   /* ---------------- skills ---------------- */
 
@@ -2770,7 +2716,7 @@ export class CharacterSheetElement extends HTMLElement {
    * element is the model and the one piece of view state it reads.
    */
   #skillsPanel() {
-    const ctx = { showAllSkills: this.#showAllSkills, keep: this.#skillRowsKept };
+    const ctx = this.#ctx({ keep: this.#skillRowsKept });
     this.#skillRowsKept = new Set(skillRowIndices(this.#model, ctx));
     return renderSkillsPanel(this.#model, ctx);
   }
@@ -2778,14 +2724,13 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- the two sphere tabs ---------------- */
 
   /** The two sphere tabs and Templates live in ui/panels/combat.js. */
-  #combatCtx() { return { showCells: this.#showCells }; }
 
   #martialPanel() { return combat.renderMartialPanel(this.#model); }
   #guilePanel() { return guile.renderGuilePanel(this.#model); }
 
   #magicPanel() { return combat.renderMagicPanel(this.#model); }
 
-  #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#combatCtx()); }
+  #templatePanel() { return combat.renderTemplatePanel(this.#model, this.#ctx()); }
 
   /** The class names, which the action dispatcher needs when adding a track. */
   #classNames(...a) { return trainingPanels.classNames(this.#model, ...a); }
@@ -2793,7 +2738,7 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- feats & mythic ---------------- */
 
   /** The tab lives in ui/panels/feats.js; the catalogue list is filled here. */
-  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, { openCell: this.#openCell, armedRemove: this.#armedRemove, openText: this.#openText }); }
+  #featuresPanel() { return feats.renderFeaturesPanel(this.#model, this.#ctx()); }
 
   /**
    * Put matches for what is being typed into the list a cell points at.
@@ -2846,55 +2791,27 @@ export class CharacterSheetElement extends HTMLElement {
   /* ---------------- equipment & crafting ---------------- */
 
   /** Both tabs live in ui/panels/gear.js. */
-  #gearCtx() {
-    return {
-      draft: this.#draft,
-      openPosts: this.#openPosts,
-      showAllGear: this.#showAllGear,
-      openGear: this.#openGear,
-      armedGearCol: this.#armedGearCol,
-    };
-  }
+  #gearPanel() { return renderGearPanel(this.#model, this.#ctx()); }
 
-  #gearPanel() { return renderGearPanel(this.#model, this.#gearCtx()); }
-
-  #craftingPanel() { return renderCraftingPanel(this.#model, this.#gearCtx()); }
+  #craftingPanel() { return renderCraftingPanel(this.#model, this.#ctx()); }
 
   /* ---------------- modelled sub-systems ---------------- */
 
-  /**
-   * Every sub-system tab lives in ui/panels/subsystems.js. What they need from
-   * the element is the model and the few bits of view state their tabs keep:
-   * which deck view is showing, which maneuver is open and whether it is being
-   * read or written, and the cards currently peeked at.
-   */
-  #systemCtx() {
-    return {
-      deckView: this.#deckView,
-      openManeuver: this.#openManeuver,
-      maneuverEdit: this.#maneuverEdit,
-      veilEdit: this.#veilEdit,
-      openText: this.#openText,
-      peek: this.#peek,
-      // The essence and power-point meters open the tracker style editor, so
-      // these tabs need its state too, or their ✎ Style does nothing.
-      ...this.#trackerCtx(),
-    };
-  }
+  /** Every sub-system tab lives in ui/panels/subsystems.js. */
 
   #modelledSystems(...a) { return subsystems.modelledSystems(this.#model, ...a); }
 
   #altTrainingPanel() { return subsystems.altTrainingPanel(this.#model); }
 
-  #akashicPanel() { return subsystems.akashicPanel(this.#model, this.#systemCtx()); }
+  #akashicPanel() { return subsystems.akashicPanel(this.#model, this.#ctx()); }
 
-  #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#systemCtx()); }
+  #maneuversPanel() { return subsystems.maneuversPanel(this.#model, this.#ctx()); }
 
-  #vancianPanel() { return subsystems.vancianPanel(this.#model, { armedRemove: this.#armedRemove, openText: this.#openText }); }
+  #vancianPanel() { return subsystems.vancianPanel(this.#model, this.#ctx()); }
 
-  #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#systemCtx()); }
+  #psionicsPanel() { return subsystems.psionicsPanel(this.#model, this.#ctx()); }
 
-  #cardcastingPanel() { return subsystems.cardcastingPanel(this.#model, this.#systemCtx()); }
+  #cardcastingPanel() { return subsystems.cardcastingPanel(this.#model, this.#ctx()); }
 
   #companionPanel(kind) { return subsystems.companionPanel(this.#model, kind); }
 
@@ -2905,68 +2822,48 @@ export class CharacterSheetElement extends HTMLElement {
    * is reached from elsewhere on the sheet -- the Overview's resource card,
    * the hit-points and psionics panels -- so most of it is delegated here.
    */
-  #trackerCtx() {
-    return {
-      draft: this.#draft,
-      editDraft: this.#editDraft,
-      editMeter: this.#editMeter,
-      editTracker: this.#editTracker,
-    };
-  }
-
-  #trackersPanel() { return trackerUi.renderTrackersPanel(this.#model, this.#trackerCtx()); }
+  #trackersPanel() { return trackerUi.renderTrackersPanel(this.#model, this.#ctx()); }
 
   #isDraining(...a) { return trackerUi.isDraining(...a); }
 
-  #styleTarget(...a) { return trackerUi.styleTarget(this.#model, this.#trackerCtx(), ...a); }
+  #styleTarget(...a) { return trackerUi.styleTarget(this.#model, this.#ctx(), ...a); }
 
-  #stylePreviewHtml(...a) { return trackerUi.stylePreviewHtml(this.#model, this.#trackerCtx(), ...a); }
+  #stylePreviewHtml(...a) { return trackerUi.stylePreviewHtml(this.#model, this.#ctx(), ...a); }
 
-  #trackerStyleEditor(...a) { return trackerUi.trackerStyleEditor(this.#model, this.#trackerCtx(), ...a); }
+  #trackerStyleEditor(...a) { return trackerUi.trackerStyleEditor(this.#model, this.#ctx(), ...a); }
 
   #trackerPreview(...a) { return trackerUi.trackerPreview(this.#model, ...a); }
 
   /* ---------------- progression, lore & leftover tabs ---------------- */
 
   /** All three live in ui/panels/lore.js. */
-  #loreCtx() { return { menuLists: this.#menuLists, armedRemove: this.#armedRemove }; }
 
-  #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#loreCtx()); }
+  #progressionPanel() { return lore.renderProgressionPanel(this.#model, this.#ctx()); }
 
-  #lorePanel() { return lore.renderLorePanel(this.#model, this.#loreCtx()); }
+  #lorePanel() { return lore.renderLorePanel(this.#model, this.#ctx()); }
 
-  #extrasPanel() { return lore.renderExtrasPanel(this.#model, this.#loreCtx()); }
+  #extrasPanel() { return lore.renderExtrasPanel(this.#model, this.#ctx()); }
 
   #gridTab(...a) { return lore.gridTab(this.#model, ...a); }
 
   /* ---------------- techniques: Technique List and AutoTechnique ---------------- */
 
   /** All three tabs live in ui/panels/techniques.js. */
-  #techniqueListPanel() { return techniques.renderTechniqueListPanel(this.#model, {}); }
+  #techniqueListPanel() { return techniques.renderTechniqueListPanel(this.#model, this.#ctx()); }
 
-  #autoTechniquePanel() { return techniques.renderAutoTechniquePanel(this.#model, {}); }
+  #autoTechniquePanel() { return techniques.renderAutoTechniquePanel(this.#model, this.#ctx()); }
 
-  #cookingPanel() { return techniques.renderCookingPanel(this.#model, {}); }
+  #cookingPanel() { return techniques.renderCookingPanel(this.#model, this.#ctx()); }
 
   /* ---------------- formulas & audit ---------------- */
 
   /** Both tabs live in ui/panels/admin.js. */
-  #adminCtx() {
-    return {
-      formulaDraft: this.#formulaDraft,
-      formulaQuery: this.#formulaQuery,
-      formulaValueQuery: this.#formulaValueQuery,
-      formulaTargetQuery: this.#formulaTargetQuery,
-      formulaRefOpen: this.#formulaRefOpen,
-      tab: this.#tab,
-    };
-  }
 
-  #formulaPanel() { return admin.renderFormulaPanel(this.#model, this.#adminCtx()); }
+  #formulaPanel() { return admin.renderFormulaPanel(this.#model, this.#ctx()); }
 
-  #auditPanel() { return admin.renderAuditPanel(this.#model, this.#adminCtx()); }
+  #auditPanel() { return admin.renderAuditPanel(this.#model, this.#ctx()); }
 
-  #formulaButton(...a) { return admin.formulaButton(this.#model, this.#adminCtx(), ...a); }
+  #formulaButton(...a) { return admin.formulaButton(this.#model, this.#ctx(), ...a); }
 
   #forwardedRows(...a) { return admin.forwardedRows(this.#model, ...a); }
 
@@ -3017,14 +2914,6 @@ export class CharacterSheetElement extends HTMLElement {
     this.style.setProperty('--cs-formula-strong', rgba(hex, 0.85));
   }
 
-  /* ----- prose fields -----
-   * The two-layer prose control and everything that renders a token live in
-   * ui/prose.js, because two dozen panels put one somewhere. These pass on
-   * what the module cannot see: the model, and which folded cell is open.
-   */
-
-  #foldedProse(...a) { return prose.foldedProse(this.#model, { openCell: this.#openCell }, ...a); }
-
 
   /**
    * Extras & Notes: the workbook's scratch page, as a tab. Notes to jot on,
@@ -3054,14 +2943,10 @@ export class CharacterSheetElement extends HTMLElement {
 
   /** The ⚙ manager lives in ui/panels/manager.js. */
   #systemManagerPanel() {
-    return manager.renderSystemManagerPanel(this.#model, {
+    return manager.renderSystemManagerPanel(this.#model, this.#ctx({
       tabEntries: this.#tabEntries(),
       barEntries: this.#barEntries(),
-      draft: this.#draft,
-      armedRemove: this.#armedRemove,
-      extFilter: this.#extFilter,
-      extSearch: this.#extSearch,
-    });
+    }));
   }
 
 
@@ -3790,7 +3675,7 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * Opening and shutting the folded cells (#foldedProse).
+   * Opening and shutting the folded cells (prose.foldedProse).
    *
    * One listener for the whole sheet rather than one per cell, because a
    * click has to be able to shut a cell it did not land on. It listens on
@@ -3811,12 +3696,12 @@ export class CharacterSheetElement extends HTMLElement {
         e.preventDefault();          // focus is placed below, not by the press
         const key = peek.dataset.foldcell;
         this.#shutFoldedCell();
-        this.#openCell = key;
+        this.#view.openCell = key;
         this.#render();
         this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
         return;
       }
-      if (!this.#openCell || e.target.closest?.('.foldcell.open')) return;
+      if (!this.#view.openCell || e.target.closest?.('.foldcell.open')) return;
       this.#shutFoldedCell();
       this.#render();
     });
@@ -3825,9 +3710,9 @@ export class CharacterSheetElement extends HTMLElement {
     // it landed on has been redrawn away.
     wrap.addEventListener('click', (e) => {
       const peek = e.target.closest?.('[data-foldcell]');
-      if (!peek || this.#openCell === peek.dataset.foldcell) return;
+      if (!peek || this.#view.openCell === peek.dataset.foldcell) return;
       this.#shutFoldedCell();
-      this.#openCell = peek.dataset.foldcell;
+      this.#view.openCell = peek.dataset.foldcell;
       this.#render();
       this.shadowRoot.querySelector('.foldcell.open textarea')?.focus();
     });
@@ -3840,7 +3725,7 @@ export class CharacterSheetElement extends HTMLElement {
         this.#action('chrome-menu');
         return;
       }
-      if (!this.#openCell) return;
+      if (!this.#view.openCell) return;
       this.#shutFoldedCell();
       this.#render();
     });
@@ -3856,7 +3741,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #shutFoldedCell() {
     const field = this.shadowRoot.querySelector('.foldcell.open textarea');
-    this.#openCell = null;
+    this.#view.openCell = null;
     field?.blur();
   }
 
@@ -4884,7 +4769,7 @@ export class CharacterSheetElement extends HTMLElement {
 
     // The Cardcasting tab's two faces.
     root.querySelectorAll('[data-deck-view]').forEach((b) => {
-      b.addEventListener('click', () => { this.#deckView = b.dataset.deckView; this.#render(); });
+      b.addEventListener('click', () => { this.#view.deckView = b.dataset.deckView; this.#render(); });
     });
 
     // The table in play: every button carries its action, the card and an argument.
@@ -4892,7 +4777,7 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => {
         const [action, id, arg] = b.dataset.table.split('|');
         const m = this.#model;
-        this.#peek = [];
+        this.#view.peek = [];
         switch (action) {
           case 'start': m.tableStart(); break;
           case 'redraw': m.tableRedraw(); break;
@@ -4910,7 +4795,7 @@ export class CharacterSheetElement extends HTMLElement {
           case 'bury': m.tableBury(id); break;
           case 'move': m.tableMove(id, arg); break;
           case 'tap': m.tableTap(id); break;
-          case 'peek': this.#peek = m.tablePeek(Number(arg) || 1); break;
+          case 'peek': this.#view.peek = m.tablePeek(Number(arg) || 1); break;
           default: return;
         }
         this.#render();
@@ -4927,7 +4812,7 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-table-move]').forEach((sel) => {
       sel.addEventListener('change', () => {
         if (!sel.value) return;
-        this.#peek = [];
+        this.#view.peek = [];
         this.#model.tableMove(sel.dataset.tableMove, sel.value);
         this.#render();
       });
@@ -4994,12 +4879,12 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-remove-armed]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.removeArmed;
-        if (this.#armedRemove === key) {
+        if (this.#view.armedRemove === key) {
           const [list, index] = key.split('|');
-          this.#armedRemove = null;
+          this.#view.armedRemove = null;
           this.#model.listRemove(list, Number(index));
         } else {
-          this.#armedRemove = key;
+          this.#view.armedRemove = key;
         }
         this.#render();
       });
@@ -5018,8 +4903,8 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-cells]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.cells;
-        if (this.#showCells.has(key)) this.#showCells.delete(key);
-        else this.#showCells.add(key);
+        if (this.#view.showCells.has(key)) this.#view.showCells.delete(key);
+        else this.#view.showCells.add(key);
         this.#render();
       });
     });
@@ -5047,7 +4932,7 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     root.querySelectorAll('[data-postbox]').forEach((d) => {
-      d.addEventListener('toggle', () => this.#openPosts.set(d.dataset.postbox, d.open));
+      d.addEventListener('toggle', () => this.#view.openPosts.set(d.dataset.postbox, d.open));
     });
 
     this.#bindReadOnlyBoxes(root);
@@ -5276,7 +5161,7 @@ export class CharacterSheetElement extends HTMLElement {
     // the caret where it was.
     root.querySelectorAll('[data-ext-search]').forEach((input) => {
       input.addEventListener('input', () => {
-        this.#extSearch = input.value;
+        this.#view.extSearch = input.value;
         this.#rerender(input);
       });
     });
@@ -5452,9 +5337,9 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-gearopen]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.gearopen;
-        this.#openGear = !key || this.#openGear === key ? null : key;
+        this.#view.openGear = !key || this.#view.openGear === key ? null : key;
         this.#render();
-        if (this.#openGear) {
+        if (this.#view.openGear) {
           this.shadowRoot.querySelector('.gearcard input, .gearcard textarea')?.focus();
         }
       });
@@ -5490,9 +5375,9 @@ export class CharacterSheetElement extends HTMLElement {
     const showManeuver = (key, edit) => {
       // Asking for the face that is already up shuts it; asking for the other
       // one turns the card over instead of closing it.
-      const showing = this.#openManeuver === key && this.#maneuverEdit === edit;
-      this.#openManeuver = showing ? null : key;
-      this.#maneuverEdit = showing ? false : edit;
+      const showing = this.#view.openManeuver === key && this.#view.maneuverEdit === edit;
+      this.#view.openManeuver = showing ? null : key;
+      this.#view.maneuverEdit = showing ? false : edit;
       this.#render();
     };
     root.querySelectorAll('[data-mopen]').forEach((b) => {
@@ -5513,7 +5398,7 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-vedit]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
-        this.#veilEdit = this.#veilEdit === b.dataset.vedit ? null : b.dataset.vedit;
+        this.#view.veilEdit = this.#view.veilEdit === b.dataset.vedit ? null : b.dataset.vedit;
         this.#render();
       });
     });
@@ -5531,8 +5416,8 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
         const key = b.dataset.textopen;
-        if (this.#openText.has(key)) this.#openText.delete(key);
-        else this.#openText.add(key);
+        if (this.#view.openText.has(key)) this.#view.openText.delete(key);
+        else this.#view.openText.add(key);
         this.#render();
       });
     });
@@ -5540,8 +5425,8 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-mclose]').forEach((b) => {
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
-        this.#openManeuver = null;
-        this.#maneuverEdit = false;
+        this.#view.openManeuver = null;
+        this.#view.maneuverEdit = false;
         this.#render();
       });
     });
@@ -5653,9 +5538,9 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-draft]').forEach((input) => {
       const key = input.dataset.draft;
       input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-        this.#draft[key] = input.value;
+        this.#view.draft[key] = input.value;
         if (key === 'formula' || key === 'minFormula') {
-          this.#refreshPreview(root, 'add', this.#draft.formula, this.#draft.minFormula);
+          this.#refreshPreview(root, 'add', this.#view.draft.formula, this.#view.draft.minFormula);
         }
         // The full-attack d20 is built for the picked weapon, so the pick
         // has to rebuild it.
@@ -5682,9 +5567,9 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-tedit]').forEach((input) => {
       const key = input.dataset.tedit;
       input.addEventListener('input', () => {
-        this.#editDraft[key] = input.value;
+        this.#view.editDraft[key] = input.value;
         if (key === 'maxFormula' || key === 'minFormula') {
-          this.#refreshPreview(root, 'edit', this.#editDraft.maxFormula, this.#editDraft.minFormula);
+          this.#refreshPreview(root, 'edit', this.#view.editDraft.maxFormula, this.#view.editDraft.minFormula);
         }
       });
       input.addEventListener('keydown', (e) => {
@@ -5759,11 +5644,11 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-meter-edit]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.meterEdit;
-        if (this.#editMeter === key) { this.#editMeter = null; this.#render(); return; }
-        this.#editMeter = key;
-        this.#editTracker = null;
-        this.#editDraft = {
-          ...this.#editDraft, style: this.#model.meterStyle(key),
+        if (this.#view.editMeter === key) { this.#view.editMeter = null; this.#render(); return; }
+        this.#view.editMeter = key;
+        this.#view.editTracker = null;
+        this.#view.editDraft = {
+          ...this.#view.editDraft, style: this.#model.meterStyle(key),
         };
         this.#render();
       });
@@ -5773,11 +5658,11 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => {
         const t = this.#model.trackers.find((x) => x.id === b.dataset.trackerEdit);
         if (!t) return;
-        this.#editTracker = t.id;
+        this.#view.editTracker = t.id;
         // One draft and one set of style controls, so only one of the two can
         // be open: a meter left open would keep the editor pointed at itself.
-        this.#editMeter = null;
-        this.#editDraft = {
+        this.#view.editMeter = null;
+        this.#view.editDraft = {
           name: t.name || '',
           maxFormula: t.maxFormula || '',
           minFormula: t.minFormula || '',
@@ -5850,7 +5735,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #bindTrackerStyle(scope) {
     const root = this.shadowRoot;
-    const draft = () => this.#editDraft.style;
+    const draft = () => this.#view.editDraft.style;
     const tracker = () => this.#styleTarget();
     const preview = () => this.#refreshStylePreview(root);
     const redraw = () => this.#refreshStyleEditor(root);
@@ -5998,14 +5883,14 @@ export class CharacterSheetElement extends HTMLElement {
     // empty to typed (or back) is the one case that has to rebuild the tab.
     const refreshWorking = () => {
       const box = root.querySelector('.fx-working');
-      if (!box || !this.#formulaDraft.trim()) {
+      if (!box || !this.#view.formulaDraft.trim()) {
         this.#render();
         const again = root.querySelector('[data-fx-draft]');
         again?.focus();
         again?.setSelectionRange(again.value.length, again.value.length);
         return;
       }
-      box.innerHTML = workingHtml(this.#formulaDraft, scope(), known());
+      box.innerHTML = workingHtml(this.#view.formulaDraft, scope(), known());
       this.#bindFormulaInserts(root);
     };
 
@@ -6017,10 +5902,10 @@ export class CharacterSheetElement extends HTMLElement {
       const valueSection = root.querySelector('[data-fx-section="values"]');
       if (!valueSection) return;
       const names = this.#model.scopeNames();
-      const q = [this.#formulaQuery, this.#formulaValueQuery];
+      const q = [this.#view.formulaQuery, this.#view.formulaValueQuery];
       valueSection.outerHTML = browserHtml(
         valueGroups(names, scope(), this.#model.inlineNames || {}, q), names.length,
-        this.#formulaQuery, this.#formulaValueQuery,
+        this.#view.formulaQuery, this.#view.formulaValueQuery,
       );
     };
     const refreshTargets = () => {
@@ -6028,8 +5913,8 @@ export class CharacterSheetElement extends HTMLElement {
       if (!targetSection) return;
       const targets = this.#model.forwardTargetList || [];
       targetSection.outerHTML = targetsHtml(
-        targetGroups(targets, [this.#formulaQuery, this.#formulaTargetQuery]), targets.length,
-        this.#formulaQuery, this.#formulaTargetQuery,
+        targetGroups(targets, [this.#view.formulaQuery, this.#view.formulaTargetQuery]), targets.length,
+        this.#view.formulaQuery, this.#view.formulaTargetQuery,
       );
     };
     const bindSectionSearch = () => {
@@ -6050,12 +5935,12 @@ export class CharacterSheetElement extends HTMLElement {
           }
         });
       };
-      rebind('data-fx-value-query', refreshValues, (v) => { this.#formulaValueQuery = v; });
-      rebind('data-fx-target-query', refreshTargets, (v) => { this.#formulaTargetQuery = v; });
+      rebind('data-fx-value-query', refreshValues, (v) => { this.#view.formulaValueQuery = v; });
+      rebind('data-fx-target-query', refreshTargets, (v) => { this.#view.formulaTargetQuery = v; });
     };
 
     const refreshSearch = () => {
-      const q = this.#formulaQuery;
+      const q = this.#view.formulaQuery;
       const formulaSection = root.querySelector('[data-fx-section="formulas"]');
       const forwardedSection = root.querySelector('[data-fx-section="forwarded"]');
       if (formulaSection) {
@@ -6072,9 +5957,9 @@ export class CharacterSheetElement extends HTMLElement {
     bindSectionSearch();
 
     draft?.addEventListener('input', () => {
-      const wasEmpty = !this.#formulaDraft.trim();
-      this.#formulaDraft = draft.value;
-      if (wasEmpty !== !this.#formulaDraft.trim()) {
+      const wasEmpty = !this.#view.formulaDraft.trim();
+      this.#view.formulaDraft = draft.value;
+      if (wasEmpty !== !this.#view.formulaDraft.trim()) {
         const caret = draft.selectionStart;
         this.#render();
         const again = root.querySelector('[data-fx-draft]');
@@ -6089,18 +5974,18 @@ export class CharacterSheetElement extends HTMLElement {
     draft?.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      this.#formulaDraft = pretty(draft.value);
-      draft.value = this.#formulaDraft;
+      this.#view.formulaDraft = pretty(draft.value);
+      draft.value = this.#view.formulaDraft;
       refreshWorking();
     });
 
     query?.addEventListener('input', () => {
-      this.#formulaQuery = query.value;
+      this.#view.formulaQuery = query.value;
       refreshSearch();
     });
 
     root.querySelector('[data-fx-ref]')?.addEventListener('toggle', (e) => {
-      this.#formulaRefOpen = e.target.open;
+      this.#view.formulaRefOpen = e.target.open;
     });
 
     this.#bindFormulaInserts(root);
@@ -6157,7 +6042,7 @@ export class CharacterSheetElement extends HTMLElement {
         if (!box) return;
         const text = el.dataset.fxInsert;
         if (el.dataset.fxReplace) {
-          this.#formulaDraft = text;
+          this.#view.formulaDraft = text;
         } else {
           const at = box.selectionStart ?? box.value.length;
           const before = box.value.slice(0, at);
@@ -6165,10 +6050,10 @@ export class CharacterSheetElement extends HTMLElement {
           // A name landing straight after a name or a number is not what was
           // meant, so give it room; anything else is inserted as typed.
           const gap = /[A-Za-z0-9_.]$/.test(before) ? ' ' : '';
-          this.#formulaDraft = `${before}${gap}${text}${after}`;
+          this.#view.formulaDraft = `${before}${gap}${text}${after}`;
         }
         const wasEmpty = !box.value.trim();
-        box.value = this.#formulaDraft;
+        box.value = this.#view.formulaDraft;
         if (wasEmpty) {
           this.#render();
           root.querySelector('[data-fx-draft]')?.focus();
@@ -6176,7 +6061,7 @@ export class CharacterSheetElement extends HTMLElement {
         }
         const working = root.querySelector('.fx-working');
         if (working) {
-          working.innerHTML = workingHtml(this.#formulaDraft, this.#model.scope(),
+          working.innerHTML = workingHtml(this.#view.formulaDraft, this.#model.scope(),
             new Set(this.#model.scopeNames()));
           this.#bindFormulaInserts(root);
         }
@@ -6395,8 +6280,8 @@ export class CharacterSheetElement extends HTMLElement {
     // A two-click ×: the first press only arms it (rows.armedButton).
     const arm = button?.dataset?.arm;
     if (arm) {
-      if (this.#armedRemove !== arm) { this.#armedRemove = arm; this.#render(); return; }
-      this.#armedRemove = null;
+      if (this.#view.armedRemove !== arm) { this.#view.armedRemove = arm; this.#render(); return; }
+      this.#view.armedRemove = null;
     }
     switch (name) {
       case 'add-training-class': {
@@ -6582,7 +6467,7 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-tracker': {
-        const { name: n, formula, minFormula, refresh, note, fill } = this.#draft;
+        const { name: n, formula, minFormula, refresh, note, fill } = this.#view.draft;
         if (!n.trim()) return;
         // The preview already shows why a formula does not parse.
         if (formula.trim() && !analyse(formula).ok) return;
@@ -6596,14 +6481,14 @@ export class CharacterSheetElement extends HTMLElement {
           // Only a draining tracker needs a style; a filling one is the default.
           style: fill === 'remaining' ? { fill: 'remaining' } : null,
         });
-        this.#draft = { name: '', formula: '', minFormula: '', refresh: '', note: '', fill: 'spent' };
+        this.#view.draft = blankDraft();
         this.#render();
         break;
       }
       case 'save-tracker': {
-        const id = button?.dataset.id || this.#editTracker;
+        const id = button?.dataset.id || this.#view.editTracker;
         const t = this.#model.trackers.find((x) => x.id === id);
-        const d = this.#editDraft;
+        const d = this.#view.editDraft;
         if (!t) return;
         // Zones with an unparsable bound are dropped rather than saved broken;
         // an all-default style is stored as null.
@@ -6620,31 +6505,31 @@ export class CharacterSheetElement extends HTMLElement {
           note: d.note,
           style: isDefaultStyle(style) ? null : style,
         });
-        this.#editTracker = null;
+        this.#view.editTracker = null;
         this.#render();
         break;
       }
       case 'cancel-tracker':
-        this.#editTracker = null;
+        this.#view.editTracker = null;
         this.#render();
         break;
       case 'save-meter':
-        this.#model.setMeterStyle(button?.dataset.key, this.#editDraft.style);
-        this.#editMeter = null;
+        this.#model.setMeterStyle(button?.dataset.key, this.#view.editDraft.style);
+        this.#view.editMeter = null;
         this.#render();
         break;
       case 'cancel-meter':
-        this.#editMeter = null;
+        this.#view.editMeter = null;
         this.#render();
         break;
       case 'reset-meter':
         // Back to the default, and left open so the change is visible.
         this.#model.setMeterStyle(button?.dataset.key, null);
-        this.#editDraft.style = this.#model.meterStyle(button?.dataset.key);
+        this.#view.editDraft.style = this.#model.meterStyle(button?.dataset.key);
         this.#render();
         break;
       case 'toggle-skills':
-        this.#showAllSkills = !this.#showAllSkills;
+        this.#view.showAllSkills = !this.#view.showAllSkills;
         this.#skillRowsKept = null;
         this.#render();
         break;
@@ -6767,7 +6652,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       case 'class-systems': {
         const index = Number(button?.dataset.index);
-        this.#openClassSystems = this.#openClassSystems === index ? null : index;
+        this.#view.openClassSystems = this.#view.openClassSystems === index ? null : index;
         this.#render();
         break;
       }
@@ -6779,13 +6664,13 @@ export class CharacterSheetElement extends HTMLElement {
       // ticked (Energy Drain climbs a level per click), × takes it off (it
       // stays in the build view's grid, unticked).
       case 'dash-cond-picker':
-        this.#condPickerOpen = !this.#condPickerOpen;
+        this.#view.condPickerOpen = !this.#view.condPickerOpen;
         this.#render();
         break;
       // Arranging the dashboard: the first edit pins the automatic set into
       // uiPrefs.dashCards; Reset hands the composition back to automatic.
       case 'dash-arrange':
-        this.#dashArrange = !this.#dashArrange;
+        this.#view.dashArrange = !this.#view.dashArrange;
         this.#render();
         break;
       case 'dash-card-hide': {
@@ -6816,7 +6701,7 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'buff-add':
-        this.#openBuff = (this.#model.data.buffs || []).length;
+        this.#view.openBuff = (this.#model.data.buffs || []).length;
         this.#model.listAdd('buffs', {
           name: '', on: true, attack: 0, damage: 0, ac: 0, saves: 0, skills: 0, initiative: 0, note: '', bonuses: [],
         });
@@ -6844,7 +6729,7 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'buff-open': {
         const index = Number(button?.dataset.index);
-        this.#openBuff = this.#openBuff === index ? null : index;
+        this.#view.openBuff = this.#view.openBuff === index ? null : index;
         this.#render();
         break;
       }
@@ -6878,27 +6763,27 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'quick-damage': {
-        const n = Number(this.#draft.quickHp) || 0;
+        const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {
           const r = this.#model.applyDamage(n);
           this.#historyNote = `Took ${r.taken} damage${r.fromTemp ? ` (${r.fromTemp} to temporary hit points)` : ''}.`;
         }
-        this.#draft.quickHp = '';
+        this.#view.draft.quickHp = '';
         this.#render();
         break;
       }
       case 'quick-nonlethal': {
-        const n = Number(this.#draft.quickHp) || 0;
+        const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {
           const r = this.#model.applyNonlethal(n);
           this.#historyNote = `Took ${r.taken} nonlethal damage.`;
         }
-        this.#draft.quickHp = '';
+        this.#view.draft.quickHp = '';
         this.#render();
         break;
       }
       case 'quick-temp': {
-        const n = Number(this.#draft.quickHp) || 0;
+        const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {
           const r = this.#model.grantTempHp(n);
           // Temporary hit points do not stack, so a grant that lost to the
@@ -6908,17 +6793,17 @@ export class CharacterSheetElement extends HTMLElement {
             ? `${r.granted} temporary hit points.`
             : `Kept the ${r.kept} temporary hit points already there — they do not stack.`;
         }
-        this.#draft.quickHp = '';
+        this.#view.draft.quickHp = '';
         this.#render();
         break;
       }
       case 'quick-heal': {
-        const n = Number(this.#draft.quickHp) || 0;
+        const n = Number(this.#view.draft.quickHp) || 0;
         if (n > 0) {
           const r = this.#model.applyHealing(n);
           this.#historyNote = r.healed ? `Healed ${r.healed}.` : 'Already at full hit points.';
         }
-        this.#draft.quickHp = '';
+        this.#view.draft.quickHp = '';
         this.#render();
         break;
       }
@@ -6979,15 +6864,15 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'wealth-record': {
-        const amount = Number(this.#draft.wealthAmount);
+        const amount = Number(this.#view.draft.wealthAmount);
         if (!Number.isFinite(amount) || amount === 0) {
           this.#historyNote = 'Give the ledger line an amount.';
           this.#render();
           break;
         }
-        this.#model.addWealthEntry({ amount, label: this.#draft.wealthLabel, kind: this.#draft.wealthKind || 'session' });
-        this.#draft.wealthAmount = '';
-        this.#draft.wealthLabel = '';
+        this.#model.addWealthEntry({ amount, label: this.#view.draft.wealthLabel, kind: this.#view.draft.wealthKind || 'session' });
+        this.#view.draft.wealthAmount = '';
+        this.#view.draft.wealthLabel = '';
         this.#render();
         break;
       }
@@ -7025,9 +6910,9 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'add-system': {
-        const name = (this.#draft.newSystem || '').trim() || 'New system';
+        const name = (this.#view.draft.newSystem || '').trim() || 'New system';
         const tab = this.#model.addSystemTab(name);
-        this.#draft.newSystem = '';
+        this.#view.draft.newSystem = '';
         const idx = this.#model.data.sheetTabs.indexOf(tab);
         this.#tab = `sys-${idx}`;
         this.#render();
@@ -7052,7 +6937,7 @@ export class CharacterSheetElement extends HTMLElement {
         break;
       }
       case 'ext-filter':
-        this.#extFilter = button?.dataset.kind || '';
+        this.#view.extFilter = button?.dataset.kind || '';
         this.#render();
         break;
       case 'arch-remove': {
@@ -7138,28 +7023,28 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
         break;
       case 'add-condition': {
-        const name = String(this.#draft.condition || '').trim();
+        const name = String(this.#view.draft.condition || '').trim();
         if (name) {
           const conds = this.#model.data.conditions || (this.#model.data.conditions = {});
           if (!(name in conds)) conds[name] = 0;
           this.#model.recompute();
         }
-        this.#draft.condition = '';
+        this.#view.draft.condition = '';
         this.#render();
         break;
       }
       case 'add-trait-category': {
-        const cat = (this.#draft.traitCategory || '').trim();
+        const cat = (this.#view.draft.traitCategory || '').trim();
         if (cat && !this.#model.data.traitCategories.includes(cat)) {
           this.#model.data.traitCategories.push(cat);
           this.#model.recompute();
         }
-        this.#draft.traitCategory = '';
+        this.#view.draft.traitCategory = '';
         this.#render();
         break;
       }
       case 'toggle-gear':
-        this.#showAllGear = !this.#showAllGear;
+        this.#view.showAllGear = !this.#view.showAllGear;
         this.#render();
         break;
       // Widen or narrow a gear table. Dropping a column that has something
@@ -7172,12 +7057,12 @@ export class CharacterSheetElement extends HTMLElement {
         const delta = Number(button?.dataset.delta) || 0;
         const armKey = `${list}|${kind}`;
         if (delta < 0 && gearColumnInUse(this.#model.list(list), kind)
-          && this.#armedGearCol !== armKey) {
-          this.#armedGearCol = armKey;
+          && this.#view.armedGearCol !== armKey) {
+          this.#view.armedGearCol = armKey;
           this.#render();
           break;
         }
-        this.#armedGearCol = null;
+        this.#view.armedGearCol = null;
         this.#model.setGearColumns(list, kind, delta);
         this.#render();
         break;

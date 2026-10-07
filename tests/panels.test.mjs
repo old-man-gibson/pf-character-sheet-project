@@ -43,7 +43,8 @@ import * as manager from '../app/js/ui/panels/manager.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
-import { normalizeStyle } from '../app/js/tracker-style.js';
+import * as statBlock from '../app/js/monster/panel.js';
+import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
 
 let pass = 0;
 let fail = 0;
@@ -57,32 +58,11 @@ const check = (label, actual, expected) => {
 const ok = (label, actual) => check(label, !!actual, true);
 
 /**
- * The view state each panel reads, as the element's own `#…Ctx()` builders
- * put it together -- the shut state of every fold, which is what a sheet
- * opens on.
+ * The view a sheet opens on -- every fold shut, nothing armed, nothing typed --
+ * from ui/view-state.js, which is where the element gets its own. The ⚙
+ * manager's tab lists are the element's to work out, so they are drawn empty.
  */
-const shutCtx = () => ({
-  overview: {
-    condPickerOpen: false, dashArrange: false, draft: {}, openBuff: null, openClassSystems: null,
-  },
-  combat: { showCells: new Set() },
-  gear: { draft: {}, openPosts: new Map(), showAllGear: false },
-  system: {
-    deckView: 'table', maneuverEdit: false, openManeuver: null, peek: [],
-  },
-  tracker: {
-    draft: {}, editDraft: null, editMeter: null, editTracker: null,
-  },
-  lore: { menuLists: new Map() },
-  admin: {
-    formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: false, tab: 'formulas',
-  },
-  skills: { showAllSkills: false },
-  feats: { openCell: null },
-  manager: {
-    tabEntries: [], barEntries: [], draft: {}, armedRemove: null, extFilter: '', extSearch: '',
-  },
-});
+const shutCtx = () => ({ ...blankView(), tabEntries: [], barEntries: [] });
 
 /**
  * The same state with every fold open, which is the half the shut sweep can
@@ -103,79 +83,75 @@ const openCtx = (model) => {
   const disc = (d.maneuvers?.disciplines || [])[0];
   const firstManeuver = (disc?.entries || [])[0];
   return {
-    overview: {
-      condPickerOpen: true,
-      dashArrange: true,
-      draft: {},
-      openBuff: (d.buffs || []).length ? 0 : null,
-      openClassSystems: (d.classes || []).length ? 0 : null,
-    },
-    combat: { showCells: yes },
-    gear: { draft: {}, openPosts: yes, showAllGear: true },
-    system: {
-      deckView: 'deck',
-      maneuverEdit: true,
-      openManeuver: firstManeuver ? `maneuvers.disciplines.0|${firstManeuver.name}` : null,
-      peek: [],
-    },
-    tracker: {
-      draft: {},
-      // The element sets these two together, so the harness does too: an
-      // editor open on a tracker with no draft behind it is a state the sheet
-      // cannot be in, and failing on it would be the test's fault.
-      editDraft: {
-        name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null),
-      },
-      editMeter: 'hp',
-      editTracker: (d.customTrackers || [])[0]?.id ?? null,
-    },
-    lore: { menuLists: new Map() },
-    admin: {
-      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaValueQuery: 'mod', formulaTargetQuery: 'will', formulaRefOpen: true, tab: 'audit',
-    },
-    skills: { showAllSkills: true },
-    feats: { openCell: 'mythic:0:effect' },
-    manager: {
-      tabEntries: [], barEntries: [], draft: { newSystem: 'New' },
-      armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null, extFilter: '', extSearch: 'a',
-    },
+    ...shutCtx(),
+    condPickerOpen: true,
+    dashArrange: true,
+    draft: { ...blankDraft(), newSystem: 'New' },
+    openBuff: (d.buffs || []).length ? 0 : null,
+    openClassSystems: (d.classes || []).length ? 0 : null,
+    showCells: yes,
+    openPosts: yes,
+    showAllGear: true,
+    openGear: (d.equipment?.gear || []).length ? 'equipment.gear|0' : null,
+    deckView: 'deck',
+    maneuverEdit: true,
+    openManeuver: firstManeuver ? `maneuvers.disciplines.0|${firstManeuver.name}` : null,
+    veilEdit: (d.akashic?.slots?.[0]?.veils || []).length ? 'akashic.slots.0.veils|0' : null,
+    // The element sets these two together, so the harness does too: an
+    // editor open on a tracker with no draft behind it is a state the sheet
+    // cannot be in, and failing on it would be the test's fault.
+    editDraft: blankTrackerDraft(),
+    editMeter: 'hp',
+    editTracker: (d.customTrackers || [])[0]?.id ?? null,
+    openText: yes,
+    formulaDraft: '{= 1 + 1}',
+    formulaQuery: 'a',
+    formulaValueQuery: 'mod',
+    formulaTargetQuery: 'will',
+    formulaRefOpen: true,
+    tab: 'audit',
+    showAllSkills: true,
+    openCell: 'mythic:0:effect',
+    armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null,
+    extSearch: 'a',
   };
 };
 
 /** Every panel that is a module, by the name its tab wears. */
 const panelsWith = (CTX) => [
-  ['Overview', (m) => overview.renderOverviewPanel(m, CTX.overview)],
-  ['Overview (session dashboard)', (m) => overview.renderDashboardPanel(m, CTX.overview)],
-  ['Stats', (m) => renderStatsPanel(m, {})],
-  ['Skills', (m) => renderSkillsPanel(m, CTX.skills)],
+  ['Overview', (m) => overview.renderOverviewPanel(m, CTX)],
+  ['Overview (session dashboard)', (m) => overview.renderDashboardPanel(m, CTX)],
+  ['Stats', (m) => renderStatsPanel(m, CTX)],
+  ['Skills', (m) => renderSkillsPanel(m, CTX)],
   ['Martial Spheres', (m) => combat.renderMartialPanel(m)],
   ['Magic Spheres', (m) => combat.renderMagicPanel(m)],
   ['Guile Spheres', (m) => guile.renderGuilePanel(m)],
-  ['Template', (m) => combat.renderTemplatePanel(m, CTX.combat)],
-  ['Equipment', (m) => gear.renderGearPanel(m, CTX.gear)],
-  ['Crafting', (m) => gear.renderCraftingPanel(m, CTX.gear)],
-  ['Wealth', (m) => gear.wealthPanel(m, CTX.gear)],
-  ['Trackers', (m) => trackers.renderTrackersPanel(m, CTX.tracker)],
+  ['Template', (m) => combat.renderTemplatePanel(m, CTX)],
+  ['Equipment', (m) => gear.renderGearPanel(m, CTX)],
+  ['Crafting', (m) => gear.renderCraftingPanel(m, CTX)],
+  ['Wealth', (m) => gear.wealthPanel(m, CTX)],
+  ['Trackers', (m) => trackers.renderTrackersPanel(m, CTX)],
   ['Alternate Training', (m) => subsystems.altTrainingPanel(m)],
-  ['Akashic', (m) => subsystems.akashicPanel(m, CTX.system)],
-  ['Maneuvers', (m) => subsystems.maneuversPanel(m, CTX.system)],
+  ['Akashic', (m) => subsystems.akashicPanel(m, CTX)],
+  ['Maneuvers', (m) => subsystems.maneuversPanel(m, CTX)],
   ['Vancian', (m) => subsystems.vancianPanel(m)],
-  ['Psionics', (m) => subsystems.psionicsPanel(m, CTX.system)],
-  ['Cardcasting', (m) => subsystems.cardcastingPanel(m, CTX.system)],
+  ['Psionics', (m) => subsystems.psionicsPanel(m, CTX)],
+  ['Cardcasting', (m) => subsystems.cardcastingPanel(m, CTX)],
   ['Familiar', (m) => subsystems.companionPanel(m, 'familiar')],
   ['Animal Companion', (m) => subsystems.companionPanel(m, 'animalCompanion')],
   ['Eidolon', (m) => subsystems.companionPanel(m, 'eidolon')],
   ['Conjured Companion', (m) => subsystems.companionPanel(m, 'conjured')],
-  ['Progression', (m) => lore.renderProgressionPanel(m, CTX.lore)],
-  ['Lore', (m) => lore.renderLorePanel(m, CTX.lore)],
-  ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX.lore)],
-  ['Formulas', (m) => admin.renderFormulaPanel(m, CTX.admin)],
-  ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX.admin)],
-  ['Feats & Mythic', (m) => feats.renderFeaturesPanel(m, CTX.feats)],
-  ['Technique List', (m) => techniques.renderTechniqueListPanel(m, {})],
-  ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, {})],
-  ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, {})],
-  ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX.manager)],
+  ['Progression', (m) => lore.renderProgressionPanel(m, CTX)],
+  ['Lore', (m) => lore.renderLorePanel(m, CTX)],
+  ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX)],
+  ['Formulas', (m) => admin.renderFormulaPanel(m, CTX)],
+  ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX)],
+  ['Feats & Mythic', (m) => feats.renderFeaturesPanel(m, CTX)],
+  ['Technique List', (m) => techniques.renderTechniqueListPanel(m, CTX)],
+  ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, CTX)],
+  ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, CTX)],
+  ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX)],
+  ['Stat Block', (m) => statBlock.renderStatBlockPanel(m, CTX)],
 ];
 
 const CTX = shutCtx();
@@ -509,7 +485,7 @@ console.log('\nthe dashboard lays out the cards a character uses, and the wallet
   });
   check('a magic class brings the casting card', overview.dashCardIds(c).includes('spheres'), true);
   c.set('wealth.currency', 'Gold & Glory');
-  const html = overview.renderOverviewPanel(c, CTX.overview);
+  const html = overview.renderOverviewPanel(c, CTX);
   check('the currency is escaped once', [html.includes('Gold &amp; Glory'), html.includes('&amp;amp;')], [true, false]);
 }
 
@@ -633,7 +609,7 @@ console.log('skill rows stay put while the player is on the tab');
 console.log('\nthe dashboard Offense card opens the same breakdowns as the Defense card');
 {
   const c = new Character(blankDocument({ name: 'Striker', level: 5 }));
-  const html = overview.renderDashboardPanel(c, CTX.overview);
+  const html = overview.renderDashboardPanel(c, CTX);
   const card = (title) => html.slice(html.indexOf(`<h3>${title}`), html.indexOf('</section>', html.indexOf(`<h3>${title}`)));
   const keys = (title) => (card(title).match(/data-bd="([a-z]+)"/g) || []).map((m) => m.slice(9, -1));
   check('Melee, Ranged, CMB and Init each open theirs', keys('Offense'), ['melee', 'ranged', 'cmb', 'initiative']);
@@ -663,8 +639,8 @@ console.log('\none way of asking twice: the worksheet and feature-group ×');
   // A feature group whose class has gone: the only kind with a ×.
   c.set('progression.classFeatures', { ...(c.data.progression?.classFeatures || {}), Ghost: { columns: ['Old'], byLevel: {}, rules: {}, optionsFrom: {} } });
   const sheet = { id: 'sys-0', key: 'sys:Scratch', label: 'Scratch', kind: 'system', index: 0, tab: c.data.sheetTabs[0] };
-  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX.manager, tabEntries: [sheet], armedRemove: armed });
-  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX.lore, armedRemove: armed });
+  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX, tabEntries: [sheet], armedRemove: armed });
+  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX, armedRemove: armed });
   const sure = (html, key) => new RegExp(`data-arm="${key.replace('|', '\\|')}"[^>]*>sure\\?<`).test(html.replace(/\n\s*/g, ' '));
   check('the worksheet × arms, then says sure?', [sure(mgr(null), 'systab|0'), sure(mgr('systab|0'), 'systab|0')], [false, true]);
   check('so does the feature group ×', [sure(prog(null), 'cfgroup|Ghost'), sure(prog('cfgroup|Ghost'), 'cfgroup|Ghost')], [false, true]);
@@ -682,13 +658,13 @@ console.log('\ndeck manipulations fold to their names, and the hover says the ca
     { name: 'Loaded Hand', count: 1, group: 'General', note: '' },
     { name: 'Loaded Hand', count: 1, group: 'Cooldown', note: 'Mine: {= 2 + 2} cards' },
   ]);
-  const html = subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' });
+  const html = subsystems.cardcastingPanel(c, { ...CTX, deckView: 'deck' });
   check('shut by default: rows drawn, no rule text in them', [/class="manipname"/.test(html), /class="rule"/.test(html)], [true, false]);
   const pop = (i) => talentPopHtml(c, JSON.stringify({ k: 'manip', p: `cardcasting.manipulations|${i}` }));
   ok('an empty note shows the card', pop(0).includes('Hold one more card.'));
   check('a written note shows instead, worked out', [pop(1).includes('Mine: 4 cards'), pop(1).includes('Hold one more card.')], [true, false]);
   c.set('uiPrefs.collapsed', { 'manip:loaded hand': false });
-  ok('opened, the row shows the card and the note field', /class="rule"/.test(subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' })));
+  ok('opened, the row shows the card and the note field', /class="rule"/.test(subsystems.cardcastingPanel(c, { ...CTX, deckView: 'deck' })));
   model.setCardcastingTables({ manipulations: kept });
 }
 
@@ -737,7 +713,7 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
   // Every panel, every view, with badges actually up -- `renders` fails on
   // one drawn by hand.
   sweep('a character with forwarded bonuses', c);
-  const html = overview.renderOverviewPanel(c, CTX.overview);
+  const html = overview.renderOverviewPanel(c, CTX);
   const mate = subsystems.companionPanel(c, 'eidolon');
 
   const dr = html.match(/<span class="fwd" data-fwd="defenses\.dr dr\.magic dr\.none" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
