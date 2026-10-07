@@ -70,8 +70,8 @@ import {
   setClassFeatureRuleGroup, setColumnWidth, setProgressionClass,
 } from './progression.js';
 import {
-  audit, diffFromSource, formulaProblems, offsetError, offsetOf, offsetSource, orphans, reconcile,
-  resolveOffsets, setOffset,
+  acceptSourceDiffs, audit, diffFromSource, forgetSheetCasting, formulaProblems, offsetError, offsetOf,
+  offsetSource, orphans, reconcile, resolveOffsets, setOffset,
 } from './reconcile.js';
 import {
   characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly,
@@ -449,6 +449,8 @@ export class Character {
   #resolveOffsets(...a) { return resolveOffsets(this, ...a); }
   setOffset(...a) { return setOffset(this, ...a); }
   diffFromSource(...a) { return diffFromSource(this, ...a); }
+  acceptSourceDiffs(...a) { return acceptSourceDiffs(this, ...a); }
+  forgetSheetCasting(...a) { return forgetSheetCasting(this, ...a); }
   audit(...a) { return audit(this, ...a); }
   orphans(...a) { return orphans(this, ...a); }
   formulaProblems(...a) { return formulaProblems(this, ...a); }

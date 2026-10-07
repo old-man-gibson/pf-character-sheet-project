@@ -2281,7 +2281,10 @@ export class CharacterSheetElement extends HTMLElement {
           <div class="subtitle">
             ${i.mythicPath ? `${esc(i.mythicPath)} ${val(i.mythicTier)}` : ''}
             ${i.specialty ? ` &middot; ${esc(i.specialty)}` : ''}
-            ${diff.length ? `<span class="dirty"> &middot; ${diff.length} value(s) changed from source sheet</span>` : ''}
+            ${diff.length ? `<span class="dirty"> &middot; <span title="${esc(diff.map((d) => `${d.label}: ${d.was} → ${d.now}`).join('\n'))}"
+              >${diff.length} value${diff.length === 1 ? '' : 's'} changed from source sheet</span>
+              <button class="linkish" data-action="accept-source"
+                title="Take the sheet as it stands as the one to compare with, so the count starts again from here">clear</button></span>` : ''}
           </div>
         </div>
       </header>`;
@@ -6380,6 +6383,19 @@ export class CharacterSheetElement extends HTMLElement {
       case 'dismiss-history-note':
         this.#historyNote = null;
         this.#renderHeader();
+        break;
+      // The header's count of totals changed from the source sheet, started
+      // again from the sheet as it stands. Nothing on the character moves.
+      case 'accept-source':
+        this.#model.acceptSourceDiffs();
+        // The count sits in the header proper, which `#renderHeader` leaves alone.
+        this.#render();
+        break;
+      // The Magic tab's "sheet: 15" marks: the workbook's cached casting
+      // totals, let go once they have gone stale.
+      case 'forget-sheet-casting':
+        this.#model.forgetSheetCasting();
+        this.#render();
         break;
       case 'add-system-pool':
         this.#model.addSystemPool(button?.dataset.pool);

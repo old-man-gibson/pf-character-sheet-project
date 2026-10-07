@@ -4555,6 +4555,45 @@ console.log('a hit-point style saved before the meter was handed the damage keep
   check('a Fill chosen after it stays Fill', again.meterStyle('hp').fill, 'spent');
 }
 
+console.log('the differences from the source sheet can be cleared');
+{
+  // The header counts the totals that moved since the sheet opened; a level
+  // gained moves most of them, and the count should be the player's to clear.
+  const c = new Character(blankDocument({ name: 'Climber', level: 4 }));
+  c.listAdd('classes', { name: 'Fighter', hd: 10, bab: 1, goodFort: true, goodRef: false, goodWill: false,
+    skillRanks: 2, archetypes: '', levelsOverride: null, systems: [] });
+  const opened = new Character(c.toJSON());
+  check('a sheet opens with nothing changed', opened.diffFromSource().length, 0);
+  opened.set('identity.level', 5);
+  const moved = opened.diffFromSource();
+  check('a level moves totals away from the source sheet', moved.length > 0, true);
+  const at = (key) => (key === 'initiative' ? 'hp.initiative' : key).split('.').reduce((o, k) => o?.[k], opened.data);
+  const totals = moved.map((d) => at(d.key));
+  opened.acceptSourceDiffs();
+  check('clearing starts the count again', opened.diffFromSource(), []);
+  check('and moves nothing on the character',
+    moved.map((d) => at(d.key)), totals);
+  opened.set('identity.level', 6);
+  check('the next change counts from there', opened.diffFromSource().length > 0, true);
+
+  // The Magic tab's "sheet: 15": the workbook's cached casting totals, which
+  // go stale with the first level. They can be let go, and that undoes.
+  const doc = blankDocument({ name: 'Caster', level: 4 });
+  doc.training = { ...(doc.training || {}) };
+  const m = new Character(doc);
+  m.addTrainingClass('magic');
+  m.data.training.magic.sheet = { totalCL: 99, totalDC: 99, totalMSB: 99, totalMSD: 99, totalSP: 7, boons: 2 };
+  m.recompute();
+  const magic = () => combatPanels.renderMagicPanel(m);
+  check('a cached total that differs is a button that lets it go',
+    [magic().includes('<button class="badge err sheetfig" data-action="forget-sheet-casting"'), magic().includes('>sheet: 99 ×</button>')], [true, true]);
+  m.forgetSheetCasting();
+  check('let go, the five casting totals are gone and nothing else',
+    m.data.training.magic.sheet, { boons: 2 });
+  check('so the badges are gone', magic().includes('forget-sheet-casting'), false);
+  check('and it can be taken back', [m.undo(), m.data.training.magic.sheet.totalCL], ['Stopped comparing with the Google Sheet', 99]);
+}
+
 console.log('meters -- hit points and essence, drawn the way the player asked');
 {
   const c = new Character(load('angou'));
