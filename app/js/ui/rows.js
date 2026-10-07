@@ -102,7 +102,7 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
  * carries its own answer, so the open list is coded too and the select can
  * repaint from the option it lands on.
  */
-export function itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
+export function itemSelect(list, i, field, value, options, blank = '—', abOf = null, { kind = 'text', attrs = '' } = {}) {
   const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
   const ab = picksAbility(pairs.map(([v]) => v));
   if (value && !pairs.some(([v]) => String(v) === String(value))) {
@@ -113,7 +113,7 @@ export function itemSelect(list, i, field, value, options, blank = '—', abOf =
     .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
       String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
     .join('');
-  return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
+  return `<select data-item="${list}|${i}|${field}" data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
 }
 
 /**

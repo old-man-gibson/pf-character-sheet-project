@@ -11,7 +11,9 @@
  * which one is open, and the draft being typed into it.
  */
 import { esc } from '../html.js';
-import { PIP_LIMIT, round, pct } from '../format.js';
+import {
+  PIP_LIMIT, round, pct, signed,
+} from '../format.js';
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';
 import { removeControl } from '../rows.js';
@@ -124,7 +126,6 @@ export function trackerReading(t) {
   const min = Number(t.min) || 0;
   const draining = isDraining(t);
   const twoSided = min < 0;
-  const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
   // A draining tracker shows what is left of the span above its floor.
   const range = min === 0 ? `/ ${max}`
     : (draining && min > 0) ? `/ ${max - min}`
@@ -216,7 +217,6 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   const cur = current ?? (Number(t.current) || 0);
   const twoSided = min < 0;
   const draining = !twoSided && style.fill === 'remaining';
-  const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
   const ctx = { min, max, style, resolvedZones };
   const pct = (f) => `${(f * 100).toFixed(3)}%`;
 

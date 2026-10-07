@@ -19,7 +19,9 @@ import { gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
 import { roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
-import { group, pct, round } from '../format.js';
+import {
+  group, pct, round, signed,
+} from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
   CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
@@ -319,11 +321,10 @@ export function weaponsPanel(model, e) {
           ${field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
             title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
-          ${field('Proficient', `<select data-item="equipment.weapons|${i}|proficiency" data-kind="text"
-            title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}">
-            <option value=""${!w.proficiency ? ' selected' : ''}>Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}</option>
-            <option value="yes"${w.proficiency === 'yes' ? ' selected' : ''}>Yes</option>
-            <option value="no"${w.proficiency === 'no' ? ' selected' : ''}>No</option></select>`)}
+          ${field('Proficient', itemSelect('equipment.weapons', i, 'proficiency', w.proficiency, [['yes', 'Yes'], ['no', 'No']],
+    `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
+      attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
+    }))}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
@@ -1096,7 +1097,7 @@ export function wealthPanel(model, ctx) {
         <tbody>${ledger.slice(0, 12).map((l) => `<tr>
           <td>${esc(l.date)}</td>
           <td>${esc(l.label)} <span class="badge">${kindLabel[l.kind] || l.kind}</span></td>
-          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${l.amount > 0 ? '+' : ''}${n(l.amount)}</td>
+          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${signed(l.amount, n)}</td>
           <td class="tools">${removeAction('wealth-remove', { index: l.i }, { what: 'this line', title: 'Remove this line and undo it' })}</td>
         </tr>`).join('')}</tbody>
       </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? '' : 's'} kept.</p>` : ''}</div>` : ''}

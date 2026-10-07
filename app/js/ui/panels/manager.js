@@ -12,6 +12,7 @@
  */
 import { esc } from '../html.js';
 import * as rows from '../rows.js';
+import { signed } from '../format.js';
 import { runtime as extensionRuntime } from '../../extension-runtime.js';
 import { BLOCK_KINDS, archetypeStatus, swapLabel } from '../../extensions.js';
 
@@ -184,7 +185,7 @@ function extensionBlocksPanel(model, ctx) {
     const detail = (b) => {
       switch (b.kind) {
         case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
-        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
+        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${signed(v)} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
         case 'template': return `${b.features.length} feature(s)`;
         case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
         case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;

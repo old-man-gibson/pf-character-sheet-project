@@ -81,8 +81,12 @@ export function check(path, value, label = '', title = '') {
       data-set="${path}" data-kind="bool">${label ? `<span>${esc(label)}</span>` : ''}</label>`;
 }
 
-/** `blank: null` for a choice that must be made -- no empty option at all. */
-export function select(path, value, options, blank = '—') {
+/**
+ * A dropdown bound to a path. `blank: null` for a choice that must be made --
+ * no empty option at all. `attrs` is trusted markup for anything else the
+ * select carries (a label, a second binding), never document text.
+ */
+export function select(path, value, options, blank = '—', { attrs = '' } = {}) {
   const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
   const ab = picksAbility(pairs.map(([v]) => v));
   // Keep a value the option list doesn't know (e.g. a magic sphere recorded
@@ -93,7 +97,7 @@ export function select(path, value, options, blank = '—') {
   const opts = (blank === null ? pairs : [['', blank], ...pairs])
     .map(([v, label]) => `<option value="${esc(v)}"${abAttr(ab, v)}${String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
     .join('');
-  return `<select data-set="${path}" data-kind="text"${abAttr(ab, value)}>${opts}</select>`;
+  return `<select data-set="${path}" data-kind="text"${abAttr(ab, value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
 }
 
 /** Ability-stat picker, used by the AC / attack / save stat slots. */

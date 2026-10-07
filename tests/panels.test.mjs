@@ -818,5 +818,13 @@ console.log('\nevery moved number is the one moved number');
   check('and nothing on the sheet wears the always-red class', /\bconditioned\b/.test(html), false);
 }
 
+console.log('\none way to write a sign');
+{
+  const { group, minus, signed } = await import('../app/js/ui/format.js');
+  check('plus, a true minus, and a bare zero', [signed(2), signed(-3), signed(0)], ['+2', '−3', '0']);
+  check('the size written its own way', signed(-1200, group), '−1,200');
+  check('a figure that carries no plus', [minus(-12), minus(4)], ['−12', '4']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

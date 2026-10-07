@@ -1330,7 +1330,7 @@ function altTrainingPick(model, row, sphere = null) {
     // row's empty note from the catalogue as a talent cell would.
     const pickAttr = row.grants.some((g) => g.talent) ? ` data-altpick="${row.level}"` : '';
     const options = row.pick?.options;
-    if (options) return marked(select(path, row.text, options).replace('<select ', `<select${pickAttr} `));
+    if (options) return marked(select(path, row.text, options, '—', { attrs: pickAttr.trim() }));
     const placeholder = row.pick?.placeholder || row.auto || '—';
     const auto = !row.text.trim() && row.auto;
     // A pick carrying an inline formula shows what it comes to, the same way a
@@ -2710,6 +2710,8 @@ function deckManipulationsHead(model, p, k) {
       </h3>
       <div class="fieldgrid">
         ${field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
+    // Blank is automatic, so an emptied box has to store nothing rather than 0.
+    kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
     title: 'Blank: one per deck feat, plus one for Card Shark. Or a number, or a formula.',
   }))}

@@ -16,6 +16,7 @@
 import { esc } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
+import { minus, signed } from '../format.js';
 import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
@@ -56,7 +57,8 @@ const DASH_CARDS = [
 const DASH_CARD_LABELS = new Map(DASH_CARDS);
 
 /** The base attack progressions a class can run, as the rules name them. */
-const BAB_RATES = [[1, 'full'], [0.75, '&frac34;'], [0.5, '&frac12;'], [0, 'none']];
+// Characters, not entities: the dropdown escapes its labels like every other.
+const BAB_RATES = [[1, 'full'], [0.75, '¾'], [0.5, '½'], [0, 'none']];
 
 /** The hit dice a class can have, as the workbook's own HD Size column listed them. */
 const HIT_DICE = [4, 6, 8, 10, 12];
@@ -84,10 +86,9 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
     ? `Another class has a better ${beaten.noun} at ${where}, so this one${
       all ? ' does nothing to the character as it stands' : ' only counts at the rest'}.`
     : '';
-  return `<select data-item="classes|${i}|${field}" data-kind="number" aria-label="${esc(label)}"
-      class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}>
-      ${opts.map(([v, text]) => `<option value="${v}"${v === now ? ' selected' : ''}>${text}</option>`).join('')}
-    </select>`;
+  return itemSelect('classes', i, field, now, opts, null, null, {
+    kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
+  });
 }
 import { weaponsPanel, wealthPanel } from './gear.js';
 import {
@@ -453,9 +454,9 @@ function buffsPanel(model, ctx) {
       for (const row of b.bonuses || []) {
         const v = Number(row?.valueNum) || 0;
         if (!v) continue;
-        bits.push(row.target === 'size' ? `${v > 0 ? `+${v}` : v} true size`
-          : row.target === 'sizeEffective' ? `${v > 0 ? `+${v}` : v} effective size`
-            : row.target === 'sizeStacking' ? `${v > 0 ? `+${v}` : v} size (stacks)`
+        bits.push(row.target === 'size' ? `${signed(v)} true size`
+          : row.target === 'sizeEffective' ? `${signed(v)} effective size`
+            : row.target === 'sizeStacking' ? `${signed(v)} size (stacks)`
               : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
       }
       return bits.join(' · ') || 'no numbers yet';
@@ -485,9 +486,7 @@ function buffsPanel(model, ctx) {
       const b = buffs[editing];
       const i = editing;
       const bonusRow = (row, j) => `<span class="buffbonus">
-        <select data-item="${list}|${i}|bonuses.${j}.target" data-kind="text" aria-label="What this bonus moves">
-          ${BUFF_TARGETS.map(([key, label]) => `<option value="${key}"${row.target === key ? ' selected' : ''}>${esc(label)}</option>`).join('')}
-        </select>
+        ${itemSelect(list, i, `bonuses.${j}.target`, row.target, BUFF_TARGETS, null, null, { attrs: 'aria-label="What this bonus moves"' })}
         ${exprField(`data-item="${list}|${i}|bonuses.${j}.value"`, row.value, {
     width: '5.5rem', value: row.valueNum, error: row.valueError, title: 'A number, or a formula — 1 + essence.shoulder',
   })}
@@ -765,7 +764,6 @@ function dashQuickCard(model, ctx) {
     const hp = model.hpState;
     const maxNow = hp.max;
     const curNow = hp.current;
-    const signed = (n) => String(n).replace('-', '−');
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
     const fig = (label, value, title, cls = '') => `<span class="dashhpfig${cls ? ` ${cls}` : ''}"
       title="${esc(title)}"><span class="k">${esc(label)}</span><span class="v">${value}</span></span>`;
@@ -783,7 +781,7 @@ function dashQuickCard(model, ctx) {
     ? `${hp.typedTemp} of your own, ${hp.tempGrantLeft} left of ${hp.tempGranted} a rule grants. Damage spends these first.`
     : 'Temporary hit points. Damage spends these first, and they do not stack — the best one applies.')}
         ${fig('Nonlethal', hp.nonlethal || '—', 'You fall unconscious when nonlethal damage catches up with what is left.')}
-        ${fig('Dead at', signed(hp.deathAt), `−(Con ${hp.conScore}${hp.deathBonus ? ` + ${hp.deathBonus}` : ''}). You fall unconscious at 0.`,
+        ${fig('Dead at', minus(hp.deathAt), `−(Con ${hp.conScore}${hp.deathBonus ? ` + ${hp.deathBonus}` : ''}). You fall unconscious at 0.`,
     hp.dying ? 'bad' : '')}
       </div>
       <div class="pair" style="flex-wrap:wrap">
@@ -1993,7 +1991,6 @@ function hpBuild(model) {
 function hitPointsPanel(ctx, model) {
     const hp = model.hpState;
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
-    const signed = (n) => String(n).replace('-', '−');
     return `<section class="panel">
       <h3>Hit points
         ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
@@ -2031,9 +2028,9 @@ function hitPointsPanel(ctx, model) {
           error: model.data.hp.deathBonusError,
           title: 'A number, or a formula — e.g. con.mod or floor(level / 2)',
         })}${forwardedBadge(model, 'hp.deathBonus')}`)}
-        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${signed(hp.deathAt)}</span>`)}
+        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${minus(hp.deathAt)}</span>`)}
       </div>
-      ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${signed(hp.deathAt)}.`
+      ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${minus(hp.deathAt)}.`
         : status === 'dying' ? `Dying — ${hp.current - hp.deathAt} point${hp.current - hp.deathAt === 1 ? '' : 's'} from death at ${signed(hp.deathAt)}.`
           : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious — nonlethal damage has caught up with what is left.'
             : 'Unconscious.'}</p>` : ''}

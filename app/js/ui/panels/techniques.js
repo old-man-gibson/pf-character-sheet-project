@@ -227,7 +227,6 @@ export function renderCookingPanel(model, ctx) {
     const dish = model.data.cooking || emptyDish();
     const view = model.cookingView();
     const tables = cookingTables();
-    const levelText = dish.level === null ? '' : dish.level;
     return `<div class="grid">
       <section class="panel span2">
         <h3>Iron Chef Dish Maker
@@ -244,8 +243,10 @@ export function renderCookingPanel(model, ctx) {
         </p>
         <div class="fieldgrid" style="margin-bottom:10px">
           <label class="fld"><span>Iron chef level</span>
-            <input type="number" min="1" max="20" value="${esc(levelText)}" data-set="cooking.level" data-kind="number-or-null"
-              placeholder="${Number(model.data.identity?.level) || ''}" title="Blank uses this character's level"></label>
+            ${fields.autoNum('data-set="cooking.level"', dish.level, {
+    placeholder: Number(model.data.identity?.level) || '', auto: true, extra: 'min="1" max="20"',
+    title: "Blank uses this character's level",
+  })}</label>
           <label class="fld"><span>Chef</span>${fields.text('cooking.chef', dish.chef, String(model.data.identity?.name || 'the chef'))}</label>
           <label class="fld"><span>Dish name</span>${fields.text('cooking.dishName', dish.dishName, 'optional')}</label>
         </div>

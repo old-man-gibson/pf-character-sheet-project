@@ -18,6 +18,19 @@ export const group = (v) => String(Math.round(Number(v) || 0)).replace(/\B(?=(\d
 export const pct = (v) => `${round((Number(v) || 0) * 100, 2)}%`;
 
 /**
+ * A number with its sign written out, the way a page prints one: +2, −3 (a
+ * true minus), 0. `format` writes the size, so a price keeps its separators:
+ * `signed(-1200, group)` is "−1,200". (A modifier, which shows +0, is `fmt`.)
+ */
+export const signed = (n, format = String) => {
+  const v = Number(n) || 0;
+  return v > 0 ? `+${format(v)}` : v < 0 ? `−${format(-v)}` : format(0);
+};
+
+/** A number as a page prints it when it carries no plus: a true minus. */
+export const minus = (n) => String(n).replace('-', '−');
+
+/**
  * Two names off a sheet, compared the way a reader would compare them.
  *
  * Two names the player typed, or a pack wrote, meaning the same thing.
