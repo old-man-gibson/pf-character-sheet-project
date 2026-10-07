@@ -84,6 +84,7 @@ import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import { talentPopHtml } from './ui/talents.js';
 import { blankDraft, blankView } from './ui/view-state.js';
 import { foldValue, isOpen } from './ui/folds.js';
+import { colorControl } from './ui/color-control.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -123,7 +124,7 @@ import {
 } from './history.js';
 import { downloadFile } from './download.js';
 import {
-  TRACKER_PALETTE, THEME_ACCENT, normalizeStyle, normalizeHex, isDefaultStyle, barClickValue,
+  TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, barClickValue,
   pipClickValue, rgba, readableOn,
 } from './tracker-style.js';
 import { ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, weaponStrikes } from './roll20.js';
@@ -3893,10 +3894,6 @@ export class CharacterSheetElement extends HTMLElement {
     const cur = forCharacter
       ? normalizeHex(this.#model.data.identity?.color)
       : this.#model.tabColor(m.key);
-    const swatch = (hex, name) => `<button class="swatch${hex ? '' : ' none'}" data-tabswatch
-      data-hex="${hex}"${hex ? ` style="background:${hex}"` : ''}
-      title="${esc(hex ? `${name} ${hex}` : 'Theme default')}" aria-label="${esc(hex ? name : 'Theme default')}"
-      aria-pressed="${(cur || '') === hex}"></button>`;
     // The head wears the tab's own name, whatever it is being called: the
     // rename field below is where the calling happens, and a head that
     // followed the keystrokes would be the field said twice.
@@ -3912,15 +3909,11 @@ export class CharacterSheetElement extends HTMLElement {
           placeholder="${esc(m.base || m.label)}" maxlength="40" aria-label="Tab name"
           title="What this tab is called on your sheet. Blank gives its own name back; the GM’s inspector view always shows the original.">
       </div>` : ''}
-      <div class="swatches" role="group" aria-label="${forCharacter ? 'Character colour' : 'Tab colour'}">
-        ${swatch('', '')}
-        ${TRACKER_PALETTE.map(([h, n]) => swatch(h, n)).join('')}
-      </div>
-      <div class="pair">
-        <input class="mono hexin" data-tabhex value="${esc(cur || '')}" placeholder="#rrggbb"
-          maxlength="7" aria-label="Tab colour hex">
-        <input type="color" data-tabpick value="${esc(cur || THEME_ACCENT.hex)}" aria-label="Tab colour picker">
-      </div>
+      ${/* The character's own key when it is the character being coloured,
+           so the Details panel's control, if it is on screen, follows. */''}
+      ${colorControl(forCharacter ? 'character' : 'tab', cur, {
+    label: forCharacter ? 'Character colour' : 'Tab colour', pair: true,
+  })}
     </div>`;
   }
 
@@ -3949,20 +3942,9 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * The colour panel's own controls, plus the two ways out of it.
-   *
-   * A swatch, the hex box and the native picker all land on the same setter,
-   * and none of them re-renders. That is the same bargain `#bindCharacterColor`
-   * strikes one panel over, for a sharper version of the same reason: the
-   * native picker sends `input` continuously while its hue slider is dragged,
-   * and a re-render replaces the `<input type="color">` node it is attached to
-   * -- so re-rendering there tears down the very popup the player is dragging
-   * in. Everything the colour shows on is repainted in place instead, and the
-   * one re-render happens when the panel closes.
-   *
-   * Nothing calls `#persist` either: `setTabColor` recomputes, every model
-   * change notifies the subscriber set up with the document, and saving is
-   * what that subscriber does.
+   * The colour panel's openers, its rename field and the two ways out of it.
+   * Its colour control is bound with every other (`#bindColors`); what a
+   * tab's colour repaints is `#paintTabColor`.
    */
   #bindTabColor(root) {
     root.querySelectorAll('[data-tabcolor-open]').forEach((b) => {
@@ -3975,53 +3957,6 @@ export class CharacterSheetElement extends HTMLElement {
 
     const menu = root.querySelector('.tabmenu');
     if (!menu) return;
-    const hexBox = menu.querySelector('[data-tabhex]');
-    const picker = menu.querySelector('[data-tabpick]');
-
-    /** Write the colour, then repaint everything wearing it, in place. */
-    const apply = (hex, { fromHexBox = false, fromPicker = false } = {}) => {
-      const { key, kind } = this.#tabColorFor;
-      if (kind === 'character') {
-        // The character's colour: onto the host's properties, and onto the
-        // Details panel's own controls if that panel is the one on screen.
-        this.#model.set('identity.color', hex);
-        this.#applyCharacterColor();
-        const box = root.querySelector('[data-charhex]');
-        if (box) { box.value = hex || ''; box.classList.remove('bad'); }
-        root.querySelectorAll('[data-charswatch]').forEach((b) => {
-          b.setAttribute('aria-pressed', (normalizeHex(b.dataset.hex) || null) === hex ? 'true' : 'false');
-        });
-      } else this.#model.setTabColor(key, hex);
-      const sel = kind === 'character' ? null : `[data-tabkey="${CSS.escape(key)}"]`;
-      const tab = sel && root.querySelector(`nav.tabs ${sel}`);
-      if (tab) {
-        tab.classList.toggle('tinted', !!hex);
-        if (hex) {
-          tab.style.setProperty('--tab-color', hex);
-          tab.style.setProperty('--tab-ink', readableOn(hex, this.#surface()));
-        } else {
-          tab.style.removeProperty('--tab-color');
-          tab.style.removeProperty('--tab-ink');
-        }
-      }
-      const rowSwatch = sel && root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
-      if (rowSwatch) {
-        rowSwatch.classList.toggle('none', !hex);
-        if (hex) rowSwatch.style.background = hex;
-        else rowSwatch.style.removeProperty('background');
-      }
-      menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
-        b.setAttribute('aria-pressed', String((normalizeHex(b.dataset.hex) || '') === (hex || '')));
-      });
-      // Not while it is the field being typed in, or the caret jumps.
-      if (hexBox && !fromHexBox) {
-        hexBox.value = hex || '';
-        hexBox.classList.remove('bad');
-      }
-      // The picker shows the colour a swatch or the hex box chose, as it does
-      // when the panel opens; not while it is the one being dragged.
-      if (picker && !fromPicker) picker.value = hex || THEME_ACCENT.hex;
-    };
 
     /*
      * The rename field, on the colour panel's own bargain: write on every
@@ -4037,20 +3972,6 @@ export class CharacterSheetElement extends HTMLElement {
       if (this.isAdmin) return;
       const tab = root.querySelector(`nav.tabs [data-tabkey="${CSS.escape(m.key)}"]`);
       if (tab) tab.textContent = nameBox.value.trim() || m.base;
-    });
-
-    menu.querySelectorAll('[data-tabswatch]').forEach((b) => {
-      b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
-    });
-    picker?.addEventListener('input', (e) => {
-      apply(normalizeHex(e.target.value), { fromPicker: true });
-    });
-    hexBox?.addEventListener('input', () => {
-      // Typed a character at a time, so an incomplete hex is not an error yet
-      // -- it is only marked, and nothing is written until it reads.
-      const hex = normalizeHex(hexBox.value);
-      hexBox.classList.toggle('bad', !!hexBox.value.trim() && !hex);
-      if (hex || !hexBox.value.trim()) apply(hex, { fromHexBox: true });
     });
 
     const close = () => { this.#tabColorFor = null; this.#render(); };
@@ -4122,7 +4043,7 @@ export class CharacterSheetElement extends HTMLElement {
      * input keeps focus for as long as the popup is open, which is what makes
      * this self-clearing rather than a flag with a lifetime to get wrong.
      */
-    if (this.shadowRoot.activeElement?.matches?.('[data-tabpick]')) return;
+    if (this.shadowRoot.activeElement?.matches?.('.tabmenu [data-colorpick]')) return;
     this.#tabColorFor = null;
     this.#render();
   };
@@ -5664,7 +5585,7 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    this.#bindCharacterColor(root);
+    this.#bindColors(root);
 
     this.#bindTrackerStyle(root);
 
@@ -5677,43 +5598,98 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   /**
-   * The character-colour control.
+   * Every colour control in `scope` (ui/color-control.js).
    *
-   * Every change is applied straight to the host's custom properties rather
-   * than through a re-render, so the sheet recolours live while a hex is being
-   * typed and the field keeps its caret.
+   * A swatch, the hex box and the native picker are three ways of setting one
+   * colour, so whichever is used moves every control with the same key, and
+   * `#colorSetter` writes the colour where it goes. Nothing re-renders: the
+   * sheet recolours live while a hex is typed and the box keeps its caret,
+   * and the native picker sends `input` all the while its hue is dragged -- a
+   * re-render would replace the very `<input type="color">` its popup belongs
+   * to. Nothing calls `#persist` either: every model change reaches the
+   * subscriber set up with the document, and saving is what that does.
    */
-  #bindCharacterColor(scope) {
+  #bindColors(scope) {
     const root = this.shadowRoot;
-    const apply = (hex) => {
-      this.#model.set('identity.color', hex);
-      this.#applyCharacterColor();
-      const box = root.querySelector('[data-charhex]');
-      if (box) { box.value = hex || ''; box.classList.remove('bad'); }
-      const pick = root.querySelector('[data-charpick]');
-      if (pick && hex) pick.value = hex;
-      root.querySelectorAll('[data-charswatch]').forEach((b) => {
-        b.setAttribute('aria-pressed', (normalizeHex(b.dataset.hex) || null) === hex ? 'true' : 'false');
+    const all = (attr, key) => root.querySelectorAll(`[${attr}="${CSS.escape(key)}"]`);
+    const set = (key, hex, from) => {
+      this.#colorSetter(key)?.(hex);
+      all('data-colorswatch', key).forEach((s) => {
+        s.setAttribute('aria-pressed', String((normalizeHex(s.dataset.hex) || '') === (hex || '')));
+      });
+      // Not the box being typed in, or the caret jumps; not the picker being
+      // dragged, or its popup loses its place.
+      all('data-colorhex', key).forEach((box) => {
+        if (box !== from) { box.value = hex || ''; box.classList.remove('bad'); }
+      });
+      all('data-colorpick', key).forEach((pick) => {
+        if (pick !== from) pick.value = hex || pick.dataset.fallback || pick.value;
       });
     };
-
-    scope.querySelectorAll('[data-charswatch]').forEach((b) => {
-      b.addEventListener('click', () => apply(normalizeHex(b.dataset.hex)));
+    scope.querySelectorAll('[data-colorswatch]').forEach((b) => {
+      b.addEventListener('click', () => set(b.dataset.colorswatch, normalizeHex(b.dataset.hex), b));
     });
-    scope.querySelectorAll('[data-charhex]').forEach((input) => {
-      input.addEventListener('input', () => {
-        const raw = input.value.trim();
+    scope.querySelectorAll('[data-colorhex]').forEach((box) => {
+      box.addEventListener('input', () => {
+        // Typed a character at a time, so an incomplete hex is not an error
+        // yet: it is only marked, and nothing is written until it reads.
+        const raw = box.value.trim();
         const hex = normalizeHex(raw);
-        input.classList.toggle('bad', !!raw && !hex);
-        if (!raw || hex) apply(hex);
+        box.classList.toggle('bad', !!raw && !hex);
+        if (!raw || hex) set(box.dataset.colorhex, hex, box);
       });
     });
-    scope.querySelectorAll('[data-charpick]').forEach((pick) => {
+    scope.querySelectorAll('[data-colorpick]').forEach((pick) => {
       pick.addEventListener('input', () => {
         const hex = normalizeHex(pick.value);
-        if (hex) apply(hex);
+        if (hex) set(pick.dataset.colorpick, hex, pick);
       });
     });
+  }
+
+  /** Where a colour control's colour goes, by its key; see `#bindColors`. */
+  #colorSetter(key) {
+    if (key === 'character') {
+      return (hex) => { this.#model.set('identity.color', hex); this.#applyCharacterColor(); };
+    }
+    if (key === 'tab') return (hex) => this.#paintTabColor(hex);
+    if (key.startsWith('tstyle:')) {
+      const field = key.slice('tstyle:'.length);
+      return (hex) => {
+        this.#view.editDraft.style[field] = hex;
+        this.#refreshStylePreview(this.shadowRoot);
+      };
+    }
+    return null;
+  }
+
+  /**
+   * A tab's colour, from the colour panel: written, then repainted in place on
+   * the tab bar and the manager's row, with the one re-render left for when
+   * the panel closes (see `#bindColors` for why not before).
+   */
+  #paintTabColor(hex) {
+    const key = this.#tabColorFor?.key;
+    if (!key) return;
+    this.#model.setTabColor(key, hex);
+    const root = this.shadowRoot;
+    const tab = root.querySelector(`nav.tabs [data-tabkey="${CSS.escape(key)}"]`);
+    if (tab) {
+      tab.classList.toggle('tinted', !!hex);
+      if (hex) {
+        tab.style.setProperty('--tab-color', hex);
+        tab.style.setProperty('--tab-ink', readableOn(hex, this.#surface()));
+      } else {
+        tab.style.removeProperty('--tab-color');
+        tab.style.removeProperty('--tab-ink');
+      }
+    }
+    const rowSwatch = root.querySelector(`[data-tabcolor-open="${CSS.escape(key)}"]`);
+    if (rowSwatch) {
+      rowSwatch.classList.toggle('none', !hex);
+      if (hex) rowSwatch.style.background = hex;
+      else rowSwatch.style.removeProperty('background');
+    }
   }
 
   /**
@@ -5736,55 +5712,8 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    scope.querySelectorAll('[data-swatch]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const field = b.dataset.swatch;
-        const hex = normalizeHex(b.dataset.hex);
-        draft()[field] = hex;
-        // Reflect into the paired hex field and picker, and move the pressed state.
-        const hexin = root.querySelector(`[data-hexin="${field}"]`);
-        if (hexin) { hexin.value = hex || ''; hexin.classList.remove('bad'); }
-        const pick = root.querySelector(`[data-hexpick="${field}"]`);
-        if (pick && hex) pick.value = hex;
-        b.closest('.swatches')?.querySelectorAll('[data-swatch]').forEach((s) => {
-          s.setAttribute('aria-pressed', s === b ? 'true' : 'false');
-        });
-        preview();
-      });
-    });
-
-    scope.querySelectorAll('[data-hexin]').forEach((input) => {
-      input.addEventListener('input', () => {
-        const field = input.dataset.hexin;
-        const raw = input.value.trim();
-        const hex = normalizeHex(raw);
-        input.classList.toggle('bad', !!raw && !hex);
-        if (!raw || hex) {
-          draft()[field] = hex;
-          const pick = root.querySelector(`[data-hexpick="${field}"]`);
-          if (pick && hex) pick.value = hex;
-          root.querySelectorAll(`[data-swatch="${field}"]`).forEach((s) => {
-            s.setAttribute('aria-pressed', normalizeHex(s.dataset.hex) === hex || (!hex && !s.dataset.hex) ? 'true' : 'false');
-          });
-          preview();
-        }
-      });
-    });
-
-    scope.querySelectorAll('[data-hexpick]').forEach((pick) => {
-      pick.addEventListener('input', () => {
-        const field = pick.dataset.hexpick;
-        const hex = normalizeHex(pick.value);
-        if (!hex) return;
-        draft()[field] = hex;
-        const hexin = root.querySelector(`[data-hexin="${field}"]`);
-        if (hexin) { hexin.value = hex; hexin.classList.remove('bad'); }
-        root.querySelectorAll(`[data-swatch="${field}"]`).forEach((s) => {
-          s.setAttribute('aria-pressed', normalizeHex(s.dataset.hex) === hex ? 'true' : 'false');
-        });
-        preview();
-      });
-    });
+    // The style's own colours are colour controls like any other, bound by
+    // `#bindColors` wherever this is.
 
     scope.querySelectorAll('[data-zone]').forEach((input) => {
       input.addEventListener('input', () => {
@@ -5851,6 +5780,7 @@ export class CharacterSheetElement extends HTMLElement {
     if (!t || !block) return;
     block.innerHTML = this.#trackerStyleEditor(t);
     this.#bindTrackerStyle(block);
+    this.#bindColors(block);
   }
 
   /**

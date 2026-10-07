@@ -17,6 +17,7 @@ import {
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';
 import { removeControl } from '../rows.js';
+import { colorControl } from '../color-control.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
@@ -26,7 +27,7 @@ import { trackerForwardKey } from '../../model/util.js';
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
 import {
-  THEME_ACCENT, THEME_NEGATIVE, TRACKER_PALETTE, barLayout, normalizeStyle, resolveZones,
+  THEME_ACCENT, THEME_NEGATIVE, barLayout, normalizeStyle, resolveZones,
   rgba, squareLayout, stepColor, trackBand, zoneAt,
 } from '../../tracker-style.js';
 
@@ -533,20 +534,13 @@ export function trackerStyleEditor(model, ctx, t) {
       </div>`;
 }
 
-/** One colour control: a "none" swatch, the 16 suggestions, a hex field and a native picker. */
+/** One colour of the style, through the sheet's one colour control (ui/color-control.js). */
 function colorField(field, value, { label, none, noneCss }) {
-  const noneStyle = noneCss ? `background:${noneCss}` : '';
   return `<div class="tstyle-row">
       <span class="tlabel">${esc(label)}</span>
-      <div class="swatches" role="group" aria-label="${esc(label)}">
-        <button class="swatch none" data-swatch="${field}" data-hex="" style="${noneStyle}"
-          title="${esc(none)}" aria-label="${esc(none)}" aria-pressed="${value ? 'false' : 'true'}"></button>
-        ${TRACKER_PALETTE.map(([hex, name]) => `<button class="swatch" data-swatch="${field}" data-hex="${hex}"
-          style="background:${hex}" title="${esc(name)} ${hex}" aria-label="${esc(name)}"
-          aria-pressed="${value === hex ? 'true' : 'false'}"></button>`).join('')}
-      </div>
-      <input class="mono hexin" data-hexin="${field}" value="${esc(value || '')}" placeholder="#rrggbb" maxlength="7" aria-label="${esc(label)} hex">
-      <input type="color" data-hexpick="${field}" value="${esc(value || (noneCss ? THEME_ACCENT.hex : '#888888'))}" aria-label="${esc(label)} picker">
+      ${colorControl(`tstyle:${field}`, value, {
+    label, none, noneCss, fallback: noneCss ? THEME_ACCENT.hex : '#888888',
+  })}
     </div>`;
 }
 

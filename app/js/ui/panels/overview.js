@@ -100,9 +100,8 @@ import {
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { maneuverDetails } from '../../model.js';
-import {
-  THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
-} from '../../tracker-style.js';
+import { normalizeStyle } from '../../tracker-style.js';
+import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
@@ -1120,19 +1119,9 @@ function detailsPanel(model) {
    * without a second setting. Blank keeps the theme's own gold.
    */
 function characterColorRow(value) {
-    const hex = normalizeHex(value);
     return `<div class="tstyle-row charcolor">
       <span class="tlabel">Character colour</span>
-      <div class="swatches" role="group" aria-label="Character colour">
-        <button class="swatch none" data-charswatch data-hex=""
-          title="Theme default" aria-label="Theme default" aria-pressed="${hex ? 'false' : 'true'}"></button>
-        ${TRACKER_PALETTE.map(([h, name]) => `<button class="swatch" data-charswatch data-hex="${h}"
-          style="background:${h}" title="${esc(name)} ${h}" aria-label="${esc(name)}"
-          aria-pressed="${hex === h ? 'true' : 'false'}"></button>`).join('')}
-      </div>
-      <input class="mono hexin" data-charhex value="${esc(hex || '')}" placeholder="#rrggbb"
-        maxlength="7" aria-label="Character colour hex">
-      <input type="color" data-charpick value="${esc(hex || THEME_ACCENT.hex)}" aria-label="Character colour picker">
+      ${colorControl('character', value, { label: 'Character colour' })}
       <span class="hint">Tints the whole sheet, and is what an unstyled tracker or meter is drawn in.</span>
     </div>`;
   }
