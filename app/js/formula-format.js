@@ -22,7 +22,7 @@ import {
   parse, evaluateFormula, collectReferences, resolvePath, NameIndex, FUNCTIONS,
 } from './formula.js';
 
-import { esc } from './esc.js';
+import { esc } from './html-escape.js';
 
 /* ------------------------------------------------------------------ *
  * A tolerant lexer

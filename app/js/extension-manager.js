@@ -32,7 +32,7 @@ import { parsePaste, readStructured, splitChunk } from './paste-import.js';
 import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
 import { MANEUVER_FIELDS } from './rules.js';
 
-import { esc } from './esc.js';
+import { esc } from './html-escape.js';
 
 const lower = (s) => String(s ?? '').trim().toLowerCase();
 
