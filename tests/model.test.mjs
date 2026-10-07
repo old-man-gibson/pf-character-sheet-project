@@ -48,7 +48,7 @@ import {
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
 } from '../app/js/rules.js';
-import { zoneAt, barLayout, normalizeStyle } from '../app/js/tracker-style.js';
+import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { countChanges } from '../app/js/history.js';
@@ -1895,7 +1895,7 @@ console.log('negative levels take 5 from current and total hit points alike');
   const hp = c.hpState;
   check('current and total both come down 10', [hp.current, hp.max], [full - 14, full - 10]);
   check('the stored figure is the undrained one', [hp.baseCurrent, hp.baseMax, c.data.hp.current], [full - 4, full, full - 4]);
-  check('the meter reads the drained figure', c.meterSpec('hp').current, full - 14);
+  check('the meter shows the drained figure', squareLayout(c.meterSpec('hp')).lit, full - 14);
   c.applyHealing(100);
   check('healing stops at the drained maximum', [c.hpState.current, c.hpState.max], [full - 10, full - 10]);
   c.applyDamage(full - 5);
@@ -4542,6 +4542,19 @@ console.log('the death threshold, and how loudly the sheet says so');
   check('and rest puts it all back', [c.hpState.current, c.hpState.dying], [c.data.hp.total, false]);
 }
 
+console.log('a hit-point style saved before the meter was handed the damage keeps its look');
+{
+  const doc = blankDocument({ name: 'Styled', level: 5 });
+  doc.meterStyles = { hp: { shape: 'bar', fill: 'spent', color: '#3b82f6', zones: [] } };
+  const c = new Character(doc);
+  check('a saved Fill, which drained, becomes Drain', [c.data.meterStyles.hp.fill, c.data.meterStyles.hp.color],
+    ['remaining', '#3b82f6']);
+  check('once, and the document says so', c.toJSON().corrections.includes('hp-meter-fill'), true);
+  c.setMeterStyle('hp', { ...c.meterStyle('hp'), fill: 'spent' });
+  const again = new Character(c.toJSON());
+  check('a Fill chosen after it stays Fill', again.meterStyle('hp').fill, 'spent');
+}
+
 console.log('meters -- hit points and essence, drawn the way the player asked');
 {
   const c = new Character(load('angou'));
@@ -4550,10 +4563,23 @@ console.log('meters -- hit points and essence, drawn the way the player asked');
   check('a fresh sheet stores no meter styles', Object.keys(c.data.meterStyles), []);
   check('and a meter is a bar', c.meterStyle('hp').shape, 'bar');
 
+  // Every meter is handed what has been used; hit points drain by default, so
+  // the bar is what is left standing, and Fill turns it into the damage taken.
+  // (It was handed what was left, so it drained under a style that said Fill.)
+  check('hit points drain by default', c.meterStyle('hp').fill, 'remaining');
+  c.applyDamage(30);
+  check('the meter is handed the damage', c.meterSpec('hp').current, 30);
+  check('and the bar shows what is left', squareLayout(c.meterSpec('hp')).lit, c.hpState.max - 30);
+  c.setMeterStyle('hp', { fill: 'spent' });
+  check('set to Fill, the bar shows the damage taken', squareLayout(c.meterSpec('hp')).lit, 30);
+  c.setMeterStyle('hp', { fill: 'remaining' });
+  check('set back to the default, nothing is stored', c.data.meterStyles.hp, undefined);
+  c.applyHealing(30);
+
   const hpMax = c.hpState.max;
   let hp = c.meterSpec('hp');
   check('the track is the maximum', [hp.min, hp.max], [0, hpMax]);
-  check('and it is full', hp.current, hpMax);
+  check('and it is full', squareLayout(hp).lit, hpMax);
   check('with nothing layered over it', hp.layers, []);
   check('and no alarm', hp.alert, 0);
 
@@ -4561,14 +4587,14 @@ console.log('meters -- hit points and essence, drawn the way the player asked');
   c.set('hp.temp', 20);
   hp = c.meterSpec('hp');
   check('temporary points extend the track', hp.max, hpMax + 20);
-  check('and fill it', hp.current, hpMax + 20);
+  check('and fill it', squareLayout(hp).lit, hpMax + 20);
   check('the borrowed stretch is marked', hp.layers.map((l) => [l.kind, l.from, l.to]),
     [['over', hpMax, hpMax + 20]]);
 
   // Nonlethal eats down from the top of what is left.
   c.set('hp.nonlethal', 30);
   hp = c.meterSpec('hp');
-  check('nonlethal is marked, not subtracted', hp.current, hpMax + 20);
+  check('nonlethal is marked, not subtracted', squareLayout(hp).lit, hpMax + 20);
   check('and covers the top of the fill',
     hp.layers.find((l) => l.kind === 'mark'), { kind: 'mark', from: hpMax - 10, to: hpMax + 20, label: '30 nonlethal' });
   c.set('hp.nonlethal', 9999);

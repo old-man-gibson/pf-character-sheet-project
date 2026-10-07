@@ -743,11 +743,15 @@ export function meterSpec(model, key) {
         label: `${hp.nonlethal} nonlethal`,
       });
     }
+    // What has been lost, like every meter's `current`: the style's default
+    // drains it, so the bar shows what is left standing, and Fill turns it
+    // into the damage taken. (Handing over what was left, as this did, made
+    // the bar drain under a style that said Fill.)
     return zones({
       name: 'Hit points',
       min: 0,
       max,
-      current: filled,
+      current: max - filled,
       layers,
       alert: hp.dyingFraction,
       alertFill: false,

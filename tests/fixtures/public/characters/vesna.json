@@ -6033,7 +6033,8 @@
  "corrections": [
   "attack-size-sign",
   "poor-save-thirds",
-  "monster-crit-range"
+  "monster-crit-range",
+  "hp-meter-fill"
  ],
  "customTrackers": [
   {

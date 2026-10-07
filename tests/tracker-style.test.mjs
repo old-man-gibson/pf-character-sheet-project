@@ -294,12 +294,14 @@ console.log('meters -- the built-in gauges take a tracker style, with layers ove
   check('a colour is a change', isDefaultMeterStyle({ color: '#6ea8fe' }), false);
   check('a zone is a change', isDefaultMeterStyle({ zones: [{ from: '1', to: '2' }] }), false);
 
-  // A pool that the sheet reads as "23 of 40 left" starts drained instead.
+  // A pool the sheet reads as "23 of 40 left" -- power points, hit points --
+  // starts drained instead.
   check('the power point pool drains', meterDefaultStyle('pp'), { shape: 'bar', fill: 'remaining' });
-  check('and hit points do not', meterDefaultStyle('hp'), METER_DEFAULT_STYLE);
+  check('and so do hit points', meterDefaultStyle('hp'), { shape: 'bar', fill: 'remaining' });
   check('a meter nobody named takes the shared default', meterDefaultStyle('nope'), METER_DEFAULT_STYLE);
   check('drained is the default for the pool', isDefaultMeterStyle({ fill: 'remaining' }, 'pp'), true);
-  check('but a change for hit points', isDefaultMeterStyle({ fill: 'remaining' }, 'hp'), false);
+  check('and for hit points', isDefaultMeterStyle({ fill: 'remaining' }, 'hp'), true);
+  check('where filling is a change', isDefaultMeterStyle({ fill: 'spent' }, 'hp'), false);
   check('and filling is a change for the pool', isDefaultMeterStyle({ fill: 'spent' }, 'pp'), false);
 
   // Where a value sits on the track, and the band a layer covers.
