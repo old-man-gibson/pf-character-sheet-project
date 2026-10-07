@@ -141,12 +141,11 @@ function featGroupTitle(model, ctx, group, g) {
  */
 function removeGroupButton(group, g, armedKey) {
     if (!group.entries.length) {
-      return `<button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+      return rows.removeButton('featGroups', g, { what: 'group' });
     }
-    const key = `featGroups|${g}`;
     const n = group.entries.length;
     const what = `${String(group.name || '').trim() || 'this group'} and its ${n} feat${n === 1 ? '' : 's'}`;
-    return rows.armedButton(key, `data-remove-armed="${key}"`, what, armedKey);
+    return rows.removeButton('featGroups', g, { what, armed: armedKey });
 }
 
 /**

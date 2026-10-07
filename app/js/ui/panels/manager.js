@@ -52,8 +52,9 @@ export function renderSystemManagerPanel(model, ctx) {
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
       : esc(e.label));
     const del = (e) => (e.kind === 'system'
-      ? rows.armedButton(`systab|${e.index}`, `data-action="delete-system" data-index="${e.index}" data-arm="systab|${e.index}"`,
-        `“${e.label}” and all its rows`, ctx.armedRemove) : '');
+      ? rows.removeAction('delete-system', { index: e.index }, {
+        what: `“${e.label}” and all its rows`, arm: `systab|${e.index}`, armed: ctx.armedRemove,
+      }) : '');
 
     // The same panel the tabs' own right-click opens, reached from a row.
     const colorBtn = (e) => {
@@ -138,7 +139,7 @@ export function renderSystemManagerPanel(model, ctx) {
       <h3>Worksheets</h3>
       <p class="hint">
         Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
-        Rename any worksheet by typing over its name above; × deletes one and its data.
+        Rename any worksheet by typing over its name above; × deletes one and its data, after asking twice.
       </p>
       <div class="pair">
         <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="max-width:16rem">

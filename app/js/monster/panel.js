@@ -18,7 +18,9 @@
  * return is whitespace-sensitive; see ui/panels/gear.js for the reasoning.
  */
 import { esc } from '../ui/html.js';
-import { collapsible, itemText, movedInline, rowTools } from '../ui/rows.js';
+import {
+  collapsible, itemText, movedInline, removeAction, rowTools,
+} from '../ui/rows.js';
 import { prose, renderedProse } from '../ui/prose.js';
 import { check, field, num, text } from '../ui/fields.js';
 import { hasTokens } from '../inline.js';
@@ -358,10 +360,16 @@ function editPanel(model, m, ctx) {
       </div>
       <div class="pair" style="margin-top:8px">
         ${check('monster.abp', m.abp, 'Automatic Bonus Progression applies', 'Off for a creature read off a page — its natural armour and saves are its own. On for an NPC built like a character, who has the ladder like anyone else.')}
-        <button class="danger" style="margin-left:auto" data-action="monster-unblock" title="Take the monster block off this sheet; every other tab is untouched">Remove the block</button>
+        ${removeAction('monster-unblock', {}, {
+    what: 'the monster block',
+    title: 'Take the monster block off this sheet; every other tab is untouched',
+    text: 'Remove the block',
+    style: 'margin-left:auto',
+    arm: 'monster-block',
+    armed: ctx.armedRemove,
+  })}
       </div>
     </section>`;
-    void ctx;
     return collapsible(model, 'statblock-edit', body);
   }
 

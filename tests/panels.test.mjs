@@ -179,6 +179,15 @@ function renders(who, name, draw, model) {
     console.log(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
     return html;
   }
+  // Every × is rows.removeControl's, which names what it takes; a remove
+  // button that says nothing to a screen reader was written by hand.
+  const bare = (html.match(/<button[^>]*\sdata-remove(?:-armed)?="[^"]*"[^>]*>/g) || [])
+    .filter((b) => !/aria-label="Remove/.test(b));
+  if (bare.length) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
+    return html;
+  }
   pass++;
   return html;
 }
@@ -743,6 +752,36 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
     `data-fwd="str\\.score" data-fwdx="\\{&quot;only&quot;:&quot;${only}&quot;\\}"[^>]*>([^<]*)<`))?.[1];
   check('the Stats tab splits a score\'s badge into its permanent and temporary halves',
     [half('permanent'), half('temporary')], ['+1', '+2']);
+}
+
+console.log('\nevery × is the one ×');
+{
+  const { removeAction, removeButton, removeControl, rowRemove } = await import('../app/js/ui/rows.js');
+  check('a row\'s ×', removeButton('buffs', 2, { what: 'buff' }),
+    '<button class="danger" data-remove="buffs|2" title="Remove buff" aria-label="Remove buff">×</button>');
+  check('with nothing named, the plain one the row tools always drew', removeButton('x', 0),
+    '<button class="danger" data-remove="x|0" title="Remove" aria-label="Remove">×</button>');
+  const ask = (armed) => removeButton('vancian.prepared', 1, { what: 'Fireball', armed });
+  check('one that asks twice is armed under list|i', ask(null).includes('data-remove-armed="vancian.prepared|1"'), true);
+  check('and says so on the hover', ask(null).includes('title="Remove Fireball — asks twice"'), true);
+  check('armed, it reads sure?', [ask('vancian.prepared|1').includes('class="danger armed"'),
+    ask('vancian.prepared|1').endsWith('>sure?</button>')], [true, true]);
+  check('another key armed leaves it a ×', ask('vancian.prepared|0').endsWith('>×</button>'), true);
+  check('an action carries its parameters, escaped, and the key it arms under',
+    removeAction('remove-cf-group', { class: 'Ghost "One"' }, { what: 'the group', arm: 'cfgroup|Ghost', armed: null })
+      .includes('data-action="remove-cf-group" data-class="Ghost &quot;One&quot;" data-arm="cfgroup|Ghost"'), true);
+  check('words in place of the ×', removeButton('psionics.classes', 0, { what: 'this class', text: 'Remove' }).endsWith('>Remove</button>'), true);
+  check('what it takes is escaped', removeControl('data-x="1"', { what: '<b>' }).includes('aria-label="Remove &lt;b&gt;"'), true);
+  check('a row\'s cell holds it', /^<td class="tools">\s*<button class="danger" data-remove="a\|1"/.test(rowRemove('a', 1, { what: 'row' })), true);
+
+  // The two removals that had no way back now leave one.
+  const { handleAction } = await import('../app/js/monster/sheet.js');
+  const m = new Character(blankDocument('monster-undo'));
+  handleAction(m, 'monster-block');
+  check('a stat block asks twice before it goes',
+    statBlock.renderStatBlockPanel(m, { ...CTX, armedRemove: 'monster-block' }).includes('>sure?</button>'), true);
+  handleAction(m, 'monster-unblock');
+  check('and leaves the way back', [m.data.monster, m.undoStack?.at(-1)?.label], [undefined, 'Removed the monster block']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

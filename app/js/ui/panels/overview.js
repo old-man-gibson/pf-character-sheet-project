@@ -26,7 +26,7 @@ import {
   guileTalentRows, ownTalentRows, plannerHasClass, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
 import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
-import { rowRemoveButton, slotSpend } from './subsystems.js';
+import { slotSpend } from './subsystems.js';
 
 /**
  * The session dashboard's building blocks, in their default order. The blocks
@@ -105,7 +105,8 @@ import {
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
+  itemText, line, lineHtml, movedInline, movedSub, removeAction, removeButton, removeControl, rowTools,
+  workingTitle,
 } from '../rows.js';
 import {
   TRAIT_CATEGORIES,
@@ -476,7 +477,7 @@ function buffsPanel(model, ctx) {
           <span class="pair" style="margin-left:auto">
             <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
               title="${open ? 'Close the editor' : 'Open the dials and formulas'}">${open ? '▾ Close' : '▸ Edit'}</button>
-            <button class="danger" data-remove="buffs|${i}" aria-label="Remove buff">×</button>
+            ${removeButton('buffs', i, { what: 'buff' })}
           </span>
         </div>
       </div>`;
@@ -492,8 +493,7 @@ function buffsPanel(model, ctx) {
         ${exprField(`data-item="${list}|${i}|bonuses.${j}.value"`, row.value, {
     width: '5.5rem', value: row.valueNum, error: row.valueError, title: 'A number, or a formula — 1 + essence.shoulder',
   })}
-        <button class="danger" data-action="buff-bonus-remove" data-index="${i}" data-j="${j}"
-          aria-label="Remove this bonus">×</button>
+        ${removeAction('buff-bonus-remove', { index: i, j }, { what: 'this bonus' })}
       </span>`;
       return `<div class="buffeditor">
         <div class="fieldgrid">
@@ -730,7 +730,7 @@ function dashEffectsCard(model) {
       <div class="pair">
         ${itemCheck('effects', i, 'on', x.on !== false)}
         ${itemText('effects', i, 'name', x.name, 'Watching the north door')}
-        <button class="danger" data-remove="effects|${i}" aria-label="Remove effect">×</button>
+        ${removeButton('effects', i, { what: 'effect' })}
       </div>
       ${itemText('effects', i, 'note', x.note, 'the detail worth remembering')}
     </div>`;
@@ -1266,7 +1266,7 @@ function languagesPanel(model) {
         ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
           <span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span>
           ${itemText('identity.languages', li, 'self', l, 'Language')}
-          <button class="danger tiny" data-remove="identity.languages|${li}" aria-label="Remove">×</button>
+          ${removeButton('identity.languages', li, { what: 'language', tiny: true })}
         </span>`).join('')}
       </div>
       <div class="pair" style="margin-top:8px">
@@ -1618,7 +1618,7 @@ function speedPanel(model) {
     const badge = forwardedBadge(model, sp.handle);
     return badge ? `<div class="speedfwd">${badge}</div>` : '';
   })()}</td>
-          <td class="tools quiet">${rowRemoveButton('identity.speeds', i, `Remove ${sp.type || 'this movement'}`)}</td>
+          <td class="tools quiet">${removeButton('identity.speeds', i, { what: sp.type || 'this movement', tiny: true })}</td>
         </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -1699,7 +1699,7 @@ function proficienciesPanel(model) {
     : `<div class="langlist proflist">
             ${weapons.map((w, i) => `<span class="lang">
               ${itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
-              <button class="danger tiny" data-remove="identity.proficiencies.weapons|${i}" aria-label="Remove">×</button>
+              ${removeButton('identity.proficiencies.weapons', i, { what: 'weapon proficiency', tiny: true })}
             </span>`).join('')}
             ${addButton('identity.proficiencies.weapons', 'Add weapon', '')}
           </div>`}
@@ -1835,7 +1835,7 @@ function classesPanel(model, ctx) {
           <td class="num" data-label="Ranks" data-inline="spec">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
           <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
             <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
-              ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
+              ${esc(a.name)}${removeAction('arch-remove', { class: x.name, name: a.name }, { what: a.name })}
             </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
           <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
           ${rowTools('classes', i)}
@@ -2115,7 +2115,7 @@ function conditionsPanel(model) {
         <input type="checkbox" ${on ? 'checked' : ''} data-set="conditions.${esc(name)}" data-kind="flag" aria-label="${esc(label)}">
         <span class="cname">${esc(label)}</span>
         <span class="ceffect">${esc(short(info) || (info ? 'no numbers' : ''))}</span>
-        <button class="danger tiny" data-remove-condition="${esc(name)}" title="Remove this condition from the list" aria-label="Remove ${esc(label)}">×</button>
+        ${removeControl(`data-remove-condition="${esc(name)}"`, { what: label, title: 'Remove this condition from the list', tiny: true })}
       </label>`;
     };
 
@@ -2188,7 +2188,7 @@ function traitsPanel(model, ctx) {
                 <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
                 <td data-label="Trait / effect"><span class="pair" style="width:100%">
                   ${prose(model, `data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
-                  <button class="danger" data-remove="traitSlots.additional|${i}" aria-label="Remove">×</button>
+                  ${removeButton('traitSlots.additional', i, { what: 'trait slot' })}
                 </span></td>
               </tr>`).join('')}
             </tbody>

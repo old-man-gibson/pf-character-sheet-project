@@ -74,7 +74,7 @@ import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, sele
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
   itemSelect, itemText, line,
-  lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools, working,
+  lineHtml, miniStat, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -477,7 +477,7 @@ function veilSlotCard(model, ctx, a, list, s, i) {
           aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
         ${select(`${base}.slot`, s.slot, VEIL_SLOTS, null)}
         <span class="vcount" title="veils shaped / slots available">${veils.length}<i>/</i>${max}</span>
-        ${rowRemoveButton(list, i, `Remove the ${s.slot || 'unnamed'} slot`)}
+        ${removeButton(list, i, { what: `the ${s.slot || 'unnamed'} slot`, tiny: true })}
       </div>
       ${collapsed ? '' : `<div class="veilslot-body">
         <div class="veilflags">
@@ -586,7 +586,7 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
           aria-expanded="${writing}"
           title="${d.mine ? 'What you wrote about it — click to edit' : 'Write your own version; leave it empty and the pack’s text stands'}"
           aria-label="Edit ${esc(v.name || 'this veil')}">✎</button>` : ''}
-        ${rowRemoveButton(list, vi, 'Unshape this veil')}
+        ${removeButton(list, vi, { what: 'this veil', title: 'Unshape this veil', tiny: true })}
       </div>
       ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
       ${writing
@@ -595,13 +595,6 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
       ${d.known && d.bindEffect && !writing
     ? `<div class="veil-bind"><b>Bind:</b> ${esc(d.bindEffect)}</div>` : ''}
     </div>`;
-  }
-
-
-/** The × from #rowRemove, without the surrounding table cell. */
-export function rowRemoveButton(list, i, title) {
-    return `<button class="danger tiny" data-remove="${list}|${i}"
-      title="${esc(title)}" aria-label="${esc(title)}">×</button>`;
   }
 
 
@@ -649,7 +642,7 @@ function akashicReceptaclesPanel(model, a) {
                 ${itemText(list, i, 'name', r.name, 'Receptacle')}
                 <label class="minifield" title="essence invested">Ess
                   ${itemNum(list, i, 'essence', r.essence)}</label>
-                ${rowRemoveButton(list, i, 'Remove this receptacle')}
+                ${removeButton(list, i, { what: 'this receptacle', tiny: true })}
               </div>
               ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active !== false, 'On')}</div>` : ''}
             </div>
@@ -739,8 +732,7 @@ function disciplineColumn(model, ctx, d, i) {
           aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
         <span class="dname" title="${esc(d.name)}">${esc(d.name) || '<em>Unnamed</em>'}</span>
         <span class="dcount" title="readied maneuvers / stances">${d.knownManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>
-        <button class="danger tiny" data-remove="maneuvers.disciplines|${i}"
-          title="Stop training ${esc(d.name)}" aria-label="Remove discipline">×</button>
+        ${removeButton('maneuvers.disciplines', i, { what: 'discipline', title: `Stop training ${d.name}`, tiny: true })}
       </div>
       ${collapsed ? '' : `<div class="discipline-body">
         ${d.inCatalogue === false && !entries.length
@@ -963,7 +955,7 @@ function castingClassPanel(model, c, i) {
         ${c.highestLevel ? `<span class="badge">up to level ${c.highestLevel}</span>` : ''}
         ${c.slotTypeUnknown ? '<span class="badge">no table</span>' : ''}
         <span class="pair" style="margin-left:auto">
-          <button class="danger" data-remove="vancian.classes|${i}">Remove</button>
+          ${removeButton('vancian.classes', i, { what: 'this casting class', text: 'Remove' })}
         </span>
       </h3>
       <div class="vcast">
@@ -1156,7 +1148,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
           <td class="spendcell">${r.name ? slotSpend({
     path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
   }) : ''}</td>
-          ${rowRemoveArmed(list, i, r.name || 'this row', ctx.armedRemove ?? null)}
+          ${rowRemove(list, i, { what: r.name || 'this row', armed: ctx.armedRemove ?? null })}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No spells listed.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add spell', {
@@ -1466,7 +1458,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
         ${c.powerCount ? `<span class="badge">${c.powerCount} power${c.powerCount === 1 ? '' : 's'}</span>` : ''}
         ${c.curveTotal && !c.curveKnown ? '<span class="badge">no curve</span>' : ''}
         <span class="pair" style="margin-left:auto">
-          <button class="danger" data-remove="psionics.classes|${i}">Remove</button>
+          ${removeButton('psionics.classes', i, { what: 'this manifesting class', text: 'Remove' })}
         </span>
       </h3>
       <div class="fieldgrid">
@@ -1586,8 +1578,12 @@ function companionSwitchPanel(model, kind, list, active, label) {
         </button>`).join('') : ''}
         <button data-action="companion-add" data-kind="${kind}"
           title="Another ${label.toLowerCase()} — its numbers get a name of their own (${kind}2.*, ${kind}3.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
-        ${many ? `<button class="danger" data-remove="${kind}|${active}" style="margin-left:auto"
-          title="Remove the ${esc(label.toLowerCase())} being shown. Undo brings it back.">Remove this one</button>` : ''}
+        ${many ? removeButton(kind, active, {
+    what: `this ${label.toLowerCase()}`,
+    title: `Remove the ${label.toLowerCase()} being shown. Undo brings it back.`,
+    text: 'Remove this one',
+    style: 'margin-left:auto',
+  }) : ''}
       </div>
       ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip —
         <code>${kind}.hp</code>, <code>${kind}2.hp</code> — and the id stays with the creature through a
@@ -2778,7 +2774,7 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+              ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;
   }).join('')}
@@ -2839,7 +2835,7 @@ function landAttunedPanel(p, k) {
                   class="${attuned.has(s) ? 'primary' : ''}">${attuned.has(s) ? '✓' : '○'}</button>
                 ${itemText(list, i, 'self', s, 'Sphere')}
                 ${tally[s] ? `<span class="badge">${tally[s]}</span>` : ''}
-                <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+                ${removeButton(list, i, { what: 'sphere' })}
               </span>`).join('')}
               ${addButton(list, 'Add sphere', '')}
             </div>
@@ -2904,7 +2900,7 @@ function cardFace(model, list, i, card, p, { inDeck = true } = {}) {
         <span class="pair tools">
           ${inDeck ? `<button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
           <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>` : ''}
-          <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+          ${removeButton(list, i, { what: 'card' })}
         </span>
       </div>
     </article>`;

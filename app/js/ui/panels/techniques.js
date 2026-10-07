@@ -180,7 +180,7 @@ export function renderTechniqueListPanel(model, ctx) {
             </label>
             <label class="pair"><span class="hint">Type</span>${fields.text(`techniques.catalogue.${idx}.subschool`, selected.subschool, 'e.g. Electric')}</label>
             <button data-action="tech-to-draft" data-name="${esc(selected.name)}" title="Copy this technique into AutoTechnique to edit it">Copy to AutoTechnique</button>
-            <button class="danger" data-action="tech-remove" data-name="${esc(selected.name)}" title="Remove from the list">×</button>` : ''}
+            ${rows.removeAction('tech-remove', { name: selected.name }, { what: selected.name, title: 'Remove from the list' })}` : ''}
         </div>
       </section>
       ${view ? `<section class="panel span2">

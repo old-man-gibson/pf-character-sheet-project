@@ -59,8 +59,6 @@ export function blankView() {
     openGear: null,
     /** Generated crafting post -> expanded? */
     openPosts: new Map(),
-    /** Which gear column's − has been armed ("equipment.gear|bonuses"), or null. */
-    armedGearCol: null,
 
     /* The sub-system tabs */
     /** Which face of the Cardcasting tab is up: the table in play, or the deck. */

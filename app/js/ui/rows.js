@@ -8,7 +8,7 @@
  * string builders with no character and no element behind them.
  *
  * The few that need something more take it as an argument: `proseText` needs a
- * model to resolve tokens against, `rowRemoveArmed` needs to know which × is
+ * model to resolve tokens against, `removeButton` needs to know which × is
  * currently armed. That is the whole reason they are arguments rather than
  * fields: it is what lets the rest of this file be plain functions.
  */
@@ -111,11 +111,73 @@ export function itemSelect(list, i, field, value, options, blank = '—', abOf =
   return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
 }
 
+/**
+ * The sheet's one ×: a button that takes something off the character.
+ *
+ * Every removal is drawn here, whatever it removes and however its click is
+ * handled, so they all look and read alike: the danger colour, "Remove
+ * <what>" on hover and to a screen reader, and a × unless the button is a
+ * sentence ("Remove this one"). `attrs` say what it does: `data-remove` for a
+ * row (`removeButton` below), a `data-action` and its parameters for a
+ * removal with a model method of its own (`removeAction`), or one of the few
+ * attributes the element binds by name.
+ *
+ * Some ask twice: the first click arms the × -- it turns into "sure?" -- and
+ * the second carries it out. Every removal can be taken back with Ctrl+Z as
+ * well; asking is for the ones a stray click would take a lot with. `arm` is
+ * the key the button is armed under and `armed` the key armed now, the
+ * view's `armedRemove`. (Reset, which cannot be undone, has its own panel.)
+ *
+ * @param attrs        the attributes that say what the button does, as given
+ * @param opts.what    what goes, for the hover and the screen reader
+ * @param opts.title   a longer hover, where "Remove <what>" does not say enough
+ * @param opts.text    words in place of the ×
+ * @param opts.tiny    the small × that sits inside a cell beside a value
+ * @param opts.style   an inline style (a button pushed to the end of its row)
+ * @param opts.arm     the key it is armed under, when it asks twice
+ * @param opts.armed   the key armed now
+ */
+export function removeControl(attrs, {
+  what = '', title = '', text = '', tiny = false, style = '', arm = null, armed = null,
+} = {}) {
+  const label = what ? `Remove ${what}` : 'Remove';
+  const on = arm !== null && armed === arm;
+  const hover = on ? `Click again to remove${what ? ` ${what}` : ''}`
+    : `${title || label}${arm !== null ? ' — asks twice' : ''}`;
+  return `<button class="danger${tiny ? ' tiny' : ''}${on ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''} `
+    + `title="${esc(hover)}" aria-label="${esc(on ? `${label} — click again to confirm` : label)}">`
+    + `${on ? 'sure?' : text ? esc(text) : '×'}</button>`;
+}
+
+/**
+ * A row's ×: the element takes row `i` off `list` with `listRemove`, which
+ * keeps the way back. Pass `armed` -- the view's `armedRemove`, null and all
+ * -- for a row that asks twice; it is then armed under "list|i".
+ */
+export function removeButton(list, i, opts = {}) {
+  const key = `${list}|${i}`;
+  return 'armed' in opts
+    ? removeControl(`data-remove-armed="${key}"`, { ...opts, arm: key })
+    : removeControl(`data-remove="${key}"`, opts);
+}
+
+/**
+ * A × for a removal with its own model method: `data-action` and one
+ * `data-<name>` a parameter, escaped. With `opts.arm` it asks twice, and the
+ * element arms it under that key before it runs the action.
+ */
+export function removeAction(action, params = {}, opts = {}) {
+  const attrs = [`data-action="${action}"`,
+    ...Object.entries(params).map(([k, v]) => `data-${k}="${esc(v)}"`),
+    ...(opts.arm != null ? [`data-arm="${esc(opts.arm)}"`] : [])].join(' ');
+  return removeControl(attrs, opts);
+}
+
 export function rowTools(list, i) {
   return `<td class="tools">
       <button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
       <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+      ${removeButton(list, i)}
     </td>`;
 }
 
@@ -131,7 +193,7 @@ export function rowToolsDragged(list, i) {
   return `<td class="tools">
       <button class="cardmove" data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
       <button class="cardmove" data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+      ${removeButton(list, i)}
     </td>`;
 }
 
@@ -152,35 +214,13 @@ export function rowToolsMoveOnly(list, i) {
 export const rowDrop = (list, i) => `data-rowdrop="${list}|${i}"`;
 export const rowGrip = () => '<td class="grip"><span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span></td>';
 
-/** Tools for a list whose rows are summed, so their order means nothing. */
-export function rowRemove(list, i) {
-  return `<td class="tools">
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
-    </td>`;
-}
-
 /**
- * The sheet's one way of asking before a removal: a × that the first click
- * arms -- it turns into "sure?" -- and the second carries out. Every removal
- * can be taken back with Ctrl+Z as well; this is for the ones a stray click
- * would take a lot with. (Reset, which cannot be undone, has its own panel.)
- *
- * `attrs` is what the button does: `data-remove-armed="list|i"` for a row,
- * or a `data-action` with `data-arm="key"`, which the element runs on the
- * second click. `armedKey` is whichever one is armed, which the element holds.
+ * Tools for a list whose rows are summed, so their order means nothing: the
+ * row's ×, in its cell. `opts` are `removeButton`'s.
  */
-export function armedButton(key, attrs, what, armedKey = null, style = '') {
-  const armed = armedKey === key;
-  return `<button class="danger${armed ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''}
-        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
-        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>`;
-}
-
-/** A row's two-click ×, in its tools cell. */
-export function rowRemoveArmed(list, i, what = 'row', armedKey = null) {
-  const key = `${list}|${i}`;
+export function rowRemove(list, i, opts = {}) {
   return `<td class="tools">
-      ${armedButton(key, `data-remove-armed="${key}"`, what, armedKey)}
+      ${removeButton(list, i, opts)}
     </td>`;
 }
 

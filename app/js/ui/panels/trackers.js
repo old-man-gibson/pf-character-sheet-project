@@ -14,6 +14,7 @@ import { esc } from '../html.js';
 import { PIP_LIMIT, round, pct } from '../format.js';
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';
+import { removeControl } from '../rows.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
@@ -185,7 +186,7 @@ function trackerRow(model, ctx, t) {
         <span class="pool">${range}</span>
         <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${plusLabel}">+</button>
         <button data-tracker-edit="${esc(t.id)}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
-        ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${esc(t.id)}" aria-label="Remove ${esc(t.name)}">×</button>`}
+        ${protectedTracker ? '' : removeControl(`data-tracker-remove="${esc(t.id)}"`, { what: t.name })}
       </div>
     </div>`;
 }
@@ -495,7 +496,7 @@ export function trackerStyleEditor(model, ctx, t) {
         <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} colour">
         <input class="mono hexin" data-zone="${i}|color" value="${esc(z.color)}" aria-label="Zone ${i + 1} hex" maxlength="7">
         <input data-zone="${i}|label" placeholder="label (optional)" value="${esc(z.label)}" aria-label="Zone ${i + 1} label">
-        <button class="danger" data-zone-remove="${i}" aria-label="Remove zone ${i + 1}">×</button>
+        ${removeControl(`data-zone-remove="${i}"`, { what: `zone ${i + 1}` })}
       </div>`).join('');
 
   return `

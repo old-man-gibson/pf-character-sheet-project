@@ -55,7 +55,7 @@
  */
 
 import {
-  Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish, gearColumnInUse,
+  Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish,
   featsAvailable, spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
@@ -1151,6 +1151,12 @@ export class CharacterSheetElement extends HTMLElement {
       // way back; offer it. Before the change rather than after, which is
       // fine: the render that follows draws the toast from the same field.
       if (detail?.type === 'undo-mark') this.#showUndoToast(detail.label);
+      // Any change to the character disarms a two-click ×. Its key names a
+      // row by place ("list|3"), and an edit, a move, a drag, an undo or
+      // another removal can put a different row there, which the second
+      // click would then take. Arming itself changes nothing in the
+      // character, so it survives its own render.
+      else if (detail?.type !== 'play-mark') this.#view.armedRemove = null;
       // Something newer to take back than whatever the toast offers: the
       // rail's button names it now. After the handler that did it has drawn,
       // because some of those redraw a panel and not the rail.
@@ -4874,8 +4880,9 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     // The two-click ×: the first click arms it, the second removes. Arming a
-    // different one disarms the first, and a removal drops the armed state so
-    // it can never point at the row that slid into the gap.
+    // different one disarms the first, and any change to the character drops
+    // the armed state (see the model subscription), so it can never point at
+    // a row that slid into the place it names.
     root.querySelectorAll('[data-remove-armed]').forEach((b) => {
       b.addEventListener('click', () => {
         const key = b.dataset.removeArmed;
@@ -6277,7 +6284,7 @@ export class CharacterSheetElement extends HTMLElement {
   }
 
   #action(name, button) {
-    // A two-click ×: the first press only arms it (rows.armedButton).
+    // A two-click ×: the first press only arms it (rows.removeControl).
     const arm = button?.dataset?.arm;
     if (arm) {
       if (this.#view.armedRemove !== arm) { this.#view.armedRemove = arm; this.#render(); return; }
@@ -7052,18 +7059,9 @@ export class CharacterSheetElement extends HTMLElement {
       // every row at once -- a scale where being asked is worth more than
       // being able to take it back afterwards.
       case 'gear-col': {
-        const list = button?.dataset.list;
-        const kind = button?.dataset.kind;
-        const delta = Number(button?.dataset.delta) || 0;
-        const armKey = `${list}|${kind}`;
-        if (delta < 0 && gearColumnInUse(this.#model.list(list), kind)
-          && this.#view.armedGearCol !== armKey) {
-          this.#view.armedGearCol = armKey;
-          this.#render();
-          break;
-        }
-        this.#view.armedGearCol = null;
-        this.#model.setGearColumns(list, kind, delta);
+        // A − whose column has something written in it asks twice, through
+        // `data-arm` like every other two-click removal; by here it has.
+        this.#model.setGearColumns(button?.dataset.list, button?.dataset.kind, Number(button?.dataset.delta) || 0);
         this.#render();
         break;
       }

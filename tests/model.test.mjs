@@ -6199,6 +6199,13 @@ console.log('gear -- the table is as wide as it needs to be, and every item open
 
   c.setGearColumns('equipment.gear', 'bonuses', -1);
   check('and dropping it takes it off every row', gearColumnCount(gear(), 'bonuses'), 3);
+  // A column off every row at once is a removal like any other: Ctrl+Z puts
+  // it back, and the toast says what went.
+  check('dropping a column leaves the way back', c.undoStack.at(-1)?.label, 'Removed a bonus column');
+  const marks = c.undoStack.length;
+  c.setGearColumns('equipment.gear', 'bonuses', 1);
+  check('widening is not a removal', c.undoStack.length, marks);
+  c.setGearColumns('equipment.gear', 'bonuses', -1);
 
   // The floor: a table with no columns has nothing to fill in.
   for (let n = 0; n < 6; n++) c.setGearColumns('equipment.gear', 'others', -1);
