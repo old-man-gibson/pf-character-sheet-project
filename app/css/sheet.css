@@ -4078,7 +4078,10 @@ label.fld .xf { width: 100%; }
 .statline .value .now { display: inline; margin-left: 6px; }
 .bigstat.has-now .sub { margin-bottom: 0; }
 .bigstat .now { margin-top: 2px; }
-.ability .mod.conditioned { color: var(--cs-bad); }
+/* A score or modifier a condition or buff has moved: down red, up green,
+   over the temporary figure's own accent. */
+.ability .mod.adj { color: var(--cs-bad); }
+.ability .mod.adj.up { color: var(--cs-good); }
 
 /* Selectors in the saves and armour tables were squeezed to three letters;
    these give them a real width and let the tables scroll rather than crush. */

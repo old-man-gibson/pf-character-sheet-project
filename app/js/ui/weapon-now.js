@@ -12,6 +12,7 @@
 
 import { WEAPON_MODE_KEYS } from '../roll20.js';
 import { addDice, diceString, fmt, stepDiceMap } from '../rules.js';
+import { movedTitle } from './rows.js';
 
 /**
  * `{ atk, dmg, atkBase, dmgBase, atkDelta, dmgMoved, title }` -- the strings
@@ -40,11 +41,11 @@ export function weaponNow(c, w, cs) {
       calc.totalDmgFlat + dmgDelta + sized.flat,
     ) + ((calc.notes || []).length ? ` ${calc.notes.join(' ')}` : '');
   const dmgMoved = dmgDelta || (grow ? 1 : 0);
-  const title = (base) => `Base ${base} — with ${cs?.sources} applied${grow
+  const title = (base) => `${movedTitle(base, cs?.sources)}${grow
     ? `, ${Math.abs(grow)} size step${Math.abs(grow) === 1 ? '' : 's'} ${grow > 0 ? 'larger' : 'smaller'}` : ''}`;
   return {
     atk, dmg, atkBase, dmgBase, atkDelta, dmgMoved,
-    atkTitle: atkDelta ? `Base ${atkBase} — with ${cs.sources} applied` : '',
+    atkTitle: atkDelta ? movedTitle(atkBase, cs.sources) : '',
     dmgTitle: dmgMoved ? title(dmgBase) : '',
   };
 }

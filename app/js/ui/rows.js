@@ -281,10 +281,41 @@ export function working(model, key, shown) {
   return `<span class="working" title="${esc(workingTitle(b))}" data-bd="${esc(key)}">${shown}</span>`;
 }
 
+/** The sentence a moved number wears on its hover: what it was, and what moved it. */
+export const movedTitle = (base, sources) => `Base ${base} — with ${sources || 'buffs and conditions'} applied`;
+
 /**
- * A number a condition or buff has moved, shown in place of the base --
- * red down, green up, with the base and what moved it in the tooltip.
- * The plain base when nothing moved it; the same read on every view.
+ * A number a condition or a buff has moved, in place of the base: red when
+ * it went down, green when it went up, the base and what moved it on hover.
+ * Every moved figure on the sheet is drawn here, so the colours and the
+ * sentence are the same wherever one stands.
+ *
+ * @param shown         the figure as it now stands, as markup (escaped by the caller)
+ * @param delta         how far it moved; its sign picks the colour, 0 is not moved
+ * @param opts.base     the unmoved figure, as text, for the sentence
+ * @param opts.sources  what moved it ("2 conditions")
+ * @param opts.title    the hover in full, in place of the sentence
+ * @param opts.tag      'strong' for a figure read on its own, 'span' for one in a line
+ * @param opts.cls      classes it wears whether moved or not
+ * @param opts.attrs    anything else on the element, as given
+ * @param opts.keep     draw the element even when nothing moved it, for its
+ *                      classes or a title of its own
+ */
+export function movedValue(shown, delta, {
+  base = '', sources = '', title = null, tag = 'strong', cls = '', attrs = '', keep = false,
+} = {}) {
+  const d = Number(delta) || 0;
+  if (!d && !keep) return shown;
+  const classes = [cls, d ? 'adj' : '', d > 0 ? 'up' : ''].filter(Boolean).join(' ');
+  const hover = title ?? (d ? movedTitle(base, sources) : '');
+  return `<${tag}${classes ? ` class="${classes}"` : ''}${hover ? ` title="${esc(hover)}"` : ''}${
+    attrs ? ` ${attrs}` : ''}>${shown}</${tag}>`;
+}
+
+/**
+ * A number a condition or buff has moved, shown in place of the base, with
+ * its working on the hover and the breakdown panel's key. The plain base when
+ * nothing moved it; the same read on every view.
  *
  * @param model  when given, the tooltip carries the whole working -- every
  *               part the number is made of, in the order they are added. The
@@ -293,7 +324,7 @@ export function working(model, key, shown) {
  */
 export function movedInline(cs, key, base, format = fmt, model = null) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
-  const moved = d ? `Base ${format(base)} — with ${cs.sources} applied` : '';
+  const moved = d ? movedTitle(format(base), cs.sources) : '';
   const b = model ? model.breakdown(key) : null;
   const title = workingTitle(b, moved);
   /*
@@ -310,15 +341,12 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
    * goes by, and most but not all of those are in BREAKDOWNS; the ones that
    * are not keep the tooltip they have always had and gain nothing.
    */
-  const bd = b ? ` data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
+  const bd = b ? `data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
   // `format` makes text, and `base` can be a stored value no rule has
   // touched (flat-footed CMD is carried, not computed), so it is escaped.
-  if (!d) {
-    return title
-      ? `<span class="working" title="${esc(title)}"${bd}>${esc(format(base))}</span>`
-      : esc(format(base));
-  }
-  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}"${bd}>${esc(format(cs.adjusted[key]))}</strong>`;
+  return movedValue(esc(format(d ? cs.adjusted[key] : base)), d, {
+    tag: d ? 'strong' : 'span', cls: title ? 'working' : '', title, attrs: bd, keep: !!title,
+  });
 }
 
 /**
@@ -333,8 +361,7 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
  */
 export function movedSub(cs, key, base, format = fmt) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
-  if (!d) return esc(format(base));
-  return `<span class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${esc(format(cs.adjusted[key]))}</span>`;
+  return movedValue(esc(format(d ? cs.adjusted[key] : base)), d, { tag: 'span', base: format(base), sources: cs.sources });
 }
 
 export function addButton(list, label, template) {

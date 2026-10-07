@@ -105,8 +105,8 @@ import {
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, lineHtml, movedInline, movedSub, removeAction, removeButton, removeControl, rowTools,
-  workingTitle,
+  itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
+  removeControl, rowTools, workingTitle,
 } from '../rows.js';
 import {
   TRAIT_CATEGORIES,
@@ -589,13 +589,10 @@ function dashOffenseCard(model, ctx, openNow) {
       // As the buffs of the moment leave it, the same reading the Gear tab's
       // weapon card shows (ui/weapon-now.js).
       const now = weaponNow(c, w, cs);
-      const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
       return `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
-      <span class="value rollpair"><strong class="${cls(now.atkDelta)}"
-          title="${esc(now.atkTitle)}">${esc(now.atk)}</strong>
-        <span class="dashdmg${cls(now.dmgMoved)}"
-          title="${esc(now.dmgTitle)}">${esc(now.dmg)}</span>
+      <span class="value rollpair">${movedValue(esc(now.atk), now.atkDelta, { title: now.atkTitle, keep: true })}
+        ${movedValue(esc(now.dmg), now.dmgMoved, { tag: 'span', cls: 'dashdmg', title: now.dmgTitle, keep: true })}
         ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} — full, single or Vital Strike`, cs)}</span>
     </div>`;
     };
@@ -677,10 +674,9 @@ function dashSpeedCard(model) {
     const line = ({ sp, adj }) => {
       const moved = cs.changed && adj && adj.adjusted !== adj.final;
       const now = adj ? adj.adjusted : Number(sp.final) || 0;
-      const value = moved
-        ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
-            title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
-        : `<strong>${now} ft.</strong>`;
+      const value = movedValue(`${now} ft.`, moved ? adj.adjusted - adj.final : 0, {
+        base: `${adj?.final} ft.`, sources: cs.sources, keep: true,
+      });
       return lineHtml(sp.type || 'Movement',
         `${value} <span class="dim">×2 ${now * 2} · run ${now * 4}</span>`, true);
     };
@@ -705,9 +701,7 @@ function dashSkillsCard(model, openNow) {
     const row = ({ s, i }) => {
       const delta = cs.changed
         ? statModDelta(cs.deltas || {}, (s.abilities || [])[0], null) + (cs.delta.skills || 0) : 0;
-      const shown = delta
-        ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(s.bonus)} — with ${cs.sources} applied`)}">${fmt((Number(s.bonus) || 0) + delta)}</strong>`
-        : fmt(s.bonus);
+      const shown = movedValue(fmt((Number(s.bonus) || 0) + delta), delta, { base: fmt(s.bonus), sources: cs.sources });
       return `<div class="statline">
       <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
       <span class="value rollpair">${shown}${rollButton(model, 'skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
@@ -888,9 +882,7 @@ function dashPsionicsCard(model) {
 function dcShown(model, base) {
     const cs = model.conditionState;
     const d = cs.changed ? (cs.delta.dc || 0) : 0;
-    if (!d) return `${base ?? 0}`;
-    return `<strong class="adj ${d > 0 ? 'up' : ''}"
-      title="${esc(`Base ${base ?? 0} — with ${cs.sources} applied`)}">${(Number(base) || 0) + d}</strong>`;
+    return movedValue(d ? `${(Number(base) || 0) + d}` : `${base ?? 0}`, d, { base: `${base ?? 0}`, sources: cs.sources });
   }
 
   /**
@@ -912,11 +904,10 @@ function dashAbilitiesCard(model) {
       const movedScore = score !== baseScore;
       return `<div class="statline">
         <span class="label"><span class="abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
-          <span class="dim">${movedScore
-    ? `<strong class="adj ${score > baseScore ? 'up' : ''}" title="${esc(`Base ${baseScore} — with ${cs.sources} applied`)}">${score}</strong>` : score}</span></span>
-        <span class="value rollpair">${delta
-    ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(a.totalMod)} — with ${cs.sources} applied`)}">${fmt(mod)}</strong>`
-    : fmt(a.totalMod)}${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}</span>
+          <span class="dim">${movedValue(`${score}`, movedScore ? score - baseScore : 0, { base: `${baseScore}`, sources: cs.sources })}</span></span>
+        <span class="value rollpair">${movedValue(delta ? fmt(mod) : fmt(a.totalMod), delta, {
+    base: fmt(a.totalMod), sources: cs.sources,
+  })}${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}</span>
       </div>`;
     };
     return `<section class="panel">
@@ -963,9 +954,9 @@ function dashVeilsCard(model) {
     const dEss = cs.changed ? (cs.delta.essence || 0) : 0;
     const free = Number(a?.calc?.free) || 0;
     const total = Number(a?.calc?.total) || 0;
-    const pool = dEss
-      ? `<strong class="adj ${dEss > 0 ? 'up' : ''}" title="Base ${free} free of ${total} — with buffs; investment math stays on the Akashic tab">${free + dEss} free of ${total + dEss}</strong>`
-      : `${free} free of ${total}`;
+    const pool = movedValue(`${free + dEss} free of ${total + dEss}`, dEss, {
+      title: `${movedTitle(`${free} free of ${total}`, cs.sources)}; investment math stays on the Akashic tab`,
+    });
     return `<section class="panel">
       <h3>Veils shaped ${shaped.length ? `<span class="badge">${shaped.length}</span>` : ''}</h3>
       ${total || dEss ? lineHtml('Essence', pool, true) : ''}
@@ -1308,13 +1299,18 @@ function abilityScoresPanel(model) {
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
+              ? movedValue(`${cs.scores[k]}`, cs.scores[k] - (a.workingScore ?? a.tempScore), {
+                tag: 'span',
+                cls: 'mod temp-score working',
+                title: workingTitle(model.breakdown(`${k}.temp`), `${a.workingScore ?? a.tempScore} before conditions`),
+                attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
+              })
               : built
                 ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
-            <span class="mod temp temp-mod${moved ? ' conditioned' : ''}"
-              ${moved ? `title="${fmt(a.totalMod)} before conditions"` : ''}>${
-              moved ? fmt(a.totalMod + cs.deltas[k]) : fmt(a.totalMod)}</span>
+            ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
+    tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
+  })}
             ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
           </div>`;
         }).join('')}
@@ -1607,8 +1603,7 @@ function speedPanel(model) {
             title: 'A number, or a formula — e.g. floor(level / 3) * 10 for fast movement',
           })}</td>
           <td class="num total" data-stack="head">${slowed
-    ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
-        title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
+    ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
     : `${Number(sp.final) || 0} ft.`}${(() => {
     // Under the total rather than beside it: the panel is one of the narrow
     // ones, and a badge on the same line pushes the column wider for every

@@ -31,7 +31,7 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, removeAction, removeButton, rowRemove,
+  itemNum, itemSelect, itemText, line, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -240,10 +240,15 @@ export function weaponsPanel(model, e) {
     // As the buffs of the moment leave it -- a size buff steps the dice -- the
     // same reading the dashboard shows (ui/weapon-now.js).
     const now = weaponNow(model.data, w, cs);
-    const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
-    return `<span class="bigroll${cls(now.atkDelta)}" title="${esc(now.atkTitle || 'Attack including {{…}} tokens')}">${esc(now.atk)}</span>
-          <span class="bigroll dmg${cls(now.dmgMoved)}" title="${esc(now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps
-      ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`)}">${esc(now.dmg)}</span>`;
+    return `${movedValue(esc(now.atk), now.atkDelta, {
+      tag: 'span', cls: 'bigroll', title: now.atkTitle || 'Attack including {{…}} tokens', keep: true,
+    })}
+          ${movedValue(esc(now.dmg), now.dmgMoved, {
+      tag: 'span',
+      cls: 'bigroll dmg',
+      title: now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`,
+      keep: true,
+    })}`;
   })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
             title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`

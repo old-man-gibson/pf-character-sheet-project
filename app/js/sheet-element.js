@@ -2482,19 +2482,18 @@ export class CharacterSheetElement extends HTMLElement {
     // the one of them a condition is most likely to have halved. The fastest
     // rate the character actually has is the one shown; the rest are on the
     // tooltip, because a strip with four movement rates in it is a table.
-    const rows = (c.identity?.speeds || [])
+    const rates = (c.identity?.speeds || [])
       .map((sp, i) => ({ sp, adj: (cs.speeds || [])[i] }))
       .filter(({ sp }) => (Number(sp.final) || 0) > 0);
-    if (!rows.length) return '';
+    if (!rates.length) return '';
     const at = ({ sp, adj }) => (adj ? adj.adjusted : Number(sp.final) || 0);
-    const best = rows.reduce((a, b) => (at(b) > at(a) ? b : a));
+    const best = rates.reduce((a, b) => (at(b) > at(a) ? b : a));
     const slowed = cs.changed && best.adj && best.adj.adjusted !== best.adj.final;
-    const all = rows.map((r) => `${r.sp.type || 'Movement'} ${at(r)} ft.`).join(' · ');
-    return `&middot; ${esc(rows.length > 1 ? best.sp.type || 'Speed' : 'Speed')}
-      ${slowed
-    ? `<strong class="adj ${best.adj.adjusted > best.adj.final ? 'up' : ''}"
-        title="${esc(`Base ${best.adj.final} ft. — with ${cs.sources} applied\n${all}`)}">${at(best)} ft.</strong>`
-    : `<strong title="${esc(all)}">${at(best)} ft.</strong>`}`;
+    const all = rates.map((r) => `${r.sp.type || 'Movement'} ${at(r)} ft.`).join(' · ');
+    return `&middot; ${esc(rates.length > 1 ? best.sp.type || 'Speed' : 'Speed')}
+      ${rows.movedValue(`${at(best)} ft.`, slowed ? best.adj.adjusted - best.adj.final : 0, {
+    title: slowed ? `${rows.movedTitle(`${best.adj.final} ft.`, cs.sources)}\n${all}` : all, keep: true,
+  })}`;
   })()}
       ${(() => {
     // A changed size is worth a standing word: {size} and the dice follow it.
@@ -2502,9 +2501,10 @@ export class CharacterSheetElement extends HTMLElement {
     const base = this.#model.data.identity?.size;
     if (sizeNow === base) return '';
     const ladder = Object.keys(SIZE_MODIFIERS);
-    const up = ladder.indexOf(sizeNow) > ladder.indexOf(base);
-    return `&middot; <strong class="adj ${up ? 'up' : ''}"
-      title="${esc(`Base ${base} — with buffs applied`)}">${esc(sizeNow)}</strong>`;
+    // Only a buff changes size, so it says buffs rather than every source.
+    return `&middot; ${rows.movedValue(esc(sizeNow), ladder.indexOf(sizeNow) > ladder.indexOf(base) ? 1 : -1, {
+      base, sources: 'buffs',
+    })}`;
   })()}
       ${cs.active.length ? `<span class="badge err">${cs.active.length} condition${cs.active.length === 1 ? '' : 's'}</span>` : ''}
     </div>`;

@@ -797,5 +797,26 @@ console.log('\nevery × is the one ×');
   check('and leaves the way back', [m.data.monster, m.undoStack?.at(-1)?.label], [undefined, 'Removed the monster block']);
 }
 
+console.log('\nevery moved number is the one moved number');
+{
+  const { movedValue } = await import('../app/js/ui/rows.js');
+  check('down: red, with what it was and what moved it on the hover',
+    movedValue('12', -2, { base: '14', sources: 'Shaken' }),
+    '<strong class="adj" title="Base 14 — with Shaken applied">12</strong>');
+  check('up: green', movedValue('16', 2, { base: '14', sources: 'Bull' }).includes('class="adj up"'), true);
+  check('not moved: the figure as it is', movedValue('14', 0, { base: '14' }), '14');
+  check('kept: its own classes either way', movedValue('+3', 0, { tag: 'span', cls: 'mod', keep: true }), '<span class="mod">+3</span>');
+
+  // The Overview's ability panel marked a moved score in a class that was
+  // always red, so a buff that raised Strength showed as a loss.
+  const c = new Character(blankDocument({ name: 'Bull', level: 5 }));
+  c.data.buffs = [{ name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
+  c.recompute();
+  const html = overview.renderOverviewPanel(c, CTX);
+  const str = html.slice(html.indexOf('data-ab="str"'), html.indexOf('data-ab="dex"'));
+  check('a buff that raises a score shows it raised', [/temp-score[^"]*adj up/.test(str), /temp-mod[^"]*adj up/.test(str)], [true, true]);
+  check('and nothing on the sheet wears the always-red class', /\bconditioned\b/.test(html), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

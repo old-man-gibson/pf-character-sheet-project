@@ -19,7 +19,7 @@
  */
 import { esc } from '../ui/html.js';
 import {
-  collapsible, itemText, movedInline, removeAction, rowTools,
+  collapsible, itemText, movedInline, movedValue, removeAction, rowTools,
 } from '../ui/rows.js';
 import { prose, renderedProse } from '../ui/prose.js';
 import { check, field, num, text } from '../ui/fields.js';
@@ -170,7 +170,11 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const speeds = (i.speeds || [])
       .map((sp, k) => ({ sp, adj: (cs.speeds || [])[k] }))
       .filter(({ sp }) => (Number(sp.final) || 0) > 0)
-      .map(({ sp, adj }) => speedText(sp, adj ? adj.adjusted : Number(sp.final) || 0))
+      .map(({ sp, adj }) => {
+        const was = Number(sp.final) || 0;
+        const now = adj ? adj.adjusted : was;
+        return movedValue(esc(speedText(sp, now)), cs.changed ? now - was : 0, { base: speedText(sp, was), sources: cs.sources });
+      })
       .join(', ');
 
     // Statistics.
@@ -179,8 +183,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
       const none = m?.nonabilities?.includes(k);
       const base = Number(a.workingScore ?? a.tempScore) || 0;
       const now = cs.changed ? (cs.scores[k] ?? base) : base;
-      return `<b>${ABILITY_LABELS[k]}</b> ${none ? '—' : now !== base
-        ? `<strong class="adj ${now > base ? 'up' : ''}" title="${esc(`Base ${base} — with ${cs.sources} applied`)}">${now}</strong>` : now}`;
+      return `<b>${ABILITY_LABELS[k]}</b> ${none ? '—' : movedValue(`${now}`, now - base, { base: `${base}`, sources: cs.sources })}`;
     }).join(', ');
     const feats = [
       ...(c.featGroups || []).flatMap((g) => g.entries || []),
@@ -191,9 +194,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     const skillDelta = cs.changed ? (Number(cs.delta?.skills) || 0) : 0;
     const skillNow = (sk) => {
       const base = Number(sk.bonus) || 0;
-      return skillDelta
-        ? `<strong class="adj ${skillDelta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(base)} — with ${cs.sources} applied`)}">${fmt(base + skillDelta)}</strong>`
-        : fmt(base);
+      return movedValue(fmt(base + skillDelta), skillDelta, { base: fmt(base), sources: cs.sources });
     };
     const skills = (c.skills || [])
       .filter((sk) => (Number(sk.totalRanks) || 0) > 0 || sk.situational)
@@ -224,7 +225,7 @@ export function renderStatBlockPanel(model, ctx = {}) {
     defLists.sr?.has ? run('SR', esc(defLists.sr.text)) : '')}
       ${lineOf(defLists.weaknessText ? run('Weaknesses', esc(defLists.weaknessText)) : '')}
       <h4 class="sb-section">Offense</h4>
-      ${lineOf(speeds ? run('Speed', esc(speeds)) : '')}
+      ${lineOf(speeds ? run('Speed', speeds) : '')}
       ${lineOf(attackLines(model, 'Melee') ? run('Melee', attackLines(model, 'Melee')) : '')}
       ${lineOf(attackLines(model, 'Ranged') ? run('Ranged', attackLines(model, 'Ranged')) : '')}
       ${lineOf(m?.space ? run('Space', esc(m.space)) : '', m?.reach ? run('Reach', esc(m.reach)) : '').replace('; <span', ', <span')}
