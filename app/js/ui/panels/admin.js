@@ -88,7 +88,7 @@ function brokenFormulas(model) {
    */
 export function formulaButton(model, ctx) {
     const broken = brokenFormulas(model);
-    return `<button data-action="formulas" aria-pressed="${ctx.tab === 'formulas'}"
+    return `<button data-view data-action="formulas" aria-pressed="${ctx.tab === 'formulas'}"
       class="${broken ? 'danger' : ''}"
       title="${broken
     ? `Formulas — ${broken} on this character ${broken === 1 ? 'is' : 'are'} not working`

@@ -72,7 +72,7 @@ import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
+  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
   lineHtml, miniStat, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
@@ -398,7 +398,7 @@ function akashicSlotsPanel(model, ctx, a) {
     const list = 'akashic.slots';
     const slots = a.slots || [];
     const shaped = slots.filter((s) => (s.veils || []).length).length;
-    const showEmpty = !!model.data.uiPrefs?.collapsed?.['veil:showEmpty'];
+    const showEmpty = isOpen(model, 'veil:showEmpty', false);
     const shown = slots.map((s, i) => ({ s, i }))
       .filter(({ s }) => showEmpty || (s.veils || []).length);
 
@@ -408,11 +408,12 @@ function akashicSlotsPanel(model, ctx, a) {
         <span class="badge">${slots.length} slots</span>
         <span class="pair" style="margin-left:auto">
           ${veilColumnsControl(model)}
-          ${/* The second key that stores *shown* rather than *collapsed*. */''}
-          <button data-collapse="veil:showEmpty" data-collapse-to="${!showEmpty}"
-            aria-pressed="${showEmpty}">
-            ${showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`}
-          </button>
+          ${foldButton(model, 'veil:showEmpty', {
+    open: showEmpty,
+    pressed: true,
+    title: '',
+    text: showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`,
+  })}
           ${addButton(list, 'Add slot', {
     slot: '', bound: false, twinveil: false, veils: [],
   })}
@@ -440,7 +441,7 @@ function veilColumnsControl(model) {
     return `<span class="seg" role="group" aria-label="Veil cards per row">
       <span class="seg-k">Per row</span>
       ${[[0, 'Auto'], [3, '3'], [4, '4'], [5, '5']].map(([n, label]) => `
-        <button data-veilcols="${n}" aria-pressed="${cols === n}"
+        <button data-view data-veilcols="${n}" aria-pressed="${cols === n}"
           title="${n ? `${n} veil cards to a row` : 'As many as fit'}">${label}</button>`).join('')}
     </span>`;
   }
@@ -469,12 +470,11 @@ function veilSlotCard(model, ctx, a, list, s, i) {
     const veils = s.veils || [];
     const max = s.twinveil ? 2 : 1;
     const key = `veil:${s.slot || i}`;
-    const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+    const collapsed = isCollapsed(model, key);
 
     return `<div class="veilslot${collapsed ? ' is-collapsed' : ''}">
       <div class="veilslot-head">
-        <button class="disclose" data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
-          aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
+        ${foldButton(model, key, { open: !collapsed, cls: 'disclose', title: collapsed ? 'Expand' : 'Collapse' })}
         ${select(`${base}.slot`, s.slot, VEIL_SLOTS, null)}
         <span class="vcount" title="veils shaped / slots available">${veils.length}<i>/</i>${max}</span>
         ${removeButton(list, i, { what: `the ${s.slot || 'unnamed'} slot`, tiny: true })}
@@ -724,12 +724,11 @@ function disciplineColumn(model, ctx, d, i) {
     const list = `maneuvers.disciplines.${i}`;
     const entries = d.entries || [];
     const levels = [...new Set(entries.map((e) => e.level))].sort((a, b) => a - b);
-    const collapsed = !!model.data.uiPrefs?.collapsed?.[`disc:${d.name}`];
+    const collapsed = isCollapsed(model, `disc:${d.name}`);
 
     return `<div class="discipline${collapsed ? ' is-collapsed' : ''}">
       <div class="discipline-head">
-        <button class="disclose" data-collapse="disc:${esc(d.name)}" data-collapse-to="${!collapsed}"
-          aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
+        ${foldButton(model, `disc:${d.name}`, { open: !collapsed, cls: 'disclose', title: collapsed ? 'Expand' : 'Collapse' })}
         <span class="dname" title="${esc(d.name)}">${esc(d.name) || '<em>Unnamed</em>'}</span>
         <span class="dcount" title="readied maneuvers / stances">${d.knownManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>
         ${removeButton('maneuvers.disciplines', i, { what: 'discipline', title: `Stop training ${d.name}`, tiny: true })}
@@ -755,7 +754,7 @@ function disciplineColumn(model, ctx, d, i) {
                 <input type="checkbox" ${e.known ? 'checked' : ''}
                   data-ready="${list}|${esc(e.name)}" data-kind="bool"
                   aria-label="Ready ${esc(e.name)}"></label>
-              <button type="button" class="mname" data-mopen="${esc(key)}"
+              <button data-view type="button" class="mname" data-mopen="${esc(key)}"
                 ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
                 title="${esc(e.name)}${entry.type ? ` — ${esc(entry.type)}` : ''}
 
@@ -797,10 +796,10 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
         <span class="mdetail-sub">${esc(sub)}</span>
         ${wiki ? `<a class="mdetail-wiki" href="${esc(wiki)}" target="_blank" rel="noopener noreferrer"
           title="Its page on the wiki">wiki ↗</a>` : ''}
-        <button class="tiny" ${editing ? `data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
+        <button class="tiny" ${editing ? `data-view data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
           aria-pressed="${editing}"
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
-        <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
+        <button data-view class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
       ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
     </div>`;
@@ -1039,11 +1038,14 @@ function castingClassPanel(model, c, i) {
 function castingStatCell(model, c, i) {
   const base = `vancian.classes.${i}`;
   const key = `vstat2:${i}`;
-  const asked = !!model.data.uiPrefs?.collapsed?.[key];
+  const asked = isOpen(model, key, false);
   const shown = !!c.stat2 || asked;
-  const caret = c.stat2 ? '' : `<button class="disclose" data-collapse="${key}"
-      data-collapse-to="${!asked}" aria-expanded="${asked}"
-      title="${asked ? 'Hide the second stat' : 'Add a second casting stat'}">${asked ? '▾' : '▸'} second</button>`;
+  const caret = c.stat2 ? '' : foldButton(model, key, {
+    open: asked,
+    cls: 'disclose',
+    title: asked ? 'Hide the second stat' : 'Add a second casting stat',
+    text: `${asked ? '▾' : '▸'} second`,
+  });
   return `<div class="fld vstat">
       <span>Casting stat ${caret}</span>
       <span class="rollpair">${select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST)}<span
@@ -1570,7 +1572,7 @@ function companionSwitchPanel(model, kind, list, active, label) {
     const many = list.length > 1;
     return `<section class="panel span2 companionswitch">
       <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-        ${many ? list.map((c, i) => `<button data-action="companion-select" data-kind="${kind}" data-index="${i}"
+        ${many ? list.map((c, i) => `<button data-view data-action="companion-select" data-kind="${kind}" data-index="${i}"
           aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
           title="Reads in formulas as ${esc(c.id)}.*">
           ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
@@ -2233,7 +2235,7 @@ function companionAbilityRow(model, cc, name) {
     return `<div class="gainrow">
       <div class="item statline">
         <span class="value">${esc(name)}</span>
-        ${foldButton(model, foldKey, shut)}
+        ${foldButton(model, foldKey, { open: !shut })}
       </div>
       ${shut ? '' : `<div class="gainbody">
         ${shared && !mine.trim() ? `<div class="hint packsays">
@@ -2305,8 +2307,8 @@ export function cardcastingPanel(model, ctx) {
     const t = p.table || {};
 
     const views = `<nav class="subtabs" role="tablist" aria-label="Cardcasting views">
-      <button role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
-      <button role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
+      <button data-view role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
+      <button data-view role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
     </nav>`;
     if (ctx.deckView === 'table') return `${views}<div class="grid">${tablePanel(model, ctx, p, k)}</div>`;
 
@@ -2763,7 +2765,7 @@ function deckManipulationsPanel(model, p, k) {
     const peek = shut ? ` data-tpop="${esc(JSON.stringify({ k: 'manip', p: `${list}|${i}` }))}"` : '';
     return `<tr class="${mc.unmet?.length || mc.overMax ? 'unmet' : ''}">
             <td class="what">
-              <span class="pair">${foldButton(model, foldKey, shut)}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
+              <span class="pair">${foldButton(model, foldKey, { open: !shut })}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
                 placeholder="Manipulation"${shut ? '' : ` title="${esc(tip)}"`}></span>
                 ${entry ? '' : '<span class="badge" title="Not in the catalogue">?</span>'}
                 ${(mc.unmet || []).map((r) => `<span class="badge err">needs ${esc(NEED[r])}</span>`).join('')}

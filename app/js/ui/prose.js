@@ -66,7 +66,7 @@ export function foldedProse(model, ctx, key, bindingAttr, value, placeholder = '
   const shown = text.trim()
     ? (hasTokens(text) ? renderedProse(model, text) : esc(text))
     : `<span class="ph">${esc(placeholder)}</span>`;
-  return `<button type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
+  return `<button data-view type="button" class="foldcell peek${text.trim() ? '' : ' blank'}"
       data-foldcell="${esc(key)}"
       title="${esc(text.trim() ? `${text}
 

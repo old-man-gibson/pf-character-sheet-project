@@ -87,7 +87,7 @@ export function renderSystemManagerPanel(model, ctx) {
     const mode = model.viewMode();
     return `<div class="grid"><section class="panel span2">
       <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
-        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
+        <button data-view data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
     ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
           Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
       </h3>
@@ -291,14 +291,14 @@ function extensionBlocksPanel(model, ctx) {
         return `<div class="foldsub extgroup${shut ? ' collapsed' : ''}">
           <h4 class="subhead">${esc(name)}
             <span class="badge">${list.length}</span>
-            ${rows.foldButton(model, key, shut)}</h4>
+            ${rows.foldButton(model, key, { open: !shut })}</h4>
           ${shut ? '' : list.map((b) => blockRow(id, b)).join('')}
         </div>`;
       }).join('');
       return `<div class="foldsub extpack${packShut ? ' collapsed' : ''}">
         <h4 class="subhead ext-pack">${esc(p.name)}
           <span class="badge">${p.blocks.length}</span>
-          ${rows.foldButton(model, packKey, packShut)}</h4>
+          ${rows.foldButton(model, packKey, { open: !packShut })}</h4>
         ${packShut ? '' : `${loose.map((b) => blockRow(id, b)).join('')}${groupHtml}`}
       </div>`;
     }).join('');
@@ -314,8 +314,8 @@ function extensionBlocksPanel(model, ctx) {
         from the page's <em>Extensions</em> button.
       </p>
       ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
-        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
+        ${kinds.length > 1 ? `<button data-view data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-view data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
         <input type="search" data-ext-search="1" value="${esc(ctx.extSearch)}" spellcheck="false"
           placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
           title="By name, pack, class, or what a block's features are called and replace">

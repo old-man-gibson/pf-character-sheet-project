@@ -17,7 +17,7 @@ import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
 import {
-  addButton, foldButton, isCollapsed, itemText, removeAction, removeButton, rowTools,
+  addButton, foldButton, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
 } from '../rows.js';
 import { same } from '../format.js';
 import { optionCatalogues } from '../../model.js';
@@ -248,7 +248,7 @@ function packOffers(className, offers) {
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const offers = model.classFeatureNoteSuggestions(className);
-    const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
+    const open = isOpen(model, `cfnotes-${className}`);
     const charLevel = Number(model.data.identity.level) || 0;
     // Where the ladder says the feature arrives; a note it never names has
     // no level and no badge. Past that level the badge is just a fact; before
@@ -265,11 +265,15 @@ function classFeatureNotes(model, className) {
       };
     };
     return `<div class="cfnotes">
-      <button class="notehead" data-collapse="cfnotes-${esc(className)}"
-        data-collapse-to="${open}" aria-expanded="${open}">
+      ${foldButton(model, `cfnotes-${className}`, {
+    open,
+    cls: 'notehead',
+    title: '',
+    text: `
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
         ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written up here, and carried by a pack you have switched on">${offers.length} in your packs</span>` : ''}
-      </button>
+      `,
+  })}
       ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
         const when = arrival(f);
         const foldKey = `cfnote-${className}-${f.name}`;
@@ -277,7 +281,7 @@ function classFeatureNotes(model, className) {
         return `<div class="cfnote${shut ? ' collapsed' : ''}" data-cfndrop="${esc(JSON.stringify({ c: className, i }))}">
         <span class="pair">
           <span class="grip" data-cfngrip title="Drag to reorder">⠿</span>
-          ${foldButton(model, foldKey, shut)}
+          ${foldButton(model, foldKey, { open: !shut })}
           <input type="text" class="notename" value="${esc(f.name)}" spellcheck="false"
             data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'name' }))}">
           <select data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'type' }))}">
@@ -410,7 +414,7 @@ function featureColumnHead(model, className, col, index, tableKey) {
       <span class="pair">
         <input type="text" class="colname" value="${esc(col)}" data-cfcol="${esc(className)}|${index}">
         ${due ? `<span class="badge due" title="${due} level${due === 1 ? '' : 's'} reached with nothing filled in">${due}</span>` : ''}
-        ${groups.length ? foldButton(model, foldKey, folded) : ''}
+        ${groups.length ? foldButton(model, foldKey, { open: !folded }) : ''}
         ${removeAction('remove-cf-column', { class: className, col: index }, { what: 'column' })}
       </span>
       ${folded ? `<span class="rulechips">${groups.map(groupChip).join('')}</span>` : `${groups.map(groupRow).join('')}
@@ -418,9 +422,13 @@ function featureColumnHead(model, className, col, index, tableKey) {
       <button class="addgroup" data-action="add-rule-group" data-class="${esc(className)}" data-col="${index}"
         title="${groups.length ? 'Another schedule sharing this column'
     : 'Limit this column to certain levels — try "odd", "even", "2, +4"'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
-      ${groups.length ? `<button class="addgroup" data-collapse="cftags-${esc(className)}-${esc(col)}"
-        data-collapse-to="${named}" aria-pressed="${named}"
-        title="${named ? 'Stop naming the rule group on each cell' : 'Name the rule group on each cell'}">${named ? '− names' : '+ names'}</button>` : ''}`}
+      ${groups.length ? foldButton(model, `cftags-${className}-${col}`, {
+    open: named,
+    cls: 'addgroup',
+    pressed: true,
+    title: named ? 'Stop naming the rule group on each cell' : 'Name the rule group on each cell',
+    text: named ? '− names' : '+ names',
+  }) : ''}`}
       <div class="col-resizer" data-resize-table="${esc(tableKey)}" data-resize-col="${esc(col)}"
         title="Drag to resize"></div>
     </th>`;
@@ -484,7 +492,7 @@ function featureField(ctx, model, className, col, row, field, multi) {
     // popover shows them as they stand and never a render old.
     const linked = model.classFeatureNotesInCell(className, field.text);
     const peek = linked.length
-      ? `<button type="button" class="cfpeek" data-cfpeek="${esc(JSON.stringify({ c: className, t: field.text }))}"
+      ? `<button data-view type="button" class="cfpeek" data-cfpeek="${esc(JSON.stringify({ c: className, t: field.text }))}"
           title="What ${esc(linked.map(({ note }) => note.name).join(', '))} does" aria-label="Show what this feature does">ⓘ</button>`
       : '';
 

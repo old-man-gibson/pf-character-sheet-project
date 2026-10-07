@@ -16,7 +16,7 @@
 import { esc } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
-import { collapsible, foldButton, isCollapsed } from '../rows.js';
+import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -208,7 +208,7 @@ export function renderOverviewPanel(model, ctx) {
    * in uiPrefs.collapsed under dash:* keys, where true means open.
    */
 export function renderDashboardPanel(model, ctx) {
-    const open = (key) => !!model.data.uiPrefs?.collapsed?.[`dash:${key}`];
+    const open = (key) => isOpen(model, `dash:${key}`, false);
     const e = model.data.equipment || {};
     const render = {
       conditions: () => dashConditionsCard(model, ctx),
@@ -328,11 +328,9 @@ function dashArrangePanel(model) {
 
   /** The card's corner control: one click between the summary and the full read. */
 function dashExpand(key, openNow) {
-    // `dash:*` is one of the two keys that stores *open* rather than
-    // *collapsed*, so what the click writes is the opposite of what is showing.
-    return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
-      data-collapse-to="${!openNow}"
-      aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
+    return foldButton(null, `dash:${key}`, {
+      open: openNow, cls: 'linkish', attrs: 'style="margin-left:auto"', title: '', text: openNow ? 'Collapse' : 'Expand',
+    });
   }
 
   /** What is on the character right now, as chips; everything else one pick away. */
@@ -565,7 +563,7 @@ function dashResourcesCard(model) {
     };
     return `<section class="panel span2">
       <h3>Resources
-        <button class="linkish" style="margin-left:auto" data-action="goto-trackers"
+        <button data-view class="linkish" style="margin-left:auto" data-action="goto-trackers"
           title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
       </h3>
       <div class="dashtrackers">
@@ -1223,9 +1221,9 @@ function languagesPanel(model) {
       .map((s) => String(s).trim()).filter(Boolean);
     const head = `<h3>Languages
         <span class="badge${spare < 0 ? ' err' : ''}" title="Known, against the slots Int, Linguistics and Extra grant">${slots.known} / ${slots.total}</span>
-        <button class="disclose" data-collapse="languages" data-collapse-to="${!shut}"
-          aria-expanded="${!shut}"
-          title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
+        ${foldButton(null, 'languages', {
+    open: !shut, cls: 'disclose', title: shut ? 'Open the list to edit it' : 'Fold it down to one line',
+  })}
       </h3>`;
     if (shut) {
       /*
@@ -1245,7 +1243,7 @@ function languagesPanel(model) {
         <div class="langcopy">
           <textarea class="ro" data-post="languages" readonly rows="1" spellcheck="false"
             placeholder="No languages yet." aria-label="Every language spoken">${esc(spoken.join(', '))}</textarea>
-          <button data-copy="languages" title="Copy the whole list">Copy</button>
+          <button data-view data-copy="languages" title="Copy the whole list">Copy</button>
         </div>
       </section>`;
     }
@@ -1534,11 +1532,11 @@ function attackPanel(model) {
           const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
           const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
           const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
-          const caret = altOf ? `<button class="disclose" data-collapse="atk:${k}"
-            data-collapse-to="${!shut}"
-            aria-expanded="${!shut}" title="${esc(shut
-    ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
-    : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
+          const caret = altOf ? foldButton(model, `atk:${k}`, {
+            open: !shut,
+            cls: 'disclose',
+            title: shut ? `Show the alternate — ${altStat}, ${fmt(altTotal)}` : 'Fold the alternate back in',
+          }) : '';
           // An alternate is the base attack with one ability swapped, so it
           // is already carrying the base's Other -- editing it here would be
           // editing the same number twice. The number is shown all the same,
@@ -1687,9 +1685,7 @@ function proficienciesPanel(model) {
            column is a dozen rows. -->
       <div class="profrow profwide">
         <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
-          <button class="disclose" data-collapse="${wkey}" data-collapse-to="${!wshut}"
-            aria-expanded="${!wshut}"
-            title="${wshut ? 'Expand' : 'Collapse'}">${wshut ? '▸' : '▾'}</button>
+          ${foldButton(model, wkey, { open: !wshut, cls: 'disclose', title: wshut ? 'Expand' : 'Collapse' })}
           Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
         </span>
         <div class="profweaponbody">
@@ -1973,9 +1969,9 @@ function hpBuild(model) {
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
         = <strong>${base + other}</strong>
-        <button class="disclose" data-collapse="hp:build" data-collapse-to="${!shut}"
-          aria-expanded="${!shut}"
-          title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
+        ${foldButton(null, 'hp:build', {
+    open: !shut, cls: 'disclose', title: shut ? 'Open the parts to edit them' : 'Fold the parts away',
+  })}</p>
       ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
             own: the first two hold a number or a small rule, while Misc is
             where everything the table gave you lands and is the one most

@@ -14,6 +14,11 @@
  */
 import { esc, val, EXPR_HINT, abKeyAttr, abAttr, picksAbility } from './html.js';
 import { hasTokens, plainTokens } from '../inline.js';
+import { foldButton, isCollapsed } from './folds.js';
+
+// The fold helpers live in ./folds.js, which the escape-only modules can
+// import without this one; panels have always reached them through here.
+export { foldButton, isCollapsed, isOpen } from './folds.js';
 import { fmt } from '../rules.js';
 
 /**
@@ -397,49 +402,15 @@ export function editLine(label, path, value) {
  * The collapsed state lives in uiPrefs and persists with the character.
  */
 export function collapsible(model, key, panelHtml, defaultCollapsed = false) {
-  // A panel that is setup rather than reading starts folded; see `isCollapsed`.
+  // A panel that is setup rather than reading starts folded; see `isOpen`.
   const collapsed = isCollapsed(model, key, defaultCollapsed);
-  const btn = foldButton(model, key, collapsed);
+  const btn = foldButton(model, key, { open: !collapsed });
   if (!collapsed) return panelHtml.replace('</h3>', ` ${btn}</h3>`);
   // Collapsed: keep only the header line of the panel.
   const m = panelHtml.match(/<h3[\s\S]*?<\/h3>/);
   const header = m ? m[0].replace('</h3>', ` ${btn}</h3>`) : btn;
   const cls = panelHtml.match(/class="panel([^"]*)"/)?.[1] ?? '';
   return `<section class="panel${cls} collapsed">${header}</section>`;
-}
-
-/**
- * Whether `key` is folded right now.
- *
- * Unset is not the same as open: a block may want to start folded in one
- * situation and open in another -- the practitioner table is controls while it
- * is what the character uses and reference once a class progression takes
- * over. So `fallback` decides only while nothing has been clicked, and the
- * moment it is, the choice is stored and outranks it.
- */
-export function isCollapsed(model, key, fallback = false) {
-  const stored = model.data.uiPrefs?.collapsed?.[key];
-  return stored === undefined ? !!fallback : !!stored;
-}
-
-/**
- * The ▾/▸ that folds whatever `key` names; the click lands on the element.
- *
- * `collapsedNow` is the state being drawn, which is the stored one unless a
- * caller has a default of its own. The click handler reads it back off
- * `aria-expanded` rather than off storage, so the first click on a block that
- * started folded by default opens it instead of storing the fold it is
- * already showing.
- */
-export function foldButton(model, key, collapsedNow = null) {
-  const collapsed = collapsedNow === null ? isCollapsed(model, key) : !!collapsedNow;
-  // Escaped because a fold key is not always ours: `progfeat-${name}` builds
-  // one out of a feature group's name, which is workbook text. The reader
-  // decodes character references in an attribute value, so `dataset.collapse`
-  // still hands the click handler back the exact key that went in.
-  return `<button data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
-    title="${collapsed ? 'Expand' : 'Minimize'}"
-    aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
 }
 
 /**
@@ -454,7 +425,7 @@ export function collapsibleSub(model, key, title, bodyHtml, className = '', defa
   const collapsed = isCollapsed(model, key, defaultCollapsed);
   const classes = `${className}${className ? ' ' : ''}foldsub${collapsed ? ' collapsed' : ''}`;
   return `<div class="${classes}">
-    <h4 class="subhead">${title} ${foldButton(model, key, collapsed)}</h4>
+    <h4 class="subhead">${title} ${foldButton(model, key, { open: !collapsed })}</h4>
     ${collapsed ? '' : bodyHtml}
   </div>`;
 }

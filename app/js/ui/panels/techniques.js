@@ -134,7 +134,7 @@ function techniqueExportBox(model, ctx, text, id) {
     return `<section class="panel span2">
       <h3>Discord application
         <span class="pair" style="margin-left:auto">
-          <button data-action="copy-text" data-copy="${id}">Copy for Discord</button>
+          <button data-view data-action="copy-text" data-copy="${id}">Copy for Discord</button>
         </span>
       </h3>
       <p class="hint">The workbook's application text — character, what is applied for, and the technique in a code block. Paste it as-is.</p>
@@ -272,7 +272,7 @@ export function renderCookingPanel(model, ctx) {
       <section class="panel span2">
         <h3>For Discord
           <span class="pair" style="margin-left:auto">
-            <button data-action="copy-text" data-copy="cookExport">Copy for Discord</button>
+            <button data-view data-action="copy-text" data-copy="cookExport">Copy for Discord</button>
           </span>
         </h3>
         <textarea id="cookExport" class="exportbox" readonly rows="10" spellcheck="false">${esc(view.export)}</textarea>

@@ -83,6 +83,7 @@ import { showBrackets, hideBrackets } from './ui/brackets.js';
 import { breakdownHtml, placeAt } from './ui/breakdown-popover.js';
 import { talentPopHtml } from './ui/talents.js';
 import { blankDraft, blankView } from './ui/view-state.js';
+import { foldValue, isOpen } from './ui/folds.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -247,20 +248,17 @@ function loadTablesFor(el) {
 }
 
 /**
- * The buttons a published sheet leaves working, as one selector.
+ * The buttons a published sheet leaves working: every control that moves the
+ * reader around the character or takes a copy of it, and changes nothing in
+ * it -- a fold, a tab, a card or a cell opened to read, the narrow-screen row
+ * folds and help disclosures, search, the view switch and the rail's ⋯ menu,
+ * the theme, a copy or an export, a dismissed notice.
  *
- * Everything here moves the reader around the character or takes a copy of it;
- * nothing here changes it. `data-collapse` folds a panel, `data-tab` opens one,
- * `data-mopen` and `data-mclose` open and shut a maneuver's card, `data-gearopen`
- * does the same for an item, `data-foldcell` unfolds a cell of prose,
- * `data-textopen` is a pack text's Read all, `data-deck-view` switches the
- * deck between cards and table, and `data-copy` takes the languages or a
- * post onto the clipboard. Choosing which companion a tab shows is a view
- * preference too, so `companion-select` stays live. The named
- * actions are the sheet's own furniture -- search, the view switch, the theme,
- * the formula tab -- plus Export JSON, because a read-only sheet is still the
- * reader's to take away, and the two dismiss buttons, which only close a notice
- * this page put up.
+ * Each of them says so itself with `data-view` (every fold through
+ * ui/folds.js), so a view control written later is kept without anybody
+ * remembering to come back here. A list of selectors kept here instead fell
+ * behind: the ⋯ menu that holds the view switch, the theme and Export, the
+ * row folds and the help disclosures were all disabled for readers.
  *
  * Anything that opens is paired with what shuts it. Leaving a card openable and
  * not closeable is the kind of half-locked state that reads as a broken sheet
@@ -268,16 +266,7 @@ function loadTablesFor(el) {
  *
  * `<details>` needs no help: the browser opens it whatever this does.
  */
-const READERS_KEEP = [
-  '[data-tab]', '[data-collapse]', '[data-foldcell]', '[data-wiki]',
-  '[data-mopen]', '[data-mclose]', '[data-gearopen]', '[data-cfpeek]',
-  '[data-textopen]', '[data-deck-view]', '[data-copy]', '[data-action="companion-select"]',
-  '[data-action="palette"]', '[data-action="view-mode"]', '[data-action="formulas"]',
-  '[data-action="theme"]', '[data-action="export"]', '[data-action="copy-text"]',
-  '[data-action="goto-trackers"]', '[data-action="ext-filter"]',
-  '[data-action="toggle-gear"]', '[data-action="toggle-weapon"]', '[data-action="toggle-skills"]',
-  '[data-action="dismiss-history-note"]', '[data-action="dismiss-import-error"]',
-].join(',');
+const READERS_KEEP = '[data-view]';
 
 
 
@@ -1788,7 +1777,7 @@ export class CharacterSheetElement extends HTMLElement {
     const tint = color ? `--tab-color:${color};--tab-ink:${readableOn(color, surface)}` : '';
     const cls = [e.kind === 'visiting' ? 'visiting' : '', color ? 'tinted' : ''].filter(Boolean).join(' ');
     return `
-            <button role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
+            <button data-view role="tab" id="tab-${e.id}" data-tab="${e.id}" data-tabkey="${esc(e.key)}"
               aria-selected="${this.#tab === e.id}" aria-controls="sheet-panel"
               tabindex="${this.#tab === e.id ? '0' : '-1'}"
               ${cls ? `class="${cls}"` : ''}${tint ? ` style="${tint}"` : ''}
@@ -1796,7 +1785,7 @@ export class CharacterSheetElement extends HTMLElement {
     : e.title ? `title="${esc(e.title)}"` : ''}
               ${FIXED_TABS.has(e.key) || e.kind === 'visiting' ? '' : 'data-tabdrag'}>${esc(e.label)}</button>`;
   }).join('')}
-          <button role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
+          <button data-view role="tab" id="tab-systabs" data-tab="systabs" aria-selected="${this.#tab === 'systabs'}"
             aria-controls="sheet-panel" tabindex="${this.#tab === 'systabs' ? '0' : '-1'}"
             aria-label="Tabs" title="Show, hide and rearrange tabs">⚙</button>
         </nav>
@@ -2326,7 +2315,7 @@ export class CharacterSheetElement extends HTMLElement {
             : 'Nothing has changed since the last save'}">
           Save${this.#changes ? ` (${this.#changes})` : ''}
         </button>`}
-        <button class="railmore" data-action="chrome-menu" aria-haspopup="menu"
+        <button data-view class="railmore" data-action="chrome-menu" aria-haspopup="menu"
           aria-expanded="${this.#chromeMenu}" aria-label="More"
           title="Views, formulas, history, export">⋯</button>
         ${this.#chromeMenu ? this.#chromeMenuHtml() : ''}
@@ -2343,12 +2332,12 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#viewModeButton()}
         ${this.#formulaButton()}
         ${monster.menuButton(this.#model, this.isAdmin)}
-        <button data-action="theme" aria-pressed="${this.#themeMenu}"
+        <button data-view data-action="theme" aria-pressed="${this.#themeMenu}"
           title="Palettes, and where the tabs go">Theme &amp; layout…</button>
         ${this.isPublished ? '' : `
         <button data-action="history" aria-pressed="${this.#showHistory}"
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
-        <button data-action="export">Export JSON</button>
+        <button data-view data-action="export">Export JSON</button>
         ${this.isPublished ? '' : `
         <button data-action="preview-published"
           title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
@@ -2387,12 +2376,12 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#confirmReset ? this.#resetConfirmHtml() : ''}
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
-          <button data-action="dismiss-history-note" aria-label="Dismiss">×</button>
+          <button data-view data-action="dismiss-history-note" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${this.#showHistory ? this.#historyPanel() : ''}
         ${this.#importError ? `<div class="importerr" role="alert">
           ${esc(this.#importError)}
-          <button data-action="dismiss-import-error" aria-label="Dismiss">×</button>
+          <button data-view data-action="dismiss-import-error" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${/*
            * Always in the markup, hidden until it is true, so `#writeWorking`
@@ -2404,7 +2393,7 @@ export class CharacterSheetElement extends HTMLElement {
           <strong>Not being saved.</strong> This browser refused to store the sheet —
           a private window, or storage that is full. Your edits are here on screen but
           will not survive closing the tab.
-          <button data-action="export" class="primary">Export JSON</button>
+          <button data-view data-action="export" class="primary">Export JSON</button>
         </div>
       </div>`;
   }
@@ -2439,7 +2428,7 @@ export class CharacterSheetElement extends HTMLElement {
    * the first time. It wears the shortcut so the second time it is not needed.
    */
   #searchButton() {
-    return `<button class="searchbtn" data-action="palette"
+    return `<button data-view class="searchbtn" data-action="palette"
       title="Search this character — skills, feats, gear, spells, anything (Ctrl+K)">
       <svg class="cmdk-glass" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/>
@@ -2453,7 +2442,7 @@ export class CharacterSheetElement extends HTMLElement {
     // round as a toggle -- a pressed button says which state it is in -- but
     // this is a row in a menu now, and a menu item is a thing you are about to
     // do. The `⚙` panel's own switch has said it this way all along.
-    return `<button data-action="view-mode"
+    return `<button data-view data-action="view-mode"
       title="${session
     ? 'Everything the sheet can show, including the build machinery'
     : 'Only the tabs that come up at the table, and the Overview as a dashboard'}">
@@ -3551,8 +3540,8 @@ export class CharacterSheetElement extends HTMLElement {
     // A collapsed panel renders none of its rows, so there would be nothing to
     // land on. Opening it is the same edit the ▸ button makes.
     const collapsed = this.#model.data.uiPrefs?.collapsed;
-    if (entry.expand && collapsed?.[entry.expand]) {
-      collapsed[entry.expand] = false;
+    if (entry.expand && collapsed && !isOpen(this.#model, entry.expand)) {
+      collapsed[entry.expand] = foldValue(entry.expand, true);
       this.#model.recompute();
     }
     this.#render();
@@ -4371,6 +4360,7 @@ export class CharacterSheetElement extends HTMLElement {
       row.classList.toggle('shut', shut);
       const button = this.ownerDocument.createElement('button');
       button.className = 'rowfold';
+      button.dataset.view = '';
       button.dataset.rowfold = key;
       button.setAttribute('aria-expanded', String(!shut));
       button.setAttribute('aria-label', shut ? 'Show the rest of this row' : 'Fold this row to its name');
@@ -4448,6 +4438,7 @@ export class CharacterSheetElement extends HTMLElement {
       hint.classList.toggle('is-open', open);
       const button = this.ownerDocument.createElement('button');
       button.className = 'helpopen';
+      button.dataset.view = '';
       button.dataset.help = key;
       button.dataset.helpLabel = label;
       button.setAttribute('aria-expanded', String(open));
@@ -5290,24 +5281,15 @@ export class CharacterSheetElement extends HTMLElement {
     /*
      * Folding something away, or opening it back up.
      *
-     * The button says what to store rather than the handler working it out.
-     * It used to read `aria-expanded` off the button and store that, which is
-     * a rule with two things hidden in it: that the attribute is the *negation*
-     * of the stored value, and that the key means "collapsed". Eight of the ten
-     * places that emit one of these obeyed both. Two did not -- the session
-     * dashboard's Expand, whose key means *open*, and the veil slots' "Show
-     * empty", whose key means *shown* and which carries `aria-pressed` rather
-     * than `aria-expanded` -- and both were dead controls: they wrote back the
-     * state they were already in, so nothing ever moved. There is no way to
-     * look at one of those buttons and see that, which is why the rule is now
-     * written down in the markup instead of inferred here.
-     *
-     * (What the old rule was reaching for is still true and still matters: the
-     * value has to come from what is *on screen*, not from storage, because a
-     * block that starts folded by default and has never been clicked has
-     * nothing stored -- and toggling `undefined` would fold something that
-     * already looked folded. `data-collapse-to` is computed by the renderer,
-     * which is the one place that knows both.)
+     * The button says what to store rather than the handler working it out:
+     * every one is drawn by ui/folds.js `foldButton`, which knows both things
+     * the value depends on -- what is on screen, and which way the key reads.
+     * On screen, because a block that starts folded by default and has never
+     * been clicked has nothing stored, and toggling `undefined` would fold
+     * something that already looked folded. Which way, because three families
+     * of key store *open* rather than *collapsed* (see `storesOpen`), and a
+     * rule inferred here once left two of them dead: they wrote back the state
+     * they were already in.
      */
     root.querySelectorAll('[data-collapse]').forEach((b) => {
       b.addEventListener('click', () => {

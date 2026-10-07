@@ -73,7 +73,7 @@ export function renderStatsPanel(model, ctx) {
           ${BUILD_OPTIONAL_KEYS.map((k) => {
           const label = allCols.find(([key]) => key === k)?.[2] || k;
           const on = showOptional[k];
-          return `<button data-buildcol="${k}" aria-pressed="${on}"
+          return `<button data-view data-buildcol="${k}" aria-pressed="${on}"
               title="${on ? 'Hide' : 'Show'} the ${esc(label)} column">${on ? 'Hide' : 'Show'} ${esc(label)}</button>`;
         }).join('')}
         </h3>

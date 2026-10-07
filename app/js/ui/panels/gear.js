@@ -224,7 +224,7 @@ export function weaponsPanel(model, e) {
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
       <div class="weaponcards">${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
         <div class="weaponhead">
-          <button class="wfold" data-action="toggle-weapon" data-index="${i}"
+          <button data-view class="wfold" data-action="toggle-weapon" data-index="${i}"
             aria-expanded="${!w.collapsed}"
             title="${w.collapsed ? 'Open this weapon' : 'Collapse this weapon'}"
             aria-label="${w.collapsed ? 'Open' : 'Collapse'} ${esc(String(w.name || '').trim() || 'weapon')}"
@@ -548,7 +548,7 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
     const open = ctx.openGear === key;
     const label = String(g.name || '').trim() || g.slot || 'this item';
     return `<tr class="gearrow${open ? ' open' : ''}">
-      <td class="slot" data-stack="head"><button class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
+      <td class="slot" data-stack="head"><button data-view class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
         title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
         aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
         >${esc(g.slot ?? '')}</td>
@@ -640,7 +640,7 @@ function gearCard(model, list, i, g, cols) {
       <div class="gearcard">
         <div class="gearcardhead">
           <h4>${esc(label)}</h4>
-          <button class="disclose" data-gearopen="" title="Close ${esc(label)}"
+          <button data-view class="disclose" data-gearopen="" title="Close ${esc(label)}"
             aria-label="Close ${esc(label)}">▾</button>
         </div>
         <div class="fieldgrid">
@@ -685,7 +685,7 @@ function gearSlotsPanel(model, ctx, e) {
     return `<section class="panel span2">
       <h3>Slotted gear
         <span class="badge">${rows.length} of ${(e.gear || []).length}</span>
-        <button data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
+        <button data-view data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
       </h3>
       <div class="tablewrap"><table class="gear stacked" data-fold="shut">
         ${gearHead('equipment.gear', cols, {
@@ -995,7 +995,7 @@ function craftPost(ctx, id, label, text, rows) {
     const open = ctx.openPosts.has(id) ? ctx.openPosts.get(id) : id.startsWith('craft-');
     return `<details class="postbox" data-postbox="${id}"${open ? ' open' : ''}>
       <summary>${esc(label)}
-        <button data-copy="${id}" title="Copy for Discord">Copy</button></summary>
+        <button data-view data-copy="${id}" title="Copy for Discord">Copy</button></summary>
       <textarea readonly rows="${rows}" data-post="${id}" spellcheck="false">${esc(text ?? '')}</textarea>
     </details>`;
   }

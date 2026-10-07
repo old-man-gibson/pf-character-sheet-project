@@ -15,7 +15,7 @@
  */
 import { esc } from '../html.js';
 import {
-  collapsible, addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml,
+  collapsible, addButton, editLine, exprField, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
   removeAction, removeButton, removeControl, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
@@ -291,9 +291,11 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
         + 'Widen it above, or add the archetype that does.')}"` : ''}>
             ${on ? itemSelect(talents, ri, 'sphere', row.sphere, spheres)
       : '<select disabled><option></option></select>'}</td>
-          <td class="tools">${on ? `<button class="disclose catfold${hasNote ? ' hasnote' : ''}" data-collapse="${esc(noteKey)}"
-            data-collapse-to="${open}" aria-expanded="${open}"
-            title="${open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note'}">${open ? '▾' : '▸'}</button>` : ''}</td>
+          <td class="tools">${on ? foldButton(model, noteKey, {
+    open,
+    cls: `disclose catfold${hasNote ? ' hasnote' : ''}`,
+    title: open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note',
+  }) : ''}</td>
         </tr>${open ? `<tr class="wnote"><td colspan="3">${noteField(model,
     `data-item="${talents}|${ri}|notes" placeholder="What this talent does…"`, String(row.notes ?? ''))}</td></tr>` : ''}`;
   }).join('')}</tbody>
@@ -765,7 +767,7 @@ function templateTables(model, ctx, ti, path, f) {
             <option value="">Move to…</option>
             ${homes.map(([p, label]) => `<option value="${p}">${esc(label)}</option>`).join('')}
           </select>` : ''}
-          <button data-cells="${table}" aria-pressed="${raw}"
+          <button data-view data-cells="${table}" aria-pressed="${raw}"
             title="Show every cell as it is stored, merge markers and all">Cells</button>
           <button data-action="add-template-column" data-path="${table}">+ Column</button>
           ${removeButton(`${path}.tables`, bi, { what: 'table', text: 'Remove table' })}

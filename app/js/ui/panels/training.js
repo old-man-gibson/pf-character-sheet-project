@@ -250,7 +250,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
       const title = on ? 'Back to both ladders side by side'
         : `Give the ${label.toLowerCase()} ladder the room and narrow the ${other} one`;
       return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}">
-              <button type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
+              <button data-view type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
                 aria-pressed="${on}" title="${esc(title)}">${label}</button></th>`;
     };
     // Sized here and nowhere else: a drag on the level column's edge used to

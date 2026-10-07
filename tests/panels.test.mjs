@@ -45,6 +45,7 @@ import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.j
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
 import * as statBlock from '../app/js/monster/panel.js';
 import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
+import { foldValue } from '../app/js/ui/folds.js';
 
 let pass = 0;
 let fail = 0;
@@ -179,6 +180,17 @@ function renders(who, name, draw, model) {
     console.log(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
     return html;
   }
+  // Every control that only changes how the sheet is read says so with
+  // data-view, which is what a published sheet keeps working; one without it
+  // is disabled for every reader. These attributes are view controls by what
+  // they do, so each must carry it.
+  const viewless = (html.match(/<button[^>]*>/g) || []).filter((b) => !/sdata-view[s=>]/.test(b)
+    && /sdata-(?:collapse|tab|gearopen|mopen|mclose|textopen|deck-view|copy|cfpeek|foldcell|ladderfocus|buildcol|veilcols|cells)=/.test(b));
+  if (viewless.length) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
+    return html;
+  }
   // Every × is rows.removeControl's, which names what it takes; a remove
   // button that says nothing to a screen reader was written by hand.
   const bare = (html.match(/<button[^>]*\sdata-remove(?:-armed)?="[^"]*"[^>]*>/g) || [])
@@ -216,11 +228,12 @@ const sweep = (who, model) => {
    *
    * The state lives in uiPrefs rather than in ctx, and the keys are strings
    * chosen panel by panel, so there is no list of them to iterate. A `get`
-   * that answers yes to every key folds all of them at once without needing
-   * one.
+   * that answers "folded" for every key folds all of them at once without
+   * needing one -- which is `true` for most keys and `false` for the few
+   * that store *open* (ui/folds.js), or those few would be opened instead.
    */
   const realCollapsed = model.data.uiPrefs.collapsed;
-  model.data.uiPrefs.collapsed = new Proxy({}, { get: () => true });
+  model.data.uiPrefs.collapsed = new Proxy({}, { get: (_, key) => foldValue(String(key), false) });
   for (const [name, draw] of PANELS) {
     const html = renders(`${who} (folds shut)`, name, draw, model);
     // A fold that ate its own header is the failure this is here to catch.
