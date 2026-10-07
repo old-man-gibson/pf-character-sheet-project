@@ -10,6 +10,7 @@
  */
 import { esc } from './html.js';
 import { prose } from './prose.js';
+import { foldButton } from './folds.js';
 import { hasTokens, plainTokens } from '../inline.js';
 import {
   catalogueEntry, sphereCatalogue, sphereTalent, talentPackage,
@@ -104,17 +105,21 @@ export function talentNote(model, binding, value, path, name = '') {
   const key = `tnote:${path}`;
   const said = model.data?.uiPrefs?.collapsed?.[key];
   const shut = said === undefined ? text.length > LONG_NOTE : !!said;
-  const caret = `<button class="disclose catfold" data-collapse="${esc(key)}" data-collapse-to="${!shut}"
-      aria-expanded="${!shut}" title="${shut ? 'Show the whole note' : 'Fold the note to one line'}"
-      >${shut ? '▸' : '▾'}</button>`;
+  const caret = foldButton(model, key, {
+    open: !shut, cls: 'disclose catfold', title: shut ? 'Show the whole note' : 'Fold the note to one line',
+  });
   if (!shut) {
     return `<div class="notecell"><div class="noteline"><div class="notebox">${field}</div>${caret}</div></div>`;
   }
   const first = text.trim().split('\n')[0];
   return `<div class="notecell"><div class="noteline">
-      <button type="button" class="notepeek" data-collapse="${esc(key)}" data-collapse-to="false"
-        data-tpop="${esc(JSON.stringify({ k: 'note', p: path, ...(name ? { n: name } : {}) }))}"
-        title="${esc(text)}">${esc(first.length > 90 ? `${first.slice(0, 90).replace(/\s+\S*$/, '')}…` : first)}</button>
+      ${foldButton(model, key, {
+    open: false,
+    cls: 'notepeek',
+    attrs: `type="button" data-tpop="${esc(JSON.stringify({ k: 'note', p: path, ...(name ? { n: name } : {}) }))}"`,
+    title: text,
+    text: esc(first.length > 90 ? `${first.slice(0, 90).replace(/\s+\S*$/, '')}…` : first),
+  })}
       ${caret}</div></div>`;
 }
 

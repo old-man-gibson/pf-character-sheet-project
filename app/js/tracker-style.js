@@ -81,11 +81,15 @@ export const METER_DEFAULT_STYLE = { shape: 'bar', fill: 'spent' };
 /**
  * Where a meter starts from, when it is not the shared default.
  *
- * Hit points and essence fill as they are used up -- the fill is what the
- * character has invested or has left standing. A power point pool is the
- * other way round: the sheet says "23 of 40 left", so its bar drains.
+ * Every meter is handed what has been used -- essence invested, power points
+ * and hit points spent -- and the style says which way to show it. Essence
+ * fills as it is invested. A power point pool and hit points are the other
+ * way round: the sheet says "23 of 40 left", so their bars drain.
  */
-export const METER_DEFAULTS = { pp: { shape: 'bar', fill: 'remaining' } };
+export const METER_DEFAULTS = {
+  hp: { shape: 'bar', fill: 'remaining' },
+  pp: { shape: 'bar', fill: 'remaining' },
+};
 
 export function meterDefaultStyle(key) {
   return METER_DEFAULTS[key] || METER_DEFAULT_STYLE;

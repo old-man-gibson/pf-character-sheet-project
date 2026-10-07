@@ -12,6 +12,7 @@
  */
 import { esc } from '../html.js';
 import * as rows from '../rows.js';
+import { signed } from '../format.js';
 import { runtime as extensionRuntime } from '../../extension-runtime.js';
 import { BLOCK_KINDS, archetypeStatus, swapLabel } from '../../extensions.js';
 
@@ -52,8 +53,9 @@ export function renderSystemManagerPanel(model, ctx) {
       ? `<input type="text" class="tabname" value="${esc(e.label)}" data-systab-name="${e.index}" aria-label="Tab name">`
       : esc(e.label));
     const del = (e) => (e.kind === 'system'
-      ? rows.armedButton(`systab|${e.index}`, `data-action="delete-system" data-index="${e.index}" data-arm="systab|${e.index}"`,
-        `“${e.label}” and all its rows`, ctx.armedRemove) : '');
+      ? rows.removeAction('delete-system', { index: e.index }, {
+        what: `“${e.label}” and all its rows`, arm: `systab|${e.index}`, armed: ctx.armedRemove,
+      }) : '');
 
     // The same panel the tabs' own right-click opens, reached from a row.
     const colorBtn = (e) => {
@@ -86,7 +88,7 @@ export function renderSystemManagerPanel(model, ctx) {
     const mode = model.viewMode();
     return `<div class="grid"><section class="panel span2">
       <h3>Tab bar — ${mode === 'session' ? 'session view' : 'build view'}
-        <button data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
+        <button data-view data-action="view-mode" style="margin-left:auto" title="${mode === 'session'
     ? 'Switch to the build view and edit its bar' : 'Switch to the session view and edit its bar'}">
           Switch to ${mode === 'session' ? 'build' : 'session'} view</button>
       </h3>
@@ -138,7 +140,7 @@ export function renderSystemManagerPanel(model, ctx) {
       <h3>Worksheets</h3>
       <p class="hint">
         Add a free grid tab of your own (Vancian spellbook, mount, a homebrew system…).
-        Rename any worksheet by typing over its name above; × deletes one and its data.
+        Rename any worksheet by typing over its name above; × deletes one and its data, after asking twice.
       </p>
       <div class="pair">
         <input type="text" data-draft="newSystem" placeholder="New tab name" value="${esc(ctx.draft.newSystem || '')}" style="max-width:16rem">
@@ -183,7 +185,7 @@ function extensionBlocksPanel(model, ctx) {
     const detail = (b) => {
       switch (b.kind) {
         case 'class': return `d${b.hd}, BAB ${b.bab === 1 ? 'full' : b.bab === 0.5 ? '½' : '¾'}, ${['goodFort', 'goodRef', 'goodWill'].filter((k) => b[k]).map((k) => k.slice(4)).join('/') || 'no good'} saves, ${b.skillRanks} ranks${b.features.length ? `, ${b.features.length} features` : ''}`;
-        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
+        case 'race': return [b.size, Object.entries(b.abilityMods).map(([k, v]) => `${signed(v)} ${k}`).join(' '), b.traits.length ? `${b.traits.length} traits` : ''].filter(Boolean).join(' · ');
         case 'template': return `${b.features.length} feature(s)`;
         case 'tracker': return `max ${b.maxFormula || '—'}${b.refresh ? ` · ${b.refresh}` : ''}`;
         case 'feature': return `${b.type ? `(${b.type}) ` : ''}${b.group ? `→ ${b.group}` : ''}`;
@@ -290,14 +292,14 @@ function extensionBlocksPanel(model, ctx) {
         return `<div class="foldsub extgroup${shut ? ' collapsed' : ''}">
           <h4 class="subhead">${esc(name)}
             <span class="badge">${list.length}</span>
-            ${rows.foldButton(model, key, shut)}</h4>
+            ${rows.foldButton(model, key, { open: !shut })}</h4>
           ${shut ? '' : list.map((b) => blockRow(id, b)).join('')}
         </div>`;
       }).join('');
       return `<div class="foldsub extpack${packShut ? ' collapsed' : ''}">
         <h4 class="subhead ext-pack">${esc(p.name)}
           <span class="badge">${p.blocks.length}</span>
-          ${rows.foldButton(model, packKey, packShut)}</h4>
+          ${rows.foldButton(model, packKey, { open: !packShut })}</h4>
         ${packShut ? '' : `${loose.map((b) => blockRow(id, b)).join('')}${groupHtml}`}
       </div>`;
     }).join('');
@@ -313,8 +315,8 @@ function extensionBlocksPanel(model, ctx) {
         from the page's <em>Extensions</em> button.
       </p>
       ${blocks.length ? `<p class="pair extfind" style="margin:0 0 6px">
-        ${kinds.length > 1 ? `<button data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
-        ${kinds.map((k) => `<button data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
+        ${kinds.length > 1 ? `<button data-view data-action="ext-filter" data-kind="" aria-pressed="${!filter}">All</button>
+        ${kinds.map((k) => `<button data-view data-action="ext-filter" data-kind="${k}" aria-pressed="${filter === k}">${esc(BLOCK_KINDS[k]?.label || k)}</button>`).join('')}` : ''}
         <input type="search" data-ext-search="1" value="${esc(ctx.extSearch)}" spellcheck="false"
           placeholder="Search ${byKind.length} block${byKind.length === 1 ? '' : 's'}…"
           title="By name, pack, class, or what a block's features are called and replace">

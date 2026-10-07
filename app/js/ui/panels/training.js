@@ -17,7 +17,7 @@ import {
 } from '../../rules.js';
 import { autoNum, select, text, field } from '../fields.js';
 import {
-  addButton, itemCheck, itemSelect, itemText, rowDrop, rowGrip, rowRemove, rowToolsDragged,
+  addButton, itemCheck, itemSelect, itemText, removeButton, rowDrop, rowGrip, rowRemove, rowToolsDragged,
 } from '../rows.js';
 
 const guileSphereList = () => sideSphereNames('guile');
@@ -57,7 +57,7 @@ export function guileClassBlock(model, g, cls, ci) {
           ${classLevelsField(model, list, ci, cls, `${cls.totalTalents ?? 0} any · ${cls.totalUtility ?? 0} utility`)}
           ${blendTicks(systems, 'guile', ci, poolCounts(cls, systems),
     !!String(cls.name || '').trim())}
-          <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
+          ${removeButton(list, ci, { what: 'class' })}
         </div>
         ${systems.length > 1 ? ladderStack(model, list, ci, cls, systems, spheres)
     : ladderTable(model, list, ci, cls, systems, spheres)}
@@ -250,7 +250,7 @@ export function ladderTable(model, list, ci, cls, systems, spheres) {
       const title = on ? 'Back to both ladders side by side'
         : `Give the ${label.toLowerCase()} ladder the room and narrow the ${other} one`;
       return `<th colspan="3" class="${which === 'utility' ? 'util' : ''}${shrunk ? ' shrunk' : ''}">
-              <button type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
+              <button data-view type="button" class="ladderfocus" data-ladderfocus="${esc(key)}|${which}"
                 aria-pressed="${on}" title="${esc(title)}">${label}</button></th>`;
     };
     // Sized here and nowhere else: a drag on the level column's edge used to

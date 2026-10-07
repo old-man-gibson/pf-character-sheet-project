@@ -19,7 +19,9 @@ import { gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
 import { roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
-import { group, pct, round } from '../format.js';
+import {
+  group, pct, round, signed,
+} from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, ASURA_TALENTS_PER_ESSENCE, BRAWLERS_VEST_TALENTS, COMBAT_SPHERES,
   CRAFT_CHECK_MODES, CRAFT_SPEED_KINDS, CRAFT_SPEED_MULTIPLIER,
@@ -31,7 +33,7 @@ import { WEAPON_MODE_KEYS } from '../../roll20.js';
 import { check, field, num, autoNum, select, text } from '../fields.js';
 import {
   addButton, addManyButton, bigStat, collapsibleSub, editLine, exprField, itemCheck, itemExpr,
-  itemNum, itemSelect, itemText, line, rowRemove,
+  itemNum, itemSelect, itemText, line, movedValue, removeAction, removeButton, rowRemove,
 } from '../rows.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
@@ -224,7 +226,7 @@ export function weaponsPanel(model, e) {
       <h3>Weapons <span class="badge">${weapons.length}</span></h3>
       <div class="weaponcards">${weapons.map((w, i) => `<div class="weapon${w.collapsed ? ' collapsed' : ''}">
         <div class="weaponhead">
-          <button class="wfold" data-action="toggle-weapon" data-index="${i}"
+          <button data-view class="wfold" data-action="toggle-weapon" data-index="${i}"
             aria-expanded="${!w.collapsed}"
             title="${w.collapsed ? 'Open this weapon' : 'Collapse this weapon'}"
             aria-label="${w.collapsed ? 'Open' : 'Collapse'} ${esc(String(w.name || '').trim() || 'weapon')}"
@@ -240,17 +242,22 @@ export function weaponsPanel(model, e) {
     // As the buffs of the moment leave it -- a size buff steps the dice -- the
     // same reading the dashboard shows (ui/weapon-now.js).
     const now = weaponNow(model.data, w, cs);
-    const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
-    return `<span class="bigroll${cls(now.atkDelta)}" title="${esc(now.atkTitle || 'Attack including {{…}} tokens')}">${esc(now.atk)}</span>
-          <span class="bigroll dmg${cls(now.dmgMoved)}" title="${esc(now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps
-      ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`)}">${esc(now.dmg)}</span>`;
+    return `${movedValue(esc(now.atk), now.atkDelta, {
+      tag: 'span', cls: 'bigroll', title: now.atkTitle || 'Attack including {{…}} tokens', keep: true,
+    })}
+          ${movedValue(esc(now.dmg), now.dmgMoved, {
+      tag: 'span',
+      cls: 'bigroll dmg',
+      title: now.dmgTitle || `Damage including [[…]] tokens${w.sizeSteps ? ` — ${w.dice} at Medium, stepped to ${w.sizeNow}` : ''}`,
+      keep: true,
+    })}`;
   })()}
           ${w.proficient === false ? `<span class="badge err nonprof"
             title="${esc(w.proficiencyWhy)} — non-proficiency is −4 to hit, yours to write in Misc">not proficient</span>`
     : w.proficient === true && w.proficiencySource !== 'overview' ? `<span class="badge ok nonprof"
             title="${esc(w.proficiencyWhy)}">proficient · ${w.proficiencySource === 'veil' ? 'veil' : esc(w.proficiencyNote || 'row')}</span>` : ''}
           ${rollButton(model, 'weapon', i, `${String(w.name || '').trim() || 'this weapon'} — attack and damage`, cs)}
-          <button class="danger" data-remove="equipment.weapons|${i}" aria-label="Remove weapon">×</button>
+          ${removeButton('equipment.weapons', i, { what: 'weapon' })}
         </div>
         <div class="weapongrid">
           ${field('Base', itemSelect('equipment.weapons', i, 'attackType', w.attackType,
@@ -314,11 +321,10 @@ export function weaponsPanel(model, e) {
           ${field('As', `<input type="text" value="${esc(w.baseWeapon ?? '')}" data-item="equipment.weapons|${i}|baseWeapon"
             data-kind="text" placeholder="katana" style="width:6.5rem"
             title="The base weapon this is — a named blade that is a katana, a veil that takes a longsword's form — read against the Overview's specific weapons">`)}
-          ${field('Proficient', `<select data-item="equipment.weapons|${i}|proficiency" data-kind="text"
-            title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}">
-            <option value=""${!w.proficiency ? ' selected' : ''}>Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}</option>
-            <option value="yes"${w.proficiency === 'yes' ? ' selected' : ''}>Yes</option>
-            <option value="no"${w.proficiency === 'no' ? ' selected' : ''}>No</option></select>`)}
+          ${field('Proficient', itemSelect('equipment.weapons', i, 'proficiency', w.proficiency, [['yes', 'Yes'], ['no', 'No']],
+    `Auto${w.proficient === true ? ' ✓' : w.proficient === false ? ' ✗' : ''}`, null, {
+      attrs: `title="${esc(w.proficiencyWhy || 'Auto reads the row against the Overview\'s Proficiencies and the [Enhanced] veil rule')}"`,
+    }))}
           ${w.proficiency ? field('Via', `<input type="text" value="${esc(w.proficiencyNote ?? '')}" data-item="equipment.weapons|${i}|proficiencyNote"
             data-kind="text" placeholder="Custom Training" style="width:8rem"
             title="What grants or denies it — a talent, a class feature, a trait">`) : ''}
@@ -400,7 +406,7 @@ function armorPanel(e) {
           ${row(e.armor || {}, 'equipment.armor')}
           <datalist id="armor-types">${ARMOR_TYPES.map((t) => `<option value="${t}">`).join('')}</datalist>
           ${(e.shields || []).map((s, i) => row(s, `equipment.shields.${i}`,
-    `<td class="tools"><button class="danger" data-remove="equipment.shields|${i}" aria-label="Remove">×</button></td>`)).join('')}
+    rowRemove('equipment.shields', i, { what: 'shield' }))).join('')}
         </tbody>
       </table></div>
       <div style="margin-top:8px">${addButton('equipment.shields', 'Add shield', {
@@ -548,7 +554,7 @@ function gearRow(model, ctx, list, i, g, cols, tools) {
     const open = ctx.openGear === key;
     const label = String(g.name || '').trim() || g.slot || 'this item';
     return `<tr class="gearrow${open ? ' open' : ''}">
-      <td class="slot" data-stack="head"><button class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
+      <td class="slot" data-stack="head"><button data-view class="disclose" data-gearopen="${esc(key)}" aria-expanded="${open}"
         title="${esc(open ? `Close ${label}` : `Open ${label} — the whole item, with room to write`)}"
         aria-label="${esc(open ? `Close ${label}` : `Open ${label}`)}">${open ? '▾' : '▸'}</button
         >${esc(g.slot ?? '')}</td>
@@ -570,22 +576,30 @@ const gearSpan = (cols) => 5 + cols.bonuses * 3 + cols.others;
  *
  * A pair of buttons per family, in the last header cell of that family, so
  * the control that adds a column stands where the column would appear. The
- * minus is armed when the column it would drop has something written in it --
- * losing a bonus off the end of every row at once is worth a second click.
+ * minus asks twice when the column it would drop has something written in
+ * it -- losing a bonus off the end of every row at once is worth a second
+ * click -- armed under `data-arm` like every other two-click removal, and
+ * `armed` is the view's `armedRemove`. A stepper rather than a ×, so it keeps
+ * its own face: plain while nothing would be lost.
  */
 function gearHead(list, cols, inUse, armed) {
-    const step = (kind, label) => `<span class="colstep">
-      <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="-1"
-        class="${armed === `${list}|${kind}` ? 'danger armed' : inUse[kind] ? 'danger' : ''}"
-        title="${esc(armed === `${list}|${kind}`
+    const step = (kind, label) => {
+      const arm = `gearcol|${list}|${kind}`;
+      const on = inUse[kind] && armed === arm;
+      return `<span class="colstep">
+      <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="-1"${
+  inUse[kind] ? ` data-arm="${esc(arm)}"` : ''}
+        class="${on ? 'danger armed' : inUse[kind] ? 'danger' : ''}"
+        title="${esc(on
     ? `Click again to drop the last ${label} column and what is written in it`
     : inUse[kind]
       ? `Remove the last ${label} column — something is written in it, so this asks twice`
       : `Remove the last ${label} column`)}"
-        aria-label="Remove a ${label} column">${armed === `${list}|${kind}` ? 'sure?' : '−'}</button>
+        aria-label="Remove a ${label} column">${on ? 'sure?' : '−'}</button>
       <button data-action="gear-col" data-list="${esc(list)}" data-kind="${kind}" data-delta="1"
         title="Add another ${label} column to every row" aria-label="Add a ${label} column">+</button>
     </span>`;
+    };
     // The cell carrying a stepper says so, rather than being found by what is
     // inside it: `th:has(…)` does not survive the stylesheet this page adopts.
     const bonusHeads = Array.from({ length: cols.bonuses }, (_, bi) => {
@@ -632,7 +646,7 @@ function gearCard(model, list, i, g, cols) {
       <div class="gearcard">
         <div class="gearcardhead">
           <h4>${esc(label)}</h4>
-          <button class="disclose" data-gearopen="" title="Close ${esc(label)}"
+          <button data-view class="disclose" data-gearopen="" title="Close ${esc(label)}"
             aria-label="Close ${esc(label)}">▾</button>
         </div>
         <div class="fieldgrid">
@@ -677,12 +691,12 @@ function gearSlotsPanel(model, ctx, e) {
     return `<section class="panel span2">
       <h3>Slotted gear
         <span class="badge">${rows.length} of ${(e.gear || []).length}</span>
-        <button data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
+        <button data-view data-action="toggle-gear" style="margin-left:8px">${showAll ? 'Hide empty slots' : 'Show all slots'}</button>
       </h3>
       <div class="tablewrap"><table class="gear stacked" data-fold="shut">
         ${gearHead('equipment.gear', cols, {
     bonuses: gearColumnInUse(e.gear, 'bonuses'), others: gearColumnInUse(e.gear, 'others'),
-  }, ctx.armedGearCol)}
+  }, ctx.armedRemove)}
         <tbody>${rows.map(({ g, i }) => gearRow(model, ctx, 'equipment.gear', i, g, cols)).join('')
     || `<tr><td colspan="${gearSpan(cols)}"><p class="empty">Nothing worn — show all slots to fill them in.</p></td></tr>`}</tbody>
       </table></div>
@@ -700,9 +714,9 @@ function otherItemsPanel(model, ctx, e) {
       <div class="tablewrap"><table class="gear stacked" data-fold="shut">
         ${gearHead('equipment.other', cols, {
     bonuses: gearColumnInUse(e.other, 'bonuses'), others: gearColumnInUse(e.other, 'others'),
-  }, ctx.armedGearCol)}
+  }, ctx.armedRemove)}
         <tbody>${(e.other || []).map((g, i) => gearRow(model, ctx, 'equipment.other', i, g, cols,
-    `<td class="tools"><button class="danger" data-remove="equipment.other|${i}" aria-label="Remove">×</button></td>`)).join('')}</tbody>
+    rowRemove('equipment.other', i, { what: 'item' }))).join('')}</tbody>
       </table></div>
       <div style="margin-top:8px">${addButton('equipment.other', 'Add item', {
         slot: 'Other',
@@ -904,7 +918,7 @@ function craftProject(ctx, model, cr, p, i) {
         ${itemText(list, i, 'name', p.name, 'Item name')}
         <span class="bigroll" title="Crafting cost">${group(k.cost)}</span>
         <span class="bigroll dmg" title="Profit at the final sale price">${fmt(k.net)}</span>
-        <button class="danger" data-remove="${list}|${i}" aria-label="Remove project">×</button>
+        ${removeButton(list, i, { what: 'project' })}
       </div>
       <div class="weapongrid">
         ${field('Base price', itemExpr(list, i, 'value', p, { width: '7rem' }))}
@@ -987,7 +1001,7 @@ function craftPost(ctx, id, label, text, rows) {
     const open = ctx.openPosts.has(id) ? ctx.openPosts.get(id) : id.startsWith('craft-');
     return `<details class="postbox" data-postbox="${id}"${open ? ' open' : ''}>
       <summary>${esc(label)}
-        <button data-copy="${id}" title="Copy for Discord">Copy</button></summary>
+        <button data-view data-copy="${id}" title="Copy for Discord">Copy</button></summary>
       <textarea readonly rows="${rows}" data-post="${id}" spellcheck="false">${esc(text ?? '')}</textarea>
     </details>`;
   }
@@ -1083,8 +1097,8 @@ export function wealthPanel(model, ctx) {
         <tbody>${ledger.slice(0, 12).map((l) => `<tr>
           <td>${esc(l.date)}</td>
           <td>${esc(l.label)} <span class="badge">${kindLabel[l.kind] || l.kind}</span></td>
-          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${l.amount > 0 ? '+' : ''}${n(l.amount)}</td>
-          <td class="tools"><button class="danger" data-action="wealth-remove" data-index="${l.i}" title="Remove this line and undo it" aria-label="Remove">×</button></td>
+          <td class="num ${l.amount < 0 ? 'neg' : 'pos'}">${signed(l.amount, n)}</td>
+          <td class="tools">${removeAction('wealth-remove', { index: l.i }, { what: 'this line', title: 'Remove this line and undo it' })}</td>
         </tr>`).join('')}</tbody>
       </table>${ledger.length > 12 ? `<p class="hint">${ledger.length - 12} older line${ledger.length - 12 === 1 ? '' : 's'} kept.</p>` : ''}</div>` : ''}
     </section>`;

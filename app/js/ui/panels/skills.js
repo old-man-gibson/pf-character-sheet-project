@@ -172,7 +172,7 @@ export function renderSkillsPanel(model, ctx) {
         <h3>Skills
           <span class="badge">${rows.length} of ${skills.length}</span>
           ${hiddenCount ? `<span class="badge" title="Hidden with the eye; Show all brings them back">${hiddenCount} hidden</span>` : ''}
-          <button data-action="toggle-skills" style="margin-left:8px">
+          <button data-view data-action="toggle-skills" style="margin-left:8px">
             ${ctx.showAllSkills ? 'Hide unused' : 'Show all'}
           </button>
         </h3>

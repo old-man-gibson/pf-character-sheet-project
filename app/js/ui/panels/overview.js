@@ -16,7 +16,8 @@
 import { esc } from '../html.js';
 import { renderSessionBoard } from './session.js';
 import { field } from '../fields.js';
-import { collapsible, foldButton, isCollapsed } from '../rows.js';
+import { minus, signed } from '../format.js';
+import { collapsible, foldButton, isCollapsed, isOpen } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
@@ -26,7 +27,7 @@ import {
   guileTalentRows, ownTalentRows, plannerHasClass, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
 import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
-import { rowRemoveButton, slotSpend } from './subsystems.js';
+import { slotSpend } from './subsystems.js';
 
 /**
  * The session dashboard's building blocks, in their default order. The blocks
@@ -56,7 +57,8 @@ const DASH_CARDS = [
 const DASH_CARD_LABELS = new Map(DASH_CARDS);
 
 /** The base attack progressions a class can run, as the rules name them. */
-const BAB_RATES = [[1, 'full'], [0.75, '&frac34;'], [0.5, '&frac12;'], [0, 'none']];
+// Characters, not entities: the dropdown escapes its labels like every other.
+const BAB_RATES = [[1, 'full'], [0.75, '¾'], [0.5, '½'], [0, 'none']];
 
 /** The hit dice a class can have, as the workbook's own HD Size column listed them. */
 const HIT_DICE = [4, 6, 8, 10, 12];
@@ -84,10 +86,9 @@ function progressionSelect(i, field, value, choices, label, format = String, bea
     ? `Another class has a better ${beaten.noun} at ${where}, so this one${
       all ? ' does nothing to the character as it stands' : ' only counts at the rest'}.`
     : '';
-  return `<select data-item="classes|${i}|${field}" data-kind="number" aria-label="${esc(label)}"
-      class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}>
-      ${opts.map(([v, text]) => `<option value="${v}"${v === now ? ' selected' : ''}>${text}</option>`).join('')}
-    </select>`;
+  return itemSelect('classes', i, field, now, opts, null, null, {
+    kind: 'number', attrs: `aria-label="${esc(label)}" class="${all ? 'beaten' : ''}"${why ? ` title="${esc(why)}"` : ''}`,
+  });
 }
 import { weaponsPanel, wealthPanel } from './gear.js';
 import {
@@ -99,13 +100,13 @@ import {
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { maneuverDetails } from '../../model.js';
-import {
-  THEME_ACCENT, TRACKER_PALETTE, normalizeHex, normalizeStyle,
-} from '../../tracker-style.js';
+import { normalizeStyle } from '../../tracker-style.js';
+import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
   addButton, bigStat, editLine, exprField, itemCheck, itemExpr, itemNum, itemSelect,
-  itemText, line, lineHtml, movedInline, movedSub, rowTools, workingTitle,
+  itemText, line, lineHtml, movedInline, movedSub, movedTitle, movedValue, removeAction, removeButton,
+  removeControl, rowTools, workingTitle,
 } from '../rows.js';
 import {
   TRAIT_CATEGORIES,
@@ -207,7 +208,7 @@ export function renderOverviewPanel(model, ctx) {
    * in uiPrefs.collapsed under dash:* keys, where true means open.
    */
 export function renderDashboardPanel(model, ctx) {
-    const open = (key) => !!model.data.uiPrefs?.collapsed?.[`dash:${key}`];
+    const open = (key) => isOpen(model, `dash:${key}`, false);
     const e = model.data.equipment || {};
     const render = {
       conditions: () => dashConditionsCard(model, ctx),
@@ -327,11 +328,9 @@ function dashArrangePanel(model) {
 
   /** The card's corner control: one click between the summary and the full read. */
 function dashExpand(key, openNow) {
-    // `dash:*` is one of the two keys that stores *open* rather than
-    // *collapsed*, so what the click writes is the opposite of what is showing.
-    return `<button class="linkish" style="margin-left:auto" data-collapse="dash:${key}"
-      data-collapse-to="${!openNow}"
-      aria-expanded="${openNow}">${openNow ? 'Collapse' : 'Expand'}</button>`;
+    return foldButton(null, `dash:${key}`, {
+      open: openNow, cls: 'linkish', attrs: 'style="margin-left:auto"', title: '', text: openNow ? 'Collapse' : 'Expand',
+    });
   }
 
   /** What is on the character right now, as chips; everything else one pick away. */
@@ -454,9 +453,9 @@ function buffsPanel(model, ctx) {
       for (const row of b.bonuses || []) {
         const v = Number(row?.valueNum) || 0;
         if (!v) continue;
-        bits.push(row.target === 'size' ? `${v > 0 ? `+${v}` : v} true size`
-          : row.target === 'sizeEffective' ? `${v > 0 ? `+${v}` : v} effective size`
-            : row.target === 'sizeStacking' ? `${v > 0 ? `+${v}` : v} size (stacks)`
+        bits.push(row.target === 'size' ? `${signed(v)} true size`
+          : row.target === 'sizeEffective' ? `${signed(v)} effective size`
+            : row.target === 'sizeStacking' ? `${signed(v)} size (stacks)`
               : `${fmt(v)} ${targetLabels.get(row.target) || row.target}`);
       }
       return bits.join(' · ') || 'no numbers yet';
@@ -476,7 +475,7 @@ function buffsPanel(model, ctx) {
           <span class="pair" style="margin-left:auto">
             <button data-action="buff-open" data-index="${i}" aria-expanded="${open}"
               title="${open ? 'Close the editor' : 'Open the dials and formulas'}">${open ? '▾ Close' : '▸ Edit'}</button>
-            <button class="danger" data-remove="buffs|${i}" aria-label="Remove buff">×</button>
+            ${removeButton('buffs', i, { what: 'buff' })}
           </span>
         </div>
       </div>`;
@@ -486,14 +485,11 @@ function buffsPanel(model, ctx) {
       const b = buffs[editing];
       const i = editing;
       const bonusRow = (row, j) => `<span class="buffbonus">
-        <select data-item="${list}|${i}|bonuses.${j}.target" data-kind="text" aria-label="What this bonus moves">
-          ${BUFF_TARGETS.map(([key, label]) => `<option value="${key}"${row.target === key ? ' selected' : ''}>${esc(label)}</option>`).join('')}
-        </select>
+        ${itemSelect(list, i, `bonuses.${j}.target`, row.target, BUFF_TARGETS, null, null, { attrs: 'aria-label="What this bonus moves"' })}
         ${exprField(`data-item="${list}|${i}|bonuses.${j}.value"`, row.value, {
     width: '5.5rem', value: row.valueNum, error: row.valueError, title: 'A number, or a formula — 1 + essence.shoulder',
   })}
-        <button class="danger" data-action="buff-bonus-remove" data-index="${i}" data-j="${j}"
-          aria-label="Remove this bonus">×</button>
+        ${removeAction('buff-bonus-remove', { index: i, j }, { what: 'this bonus' })}
       </span>`;
       return `<div class="buffeditor">
         <div class="fieldgrid">
@@ -565,7 +561,7 @@ function dashResourcesCard(model) {
     };
     return `<section class="panel span2">
       <h3>Resources
-        <button class="linkish" style="margin-left:auto" data-action="goto-trackers"
+        <button data-view class="linkish" style="margin-left:auto" data-action="goto-trackers"
           title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
       </h3>
       <div class="dashtrackers">
@@ -591,13 +587,10 @@ function dashOffenseCard(model, ctx, openNow) {
       // As the buffs of the moment leave it, the same reading the Gear tab's
       // weapon card shows (ui/weapon-now.js).
       const now = weaponNow(c, w, cs);
-      const cls = (d) => (d ? ` adj${d > 0 ? ' up' : ''}` : '');
       return `<div class="statline">
       <span class="label">${esc(String(w.name || '').trim() || `Weapon ${i + 1}`)}</span>
-      <span class="value rollpair"><strong class="${cls(now.atkDelta)}"
-          title="${esc(now.atkTitle)}">${esc(now.atk)}</strong>
-        <span class="dashdmg${cls(now.dmgMoved)}"
-          title="${esc(now.dmgTitle)}">${esc(now.dmg)}</span>
+      <span class="value rollpair">${movedValue(esc(now.atk), now.atkDelta, { title: now.atkTitle, keep: true })}
+        ${movedValue(esc(now.dmg), now.dmgMoved, { tag: 'span', cls: 'dashdmg', title: now.dmgTitle, keep: true })}
         ${rollButton(model, 'weapon', i, `an attack with ${String(w.name || '').trim() || 'this weapon'} — full, single or Vital Strike`, cs)}</span>
     </div>`;
     };
@@ -679,10 +672,9 @@ function dashSpeedCard(model) {
     const line = ({ sp, adj }) => {
       const moved = cs.changed && adj && adj.adjusted !== adj.final;
       const now = adj ? adj.adjusted : Number(sp.final) || 0;
-      const value = moved
-        ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
-            title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
-        : `<strong>${now} ft.</strong>`;
+      const value = movedValue(`${now} ft.`, moved ? adj.adjusted - adj.final : 0, {
+        base: `${adj?.final} ft.`, sources: cs.sources, keep: true,
+      });
       return lineHtml(sp.type || 'Movement',
         `${value} <span class="dim">×2 ${now * 2} · run ${now * 4}</span>`, true);
     };
@@ -707,9 +699,7 @@ function dashSkillsCard(model, openNow) {
     const row = ({ s, i }) => {
       const delta = cs.changed
         ? statModDelta(cs.deltas || {}, (s.abilities || [])[0], null) + (cs.delta.skills || 0) : 0;
-      const shown = delta
-        ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(s.bonus)} — with ${cs.sources} applied`)}">${fmt((Number(s.bonus) || 0) + delta)}</strong>`
-        : fmt(s.bonus);
+      const shown = movedValue(fmt((Number(s.bonus) || 0) + delta), delta, { base: fmt(s.bonus), sources: cs.sources });
       return `<div class="statline">
       <span class="label">${esc(skillLabel(s.name, s.spec) || s.name || '—')}</span>
       <span class="value rollpair">${shown}${rollButton(model, 'skill', i, `a ${skillLabel(s.name, s.spec) || 'skill'} check`, cs)}</span>
@@ -730,7 +720,7 @@ function dashEffectsCard(model) {
       <div class="pair">
         ${itemCheck('effects', i, 'on', x.on !== false)}
         ${itemText('effects', i, 'name', x.name, 'Watching the north door')}
-        <button class="danger" data-remove="effects|${i}" aria-label="Remove effect">×</button>
+        ${removeButton('effects', i, { what: 'effect' })}
       </div>
       ${itemText('effects', i, 'note', x.note, 'the detail worth remembering')}
     </div>`;
@@ -773,7 +763,6 @@ function dashQuickCard(model, ctx) {
     const hp = model.hpState;
     const maxNow = hp.max;
     const curNow = hp.current;
-    const signed = (n) => String(n).replace('-', '−');
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
     const fig = (label, value, title, cls = '') => `<span class="dashhpfig${cls ? ` ${cls}` : ''}"
       title="${esc(title)}"><span class="k">${esc(label)}</span><span class="v">${value}</span></span>`;
@@ -791,7 +780,7 @@ function dashQuickCard(model, ctx) {
     ? `${hp.typedTemp} of your own, ${hp.tempGrantLeft} left of ${hp.tempGranted} a rule grants. Damage spends these first.`
     : 'Temporary hit points. Damage spends these first, and they do not stack — the best one applies.')}
         ${fig('Nonlethal', hp.nonlethal || '—', 'You fall unconscious when nonlethal damage catches up with what is left.')}
-        ${fig('Dead at', signed(hp.deathAt), `−(Con ${hp.conScore}${hp.deathBonus ? ` + ${hp.deathBonus}` : ''}). You fall unconscious at 0.`,
+        ${fig('Dead at', minus(hp.deathAt), `−(Con ${hp.conScore}${hp.deathBonus ? ` + ${hp.deathBonus}` : ''}). You fall unconscious at 0.`,
     hp.dying ? 'bad' : '')}
       </div>
       <div class="pair" style="flex-wrap:wrap">
@@ -890,9 +879,7 @@ function dashPsionicsCard(model) {
 function dcShown(model, base) {
     const cs = model.conditionState;
     const d = cs.changed ? (cs.delta.dc || 0) : 0;
-    if (!d) return `${base ?? 0}`;
-    return `<strong class="adj ${d > 0 ? 'up' : ''}"
-      title="${esc(`Base ${base ?? 0} — with ${cs.sources} applied`)}">${(Number(base) || 0) + d}</strong>`;
+    return movedValue(d ? `${(Number(base) || 0) + d}` : `${base ?? 0}`, d, { base: `${base ?? 0}`, sources: cs.sources });
   }
 
   /**
@@ -914,11 +901,10 @@ function dashAbilitiesCard(model) {
       const movedScore = score !== baseScore;
       return `<div class="statline">
         <span class="label"><span class="abmark" data-ab="${k}">${ABILITY_LABELS[k]}</span>
-          <span class="dim">${movedScore
-    ? `<strong class="adj ${score > baseScore ? 'up' : ''}" title="${esc(`Base ${baseScore} — with ${cs.sources} applied`)}">${score}</strong>` : score}</span></span>
-        <span class="value rollpair">${delta
-    ? `<strong class="adj ${delta > 0 ? 'up' : ''}" title="${esc(`Base ${fmt(a.totalMod)} — with ${cs.sources} applied`)}">${fmt(mod)}</strong>`
-    : fmt(a.totalMod)}${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}</span>
+          <span class="dim">${movedValue(`${score}`, movedScore ? score - baseScore : 0, { base: `${baseScore}`, sources: cs.sources })}</span></span>
+        <span class="value rollpair">${movedValue(delta ? fmt(mod) : fmt(a.totalMod), delta, {
+    base: fmt(a.totalMod), sources: cs.sources,
+  })}${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}</span>
       </div>`;
     };
     return `<section class="panel">
@@ -965,9 +951,9 @@ function dashVeilsCard(model) {
     const dEss = cs.changed ? (cs.delta.essence || 0) : 0;
     const free = Number(a?.calc?.free) || 0;
     const total = Number(a?.calc?.total) || 0;
-    const pool = dEss
-      ? `<strong class="adj ${dEss > 0 ? 'up' : ''}" title="Base ${free} free of ${total} — with buffs; investment math stays on the Akashic tab">${free + dEss} free of ${total + dEss}</strong>`
-      : `${free} free of ${total}`;
+    const pool = movedValue(`${free + dEss} free of ${total + dEss}`, dEss, {
+      title: `${movedTitle(`${free} free of ${total}`, cs.sources)}; investment math stays on the Akashic tab`,
+    });
     return `<section class="panel">
       <h3>Veils shaped ${shaped.length ? `<span class="badge">${shaped.length}</span>` : ''}</h3>
       ${total || dEss ? lineHtml('Essence', pool, true) : ''}
@@ -1133,19 +1119,9 @@ function detailsPanel(model) {
    * without a second setting. Blank keeps the theme's own gold.
    */
 function characterColorRow(value) {
-    const hex = normalizeHex(value);
     return `<div class="tstyle-row charcolor">
       <span class="tlabel">Character colour</span>
-      <div class="swatches" role="group" aria-label="Character colour">
-        <button class="swatch none" data-charswatch data-hex=""
-          title="Theme default" aria-label="Theme default" aria-pressed="${hex ? 'false' : 'true'}"></button>
-        ${TRACKER_PALETTE.map(([h, name]) => `<button class="swatch" data-charswatch data-hex="${h}"
-          style="background:${h}" title="${esc(name)} ${h}" aria-label="${esc(name)}"
-          aria-pressed="${hex === h ? 'true' : 'false'}"></button>`).join('')}
-      </div>
-      <input class="mono hexin" data-charhex value="${esc(hex || '')}" placeholder="#rrggbb"
-        maxlength="7" aria-label="Character colour hex">
-      <input type="color" data-charpick value="${esc(hex || THEME_ACCENT.hex)}" aria-label="Character colour picker">
+      ${colorControl('character', value, { label: 'Character colour' })}
       <span class="hint">Tints the whole sheet, and is what an unstyled tracker or meter is drawn in.</span>
     </div>`;
   }
@@ -1223,9 +1199,9 @@ function languagesPanel(model) {
       .map((s) => String(s).trim()).filter(Boolean);
     const head = `<h3>Languages
         <span class="badge${spare < 0 ? ' err' : ''}" title="Known, against the slots Int, Linguistics and Extra grant">${slots.known} / ${slots.total}</span>
-        <button class="disclose" data-collapse="languages" data-collapse-to="${!shut}"
-          aria-expanded="${!shut}"
-          title="${shut ? 'Open the list to edit it' : 'Fold it down to one line'}">${shut ? '▸' : '▾'}</button>
+        ${foldButton(null, 'languages', {
+    open: !shut, cls: 'disclose', title: shut ? 'Open the list to edit it' : 'Fold it down to one line',
+  })}
       </h3>`;
     if (shut) {
       /*
@@ -1245,7 +1221,7 @@ function languagesPanel(model) {
         <div class="langcopy">
           <textarea class="ro" data-post="languages" readonly rows="1" spellcheck="false"
             placeholder="No languages yet." aria-label="Every language spoken">${esc(spoken.join(', '))}</textarea>
-          <button data-copy="languages" title="Copy the whole list">Copy</button>
+          <button data-view data-copy="languages" title="Copy the whole list">Copy</button>
         </div>
       </section>`;
     }
@@ -1266,7 +1242,7 @@ function languagesPanel(model) {
         ${langs.map((l, li) => `<span class="lang" data-rowdrop="identity.languages|${li}" data-rowaxis="x">
           <span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span>
           ${itemText('identity.languages', li, 'self', l, 'Language')}
-          <button class="danger tiny" data-remove="identity.languages|${li}" aria-label="Remove">×</button>
+          ${removeButton('identity.languages', li, { what: 'language', tiny: true })}
         </span>`).join('')}
       </div>
       <div class="pair" style="margin-top:8px">
@@ -1310,13 +1286,18 @@ function abilityScoresPanel(model) {
               : `<input type="number" value="${a.score}" data-set="abilities.${k}.score" aria-label="${ABILITY_LABELS[k]} score" title="${tip(k)}">`}
             <span class="mod">${fmt(a.mod)}</span>
             ${moved
-              ? `<span class="mod temp-score conditioned working" title="${tip(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}"${bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`)}>${cs.scores[k]}</span>`
+              ? movedValue(`${cs.scores[k]}`, cs.scores[k] - (a.workingScore ?? a.tempScore), {
+                tag: 'span',
+                cls: 'mod temp-score working',
+                title: workingTitle(model.breakdown(`${k}.temp`), `${a.workingScore ?? a.tempScore} before conditions`),
+                attrs: bd(`${k}.temp`, `${a.workingScore ?? a.tempScore} before conditions`).trim(),
+              })
               : built
                 ? `<span class="mod temp-score working" title="${tip(`${k}.temp`)}"${bd(`${k}.temp`)}>${a.tempScore}</span>`
                 : `<input class="temp-score" type="number" value="${a.tempScore}" data-set="abilities.${k}.tempScore" aria-label="${ABILITY_LABELS[k]} temporary score" title="${tip(`${k}.temp`)}">`}
-            <span class="mod temp temp-mod${moved ? ' conditioned' : ''}"
-              ${moved ? `title="${fmt(a.totalMod)} before conditions"` : ''}>${
-              moved ? fmt(a.totalMod + cs.deltas[k]) : fmt(a.totalMod)}</span>
+            ${movedValue(fmt(a.totalMod + (moved ? cs.deltas[k] : 0)), moved ? cs.deltas[k] : 0, {
+    tag: 'span', cls: 'mod temp temp-mod', title: moved ? `${fmt(a.totalMod)} before conditions` : '', keep: true,
+  })}
             ${rollButton(model, 'ability', k, `a ${ABILITY_LABELS[k]} check`, cs)}
           </div>`;
         }).join('')}
@@ -1534,11 +1515,11 @@ function attackPanel(model) {
           const altOf = ATTACK_MODES.find((m) => ALT_ATTACK_OF[m] === k);
           const altTotal = altOf ? attackModeTotal(c, altOf) ?? 0 : 0;
           const altStat = altOf ? (c.attack.modes[altOf]?.stat1 || '—') : '';
-          const caret = altOf ? `<button class="disclose" data-collapse="atk:${k}"
-            data-collapse-to="${!shut}"
-            aria-expanded="${!shut}" title="${esc(shut
-    ? `Show the alternate — ${altStat}, ${fmt(altTotal)}`
-    : 'Fold the alternate back in')}">${shut ? '▸' : '▾'}</button>` : '';
+          const caret = altOf ? foldButton(model, `atk:${k}`, {
+            open: !shut,
+            cls: 'disclose',
+            title: shut ? `Show the alternate — ${altStat}, ${fmt(altTotal)}` : 'Fold the alternate back in',
+          }) : '';
           // An alternate is the base attack with one ability swapped, so it
           // is already carrying the base's Other -- editing it here would be
           // editing the same number twice. The number is shown all the same,
@@ -1609,8 +1590,7 @@ function speedPanel(model) {
             title: 'A number, or a formula — e.g. floor(level / 3) * 10 for fast movement',
           })}</td>
           <td class="num total" data-stack="head">${slowed
-    ? `<strong class="adj ${adj.adjusted > adj.final ? 'up' : ''}"
-        title="${esc(`Base ${adj.final} ft. — with ${cs.sources} applied`)}">${adj.adjusted} ft.</strong>`
+    ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
     : `${Number(sp.final) || 0} ft.`}${(() => {
     // Under the total rather than beside it: the panel is one of the narrow
     // ones, and a badge on the same line pushes the column wider for every
@@ -1618,7 +1598,7 @@ function speedPanel(model) {
     const badge = forwardedBadge(model, sp.handle);
     return badge ? `<div class="speedfwd">${badge}</div>` : '';
   })()}</td>
-          <td class="tools quiet">${rowRemoveButton('identity.speeds', i, `Remove ${sp.type || 'this movement'}`)}</td>
+          <td class="tools quiet">${removeButton('identity.speeds', i, { what: sp.type || 'this movement', tiny: true })}</td>
         </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -1687,9 +1667,7 @@ function proficienciesPanel(model) {
            column is a dozen rows. -->
       <div class="profrow profwide">
         <span class="tlabel" title="Weapons named one by one — a race's or a class's list">
-          <button class="disclose" data-collapse="${wkey}" data-collapse-to="${!wshut}"
-            aria-expanded="${!wshut}"
-            title="${wshut ? 'Expand' : 'Collapse'}">${wshut ? '▸' : '▾'}</button>
+          ${foldButton(model, wkey, { open: !wshut, cls: 'disclose', title: wshut ? 'Expand' : 'Collapse' })}
           Specific weapons ${named.length ? `<span class="badge">${named.length}</span>` : ''}
         </span>
         <div class="profweaponbody">
@@ -1699,7 +1677,7 @@ function proficienciesPanel(model) {
     : `<div class="langlist proflist">
             ${weapons.map((w, i) => `<span class="lang">
               ${itemText('identity.proficiencies.weapons', i, 'self', w, 'Weapon')}
-              <button class="danger tiny" data-remove="identity.proficiencies.weapons|${i}" aria-label="Remove">×</button>
+              ${removeButton('identity.proficiencies.weapons', i, { what: 'weapon proficiency', tiny: true })}
             </span>`).join('')}
             ${addButton('identity.proficiencies.weapons', 'Add weapon', '')}
           </div>`}
@@ -1835,7 +1813,7 @@ function classesPanel(model, ctx) {
           <td class="num" data-label="Ranks" data-inline="spec">${itemNum('classes', i, 'skillRanks', x.skillRanks)}</td>
           <td data-label="Archetypes">${(Array.isArray(x.archetypeStack) && x.archetypeStack.length) ? `<span class="pills">${x.archetypeStack.map((a) => `
             <span class="pill" title="${esc(`${a.name} — an archetype added from an extension.${a.removedCells?.length ? ` Replaced ${[...new Set(a.removedCells.map((r) => r.name))].join(', ')}.` : ''}${a.touches?.length ? ` Touches: ${a.touches.join(', ')}.` : ''} × removes it and puts the class's own features back.`)}">
-              ${esc(a.name)}<button data-action="arch-remove" data-class="${esc(x.name)}" data-name="${esc(a.name)}" aria-label="Remove ${esc(a.name)}">×</button>
+              ${esc(a.name)}${removeAction('arch-remove', { class: x.name, name: a.name }, { what: a.name })}
             </span>`).join('')}</span>` : ''}${itemText('classes', i, 'archetypes', x.archetypes)}</td>
           <td class="mid" data-label="Systems">${sysButton(x, i)}</td>
           ${rowTools('classes', i)}
@@ -1973,9 +1951,9 @@ function hpBuild(model) {
       </div>
       <p class="hint">${parts.map(([n, label]) => `<span title="${esc(label)}">${n}</span>`).join(' + ')}
         = <strong>${base + other}</strong>
-        <button class="disclose" data-collapse="hp:build" data-collapse-to="${!shut}"
-          aria-expanded="${!shut}"
-          title="${shut ? 'Open the parts to edit them' : 'Fold the parts away'}">${shut ? '▸' : '▾'}</button></p>
+        ${foldButton(null, 'hp:build', {
+    open: !shut, cls: 'disclose', title: shut ? 'Open the parts to edit them' : 'Fold the parts away',
+  })}</p>
       ${shut ? '' : `${/* Three short figures across, then Misc on a row of its
             own: the first two hold a number or a small rule, while Misc is
             where everything the table gave you lands and is the one most
@@ -2002,7 +1980,6 @@ function hpBuild(model) {
 function hitPointsPanel(ctx, model) {
     const hp = model.hpState;
     const status = hp.dead ? 'dead' : hp.dying ? 'dying' : hp.unconscious ? 'unconscious' : null;
-    const signed = (n) => String(n).replace('-', '−');
     return `<section class="panel">
       <h3>Hit points
         ${hp.temp > 0 ? `<span class="badge">+${hp.temp} temp</span>` : ''}
@@ -2040,9 +2017,9 @@ function hitPointsPanel(ctx, model) {
           error: model.data.hp.deathBonusError,
           title: 'A number, or a formula — e.g. con.mod or floor(level / 2)',
         })}${forwardedBadge(model, 'hp.deathBonus')}`)}
-        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${signed(hp.deathAt)}</span>`)}
+        ${field('Dead at', `<span class="value${hp.dying ? ' bad' : ''}">${minus(hp.deathAt)}</span>`)}
       </div>
-      ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${signed(hp.deathAt)}.`
+      ${status ? `<p class="hint warn">${status === 'dead' ? `Dead — at or past ${minus(hp.deathAt)}.`
         : status === 'dying' ? `Dying — ${hp.current - hp.deathAt} point${hp.current - hp.deathAt === 1 ? '' : 's'} from death at ${signed(hp.deathAt)}.`
           : hp.nonlethal >= hp.effective && hp.current > 0 ? 'Unconscious — nonlethal damage has caught up with what is left.'
             : 'Unconscious.'}</p>` : ''}
@@ -2115,7 +2092,7 @@ function conditionsPanel(model) {
         <input type="checkbox" ${on ? 'checked' : ''} data-set="conditions.${esc(name)}" data-kind="flag" aria-label="${esc(label)}">
         <span class="cname">${esc(label)}</span>
         <span class="ceffect">${esc(short(info) || (info ? 'no numbers' : ''))}</span>
-        <button class="danger tiny" data-remove-condition="${esc(name)}" title="Remove this condition from the list" aria-label="Remove ${esc(label)}">×</button>
+        ${removeControl(`data-remove-condition="${esc(name)}"`, { what: label, title: 'Remove this condition from the list', tiny: true })}
       </label>`;
     };
 
@@ -2188,7 +2165,7 @@ function traitsPanel(model, ctx) {
                 <td data-stack="name">${itemText('traitSlots.additional', i, 'name', x.name, 'Trait')}</td>
                 <td data-label="Trait / effect"><span class="pair" style="width:100%">
                   ${prose(model, `data-item="traitSlots.additional|${i}|text"`, x.text, 1, 'grow')}
-                  <button class="danger" data-remove="traitSlots.additional|${i}" aria-label="Remove">×</button>
+                  ${removeButton('traitSlots.additional', i, { what: 'trait slot' })}
                 </span></td>
               </tr>`).join('')}
             </tbody>

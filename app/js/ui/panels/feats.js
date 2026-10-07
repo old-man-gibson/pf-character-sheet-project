@@ -141,12 +141,11 @@ function featGroupTitle(model, ctx, group, g) {
  */
 function removeGroupButton(group, g, armedKey) {
     if (!group.entries.length) {
-      return `<button class="danger" data-remove="featGroups|${g}" title="Remove group">×</button>`;
+      return rows.removeButton('featGroups', g, { what: 'group' });
     }
-    const key = `featGroups|${g}`;
     const n = group.entries.length;
     const what = `${String(group.name || '').trim() || 'this group'} and its ${n} feat${n === 1 ? '' : 's'}`;
-    return rows.armedButton(key, `data-remove-armed="${key}"`, what, armedKey);
+    return rows.removeButton('featGroups', g, { what, armed: armedKey });
 }
 
 /**
@@ -250,16 +249,16 @@ export function renderFeaturesPanel(model, ctx) {
         <div class="fieldgrid">
           ${fields.field('Path', fields.text('mythic.path', m.path))}
           ${fields.field(`Tier (auto: ${esc(m.computedTier ?? 0)})`, `<span class="pair">
-            <input type="number" value="${esc(m.tierOverride ?? '')}" placeholder="${esc(m.computedTier ?? 0)}"
-              data-set="mythic.tierOverride" data-kind="number-or-null" style="width:3.6rem"
-              title="Automatic from level; enter a number to override.">
+            ${fields.autoNum('data-set="mythic.tierOverride"', m.tierOverride, {
+    placeholder: m.computedTier ?? 0, width: '3.6rem', auto: true, label: 'Mythic tier',
+    title: 'Automatic from level; enter a number to override.',
+  })}
             <span class="value">→ ${esc(c.identity.mythicTier ?? 0)}</span></span>`)}
           ${fields.field(`Bonus HP / tier (path: ${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? '—'})`,
-    `<input type="number" class="autonum${m.bonusHpPerTier == null ? ' auto' : ''}"
-            value="${esc(m.bonusHpPerTier ?? '')}" placeholder="${MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0}"
-            data-set="mythic.bonusHpPerTier" data-kind="number-or-null" style="width:3.6rem"
-            title="From the path; enter a number to override it."
-            aria-label="Bonus hit points per mythic tier">`)}
+    fields.autoNum('data-set="mythic.bonusHpPerTier"', m.bonusHpPerTier, {
+      placeholder: MYTHIC_PATH_HP[String(m.path || '').trim()] ?? 0, width: '3.6rem', auto: true,
+      title: 'From the path; enter a number to override it.', label: 'Bonus hit points per mythic tier',
+    }))}
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
         </div>
         <p class="hint">

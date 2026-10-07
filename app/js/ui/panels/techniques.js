@@ -134,7 +134,7 @@ function techniqueExportBox(model, ctx, text, id) {
     return `<section class="panel span2">
       <h3>Discord application
         <span class="pair" style="margin-left:auto">
-          <button data-action="copy-text" data-copy="${id}">Copy for Discord</button>
+          <button data-view data-action="copy-text" data-copy="${id}">Copy for Discord</button>
         </span>
       </h3>
       <p class="hint">The workbook's application text — character, what is applied for, and the technique in a code block. Paste it as-is.</p>
@@ -180,7 +180,7 @@ export function renderTechniqueListPanel(model, ctx) {
             </label>
             <label class="pair"><span class="hint">Type</span>${fields.text(`techniques.catalogue.${idx}.subschool`, selected.subschool, 'e.g. Electric')}</label>
             <button data-action="tech-to-draft" data-name="${esc(selected.name)}" title="Copy this technique into AutoTechnique to edit it">Copy to AutoTechnique</button>
-            <button class="danger" data-action="tech-remove" data-name="${esc(selected.name)}" title="Remove from the list">×</button>` : ''}
+            ${rows.removeAction('tech-remove', { name: selected.name }, { what: selected.name, title: 'Remove from the list' })}` : ''}
         </div>
       </section>
       ${view ? `<section class="panel span2">
@@ -227,7 +227,6 @@ export function renderCookingPanel(model, ctx) {
     const dish = model.data.cooking || emptyDish();
     const view = model.cookingView();
     const tables = cookingTables();
-    const levelText = dish.level === null ? '' : dish.level;
     return `<div class="grid">
       <section class="panel span2">
         <h3>Iron Chef Dish Maker
@@ -244,8 +243,10 @@ export function renderCookingPanel(model, ctx) {
         </p>
         <div class="fieldgrid" style="margin-bottom:10px">
           <label class="fld"><span>Iron chef level</span>
-            <input type="number" min="1" max="20" value="${esc(levelText)}" data-set="cooking.level" data-kind="number-or-null"
-              placeholder="${Number(model.data.identity?.level) || ''}" title="Blank uses this character's level"></label>
+            ${fields.autoNum('data-set="cooking.level"', dish.level, {
+    placeholder: Number(model.data.identity?.level) || '', auto: true, extra: 'min="1" max="20"',
+    title: "Blank uses this character's level",
+  })}</label>
           <label class="fld"><span>Chef</span>${fields.text('cooking.chef', dish.chef, String(model.data.identity?.name || 'the chef'))}</label>
           <label class="fld"><span>Dish name</span>${fields.text('cooking.dishName', dish.dishName, 'optional')}</label>
         </div>
@@ -272,7 +273,7 @@ export function renderCookingPanel(model, ctx) {
       <section class="panel span2">
         <h3>For Discord
           <span class="pair" style="margin-left:auto">
-            <button data-action="copy-text" data-copy="cookExport">Copy for Discord</button>
+            <button data-view data-action="copy-text" data-copy="cookExport">Copy for Discord</button>
           </span>
         </h3>
         <textarea id="cookExport" class="exportbox" readonly rows="10" spellcheck="false">${esc(view.export)}</textarea>

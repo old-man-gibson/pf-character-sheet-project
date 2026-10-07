@@ -1767,7 +1767,7 @@ export function ladderDice(ladder, level) {
  * (model/corrections.js). The monster importer writes the whole list, because
  * what it writes is current.
  */
-export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range'];
+export const RULE_CORRECTIONS = ['attack-size-sign', 'poor-save-thirds', 'monster-crit-range', 'hp-meter-fill'];
 
 /** Size -> AC/attack modifier and its opposite for CMB/CMD. */
 export const SIZE_MODIFIERS = {

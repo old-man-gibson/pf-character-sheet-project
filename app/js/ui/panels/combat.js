@@ -15,7 +15,8 @@
  */
 import { esc } from '../html.js';
 import {
-  collapsible, addButton, editLine, exprField, itemCheck, itemSelect, itemText, line, lineHtml, rowTools,
+  collapsible, addButton, editLine, exprField, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
+  removeAction, removeButton, removeControl, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
@@ -140,7 +141,7 @@ function trainingSide(model, sideKey, side) {
           ${abilityField(model, list, ci, 'mod2', cls.mod2, '2nd score')}
           ${classLevelsField(model, list, ci, cls, `talents: ${cls.totalTalents ?? 0}`)}
           ${blendTicks([sideKey], sideKey, ci, null, !!String(cls.name || '').trim())}
-          <button class="danger" data-remove="${list}|${ci}" title="Remove class">×</button>
+          ${removeButton(list, ci, { what: 'class' })}
         </div>
         ${singleLadderTable(model, `${list}.${ci}.levels`, cls, spheres)}
       </div>`;
@@ -224,7 +225,7 @@ function customizationPanel(model, blocks) {
     `${block.className || 'This class'} ${block.classLevels}: ${block.setCount} customized weapon(s), `
     + `${block.talentCount} talent(s) on each`, 'style="width:4.2rem"')}
               <span class="hint">at level ${block.classLevels}</span></span></label>
-          <button class="danger" data-remove-customization="${bi}" title="Remove these ${esc(unit)}s">×</button>
+          ${removeControl(`data-remove-customization="${bi}"`, { what: `these ${unit}s` })}
         </div>
         ${block.spec?.text ? `<p class="hint">${esc(block.spec.text)}</p>` : ''}
         <div class="weaponsets">
@@ -290,9 +291,11 @@ function weaponSet(model, block, bi, si, set, list, spheres, Unit = 'Weapon') {
         + 'Widen it above, or add the archetype that does.')}"` : ''}>
             ${on ? itemSelect(talents, ri, 'sphere', row.sphere, spheres)
       : '<select disabled><option></option></select>'}</td>
-          <td class="tools">${on ? `<button class="disclose catfold${hasNote ? ' hasnote' : ''}" data-collapse="${esc(noteKey)}"
-            data-collapse-to="${open}" aria-expanded="${open}"
-            title="${open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note'}">${open ? '▾' : '▸'}</button>` : ''}</td>
+          <td class="tools">${on ? foldButton(model, noteKey, {
+    open,
+    cls: `disclose catfold${hasNote ? ' hasnote' : ''}`,
+    title: open ? 'Fold the note' : hasNote ? 'Show the note' : 'Add a note',
+  }) : ''}</td>
         </tr>${open ? `<tr class="wnote"><td colspan="3">${noteField(model,
     `data-item="${talents}|${ri}|notes" placeholder="What this talent does…"`, String(row.notes ?? ''))}</td></tr>` : ''}`;
   }).join('')}</tbody>
@@ -345,7 +348,7 @@ function magicTraditionPanel(model, m) {
     // is a drawback and a number the rest of the sheet can spend.
     const textRow = (lst, v, i) => `<div class="listrow">
       ${prose(model, `data-item="${lst}|${i}|self"`, v, 1, 'grow')}
-      <button class="danger" data-remove="${lst}|${i}" aria-label="Remove">×</button>
+      ${removeButton(lst, i, { what: 'drawback' })}
     </div>`;
     // A drawback is a few words, and a tradition can run to twenty of them, so
     // they sit as many to a row as the panel is wide enough for rather than
@@ -397,8 +400,11 @@ function boonSplit(m) {
         <p class="hint">Nothing to spend yet — a tradition grants a boon per drawback
           left after the drawback feats have bought theirs off.</p>`;
     }
+    // The pool's label closes the key only so that two pools of one size are
+    // two controls when focus is put back after a render; the handler reads
+    // the first three parts.
     const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
-      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}"
+      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
       aria-label="${esc(p.label)} — steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
 
     return `<h4 class="subhead">Granted, and how it was spent</h4>
@@ -624,7 +630,7 @@ export function renderTemplatePanel(model, ctx) {
         <h3>
           ${text(`templates.${ti}.name`, tp.name ?? tp.tab ?? 'Template', 'Template name')}
           ${tp.tab ? `<span class="badge">from “${esc(tp.tab)}”</span>` : ''}
-          <button class="danger" data-remove="templates|${ti}" title="Remove template" aria-label="Remove template">×</button>
+          ${removeButton('templates', ti, { what: 'template' })}
         </h3>
         <div class="fieldgrid two">
           ${field('Template link', text(`templates.${ti}.link`, tp.link))}
@@ -654,7 +660,7 @@ function templateGroup(ctx, model, ti, fi, f, total) {
         <span class="tools">
           <button data-move="${list}|${fi}|-1" title="Move up" aria-label="Move up" ${fi === 0 ? 'disabled' : ''}>↑</button>
           <button data-move="${list}|${fi}|1" title="Move down" aria-label="Move down" ${fi === total - 1 ? 'disabled' : ''}>↓</button>
-          <button class="danger" data-remove="${list}|${fi}" title="Remove ability" aria-label="Remove ability">×</button>
+          ${removeButton(list, fi, { what: 'ability' })}
         </span>
       </div>
       ${f.temporary ? `<p class="hint pending">Temporary — the import could not place these cells
@@ -696,7 +702,7 @@ function templateChild(ctx, model, ti, fi, ci, c, { first, last }) {
             aria-label="Move up" ${first ? 'disabled' : ''}>↑</button>
           <button data-tnudge="${ti}|${fi}|${ci}|1" title="Move down (into the ability below, at the bottom)"
             aria-label="Move down" ${last ? 'disabled' : ''}>↓</button>
-          <button class="danger" data-remove="${list}|${ci}" title="Remove sub-ability" aria-label="Remove sub-ability">×</button>
+          ${removeButton(list, ci, { what: 'sub-ability' })}
         </span>
       </div>
       ${itemArea(model, list, ci, 'text', c.text, 3)}
@@ -764,10 +770,10 @@ function templateTables(model, ctx, ti, path, f) {
             <option value="">Move to…</option>
             ${homes.map(([p, label]) => `<option value="${p}">${esc(label)}</option>`).join('')}
           </select>` : ''}
-          <button data-cells="${table}" aria-pressed="${raw}"
+          <button data-view data-cells="${table}" aria-pressed="${raw}"
             title="Show every cell as it is stored, merge markers and all">Cells</button>
           <button data-action="add-template-column" data-path="${table}">+ Column</button>
-          <button class="danger" data-remove="${path}.tables|${bi}" title="Remove table">Remove table</button>
+          ${removeButton(`${path}.tables`, bi, { what: 'table', text: 'Remove table' })}
         </div>
         ${raw ? `<p class="hint">Every cell, as stored. Type <code>-----</code> in a cell to
           merge it into the one on its left, or <code>|||||</code> to merge it into the one
@@ -777,8 +783,7 @@ function templateTables(model, ctx, ti, path, f) {
             ${(t.columns || []).map((c, ci) => (head && !head[ci] ? '' : `<th${head ? span(head[ci]) : ''}>
               <span class="colhead">
                 ${text(`${table}.columns.${ci}`, c, `Column ${ci + 1}`)}
-                <button class="danger" data-action="remove-template-column" data-path="${table}"
-                  data-col="${ci}" title="Remove column" aria-label="Remove column">×</button>
+                ${removeAction('remove-template-column', { path: table, col: ci }, { what: 'column' })}
               </span>
             </th>`)).join('')}
             <th class="tools"></th>

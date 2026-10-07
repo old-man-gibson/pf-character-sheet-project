@@ -11,9 +11,13 @@
  * which one is open, and the draft being typed into it.
  */
 import { esc } from '../html.js';
-import { PIP_LIMIT, round, pct } from '../format.js';
+import {
+  PIP_LIMIT, round, pct, signed,
+} from '../format.js';
 import { forwardedBadge } from '../badges.js';
 import { prose, renderedProse } from '../prose.js';
+import { removeControl } from '../rows.js';
+import { colorControl } from '../color-control.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
@@ -23,7 +27,7 @@ import { trackerForwardKey } from '../../model/util.js';
 /** What a casting pool's maximum is, said once for the row and the editor. */
 const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
 import {
-  THEME_ACCENT, THEME_NEGATIVE, TRACKER_PALETTE, barLayout, normalizeStyle, resolveZones,
+  THEME_ACCENT, THEME_NEGATIVE, barLayout, normalizeStyle, resolveZones,
   rgba, squareLayout, stepColor, trackBand, zoneAt,
 } from '../../tracker-style.js';
 
@@ -76,7 +80,7 @@ export function renderTrackersPanel(model, ctx) {
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
           <code>mod</code> <code>iterations</code> <code>dice</code> <code>tags</code>.
-          <button data-action="formulas" class="linkish"
+          <button data-view data-action="formulas" class="linkish"
             title="The guide, a scratchpad, and every value with its current number"
             >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
           value this character can read with what it is worth now.
@@ -123,7 +127,6 @@ export function trackerReading(t) {
   const min = Number(t.min) || 0;
   const draining = isDraining(t);
   const twoSided = min < 0;
-  const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
   // A draining tracker shows what is left of the span above its floor.
   const range = min === 0 ? `/ ${max}`
     : (draining && min > 0) ? `/ ${max - min}`
@@ -185,7 +188,7 @@ function trackerRow(model, ctx, t) {
         <span class="pool">${range}</span>
         <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${plusLabel}">+</button>
         <button data-tracker-edit="${esc(t.id)}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
-        ${protectedTracker ? '' : `<button class="danger" data-tracker-remove="${esc(t.id)}" aria-label="Remove ${esc(t.name)}">×</button>`}
+        ${protectedTracker ? '' : removeControl(`data-tracker-remove="${esc(t.id)}"`, { what: t.name })}
       </div>
     </div>`;
 }
@@ -215,7 +218,6 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   const cur = current ?? (Number(t.current) || 0);
   const twoSided = min < 0;
   const draining = !twoSided && style.fill === 'remaining';
-  const signed = (n) => (n > 0 ? `+${n}` : String(n).replace('-', '−'));
   const ctx = { min, max, style, resolvedZones };
   const pct = (f) => `${(f * 100).toFixed(3)}%`;
 
@@ -495,7 +497,7 @@ export function trackerStyleEditor(model, ctx, t) {
         <input type="color" data-zonepick="${i}" value="${esc(z.color)}" aria-label="Zone ${i + 1} colour">
         <input class="mono hexin" data-zone="${i}|color" value="${esc(z.color)}" aria-label="Zone ${i + 1} hex" maxlength="7">
         <input data-zone="${i}|label" placeholder="label (optional)" value="${esc(z.label)}" aria-label="Zone ${i + 1} label">
-        <button class="danger" data-zone-remove="${i}" aria-label="Remove zone ${i + 1}">×</button>
+        ${removeControl(`data-zone-remove="${i}"`, { what: `zone ${i + 1}` })}
       </div>`).join('');
 
   return `
@@ -532,20 +534,13 @@ export function trackerStyleEditor(model, ctx, t) {
       </div>`;
 }
 
-/** One colour control: a "none" swatch, the 16 suggestions, a hex field and a native picker. */
+/** One colour of the style, through the sheet's one colour control (ui/color-control.js). */
 function colorField(field, value, { label, none, noneCss }) {
-  const noneStyle = noneCss ? `background:${noneCss}` : '';
   return `<div class="tstyle-row">
       <span class="tlabel">${esc(label)}</span>
-      <div class="swatches" role="group" aria-label="${esc(label)}">
-        <button class="swatch none" data-swatch="${field}" data-hex="" style="${noneStyle}"
-          title="${esc(none)}" aria-label="${esc(none)}" aria-pressed="${value ? 'false' : 'true'}"></button>
-        ${TRACKER_PALETTE.map(([hex, name]) => `<button class="swatch" data-swatch="${field}" data-hex="${hex}"
-          style="background:${hex}" title="${esc(name)} ${hex}" aria-label="${esc(name)}"
-          aria-pressed="${value === hex ? 'true' : 'false'}"></button>`).join('')}
-      </div>
-      <input class="mono hexin" data-hexin="${field}" value="${esc(value || '')}" placeholder="#rrggbb" maxlength="7" aria-label="${esc(label)} hex">
-      <input type="color" data-hexpick="${field}" value="${esc(value || (noneCss ? THEME_ACCENT.hex : '#888888'))}" aria-label="${esc(label)} picker">
+      ${colorControl(`tstyle:${field}`, value, {
+    label, none, noneCss, fallback: noneCss ? THEME_ACCENT.hex : '#888888',
+  })}
     </div>`;
 }
 

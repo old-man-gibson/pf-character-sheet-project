@@ -9,6 +9,7 @@
  */
 import { esc, val } from '../ui/html.js';
 import { emptyMonster } from './block.js';
+import { markUndo } from '../model/undo.js';
 
 export { renderStatBlockPanel } from './panel.js';
 
@@ -53,6 +54,7 @@ export function handleAction(model, name) {
     return true;
   }
   if (name === 'monster-unblock') {
+    markUndo(model, 'Removed the monster block');
     delete model.data.monster;
     model.recompute();
     return true;

@@ -1511,24 +1511,29 @@ select.jumpto[hidden] { display: none; }
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   align-items: start;
 }
-.discipline {
+/* A maneuver discipline and a veil slot (Akashic, below) are the same card:
+   a bordered box whose head folds it to one line, a name that truncates and
+   a count beside it. One set of rules; each keeps only what is its own. */
+.discipline, .veilslot {
   border: 1px solid var(--cs-line); border-radius: 6px;
-  background: var(--cs-panel-2); overflow: hidden; min-width: 0;
+  background: var(--cs-panel-2); min-width: 0;
 }
-.discipline-head {
+.discipline { overflow: hidden; }
+.discipline-head, .veilslot-head {
   display: flex; align-items: center; gap: 4px;
   padding: 4px 4px 4px 2px; border-bottom: 1px solid var(--cs-line);
 }
-.discipline.is-collapsed .discipline-head { border-bottom: none; }
-.discipline-head .dname {
+.discipline.is-collapsed .discipline-head,
+.veilslot.is-collapsed .veilslot-head { border-bottom: none; }
+.discipline-head .dname, .veilslot-head .klabel {
   flex: 1 1 auto; min-width: 0; font-weight: 640; font-size: 0.8rem;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.discipline-head .dcount {
-  font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--cs-muted);
-  flex: none;
+.veilslot-head .klabel { font-size: 0.78rem; }
+.discipline-head .dcount, .veilslot-head .vcount {
+  flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--cs-muted);
 }
-.discipline-head .dcount i { font-style: normal; opacity: 0.5; margin: 0 1px; }
+.discipline-head .dcount i, .veilslot-head .vcount i { font-style: normal; opacity: 0.5; margin: 0 1px; }
 .disclose {
   flex: none; padding: 0 3px; min-width: 0; background: none; border: none;
   color: var(--cs-muted); font-size: 0.75rem; line-height: 1; cursor: pointer;
@@ -1740,26 +1745,10 @@ button.mname {
    floating over nothing. The count is pinned inline (see veilGridStyle),
    and the width floor still drops columns on a narrow window. */
 .veils { column-width: 250px; column-gap: 8px; }
-.veilslot {
-  border: 1px solid var(--cs-line); border-radius: 6px;
-  background: var(--cs-panel-2); min-width: 0;
-  break-inside: avoid; page-break-inside: avoid; margin: 0 0 8px;
-}
-.veilslot-head {
-  display: flex; align-items: center; gap: 4px;
-  padding: 4px 4px 4px 2px; border-bottom: 1px solid var(--cs-line);
-}
-.veilslot.is-collapsed .veilslot-head { border-bottom: none; }
+/* The card itself is the discipline's (Maneuvers, above); a slot is one of a
+   column of them. */
+.veilslot { break-inside: avoid; page-break-inside: avoid; margin: 0 0 8px; }
 .veilslot-head select { flex: 1 1 auto; min-width: 0; }
-.veilslot-head .klabel {
-  flex: 1 1 auto; min-width: 0; font-weight: 640; font-size: 0.78rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.veilslot-head .vcount {
-  flex: none; font-size: 0.72rem; font-variant-numeric: tabular-nums;
-  color: var(--cs-muted);
-}
-.veilslot-head .vcount i { font-style: normal; opacity: 0.5; margin: 0 1px; }
 .veilslot-body { padding: 5px; display: flex; flex-direction: column; gap: 6px; }
 /* A receptacle ticked off for the day: still there, dimmed. */
 .veilslot.is-off .veil { opacity: 0.55; }
@@ -2692,8 +2681,6 @@ table.speeds .speedfwd { margin-top: 2px; }
 .weaponset.drawn { border-color: var(--cs-good); box-shadow: inset 3px 0 0 var(--cs-good); }
 /* Past what this level customizes: kept, greyed, counting for nothing. */
 .weaponset.spare { opacity: 0.5; }
-.weaponhead { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
-.weaponhead input[type="text"] { flex: 1; min-width: 0; font-weight: 600; }
 .weaponhead .chk { flex: 0 0 auto; white-space: nowrap; font-size: 0.72rem; color: var(--cs-muted); }
 .weaponset.drawn .weaponhead .chk { color: var(--cs-good); }
 .weaponset table.talents col.sphere { width: 7.6rem; }
@@ -2958,8 +2945,10 @@ table.gear th.colhead { white-space: nowrap; }
   border: 1px solid var(--cs-line); border-radius: 6px;
   padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
 }
+/* The head of a weapon card here and of a customized weapon set on the
+   Martial tab: one rule for both (it was two, the second quietly winning). */
 .weaponhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 7px; }
-.weaponhead input[type="text"] { flex: 1; font-weight: 640; }
+.weaponhead input[type="text"] { flex: 1; min-width: 0; font-weight: 640; }
 
 /* Collapsed: the head is the summary -- name, attack, damage, proficiency --
    which is what a weapon you are not editing has to say. Hidden rather than
@@ -3731,7 +3720,6 @@ input[type="color"] {
 .notecard { margin-bottom: 10px; }
 .notecard h4 { margin: 0 0 4px; font-size: 0.8rem; color: var(--cs-accent); }
 .notecard p { margin: 0; font-size: 0.83rem; white-space: pre-wrap; }
-.chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
   font-size: 0.76rem; background: var(--cs-panel-2); border: 1px solid var(--cs-line);
   border-radius: 12px; padding: 2px 9px;
@@ -4078,7 +4066,10 @@ label.fld .xf { width: 100%; }
 .statline .value .now { display: inline; margin-left: 6px; }
 .bigstat.has-now .sub { margin-bottom: 0; }
 .bigstat .now { margin-top: 2px; }
-.ability .mod.conditioned { color: var(--cs-bad); }
+/* A score or modifier a condition or buff has moved: down red, up green,
+   over the temporary figure's own accent. */
+.ability .mod.adj { color: var(--cs-bad); }
+.ability .mod.adj.up { color: var(--cs-good); }
 
 /* Selectors in the saves and armour tables were squeezed to three letters;
    these give them a real width and let the tables scroll rather than crush. */

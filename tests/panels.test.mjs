@@ -43,7 +43,9 @@ import * as manager from '../app/js/ui/panels/manager.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel, skillRowIndices } from '../app/js/ui/panels/skills.js';
 import { prose, foldedProse, renderedProse } from '../app/js/ui/prose.js';
-import { normalizeStyle } from '../app/js/tracker-style.js';
+import * as statBlock from '../app/js/monster/panel.js';
+import { blankDraft, blankTrackerDraft, blankView } from '../app/js/ui/view-state.js';
+import { foldValue } from '../app/js/ui/folds.js';
 
 let pass = 0;
 let fail = 0;
@@ -57,32 +59,11 @@ const check = (label, actual, expected) => {
 const ok = (label, actual) => check(label, !!actual, true);
 
 /**
- * The view state each panel reads, as the element's own `#…Ctx()` builders
- * put it together -- the shut state of every fold, which is what a sheet
- * opens on.
+ * The view a sheet opens on -- every fold shut, nothing armed, nothing typed --
+ * from ui/view-state.js, which is where the element gets its own. The ⚙
+ * manager's tab lists are the element's to work out, so they are drawn empty.
  */
-const shutCtx = () => ({
-  overview: {
-    condPickerOpen: false, dashArrange: false, draft: {}, openBuff: null, openClassSystems: null,
-  },
-  combat: { showCells: new Set() },
-  gear: { draft: {}, openPosts: new Map(), showAllGear: false },
-  system: {
-    deckView: 'table', maneuverEdit: false, openManeuver: null, peek: [],
-  },
-  tracker: {
-    draft: {}, editDraft: null, editMeter: null, editTracker: null,
-  },
-  lore: { menuLists: new Map() },
-  admin: {
-    formulaDraft: '', formulaQuery: '', formulaValueQuery: '', formulaTargetQuery: '', formulaRefOpen: false, tab: 'formulas',
-  },
-  skills: { showAllSkills: false },
-  feats: { openCell: null },
-  manager: {
-    tabEntries: [], barEntries: [], draft: {}, armedRemove: null, extFilter: '', extSearch: '',
-  },
-});
+const shutCtx = () => ({ ...blankView(), tabEntries: [], barEntries: [] });
 
 /**
  * The same state with every fold open, which is the half the shut sweep can
@@ -103,79 +84,75 @@ const openCtx = (model) => {
   const disc = (d.maneuvers?.disciplines || [])[0];
   const firstManeuver = (disc?.entries || [])[0];
   return {
-    overview: {
-      condPickerOpen: true,
-      dashArrange: true,
-      draft: {},
-      openBuff: (d.buffs || []).length ? 0 : null,
-      openClassSystems: (d.classes || []).length ? 0 : null,
-    },
-    combat: { showCells: yes },
-    gear: { draft: {}, openPosts: yes, showAllGear: true },
-    system: {
-      deckView: 'deck',
-      maneuverEdit: true,
-      openManeuver: firstManeuver ? `maneuvers.disciplines.0|${firstManeuver.name}` : null,
-      peek: [],
-    },
-    tracker: {
-      draft: {},
-      // The element sets these two together, so the harness does too: an
-      // editor open on a tracker with no draft behind it is a state the sheet
-      // cannot be in, and failing on it would be the test's fault.
-      editDraft: {
-        name: '', maxFormula: '', minFormula: '', refresh: '', note: '', style: normalizeStyle(null),
-      },
-      editMeter: 'hp',
-      editTracker: (d.customTrackers || [])[0]?.id ?? null,
-    },
-    lore: { menuLists: new Map() },
-    admin: {
-      formulaDraft: '{= 1 + 1}', formulaQuery: 'a', formulaValueQuery: 'mod', formulaTargetQuery: 'will', formulaRefOpen: true, tab: 'audit',
-    },
-    skills: { showAllSkills: true },
-    feats: { openCell: 'mythic:0:effect' },
-    manager: {
-      tabEntries: [], barEntries: [], draft: { newSystem: 'New' },
-      armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null, extFilter: '', extSearch: 'a',
-    },
+    ...shutCtx(),
+    condPickerOpen: true,
+    dashArrange: true,
+    draft: { ...blankDraft(), newSystem: 'New' },
+    openBuff: (d.buffs || []).length ? 0 : null,
+    openClassSystems: (d.classes || []).length ? 0 : null,
+    showCells: yes,
+    openPosts: yes,
+    showAllGear: true,
+    openGear: (d.equipment?.gear || []).length ? 'equipment.gear|0' : null,
+    deckView: 'deck',
+    maneuverEdit: true,
+    openManeuver: firstManeuver ? `maneuvers.disciplines.0|${firstManeuver.name}` : null,
+    veilEdit: (d.akashic?.slots?.[0]?.veils || []).length ? 'akashic.slots.0.veils|0' : null,
+    // The element sets these two together, so the harness does too: an
+    // editor open on a tracker with no draft behind it is a state the sheet
+    // cannot be in, and failing on it would be the test's fault.
+    editDraft: blankTrackerDraft(),
+    editMeter: 'hp',
+    editTracker: (d.customTrackers || [])[0]?.id ?? null,
+    openText: yes,
+    formulaDraft: '{= 1 + 1}',
+    formulaQuery: 'a',
+    formulaValueQuery: 'mod',
+    formulaTargetQuery: 'will',
+    formulaRefOpen: true,
+    tab: 'audit',
+    showAllSkills: true,
+    openCell: 'mythic:0:effect',
+    armedRemove: (d.sheetTabs || []).length ? 'systab|0' : null,
+    extSearch: 'a',
   };
 };
 
 /** Every panel that is a module, by the name its tab wears. */
 const panelsWith = (CTX) => [
-  ['Overview', (m) => overview.renderOverviewPanel(m, CTX.overview)],
-  ['Overview (session dashboard)', (m) => overview.renderDashboardPanel(m, CTX.overview)],
-  ['Stats', (m) => renderStatsPanel(m, {})],
-  ['Skills', (m) => renderSkillsPanel(m, CTX.skills)],
+  ['Overview', (m) => overview.renderOverviewPanel(m, CTX)],
+  ['Overview (session dashboard)', (m) => overview.renderDashboardPanel(m, CTX)],
+  ['Stats', (m) => renderStatsPanel(m, CTX)],
+  ['Skills', (m) => renderSkillsPanel(m, CTX)],
   ['Martial Spheres', (m) => combat.renderMartialPanel(m)],
   ['Magic Spheres', (m) => combat.renderMagicPanel(m)],
   ['Guile Spheres', (m) => guile.renderGuilePanel(m)],
-  ['Template', (m) => combat.renderTemplatePanel(m, CTX.combat)],
-  ['Equipment', (m) => gear.renderGearPanel(m, CTX.gear)],
-  ['Crafting', (m) => gear.renderCraftingPanel(m, CTX.gear)],
-  ['Wealth', (m) => gear.wealthPanel(m, CTX.gear)],
-  ['Trackers', (m) => trackers.renderTrackersPanel(m, CTX.tracker)],
+  ['Template', (m) => combat.renderTemplatePanel(m, CTX)],
+  ['Equipment', (m) => gear.renderGearPanel(m, CTX)],
+  ['Crafting', (m) => gear.renderCraftingPanel(m, CTX)],
+  ['Wealth', (m) => gear.wealthPanel(m, CTX)],
+  ['Trackers', (m) => trackers.renderTrackersPanel(m, CTX)],
   ['Alternate Training', (m) => subsystems.altTrainingPanel(m)],
-  ['Akashic', (m) => subsystems.akashicPanel(m, CTX.system)],
-  ['Maneuvers', (m) => subsystems.maneuversPanel(m, CTX.system)],
+  ['Akashic', (m) => subsystems.akashicPanel(m, CTX)],
+  ['Maneuvers', (m) => subsystems.maneuversPanel(m, CTX)],
   ['Vancian', (m) => subsystems.vancianPanel(m)],
-  ['Psionics', (m) => subsystems.psionicsPanel(m, CTX.system)],
-  ['Cardcasting', (m) => subsystems.cardcastingPanel(m, CTX.system)],
+  ['Psionics', (m) => subsystems.psionicsPanel(m, CTX)],
+  ['Cardcasting', (m) => subsystems.cardcastingPanel(m, CTX)],
   ['Familiar', (m) => subsystems.companionPanel(m, 'familiar')],
   ['Animal Companion', (m) => subsystems.companionPanel(m, 'animalCompanion')],
   ['Eidolon', (m) => subsystems.companionPanel(m, 'eidolon')],
   ['Conjured Companion', (m) => subsystems.companionPanel(m, 'conjured')],
-  ['Progression', (m) => lore.renderProgressionPanel(m, CTX.lore)],
-  ['Lore', (m) => lore.renderLorePanel(m, CTX.lore)],
-  ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX.lore)],
-  ['Formulas', (m) => admin.renderFormulaPanel(m, CTX.admin)],
-  ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX.admin)],
-  ['Feats & Mythic', (m) => feats.renderFeaturesPanel(m, CTX.feats)],
-  ['Technique List', (m) => techniques.renderTechniqueListPanel(m, {})],
-  ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, {})],
-  ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, {})],
-  ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX.manager)],
+  ['Progression', (m) => lore.renderProgressionPanel(m, CTX)],
+  ['Lore', (m) => lore.renderLorePanel(m, CTX)],
+  ['Extras & Notes', (m) => lore.renderExtrasPanel(m, CTX)],
+  ['Formulas', (m) => admin.renderFormulaPanel(m, CTX)],
+  ['Formula Audit', (m) => admin.renderAuditPanel(m, CTX)],
+  ['Feats & Mythic', (m) => feats.renderFeaturesPanel(m, CTX)],
+  ['Technique List', (m) => techniques.renderTechniqueListPanel(m, CTX)],
+  ['AutoTechnique', (m) => techniques.renderAutoTechniquePanel(m, CTX)],
+  ['Auto-Cooking', (m) => techniques.renderCookingPanel(m, CTX)],
+  ['⚙ manager', (m) => manager.renderSystemManagerPanel(m, CTX)],
+  ['Stat Block', (m) => statBlock.renderStatBlockPanel(m, CTX)],
 ];
 
 const CTX = shutCtx();
@@ -201,6 +178,26 @@ function renders(who, name, draw, model) {
   if (/<span class="fwd[^"]*"(?! data-fwd=)/.test(html)) {
     fail++;
     console.log(`  FAIL ${who} — ${name} draws a forwarded-bonus badge by hand`);
+    return html;
+  }
+  // Every control that only changes how the sheet is read says so with
+  // data-view, which is what a published sheet keeps working; one without it
+  // is disabled for every reader. These attributes are view controls by what
+  // they do, so each must carry it.
+  const viewless = (html.match(/<button[^>]*>/g) || []).filter((b) => !/sdata-view[s=>]/.test(b)
+    && /sdata-(?:collapse|tab|gearopen|mopen|mclose|textopen|deck-view|copy|cfpeek|foldcell|ladderfocus|buildcol|veilcols|cells)=/.test(b));
+  if (viewless.length) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
+    return html;
+  }
+  // Every × is rows.removeControl's, which names what it takes; a remove
+  // button that says nothing to a screen reader was written by hand.
+  const bare = (html.match(/<button[^>]*\sdata-remove(?:-armed)?="[^"]*"[^>]*>/g) || [])
+    .filter((b) => !/aria-label="Remove/.test(b));
+  if (bare.length) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} draws a × by hand: ${bare[0].slice(0, 120)}`);
     return html;
   }
   pass++;
@@ -231,11 +228,12 @@ const sweep = (who, model) => {
    *
    * The state lives in uiPrefs rather than in ctx, and the keys are strings
    * chosen panel by panel, so there is no list of them to iterate. A `get`
-   * that answers yes to every key folds all of them at once without needing
-   * one.
+   * that answers "folded" for every key folds all of them at once without
+   * needing one -- which is `true` for most keys and `false` for the few
+   * that store *open* (ui/folds.js), or those few would be opened instead.
    */
   const realCollapsed = model.data.uiPrefs.collapsed;
-  model.data.uiPrefs.collapsed = new Proxy({}, { get: () => true });
+  model.data.uiPrefs.collapsed = new Proxy({}, { get: (_, key) => foldValue(String(key), false) });
   for (const [name, draw] of PANELS) {
     const html = renders(`${who} (folds shut)`, name, draw, model);
     // A fold that ate its own header is the failure this is here to catch.
@@ -509,7 +507,7 @@ console.log('\nthe dashboard lays out the cards a character uses, and the wallet
   });
   check('a magic class brings the casting card', overview.dashCardIds(c).includes('spheres'), true);
   c.set('wealth.currency', 'Gold & Glory');
-  const html = overview.renderOverviewPanel(c, CTX.overview);
+  const html = overview.renderOverviewPanel(c, CTX);
   check('the currency is escaped once', [html.includes('Gold &amp; Glory'), html.includes('&amp;amp;')], [true, false]);
 }
 
@@ -633,7 +631,7 @@ console.log('skill rows stay put while the player is on the tab');
 console.log('\nthe dashboard Offense card opens the same breakdowns as the Defense card');
 {
   const c = new Character(blankDocument({ name: 'Striker', level: 5 }));
-  const html = overview.renderDashboardPanel(c, CTX.overview);
+  const html = overview.renderDashboardPanel(c, CTX);
   const card = (title) => html.slice(html.indexOf(`<h3>${title}`), html.indexOf('</section>', html.indexOf(`<h3>${title}`)));
   const keys = (title) => (card(title).match(/data-bd="([a-z]+)"/g) || []).map((m) => m.slice(9, -1));
   check('Melee, Ranged, CMB and Init each open theirs', keys('Offense'), ['melee', 'ranged', 'cmb', 'initiative']);
@@ -663,8 +661,8 @@ console.log('\none way of asking twice: the worksheet and feature-group ×');
   // A feature group whose class has gone: the only kind with a ×.
   c.set('progression.classFeatures', { ...(c.data.progression?.classFeatures || {}), Ghost: { columns: ['Old'], byLevel: {}, rules: {}, optionsFrom: {} } });
   const sheet = { id: 'sys-0', key: 'sys:Scratch', label: 'Scratch', kind: 'system', index: 0, tab: c.data.sheetTabs[0] };
-  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX.manager, tabEntries: [sheet], armedRemove: armed });
-  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX.lore, armedRemove: armed });
+  const mgr = (armed) => manager.renderSystemManagerPanel(c, { ...CTX, tabEntries: [sheet], armedRemove: armed });
+  const prog = (armed) => lore.renderProgressionPanel(c, { ...CTX, armedRemove: armed });
   const sure = (html, key) => new RegExp(`data-arm="${key.replace('|', '\\|')}"[^>]*>sure\\?<`).test(html.replace(/\n\s*/g, ' '));
   check('the worksheet × arms, then says sure?', [sure(mgr(null), 'systab|0'), sure(mgr('systab|0'), 'systab|0')], [false, true]);
   check('so does the feature group ×', [sure(prog(null), 'cfgroup|Ghost'), sure(prog('cfgroup|Ghost'), 'cfgroup|Ghost')], [false, true]);
@@ -682,13 +680,13 @@ console.log('\ndeck manipulations fold to their names, and the hover says the ca
     { name: 'Loaded Hand', count: 1, group: 'General', note: '' },
     { name: 'Loaded Hand', count: 1, group: 'Cooldown', note: 'Mine: {= 2 + 2} cards' },
   ]);
-  const html = subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' });
+  const html = subsystems.cardcastingPanel(c, { ...CTX, deckView: 'deck' });
   check('shut by default: rows drawn, no rule text in them', [/class="manipname"/.test(html), /class="rule"/.test(html)], [true, false]);
   const pop = (i) => talentPopHtml(c, JSON.stringify({ k: 'manip', p: `cardcasting.manipulations|${i}` }));
   ok('an empty note shows the card', pop(0).includes('Hold one more card.'));
   check('a written note shows instead, worked out', [pop(1).includes('Mine: 4 cards'), pop(1).includes('Hold one more card.')], [true, false]);
   c.set('uiPrefs.collapsed', { 'manip:loaded hand': false });
-  ok('opened, the row shows the card and the note field', /class="rule"/.test(subsystems.cardcastingPanel(c, { ...CTX.system, deckView: 'deck' })));
+  ok('opened, the row shows the card and the note field', /class="rule"/.test(subsystems.cardcastingPanel(c, { ...CTX, deckView: 'deck' })));
   model.setCardcastingTables({ manipulations: kept });
 }
 
@@ -737,7 +735,7 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
   // Every panel, every view, with badges actually up -- `renders` fails on
   // one drawn by hand.
   sweep('a character with forwarded bonuses', c);
-  const html = overview.renderOverviewPanel(c, CTX.overview);
+  const html = overview.renderOverviewPanel(c, CTX);
   const mate = subsystems.companionPanel(c, 'eidolon');
 
   const dr = html.match(/<span class="fwd" data-fwd="defenses\.dr dr\.magic dr\.none" data-fwdx="([^"]*)"[^>]*>([^<]*)</);
@@ -767,6 +765,65 @@ console.log('\nevery gold badge is the one badge, and opens the same panel');
     `data-fwd="str\\.score" data-fwdx="\\{&quot;only&quot;:&quot;${only}&quot;\\}"[^>]*>([^<]*)<`))?.[1];
   check('the Stats tab splits a score\'s badge into its permanent and temporary halves',
     [half('permanent'), half('temporary')], ['+1', '+2']);
+}
+
+console.log('\nevery × is the one ×');
+{
+  const { removeAction, removeButton, removeControl, rowRemove } = await import('../app/js/ui/rows.js');
+  check('a row\'s ×', removeButton('buffs', 2, { what: 'buff' }),
+    '<button class="danger" data-remove="buffs|2" title="Remove buff" aria-label="Remove buff">×</button>');
+  check('with nothing named, the plain one the row tools always drew', removeButton('x', 0),
+    '<button class="danger" data-remove="x|0" title="Remove" aria-label="Remove">×</button>');
+  const ask = (armed) => removeButton('vancian.prepared', 1, { what: 'Fireball', armed });
+  check('one that asks twice is armed under list|i', ask(null).includes('data-remove-armed="vancian.prepared|1"'), true);
+  check('and says so on the hover', ask(null).includes('title="Remove Fireball — asks twice"'), true);
+  check('armed, it reads sure?', [ask('vancian.prepared|1').includes('class="danger armed"'),
+    ask('vancian.prepared|1').endsWith('>sure?</button>')], [true, true]);
+  check('another key armed leaves it a ×', ask('vancian.prepared|0').endsWith('>×</button>'), true);
+  check('an action carries its parameters, escaped, and the key it arms under',
+    removeAction('remove-cf-group', { class: 'Ghost "One"' }, { what: 'the group', arm: 'cfgroup|Ghost', armed: null })
+      .includes('data-action="remove-cf-group" data-class="Ghost &quot;One&quot;" data-arm="cfgroup|Ghost"'), true);
+  check('words in place of the ×', removeButton('psionics.classes', 0, { what: 'this class', text: 'Remove' }).endsWith('>Remove</button>'), true);
+  check('what it takes is escaped', removeControl('data-x="1"', { what: '<b>' }).includes('aria-label="Remove &lt;b&gt;"'), true);
+  check('a row\'s cell holds it', /^<td class="tools">\s*<button class="danger" data-remove="a\|1"/.test(rowRemove('a', 1, { what: 'row' })), true);
+
+  // The two removals that had no way back now leave one.
+  const { handleAction } = await import('../app/js/monster/sheet.js');
+  const m = new Character(blankDocument('monster-undo'));
+  handleAction(m, 'monster-block');
+  check('a stat block asks twice before it goes',
+    statBlock.renderStatBlockPanel(m, { ...CTX, armedRemove: 'monster-block' }).includes('>sure?</button>'), true);
+  handleAction(m, 'monster-unblock');
+  check('and leaves the way back', [m.data.monster, m.undoStack?.at(-1)?.label], [undefined, 'Removed the monster block']);
+}
+
+console.log('\nevery moved number is the one moved number');
+{
+  const { movedValue } = await import('../app/js/ui/rows.js');
+  check('down: red, with what it was and what moved it on the hover',
+    movedValue('12', -2, { base: '14', sources: 'Shaken' }),
+    '<strong class="adj" title="Base 14 — with Shaken applied">12</strong>');
+  check('up: green', movedValue('16', 2, { base: '14', sources: 'Bull' }).includes('class="adj up"'), true);
+  check('not moved: the figure as it is', movedValue('14', 0, { base: '14' }), '14');
+  check('kept: its own classes either way', movedValue('+3', 0, { tag: 'span', cls: 'mod', keep: true }), '<span class="mod">+3</span>');
+
+  // The Overview's ability panel marked a moved score in a class that was
+  // always red, so a buff that raised Strength showed as a loss.
+  const c = new Character(blankDocument({ name: 'Bull', level: 5 }));
+  c.data.buffs = [{ name: 'Bull', on: true, bonuses: [{ target: 'str', value: 4 }] }];
+  c.recompute();
+  const html = overview.renderOverviewPanel(c, CTX);
+  const str = html.slice(html.indexOf('data-ab="str"'), html.indexOf('data-ab="dex"'));
+  check('a buff that raises a score shows it raised', [/temp-score[^"]*adj up/.test(str), /temp-mod[^"]*adj up/.test(str)], [true, true]);
+  check('and nothing on the sheet wears the always-red class', /\bconditioned\b/.test(html), false);
+}
+
+console.log('\none way to write a sign');
+{
+  const { group, minus, signed } = await import('../app/js/ui/format.js');
+  check('plus, a true minus, and a bare zero', [signed(2), signed(-3), signed(0)], ['+2', '−3', '0']);
+  check('the size written its own way', signed(-1200, group), '−1,200');
+  check('a figure that carries no plus', [minus(-12), minus(4)], ['−12', '4']);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

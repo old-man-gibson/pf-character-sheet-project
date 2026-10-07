@@ -12,6 +12,7 @@
 import { ABILITIES, ABILITY_LABELS } from '../rules.js';
 
 import { esc } from '../html-escape.js';
+import { foldButton } from './folds.js';
 
 export { esc };
 
@@ -161,7 +162,7 @@ export function packText(ctx, key, className, html) {
   const open = !!ctx?.openText?.has(key);
   return `<div class="packwrap${open ? ' is-open' : ''}">
       <div class="${className} packtext">${html}</div>
-      <button class="packmore" data-textopen="${esc(key)}"
+      <button data-view class="packmore" data-textopen="${esc(key)}"
         aria-expanded="${open}">${open ? 'Show less' : 'Read all'}</button>
     </div>`;
 }
@@ -192,9 +193,9 @@ export function noteCell(proseHtml, details, collapsed = {}, path = '', ctx = nu
   return `<div class="notecell">
     <div class="noteline">
       <div class="notebox">${proseHtml}</div>
-      <button class="disclose catfold" data-collapse="${esc(key)}" data-collapse-to="${!shut}"
-        aria-expanded="${!shut}" title="${shut ? 'Show what the pack says' : 'Hide what the pack says'}"
-        >${shut ? '▸' : '▾'}</button>
+      ${foldButton(null, key, {
+    open: !shut, cls: 'disclose catfold', title: shut ? 'Show what the pack says' : 'Hide what the pack says',
+  })}
     </div>
     ${shut ? '' : face}
   </div>`;

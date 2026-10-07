@@ -16,7 +16,9 @@ import { collapsible } from '../rows.js';
 import { prose, renderedProse } from '../prose.js';
 import { systemExtrasPanel } from './subsystems.js';
 import { itemArea } from '../prose.js';
-import { addButton, armedButton, foldButton, isCollapsed, itemText, rowTools } from '../rows.js';
+import {
+  addButton, foldButton, isCollapsed, isOpen, itemText, removeAction, removeButton, rowTools,
+} from '../rows.js';
 import { same } from '../format.js';
 import { optionCatalogues } from '../../model.js';
 import { parseLevelRule, levelRuleLevels, summariseLevels } from '../../rules.js';
@@ -52,8 +54,7 @@ export function renderProgressionPanel(model, ctx) {
           <thead><tr>
             <th class="num">Lvl</th>
             ${tracks.map((t) => `<th><span class="pair">Track ${t + 1}
-              ${p.tracks > 1 ? `<button class="danger" data-action="remove-track" data-track="${t}"
-                title="Delete this track">×</button>` : ''}</span>
+              ${p.tracks > 1 ? removeAction('remove-track', { track: t }, { what: 'this track' }) : ''}</span>
               <select class="fillcol" data-filltrack="${t}"
                 title="Put one class on every level of this track"
                 aria-label="Fill track ${t + 1} with one class">
@@ -192,7 +193,7 @@ function classFeatureGroups(model, ctx) {
    * a ghost class is exactly the one nobody has open -- and a confirmation in
    * the body would be a click on a × that visibly did nothing. The second
    * click says what is going: a group is a column of the player's own writing
-   * per level, and History is the only way back.
+   * per level, which is worth asking about even though Ctrl+Z puts it back.
    */
 function groupDelete(name, g, armedKey) {
     const cols = g.columns.length;
@@ -201,8 +202,9 @@ function groupDelete(name, g, armedKey) {
     const what = cols ? `the ${name} group's ${cols} column${cols === 1 ? '' : 's'} and everything in ${cols === 1 ? 'it' : 'them'}`
       : `the empty ${name} group`;
     const key = `cfgroup|${name}`;
-    return armedButton(key, `data-action="remove-cf-group" data-class="${esc(name)}" data-arm="${esc(key)}"`,
-      what, armedKey, 'margin-left:auto');
+    return removeAction('remove-cf-group', { class: name }, {
+      what, arm: key, armed: armedKey, style: 'margin-left:auto',
+    });
   }
 
   /**
@@ -246,7 +248,7 @@ function packOffers(className, offers) {
 function classFeatureNotes(model, className) {
     const notes = model.classFeatureNotes(className);
     const offers = model.classFeatureNoteSuggestions(className);
-    const open = !model.data.uiPrefs.collapsed?.[`cfnotes-${className}`];
+    const open = isOpen(model, `cfnotes-${className}`);
     const charLevel = Number(model.data.identity.level) || 0;
     // Where the ladder says the feature arrives; a note it never names has
     // no level and no badge. Past that level the badge is just a fact; before
@@ -263,11 +265,15 @@ function classFeatureNotes(model, className) {
       };
     };
     return `<div class="cfnotes">
-      <button class="notehead" data-collapse="cfnotes-${esc(className)}"
-        data-collapse-to="${open}" aria-expanded="${open}">
+      ${foldButton(model, `cfnotes-${className}`, {
+    open,
+    cls: 'notehead',
+    title: '',
+    text: `
         ${open ? '▾' : '▸'} What they do <span class="badge">${notes.length}</span>
         ${offers.length ? `<span class="badge offer" title="Named on the ladder, not written up here, and carried by a pack you have switched on">${offers.length} in your packs</span>` : ''}
-      </button>
+      `,
+  })}
       ${open ? `${notes.length ? `<div class="cfnotelist" data-cfnotes="${esc(className)}">${notes.map((f, i) => {
         const when = arrival(f);
         const foldKey = `cfnote-${className}-${f.name}`;
@@ -275,15 +281,14 @@ function classFeatureNotes(model, className) {
         return `<div class="cfnote${shut ? ' collapsed' : ''}" data-cfndrop="${esc(JSON.stringify({ c: className, i }))}">
         <span class="pair">
           <span class="grip" data-cfngrip title="Drag to reorder">⠿</span>
-          ${foldButton(model, foldKey, shut)}
+          ${foldButton(model, foldKey, { open: !shut })}
           <input type="text" class="notename" value="${esc(f.name)}" spellcheck="false"
             data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'name' }))}">
           <select data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'type' }))}">
             ${['', 'Ex', 'Su', 'Sp'].map((t) => `<option value="${t}"${(f.type || '') === t ? ' selected' : ''}>${t || '—'}</option>`).join('')}
           </select>
           ${when.badge}
-          <button class="danger" data-action="remove-cfnote" data-class="${esc(className)}" data-index="${i}"
-            title="Remove ${esc(f.name)}">×</button>
+          ${removeAction('remove-cfnote', { class: className, index: i }, { what: f.name })}
         </span>
         ${shut ? '' : prose(model, `data-cfnote="${esc(JSON.stringify({ c: className, i, k: 'text' }))}"`, f.text, 3, 'grow', null, {
     inactive: when.future,
@@ -401,8 +406,7 @@ function featureColumnHead(model, className, col, index, tableKey) {
         <input type="text" class="grule ${rule.kind === 'error' ? 'bad' : ''}" value="${esc(grp.rule)}"
           placeholder="levels" data-cfgrule="${esc(className)}|${index}|${gi}"
           title="${esc(title)}" spellcheck="false">
-        <button class="danger" data-action="remove-rule-group" data-class="${esc(className)}"
-          data-col="${index}" data-group="${gi}" title="Remove this rule group">×</button>
+        ${removeAction('remove-rule-group', { class: className, col: index, group: gi }, { what: 'this rule group' })}
       </span>`;
     };
 
@@ -410,17 +414,21 @@ function featureColumnHead(model, className, col, index, tableKey) {
       <span class="pair">
         <input type="text" class="colname" value="${esc(col)}" data-cfcol="${esc(className)}|${index}">
         ${due ? `<span class="badge due" title="${due} level${due === 1 ? '' : 's'} reached with nothing filled in">${due}</span>` : ''}
-        ${groups.length ? foldButton(model, foldKey, folded) : ''}
-        <button class="danger" data-action="remove-cf-column" data-class="${esc(className)}" data-col="${index}" title="Remove column">×</button>
+        ${groups.length ? foldButton(model, foldKey, { open: !folded }) : ''}
+        ${removeAction('remove-cf-column', { class: className, col: index }, { what: 'column' })}
       </span>
       ${folded ? `<span class="rulechips">${groups.map(groupChip).join('')}</span>` : `${groups.map(groupRow).join('')}
       ${featureColumnMenu(model, className, col, index)}
       <button class="addgroup" data-action="add-rule-group" data-class="${esc(className)}" data-col="${index}"
         title="${groups.length ? 'Another schedule sharing this column'
     : 'Limit this column to certain levels — try "odd", "even", "2, +4"'}">${groups.length ? '+ rule group' : '+ level rule'}</button>
-      ${groups.length ? `<button class="addgroup" data-collapse="cftags-${esc(className)}-${esc(col)}"
-        data-collapse-to="${named}" aria-pressed="${named}"
-        title="${named ? 'Stop naming the rule group on each cell' : 'Name the rule group on each cell'}">${named ? '− names' : '+ names'}</button>` : ''}`}
+      ${groups.length ? foldButton(model, `cftags-${className}-${col}`, {
+    open: named,
+    cls: 'addgroup',
+    pressed: true,
+    title: named ? 'Stop naming the rule group on each cell' : 'Name the rule group on each cell',
+    text: named ? '− names' : '+ names',
+  }) : ''}`}
       <div class="col-resizer" data-resize-table="${esc(tableKey)}" data-resize-col="${esc(col)}"
         title="Drag to resize"></div>
     </th>`;
@@ -484,7 +492,7 @@ function featureField(ctx, model, className, col, row, field, multi) {
     // popover shows them as they stand and never a render old.
     const linked = model.classFeatureNotesInCell(className, field.text);
     const peek = linked.length
-      ? `<button type="button" class="cfpeek" data-cfpeek="${esc(JSON.stringify({ c: className, t: field.text }))}"
+      ? `<button data-view type="button" class="cfpeek" data-cfpeek="${esc(JSON.stringify({ c: className, t: field.text }))}"
           title="What ${esc(linked.map(({ note }) => note.name).join(', '))} does" aria-label="Show what this feature does">ⓘ</button>`
       : '';
 
@@ -586,7 +594,7 @@ export function renderExtrasPanel(model, ctx) {
         ${(c.notes || []).map((n, i) => `<div class="notecard editable">
           <div class="noterow">
             ${itemText('notes', i, 'title', n.title, 'Title')}
-            <button class="danger" data-remove="notes|${i}" aria-label="Remove note">×</button>
+            ${removeButton('notes', i, { what: 'note' })}
           </div>
           ${itemArea(model, 'notes', i, 'body', n.body, 4)}
         </div>`).join('') || '<p class="empty">No notes yet — jot anything here: links, ideas, things to ask the GM.</p>'}

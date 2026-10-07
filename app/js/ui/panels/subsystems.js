@@ -72,9 +72,9 @@ import { hasTokens } from '../../inline.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, itemCheck, itemNum,
+  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
-  lineHtml, miniStat, rowRemove, rowRemoveArmed, rowTools, working,
+  lineHtml, miniStat, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -398,7 +398,7 @@ function akashicSlotsPanel(model, ctx, a) {
     const list = 'akashic.slots';
     const slots = a.slots || [];
     const shaped = slots.filter((s) => (s.veils || []).length).length;
-    const showEmpty = !!model.data.uiPrefs?.collapsed?.['veil:showEmpty'];
+    const showEmpty = isOpen(model, 'veil:showEmpty', false);
     const shown = slots.map((s, i) => ({ s, i }))
       .filter(({ s }) => showEmpty || (s.veils || []).length);
 
@@ -408,11 +408,12 @@ function akashicSlotsPanel(model, ctx, a) {
         <span class="badge">${slots.length} slots</span>
         <span class="pair" style="margin-left:auto">
           ${veilColumnsControl(model)}
-          ${/* The second key that stores *shown* rather than *collapsed*. */''}
-          <button data-collapse="veil:showEmpty" data-collapse-to="${!showEmpty}"
-            aria-pressed="${showEmpty}">
-            ${showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`}
-          </button>
+          ${foldButton(model, 'veil:showEmpty', {
+    open: showEmpty,
+    pressed: true,
+    title: '',
+    text: showEmpty ? 'Hide empty slots' : `Show ${slots.length - shaped} empty`,
+  })}
           ${addButton(list, 'Add slot', {
     slot: '', bound: false, twinveil: false, veils: [],
   })}
@@ -440,7 +441,7 @@ function veilColumnsControl(model) {
     return `<span class="seg" role="group" aria-label="Veil cards per row">
       <span class="seg-k">Per row</span>
       ${[[0, 'Auto'], [3, '3'], [4, '4'], [5, '5']].map(([n, label]) => `
-        <button data-veilcols="${n}" aria-pressed="${cols === n}"
+        <button data-view data-veilcols="${n}" aria-pressed="${cols === n}"
           title="${n ? `${n} veil cards to a row` : 'As many as fit'}">${label}</button>`).join('')}
     </span>`;
   }
@@ -469,15 +470,14 @@ function veilSlotCard(model, ctx, a, list, s, i) {
     const veils = s.veils || [];
     const max = s.twinveil ? 2 : 1;
     const key = `veil:${s.slot || i}`;
-    const collapsed = !!model.data.uiPrefs?.collapsed?.[key];
+    const collapsed = isCollapsed(model, key);
 
     return `<div class="veilslot${collapsed ? ' is-collapsed' : ''}">
       <div class="veilslot-head">
-        <button class="disclose" data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
-          aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
+        ${foldButton(model, key, { open: !collapsed, cls: 'disclose', title: collapsed ? 'Expand' : 'Collapse' })}
         ${select(`${base}.slot`, s.slot, VEIL_SLOTS, null)}
         <span class="vcount" title="veils shaped / slots available">${veils.length}<i>/</i>${max}</span>
-        ${rowRemoveButton(list, i, `Remove the ${s.slot || 'unnamed'} slot`)}
+        ${removeButton(list, i, { what: `the ${s.slot || 'unnamed'} slot`, tiny: true })}
       </div>
       ${collapsed ? '' : `<div class="veilslot-body">
         <div class="veilflags">
@@ -586,7 +586,7 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
           aria-expanded="${writing}"
           title="${d.mine ? 'What you wrote about it — click to edit' : 'Write your own version; leave it empty and the pack’s text stands'}"
           aria-label="Edit ${esc(v.name || 'this veil')}">✎</button>` : ''}
-        ${rowRemoveButton(list, vi, 'Unshape this veil')}
+        ${removeButton(list, vi, { what: 'this veil', title: 'Unshape this veil', tiny: true })}
       </div>
       ${meta.length ? `<div class="veil-meta" title="from the pack that carries this veil">${meta.map((m) => esc(m)).join(' · ')}</div>` : ''}
       ${writing
@@ -595,13 +595,6 @@ function veilCard(model, ctx, list, v, vi, options = { id: '' }) {
       ${d.known && d.bindEffect && !writing
     ? `<div class="veil-bind"><b>Bind:</b> ${esc(d.bindEffect)}</div>` : ''}
     </div>`;
-  }
-
-
-/** The × from #rowRemove, without the surrounding table cell. */
-export function rowRemoveButton(list, i, title) {
-    return `<button class="danger tiny" data-remove="${list}|${i}"
-      title="${esc(title)}" aria-label="${esc(title)}">×</button>`;
   }
 
 
@@ -649,7 +642,7 @@ function akashicReceptaclesPanel(model, a) {
                 ${itemText(list, i, 'name', r.name, 'Receptacle')}
                 <label class="minifield" title="essence invested">Ess
                   ${itemNum(list, i, 'essence', r.essence)}</label>
-                ${rowRemoveButton(list, i, 'Remove this receptacle')}
+                ${removeButton(list, i, { what: 'this receptacle', tiny: true })}
               </div>
               ${ticks ? `<div class="veilflags">${check(`${list}.${i}.active`, r.active !== false, 'On')}</div>` : ''}
             </div>
@@ -731,16 +724,14 @@ function disciplineColumn(model, ctx, d, i) {
     const list = `maneuvers.disciplines.${i}`;
     const entries = d.entries || [];
     const levels = [...new Set(entries.map((e) => e.level))].sort((a, b) => a - b);
-    const collapsed = !!model.data.uiPrefs?.collapsed?.[`disc:${d.name}`];
+    const collapsed = isCollapsed(model, `disc:${d.name}`);
 
     return `<div class="discipline${collapsed ? ' is-collapsed' : ''}">
       <div class="discipline-head">
-        <button class="disclose" data-collapse="disc:${esc(d.name)}" data-collapse-to="${!collapsed}"
-          aria-expanded="${!collapsed}" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>
+        ${foldButton(model, `disc:${d.name}`, { open: !collapsed, cls: 'disclose', title: collapsed ? 'Expand' : 'Collapse' })}
         <span class="dname" title="${esc(d.name)}">${esc(d.name) || '<em>Unnamed</em>'}</span>
         <span class="dcount" title="readied maneuvers / stances">${d.knownManeuvers ?? 0}<i>/</i>${d.knownStances ?? 0}</span>
-        <button class="danger tiny" data-remove="maneuvers.disciplines|${i}"
-          title="Stop training ${esc(d.name)}" aria-label="Remove discipline">×</button>
+        ${removeButton('maneuvers.disciplines', i, { what: 'discipline', title: `Stop training ${d.name}`, tiny: true })}
       </div>
       ${collapsed ? '' : `<div class="discipline-body">
         ${d.inCatalogue === false && !entries.length
@@ -763,7 +754,7 @@ function disciplineColumn(model, ctx, d, i) {
                 <input type="checkbox" ${e.known ? 'checked' : ''}
                   data-ready="${list}|${esc(e.name)}" data-kind="bool"
                   aria-label="Ready ${esc(e.name)}"></label>
-              <button type="button" class="mname" data-mopen="${esc(key)}"
+              <button data-view type="button" class="mname" data-mopen="${esc(key)}"
                 ${wiki ? `data-wiki="${esc(wiki)}"` : ''} aria-expanded="${open}"
                 title="${esc(e.name)}${entry.type ? ` — ${esc(entry.type)}` : ''}
 
@@ -805,10 +796,10 @@ function maneuverCard(model, ctx, list, e, entry, own, key, wiki) {
         <span class="mdetail-sub">${esc(sub)}</span>
         ${wiki ? `<a class="mdetail-wiki" href="${esc(wiki)}" target="_blank" rel="noopener noreferrer"
           title="Its page on the wiki">wiki ↗</a>` : ''}
-        <button class="tiny" ${editing ? `data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
+        <button class="tiny" ${editing ? `data-view data-mopen="${esc(key)}"` : `data-medit="${esc(key)}"`}
           aria-pressed="${editing}"
           title="${editing ? 'Back to reading it' : 'Fill in what it does'}">${editing ? 'Done' : 'Edit'}</button>
-        <button class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
+        <button data-view class="tiny" data-mclose="${esc(key)}" title="Close" aria-label="Close ${esc(e.name)}">×</button>
       </div>
       ${editing ? maneuverCells(model, list, e, own) : maneuverRead(model, ctx, entry, key, e.known)}
     </div>`;
@@ -963,7 +954,7 @@ function castingClassPanel(model, c, i) {
         ${c.highestLevel ? `<span class="badge">up to level ${c.highestLevel}</span>` : ''}
         ${c.slotTypeUnknown ? '<span class="badge">no table</span>' : ''}
         <span class="pair" style="margin-left:auto">
-          <button class="danger" data-remove="vancian.classes|${i}">Remove</button>
+          ${removeButton('vancian.classes', i, { what: 'this casting class', text: 'Remove' })}
         </span>
       </h3>
       <div class="vcast">
@@ -1047,11 +1038,14 @@ function castingClassPanel(model, c, i) {
 function castingStatCell(model, c, i) {
   const base = `vancian.classes.${i}`;
   const key = `vstat2:${i}`;
-  const asked = !!model.data.uiPrefs?.collapsed?.[key];
+  const asked = isOpen(model, key, false);
   const shown = !!c.stat2 || asked;
-  const caret = c.stat2 ? '' : `<button class="disclose" data-collapse="${key}"
-      data-collapse-to="${!asked}" aria-expanded="${asked}"
-      title="${asked ? 'Hide the second stat' : 'Add a second casting stat'}">${asked ? '▾' : '▸'} second</button>`;
+  const caret = c.stat2 ? '' : foldButton(model, key, {
+    open: asked,
+    cls: 'disclose',
+    title: asked ? 'Hide the second stat' : 'Add a second casting stat',
+    text: `${asked ? '▾' : '▸'} second`,
+  });
   return `<div class="fld vstat">
       <span>Casting stat ${caret}</span>
       <span class="rollpair">${select(`${base}.stat`, c.stat, ABILITY_LABELS_LIST)}<span
@@ -1156,7 +1150,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
           <td class="spendcell">${r.name ? slotSpend({
     path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
   }) : ''}</td>
-          ${rowRemoveArmed(list, i, r.name || 'this row', ctx.armedRemove ?? null)}
+          ${rowRemove(list, i, { what: r.name || 'this row', armed: ctx.armedRemove ?? null })}
         </tr>`).join('')}
       </tbody></table>` : '<p class="empty">No spells listed.</p>'}
       <div style="margin-top:6px">${addButton(list, 'Add spell', {
@@ -1336,7 +1330,7 @@ function altTrainingPick(model, row, sphere = null) {
     // row's empty note from the catalogue as a talent cell would.
     const pickAttr = row.grants.some((g) => g.talent) ? ` data-altpick="${row.level}"` : '';
     const options = row.pick?.options;
-    if (options) return marked(select(path, row.text, options).replace('<select ', `<select${pickAttr} `));
+    if (options) return marked(select(path, row.text, options, '—', { attrs: pickAttr.trim() }));
     const placeholder = row.pick?.placeholder || row.auto || '—';
     const auto = !row.text.trim() && row.auto;
     // A pick carrying an inline formula shows what it comes to, the same way a
@@ -1466,7 +1460,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
         ${c.powerCount ? `<span class="badge">${c.powerCount} power${c.powerCount === 1 ? '' : 's'}</span>` : ''}
         ${c.curveTotal && !c.curveKnown ? '<span class="badge">no curve</span>' : ''}
         <span class="pair" style="margin-left:auto">
-          <button class="danger" data-remove="psionics.classes|${i}">Remove</button>
+          ${removeButton('psionics.classes', i, { what: 'this manifesting class', text: 'Remove' })}
         </span>
       </h3>
       <div class="fieldgrid">
@@ -1578,7 +1572,7 @@ function companionSwitchPanel(model, kind, list, active, label) {
     const many = list.length > 1;
     return `<section class="panel span2 companionswitch">
       <div class="statline" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-        ${many ? list.map((c, i) => `<button data-action="companion-select" data-kind="${kind}" data-index="${i}"
+        ${many ? list.map((c, i) => `<button data-view data-action="companion-select" data-kind="${kind}" data-index="${i}"
           aria-pressed="${i === active}" ${i === active ? 'class="primary"' : ''}
           title="Reads in formulas as ${esc(c.id)}.*">
           ${esc(String(c.name || '').trim() || `${label} ${i + 1}`)}
@@ -1586,8 +1580,12 @@ function companionSwitchPanel(model, kind, list, active, label) {
         </button>`).join('') : ''}
         <button data-action="companion-add" data-kind="${kind}"
           title="Another ${label.toLowerCase()} — its numbers get a name of their own (${kind}2.*, ${kind}3.*), so a rule can be aimed at each">+ Add ${esc(label.toLowerCase())}</button>
-        ${many ? `<button class="danger" data-remove="${kind}|${active}" style="margin-left:auto"
-          title="Remove the ${esc(label.toLowerCase())} being shown. Undo brings it back.">Remove this one</button>` : ''}
+        ${many ? removeButton(kind, active, {
+    what: `this ${label.toLowerCase()}`,
+    title: `Remove the ${label.toLowerCase()} being shown. Undo brings it back.`,
+    text: 'Remove this one',
+    style: 'margin-left:auto',
+  }) : ''}
       </div>
       ${many ? `<p class="hint">One of ${list.length}. Each reads and takes bonuses under the id on its chip —
         <code>${kind}.hp</code>, <code>${kind}2.hp</code> — and the id stays with the creature through a
@@ -2237,7 +2235,7 @@ function companionAbilityRow(model, cc, name) {
     return `<div class="gainrow">
       <div class="item statline">
         <span class="value">${esc(name)}</span>
-        ${foldButton(model, foldKey, shut)}
+        ${foldButton(model, foldKey, { open: !shut })}
       </div>
       ${shut ? '' : `<div class="gainbody">
         ${shared && !mine.trim() ? `<div class="hint packsays">
@@ -2309,8 +2307,8 @@ export function cardcastingPanel(model, ctx) {
     const t = p.table || {};
 
     const views = `<nav class="subtabs" role="tablist" aria-label="Cardcasting views">
-      <button role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
-      <button role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
+      <button data-view role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
+      <button data-view role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
     </nav>`;
     if (ctx.deckView === 'table') return `${views}<div class="grid">${tablePanel(model, ctx, p, k)}</div>`;
 
@@ -2712,6 +2710,8 @@ function deckManipulationsHead(model, p, k) {
       </h3>
       <div class="fieldgrid">
         ${field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
+    // Blank is automatic, so an emptied box has to store nothing rather than 0.
+    kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
     title: 'Blank: one per deck feat, plus one for Card Shark. Or a number, or a formula.',
   }))}
@@ -2767,7 +2767,7 @@ function deckManipulationsPanel(model, p, k) {
     const peek = shut ? ` data-tpop="${esc(JSON.stringify({ k: 'manip', p: `${list}|${i}` }))}"` : '';
     return `<tr class="${mc.unmet?.length || mc.overMax ? 'unmet' : ''}">
             <td class="what">
-              <span class="pair">${foldButton(model, foldKey, shut)}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
+              <span class="pair">${foldButton(model, foldKey, { open: !shut })}<span class="manipname"${peek}><input type="text" value="${esc(m.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
                 placeholder="Manipulation"${shut ? '' : ` title="${esc(tip)}"`}></span>
                 ${entry ? '' : '<span class="badge" title="Not in the catalogue">?</span>'}
                 ${(mc.unmet || []).map((r) => `<span class="badge err">needs ${esc(NEED[r])}</span>`).join('')}
@@ -2778,7 +2778,7 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
-              <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+              ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;
   }).join('')}
@@ -2839,7 +2839,7 @@ function landAttunedPanel(p, k) {
                   class="${attuned.has(s) ? 'primary' : ''}">${attuned.has(s) ? '✓' : '○'}</button>
                 ${itemText(list, i, 'self', s, 'Sphere')}
                 ${tally[s] ? `<span class="badge">${tally[s]}</span>` : ''}
-                <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+                ${removeButton(list, i, { what: 'sphere' })}
               </span>`).join('')}
               ${addButton(list, 'Add sphere', '')}
             </div>
@@ -2904,7 +2904,7 @@ function cardFace(model, list, i, card, p, { inDeck = true } = {}) {
         <span class="pair tools">
           ${inDeck ? `<button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
           <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>` : ''}
-          <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+          ${removeButton(list, i, { what: 'card' })}
         </span>
       </div>
     </article>`;

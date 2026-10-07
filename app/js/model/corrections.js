@@ -87,6 +87,19 @@ FIXES['monster-crit-range'] = (model) => {
   }
 };
 
+/*
+ * The hit-point meter was handed what was left rather than what was spent,
+ * so a style saved as Fill -- which any style saved for it carried, Fill
+ * being the default then -- showed a draining bar. Hit points are handed
+ * over as spent now and drain by default; a saved Fill becomes Drain, so the
+ * bar looks the way it did. A saved Drain had shown the damage taken, and
+ * now shows what it said it would.
+ */
+FIXES['hp-meter-fill'] = (model) => {
+  const style = model.data.meterStyles?.hp;
+  if (style && style.fill !== 'remaining') style.fill = 'remaining';
+};
+
 /**
  * Apply every fix the document was saved before, once. Runs inside the first
  * reconciliation, before any offset is measured.

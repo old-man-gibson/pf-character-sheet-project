@@ -8,12 +8,17 @@
  * string builders with no character and no element behind them.
  *
  * The few that need something more take it as an argument: `proseText` needs a
- * model to resolve tokens against, `rowRemoveArmed` needs to know which × is
+ * model to resolve tokens against, `removeButton` needs to know which × is
  * currently armed. That is the whole reason they are arguments rather than
  * fields: it is what lets the rest of this file be plain functions.
  */
 import { esc, val, EXPR_HINT, abKeyAttr, abAttr, picksAbility } from './html.js';
 import { hasTokens, plainTokens } from '../inline.js';
+import { foldButton, isCollapsed } from './folds.js';
+
+// The fold helpers live in ./folds.js, which the escape-only modules can
+// import without this one; panels have always reached them through here.
+export { foldButton, isCollapsed, isOpen } from './folds.js';
 import { fmt } from '../rules.js';
 
 /**
@@ -97,7 +102,7 @@ export function itemExpr(list, i, field, obj, { width = '5rem', placeholder = ''
  * carries its own answer, so the open list is coded too and the select can
  * repaint from the option it lands on.
  */
-export function itemSelect(list, i, field, value, options, blank = '—', abOf = null) {
+export function itemSelect(list, i, field, value, options, blank = '—', abOf = null, { kind = 'text', attrs = '' } = {}) {
   const pairs = options.map((o) => (Array.isArray(o) ? o : [o, o]));
   const ab = picksAbility(pairs.map(([v]) => v));
   if (value && !pairs.some(([v]) => String(v) === String(value))) {
@@ -108,14 +113,76 @@ export function itemSelect(list, i, field, value, options, blank = '—', abOf =
     .map(([v, label, hint]) => `<option value="${esc(v)}"${hint ? ` title="${esc(hint)}"` : ''}${mark(v)}${
       String(value ?? '') === String(v) ? ' selected' : ''}>${esc(label)}</option>`)
     .join('');
-  return `<select data-item="${list}|${i}|${field}" data-kind="text"${mark(value)}>${opts}</select>`;
+  return `<select data-item="${list}|${i}|${field}" data-kind="${kind}"${mark(value)}${attrs ? ` ${attrs}` : ''}>${opts}</select>`;
+}
+
+/**
+ * The sheet's one ×: a button that takes something off the character.
+ *
+ * Every removal is drawn here, whatever it removes and however its click is
+ * handled, so they all look and read alike: the danger colour, "Remove
+ * <what>" on hover and to a screen reader, and a × unless the button is a
+ * sentence ("Remove this one"). `attrs` say what it does: `data-remove` for a
+ * row (`removeButton` below), a `data-action` and its parameters for a
+ * removal with a model method of its own (`removeAction`), or one of the few
+ * attributes the element binds by name.
+ *
+ * Some ask twice: the first click arms the × -- it turns into "sure?" -- and
+ * the second carries it out. Every removal can be taken back with Ctrl+Z as
+ * well; asking is for the ones a stray click would take a lot with. `arm` is
+ * the key the button is armed under and `armed` the key armed now, the
+ * view's `armedRemove`. (Reset, which cannot be undone, has its own panel.)
+ *
+ * @param attrs        the attributes that say what the button does, as given
+ * @param opts.what    what goes, for the hover and the screen reader
+ * @param opts.title   a longer hover, where "Remove <what>" does not say enough
+ * @param opts.text    words in place of the ×
+ * @param opts.tiny    the small × that sits inside a cell beside a value
+ * @param opts.style   an inline style (a button pushed to the end of its row)
+ * @param opts.arm     the key it is armed under, when it asks twice
+ * @param opts.armed   the key armed now
+ */
+export function removeControl(attrs, {
+  what = '', title = '', text = '', tiny = false, style = '', arm = null, armed = null,
+} = {}) {
+  const label = what ? `Remove ${what}` : 'Remove';
+  const on = arm !== null && armed === arm;
+  const hover = on ? `Click again to remove${what ? ` ${what}` : ''}`
+    : `${title || label}${arm !== null ? ' — asks twice' : ''}`;
+  return `<button class="danger${tiny ? ' tiny' : ''}${on ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''} `
+    + `title="${esc(hover)}" aria-label="${esc(on ? `${label} — click again to confirm` : label)}">`
+    + `${on ? 'sure?' : text ? esc(text) : '×'}</button>`;
+}
+
+/**
+ * A row's ×: the element takes row `i` off `list` with `listRemove`, which
+ * keeps the way back. Pass `armed` -- the view's `armedRemove`, null and all
+ * -- for a row that asks twice; it is then armed under "list|i".
+ */
+export function removeButton(list, i, opts = {}) {
+  const key = `${list}|${i}`;
+  return 'armed' in opts
+    ? removeControl(`data-remove-armed="${key}"`, { ...opts, arm: key })
+    : removeControl(`data-remove="${key}"`, opts);
+}
+
+/**
+ * A × for a removal with its own model method: `data-action` and one
+ * `data-<name>` a parameter, escaped. With `opts.arm` it asks twice, and the
+ * element arms it under that key before it runs the action.
+ */
+export function removeAction(action, params = {}, opts = {}) {
+  const attrs = [`data-action="${action}"`,
+    ...Object.entries(params).map(([k, v]) => `data-${k}="${esc(v)}"`),
+    ...(opts.arm != null ? [`data-arm="${esc(opts.arm)}"`] : [])].join(' ');
+  return removeControl(attrs, opts);
 }
 
 export function rowTools(list, i) {
   return `<td class="tools">
       <button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
       <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+      ${removeButton(list, i)}
     </td>`;
 }
 
@@ -131,7 +198,7 @@ export function rowToolsDragged(list, i) {
   return `<td class="tools">
       <button class="cardmove" data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
       <button class="cardmove" data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
+      ${removeButton(list, i)}
     </td>`;
 }
 
@@ -152,35 +219,13 @@ export function rowToolsMoveOnly(list, i) {
 export const rowDrop = (list, i) => `data-rowdrop="${list}|${i}"`;
 export const rowGrip = () => '<td class="grip"><span class="grip" data-rowgrip title="Drag to reorder">&#10495;</span></td>';
 
-/** Tools for a list whose rows are summed, so their order means nothing. */
-export function rowRemove(list, i) {
-  return `<td class="tools">
-      <button class="danger" data-remove="${list}|${i}" title="Remove" aria-label="Remove">×</button>
-    </td>`;
-}
-
 /**
- * The sheet's one way of asking before a removal: a × that the first click
- * arms -- it turns into "sure?" -- and the second carries out. Every removal
- * can be taken back with Ctrl+Z as well; this is for the ones a stray click
- * would take a lot with. (Reset, which cannot be undone, has its own panel.)
- *
- * `attrs` is what the button does: `data-remove-armed="list|i"` for a row,
- * or a `data-action` with `data-arm="key"`, which the element runs on the
- * second click. `armedKey` is whichever one is armed, which the element holds.
+ * Tools for a list whose rows are summed, so their order means nothing: the
+ * row's ×, in its cell. `opts` are `removeButton`'s.
  */
-export function armedButton(key, attrs, what, armedKey = null, style = '') {
-  const armed = armedKey === key;
-  return `<button class="danger${armed ? ' armed' : ''}" ${attrs}${style ? ` style="${style}"` : ''}
-        title="${esc(armed ? `Click again to remove ${what}` : `Remove ${what} — asks twice`)}"
-        aria-label="${esc(`Remove ${what}${armed ? ' — click again to confirm' : ''}`)}">${armed ? 'sure?' : '×'}</button>`;
-}
-
-/** A row's two-click ×, in its tools cell. */
-export function rowRemoveArmed(list, i, what = 'row', armedKey = null) {
-  const key = `${list}|${i}`;
+export function rowRemove(list, i, opts = {}) {
   return `<td class="tools">
-      ${armedButton(key, `data-remove-armed="${key}"`, what, armedKey)}
+      ${removeButton(list, i, opts)}
     </td>`;
 }
 
@@ -236,10 +281,41 @@ export function working(model, key, shown) {
   return `<span class="working" title="${esc(workingTitle(b))}" data-bd="${esc(key)}">${shown}</span>`;
 }
 
+/** The sentence a moved number wears on its hover: what it was, and what moved it. */
+export const movedTitle = (base, sources) => `Base ${base} — with ${sources || 'buffs and conditions'} applied`;
+
 /**
- * A number a condition or buff has moved, shown in place of the base --
- * red down, green up, with the base and what moved it in the tooltip.
- * The plain base when nothing moved it; the same read on every view.
+ * A number a condition or a buff has moved, in place of the base: red when
+ * it went down, green when it went up, the base and what moved it on hover.
+ * Every moved figure on the sheet is drawn here, so the colours and the
+ * sentence are the same wherever one stands.
+ *
+ * @param shown         the figure as it now stands, as markup (escaped by the caller)
+ * @param delta         how far it moved; its sign picks the colour, 0 is not moved
+ * @param opts.base     the unmoved figure, as text, for the sentence
+ * @param opts.sources  what moved it ("2 conditions")
+ * @param opts.title    the hover in full, in place of the sentence
+ * @param opts.tag      'strong' for a figure read on its own, 'span' for one in a line
+ * @param opts.cls      classes it wears whether moved or not
+ * @param opts.attrs    anything else on the element, as given
+ * @param opts.keep     draw the element even when nothing moved it, for its
+ *                      classes or a title of its own
+ */
+export function movedValue(shown, delta, {
+  base = '', sources = '', title = null, tag = 'strong', cls = '', attrs = '', keep = false,
+} = {}) {
+  const d = Number(delta) || 0;
+  if (!d && !keep) return shown;
+  const classes = [cls, d ? 'adj' : '', d > 0 ? 'up' : ''].filter(Boolean).join(' ');
+  const hover = title ?? (d ? movedTitle(base, sources) : '');
+  return `<${tag}${classes ? ` class="${classes}"` : ''}${hover ? ` title="${esc(hover)}"` : ''}${
+    attrs ? ` ${attrs}` : ''}>${shown}</${tag}>`;
+}
+
+/**
+ * A number a condition or buff has moved, shown in place of the base, with
+ * its working on the hover and the breakdown panel's key. The plain base when
+ * nothing moved it; the same read on every view.
  *
  * @param model  when given, the tooltip carries the whole working -- every
  *               part the number is made of, in the order they are added. The
@@ -248,7 +324,7 @@ export function working(model, key, shown) {
  */
 export function movedInline(cs, key, base, format = fmt, model = null) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
-  const moved = d ? `Base ${format(base)} — with ${cs.sources} applied` : '';
+  const moved = d ? movedTitle(format(base), cs.sources) : '';
   const b = model ? model.breakdown(key) : null;
   const title = workingTitle(b, moved);
   /*
@@ -265,15 +341,12 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
    * goes by, and most but not all of those are in BREAKDOWNS; the ones that
    * are not keep the tooltip they have always had and gain nothing.
    */
-  const bd = b ? ` data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
+  const bd = b ? `data-bd="${esc(key)}"${moved ? ` data-bdx="${esc(moved)}"` : ''}` : '';
   // `format` makes text, and `base` can be a stored value no rule has
   // touched (flat-footed CMD is carried, not computed), so it is escaped.
-  if (!d) {
-    return title
-      ? `<span class="working" title="${esc(title)}"${bd}>${esc(format(base))}</span>`
-      : esc(format(base));
-  }
-  return `<strong class="adj working ${d > 0 ? 'up' : ''}" title="${esc(title)}"${bd}>${esc(format(cs.adjusted[key]))}</strong>`;
+  return movedValue(esc(format(d ? cs.adjusted[key] : base)), d, {
+    tag: d ? 'strong' : 'span', cls: title ? 'working' : '', title, attrs: bd, keep: !!title,
+  });
 }
 
 /**
@@ -288,8 +361,7 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
  */
 export function movedSub(cs, key, base, format = fmt) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
-  if (!d) return esc(format(base));
-  return `<span class="adj ${d > 0 ? 'up' : ''}" title="${esc(`Base ${format(base)} — with ${cs.sources} applied`)}">${esc(format(cs.adjusted[key]))}</span>`;
+  return movedValue(esc(format(d ? cs.adjusted[key] : base)), d, { tag: 'span', base: format(base), sources: cs.sources });
 }
 
 export function addButton(list, label, template) {
@@ -357,49 +429,15 @@ export function editLine(label, path, value) {
  * The collapsed state lives in uiPrefs and persists with the character.
  */
 export function collapsible(model, key, panelHtml, defaultCollapsed = false) {
-  // A panel that is setup rather than reading starts folded; see `isCollapsed`.
+  // A panel that is setup rather than reading starts folded; see `isOpen`.
   const collapsed = isCollapsed(model, key, defaultCollapsed);
-  const btn = foldButton(model, key, collapsed);
+  const btn = foldButton(model, key, { open: !collapsed });
   if (!collapsed) return panelHtml.replace('</h3>', ` ${btn}</h3>`);
   // Collapsed: keep only the header line of the panel.
   const m = panelHtml.match(/<h3[\s\S]*?<\/h3>/);
   const header = m ? m[0].replace('</h3>', ` ${btn}</h3>`) : btn;
   const cls = panelHtml.match(/class="panel([^"]*)"/)?.[1] ?? '';
   return `<section class="panel${cls} collapsed">${header}</section>`;
-}
-
-/**
- * Whether `key` is folded right now.
- *
- * Unset is not the same as open: a block may want to start folded in one
- * situation and open in another -- the practitioner table is controls while it
- * is what the character uses and reference once a class progression takes
- * over. So `fallback` decides only while nothing has been clicked, and the
- * moment it is, the choice is stored and outranks it.
- */
-export function isCollapsed(model, key, fallback = false) {
-  const stored = model.data.uiPrefs?.collapsed?.[key];
-  return stored === undefined ? !!fallback : !!stored;
-}
-
-/**
- * The ▾/▸ that folds whatever `key` names; the click lands on the element.
- *
- * `collapsedNow` is the state being drawn, which is the stored one unless a
- * caller has a default of its own. The click handler reads it back off
- * `aria-expanded` rather than off storage, so the first click on a block that
- * started folded by default opens it instead of storing the fold it is
- * already showing.
- */
-export function foldButton(model, key, collapsedNow = null) {
-  const collapsed = collapsedNow === null ? isCollapsed(model, key) : !!collapsedNow;
-  // Escaped because a fold key is not always ours: `progfeat-${name}` builds
-  // one out of a feature group's name, which is workbook text. The reader
-  // decodes character references in an attribute value, so `dataset.collapse`
-  // still hands the click handler back the exact key that went in.
-  return `<button data-collapse="${esc(key)}" data-collapse-to="${!collapsed}"
-    title="${collapsed ? 'Expand' : 'Minimize'}"
-    aria-expanded="${!collapsed}">${collapsed ? '▸' : '▾'}</button>`;
 }
 
 /**
@@ -414,7 +452,7 @@ export function collapsibleSub(model, key, title, bodyHtml, className = '', defa
   const collapsed = isCollapsed(model, key, defaultCollapsed);
   const classes = `${className}${className ? ' ' : ''}foldsub${collapsed ? ' collapsed' : ''}`;
   return `<div class="${classes}">
-    <h4 class="subhead">${title} ${foldButton(model, key, collapsed)}</h4>
+    <h4 class="subhead">${title} ${foldButton(model, key, { open: !collapsed })}</h4>
     ${collapsed ? '' : bodyHtml}
   </div>`;
 }

@@ -18,6 +18,7 @@ import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
 import { weaponProficient } from '../document.js';
 import { emit } from '../events.js';
+import { markUndo } from '../undo.js';
 import { forwarded } from '../scope.js';
 import { sphereTally, talentsIn } from '../spheres.js';
 import { slug } from '../util.js';
@@ -614,6 +615,8 @@ export function setGearColumns(model, list, kind, delta) {
   const now = gearColumnCount(rows, kind);
   const want = Math.max(GEAR_COLUMN_MIN[kind], now + (delta > 0 ? 1 : -1));
   if (want === now) return model;
+  // Narrowing takes the last cell off every row, whatever is written in it.
+  if (want < now) markUndo(model, `Removed ${kind === 'bonuses' ? 'a bonus' : 'an Other'} column`);
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
     if (!Array.isArray(row[kind])) row[kind] = [];
