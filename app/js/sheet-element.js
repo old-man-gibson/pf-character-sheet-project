@@ -4887,7 +4887,7 @@ export class CharacterSheetElement extends HTMLElement {
       select.addEventListener('change', () => {
         const [lvl, track] = select.dataset.prog.split('|');
         this.#model.setProgressionClass(Number(lvl), Number(track), select.value || null);
-        this.#render();
+        this.#rerender(select);
       });
     });
 
@@ -5035,7 +5035,7 @@ export class CharacterSheetElement extends HTMLElement {
       radio.addEventListener('change', () => {
         const [block, set] = radio.dataset.custactive.split('|');
         this.#model.setCustomizationActive(Number(block), Number(set));
-        this.#render();
+        this.#rerender(radio);
       });
     });
     // Widening or narrowing what a track may learn changes every sphere
@@ -5043,7 +5043,7 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-custspheres]').forEach((select) => {
       select.addEventListener('change', () => {
         this.#model.setCustomizationRule(Number(select.dataset.custspheres), 'spheres', select.value);
-        this.#render();
+        this.#rerender(select);
       });
     });
     // A counting rule opens and shuts rows under the panel it is typed in.
@@ -5051,7 +5051,7 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         const [block, key, field] = input.dataset.custrule.split('|');
         this.#model.setCustomizationRule(Number(block), key, field, input.value);
-        this.#render();
+        this.#rerender(input);
       });
     });
     root.querySelectorAll('[data-remove-customization]').forEach((button) => {
@@ -5386,7 +5386,7 @@ export class CharacterSheetElement extends HTMLElement {
       input.addEventListener('change', () => {
         const [ability, key] = input.dataset.build.split('|');
         this.#model.setBuild(ability, key, readControl(input));
-        this.#render();
+        this.#rerender(input);
       });
     });
 
@@ -5437,7 +5437,7 @@ export class CharacterSheetElement extends HTMLElement {
           const slotKey = kind === 'array' ? Number(slot) : slot;
           this.#model.setPick(kind, Number(level), slotKey, select.value || null);
         }
-        this.#render();
+        this.#rerender(select);
       });
     });
 
@@ -5500,7 +5500,7 @@ export class CharacterSheetElement extends HTMLElement {
         // A draining tracker's number is what is left; the model stores spent.
         const current = this.#isDraining(t) ? (Number(t.max) || 0) - typed : typed;
         this.#model.updateTracker(t.id, { current });
-        this.#render();
+        this.#rerender(input);
       });
     });
 

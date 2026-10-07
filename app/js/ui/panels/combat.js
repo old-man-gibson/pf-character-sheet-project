@@ -400,8 +400,11 @@ function boonSplit(m) {
         <p class="hint">Nothing to spend yet — a tradition grants a boon per drawback
           left after the drawback feats have bought theirs off.</p>`;
     }
+    // The pool's label closes the key only so that two pools of one size are
+    // two controls when focus is put back after a render; the handler reads
+    // the first three parts.
     const steps = (p, value, kind) => `<input type="number" min="0" max="${p.steps}"
-      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}"
+      value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
       aria-label="${esc(p.label)} — steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
 
     return `<h4 class="subhead">Granted, and how it was spent</h4>
