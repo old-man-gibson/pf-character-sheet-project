@@ -11,7 +11,7 @@
  */
 import { ABILITIES, ABILITY_LABELS } from '../rules.js';
 
-import { esc } from '../esc.js';
+import { esc } from '../html-escape.js';
 
 export { esc };
 
