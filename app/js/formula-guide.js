@@ -30,7 +30,7 @@ import {
   FUNCTION_HELP, OPERATOR_HELP, VALUE_GUIDE, PLACES_GUIDE, TOKEN_FORMS, CONTEXTUAL_VALUES,
 } from './formula-format.js';
 
-import { esc } from './esc.js';
+import { esc } from './html-escape.js';
 
 /* ------------------------------------------------------------------ *
  * Grouping the character's values
