@@ -546,6 +546,15 @@ export function essenceScope(model) {
 let VEIL_CATALOGUE = { veils: [] };
 
 /**
+ * The catalogue by name, as veilEntry matches it, built on the first lookup
+ * after the catalogue is set. A full veil catalogue is long and the training
+ * tabs look veils up by name on every recompute, so scanning the whole list
+ * per lookup was a fair part of what a keystroke cost. Where two spellings
+ * match, the first is kept, as the scan found it.
+ */
+let VEIL_BY_NAME = null;
+
+/**
  * One chakra however it is written: the slot picker says "Wrist" where a
  * page says "Wrists", so case and a trailing plural s are not part of it.
  */
@@ -589,6 +598,7 @@ export function setVeilCatalogue(doc) {
       };
     }).filter((v) => v.name),
   };
+  VEIL_BY_NAME = null;
 }
 
 export function veilCatalogue() {
@@ -599,7 +609,14 @@ export function veilCatalogue() {
 export function veilEntry(name) {
   const key = normalizeName(name);
   if (!key) return null;
-  return VEIL_CATALOGUE.veils.find((v) => normalizeName(v.name) === key) || null;
+  if (!VEIL_BY_NAME) {
+    VEIL_BY_NAME = new Map();
+    for (const v of VEIL_CATALOGUE.veils) {
+      const k = normalizeName(v.name);
+      if (!VEIL_BY_NAME.has(k)) VEIL_BY_NAME.set(k, v);
+    }
+  }
+  return VEIL_BY_NAME.get(key) || null;
 }
 
 /**
