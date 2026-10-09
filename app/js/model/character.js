@@ -75,7 +75,7 @@ import {
 } from './reconcile.js';
 import {
   characterScope, forwardTargets, forwarded, forwardedInto, forwardedSplit, forwardsEarly,
-  proseSources, renderProse, resolveInlineNames, scopeNames, trackerScope,
+  proseSources, renderProse, resolveInlineNames, scopeNames, secondPass, trackerScope,
 } from './scope.js';
 import {
   addCustomization, applyBudget, blendedClasses, casterLevel, checkCustomizationBases, customizationFor,
@@ -112,7 +112,7 @@ import {
   tableShuffleDiscard, tableSpend, tableStart, tableTap, tableTrigger,
 } from './subsystems/cardcasting.js';
 import {
-  addCompanion, companionDamage, companionHeal, companionMaster, companionRest,
+  addCompanion, companionDamage, companionHeal, companionMaster, companionOpenSlot, companionRest,
   recomputeCompanions,
 } from './subsystems/companions.js';
 import { cookingView } from './subsystems/cooking.js';
@@ -215,10 +215,13 @@ export class Character {
    * bonuses are read off it, and it is worked out again with them in hand.
    *
    * Never a third time. The second pass reuses the amounts the first one
-   * arrived at rather than working them out afresh, so a bonus can never chase
-   * its own destination round a loop and settle somewhere that depends on
-   * where it started. A character with no forwarded bonuses, or none aimed
-   * earlier than the skills, costs exactly what it always did.
+   * arrived at for the bonuses aimed at those early stats, rather than working
+   * them out afresh, so a bonus can never chase its own destination round a
+   * loop and settle somewhere that depends on where it started. A bonus aimed
+   * only at something totalled after them -- a skill, a companion -- is worked
+   * out again on the second pass, so that it reads the early stats with their
+   * bonuses in. A character with no forwarded bonuses, or none aimed earlier
+   * than the skills, costs exactly what it always did.
    */
   recompute() {
     this.contributions = null;
@@ -328,13 +331,25 @@ export class Character {
     // and added again on the first edit, so it climbed by its own size every
     // session. A bonus now reads this pass's figure from before any bonus
     // applies, which is what a bonus reads everywhere else on the sheet.
-    this.#recomputeReadable();
+    //
+    // On the second pass the bonuses aimed at the companions, the skills and
+    // the rest of what is totalled after the early stats are worked out again
+    // (see resolveInlineNames). The companions are the one such thing already
+    // worked out by now, so they are worked out without their own bonuses
+    // first -- a bonus reading the creature it lands on must not count itself
+    // -- and with them straight after, before anything else reads them.
+    const again = this.contributions ? secondPass(this) : {};
+    this.#recomputeReadable({ bareCompanions: !!again.companions });
 
     // Inline names ({skill_familiarity = …}) resolve before skill misc so a
     // misc formula can read them. Their scope has no skill totals yet, which
     // is intended: skills may read names, names may not read skills, so no
     // cycle can form between the two.
-    this.#resolveInlineNames();
+    this.#resolveInlineNames({ late: !!again.late });
+    if (again.companions) {
+      this.#recomputeCompanions();
+      if (again.names) this.#resolveInlineNames();
+    }
     // The defence boxes are both a source of forwarded bonuses and a
     // destination for them, so they settle here: after the prose has been
     // read, and before the skills, which may read `dr.fire` or `immune.sleep`
@@ -413,9 +428,10 @@ export class Character {
   /**
    * The sub-systems a formula may read, before the prose (see #computePass),
    * in the order they read one another. Each is worked out again after the
-   * prose, so what they show carries the bonuses it forwards.
+   * prose, so what they show carries the bonuses it forwards. `bareCompanions`
+   * leaves the companions without theirs.
    */
-  #recomputeReadable() {
+  #recomputeReadable({ bareCompanions = false } = {}) {
     this.#recomputeSphereRows();
     this.#recomputeGuileSpheres();
     this.#recomputeAkashic();
@@ -423,7 +439,7 @@ export class Character {
     this.#recomputeVancian();
     this.#recomputePsionics();
     this.#recomputeCardcasting();
-    this.#recomputeCompanions();
+    this.#recomputeCompanions({ bare: bareCompanions });
   }
 
   /* ---------------- delegations ---------------- */
@@ -768,6 +784,8 @@ export class Character {
   #companionMaster(...a) { return companionMaster(this, ...a); }
   #recomputeCompanions(...a) { return recomputeCompanions(this, ...a); }
   addCompanion(...a) { return addCompanion(this, ...a); }
+  // edit.js setItem: the row a write past a list's end grows it by.
+  openSlotRow(...a) { return companionOpenSlot(this, ...a); }
   companionDamage(kind, i, n) { return this.play(`${this.#companionName(kind, i)}: ${points(n)} damage`, () => companionDamage(this, kind, i, n)); }
   companionHeal(kind, i, n) { return this.play(`${this.#companionName(kind, i)}: heal ${points(n)}`, () => companionHeal(this, kind, i, n)); }
   companionRest(kind, i) { return this.play(`${this.#companionName(kind, i)}: rest`, () => companionRest(this, kind, i)); }

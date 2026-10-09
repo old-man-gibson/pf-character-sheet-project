@@ -16,7 +16,7 @@
 import { esc } from '../html.js';
 import {
   collapsible, addButton, editLine, exprField, foldButton, itemCheck, itemSelect, itemText, line, lineHtml,
-  removeAction, removeButton, removeControl, rowTools,
+  proseList, removeAction, removeButton, removeControl, rowTools,
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
@@ -344,18 +344,7 @@ function magicTraditionPanel(model, m) {
     const tr = m.tradition || {};
     const dlist = 'training.magic.tradition.drawbacks';
     const blist = 'training.magic.tradition.boughtOff';
-    // Drawbacks read {…} like prose: "Expensive Locus ({locus = 22500} mana)"
-    // is a drawback and a number the rest of the sheet can spend.
-    const textRow = (lst, v, i) => `<div class="listrow">
-      ${prose(model, `data-item="${lst}|${i}|self"`, v, 1, 'grow')}
-      ${removeButton(lst, i, { what: 'drawback' })}
-    </div>`;
-    // A drawback is a few words, and a tradition can run to twenty of them, so
-    // they sit as many to a row as the panel is wide enough for rather than
-    // one per line down a column of mostly empty space.
-    const textList = (lst, items) => (items.length
-      ? `<div class="listgrid">${items.map((d, i) => textRow(lst, d, i)).join('')}</div>`
-      : '<p class="empty">None.</p>');
+    const textList = (lst, items) => proseList(model, lst, items, 'drawback');
     return `<section class="panel wide">
       <h3>Casting tradition</h3>
       <label class="fld"><span>Tradition</span>${text('training.magic.tradition.name', tr.name)}</label>

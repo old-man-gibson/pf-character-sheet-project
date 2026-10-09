@@ -2269,6 +2269,17 @@ table.build td.mid .hint { margin-left: 3px; }
 /* The two ability tables on Stats: every column one width -- a typed box, a
    worked-out number, the Attuned tick -- under a short header whose full name
    is on hover, so the columns line up and take no more room than a number. */
+/* A companion's saves: every column shrunk to what it holds (the 1% is how
+   an auto-layout table is told to), and the rest of the width to Misc, whose
+   box takes a formula and wants the room to show one. */
+.tablewrap > table.build.compsaves { min-width: 0; }
+table.build.compsaves th[scope="row"], table.build.compsaves .good,
+table.build.compsaves .num { width: 1%; white-space: nowrap; }
+table.build.compsaves .good { text-align: center; }
+table.build.compsaves .miscbox { display: flex; align-items: center; gap: 4px; }
+table.build.compsaves .miscbox > .xf { flex: 1 1 auto; min-width: 3rem; }
+/* A feat past a conjured companion's last slot: kept, and said to be over. */
+table.build tr.over td[data-stack="head"] input::placeholder { color: var(--cs-bad); opacity: 1; }
 table.build.statcols { width: auto; }
 table.build.statcols th.num, table.build.statcols td.num, table.build.statcols td.mid {
   width: 3.2rem; min-width: 3.2rem; text-align: center;
@@ -2368,6 +2379,9 @@ label.fld { display: flex; flex-direction: column; gap: 3px; }
 label.fld > span {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
 }
+/* A formula box is a span too, and a field's value rather than its label:
+   "40 ft." worked out from a formula is not to be set as "40 FT.". */
+label.fld > span.xf { font-size: inherit; text-transform: none; letter-spacing: normal; color: inherit; }
 label.fld.tall textarea { min-height: 58px; }
 /* A Vancian block's settings are six short picks, each only as wide as what
    it holds. The first row sets the width: the stat, preparation and source

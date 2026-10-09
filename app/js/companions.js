@@ -24,10 +24,11 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, abilityMod, abilityOf, recipePart, recipePlain, saveBase,
-  sizeModifiers, skillTotal, sumParts,
+  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, recipePart, recipePlain,
+  saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
-import { isPinned, normalizeName, slug } from './model/util.js';
+import { evaluateFormula, parse } from './formula.js';
+import { getPath, isPinned, normalizeName, setPath, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -555,11 +556,20 @@ export function defaultConjured() {
     // from the master's magic talents, so nothing here budgets them; the list
     // is what this companion is built of.
     talents: [],
+    // Feats past the table's one per odd Hit Die, granted by whatever grants
+    // them; a number or a formula, like the bonus boxes.
+    bonusFeats: 0,
+    // Its own casting tradition, once a talent or the mage archetype makes it
+    // a caster: a name, and the drawbacks and boons, each a line of prose.
+    tradition: emptyCompanionTradition(),
     dr: '',
     resistances: '',
     immunities: '',
   };
 }
+
+/** A casting companion's tradition with nothing chosen: natural casting. */
+const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boons: [] });
 
 export const defaultCompanion = (kind) => ({
   familiar: defaultFamiliar,
@@ -590,6 +600,15 @@ export function normalizeCompanion(kind, block) {
   // Guarded by kind: the familiar keeps `archetypes` as the prose field it
   // has always been, and only the conjured companion's is the tick map.
   if (kind === 'conjured' && (!out.archetypes || typeof out.archetypes !== 'object')) out.archetypes = {};
+  if (kind === 'conjured') {
+    const tr = out.tradition && typeof out.tradition === 'object' ? out.tradition : {};
+    out.tradition = {
+      ...emptyCompanionTradition(),
+      ...tr,
+      drawbacks: Array.isArray(tr.drawbacks) ? tr.drawbacks : [],
+      boons: Array.isArray(tr.boons) ? tr.boons : [],
+    };
+  }
   if (!out.abilityNotes || typeof out.abilityNotes !== 'object') out.abilityNotes = {};
   // A document saved before equipment could do anything holds a name and a
   // cost; the two new fields default the way a player would expect -- a thing
@@ -1134,8 +1153,36 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.formNatural = form ? form.natural : 0;
     calc.talentsTaken = (b.talents || []).filter((t) => String(t?.name || '').trim()).length;
     calc.archetypes = CONJURED_ARCHETYPES.filter((a) => arch(a.id)).map((a) => a.label);
+    calc.casting = conjuredCasting(b, hd, mod('cha'), arch('mage'));
+    // A feat slot for every odd Hit Die -- the table's feat column, which is
+    // exactly that -- and then one for each bonus feat granted. The slots are
+    // drawn whether or not a row is stored for them (see companionOpenSlot).
+    calc.bonusFeats = Math.max(0, Math.floor(Number(b.bonusFeats) || 0));
+    calc.featSlots = calc.featsAllowed + calc.bonusFeats;
   }
   return { calc, skills, attacks };
+}
+
+/**
+ * A conjured companion's own casting, or null when it has none.
+ *
+ * The Magical Companion (form) talent makes it a natural caster on Charisma,
+ * with a spell pool of its Charisma modifier and a caster level of half its
+ * Hit Dice. The mage archetype must take that talent, and then counts as a
+ * Mid-Caster -- three quarters of its Hit Dice, the rate a Mid-Caster class
+ * level is worth, which is how this sheet reads "considered a Mid-Caster"
+ * against the talent's half -- with its Hit Dice added to the pool. The talent's Charisma increase is left to the talent's own note,
+ * where a forwarded bonus puts it into `cha` before this reads it.
+ */
+function conjuredCasting(b, hd, chaMod, mage) {
+  const talent = (b.talents || []).some((t) => /\bmagical companion\b/i.test(String(t?.name || '')));
+  if (!mage && !talent) return null;
+  return {
+    ability: 'Cha',
+    mage,
+    cl: mage ? Math.floor(hd * TYPE_RATES.Mid) : Math.floor(hd / 2),
+    spellPoints: Math.max(0, (mage ? hd : 0) + chaMod),
+  };
 }
 
 /**
@@ -1191,6 +1238,8 @@ export function companionScope(block) {
   if (k.evoPool !== undefined) { s.evoPool = k.evoPool; s.evoLeft = k.evoLeft; }
   // The conjured companion's summon cost, so a tracker can charge it.
   if (k.summonCost !== undefined) s.summonCost = k.summonCost;
+  // And, when it casts, its own spell pool and caster level.
+  if (k.casting) { s.sp = k.casting.spellPoints; s.cl = k.casting.cl; }
   return s;
 }
 
@@ -1270,7 +1319,7 @@ export function companionRecipe(b, k, stat) {
 }
 
 export function companionBreakdown(kind, block, stat) {
-  const b = block;
+  const b = withTypedNumbers(block, block?.calc?.typed);
   const k = b?.calc;
   if (!k) return null;
   const part = recipePart;
@@ -1355,6 +1404,83 @@ export function companionBreakdown(kind, block, stat) {
         ],
       };
     }
+  }
+}
+
+/**
+ * The boxes on a companion that take a formula as readily as a number: the
+ * three AC buckets, CMD and CMB other, initiative, and each save's misc. What
+ * was typed is kept as typed; the model works each one out (`calc.typed`)
+ * and the sums read the answer through `withTypedNumbers`.
+ */
+export const COMPANION_FORMULA_FIELDS = [
+  'ac.all', 'ac.touch', 'ac.ff', 'cmdOther', 'cmbOther', 'initBonus',
+  'saves.fort.misc', 'saves.ref.misc', 'saves.will.misc', 'bonusFeats',
+];
+
+/** The speed boxes, which hold text ("30 ft.") or a formula worked out in feet. */
+export const COMPANION_SPEEDS = ['base', 'fly', 'swim', 'climb', 'burrow'];
+
+/**
+ * A block with each formula box as the number it came to. `typed` is
+ * `{ path: { value, error } }` for the boxes holding a formula; a box holding
+ * a number is already what the sums want. The block itself is not touched,
+ * so what was typed is what is saved.
+ */
+export function withTypedNumbers(b, typed) {
+  if (!b || !typed || !Object.keys(typed).length) return b;
+  const out = { ...b, ac: { ...(b.ac || {}) }, saves: { ...(b.saves || {}) } };
+  for (const k of ['fort', 'ref', 'will']) out.saves[k] = { ...(out.saves[k] || {}) };
+  for (const [path, r] of Object.entries(typed)) setPath(out, path, r.value);
+  return out;
+}
+
+/**
+ * Work out a companion's formula boxes, and its speeds where one is written
+ * as a formula. `scope` is called only if there is a formula to read it for.
+ * Returns `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds as
+ * `{ key: { value, error } }` with the value in feet ("40 ft.").
+ *
+ * A speed is text first. "30 ft." and "60 ft. (good)" are not formulas and
+ * stay as written; one that parses -- `30`, `20 + 10 * floor(conjured.hd / 5)`
+ * -- is worked out, and one that parses and then fails says why.
+ */
+export function companionFormulas(b, scope) {
+  const typed = {};
+  const speeds = {};
+  let s = null;
+  const sc = () => (s ??= scope());
+  for (const path of COMPANION_FORMULA_FIELDS) {
+    const raw = getPath(b, path);
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    if (/^-?\d+$/.test(raw.trim())) { typed[path] = { value: Number(raw), error: null }; continue; }
+    try {
+      const v = Number(evaluateFormula(raw, sc()));
+      typed[path] = { value: Number.isFinite(v) ? Math.floor(v) : 0, error: null };
+    } catch (err) {
+      typed[path] = { value: 0, error: err.message };
+    }
+  }
+  for (const key of COMPANION_SPEEDS) {
+    const raw = String(b.speed?.[key] ?? '').trim();
+    if (!raw || !parses(raw)) continue;
+    try {
+      const v = Number(evaluateFormula(raw, sc()));
+      speeds[key] = { value: `${Number.isFinite(v) ? Math.floor(v) : 0} ft.`, error: null };
+    } catch (err) {
+      speeds[key] = { value: null, error: err.message };
+    }
+  }
+  return { typed, speeds };
+}
+
+/** Whether text reads as a formula at all, as against words. */
+function parses(text) {
+  try {
+    parse(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 

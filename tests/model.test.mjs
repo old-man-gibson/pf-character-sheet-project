@@ -58,8 +58,8 @@ import { importVancian } from '../app/js/model/subsystems/vancian.js';
 import { importPsionics } from '../app/js/model/subsystems/psionics.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
-  CONJURED_TABLE, COMPANION_KINDS, companionScopeName, defaultCompanion, normalizeCompanion, splitAbilities,
-  setCompanionAbilityText, companionAbilityText, abilityTextKey,
+  CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
+  splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
@@ -1316,6 +1316,225 @@ console.log('companions -- the conjured companion follows the Conjuration sphere
       back.data.conjured[0].calc.flatFooted], [7, 1, ffBefore + 2]);
   const old = new Character({ ...saved, conjured: undefined });
   check('a document saved before the block existed grows one', !!old.data.conjured?.[0]?.calc, true);
+}
+
+/*
+ * A bonus aimed at something worked out after the early stats -- a companion,
+ * a skill -- reads them with their own bonuses in. Every bonus used to be
+ * worked out once, before any applied, so the Mage form's Charisma read the
+ * Hit Dice of a caster level that four `{spheres.cl += 1}` talents had not
+ * yet raised: 12 dice on the sheet, +4 to Charisma.
+ */
+console.log('forwarded bonuses -- one aimed late reads the early stats with their bonuses in');
+{
+  const c = new Character(blankDocument({ name: 'Late', level: 12 }));
+  const levels = Array.from({ length: 20 }, (_, i) => ({
+    level: i + 1, talent: i === 0 ? 'Summon Companion' : null, sphere: i === 0 ? 'Conjuration' : null, notes: null,
+  }));
+  c.listAdd('training.magic.classes', {
+    name: 'Mage', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 12, levels,
+  });
+  c.set('conjured.0.baseForm', 'Orb');
+  const k = () => c.data.conjured[0].calc;
+  const note = (text) => {
+    const at = c.data.notes.length;
+    c.listAdd('notes', { title: 'Test', body: text });
+    return () => c.listRemove('notes', at);
+  };
+  c.listAdd('conjured.0.talents', {
+    source: '(form)', name: 'Mage', notes: '{conjured.cha.score += floor(conjured.hd/2)}',
+  });
+  check('caster level 12 is 9 dice, and the Mage form gives half of them to Charisma',
+    [k().hd, k().scores.cha.gear], [9, 4]);
+  let drop = note('Four talents of it {spheres.cl += 4}');
+  check('a caster-level bonus raises the dice, and the Charisma follows them',
+    [k().level, k().hd, k().scores.cha.gear], [16, 12, 6]);
+  const settled = k().scores.cha.total;
+  c.recompute(); c.recompute();
+  check('recomputing settles', k().scores.cha.total, settled);
+  check('and so does reopening',
+    new Character(JSON.parse(JSON.stringify(c.toJSON()))).data.conjured[0].calc.scores.cha.total, settled);
+  drop();
+  check('and it goes with the bonus', [k().hd, k().scores.cha.gear], [9, 4]);
+
+  // The companion is read without its own bonuses for this, so a bonus
+  // reading the very stat it lands on does not count itself.
+  c.setItem('conjured.0.talents', 0, 'notes', '{conjured.cha.score += floor(conjured.cha.score/4)}');
+  const alone = k().scores.cha.gear;
+  drop = note('{spheres.cl += 4}');
+  check('a companion bonus reading its own destination does not count itself', k().scores.cha.gear, alone);
+  drop();
+
+  // A name reads the companion with its bonuses, as it always has.
+  c.setItem('conjured.0.talents', 0, 'notes', '{conjured.cha.score += 4} {orb_cha = conjured.cha.score}');
+  drop = note('{spheres.cl += 4}');
+  check('a name reading the companion sees its bonuses', c.inlineNames.orb_cha, k().scores.cha.total);
+  drop();
+  c.setItem('conjured.0.talents', 0, 'notes', '');
+
+  // Skills are worked out after the early stats as well.
+  drop = note('Headband {int.score += 4} and {skill.appraise += int.mod}');
+  check('a skill bonus reads an ability with its bonus in',
+    [c.data.abilities.int.mod, c.data.skills.find((s) => s.name === 'Appraise').forwarded], [2, 2]);
+  drop();
+  // A bonus aimed at an early stat still reads the sheet from before any.
+  const wis = c.data.abilities.wis.score;
+  drop = note('{int.score += 4} {wis.score += int.mod}');
+  check('an early bonus still reads the sheet before any bonus applies', c.data.abilities.wis.score, wis);
+  drop();
+}
+
+/*
+ * A conjured companion with the Magical Companion (form) talent casts on
+ * Charisma: CL half its dice, a pool of its Charisma modifier. The mage
+ * archetype must take that talent and counts as a Mid-Caster: CL three
+ * quarters of its dice, its dice added to the pool. The pool is a tracker
+ * of its own, as the character's Spell Points are.
+ */
+console.log('companions -- a casting conjured companion keeps its own spell points');
+{
+  const c = new Character(blankDocument({ name: 'Caster', level: 12 }));
+  const levels = Array.from({ length: 20 }, (_, i) => ({
+    level: i + 1, talent: i === 0 ? 'Summon Companion' : null, sphere: i === 0 ? 'Conjuration' : null, notes: null,
+  }));
+  c.listAdd('training.magic.classes', {
+    name: 'Mage', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 12, levels,
+  });
+  c.set('conjured.0.baseForm', 'Orb');
+  const k = () => c.data.conjured[0].calc;
+  const pool = (id = 'conjured') => c.trackers.find((t) => t.pool === `sp:${id}`);
+  check('9 dice, and no casting without the talent', [k().hd, k().casting, pool()], [9, null, undefined]);
+
+  c.listAdd('conjured.0.talents', {
+    source: '(form)', name: 'Magical Companion', notes: '{conjured.cha.score += floor(conjured.hd/2)}',
+  });
+  const cha = k().scores.cha.mod;
+  check('Magical Companion: CL half its dice, spell points its Charisma modifier',
+    [k().casting.cl, k().casting.spellPoints], [4, cha]);
+  check('readable from a formula', [c.scope().conjured.cl, c.scope().conjured.sp], [4, cha]);
+  check('and a pool of its own, kept while it casts',
+    [pool()?.id, pool()?.name, pool()?.max, pool()?.refresh, c.isProtectedTracker(pool()?.id)],
+    ['conjured_spell_points', 'Conjured Companion Spell Points', cha, 'Daily', true]);
+
+  c.set('conjured.0.archetypes.mage', true);
+  check('the mage archetype: a Mid-Caster, its dice added to the pool',
+    [k().casting.cl, k().casting.spellPoints, pool().max], [6, 9 + cha, 9 + cha]);
+  check('one pool still', c.trackers.filter((t) => t.pool === 'sp:conjured').length, 1);
+
+  c.stepTracker(pool().id, 3);
+  check('spent like any tracker', pool().current, 3);
+  c.companionRest('conjured', 0);
+  check('the companion’s rest refills it', pool().current, 0);
+  c.stepTracker(pool().id, 2);
+  c.rest('day');
+  check('and so does a new day', pool().current, 0);
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('reopened, the same pool and no second',
+    back.trackers.filter((t) => t.pool === 'sp:conjured').map((t) => [t.id, t.max]), [['conjured_spell_points', 9 + cha]]);
+
+  // Its own casting tradition: a name, and drawbacks and boons as prose.
+  check('a companion starts with no tradition: natural casting', c.data.conjured[0].tradition,
+    { name: '', drawbacks: [], boons: [] });
+  const chaBefore = k().scores.cha.total;
+  c.set('conjured.0.tradition.name', 'Fey Magic');
+  c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
+  c.listAdd('conjured.0.tradition.boons', 'Easy Focus {conjured.cha.score += 2}');
+  check('a boon forwards what it grants', k().scores.cha.total, chaBefore + 2);
+  check('and the spell points are left as they were', pool().max, 9 + k().scores.cha.mod);
+  check('the bonus says where it came from',
+    c.forwardedInto('conjured.cha.score').from.map((f) => f.where).includes('the conjured companion, tradition boon 1'),
+    true);
+  const saved = JSON.parse(JSON.stringify(c.toJSON()));
+  check('saved and reopened, tradition and all',
+    new Character(saved).data.conjured[0].tradition,
+    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boons: ['Easy Focus {conjured.cha.score += 2}'] });
+  delete saved.conjured[0].tradition;
+  check('a companion saved before traditions grows an empty one',
+    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boons: [] });
+  c.set('conjured.0.archetypes.mage', false);
+  c.setItem('conjured.0.talents', 0, 'name', 'Not yet chosen');
+  check('the tradition goes quiet when the companion stops casting', k().scores.cha.total, chaBefore);
+  c.setItem('conjured.0.talents', 0, 'name', 'Magical Companion');
+  c.set('conjured.0.archetypes.mage', true);
+  c.listRemove('conjured.0.tradition.boons', 0);
+
+  // A second casting companion has a pool of its own, named for it.
+  c.addCompanion('conjured');
+  c.set('conjured.1.archetypes.mage', true);
+  check('a second casting companion has its own pool',
+    [pool('conjured2')?.id, pool('conjured2')?.name], ['conjured2_spell_points', 'Conjured Companion 2 Spell Points']);
+
+  // One that stops casting keeps the tracker, which may now be removed.
+  c.set('conjured.0.archetypes.mage', false);
+  c.setItem('conjured.0.talents', 0, 'name', '');
+  check('a companion that stops casting has no pool to keep',
+    [k().casting, pool().max, c.isProtectedTracker(pool().id)], [null, 0, false]);
+}
+
+/*
+ * A companion's typed boxes take a formula as readily as a number: the AC
+ * buckets, CMD and CMB other, initiative, each save's misc -- and its speeds,
+ * which are text ("30 ft.") until one is written as a formula.
+ */
+console.log('companions -- a typed box takes a formula');
+{
+  const c = new Character(blankDocument('companion-formulas'));
+  c.set('conjured.0.levelOverride', 9);
+  c.set('conjured.0.baseForm', 'Orb');
+  const k = () => c.data.conjured[0].calc;
+  const before = { ac: k().ac, cmd: k().cmd, will: k().saves.will.total, init: k().initiative };
+  c.set('conjured.0.ac.all', 'floor(conjured.hd / 2)');
+  c.set('conjured.0.saves.will.misc', '1 + 1');
+  c.set('conjured.0.initBonus', 'conjured.str.mod');
+  check('the sums read what each formula came to',
+    [k().ac, k().cmd, k().saves.will.total, k().initiative],
+    [before.ac + 3, before.cmd + 3, before.will + 2, before.init + k().scores.str.mod]);
+  check('and say what that was', [k().typed['ac.all'], k().typed['saves.will.misc']],
+    [{ value: 3, error: null }, { value: 2, error: null }]);
+  check('the working shows the number, not the formula',
+    companionBreakdown('conjured', c.data.conjured[0], 'ac').parts.find((x) => /all/.test(x.label))?.value, 3);
+  c.set('conjured.0.cmbOther', 'conjured.nosuch');
+  check('a broken one counts nothing and says why',
+    [k().typed.cmbOther.value, /nosuch/.test(k().typed.cmbOther.error || '')], [0, true]);
+  c.set('conjured.0.cmbOther', 0);
+
+  c.set('conjured.0.speed.base', '30 ft.');
+  c.set('conjured.0.speed.fly', '20 + 10 * floor(conjured.hd / 5)');
+  check('a speed is text until it is a formula, then feet',
+    [k().speeds.base, k().speeds.fly], [undefined, { value: '30 ft.', error: null }]);
+
+  const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('what was typed is what is saved, and works out again on load',
+    [back.data.conjured[0].ac.all, back.data.conjured[0].calc.ac], ['floor(conjured.hd / 2)', k().ac]);
+}
+
+/*
+ * A conjured companion's feats are slots: one per odd Hit Die, then a slot
+ * for each bonus feat. They are drawn whether or not a row is stored, and a
+ * feat typed into one stores the list up to it.
+ */
+console.log('companions -- a conjured companion has a feat slot per odd Hit Die');
+{
+  const c = new Character(blankDocument({ name: 'Slots', level: 12 }));
+  const levels = Array.from({ length: 20 }, (_, i) => ({
+    level: i + 1, talent: i === 0 ? 'Summon Companion' : null, sphere: i === 0 ? 'Conjuration' : null, notes: null,
+  }));
+  c.listAdd('training.magic.classes', {
+    name: 'Mage', type: 'High', talentsPerLevel: null, mod1: 'Int', mod2: null, classLevelsOverride: 12, levels,
+  });
+  const b = () => c.data.conjured[0];
+  check('9 dice is five slots, and nothing stored', [b().calc.hd, b().calc.featSlots, b().feats.length], [9, 5, 0]);
+  check('open slots do not make an untouched companion one in use', c.systemTabsInUse().conjured, false);
+  c.setItem('conjured.0.feats', 2, 'name', 'Power Attack');
+  check('a feat typed into the 5 HD slot stores the list up to it',
+    b().feats.map((f) => f.name), ['', '', 'Power Attack']);
+  c.setItem('conjured.0.feats', 5, 'name', 'Toughness');
+  check('and a write past the last slot goes nowhere', b().feats.length, 3);
+  c.set('conjured.0.bonusFeats', 'floor(conjured.hd / 4)');
+  check('bonus feats add slots, and take a formula', [b().calc.bonusFeats, b().calc.featSlots], [2, 7]);
+  c.setItem('conjured.0.feats', 5, 'name', 'Toughness');
+  check('so the first bonus slot takes one now', [b().feats.length, b().feats[5].name], [6, 'Toughness']);
+  check('and both count against the slots', [b().calc.featsTaken, b().calc.featSlots], [2, 7]);
 }
 
 console.log('companions -- a minionmancer keeps more than one of a kind');

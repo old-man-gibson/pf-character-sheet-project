@@ -20,6 +20,7 @@ import { foldButton, isCollapsed } from './folds.js';
 // import without this one; panels have always reached them through here.
 export { foldButton, isCollapsed, isOpen } from './folds.js';
 import { fmt } from '../rules.js';
+import { prose } from './prose.js';
 
 /**
  * `title` is for a cell narrow enough to cut its own value off: an input
@@ -362,6 +363,24 @@ export function movedInline(cs, key, base, format = fmt, model = null) {
 export function movedSub(cs, key, base, format = fmt) {
   const d = cs.changed ? (cs.delta[key] || 0) : 0;
   return movedValue(esc(format(d ? cs.adjusted[key] : base)), d, { tag: 'span', base: format(base), sources: cs.sources });
+}
+
+/**
+ * A list of short lines of prose -- a tradition's drawbacks, a companion's
+ * boons -- as many to a row as the panel is wide enough for, each with its ×.
+ * A tradition can run to twenty of them, and a column of mostly empty space
+ * was what one per line looked like. Each line reads {…} like any prose:
+ * "Expensive Locus ({locus = 22500} mana)" is a drawback and a number.
+ * `what` names one line for the ×.
+ */
+export function proseList(model, list, items, what) {
+  const row = (v, i) => `<div class="listrow">
+      ${prose(model, `data-item="${list}|${i}|self"`, v, 1, 'grow')}
+      ${removeButton(list, i, { what })}
+    </div>`;
+  return items.length
+    ? `<div class="listgrid">${items.map(row).join('')}</div>`
+    : '<p class="empty">None.</p>';
 }
 
 export function addButton(list, label, template) {

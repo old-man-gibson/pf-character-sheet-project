@@ -175,6 +175,7 @@ function companionField(model, kind, index, key, a) {
   const lists = {
     evolution: ['evolutions', 'notes'], attack: ['attacks', 'qualities'], feat: ['feats', 'notes'],
     trick: ['tricks', 'notes'], talent: ['talents', 'notes'], slotless: ['slotless', 'effect'],
+    drawback: ['tradition.drawbacks', 'self'], boon: ['tradition.boons', 'self'],
   };
   if (lists[key]) return companionPlace(model, kind, index, (p) => [item(`${p}.${lists[key][0]}`, a, lists[key][1])]);
   if (key === 'item') return companionPlace(model, kind, index, (p) => [set(`${p}.items.${a}.effect`)]);

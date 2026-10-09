@@ -26,7 +26,7 @@ import { weaponNow } from '../weapon-now.js';
 import {
   guileTalentRows, ownTalentRows, plannerHasClass, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
-import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerReading, trackerVisual } from './trackers.js';
+import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
 import { slotSpend } from './subsystems.js';
 
 /**
@@ -100,7 +100,6 @@ import {
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
 import { maneuverDetails } from '../../model.js';
-import { normalizeStyle } from '../../tracker-style.js';
 import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
@@ -545,27 +544,13 @@ function buffsPanel(model, ctx) {
   /** Every tracker as one row: name, its own meter, and the − n + controls. */
 function dashResourcesCard(model) {
     const trackers = model.trackers;
-    const row = (t) => {
-      const { shown, range, draining } = trackerReading(t);
-      return `<div class="dashtracker${t.error ? ' invalid' : ''}">
-        <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
-        <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
-        <span class="tracker-controls">
-          <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
-          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
-            aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
-          <span class="pool">${range}</span>
-          <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
-        </span>
-      </div>`;
-    };
     return `<section class="panel span2">
       <h3>Resources
         <button data-view class="linkish" style="margin-left:auto" data-action="goto-trackers"
           title="The Trackers tab: add one, restyle one, give one a formula">+ New tracker</button>
       </h3>
       <div class="dashtrackers">
-        ${trackers.map(row).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
+        ${trackers.map(trackerLine).join('') || '<p class="empty">No trackers yet — the Trackers tab starts one.</p>'}
       </div>
     </section>`;
   }
