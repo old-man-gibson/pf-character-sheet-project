@@ -5396,6 +5396,12 @@
     }
    ],
    "talents": [],
+   "bonusFeats": 0,
+   "tradition": {
+    "name": "",
+    "drawbacks": [],
+    "boons": []
+   },
    "dr": "",
    "resistances": "",
    "immunities": ""

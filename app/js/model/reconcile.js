@@ -146,7 +146,7 @@ export function describeSource(path) {
       // the kind (`eidolon:brutus:item:Neck`); the first keeps the old shape.
       const SUBHEADS = new Set(['abilities', 'specialAbility', 'specialQualities', 'baseEvolutions',
         'dr', 'resistances', 'immunities', 'notes', 'evolution', 'attack', 'feat', 'trick',
-        'talent', 'item', 'slotless']);
+        'talent', 'item', 'slotless', 'drawback', 'boon']);
       let [sub, at] = [a, b];
       let rest = 2;
       if (a && !SUBHEADS.has(a)) {
@@ -156,6 +156,7 @@ export function describeSource(path) {
       }
       if (sub === 'item') return `${who}, the ${parts.slice(rest).join(':')} slot`;
       if (sub === 'slotless') return `${who}, item ${nth(at)}`;
+      if (sub === 'drawback' || sub === 'boon') return `${who}, tradition ${sub} ${nth(at)}`;
       return who;
     }
     // A maneuver's own entry. The name is last in both because it may hold a

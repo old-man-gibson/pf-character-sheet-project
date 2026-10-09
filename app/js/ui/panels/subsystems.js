@@ -16,7 +16,7 @@ import { itemArea, prose, renderedProse } from '../prose.js';
 import { fillNotesButton, talentLegend, talentMark, talentNote } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
-import { meterStyleButton, meterStyleEditor, meterVisual } from './trackers.js';
+import { meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
 
 /**
  * The frame colours a card wears: frame, its darker edge, and the card-stock
@@ -69,12 +69,13 @@ import {
   companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
+import { getPath } from '../../model/util.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
   addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
-  lineHtml, miniStat, removeButton, rowRemove, rowTools, working,
+  lineHtml, miniStat, proseList, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
 
 export function markKeywords(html) {
@@ -1538,6 +1539,7 @@ export function companionPanel(model, kind) {
       ${companionDefensePanel(model, cc)}
       ${companionSavesPanel(model, cc)}
       ${kind === 'conjured' ? conjuredContractPanel(model, cc) : ''}
+      ${kind === 'conjured' ? conjuredCastingPanel(model, cc) : ''}
       ${companionAttacksPanel(model, cc)}
       ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, cc) : ''}
       ${kind === 'animalCompanion' ? companionTricksPanel(model, cc) : ''}
@@ -1754,10 +1756,10 @@ function companionScoresPanel(model, cc) {
         </tr>`;
   }).join('')}
       </tbody></table></div>
-      ${incs.length ? `<div class="fieldgrid" style="margin-top:8px">
+      ${incs.length ? `<div class="fieldgrid tight" style="margin-top:8px">
         ${incs.map((inc, i) => field(`+1 at ${kind === 'conjured' ? `${inc.level} HD` : `level ${inc.level}`}${
     (kind === 'conjured' ? (k.hd ?? 0) : (k.level ?? 0)) >= inc.level ? '' : ' (not yet)'}`,
-    itemSelect(list, i, 'ability', inc.ability, ABILITY_LABELS_LIST)))}
+    itemSelect(list, i, 'ability', inc.ability, ABILITY_LABELS_LIST))).join('')}
       </div>` : ''}
       ${evo ? `<p class="hint">Evo is the Ability Increase evolution, at most +${k.maxBonusPerStat ?? 2} to any one score at this level.
         ${(k.evoBonusOver || []).length ? `<span class="warn">Over the cap: ${k.evoBonusOver.join(', ')}.</span>` : ''}</p>` : ''}
@@ -1767,7 +1769,6 @@ function companionScoresPanel(model, cc) {
 
 function companionDefensePanel(model, cc) {
     const { kind, p, sn, roll, b, k } = cc;
-    const ac = b.ac || {};
     // Every one of these is a destination now, so each says beside itself
     // what has been forwarded to it and from where.
     const fwd = (name) => forwardedBadge(model, `${sn}.${name}`);
@@ -1784,14 +1785,14 @@ function companionDefensePanel(model, cc) {
       ${lineHtml('Initiative', `<span class="rollpair">${w('init', fmt(k.initiative ?? 0))}${
         rollButton(model, roll, 'init', 'initiative')}</span>${fwd('init')}`)}
       <div class="fieldgrid" style="margin-top:8px">
-        ${field('Bonus AC (all)', num(`${p}.ac.all`, ac.all))}
-        ${field('Touch only', num(`${p}.ac.touch`, ac.touch))}
-        ${field('Flat-footed only', num(`${p}.ac.ff`, ac.ff))}
-        ${field('CMD other', num(`${p}.cmdOther`, b.cmdOther))}
-        ${field('CMB other', num(`${p}.cmbOther`, b.cmbOther))}
+        ${field('Bonus AC (all)', formulaBox(cc, 'ac.all'))}
+        ${field('Touch only', formulaBox(cc, 'ac.touch'))}
+        ${field('Flat-footed only', formulaBox(cc, 'ac.ff'))}
+        ${field('CMD other', formulaBox(cc, 'cmdOther'))}
+        ${field('CMB other', formulaBox(cc, 'cmbOther'))}
         ${field('CMB ability', select(`${p}.cmbAbility`, b.cmbAbility, ABILITY_LABELS_LIST,
     `auto (${['Tiny', 'Diminutive', 'Fine'].includes(b.size) ? 'Dex' : 'Str'})`))}
-        ${field('Initiative bonus', num(`${p}.initBonus`, b.initBonus))}
+        ${field('Initiative bonus', formulaBox(cc, 'initBonus'))}
       </div>
       <p class="hint">10 + Dex + size ${fmt(k.sizeAC ?? 0)} + natural armour ${fmt(k.tableNatural ?? 0)} from the table
         + the bonuses: <em>all</em> counts everywhere (deflection, luck, insight…), <em>touch only</em>
@@ -1811,24 +1812,26 @@ function companionSavesPanel(model, cc) {
     const { kind, p, sn, roll, b, k } = cc;
     const saves = k.saves || {};
     const rows = [['fort', 'Fortitude', 'Con'], ['ref', 'Reflex', 'Dex'], ['will', 'Will', 'Wis']];
+    // Every column as narrow as what it holds, and the rest of the width to
+    // Misc, which takes a formula and wants the room to show one.
     return `<section class="panel">
       <h3>Saves</h3>
-      <div class="tablewrap"><table class="build compact"><thead><tr>
-        <th scope="col">Save</th>${kind === 'familiar' ? '' : '<th scope="col">Good</th>'}
+      <div class="tablewrap"><table class="build compact compsaves"><thead><tr>
+        <th scope="col">Save</th>${kind === 'familiar' ? '' : '<th scope="col" class="good">Good</th>'}
         <th scope="col" class="num">Base</th><th scope="col" class="num">Ability</th>
-        <th scope="col">Misc</th><th scope="col" class="num">Total</th>
+        <th scope="col" class="misc">Misc</th><th scope="col" class="num">Total</th>
       </tr></thead><tbody>
         ${rows.map(([key, name, ab]) => `<tr>
           <th scope="row">${name}<span class="hint" style="margin-left:4px">${ab}</span></th>
           ${kind === 'familiar' ? '' : k.formSaves
     // The base form sets these; a tick here would change nothing.
-    ? `<td><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
+    ? `<td class="good"><input type="checkbox" disabled ${k.formSaves[key] ? 'checked' : ''}
         title="${esc(`${k.formSaves[key] ? 'Good' : 'Poor'} — set by the ${b.baseForm} form`)}"></td>`
-    : `<td>${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
+    : `<td class="good">${check(`${p}.goodSaves.${key}`, b.goodSaves?.[key])}</td>`}
           <td class="num derived">${fmt(saves[key]?.base ?? 0)}</td>
           <td class="num derived">${fmt(saves[key]?.mod ?? 0)}</td>
-          <td>${num(`${p}.saves.${key}.misc`, b.saves?.[key]?.misc)}${
-            forwardedBadge(model, `${sn}.${key}`)}</td>
+          <td class="misc"><span class="miscbox">${formulaBox(cc, `saves.${key}.misc`)}${
+            forwardedBadge(model, `${sn}.${key}`)}</span></td>
           <td class="num total"><span class="rollpair">${working(model, `${sn}.${key}`, fmt(saves[key]?.total ?? 0))}${
             rollButton(model, roll, `save:${key}`, `a ${name} save`)}</span></td>
         </tr>`).join('')}
@@ -1840,13 +1843,47 @@ function companionSavesPanel(model, cc) {
         .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'} — and the table gives the good and poor base at this HD.`
       : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
       <div class="fieldgrid" style="margin-top:8px">
-        ${field('Speed', text(`${p}.speed.base`, b.speed?.base, '30 ft.'))}
-        ${field('Fly', text(`${p}.speed.fly`, b.speed?.fly))}
-        ${field('Swim', text(`${p}.speed.swim`, b.speed?.swim))}
-        ${field('Climb', text(`${p}.speed.climb`, b.speed?.climb))}
-        ${field('Burrow', text(`${p}.speed.burrow`, b.speed?.burrow))}
+        ${field('Speed', speedBox(cc, 'base', '30 ft.'))}
+        ${field('Fly', speedBox(cc, 'fly'))}
+        ${field('Swim', speedBox(cc, 'swim'))}
+        ${field('Climb', speedBox(cc, 'climb'))}
+        ${field('Burrow', speedBox(cc, 'burrow'))}
       </div>
     </section>`;
+  }
+
+
+/**
+ * One of a companion's typed bonus boxes (COMPANION_FORMULA_FIELDS), which
+ * takes a formula as readily as a number: it shows what the formula came to
+ * and opens on the formula when clicked into, as the character's own do.
+ */
+function formulaBox(cc, path) {
+    const { p, b, k, sn } = cc;
+    const r = k.typed?.[path];
+    return exprField(`data-set="${p}.${path}"`, getPath(b, path) ?? 0, {
+      width: '100%',
+      value: r && !r.error ? String(r.value) : null,
+      error: r?.error || null,
+      title: `A number, or a formula like floor(${sn}.hd / 2)`,
+    });
+  }
+
+/**
+ * A companion's speed: text as it has always been ("30 ft.", "60 ft.
+ * (good)"), or a formula worked out in feet, shown with its answer.
+ */
+function speedBox(cc, key, placeholder = '') {
+    const { p, b, k, sn } = cc;
+    const r = k.speeds?.[key];
+    return exprField(`data-set="${p}.speed.${key}"`, b.speed?.[key] ?? '', {
+      kind: 'text',
+      width: '100%',
+      placeholder,
+      value: r && !r.error ? r.value : null,
+      error: r?.error || null,
+      title: `Text, like 30 ft., or a formula in feet, like 30 + 10 * floor(${sn}.hd / 5)`,
+    });
   }
 
 
@@ -1959,21 +1996,31 @@ function eidolonEvolutionsPanel(model, cc) {
  * 620px they become cards like the rest; see "a list of things, on a phone".
  */
 function companionListPanel(model, {
-  list, rows, heading, badge, what, sourcePlaceholder, hint,
+  list, rows, heading, badge, what, sourcePlaceholder, hint, slots = null, extra = '',
 }) {
+    // With `slots` (one label per place the list is owed a row), the list is
+    // drawn slot by slot whether or not a row is stored for each -- writing
+    // into an open one stores it (see companionOpenSlot) -- the source reads
+    // the slot's label until something else is typed, and only a row past the
+    // last slot can be removed. Without, it is a list rows are added to.
+    const count = slots ? Math.max(rows.length, slots.length) : rows.length;
+    const shown = Array.from({ length: count }, (_, i) => rows[i] || {});
+    const over = (i) => slots && i >= slots.length;
     return `<section class="panel span2">
       <h3>${heading} ${badge}</h3>
-      ${rows.length ? `<div class="tablewrap"><table class="build stacked"><thead><tr>
+      ${extra}
+      ${count ? `<div class="tablewrap"><table class="build stacked"><thead><tr>
         <th style="width:9rem">Source</th><th style="width:14rem">${esc(what)}</th><th>Notes</th><th></th>
       </tr></thead><tbody>
-        ${rows.map((r, i) => `<tr>
-          <td data-stack="head">${itemText(list, i, 'source', r.source, sourcePlaceholder)}</td>
+        ${shown.map((r, i) => `<tr${over(i) ? ' class="over"' : ''}>
+          <td data-stack="head">${itemText(list, i, 'source', r.source,
+    slots ? (slots[i] ?? 'Over the allowance') : sourcePlaceholder)}</td>
           <td data-stack="name">${itemText(list, i, 'name', r.name, what)}</td>
           <td data-label="Notes">${itemArea(model, list, i, 'notes', r.notes, 1)}</td>
-          ${rowRemove(list, i)}
+          ${!slots || over(i) ? rowRemove(list, i) : '<td class="tools"></td>'}
         </tr>`).join('')}
       </tbody></table></div>` : `<p class="empty">No ${what.toLowerCase()}s yet.</p>`}
-      <div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, emptyCompanionFeat())}</div>
+      ${slots ? '' : `<div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, emptyCompanionFeat())}</div>`}
       <p class="hint">${hint}</p>
     </section>`;
   }
@@ -2024,6 +2071,58 @@ function conjuredContractPanel(model, cc) {
   }
 
 
+/**
+ * A conjured companion's own casting, when the Magical Companion (form)
+ * talent or the mage archetype gives it one: its caster level, and its spell
+ * points as the pool they are spent from. The pool is one of the character's
+ * trackers, made for this companion, so it is spent, undone and refilled the
+ * way every tracker is; it is drawn here as well as on the Trackers tab.
+ *
+ * And its own casting tradition, which this sheet lets either source take,
+ * the talent's natural casting included: a name, and its drawbacks and boons
+ * as lines of prose.
+ * They are what was chosen, not a sum -- nothing here adds them up into the
+ * pool -- and a boon that changes a number forwards it, as any note does.
+ */
+function conjuredCastingPanel(model, cc) {
+    const { p, b, k, sn } = cc;
+    const cast = k.casting;
+    if (!cast) return '';
+    const pool = (model.trackers || []).find((t) => t.pool === `sp:${b.id}`);
+    const cha = k.scores?.cha?.mod ?? 0;
+    const tr = b.tradition || {};
+    const dlist = `${p}.tradition.drawbacks`;
+    const blist = `${p}.tradition.boons`;
+    return `<section class="panel">
+      <h3>Casting <span class="badge">CL ${cast.cl}</span><span class="badge">${cast.spellPoints} sp</span></h3>
+      ${line('Caster level', cast.cl)}
+      ${line('Spell points', cast.spellPoints)}
+      ${pool ? trackerLine(pool) : ''}
+      <p class="hint">${cast.mage
+    ? `The mage archetype: a Mid-Caster on Charisma. Caster level is ¾ of its ${k.hd ?? 0} Hit Dice;
+        spell points are its Hit Dice plus its Charisma modifier (${k.hd ?? 0} ${cha < 0 ? '−' : '+'} ${Math.abs(cha)}).`
+    : `Magical Companion: a caster on Charisma. Caster level is half its ${k.hd ?? 0} Hit Dice;
+        spell points are its Charisma modifier.`}
+        The talent’s Charisma increase is not added here; forward it from the talent’s note.
+        The pool comes back with this companion’s Rest and with a new day.
+        Readable as <code>${esc(sn)}.sp</code> and <code>${esc(sn)}.cl</code>${pool
+    ? `; the pool as <code>tracker.${esc(pool.id)}</code>` : ''}.</p>
+
+      <h4 class="subhead">Casting tradition</h4>
+      <label class="fld"><span>Tradition</span>${text(`${p}.tradition.name`, tr.name, 'Natural casting')}</label>
+      <h4 class="subhead">Drawbacks${(tr.drawbacks || []).length ? ` <span class="badge">${tr.drawbacks.length}</span>` : ''}</h4>
+      ${proseList(model, dlist, tr.drawbacks || [], 'drawback')}
+      <div>${addButton(dlist, 'Add drawback', '')}</div>
+      <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
+      ${proseList(model, blist, tr.boons || [], 'boon')}
+      <div>${addButton(blist, 'Add boon', '')}</div>
+      <p class="hint">Blank is natural casting. Drawbacks and boons are kept as written and
+        do not change the spell points above; a line can forward what it grants, as any
+        note does: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
+    </section>`;
+  }
+
+
 /** The (form) and (type) talents shaping this companion, one list per companion. */
 function conjuredTalentsPanel(model, cc) {
     const { p, b, k } = cc;
@@ -2043,8 +2142,29 @@ function conjuredTalentsPanel(model, cc) {
 
 
 function companionFeatsPanel(model, cc) {
-    const { p, b, k } = cc;
+    const { kind, p, b, k } = cc;
     const allowed = k.featsAllowed ?? 0;
+    if (kind === 'conjured') {
+      // One slot per odd Hit Die, then the bonus feats: the slots are there on
+      // their own, and a feat is typed into one rather than added.
+      const slots = [
+        ...Array.from({ length: allowed }, (_, i) => `${2 * i + 1} HD`),
+        ...Array.from({ length: k.bonusFeats ?? 0 }, () => 'Bonus'),
+      ];
+      const taken = k.featsTaken ?? 0;
+      return companionListPanel(model, {
+        list: `${p}.feats`,
+        rows: b.feats || [],
+        heading: 'Feats',
+        badge: `<span class="badge${taken > slots.length ? ' err' : ''}">${taken} of ${slots.length}</span>`,
+        what: 'Feat',
+        slots,
+        extra: `<div class="fieldgrid tight">${field('Bonus feats', formulaBox(cc, 'bonusFeats'))}</div>`,
+        hint: `A feat at every odd Hit Die (${allowed} at ${k.hd ?? 0} HD), and a slot for each bonus feat:
+          a number, or a formula. A feat past the last slot is kept and marked, and can be removed.
+          A feat named Multiattack softens secondary attacks to −2.`,
+      });
+    }
     const over = (k.featsTaken ?? 0) > allowed;
     return companionListPanel(model, {
       list: `${p}.feats`,

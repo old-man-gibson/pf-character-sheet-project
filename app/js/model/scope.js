@@ -21,7 +21,9 @@ import {
   collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
   resolveContributions, resolveDefinitions,
 } from '../inline.js';
-import { NameIndex, SCOPE_INFO, resolvePath, tagKey } from '../formula.js';
+import {
+  NameIndex, SCOPE_INFO, collectReferences, parse, resolvePath, tagKey,
+} from '../formula.js';
 import { zoneAt } from '../tracker-style.js';
 import { describeSource, shadowReason } from './reconcile.js';
 import { sphereTableNames, talentsIn } from './spheres.js';
@@ -1221,8 +1223,12 @@ export function stackingNote(x) {
  * Resolve every {name = expr} on the character into `this.inlineNames`,
  * available to trackers, weapon tokens, skill formulas and other inline
  * tokens through the formula scope.
+ *
+ * `late` is set on the second recompute pass, the first time through it: the
+ * bonuses aimed at anything totalled after the early stats are worked out
+ * again then (see below).
  */
-export function resolveInlineNames(model) {
+export function resolveInlineNames(model, { late = false } = {}) {
   const sources = model.proseSources();
   const defs = collectDefinitions(sources);
   // Base scope excludes inline names (they are being computed) and skill
@@ -1259,9 +1265,11 @@ export function resolveInlineNames(model) {
   model.inlineDuplicates = duplicates;
   model.inlineShadowed = shadowed;
 
-  // Forwarded bonuses are worked out here too, and only once: the second
-  // recompute pass re-resolves the names (a name may read a save that a
-  // bonus has just moved) but keeps the amounts this pass arrived at.
+  // Forwarded bonuses are worked out here too. The second recompute pass
+  // re-resolves the names (a name may read a save that a bonus has just
+  // moved) but keeps the amounts this pass arrived at for every bonus aimed
+  // at a stat totalled before the prose: worked out again, one could feed
+  // itself, and settle somewhere that depended on where it started.
   //
   // Names first, bonuses second, and never the other way round. A bonus may
   // be written in terms of a name the character defines; a name may not be
@@ -1274,6 +1282,26 @@ export function resolveInlineNames(model) {
     model.forwardTargetList = targets.list;
     model.contributions = resolveContributions(
       collectContributions(sources), values, model.scope(), targets,
+    );
+  } else if (late) {
+    // A bonus aimed only at something totalled later -- a skill, a
+    // companion, a weapon, a tracker -- is worked out again, against a sheet
+    // that now has the early bonuses in it. The first pass read everything
+    // before any bonus, so a companion's Hit Dice did not yet follow a
+    // `{spheres.cl += 1}`, and `{conjured.cha.score += floor(conjured.hd/2)}`
+    // came out short. Nothing it reads can have been moved by it: the late
+    // stats are totalled after the prose, and the companions, the one
+    // exception, were worked out without their bonuses for this (see
+    // Character#computePass). `targets` is the first pass's, so what `target`
+    // read stays what the tooltips show.
+    const before = model.contributions;
+    const keep = (c, i) => {
+      const e = before.entries[i];
+      if (!e || e.path !== c.path || e.raw !== c.raw) return null;
+      return [...e.lands, ...Object.keys(e.failed || {})].some(totalledEarly) ? e : null;
+    };
+    model.contributions = resolveContributions(
+      collectContributions(sources), values, model.scope(), before.targets || model.forwardTargets(), keep,
     );
   }
   // Every name the prose *reads*, kept beside every name it defines: the
@@ -1580,6 +1608,13 @@ export function proseSources(model) {
       // its note, and prose forwards -- Armored Companion is
       // `{conjured.ac.flatFooted += 2 as armor}` written where the talent is.
       (b.talents || []).forEach((t, i) => push(`${tag}:talent:${i}`, t.notes));
+      // A casting companion's tradition: each drawback and boon is a line of
+      // prose, so a boon can forward what it grants. Only while it casts --
+      // the tradition is its casting's, and goes quiet with it.
+      if (b.calc?.casting) {
+        (b.tradition?.drawbacks || []).forEach((x, i) => push(`${tag}:drawback:${i}`, x));
+        (b.tradition?.boons || []).forEach((x, i) => push(`${tag}:boon:${i}`, x));
+      }
       // What a companion is wearing. The effect is prose like any other, so it
       // reads {…} and forwards a bonus at the companion's own stats -- which is
       // the whole of what "equipment that changes its numbers" needs to be.
@@ -1708,6 +1743,42 @@ export function forwardsEarly(model) {
   // raises has to see it raised, which takes the second pass.
   const companions = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b?.id ?? ''))));
   return Object.entries(model.contributions?.totals || {})
-    .some(([name, value]) => value
-      && (FORWARD_EARLY.has(name) || inEarlyFamily(name) || companions.has(name.split('.')[0])));
+    .some(([name, value]) => value && (totalledEarly(name) || companions.has(name.split('.')[0])));
+}
+
+/**
+ * Is this destination totalled before the prose is read? A bonus aimed at one
+ * keeps the amount the first pass gave it; see resolveInlineNames.
+ */
+const totalledEarly = (name) => FORWARD_EARLY.has(name) || inEarlyFamily(name);
+
+/**
+ * What the second recompute pass has to do over again, read off the first
+ * pass's bonuses (see Character#computePass). Each step is skipped where it
+ * could not change anything, since the pass runs on every keystroke:
+ *
+ * - `late`: a bonus moved an early stat, so the bonuses aimed later are
+ *   worked out again with it moved.
+ * - `companions`: and a bonus is aimed at a companion, so the companions are
+ *   worked out without theirs for that, and with them after. Aimed at, not
+ *   moved: one worth nothing on the first pass may be worth something now.
+ * - `names`: and a name is defined from a companion, so the names are worked
+ *   out again once it has its bonuses back.
+ */
+export function secondPass(model) {
+  const late = Object.entries(model.contributions?.totals || {})
+    .some(([name, value]) => value && totalledEarly(name));
+  const ids = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || [])
+    .map((b) => String(b?.id ?? '').toLowerCase())));
+  const companionOf = (name) => ids.has(String(name).split('.')[0].toLowerCase());
+  const companions = late && (model.contributions?.entries || [])
+    .some((e) => [...e.lands, ...Object.keys(e.failed || {})].some(companionOf));
+  const names = companions && (model.inlineDefinitions || []).some((d) => {
+    try {
+      return collectReferences(parse(d.expr)).variables.some(companionOf);
+    } catch {
+      return false;
+    }
+  });
+  return { late, companions, names };
 }

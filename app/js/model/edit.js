@@ -147,7 +147,13 @@ export function listMoveInto(model, fromPath, from, toPath, to) {
  */
 export function setItem(model, path, index, field, value) {
   const arr = model.list(path);
-  if (arr[index] === undefined) return model;
+  if (arr[index] === undefined) {
+    // A list drawn with open slots past its end -- a conjured companion's
+    // feats, one per odd Hit Die -- grows to the slot written into.
+    const blank = Number.isInteger(index) && index >= arr.length ? model.openSlotRow?.(path, index) : null;
+    if (!blank) return model;
+    while (arr.length <= index) arr.push(blank());
+  }
   // A skill is identified by name and variant together, so renaming either
   // has to carry the specialty picks along or they silently detach.
   const renamingSkill = path === 'skills' && (field === 'name' || field === 'spec');
