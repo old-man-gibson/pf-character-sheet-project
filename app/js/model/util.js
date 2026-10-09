@@ -248,11 +248,27 @@ const isPlaceholder = (v) => v === null || v === undefined
  * typography do not count. An ellipsis is three dots (NFKC), curly quotes are
  * straight ones and a typographic dash is a hyphen, so "Seraph’s Wrath" typed
  * on a sheet finds the pack's "Seraph's Wrath" in every catalogue alike.
+ *
+ * Each spelling is worked out once and remembered: matching a name against a
+ * catalogue normalises both sides, and the same few thousand names -- class
+ * names against every Planner row, talents, veils -- are matched over and
+ * over on every recompute.
  */
-export const normalizeName = (v) => String(v ?? '')
-  .normalize('NFKC')
-  .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[‐-―]/g, '-')
-  .trim().toLowerCase().replace(/\s+/g, ' ');
+const NORMALIZED = new Map();
+export const normalizeName = (v) => {
+  const s = String(v ?? '');
+  let out = NORMALIZED.get(s);
+  if (out === undefined) {
+    out = s.normalize('NFKC')
+      .replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/[‐-―]/g, '-')
+      .trim().toLowerCase().replace(/\s+/g, ' ');
+    // Emptied rather than trimmed once it is large: one sheet and its
+    // catalogues hold a few thousand names, so this is only ever a guard.
+    if (NORMALIZED.size >= 50000) NORMALIZED.clear();
+    NORMALIZED.set(s, out);
+  }
+  return out;
+};
 
 /**
  * Edit distance, abandoned once it cannot come in under `limit`.

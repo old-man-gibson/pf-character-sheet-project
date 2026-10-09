@@ -1883,6 +1883,13 @@ console.log('veils -- a catalogue read where it stands, not copied onto the shee
   check('the catalogue holds what the pack carried', veilCatalogue().veils.length, 3);
   check('a veil is found however it was capitalised', veilEntry('AETHER wire').descriptor, 'Enhanced, Force');
   check('unknown reads null', veilEntry('Nothing'), null);
+  check('nor does a doubled space', veilEntry('Aether  Wire')?.name, 'Aether Wire');
+  // Found through an index built on the first lookup: a catalogue set again
+  // is read afresh, not through what the last one left.
+  setVeilCatalogue(mergeTables([pack('b', [mass])]).veils);
+  check('a catalogue set again has only its own veils', [veilEntry('Aether Wire'), veilEntry('acidic mass')?.name],
+    [null, 'Acidic Mass']);
+  setVeilCatalogue(mergeTables([pack('a', [wire, mass, loose])]).veils);
   check('its chakras are split as well as kept', [veilEntry('Aether Wire').slot, veilEntry('Aether Wire').slots],
     ['Hands, Wrists', ['Hands', 'Wrists']]);
   check('every class any veil names', veilClasses(), ['Daevic', 'Eclipse', 'Vizier']);
