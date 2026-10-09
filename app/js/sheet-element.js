@@ -5200,6 +5200,33 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     /*
+     * A mouse wheel moves the tab bar while the bar is one row that scrolls
+     * sideways (phone width, see `.tabs` in sheet.css). A wheel only turns up
+     * and down, the bar hides its scrollbar, and the browser gives an up-down
+     * turn to the page, so with a mouse the tabs past the edge could only be
+     * reached by clicking a tab and using the arrow keys.
+     *
+     * A sideways gesture (a trackpad, a tilting wheel) already moves the bar
+     * and is left alone, and so is a turn the bar cannot follow because it is
+     * at that end already: that one scrolls the page, as it did before. The
+     * bar is asked whether it scrolls at all rather than how wide the window
+     * is, so the column of the side rail, which clips rather than scrolls,
+     * never takes the wheel. On the bar itself, which every render replaces.
+     */
+    root.querySelector('nav.tabs')?.addEventListener('wheel', (e) => {
+      const bar = e.currentTarget;
+      if (e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const room = bar.scrollWidth - bar.clientWidth;
+      if (room < 1 || !/auto|scroll/.test(getComputedStyle(bar).overflowX)) return;
+      // Lines and pages, which some browsers count a wheel's turn in, as pixels.
+      const step = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? bar.clientWidth : 1);
+      const to = Math.max(0, Math.min(room, bar.scrollLeft + step));
+      if (Math.abs(to - bar.scrollLeft) < 1) return;
+      e.preventDefault();
+      bar.scrollLeft = to;
+    }, { passive: false });
+
+    /*
      * Folding something away, or opening it back up.
      *
      * The button says what to store rather than the handler working it out:
