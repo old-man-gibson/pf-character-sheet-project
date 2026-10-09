@@ -27,8 +27,8 @@ import {
   ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, recipePart, recipePlain,
   saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
-import { evaluateFormula, parse } from './formula.js';
-import { getPath, isPinned, normalizeName, setPath, slug } from './model/util.js';
+import { parse } from './formula.js';
+import { evaluateAmount, getPath, isPinned, normalizeName, setPath, slug } from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -1408,18 +1408,33 @@ export function companionBreakdown(kind, block, stat) {
 }
 
 /**
- * The boxes on a companion that take a formula as readily as a number: the
- * three AC buckets, CMD and CMB other, initiative, and each save's misc. What
- * was typed is kept as typed; the model works each one out (`calc.typed`)
- * and the sums read the answer through `withTypedNumbers`.
+ * The boxes on a companion that take a formula as readily as a number, each
+ * with the name the Formula Audit gives it: the three AC buckets, CMD and CMB
+ * other, initiative, each save's misc and the bonus feats. What was typed is
+ * kept as typed; the model works each one out (`calc.typed`) and the sums read
+ * the answer through `withTypedNumbers`. A box added here is worked out and
+ * audited with nothing else to change (see FORMULA_FIELDS in model/reconcile.js).
  */
-export const COMPANION_FORMULA_FIELDS = [
-  'ac.all', 'ac.touch', 'ac.ff', 'cmdOther', 'cmbOther', 'initBonus',
-  'saves.fort.misc', 'saves.ref.misc', 'saves.will.misc', 'bonusFeats',
-];
+export const COMPANION_FORMULA_FIELDS = {
+  'ac.all': 'Bonus AC (all)',
+  'ac.touch': 'Bonus AC (touch only)',
+  'ac.ff': 'Bonus AC (flat-footed only)',
+  cmdOther: 'CMD other',
+  cmbOther: 'CMB other',
+  initBonus: 'Initiative bonus',
+  'saves.fort.misc': 'Fortitude misc',
+  'saves.ref.misc': 'Reflex misc',
+  'saves.will.misc': 'Will misc',
+  bonusFeats: 'Bonus feats',
+};
 
-/** The speed boxes, which hold text ("30 ft.") or a formula worked out in feet. */
-export const COMPANION_SPEEDS = ['base', 'fly', 'swim', 'climb', 'burrow'];
+/** The speed boxes, which hold text ("30 ft.") or a formula worked out in feet, by name. */
+export const COMPANION_SPEEDS = {
+  base: 'Speed', fly: 'Fly speed', swim: 'Swim speed', climb: 'Climb speed', burrow: 'Burrow speed',
+};
+
+/** A number kept as text -- an older save -- which needs no scope to read. */
+export const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
 
 /**
  * A block with each formula box as the number it came to. `typed` is
@@ -1439,7 +1454,9 @@ export function withTypedNumbers(b, typed) {
  * Work out a companion's formula boxes, and its speeds where one is written
  * as a formula. `scope` is called only if there is a formula to read it for.
  * Returns `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds as
- * `{ key: { value, error } }` with the value in feet ("40 ft.").
+ * `{ key: { value, feet, error } }` with the value as shown ("40 ft.").
+ * Each is worked out by evaluateAmount, the one rule every number-or-formula
+ * box on the sheet follows.
  *
  * A speed is text first. "30 ft." and "60 ft. (good)" are not formulas and
  * stay as written; one that parses -- `30`, `20 + 10 * floor(conjured.hd / 5)`
@@ -1450,26 +1467,20 @@ export function companionFormulas(b, scope) {
   const speeds = {};
   let s = null;
   const sc = () => (s ??= scope());
-  for (const path of COMPANION_FORMULA_FIELDS) {
+  for (const path of Object.keys(COMPANION_FORMULA_FIELDS)) {
     const raw = getPath(b, path);
     if (typeof raw !== 'string' || raw.trim() === '') continue;
-    if (/^-?\d+$/.test(raw.trim())) { typed[path] = { value: Number(raw), error: null }; continue; }
-    try {
-      const v = Number(evaluateFormula(raw, sc()));
-      typed[path] = { value: Number.isFinite(v) ? Math.floor(v) : 0, error: null };
-    } catch (err) {
-      typed[path] = { value: 0, error: err.message };
-    }
+    typed[path] = PLAIN_NUMBER.test(raw.trim())
+      ? { value: Math.floor(Number(raw)), error: null }
+      : evaluateAmount(raw, sc());
   }
-  for (const key of COMPANION_SPEEDS) {
+  for (const key of Object.keys(COMPANION_SPEEDS)) {
     const raw = String(b.speed?.[key] ?? '').trim();
     if (!raw || !parses(raw)) continue;
-    try {
-      const v = Number(evaluateFormula(raw, sc()));
-      speeds[key] = { value: `${Number.isFinite(v) ? Math.floor(v) : 0} ft.`, error: null };
-    } catch (err) {
-      speeds[key] = { value: null, error: err.message };
-    }
+    const r = evaluateAmount(raw, sc());
+    speeds[key] = r.error
+      ? { value: null, feet: null, error: r.error }
+      : { value: `${r.value} ft.`, feet: r.value, error: null };
   }
   return { typed, speeds };
 }

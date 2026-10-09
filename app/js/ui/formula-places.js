@@ -401,6 +401,12 @@ function placeOf(model, ref) {
     case 'statCell': return { tab: 'stats', sel: [set(ref.slice('statCell:'.length))] };
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
+    // A companion's number-or-formula box or a speed written as a formula:
+    // `companionCell:<kind>:<index>:<path>`, the index as the audit found it.
+    case 'companionCell':
+      return COMPANION_KINDS.includes(a) && /^\d+$/.test(b) && c
+        ? companionPlace(model, a, Number(b), (p) => [set(`${p}.${c}`)])
+        : null;
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 
     default: {

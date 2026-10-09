@@ -1501,7 +1501,30 @@ console.log('companions -- a typed box takes a formula');
   c.set('conjured.0.speed.base', '30 ft.');
   c.set('conjured.0.speed.fly', '20 + 10 * floor(conjured.hd / 5)');
   check('a speed is text until it is a formula, then feet',
-    [k().speeds.base, k().speeds.fly], [undefined, { value: '30 ft.', error: null }]);
+    [k().speeds.base, k().speeds.fly], [undefined, { value: '30 ft.', feet: 30, error: null }]);
+
+  // Every one of them is on the Formulas tab and in the audit, as the
+  // character's own boxes are: by companion, with what it came to and the
+  // place its go-to button opens.
+  const rows = () => c.audit().filter((r) => r.id.startsWith('companion-'));
+  const who = 'Conjured Companion';
+  check('each box written as a formula is audited, and a number or plain text is not',
+    rows().map((r) => [r.name, r.value, r.status, r.place, r.where]), [
+      [`${who} — Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
+      [`${who} — Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
+      [`${who} — Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
+      [`${who} — Fly speed`, 30, 'ok', 'companionCell:conjured:0:speed.fly', 'the Conjured Companion tab'],
+    ]);
+  c.set('conjured.0.cmdOther', '2');
+  check('a number kept as text counts, and is not listed as a formula',
+    [k().typed.cmdOther, rows().some((r) => r.place.endsWith(':cmdOther'))], [{ value: 2, error: null }, false]);
+  c.set('conjured.0.cmbOther', 'conjured.nosuch');
+  c.set('conjured.0.speed.swim', 'conjured.nosuch * 2');
+  check('a broken one is a problem the Formulas tab lists, with the way to it',
+    ['cmbOther', 'speed.swim'].map((p) => c.formulaProblems()
+      .some((x) => x.places.some((pl) => pl.place === `companionCell:conjured:0:${p}`))), [true, true]);
+  c.set('conjured.0.cmbOther', 0);
+  c.set('conjured.0.speed.swim', '');
 
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('what was typed is what is saved, and works out again on load',

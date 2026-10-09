@@ -13,6 +13,9 @@ import {
   AC_BONUS_TYPES, BUFF_MOD_KEYS, DERIVED, FORWARD_BY_DERIVED, SAVE_BONUS_TYPES, bonusColumnName, diceString,
   flatFootedLoss, skillLabel,
 } from '../rules.js';
+import {
+  COMPANION_FORMULA_FIELDS, COMPANION_KINDS, COMPANION_LABELS, COMPANION_SPEEDS, PLAIN_NUMBER, companionHeading,
+} from '../companions.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
 import { contextualNote } from '../formula-format.js';
@@ -564,6 +567,32 @@ export const FORMULA_FIELDS = [
       ];
     }),
   },
+  {
+    // A companion's number-or-formula boxes (COMPANION_FORMULA_FIELDS) and a
+    // speed written as a formula, each on its own kind's tab. The box keeps
+    // what was typed; the model left what it came to in calc.typed and
+    // calc.speeds. A number, typed or kept as text, is not a formula.
+    key: 'companionCell', source: 'player',
+    collect: (model) => COMPANION_KINDS.flatMap((kind) => (model.data[kind] || []).flatMap((b, i) => {
+      if (!b || typeof b !== 'object') return [];
+      const who = companionHeading(kind, b);
+      const boxes = [
+        ...Object.entries(COMPANION_FORMULA_FIELDS)
+          .map(([path, label]) => [path, label, getPath(b, path), b.calc?.typed?.[path]]),
+        ...Object.entries(COMPANION_SPEEDS).map(([key, label]) => {
+          const r = b.calc?.speeds?.[key];
+          return [`speed.${key}`, label, b.speed?.[key], r && { value: r.feet, error: r.error }];
+        }),
+      ];
+      return boxes
+        .filter(([, , raw, r]) => r && stringFormula(raw) && !PLAIN_NUMBER.test(raw.trim()))
+        .map(([path, label, raw, r]) => ({
+          id: `companion-${kind}-${i}-${path}`, place: `companionCell:${kind}:${i}:${path}`,
+          name: `${who} — ${label}`, where: `the ${COMPANION_LABELS[kind]} tab`,
+          formula: raw, value: r.value, error: r.error,
+        }));
+    })),
+  },
 ];
 
 /** One field's formula as an audit row: what it reads, and what is wrong with it. */
@@ -584,7 +613,9 @@ function fieldRow(entry, it, known) {
     error,
     status: error ? 'error' : 'ok',
     createdAt: null,
-    ...(entry.where ? { where: entry.where } : null),
+    // Where the field is: the entry's, or the row's own when the entry's
+    // fields are spread over several tabs.
+    ...(it.where || entry.where ? { where: it.where || entry.where } : null),
   };
 }
 
