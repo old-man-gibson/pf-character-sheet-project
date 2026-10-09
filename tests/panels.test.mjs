@@ -191,6 +191,19 @@ function renders(who, name, draw, model) {
     console.log(`  FAIL ${who} — ${name} has a view control a reader would lose: ${viewless[0].slice(0, 120)}`);
     return html;
   }
+  // A list dropped into a template without `.join('')` comes out with a
+  // comma between every item, and in a grid each comma takes a cell of its
+  // own -- the conjured companion's ability increases sat in a grid half
+  // made of commas. Two shapes are that and nothing else: a comma hard up
+  // against both tags, and a comma that starts a line of its own. Prose's
+  // comma follows its word and is followed by a space or a line break.
+  const stray = /<\/[a-z0-9]+>(?:,<|\s*\n\s*,\s*<)/i.exec(html);
+  if (stray) {
+    fail++;
+    console.log(`  FAIL ${who} — ${name} has a stray comma between tags (a list not joined): `
+      + `${html.slice(Math.max(0, stray.index - 80), stray.index + 40).replace(/\s+/g, ' ')}`);
+    return html;
+  }
   // Every × is rows.removeControl's, which names what it takes; a remove
   // button that says nothing to a screen reader was written by hand.
   const bare = (html.match(/<button[^>]*\sdata-remove(?:-armed)?="[^"]*"[^>]*>/g) || [])
@@ -247,6 +260,31 @@ const sweep = (who, model) => {
 
 console.log('a blank sheet draws every panel');
 sweep('a blank sheet', new Character(blankDocument('panels-test')));
+
+console.log('a casting companion draws its pool and its tradition');
+{
+  // The blank sweep's conjured companion casts nothing, and the Casting panel
+  // -- the pool's line, the tradition's lists -- is a branch of its own.
+  const m = new Character(blankDocument('casting-panels-test'));
+  m.set('conjured.0.levelOverride', 9);
+  m.set('conjured.0.baseForm', 'Orb');
+  m.set('conjured.0.archetypes.mage', true);
+  m.set('conjured.0.tradition.name', 'Fey Magic');
+  m.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
+  m.listAdd('conjured.0.tradition.boons', 'Easy Focus {conjured.cha.score += 2}');
+  const html = renders('a casting companion', 'Conjured Companion', (x) => subsystems.companionPanel(x, 'conjured'), m);
+  for (const [what, needle] of [['its pool', 'data-tracker-step="conjured_spell_points"'],
+    ['its tradition', 'value="Fey Magic"'], ['a drawback', 'conjured.0.tradition.drawbacks|0|self'],
+    ['a boon', 'conjured.0.tradition.boons|0|self'],
+    // 9th level is 7 dice: four feat slots, open, and labelled by Hit Die.
+    ['its last open feat slot', 'data-item="conjured.0.feats|3|name"'], ['a slot’s Hit Die', 'placeholder="7 HD"'],
+    ['the bonus feats box', 'data-set="conjured.0.bonusFeats"']]) {
+    if (html && !html.includes(needle)) {
+      fail++;
+      console.log(`  FAIL a casting companion — the Casting panel does not draw ${what}`);
+    } else pass++;
+  }
+}
 
 console.log('a minionmancer\'s tab draws its chips and the companion selected');
 {

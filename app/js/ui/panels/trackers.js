@@ -21,11 +21,11 @@ import { colorControl } from '../color-control.js';
 import { evaluateFormula } from '../../formula.js';
 import { highlight, pretty, workingLine, workings } from '../../formula-format.js';
 import { hasTokens } from '../../inline.js';
-import { SYSTEM_POOLS, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
+import { poolDef, trackerDrains, trackerFacts, trackerShown } from '../../model/trackers.js';
 import { trackerForwardKey } from '../../model/util.js';
 
 /** What a casting pool's maximum is, said once for the row and the editor. */
-const poolWhat = (t) => SYSTEM_POOLS.find((p) => p.pool === t?.pool)?.what || '';
+const poolWhat = (model, t) => poolDef(t?.pool, model.data)?.what || '';
 import {
   THEME_ACCENT, THEME_NEGATIVE, barLayout, normalizeStyle, resolveZones,
   rgba, squareLayout, stepColor, trackBand, zoneAt,
@@ -136,6 +136,26 @@ export function trackerReading(t) {
 }
 
 /**
+ * A tracker as one line to play from: its name, its meter, and − n +. The
+ * Overview's resources card is a list of these, and a panel that owns a pool
+ * (a casting companion's spell points) shows its own the same way.
+ */
+export function trackerLine(t) {
+  const { shown, range, draining } = trackerReading(t);
+  return `<div class="dashtracker${t.error ? ' invalid' : ''}">
+        <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
+        <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
+        <span class="tracker-controls">
+          <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
+          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
+            aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
+          <span class="pool">${range}</span>
+          <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
+        </span>
+      </div>`;
+}
+
+/**
  * One tracker. An ordinary pool runs 0..max and `current` counts what has
  * been spent. A tracker whose min is below zero is a two-sided meter
  * (Hellfire Qi: -7..+7): `current` is a signed position, negative pips grow
@@ -162,13 +182,13 @@ function trackerRow(model, ctx, t) {
         <div class="tname">${esc(t.name)}
           ${t.source === 'player' ? (t.pool ? '<span class="badge">built-in</span>' : '<span class="badge player">custom</span>')
   : `<span class="badge">from sheet${t.edited ? ', edited' : ''}</span>`}
-          ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? 'Every caster carries this pool while their system grants points'
+          ${protectedTracker ? `<span class="badge" title="${esc(t.pool ? (poolDef(t.pool, model.data)?.held || 'Every caster carries this pool while their system grants points')
     : 'Every character has Mythic Power from level 8')}">required</span>` : ''}
           ${t.refresh ? `<span class="badge">${esc(t.refresh)}</span>` : ''}
           ${draining ? '<span class="badge">drains</span>' : ''}
           ${stateBadge}
         </div>
-        ${t.pool ? `<div class="tmeta">max: ${esc(poolWhat(t))}</div>`
+        ${t.pool ? `<div class="tmeta">max: ${esc(poolWhat(model, t))}</div>`
     : t.maxFormula ? formulaMeta(model, 'max', t.maxFormula) : ''}
         ${t.minFormula ? formulaMeta(model, 'min', t.minFormula) : ''}
         ${['max', 'min'].map((edge) => {
@@ -434,7 +454,7 @@ function trackerEditRow(model, ctx, t) {
       <div class="formrow" style="margin:0">
         <div class="cols">
           <input data-tedit="name" placeholder="Name" value="${esc(d.name)}" aria-label="Tracker name">
-          ${t.pool ? `<input class="mono" disabled value="" placeholder="${esc(`Max: ${poolWhat(t)}`)}" aria-label="Max, worked out">`
+          ${t.pool ? `<input class="mono" disabled value="" placeholder="${esc(`Max: ${poolWhat(model, t)}`)}" aria-label="Max, worked out">`
     : `<input class="mono" data-tedit="maxFormula" placeholder="Max, as a formula" value="${esc(d.maxFormula)}" aria-label="Max formula">`}
           <input class="mono" data-tedit="minFormula" placeholder="Min (optional)" value="${esc(d.minFormula)}" aria-label="Min formula">
           <input data-tedit="refresh" placeholder="Refresh" value="${esc(d.refresh)}" aria-label="Refresh">

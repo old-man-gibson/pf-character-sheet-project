@@ -6,13 +6,14 @@
  */
 
 import {
-  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionSkillKey,
-  computeCompanion, defaultCompanion, seedSkills,
+  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionFormulas, companionSkillKey,
+  computeCompanion, defaultCompanion, emptyCompanionFeat, seedSkills, withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
+import { poolTracker } from '../trackers.js';
 import { setPath, skillRanksNamed } from '../util.js';
 
 // A companion: the level, HD, hit points, attack, saves, AC and every skill
@@ -329,16 +330,43 @@ export function companionBonuses(model, kind, b) {
   return out;
 }
 
-export function recomputeCompanions(model) {
+/**
+ * Every companion worked out afresh. `bare` leaves out what has been forwarded
+ * at them, for the second recompute pass to read them by (see
+ * Character#computePass).
+ */
+export function recomputeCompanions(model, { bare = false } = {}) {
   const master = companionMaster(model);
   for (const kind of COMPANION_KINDS) {
     (model.data[kind] || []).forEach((b) => {
-      const { calc, skills, attacks } = computeCompanion(kind, b, master, companionBonuses(model, kind, b));
+      // The boxes written as formulas are worked out first and the sums read
+      // the answers; what was typed stays on the block (see companionFormulas).
+      const { typed, speeds } = companionFormulas(b, () => model.scope());
+      const { calc, skills, attacks } = computeCompanion(kind, withTypedNumbers(b, typed), master,
+        bare ? null : companionBonuses(model, kind, b));
+      calc.typed = typed;
+      calc.speeds = speeds;
       b.calc = calc;
       b.skills = skills;
       b.attacks = attacks;
     });
   }
+}
+
+/**
+ * A row to grow a list by when a write lands past its end, or null.
+ *
+ * A conjured companion's feats are drawn as slots -- one per odd Hit Die,
+ * then the bonus feats -- whether or not a row is stored for each, so that a
+ * companion nobody has given a feat to stores none (and is not taken for one
+ * in use). Typing into an open slot writes there, and setItem grows the list
+ * to reach it with blank rows from here.
+ */
+export function companionOpenSlot(model, path, index) {
+  const m = /^conjured\.(\d+)\.feats$/.exec(String(path));
+  const b = m ? (model.data.conjured || [])[Number(m[1])] : null;
+  if (!b || !(index < (Number(b.calc?.featSlots) || 0))) return null;
+  return () => emptyCompanionFeat();
 }
 
 /**
@@ -392,5 +420,9 @@ export function companionRest(model, kind, index) {
   const b = blockAt(model, kind, index);
   if (!b) return model;
   b.hp = { ...(b.hp || {}), damage: 0, temp: 0 };
+  // Its own spell points come back with its hit points: a companion recovers
+  // its resources when its caster rests, and this is that rest.
+  const pool = b.id ? poolTracker(model, `sp:${b.id}`) : null;
+  if (pool) pool.current = 0;
   return model.recompute();
 }

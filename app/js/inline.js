@@ -592,8 +592,14 @@ export function resolveDefinitions(defs, baseScope) {
  *                       `skill` becomes every skill) and returns null for
  *                       anything unforwardable; `targetOf` returns what
  *                       `target` reads for one of those keys.
+ * @param keep           optional `(contribution, index)` -> the entry an
+ *                       earlier resolution made of that same bonus, when its
+ *                       amount is to stand rather than be worked out again;
+ *                       null to work it out. Only a bonus that landed is
+ *                       kept, so a kept entry's error is its formula's. See
+ *                       resolveInlineNames for the one caller.
  */
-export function resolveContributions(contributions, names, baseScope, targets) {
+export function resolveContributions(contributions, names, baseScope, targets, keep = null) {
   const expand = targets?.expand || (() => null);
   const known = targets?.known || (() => false);
   const targetOf = targets?.targetOf ? (key) => targets.targetOf(key, baseScope) : null;
@@ -603,7 +609,7 @@ export function resolveContributions(contributions, names, baseScope, targets) {
   const by = {};              // destination -> every bonus aimed at it, in order
   const countedAt = {};       // destination -> the subset of those that stack
 
-  for (const c of contributions) {
+  for (const [i, c] of contributions.entries()) {
     const lands = [];
     const dropped = [];
     for (const t of c.targets) {
@@ -630,9 +636,15 @@ export function resolveContributions(contributions, names, baseScope, targets) {
     let value = 0;
     let error = null;
     let each = null;
-    if (targetOf && readsTarget(c.expr)) {
-      each = amountsPerTarget(c.expr, c.sign, keys,
-        (target) => proseScope(names, c.scope, baseScope, target), targetOf);
+    const kept = keep ? keep(c, i) : null;
+    if (kept && !kept.values) {
+      value = kept.value;
+      error = kept.error || null;
+      if (error) errors.push({ path: c.path, error, source: c.raw });
+    } else if (kept || (targetOf && readsTarget(c.expr))) {
+      each = kept ? { value: kept.value, values: kept.values, failed: kept.failed || {} }
+        : amountsPerTarget(c.expr, c.sign, keys,
+          (target) => proseScope(names, c.scope, baseScope, target), targetOf);
       value = each.value;
       // One complaint per thing wrong, not one per skill it was wrong on: a
       // misspelt part is misspelt forty times over and is one fix. Where it

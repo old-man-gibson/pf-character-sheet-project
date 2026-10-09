@@ -1000,6 +1000,8 @@ function rulesHtml() {
       'The id is slugged from the name the tracker was created with and never changes afterwards, so renaming a tracker cannot break a formula pointing at it. Each tracker’s ✎ editor spells out its own id.'],
     ['A few names only exist in one kind of field.',
       'self inside a tracker, essence.self inside a veil, target inside a bonus. They are the easiest thing here to get wrong, so they have a table of their own above.'],
+    ['Bonuses to the core stats are worked out first.',
+      'A bonus to an ability score, save, armour class, attack, initiative, hit points, class level, speed or caster level is worked out from the sheet as it stood before any bonus, so one cannot feed another or itself. A bonus to anything worked out after those — skills, companions, weapons, trackers — reads them with those bonuses in: {skill.appraise += int.mod} counts an {int.score += 2} written elsewhere, and a companion’s Hit Dice follow a {spheres.cl += 1}.'],
     ['target is the stat a bonus is added to.',
       'In a forwarded bonus, target is the destination stat, and the formula is evaluated once per destination: {skill -= if(target.ranks == 0, 2, 0)} gives −2 to untrained skills and 0 to the rest. Values are read from before any bonus is applied, and saves and armour classes without their Other column, so a bonus cannot change its own input. Stats calculated after bonuses are applied (skills, weapons, trackers and others) expose only values bonuses do not change, such as a skill’s ranks and classSkill; asking for anything else gives an error listing what is available.'],
     ['A tracker’s note shows values but does not publish them.',

@@ -9,6 +9,7 @@
  */
 
 import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
+import { COMPANION_KINDS, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded } from './scope.js';
@@ -75,22 +76,64 @@ export const SYSTEM_POOLS = [
   },
 ];
 
-const poolDef = (pool) => SYSTEM_POOLS.find((p) => p.pool === pool) || null;
+/*
+ * A companion that casts has spell points of its own, and they are a pool the
+ * same way: one tracker per such companion, marked `sp:<id>` with the id the
+ * companion reads by in a formula (`conjured`, `conjured2`), so renaming
+ * either keeps the two together. Its maximum is the companion's worked-out
+ * pool, its name the companion's at the time it was made.
+ */
+const COMPANION_POOL = /^sp:(.+)$/;
 
-/** The tracker that holds a casting pool ('sp' or 'pp'), or null. */
+const companionById = (d, id) => COMPANION_KINDS
+  .flatMap((kind) => (d[kind] || []).map((b) => ({ kind, b })))
+  .find(({ b }) => String(b?.id ?? '') === id) || null;
+
+function companionPoolDef(d, id) {
+  const found = companionById(d, id);
+  if (!found) return null;
+  const { kind, b } = found;
+  const who = String(b.name || '').trim() || companionHeading(kind, b);
+  return {
+    pool: `sp:${id}`,
+    id: `${id}_spell_points`,
+    name: `${who} Spell Points`,
+    match: null,
+    what: `${who}’s spell points, worked out on its tab`,
+    held: 'Kept while this companion casts',
+    has: (doc) => !!companionById(doc, id)?.b?.calc?.casting,
+    max: (doc) => Number(companionById(doc, id)?.b?.calc?.casting?.spellPoints) || 0,
+  };
+}
+
+/** Every pool a character may hold: its own casting pools, and each casting companion's. */
+function poolDefs(d) {
+  const ids = COMPANION_KINDS.flatMap((kind) => (d[kind] || []).map((b) => String(b?.id ?? '')));
+  return [...SYSTEM_POOLS, ...ids.filter(Boolean).map((id) => companionPoolDef(d, id))];
+}
+
+/** A pool's definition by its mark ('sp', 'pp', 'sp:conjured'), or null. */
+export function poolDef(pool, d) {
+  const own = SYSTEM_POOLS.find((p) => p.pool === pool);
+  if (own) return own;
+  const m = COMPANION_POOL.exec(String(pool ?? ''));
+  return m && d ? companionPoolDef(d, m[1]) : null;
+}
+
+/** The tracker that holds a casting pool ('sp', 'pp' or a companion's 'sp:<id>'), or null. */
 export function poolTracker(model, pool) {
-  const def = poolDef(pool);
+  const def = poolDef(pool, model.data);
   if (!def) return null;
   const list = model.trackers || [];
   return list.find((t) => t.pool === pool)
     || list.find((t) => !t.pool && t.id === def.id)
-    || list.find((t) => !t.pool && def.match.test(String(t.name || '').trim()))
+    || (def.match && list.find((t) => !t.pool && def.match.test(String(t.name || '').trim())))
     || null;
 }
 
-/** Give every caster the pool trackers their systems grant. */
+/** Give every caster, and every companion that casts, the pool trackers their systems grant. */
 export function ensureSystemPools(model) {
-  for (const def of SYSTEM_POOLS) {
+  for (const def of poolDefs(model.data)) {
     if (def.has(model.data)) addPoolTracker(model, def);
   }
 }
@@ -107,7 +150,7 @@ export function missingSystemPools(model) {
  * calculated pool, as it is for the ones made automatically.
  */
 export function addSystemPool(model, pool) {
-  const def = poolDef(pool);
+  const def = poolDef(pool, model.data);
   if (!def || poolTracker(model, pool)) return model;
   addPoolTracker(model, def);
   model.recompute();
@@ -307,7 +350,7 @@ export function recomputeTrackers(model) {
     // a failed formula does everywhere else; keeping last pass's number and
     // adding the bonus to it again made the range grow on every recompute.
     let max = 0;
-    const pool = t.pool ? poolDef(t.pool) : null;
+    const pool = t.pool ? poolDef(t.pool, model.data) : null;
     if (pool) {
       // The system's own number, and for power points its own spent count.
       max = pool.max(model.data);
@@ -413,7 +456,7 @@ function setTracker(model, t, patch) {
   Object.assign(t, patch);
   // A pool that keeps its spent count elsewhere is written there, or the
   // recompute would read the old count straight back.
-  const linked = t.pool ? poolDef(t.pool)?.spent : null;
+  const linked = t.pool ? poolDef(t.pool, model.data)?.spent : null;
   if (linked && patch && 'current' in patch) linked.set(model.data, t.current);
   model.recompute();
   // A value typed in is held to the range, the way a step is -- 99 typed into
@@ -437,7 +480,7 @@ function setTracker(model, t, patch) {
 export function isProtectedTracker(model, id) {
   if (id === MYTHIC_POWER_ID) return true;
   const t = (model.trackers || []).find((x) => x.id === id);
-  const pool = t?.pool ? poolDef(t.pool) : null;
+  const pool = t?.pool ? poolDef(t.pool, model.data) : null;
   return !!pool && pool.has(model.data);
 }
 
