@@ -20,6 +20,7 @@ import { applyMythic, refreshAbilities } from './abilities.js';
 import { applyCorrections } from './corrections.js';
 import { TRAINING_SIDES } from './spheres.js';
 import { emit } from './events.js';
+import { markUndo } from './undo.js';
 import { applyGestalt } from './progression.js';
 import { forwarded } from './scope.js';
 import { resolveDefenceBonuses } from './stats/defenses.js';
@@ -345,6 +346,41 @@ export function diffFromSource(model) {
     if (Number(now) !== Number(was)) out.push({ key: d.key, label: d.label, was, now });
   }
   return out;
+}
+
+/**
+ * Count from the sheet as it stands: every total the header lists as changed
+ * from the source sheet becomes the figure it is compared with from now on.
+ * Nothing on the character moves -- `imported` is only what each total is
+ * measured against (and, as a sheet opens, reconciled to) -- so a level
+ * gained, or anything else that moves a total, stops reading as a difference
+ * once the player has seen it.
+ */
+export function acceptSourceDiffs(model) {
+  for (const d of diffFromSource(model)) model.imported[d.key] = Number(d.now) || 0;
+  return model;
+}
+
+/** The casting totals a workbook cached, which the Magic tab sets beside its own. */
+export const SHEET_CASTING_TOTALS = ['totalCL', 'totalDC', 'totalMSB', 'totalMSD', 'totalSP'];
+
+/**
+ * Stop comparing the casting numbers with the Google Sheet's.
+ *
+ * The workbook's own totals are kept from the import so a difference shows up
+ * as soon as the sheet opens. They are right on the day of the import and go
+ * stale with the first level gained, after which a red "sheet: 15" beside the
+ * caster level is only noise -- so they can be let go. Undoable, like any
+ * removal.
+ */
+export function forgetSheetCasting(model) {
+  const s = model.data.training?.magic?.sheet;
+  if (!s || !SHEET_CASTING_TOTALS.some((k) => k in s)) return model;
+  markUndo(model, 'Stopped comparing with the Google Sheet');
+  for (const k of SHEET_CASTING_TOTALS) delete s[k];
+  model.recompute();
+  emit(model, { type: 'set', path: 'training.magic.sheet', value: s });
+  return model;
 }
 
 /**

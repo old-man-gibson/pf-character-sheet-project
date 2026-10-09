@@ -3722,6 +3722,10 @@ input[type="color"] {
 .badge.ok { color: var(--cs-good); border-color: var(--cs-good); }
 .badge.err { color: var(--cs-bad); border-color: var(--cs-bad); }
 .badge.player { color: var(--cs-edit); border-color: var(--cs-edit); }
+/* A badge that does something when pressed -- the Magic tab's "sheet: 15",
+   which lets the Google Sheet's stale figure go: a badge still, not a button. */
+button.badge { background: transparent; line-height: inherit; }
+button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
 
 .tag {
   display: inline-block; font-family: var(--cs-mono); font-size: 0.72rem;

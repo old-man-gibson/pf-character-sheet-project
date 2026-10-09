@@ -418,8 +418,12 @@ function boonSplit(m) {
 
 
 function magicGlobalsPanel(model, m) {
+    // The Google Sheet's own totals, kept from the import. They go stale with
+    // the first level the sheet gains, so the mark is also the way to stop
+    // comparing with them (undoable).
     const hint = (mine, sheet) => (sheet && mine !== sheet
-      ? `<span class="badge err" title="The Google Sheet cached a different value">sheet: ${esc(sheet)}</span>` : '');
+      ? `<button class="badge err sheetfig" data-action="forget-sheet-casting"
+          title="${esc(`The Google Sheet had ${sheet} when it was imported. Press to stop comparing the casting numbers with the sheet's own once they have moved on.`)}">sheet: ${esc(sheet)} ×</button>` : '');
     const s = m.sheet || {};
     return `<section class="panel">
       <h3>Casting numbers</h3>
