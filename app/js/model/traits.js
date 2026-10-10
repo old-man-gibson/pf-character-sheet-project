@@ -8,7 +8,7 @@
  */
 
 import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
-import { evaluateAmount, speedForwardKey } from './util.js';
+import { evaluateAmount, speedRows } from './util.js';
 
 /**
  * Movement rates: base plus bonus, with the bonus allowed to be a formula.
@@ -31,20 +31,19 @@ export function recomputeSpeeds(model) {
   // rather than merely unlikely -- the same line the inline names draw
   // against the skills.
   if (scope) scope.speed = {};
-  for (const sp of speeds) {
-    // Rounded down, as every formula field is.
-    const { value: bonus, error } = evaluateAmount(sp.bonus, scope);
-    sp.bonusError = error;
-    sp.bonusNum = bonus;
-    // A bonus forwarded here from elsewhere on the sheet is kept beside the
-    // one typed in, never folded into it -- the same way a skill keeps its
-    // Misc and its forwarded amount apart, and for the same reason: the
-    // field has to go on saying what was written in it.
-    sp.handle = speedForwardKey(sp);
-    sp.forwarded = sp.handle ? forwarded(model, sp.handle) : 0;
-    sp.final = (Number(sp.base) || 0) + bonus + sp.forwarded;
-    if (scope && sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
-  }
+  // A bonus forwarded here from elsewhere on the sheet is kept beside the one
+  // typed in, never folded into it -- the same way a skill keeps its Misc and
+  // its forwarded amount apart, and for the same reason: the field has to go
+  // on saying what was written in it.
+  speedRows(speeds, scope, { forwardedAt: (handle) => forwarded(model, handle), named: scope?.speed })
+    .forEach((r, i) => {
+      const sp = speeds[i];
+      sp.bonusError = r.error;
+      sp.bonusNum = r.bonus;
+      sp.handle = r.handle;
+      sp.forwarded = r.forwarded;
+      sp.final = r.final;
+    });
 }
 
 /**

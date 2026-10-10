@@ -294,7 +294,7 @@ function everywhere() {
   // on the second of a kind and the first.
   wisp.ac = { ...(wisp.ac || {}), all: 'floor(level / 4)' };
   wisp.saves = { ...(wisp.saves || {}), will: { ...(wisp.saves?.will || {}), misc: 'floor(level / 8)' } };
-  wisp.speed = { ...(wisp.speed || {}), fly: '30 + 10' };
+  wisp.speeds = [{ type: 'Fly', base: 0, bonus: '30 + 10' }];
   d.eidolon[0].cmdOther = 'floor(level / 4)';
   c.addTracker({ name: 'Burn', maxFormula: 'level', minFormula: '0 - level',
     style: { zones: [{ from: 'self.max - 2', to: 'self.max', color: '#aa2222', label: 'danger' }] } });
@@ -329,7 +329,7 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
     [['ok', 2], ['ok', 1], ['ok', 2], ['ok', 4]]);
   check('a companion\'s boxes and speed are audited, worked out',
     ['companion-eidolon-0-cmdOther', 'companion-eidolon-1-ac.all', 'companion-eidolon-1-saves.will.misc',
-      'companion-eidolon-1-speed.fly'].map((id) => rows.find((r) => r.id === id)).map((r) => [r?.status, r?.value]),
+      'companion-eidolon-1-speeds.0.bonus'].map((id) => rows.find((r) => r.id === id)).map((r) => [r?.status, r?.value]),
     [['ok', 2], ['ok', 2], ['ok', 1], ['ok', 40]]);
   for (const r of rows) checkPlace(c, r.place, `formula ${r.name}`);
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);

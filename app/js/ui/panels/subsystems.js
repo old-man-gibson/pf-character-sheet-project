@@ -72,6 +72,7 @@ import {
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
+import { speedTable } from '../speeds.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
@@ -1841,13 +1842,8 @@ function companionSavesPanel(model, cc) {
       ? `Tick the good saves — the ${esc(b.baseForm)} form’s are ${['fort', 'ref', 'will']
         .filter((x) => k.formSaves[x]).map((x) => ({ fort: 'Fortitude', ref: 'Reflex', will: 'Will' }[x])).join(' and ') || 'none, as printed'} — and the table gives the good and poor base at this HD.`
       : 'Tick the good saves; the table gives the good and poor base at this level.'}</p>
-      <div class="fieldgrid" style="margin-top:8px">
-        ${field('Speed', speedBox(cc, 'base', '30 ft.'))}
-        ${field('Fly', speedBox(cc, 'fly'))}
-        ${field('Swim', speedBox(cc, 'swim'))}
-        ${field('Climb', speedBox(cc, 'climb'))}
-        ${field('Burrow', speedBox(cc, 'burrow'))}
-      </div>
+      <h4 class="subhead">Speed</h4>
+      ${speedTable(`${p}.speeds`, b.speeds || [], k.speeds || [], { example: `30 + 10 * floor(${sn}.hd / 5)` })}
     </section>`;
   }
 
@@ -1865,23 +1861,6 @@ function formulaBox(cc, path) {
       value: r && !r.error ? String(r.value) : null,
       error: r?.error || null,
       title: `A number, or a formula like floor(${sn}.hd / 2)`,
-    });
-  }
-
-/**
- * A companion's speed: text as it has always been ("30 ft.", "60 ft.
- * (good)"), or a formula worked out in feet, shown with its answer.
- */
-function speedBox(cc, key, placeholder = '') {
-    const { p, b, k, sn } = cc;
-    const r = k.speeds?.[key];
-    return exprField(`data-set="${p}.speed.${key}"`, b.speed?.[key] ?? '', {
-      kind: 'text',
-      width: '100%',
-      placeholder,
-      value: r && !r.error ? r.value : null,
-      error: r?.error || null,
-      title: `Text, like 30 ft., or a formula in feet, like 30 + 10 * floor(${sn}.hd / 5)`,
     });
   }
 

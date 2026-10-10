@@ -7,7 +7,8 @@
 
 import {
   COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionEntries, companionFormulas, companionSkillKey,
-  computeCompanion, defaultCompanion, emptyCompanionFeat, seedSkills, withTypedNumbers,
+  computeCompanion, defaultCompanion, emptyCompanionFeat, LEGACY_SPEED_TYPES, legacySpeedRows, seedSkills,
+  withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
@@ -154,11 +155,13 @@ export function importAnimalCompanion(tab) {
 
   const speed = find('Speed');
   if (speed) {
+    const boxes = {};
     for (let ri = speed[0] + 1; ri < rows.length; ri++) {
       const key = t(ri, speed[1]).toLowerCase();
-      if (!Object.hasOwn(b.speed, key)) break;
-      b.speed[key] = t(ri, speed[1] + 1);
+      if (!Object.hasOwn(LEGACY_SPEED_TYPES, key)) break;
+      boxes[key] = t(ri, speed[1] + 1);
     }
+    b.speeds = legacySpeedRows(boxes);
   }
 
   // Tricks run down a column of merged rows as far as the Slotless Items

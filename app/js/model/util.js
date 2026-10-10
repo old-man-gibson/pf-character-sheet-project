@@ -71,6 +71,44 @@ export function speedForwardKey(sp) {
 }
 
 /**
+ * A movement row as it is kept -- a type, a base in feet, and a bonus -- on
+ * the character's Speed panel and on every companion's. The bonus may be a
+ * formula ("floor(level / 3) * 10" for fast movement), so only a real number
+ * is coerced to one.
+ */
+export function speedRow(sp) {
+  const row = sp && typeof sp === 'object' ? sp : {};
+  return {
+    ...row,
+    type: row.type ?? '',
+    base: Number(row.base) || 0,
+    bonus: typeof row.bonus === 'string' ? row.bonus : Number(row.bonus) || 0,
+  };
+}
+
+/**
+ * Movement rows worked out: each one's bonus (rounded down, as every
+ * formula field is), the name a formula calls it by, what is forwarded at
+ * it, and the rate that comes to. `scope` is what a formula bonus reads (or
+ * a function giving it, asked only when there is a formula); `forwardedAt`
+ * says what rules send at a name; `named`, when given, collects each rate
+ * under its name as it is worked out, so a row may read the rows above it
+ * and never the ones below.
+ */
+export function speedRows(rows, scope, { forwardedAt = () => 0, named = null } = {}) {
+  return (rows || []).map((sp) => {
+    const { value: bonus, error } = evaluateAmount(sp?.bonus, scope);
+    const handle = speedForwardKey(sp);
+    const forwarded = handle ? forwardedAt(handle) : 0;
+    const final = (Number(sp?.base) || 0) + bonus + forwarded;
+    if (named && handle) named[handle.slice('speed.'.length)] = final;
+    return {
+      bonus, error, handle, forwarded, final,
+    };
+  });
+}
+
+/**
  * The name a formula reads a sphere's numbers under, and forwards to --
  * `sphere.dark` for the Dark sphere, whichever of the three systems it
  * belongs to; the three lists share no name, so the slug says which.

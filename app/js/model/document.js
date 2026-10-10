@@ -36,7 +36,7 @@ import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vanci
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
-import { normalizeName, skillKey, slug } from './util.js';
+import { normalizeName, skillKey, slug, speedRow } from './util.js';
 import { MONSTER_TAB_ORDER } from '../monster/block.js';
 
 // What the Spheres magic side works out and does not save: the sphere table,
@@ -1390,14 +1390,7 @@ export function normalise(model) {
   if (!d.mythic) d.mythic = {};
   if (!Array.isArray(d.mythic.abilities)) d.mythic.abilities = [];
   if (!Array.isArray(d.traits)) d.traits = [];
-  if (!Array.isArray(d.identity.speeds)) d.identity.speeds = [];
-  for (const sp of d.identity.speeds) {
-    sp.type = sp.type ?? '';
-    sp.base = Number(sp.base) || 0;
-    // The bonus may be a formula ("floor(level / 3) * 10" for fast
-    // movement), so only a real number is coerced to one.
-    if (typeof sp.bonus !== 'string') sp.bonus = Number(sp.bonus) || 0;
-  }
+  d.identity.speeds = Array.isArray(d.identity.speeds) ? d.identity.speeds.map(speedRow) : [];
   // Weapon and armor proficiencies: the workbook's three sentences become
   // lists (see parseProficiencyText); lists already saved are only tidied.
   d.identity.proficiencies = normalizeProficiencies(d.identity.proficiencies);

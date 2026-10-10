@@ -28,7 +28,9 @@ import {
   saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
-import { evaluateAmount, getPath, isPinned, normalizeName, setPath, slug } from './model/util.js';
+import {
+  evaluateAmount, getPath, isPinned, normalizeName, setPath, slug, speedRow, speedRows,
+} from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -525,7 +527,8 @@ const common = (kind) => ({
   cmbOther: 0,
   initBonus: 0,
   saves: { fort: { misc: 0 }, ref: { misc: 0 }, will: { misc: 0 } },
-  speed: { base: '', fly: '', burrow: '', swim: '', climb: '' },
+  // Movement rows, the character's shape: a type, a base and a bonus.
+  speeds: [],
   skills: seedSkills(kind),
   attacks: [],
   feats: [],
@@ -675,9 +678,13 @@ export function normalizeCompanion(kind, block) {
   const base = defaultCompanion(kind);
   const b = block && typeof block === 'object' ? block : {};
   const out = { ...base, ...b };
-  for (const key of ['hp', 'ac', 'saves', 'speed', 'goodSaves']) {
+  for (const key of ['hp', 'ac', 'saves', 'goodSaves']) {
     if (base[key]) out[key] = { ...base[key], ...(b[key] && typeof b[key] === 'object' ? b[key] : {}) };
   }
+  // Speeds are rows; a block saved with the five speed boxes it used to have
+  // is read into them (legacySpeedRows).
+  out.speeds = Array.isArray(b.speeds) ? b.speeds.map(speedRow) : legacySpeedRows(b.speed);
+  delete out.speed;
   for (const k of ['fort', 'ref', 'will']) out.saves[k] = { misc: 0, ...(out.saves[k] || {}) };
   out.scores = Object.fromEntries(ABILITIES.map((k) => [
     k, { ...base.scores[k], ...(b.scores?.[k] && typeof b.scores[k] === 'object' ? b.scores[k] : {}) },
@@ -1505,10 +1512,34 @@ export const COMPANION_FORMULA_FIELDS = {
   bonusFeats: 'Bonus feats',
 };
 
-/** The speed boxes, which hold text ("30 ft.") or a formula worked out in feet, by name. */
-export const COMPANION_SPEEDS = {
-  base: 'Speed', fly: 'Fly speed', swim: 'Swim speed', climb: 'Climb speed', burrow: 'Burrow speed',
+/**
+ * The five speed boxes a companion used to have, and the movement type each
+ * becomes as a row.
+ */
+export const LEGACY_SPEED_TYPES = {
+  base: 'Land', fly: 'Fly', swim: 'Swim', climb: 'Climb', burrow: 'Burrow',
 };
+
+/**
+ * The old speed boxes -- each text ("30 ft.", "60 ft. (good)") or a formula
+ * in feet -- as movement rows. A number is the row's base, with any bracket
+ * kept on its type ("Fly (good)"); a formula is its bonus, so it goes on
+ * being worked out; and text that is neither is kept whole on the type, so
+ * nothing typed is lost, with its first number as the base.
+ */
+export function legacySpeedRows(speed) {
+  if (!speed || typeof speed !== 'object') return [];
+  const rows = [];
+  for (const [key, type] of Object.entries(LEGACY_SPEED_TYPES)) {
+    const raw = String(speed[key] ?? '').trim();
+    if (!raw) continue;
+    const feet = /^(\d+)\s*(?:ft\.?|feet)?\s*(\([^)]*\))?$/i.exec(raw);
+    if (feet) rows.push({ type: feet[2] ? `${type} ${feet[2]}` : type, base: Number(feet[1]), bonus: 0 });
+    else if (parses(raw)) rows.push({ type, base: 0, bonus: raw });
+    else rows.push({ type: `${type} (${raw})`, base: Number(raw.match(/\d+/)?.[0]) || 0, bonus: 0 });
+  }
+  return rows;
+}
 
 /** A number kept as text -- an older save -- which needs no scope to read. */
 export const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
@@ -1528,20 +1559,15 @@ export function withTypedNumbers(b, typed) {
 }
 
 /**
- * Work out a companion's formula boxes, and its speeds where one is written
- * as a formula. `scope` is called only if there is a formula to read it for.
- * Returns `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds as
- * `{ key: { value, feet, error } }` with the value as shown ("40 ft.").
- * Each is worked out by evaluateAmount, the one rule every number-or-formula
- * box on the sheet follows.
- *
- * A speed is text first. "30 ft." and "60 ft. (good)" are not formulas and
- * stay as written; one that parses -- `30`, `20 + 10 * floor(conjured.hd / 5)`
- * -- is worked out, and one that parses and then fails says why.
+ * Work out a companion's formula boxes and its movement rows. `scope` is
+ * called only if there is a formula to read it for. Returns
+ * `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds one per
+ * row as speedRows works them out for the character's (`{ bonus, error,
+ * handle, final }`). Each is worked out by evaluateAmount, the one rule
+ * every number-or-formula box on the sheet follows.
  */
 export function companionFormulas(b, scope) {
   const typed = {};
-  const speeds = {};
   let s = null;
   const sc = () => (s ??= scope());
   for (const path of Object.keys(COMPANION_FORMULA_FIELDS)) {
@@ -1551,14 +1577,7 @@ export function companionFormulas(b, scope) {
       ? { value: Math.floor(Number(raw)), error: null }
       : evaluateAmount(raw, sc());
   }
-  for (const key of Object.keys(COMPANION_SPEEDS)) {
-    const raw = String(b.speed?.[key] ?? '').trim();
-    if (!raw || !parses(raw)) continue;
-    const r = evaluateAmount(raw, sc());
-    speeds[key] = r.error
-      ? { value: null, feet: null, error: r.error }
-      : { value: `${r.value} ft.`, feet: r.value, error: null };
-  }
+  const speeds = speedRows(b.speeds, sc);
   return { typed, speeds };
 }
 

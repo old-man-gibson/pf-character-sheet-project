@@ -3885,13 +3885,7 @@
      "misc": 0
     }
    },
-   "speed": {
-    "base": "",
-    "fly": "",
-    "burrow": "",
-    "swim": "",
-    "climb": ""
-   },
+   "speeds": [],
    "skills": [
     {
      "name": "Acrobatics",
@@ -4314,13 +4308,7 @@
      "misc": 0
     }
    },
-   "speed": {
-    "base": "",
-    "fly": "",
-    "burrow": "",
-    "swim": "",
-    "climb": ""
-   },
+   "speeds": [],
    "skills": [
     {
      "name": "Acrobatics",
@@ -4508,13 +4496,7 @@
      "misc": 0
     }
    },
-   "speed": {
-    "base": "",
-    "fly": "",
-    "burrow": "",
-    "swim": "",
-    "climb": ""
-   },
+   "speeds": [],
    "skills": [
     {
      "name": "Acrobatics",
@@ -4963,13 +4945,7 @@
      "misc": 0
     }
    },
-   "speed": {
-    "base": "",
-    "fly": "",
-    "burrow": "",
-    "swim": "",
-    "climb": ""
-   },
+   "speeds": [],
    "skills": [
     {
      "name": "Acrobatics",

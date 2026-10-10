@@ -336,7 +336,7 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('the good saves ticked', b.goodSaves, { fort: true, ref: true, will: false });
   check('the typed AC, CMD and initiative bonuses',
     [b.ac.all, b.ac.touch, b.ac.ff, b.cmdOther, b.initBonus], [1, 2, 3, 1, 2]);
-  check('the speeds', [b.speed.base, b.speed.fly, b.speed.swim], ['50', '', '20']);
+  check('the speeds, as movement rows', b.speeds.map((s) => [s.type, s.base, s.bonus]), [['Land', 50, 0], ['Swim', 20, 0]]);
   check('special qualities, both merged lines', b.specialQualities, 'Scent, low-light vision\nTrip on a bite');
   check('the tricks', b.tricks.map((t) => t.name), ['Attack', 'Come', 'Heel']);
   // The level is where the feat came from, so it lands in Source and leaves
@@ -1519,10 +1519,22 @@ console.log('companions -- a typed box takes a formula');
     [k().typed.cmbOther.value, /nosuch/.test(k().typed.cmbOther.error || '')], [0, true]);
   c.set('conjured.0.cmbOther', 0);
 
-  c.set('conjured.0.speed.base', '30 ft.');
-  c.set('conjured.0.speed.fly', '20 + 10 * floor(conjured.hd / 5)');
-  check('a speed is text until it is a formula, then feet',
-    [k().speeds.base, k().speeds.fly], [undefined, { value: '30 ft.', feet: 30, error: null }]);
+  c.listAdd('conjured.0.speeds', { type: 'Land', base: 30, bonus: 0 });
+  c.listAdd('conjured.0.speeds', { type: 'Fly (good)', base: 0, bonus: '20 + 10 * floor(conjured.hd / 5)' });
+  check('a speed is a row, its bonus a number or a formula, as the character\'s are',
+    k().speeds.map((s) => [s.final, s.bonus, s.error]), [[30, 0, null], [30, 30, null]]);
+  // A block saved with the five speed boxes reads them into rows, and keeps
+  // nothing of the old shape.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  delete old.conjured[0].speeds;
+  old.conjured[0].speed = {
+    base: '30 ft.', fly: '60 ft. (good)', swim: '20 + 10 * floor(conjured.hd / 5)', climb: '20 ft. in trees', burrow: '',
+  };
+  const read = new Character(old).data.conjured[0];
+  check('the old speed boxes become rows, nothing typed lost',
+    [read.speeds.map((s) => [s.type, s.base, s.bonus]), read.speed, read.calc.speeds.map((s) => s.final)],
+    [[['Land', 30, 0], ['Fly (good)', 60, 0], ['Swim', 0, '20 + 10 * floor(conjured.hd / 5)'], ['Climb (20 ft. in trees)', 20, 0]],
+      undefined, [30, 60, 30, 20]]);
 
   // Every one of them is on the Formulas tab and in the audit, as the
   // character's own boxes are: by companion, with what it came to and the
@@ -1534,18 +1546,18 @@ console.log('companions -- a typed box takes a formula');
       [`${who} — Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
       [`${who} — Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
       [`${who} — Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
-      [`${who} — Fly speed`, 30, 'ok', 'companionCell:conjured:0:speed.fly', 'the Conjured Companion tab'],
+      [`${who} — Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
     ]);
   c.set('conjured.0.cmdOther', '2');
   check('a number kept as text counts, and is not listed as a formula',
     [k().typed.cmdOther, rows().some((r) => r.place.endsWith(':cmdOther'))], [{ value: 2, error: null }, false]);
   c.set('conjured.0.cmbOther', 'conjured.nosuch');
-  c.set('conjured.0.speed.swim', 'conjured.nosuch * 2');
+  c.listAdd('conjured.0.speeds', { type: 'Swim', base: 0, bonus: 'conjured.nosuch * 2' });
   check('a broken one is a problem the Formulas tab lists, with the way to it',
-    ['cmbOther', 'speed.swim'].map((p) => c.formulaProblems()
+    ['cmbOther', 'speeds.2.bonus'].map((p) => c.formulaProblems()
       .some((x) => x.places.some((pl) => pl.place === `companionCell:conjured:0:${p}`))), [true, true]);
   c.set('conjured.0.cmbOther', 0);
-  c.set('conjured.0.speed.swim', '');
+  c.listRemove('conjured.0.speeds', 2);
 
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('what was typed is what is saved, and works out again on load',
