@@ -161,6 +161,12 @@ export function deckFeatNames(d) {
   return out;
 }
 
+/** Every feat on the character by name, whatever group it sits in. */
+function allFeatNames(d) {
+  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g.entries || []) : Object.values(d?.feats || {});
+  return groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name || '')) : []));
+}
+
 /** Uppercase colour letters only, in first-seen order: "u/b" → "UB". */
 function normalizeColors(value) {
   const letters = String(value ?? '').toUpperCase().replace(/[^RBUWG]/g, '');
@@ -750,7 +756,22 @@ export function recomputeCardcasting(model) {
   const lifebound = mods.lifeboundDeck && deckSize ? Math.max(1, Math.floor(hpTotal / 3 / deckSize)) : null;
   const handMax = mods.tightHand ? 3 + loadedHand : null;
 
+  // Land-Attuned Magic's special: with Card Casting and Mana Pool, every
+  // Mana Point card in play is worth two spell points on an effect of an
+  // attuned sphere rather than one. The feat wants Area Bound or Terrain
+  // Casting in the tradition, and is itself a deck feat, so it is found
+  // among those or among the feats proper.
+  const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || allFeatNames(c).some((f) => /land-?attuned magic/i.test(f));
+  const landDrawback = (c.training?.magic?.tradition?.drawbacks || []).some((x) => /^(terrain casting|area bound)/i.test(String(x || '').trim()));
+  const landAttuned = !!(p.manaPool && landFeat && landDrawback);
+  const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
+    : !landFeat ? 'Land-Attuned Magic is not among the feats'
+      : !landDrawback ? 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition'
+        : 'its special wants Mana Pool';
+
   p.calc = {
+    landAttuned,
+    landAttunedWhy,
     stat,
     cam,
     openingHand,
@@ -965,14 +986,26 @@ export function castCheck(model, id) {
     const letters = String(manaCard?.mana || '');
     return [...colors].some((c) => letters.includes(c));
   });
+  // Land-Attuned Magic: on an attuned sphere each mana card is two points,
+  // so the card needs half as many -- and spends half as many.
+  const worth = cardAttuned(model, card) ? 2 : 1;
+  const spend = Math.ceil(need / worth);
   // Rainbow Efficiency: a two-colour card needs a mana card of each colour.
-  let ok = usable.length >= need;
-  let why = ok ? '' : `needs ${need} mana in play, has ${usable.length}`;
+  let ok = usable.length >= spend;
+  let why = ok ? (worth > 1 ? 'attuned: each mana card pays two' : '') : `needs ${spend} mana in play${worth > 1 ? ' (attuned: each pays two)' : ''}, has ${usable.length}`;
   if (ok && p.mods.coloredMana && colors.length > 1) {
     const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
     if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, have: usable.length, why };
+  return { ok, need, spend, worth, have: usable.length, why };
+}
+
+/** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
+export function cardAttuned(model, card) {
+  const p = model.data.cardcasting;
+  if (!p?.calc?.landAttuned) return false;
+  const sphere = String(card?.sphere || '').trim().toLowerCase();
+  return !!sphere && (p.attunedSpheres || []).some((s) => String(s).trim().toLowerCase() === sphere);
 }
 
 /** A shuffle. `this.rng` may be replaced for a deterministic test. */
@@ -1131,7 +1164,7 @@ export function tableDraw(model, n = 1, why = 'draw') {
  * otherwise they simply need to be there. Nothing is refused -- the check
  * is shown beside the card and the player decides.
  */
-export function tablePlay(model, id, mode = 'cast') {
+export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
@@ -1167,7 +1200,8 @@ export function tablePlay(model, id, mode = 'cast') {
     const colors = String(card.calc?.colors || '');
     const eligible = (m) => !m.tapped && (!p.mods.coloredMana || !colors
       || [...colors].some((c) => String(model.tableCard(m.id)?.mana || '').includes(c)));
-    let left = cost;
+    // Land-Attuned Magic: an attuned card's mana pays two points each.
+    let left = check.spend ?? cost;
     // Colour-matching mana first, one of each colour a multi-colour card wants.
     const order = [...t.mana].sort((a, b) => (eligible(b) ? 1 : 0) - (eligible(a) ? 1 : 0));
     const spent = [];
@@ -1181,15 +1215,21 @@ export function tablePlay(model, id, mode = 'cast') {
       t.mana = t.mana.filter((m) => !spent.includes(m));
       t.discard.push(...spent.map((m) => m.id));
     } else for (const m of spent) m.tapped = true;
-    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` — ${check.why}`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}`);
+    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` — ${check.why}`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}${check.worth > 1 ? ' (attuned: two points each)' : ''}`);
   } else {
     tableLog(model, t, `${name} cast${cost ? ` for ${cost}` : ''}${check.ok ? '' : ` — ${check.why}`}`);
   }
 
   // The spell points themselves, from the tracker if there is one.
   if (cost > 0) spendSP(model, cost, name);
-  // Its dice, if it has any.
-  rollFor(model, id);
+  // A mode picked on the way in -- "boost (1 SP)" -- and whatever was put
+  // into it: the points on top of the cost, then that mode's dice. Otherwise
+  // the card's first dice, if it has any.
+  const extra = Math.max(0, Math.floor(Number(sp) || 0));
+  const mode_ = which ? model.cardRolls(card).find((r) => r.label.toLowerCase() === String(which).toLowerCase()) : null;
+  if (extra > 0) spendSP(model, extra, `${name} — ${mode_?.label || 'augmented'}`);
+  if (mode_) model.tableRoll(id, { quiet: true, which: mode_.label });
+  else rollFor(model, id);
 
   // Keywords in the card's text fire as it is cast.
   const fate = tableKeywords(model, id, card);
@@ -1578,7 +1618,7 @@ const EFFECT_NOTE_MAX = 600;
  * than being dropped. A card without dice is a spec with notes alone, which
  * is still a message worth posting.
  */
-export function cardRollSpec(model, ref) {
+export function cardRollSpec(model, ref, which = null) {
   const found = cardRef(model, ref);
   if (!found) return null;
   const { card } = found;
@@ -1590,7 +1630,11 @@ export function cardRollSpec(model, ref) {
 
   const rolls = [];
   const notes = [];
+  // A mode picked at the table narrows the message to that one roll; the
+  // notes stay, since they are the card rather than the mode.
+  const want = which ? String(which).toLowerCase() : null;
   for (const r of cardRollFormulas(model, card)) {
+    if (want && r.label.toLowerCase() !== want) continue;
     if (r.formula) rolls.push({ label: r.label, formula: r.formula });
     else if (r.source) notes.push({ label: r.label, text: r.source });
   }

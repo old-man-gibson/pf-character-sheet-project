@@ -973,5 +973,34 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   ok('…and does once a twin exists', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-dice-share="cardcasting.cards|0"'));
 }
 
+console.log('\na card with several modes asks on the way in');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.copyOnCast = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 1, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', dice: '0 SP: 5d6; boost (1 SP): 7d6', sphere: 'Destruction', tags: '' },
+    { name: 'Hex', qty: 1, cost: '1', color: 'B', mana: '', effect: 'Curse', dice: '2d4', sphere: 'Death', tags: '' },
+  ];
+  c.recompute();
+  c.tableStart();
+  const t = c.data.cardcasting.table;
+  const bolt = t.hand.find((id) => id.startsWith('0#'));
+  const hex = t.hand.find((id) => id.startsWith('1#'));
+  const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'table', rollFormat: 'template' };
+  const hand = subsystems.cardTableView(c, ctx, 'hand');
+  ok('a many-mode card offers Cast… and no plain Cast; a one-mode card the reverse',
+    hand.includes(`data-table="pick|${bolt}|"`) && !hand.includes(`data-table="play|${bolt}|cast"`)
+    && hand.includes(`data-table="play|${hex}|cast"`) && !hand.includes(`data-table="pick|${hex}|"`));
+  const open = subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'hand');
+  const form = open.match(/<div class="mcard mini castpick"[^]*?<\/select>/)?.[0] || '';
+  ok('opened, the chooser lists the modes with their dice and price, each with its own Roll20 text',
+    form.includes('<option value="0 SP" data-sp="0" data-copytext="&amp;{template:default} {{name=Bolt — Fire Blast}} {{0 SP=[[5d6]]}}')
+    && form.includes('<option value="boost (1 SP)" data-sp="1"') && /boost \(1 SP\) — 7d6 \(1 SP\)</.test(form));
+  ok('with a points field and Cast, Ongoing and a way out', open.includes('name="sp"') && open.includes(`data-table="play|${bolt}|cast"`)
+    && open.includes(`data-table="play|${bolt}|ongoing"`) && open.includes('data-table="pick||"'));
+  ok('the chooser is the hand\'s: the table window never draws it', !subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'table').includes('castpick'));
+  ok('the sheet draws it too', subsystems.cardcastingPanel(c, { ...ctx, castPick: bolt }).includes('castpick'));
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

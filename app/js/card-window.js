@@ -24,6 +24,7 @@
  * pressed.
  */
 import { SHEET_LINK, adoptSheetStyles } from './styles.js';
+import { castPickArg, castPickCopy, followCastPick } from './ui/cast-pick.js';
 
 const params = new URLSearchParams(location.search);
 const view = params.get('view') === 'hand' ? 'hand' : 'table';
@@ -103,15 +104,20 @@ channel?.addEventListener('message', (e) => {
 /* Presses go back to the sheet; the clipboard is handled here. */
 root.addEventListener('click', (e) => {
   const copy = e.target.closest?.('[data-copytext]');
-  if (copy && !copy.disabled) copyText(copy.dataset.copytext, copy.dataset.rollwhat || copy.closest('[data-card]')?.querySelector('.name')?.textContent || 'card');
+  const name = (el) => el.dataset.rollwhat || el.closest('[data-card]')?.querySelector('.name')?.textContent || 'card';
+  if (copy && !copy.disabled) copyText(copy.dataset.copytext, name(copy));
   if (e.target.closest?.('[data-roll]')) return;   // a d20 copies and does nothing else
   const b = e.target.closest?.('[data-table]');
   if (!b || b.disabled) return;
+  // A Cast from the mode chooser copies the mode picked, which its option carries.
+  const picked = castPickCopy(b);
+  if (picked && /^play\|/.test(b.dataset.table)) copyText(picked, name(b));
   const [action, id, arg] = b.dataset.table.split('|');
-  send({ type: 'cards:action', action, id, arg });
+  send({ type: 'cards:action', action, id, arg: castPickArg(b, arg) });
 });
 root.addEventListener('change', (e) => {
   const sel = e.target;
+  if (sel?.matches?.('.castpick select[name="mode"]')) { followCastPick(sel); return; }
   if (!sel?.value) return;
   if (sel.dataset.tableMove) send({ type: 'cards:action', action: 'move', id: sel.dataset.tableMove, arg: sel.value });
   else if (sel.dataset.tableRoll) send({ type: 'cards:action', action: 'boost', id: sel.dataset.tableRoll, arg: sel.value });

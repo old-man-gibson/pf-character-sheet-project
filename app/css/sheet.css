@@ -5373,3 +5373,7 @@ table.stacked .catface { margin-left: 0; }
 :host([plain]) .manacard button, :host([plain]) select.movesel, :host([plain]) .panel > .hint { display: none; }
 .cardwin { padding: 12px; }
 .cardwin .grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+/* The mode chooser a many-mode card opens in its place in the hand. */
+.mcard.mini.castpick .text { display: flex; flex-direction: column; gap: 5px; max-height: none; }
+.mcard.mini.castpick .pickrow { display: flex; flex-direction: column; gap: 2px; font-size: 0.7rem; font-weight: 600; color: var(--ink); }
+.mcard.mini.castpick .pickrow select, .mcard.mini.castpick .pickrow input { width: 100%; box-sizing: border-box; font-size: 0.74rem; font-weight: 400; padding: 2px 4px; }

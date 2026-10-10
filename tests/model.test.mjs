@@ -12958,5 +12958,72 @@ console.log('the Dice picker joins what it adds to what is there');
   check('a roll after a finished roll becomes a second one', appendDiceText('8d6', '{caster.level}d6'), '8d6; {caster.level}d6');
 }
 
+console.log('\na card cast in a mode: that mode rolls, and the points put into it are spent');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 3, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '',
+      dice: '0 SP: 5d6; boost (1 SP): 7d6; big (3 SP): 11d6' },
+  ];
+  const sp = c.addTracker({ name: 'Spell Points', maxFormula: '20' });
+  c.recompute();
+  let seed = 3;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.tableStart();
+  const t = () => c.data.cardcasting.table;
+  const left = () => { const x = c.trackers.find((k) => k.id === sp.id); return x.max - x.current; };
+  const before = left();
+  c.tablePlay(t().hand[0], 'cast', { which: 'boost (1 SP)', sp: 1 });
+  check('the picked mode is what rolled', [t().lastRoll.label, t().lastRoll.rolls.length], ['boost (1 SP)', 7]);
+  check('the cost and the points on top both came off the tracker', before - left(), 2);
+  check('and the log says what the extra was for', t().log.some((l) => /Bolt — boost \(1 SP\)/.test(l)), true);
+  c.tablePlay(t().hand[0], 'cast', { which: 'BIG (3 SP)', sp: 3 });
+  check('a mode is matched by name, whatever the case', t().lastRoll.rolls.length, 11);
+  c.tableDraw(1);
+  c.tablePlay(t().hand[0], 'cast');
+  check('no mode picked: the first entry, as before', [t().lastRoll.label, t().lastRoll.rolls.length], ['0 SP', 5]);
+  const spec = c.cardRollSpec('cardcasting.cards|0', 'boost (1 SP)');
+  check('the Roll20 text for a mode is that roll alone, with the card\'s notes', [spec.rolls, spec.notes.length > 0], [[{ label: 'boost (1 SP)', formula: '7d6' }], true]);
+  check('and with no mode, every roll', c.cardRollSpec('cardcasting.cards|0').rolls.length, 3);
+}
+
+console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned sphere');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  const p = c.data.cardcasting;
+  p.enabled = true;
+  p.manaPool = true;
+  p.attunedSpheres = ['Destruction'];
+  p.cards = [
+    { name: 'Bolt', qty: 2, cost: '4', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '', dice: '' },
+    { name: 'Hex', qty: 2, cost: '4', color: 'B', mana: '', effect: 'Curse', sphere: 'Death', tags: '', dice: '' },
+    { name: 'Ember', qty: 4, cost: '', color: '', mana: 'R', effect: '', sphere: '', tags: '', dice: '' },
+  ];
+  c.recompute();
+  check('without the feat the rule is off, and says why', [p.calc.landAttuned, p.calc.landAttunedWhy], [false, 'Land-Attuned Magic is not among the feats']);
+  c.data.training.magic.tradition.boughtOff = ['Land-Attuned Magic [Deck]'];
+  c.recompute();
+  check('with it among the deck feats it still wants the tradition', p.calc.landAttunedWhy, 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition');
+  c.data.training.magic.tradition.drawbacks = ['Terrain Casting'];
+  c.recompute();
+  check('and then it is in force', p.calc.landAttuned, true);
+  c.tableStart();
+  const t = c.data.cardcasting.table;
+  // Two mana in play, by hand, and the two effect cards in hand.
+  t.hand = ['0#0', '1#0'];
+  t.deck = t.deck.filter((id) => !['0#0', '1#0', '2#0', '2#1'].includes(id));
+  t.mana = [{ id: '2#0', tapped: false }, { id: '2#1', tapped: false }];
+  c.recompute();
+  const bolt = c.data.cardcasting.table.calc.castable['0#0'];
+  const hex = c.data.cardcasting.table.calc.castable['1#0'];
+  check('an attuned card needs half the mana cards for its cost', [bolt.ok, bolt.need, bolt.spend, bolt.worth, bolt.why], [true, 4, 2, 2, 'attuned: each mana card pays two']);
+  check('a card of another sphere still needs one per point', [hex.ok, hex.spend, hex.why], [false, 4, 'needs 4 mana in play, has 2']);
+  p.mods.stagnantPool = true;
+  c.recompute();
+  c.tablePlay('0#0', 'cast');
+  check('casting it under Stagnant Pool taps two cards for four points', c.data.cardcasting.table.mana.filter((m) => m.tapped).length, 2);
+  check('and the log says so', c.data.cardcasting.table.log.some((l) => /cast for 4.*2 mana tapped \(attuned: two points each\)/.test(l)), true);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

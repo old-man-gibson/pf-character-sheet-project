@@ -2555,6 +2555,7 @@ function tableState(model, ctx, p, k, view) {
       faceDown: new Set(t.faceDown || []),
       stagnant: !!p.mods.stagnantPool,
       peeked: faces.secrets ? (ctx.peek || []).filter((id) => (t.deck || []).slice(0, 3).includes(id)) : [],
+      castPick: faces.hand ? ctx.castPick || null : null,
       copyText,
     };
     s.spBtn = (id) => (sp ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
@@ -2633,6 +2634,7 @@ function tableHead(s) {
         ${p.manaPool ? `<span class="badge">${tc.manaUntapped ?? 0}${stagnant ? ` of ${tc.manaInPlay ?? 0}` : ''} mana</span>` : ''}
         ${p.cooldown ? `<span class="badge">${tc.inDiscard ?? 0} in discard</span>` : ''}
         ${tc.inPlay ? `<span class="badge">${tc.inPlay} in play</span>` : ''}
+        ${k.landAttuned ? `<span class="badge" title="${esc(k.landAttunedWhy)}">land-attuned: mana pays ×2</span>` : ''}
         ${!faces.controls ? '' : sp ? `<span class="badge ${spLeft <= 0 ? 'err' : ''}" title="${esc(sp.name)}: casts are paid from this tracker">${spLeft} of ${sp.max} SP</span>`
     : '<span class="badge" title="Add a tracker named Spell Points and casts will be paid from it">no SP tracker</span>'}
         ${lastRoll}
@@ -2651,6 +2653,39 @@ function tableHead(s) {
     </section>`;
   }
 
+  /**
+   * The chooser a many-mode card opens on Cast…: the modes as a list with
+   * what each works out to and what it asks for, the spell points to put in
+   * (the picked mode's price to begin with), and Cast or Ongoing. The press
+   * carries the two answers in its argument (`cast?mode=…&sp=…`), read off
+   * the form by whoever handles the click -- the element, or a window --
+   * and each option holds its own Roll20 text, so a window copies the mode
+   * that was cast and not the whole card.
+   */
+function castPicker(s, id, card, modes) {
+    const { model, ctx, p } = s;
+    const copy = (label) => (p.copyOnCast ? rollText(model.cardRollSpec(id, label), ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '');
+    const first = modes[0];
+    return `<div class="mcard mini castpick" data-card="${esc(id)}">
+      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      <div class="text">
+        <label class="pickrow">Mode
+          <select name="mode" aria-label="Mode">
+            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? ` — ${esc(m.formula)}` : m.source ? ` — ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
+          </select>
+        </label>
+        <label class="pickrow">Spell points on top of the cost
+          <input type="number" name="sp" min="0" step="1" value="${first.sp || 0}" aria-label="Spell points to spend">
+        </label>
+      </div>
+      <div class="foot"><span class="pair tools">
+        ${tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast this mode: the effect resolves now', cls: 'primary' })}
+        ${tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast this mode as an effect that lasts' })}
+        ${tableBtn('pick', '', '×', { title: 'Never mind' })}
+      </span></div>
+    </div>`;
+  }
+
   /** The hand: every card with the moves it may make from there. */
 function handZone(s) {
     const { model, p, k, t, tc, copyText } = s;
@@ -2660,13 +2695,20 @@ function handZone(s) {
       const manaOk = tc.manaOk?.[id] || {};
       const isEffect = String(card?.effect || '').trim() !== '';
       const badge = isEffect && p.manaPool
-        ? `<span class="badge ${check.ok ? 'ok' : 'err'}" title="${esc(check.why || `needs ${check.need}, has ${check.have}`)}">${check.ok ? 'castable' : `${check.have}/${check.need} mana`}</span>` : '';
+        ? `<span class="badge ${check.ok ? 'ok' : 'err'}" title="${esc(check.why || `needs ${check.need}, has ${check.have}`)}">${check.ok ? `castable${check.worth > 1 ? ' ×2' : ''}` : `${check.have}/${check.spend ?? check.need} mana`}</span>` : '';
       const copy = copyText(id);
+      // A card with several Dice entries is asked which, and for how many
+      // points, on the way in: Cast… opens the chooser in the card's place.
+      const modes = isEffect ? model.cardRollFormulas(card) : [];
+      const asks = modes.length > 1;
+      if (asks && s.castPick === id) return castPicker(s, id, card, modes);
+      const castBtns = !isEffect ? '' : asks
+        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one, and the spell points to put into it`, cls: 'primary' })
+        : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
+          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy });
       return cardMini(model, id, {
         badge,
-        buttons: `${isEffect ? tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
-          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy })
-          + (tc.trapCard ? tableBtn('play', id, 'Trap', { arg: 'trap', title: 'Trap Card: set it face down in play; spring it later' }) : '') : ''}
+        buttons: `${castBtns}${isEffect && tc.trapCard ? tableBtn('play', id, 'Trap', { arg: 'trap', title: 'Trap Card: set it face down in play; spring it later' }) : ''}
           ${card?.mana ? tableBtn('play', id, 'As mana', { arg: 'mana', title: manaOk.ok ? (manaOk.why || 'Play the Mana Point card onto the table') : manaOk.why, disabled: !manaOk.ok }) : ''}
           ${s.rollBtn(id, card)}${s.copyBtn(id)}${isEffect ? s.spBtn(id) : ''}
           ${tableBtn('move', id, '⤓', { arg: 'discard', title: 'Discard' })}
@@ -3056,9 +3098,13 @@ function landAttunedPanel(p, k) {
     return `<section class="panel span2">
       <h3>Land-attuned magic
         ${attuned.size ? `<span class="badge">${attuned.size} attuned</span>` : ''}
+        <span class="badge ${k.landAttuned ? 'ok' : ''}" title="${esc(k.landAttunedWhy || '')}">${k.landAttuned ? 'mana pays ×2 on attuned spheres' : 'feat not in force'}</span>
       </h3>
       <p class="hint">The spheres each colour of mana covers, as the deck's own table had them; tick a
-        sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.</p>
+        sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.
+        With Land-Attuned Magic among the feats, Terrain Casting or Area Bound in the tradition and Mana Pool,
+        every Mana Point card in play pays two spell points on an attuned sphere's card instead of one
+        ${k.landAttunedWhy ? `— ${esc(k.landAttunedWhy)}.` : '.'}</p>
       ${CARD_COLORS.map(([c, name]) => {
     const list = `cardcasting.colorSpheres.${c}`;
     const rows = spheres[c] || [];

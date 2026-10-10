@@ -96,6 +96,7 @@ import { bindClassActions } from './ui/class-actions.js';
 import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
 import { appendDiceText } from './model/subsystems/cardcasting.js';
+import { castPickArg, followCastPick } from './ui/cast-pick.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as trainingPanels from './ui/panels/training.js';
@@ -1301,14 +1302,20 @@ export class CharacterSheetElement extends HTMLElement {
     const m = this.#model;
     if (!m) return false;
     if (action === 'window') { this.#openCardWindow(id); return false; }
+    // The mode chooser opening on a card, or closing.
+    if (action === 'pick') { this.#view.castPick = id || null; return true; }
     const t = m.data.cardcasting?.table || {};
+    // A play's argument may carry the chooser's answers: `cast?mode=…&sp=…`.
+    const [how, query] = String(arg ?? '').split('?');
+    const answers = new URLSearchParams(query || '');
     // A cast, by any of its names: Cast and Ongoing from the hand, a trap
     // springing, a Retrace from the discard. Read before the action moves
     // the card.
-    const casting = (action === 'play' && (!arg || arg === 'cast' || arg === 'ongoing'))
+    const casting = (action === 'play' && (!how || how === 'cast' || how === 'ongoing'))
       || (action === 'resolve' && (t.faceDown || []).includes(id))
       || action === 'retrace';
     this.#view.peek = [];
+    this.#view.castPick = null;
     switch (action) {
       case 'start': m.tableStart(); break;
       case 'redraw': m.tableRedraw(); break;
@@ -1316,7 +1323,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'draw': m.tableDraw(1, 'draw'); break;
       case 'shuffle': m.tableShuffleDiscard(); break;
       case 'end': m.tableEnd(); break;
-      case 'play': m.tablePlay(id, arg || 'cast'); break;
+      case 'play': m.tablePlay(id, how || 'cast', { which: answers.get('mode') || null, sp: Number(answers.get('sp')) || 0 }); break;
       case 'resolve': m.tableResolve(id); break;
       case 'reveal': m.tableReveal(id); break;
       case 'roll': m.tableRoll(id); break;
@@ -1331,7 +1338,7 @@ export class CharacterSheetElement extends HTMLElement {
       default: return false;
     }
     if (casting && !fromWindow && m.data.cardcasting?.copyOnCast) {
-      this.#copyRoll('card', id, m.tableCard(id)?.name || 'card');
+      this.#copyRoll('card', id, m.tableCard(id)?.name || 'card', { mode: answers.get('mode') || null });
     }
     return true;
   }
@@ -3235,7 +3242,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   async #copyRoll(kind, ref, what, answers = null) {
     const spec = kind === 'session' ? sessionRollSpec(this.#model, ref, answers)
-      : kind === 'card' ? this.#model.cardRollSpec(ref)
+      : kind === 'card' ? this.#model.cardRollSpec(ref, answers?.mode || null)
         : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
     // A roll with a question in it is not a roll yet. Asking here rather than
     // copying a `?{…}` for Roll20 to ask is the difference between a number
@@ -4825,8 +4832,12 @@ export class CharacterSheetElement extends HTMLElement {
     root.querySelectorAll('[data-table]').forEach((b) => {
       b.addEventListener('click', () => {
         const [action, id, arg] = b.dataset.table.split('|');
-        if (this.#tableAction(action, id, arg)) this.#render();
+        if (this.#tableAction(action, id, castPickArg(b, arg))) this.#render();
       });
+    });
+    // The mode chooser's points follow the mode picked, as its price.
+    root.querySelectorAll('.castpick select[name="mode"]').forEach((sel) => {
+      sel.addEventListener('change', () => followCastPick(sel));
     });
     // A named roll picked on a card: spends what its label says, then rolls.
     root.querySelectorAll('[data-table-roll]').forEach((sel) => {
