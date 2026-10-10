@@ -14,7 +14,7 @@ import {
   abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
 import {
-  COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
+  COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
   companionHeading, companionInUse, companionNameTest, companionScope, companionSkillKey,
 } from '../companions.js';
 import {
@@ -975,6 +975,9 @@ export function forwardTargets(model) {
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
         for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`, mine);
+        // The character's names for the same numbers land on them as well,
+        // unlisted, so a bonus written either way arrives.
+        for (const [alias, name] of Object.entries(COMPANION_ALIASES)) expand.set(under(alias), [under(name)]);
         for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
           const into = members.map(under);
           expand.set(under(name), into);

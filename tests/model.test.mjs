@@ -60,7 +60,7 @@ import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
   splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
-  companionNameTest,
+  companionNameTest, levelSourceOf, levelSourceLabel, COMPANION_LEVEL_SOURCES, CONJURED_LEVEL_SOURCES, naturalAttack,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
@@ -2251,6 +2251,43 @@ console.log('the last hand-written number-or-formula fields go through evaluateA
   c.recompute();
   check('and a broken one is among the problems',
     c.formulaProblems().some((p) => p.places.some((pl) => pl.place === 'skillBudget')), true);
+}
+
+console.log('companions -- one table for where a level comes from; the character\'s names read and aim');
+{
+  // LEVEL_SOURCES decides a companion's level and how its working names it.
+  const src = (kind, b) => levelSourceOf(kind, b)?.id;
+  check('each kind\'s source, its pick, and a pick it does not offer',
+    [src('familiar', { levelSource: 'class' }), src('animalCompanion', {}), src('animalCompanion', { levelSource: 'ride' }),
+      src('animalCompanion', { levelSource: 'casterLevel' }), src('eidolon', { levelSource: 'ride' }),
+      src('conjured', {}), src('conjured', { levelSource: 'class' }), src('conjured', { levelSource: 'handleAnimal' })],
+    ['master', 'class', 'ride', 'class', 'class', 'casterLevel', 'class', 'class']);
+  check('the pickers list what each kind offers, in order',
+    [COMPANION_LEVEL_SOURCES.map(([id]) => id), CONJURED_LEVEL_SOURCES.map(([id]) => id)],
+    [['class', 'handleAnimal', 'ride'], ['casterLevel', 'class']]);
+  check('the working names the source, a pin, and never a familiar\'s pin',
+    [levelSourceLabel('eidolon', { masterClass: 'Summoner', levelOverride: null }),
+      levelSourceLabel('eidolon', { masterClass: 'Summoner', levelOverride: 5 }),
+      levelSourceLabel('familiar', { levelOverride: 5 })],
+    ['the master’s levels in Summoner', 'the level typed in', 'the master’s level']);
+
+  // The character's spellings, beside the companion's own.
+  const c = new Character(blankDocument({ name: 'Kin', level: 8 }));
+  c.set('conjured.0.levelOverride', 6);
+  c.set('conjured.0.baseForm', 'Orb');
+  const init = c.data.conjured[0].calc.initiative;
+  c.data.notes = [{ title: 'A', body: 'quick {conjured.initiative += 2}' }];
+  c.recompute();
+  const k = c.data.conjured[0].calc;
+  check('a bonus aimed at conjured.initiative lands on its initiative', k.initiative, init + 2);
+  check('and the character\'s names read the companion\'s numbers',
+    ['conjured.initiative', 'conjured.saves.will', 'conjured.attack.cmb', 'conjured.hp', 'conjured.hp.current']
+      .map((name) => evaluateAmount(name, c.scope()).value),
+    [k.initiative, k.saves.will.total, k.cmb, k.hpMax, k.hpCurrent]);
+
+  check('a natural attack is found singular or plural',
+    ['claws', 'talon', 'Tail Slaps', 'pincer', '', 'nope'].map((n) => naturalAttack(n)?.name ?? null),
+    ['Claw', 'Talons', 'Tail Slap', 'Pincers', null, null]);
 }
 
 console.log('a two-stat slot is read one way');
@@ -11734,7 +11771,9 @@ console.log('companions -- readable from a formula, and only what was typed is s
   const c = new Character(load('angou'));
   c.set('eidolon.0.levelOverride', 20);
   const s = c.scope();
-  check('familiar.hp and eidolon.hd read', [s.familiar.hp, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar[0].calc.hpMax, 15, 15]);
+  check('familiar.hp and eidolon.hd read', [s.familiar.hp.total, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar[0].calc.hpMax, 15, 15]);
+  check('and familiar.hp, a branch now, still reads as the total in a formula',
+    evaluateAmount('familiar.hp', s).value, c.data.familiar[0].calc.hpMax);
   check('the names validate', c.scopeNames().includes('animalCompanion.str.mod'), true);
   c.set('familiar.0.notes', 'Bites for {= familiar.attack}');
   check('prose on the tab resolves', c.renderProse(c.data.familiar[0].notes).some((seg) => seg.kind !== 'text' && seg.value === c.data.familiar[0].calc.totalAttack), true);

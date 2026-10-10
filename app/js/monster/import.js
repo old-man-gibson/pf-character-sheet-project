@@ -508,7 +508,7 @@ function damageTypeOf(name) {
   // (claw is B and S, pincers B, as the Bestiary has them); the names below
   // are for weapons and for attacks that table does not list.
   const bare = n.trim().replace(/^\d+\s+/, '');
-  const natural = naturalAttack(bare) || naturalAttack(`${bare}s`) || naturalAttack(bare.replace(/s$/, ''));
+  const natural = naturalAttack(bare);
   if (natural && natural.name !== 'Other') return natural.damageType;
   if (/\b(bite|jaws)\b/.test(n)) return 'B, P, S';
   if (/\b(claw|talon|rake|scythe|sword|axe|falchion|kukri|scimitar|glaive|halberd)\b/.test(n)) return 'S';
