@@ -32,18 +32,20 @@ import {
   RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, saveBase, sizeModifiers,
 } from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
+import { TEXT_STEPS, cleanText } from '../text.js';
 
 export { MONSTER_TAB_ORDER, normalizeMonster, emptyMonster } from './block.js';
 
 /* ---------------- text helpers ---------------- */
 
-const clean = (s) => String(s ?? '')
-  .replace(/ /g, ' ')            // no-break spaces off a web page
-  .replace(/−/g, '-')            // minus sign
-  .replace(/–/g, '-')            // en dash: crit ranges ("17–20"), penalties ("–1 size")
-  .replace(/[‘’]/g, '’') // one apostrophe
-  .replace(/\*\*([^*\n]+)\*\*/g, '$1')  // **bold** from a markdown copy
-  .replace(/[ \t]+$/gm, '');
+const clean = (s) => cleanText(s, [
+  TEXT_STEPS.nbsp,
+  TEXT_STEPS.minus,
+  [/–/g, '-'], // en dash: crit ranges ("17–20"), penalties ("–1 size")
+  [/[‘’]/g, '’'], // one apostrophe
+  TEXT_STEPS.bold,
+  TEXT_STEPS.trailing,
+]);
 
 const isBlank = (line) => !line || !line.trim();
 

@@ -25,6 +25,7 @@
 
 import { babFromText, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
+import { TEXT_STEPS, cleanText } from './text.js';
 
 // One definition, shared: the block reader needs it to tell which of a class's
 // features repeat, and the paste reader to pair a table's names with its prose.
@@ -39,16 +40,17 @@ export { featureKey };
  * is the same, so the markup goes and the line shapes the reader keys on
  * are back.
  */
-const clean = (s) => String(s ?? '')
-  .replace(/ /g, ' ')                  // no-break spaces off a web page (as an escape: a plain space had replaced the literal one)
-  .replace(/−/g, '-')                       // minus sign
-  .replace(/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]')   // [[Source](url)] -> [Source]
-  .replace(/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')  // [text](url) -> text
-  .replace(/^[ \t]*[*\-•]\s+(?=\S)/gm, '')          // "* item" -> "item"
-  .replace(/^#{1,6}\s+/gm, '')                      // "## Heading" -> "Heading"
-  .replace(/\*\*([^*\n]+)\*\*/g, '$1')              // **bold**
-  .replace(/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:])/g, '$1$2') // _italic_
-  .replace(/[ \t]+$/gm, '');
+const clean = (s) => cleanText(s, [
+  TEXT_STEPS.nbsp,
+  TEXT_STEPS.minus,
+  [/\[\[([^\]]*)\]\([^)]*\)\]/g, '[$1]'], // [[Source](url)] -> [Source]
+  [/!?\[([^\]\n]*)\]\([^)\n]*\)/g, '$1'], // [text](url) -> text
+  [/^[ \t]*[*\-•]\s+(?=\S)/gm, ''], // "* item" -> "item"
+  [/^#{1,6}\s+/gm, ''], // "## Heading" -> "Heading"
+  TEXT_STEPS.bold,
+  [/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:])/g, '$1$2'], // _italic_
+  TEXT_STEPS.trailing,
+]);
 const lower = (s) => String(s || '').trim().toLowerCase();
 const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
 const isBlank = (line) => !line || !line.trim();

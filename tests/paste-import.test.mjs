@@ -6,6 +6,7 @@ import {
   splitTalentName, looksStructured, tidyScrapeResidue, parseStructured, unwikiTables, entryDepth,
   SPHERE_KIND,
 } from '../app/js/paste-import.js';
+import { TEXT_STEPS, cleanText } from '../app/js/text.js';
 
 let pass = 0;
 let fail = 0;
@@ -1881,6 +1882,17 @@ console.log('scrape residue -- what a cut page leaves behind, and what it does n
   const veil = parsePaste(doc).blocks.find((b) => b.kind === 'veil');
   ok('a veil read off a scrape comes in clean', !/\}\}/.test(veil.text));
   check('with its text intact', veil.text, 'The veil does a thing.');
+}
+
+console.log('the clean-up both importers share');
+{
+  // The no-break-space step once held an ordinary space and did nothing; the
+  // shared steps are written as escapes so that cannot happen again.
+  check('the no-break-space step matches U+00A0 and not a space',
+    [TEXT_STEPS.nbsp[0].test('a b'), TEXT_STEPS.nbsp[0].test('a b')], [true, false]);
+  check('the shared steps, in turn',
+    cleanText('Str +2, AC −1, **bold**  ', [TEXT_STEPS.nbsp, TEXT_STEPS.minus, TEXT_STEPS.bold, TEXT_STEPS.trailing]),
+    'Str +2, AC -1, bold');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
