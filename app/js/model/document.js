@@ -71,6 +71,27 @@ export const PROFICIENCY_LISTS = {
   shields: SHIELD_PROFICIENCIES,
 };
 
+/**
+ * A new row on the Classes table. Add class on the Overview starts from it
+ * and a pack's class block fills it in, so the two carry the same fields.
+ */
+export const blankClassRow = () => ({
+  name: 'New class', hd: 8, bab: 0.75, babOverride: null, goodFort: false, goodRef: false,
+  goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
+});
+
+/**
+ * A new weapon row. Add weapon on the Gear tab starts from it, and an older
+ * save's simple weapon is brought up to it, so a weapon from either has every
+ * field the Gear tab draws.
+ */
+export const blankWeapon = () => ({
+  name: '', attackType: 'Melee', dice: '', damageAbility: 'Str', abilityMult: 1,
+  miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2',
+  damageType: '', groups: [], special: '', size: '', range: '', handedness: '',
+  familiarity: '', ammunition: '', weight: 0, price: 0, attackOffset: 0,
+});
+
 export const blankProficiencies = () => ({
   familiarities: [], handedness: [], groups: [], weapons: [], armor: [], shields: [], notes: '',
 });
@@ -1355,6 +1376,7 @@ export function normalise(model) {
   if (Array.isArray(d.weapons) && d.weapons.length) {
     for (const w of d.weapons) {
       e.weapons.push({
+        ...blankWeapon(),
         name: w.name || '', attackType: w.type === 'ranged' ? 'Ranged' : w.type === 'cmb' ? 'CMB' : 'Melee',
         dice: w.damage || '', critMult: w.crit || '', special: w.notes || '',
         enhancement: 0, miscAttack: Number(w.bonus) || 0, miscDamage: 0,
@@ -1612,7 +1634,7 @@ export function toDocument(model) {
       ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, MAGIC_DERIVED) } : {}),
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
-    ...Object.fromEntries(SAVE_STRIP.map(([key, derived, { list = false } = {}]) => [key, list
+    ...Object.fromEntries(saveStrip().map(([key, derived, { list = false } = {}]) => [key, list
       ? (model.data[key] || []).map((b) => stripDerived(b, derived))
       : stripDerived(model.data[key], derived)])),
   };
@@ -1623,10 +1645,13 @@ export function toDocument(model) {
  * the list of what goes (see stripDerived). One row per block, so a new
  * sub-system's worked fields are a row here rather than another line in
  * toDocument; `list` marks a block kept as a list of them, each stripped.
+ * A function rather than a constant: the lists come from the sub-system
+ * modules, and a table built as this module loads would read them before
+ * they exist whenever another module is loaded first.
  * The defence boxes keep exactly what was typed; `calc` is the parts they
  * were read into and every bonus forwarded at them, worked out on each load.
  */
-const SAVE_STRIP = [
+const saveStrip = () => [
   ['defenses', DEFENCES_DERIVED],
   ['hp', HP_DERIVED],
   ['akashic', AKASHIC_DERIVED],

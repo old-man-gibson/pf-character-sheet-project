@@ -99,7 +99,7 @@ import {
   conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { maneuverDetails } from '../../model.js';
+import { blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
@@ -1805,10 +1805,7 @@ function classesPanel(model, ctx) {
         </tr>${sysPicker(x, i)}`;
         }).join('')}</tbody>
       </table></div>
-      <div style="margin-top:8px">${addButton('classes', 'Add class', {
-        name: 'New class', hd: 8, bab: 0.75, goodFort: false, goodRef: false,
-        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
-      })}</div>
+      <div style="margin-top:8px">${addButton('classes', 'Add class', blankClassRow())}</div>
       <div class="fieldgrid" style="margin-top:8px">
         <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
           <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;

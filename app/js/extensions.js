@@ -47,6 +47,7 @@ import { storageMedium } from './pack-storage.js';
 import { veilEntry } from './model/subsystems/akashic.js';
 import { talentKey } from './model/spheres.js';
 import { markUndo } from './model/undo.js';
+import { blankClassRow } from './model/document.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -1265,7 +1266,7 @@ export function applyBlock(model, rawBlock) {
         goodFort: block.goodFort, goodRef: block.goodRef, goodWill: block.goodWill,
         skillRanks: block.skillRanks, archetypes: block.archetypes, levelsOverride: null,
       };
-      if (existing === -1) model.listAdd('classes', { ...row, systems: block.systems });
+      if (existing === -1) model.listAdd('classes', { ...blankClassRow(), ...row, systems: block.systems });
       else {
         for (const [k, v] of Object.entries(row)) model.setItem('classes', existing, k, v);
         // The block's system tags join the row's rather than replace them --

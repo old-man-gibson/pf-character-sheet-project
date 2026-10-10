@@ -18,7 +18,7 @@ import {
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
-  maneuverOwn,
+  maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
@@ -2297,6 +2297,21 @@ console.log('a two-stat slot is read one way');
   check('the abilities in a slot',
     [statKeys('Int', 'Wis'), statKeys('Int', 'int'), statKeys('Intelligence', ''), statKeys('', 'Cha'), statKeys('Foo', 'Foo')],
     [['int', 'wis'], ['int'], ['int'], ['cha'], []]);
+}
+
+console.log('a new weapon or class row starts from one blank');
+{
+  // Add weapon and an older save's simple weapon both start from blankWeapon;
+  // Add class and a pack's class block both from blankClassRow.
+  const doc = blankDocument({ name: 'Old', level: 3 });
+  doc.weapons = [{ name: 'Old Club', type: 'melee', damage: '1d6', crit: 'x2' }];
+  const c = new Character(doc);
+  const club = c.data.equipment.weapons.find((w) => w.name === 'Old Club');
+  check('an older save\'s weapon gets every field a new one has, keeping its own',
+    [Object.keys(blankWeapon()).every((k) => k in club), club.critRange, club.dice, club.damageAbility],
+    [true, 20, '1d6', null]);
+  check('a class row carries its BAB override, as a pack\'s class does',
+    ['babOverride', 'levelsOverride', 'systems'].every((k) => k in blankClassRow()), true);
 }
 
 console.log('a crit is read and written one way');
