@@ -12,6 +12,7 @@ import {
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
+import { lazyScope } from '../scope.js';
 
 /** Labels whose value we keep, read from the cell immediately to their right. */
 const CRAFT_LABELS = {
@@ -274,7 +275,8 @@ export function craftSkills(model) {
 export function recomputeCrafting(model) {
   const cr = model.data.crafting;
   if (!cr) return;
-  const scope = model.scope();
+  // Nothing here is read by the scope, so it is built on the first formula.
+  const scope = lazyScope(model);
   const errors = [];
 
   /** A plain number, or a player formula; resolved into `<field>Num`. */
@@ -288,7 +290,7 @@ export function recomputeCrafting(model) {
       const src = String(raw ?? '').trim();
       if (src !== '') {
         try {
-          const v = Number(evaluateFormula(src, scope));
+          const v = Number(evaluateFormula(src, scope()));
           out = Number.isFinite(v) ? v : 0;
         } catch (err) {
           obj[`${field}Error`] = err.message;

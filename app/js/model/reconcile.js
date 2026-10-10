@@ -25,7 +25,7 @@ import { TRAINING_SIDES } from './spheres.js';
 import { emit } from './events.js';
 import { markUndo } from './undo.js';
 import { applyGestalt } from './progression.js';
-import { forwarded } from './scope.js';
+import { forwarded, lazyScope } from './scope.js';
 import { resolveDefenceBonuses } from './stats/defenses.js';
 import { evaluateAmount, flatNames, getPath, safe, sphereForwardKey } from './util.js';
 
@@ -260,10 +260,9 @@ export function seedOffsetFormulas(model) {
 export function resolveOffsets(model) {
   model.offsetValues = {};
   model.offsetErrors = {};
-  let scope = null;
+  const scope = lazyScope(model);
   for (const [key, raw] of Object.entries(model.offsets)) {
     if (typeof raw !== 'string') continue;
-    scope ??= model.scope();
     const { value, error } = evaluateAmount(raw, scope);
     model.offsetValues[key] = value;
     model.offsetErrors[key] = error;

@@ -17,7 +17,7 @@ import {
   METERS, dyingFraction, isDefaultMeterStyle, meterDefaultStyle, normalizeStyle, resolveZones,
 } from '../../tracker-style.js';
 import { emit } from '../events.js';
-import { forwarded, proseText } from '../scope.js';
+import { forwarded, lazyScope, proseText, scopeIfFormulas } from '../scope.js';
 import {
   applyForwarded, applyImmunities, formatDr, formatEnergy, formatImmunities,
   formatSpellResistance, parseDr, parseEnergy, parseImmunities, parseSpellResistance, unslug,
@@ -42,8 +42,13 @@ import { resolveBonusBlock, resolveNumberField } from '../util.js';
  */
 export function resolveDefenceBonuses(model) {
   // Ability modifiers and BAB are current by now; skills are not, and are
-  // deliberately out of reach here -- a skill's own bonus can read AC.
-  const scope = model.scope();
+  // deliberately out of reach here -- a skill's own bonus can read AC. Built
+  // only when a cell holds a formula (each block written feeds the next).
+  const d = model.data;
+  const scope = scopeIfFormulas(model, [
+    ...['fortitude', 'reflex', 'will'].flatMap((k) => Object.values(d.saves?.[k]?.bonuses || {})),
+    ...Object.values(d.defenses?.acBonuses || {}),
+  ]);
   // The three ABP defence bonuses follow the character's level along the
   // progression's own ladder; they are read, not typed. A monster is outside
   // the progression -- its natural armour and saves are its own -- unless the
@@ -95,8 +100,7 @@ export function resolveDefenceText(model) {
   const hp = c.hp;
   if (hp) {
     const raw = hp.deathBonus;
-    const formula = typeof raw === 'string' && raw.trim() !== '';
-    const { value, error } = resolveNumberField(formula ? model.scope() : null, raw);
+    const { value, error } = resolveNumberField(lazyScope(model), raw);
     hp.deathBonusResolved = value;
     hp.deathBonusError = error;
   }

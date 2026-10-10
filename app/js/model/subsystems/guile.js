@@ -44,7 +44,7 @@ import {
   guilePackages, guileRanges, leveragePool, skillLabel, statMod,
 } from '../../rules.js';
 import { altTrainingTalents } from './alt-training.js';
-import { forwarded } from '../scope.js';
+import { forwarded, lazyScope } from '../scope.js';
 import {
   ownTalentRows, sphereTalent, talentsIn, tallyAdd, walkClassLadder,
 } from '../spheres.js';
@@ -388,11 +388,8 @@ export function guileRanksBySkill(model, combatRanks = new Map()) {
   // a rule here reads abilities, level and class levels, and a name defined
   // in prose only as the last pass left it. The scope is built once, and
   // only if a row asks for it.
-  let scope = null;
-  const amount = (raw) => {
-    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
-    return evaluateAmount(raw, scope);
-  };
+  const scope = lazyScope(model);
+  const amount = (raw) => evaluateAmount(raw, scope);
 
   // What each row is owed, before any of them find out they are sharing.
   // A sphere has one associated skill, so a second row naming it is a
@@ -476,11 +473,8 @@ export function recomputeGuileSpheres(model) {
   const skills = model.data.skills || [];
   // DC+ may be a rule. Unlike Rank+ this runs after the prose, so a name
   // defined there resolves. The scope is built once, and only if asked for.
-  let scope = null;
-  const amount = (raw) => {
-    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
-    return evaluateAmount(raw, scope);
-  };
+  const scope = lazyScope(model);
+  const amount = (raw) => evaluateAmount(raw, scope);
   g.sphereRows = (g.spheres || []).map((row) => {
     const skill = row.skillIndex >= 0 ? skills[row.skillIndex] : null;
     const ranks = Number(skill?.totalRanks) || 0;
