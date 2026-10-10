@@ -120,7 +120,7 @@ console.log('a tracker and a companion read as they stand, not as they were save
   const withKi = blankDocument('palette-ki');
   withKi.resources = [{ name: 'Ki Pool', total: 5, uses: 1, refresh: 'Daily' }];
   const ki = find(index(new Character(withKi)), 'Ki Pool');
-  check('a sheet resource is found where it is drawn', [ki?.tab, ki?.value, ki?.sel], ['trackers', '1/5', ['[data-tracker-current="ki_pool"]']]);
+  check('a sheet resource is found where it is drawn', [ki?.tab, ki?.value, ki?.sel], ['trackers', '1/5', ['[data-pool-value="tracker:ki_pool"]']]);
 
   // Its computed numbers, not fields nobody writes: a companion's hit points
   // and its attack's bonus to hit come from what recompute worked out.

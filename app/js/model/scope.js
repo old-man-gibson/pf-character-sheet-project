@@ -14,8 +14,8 @@ import {
   abpGroupTotal, columnTypes, resolveAbility, statMod,
 } from '../rules.js';
 import {
-  COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
-  companionHeading, companionInUse, companionScope, companionSkillKey,
+  COMPANION_ALIASES, COMPANION_FAMILIES, COMPANION_KINDS, COMPANION_LABELS, COMPANION_TARGETS, companionAttackKey,
+  companionHeading, companionInUse, companionNameTest, companionScope, companionSkillKey,
 } from '../companions.js';
 import {
   collectContributions, collectDefinitions, collectUses, hasTokens, plainTokens, renderTokens,
@@ -975,6 +975,9 @@ export function forwardTargets(model) {
       for (const [prefix, label] of prefixes) {
         const under = (name) => `${prefix}.${name}`;
         for (const [name, what] of COMPANION_TARGETS) add(under(name), `${label}: ${what}`, mine);
+        // The character's names for the same numbers land on them as well,
+        // unlisted, so a bonus written either way arrives.
+        for (const [alias, name] of Object.entries(COMPANION_ALIASES)) expand.set(under(alias), [under(name)]);
         for (const [name, members] of Object.entries(COMPANION_FAMILIES)) {
           const into = members.map(under);
           expand.set(under(name), into);
@@ -1771,9 +1774,9 @@ export function forwardsEarly(model) {
   // are worked out before the prose as well, so a formula can read them (see
   // Character#recomputeReadable) -- and a name reading one that a bonus
   // raises has to see it raised, which takes the second pass.
-  const companions = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b?.id ?? ''))));
+  const companion = companionNameTest(model.data);
   return Object.entries(model.contributions?.totals || {})
-    .some(([name, value]) => value && (totalledEarly(name) || companions.has(name.split('.')[0])));
+    .some(([name, value]) => value && (totalledEarly(name) || companion(name)));
 }
 
 /**
@@ -1798,9 +1801,7 @@ const totalledEarly = (name) => FORWARD_EARLY.has(name) || inEarlyFamily(name);
 export function secondPass(model) {
   const late = Object.entries(model.contributions?.totals || {})
     .some(([name, value]) => value && totalledEarly(name));
-  const ids = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || [])
-    .map((b) => String(b?.id ?? '').toLowerCase())));
-  const companionOf = (name) => ids.has(String(name).split('.')[0].toLowerCase());
+  const companionOf = companionNameTest(model.data);
   const companions = late && (model.contributions?.entries || [])
     .some((e) => [...e.lands, ...Object.keys(e.failed || {})].some(companionOf));
   const names = companions && (model.inlineDefinitions || []).some((d) => {

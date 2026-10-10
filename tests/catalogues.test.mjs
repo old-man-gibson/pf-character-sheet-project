@@ -26,6 +26,7 @@ import {
 import { vancianPanel, psionicsPanel } from '../app/js/ui/panels/subsystems.js';
 import { catalogueFace } from '../app/js/ui/html.js';
 import { itemText } from '../app/js/ui/rows.js';
+import { datalistOptions } from '../app/js/ui/datalist.js';
 import { text as fieldText } from '../app/js/ui/fields.js';
 
 let pass = 0;
@@ -148,6 +149,23 @@ console.log('through a pack and into the catalogues');
     [featTypes(), spellClasses()], [['Combat'], ['Alchemist', 'Wizard']]);
   ok('a spell is found by name', !!spellEntry('Acid Geyser'));
   ok('so is a power', !!powerEntry('Ability as One'));
+
+  // A catalogue cell's suggestions come from one table (ui/datalist.js).
+  check('a feat cell suggests what matches, with its type',
+    datalistOptions('feats', { query: 'attack' }), [{ value: 'Power Attack', label: 'Combat' }]);
+  check('a spell cell, narrowed to its class, labelled with school and levels',
+    datalistOptions('spells', { classes: ['Wizard'] }).map((o) => o.value), ['Acid Geyser']);
+  check('a list no filler serves is left alone, and the answer is capped',
+    [datalistOptions('veils'), datalistOptions('constructor'), datalistOptions('powers', { max: 1 }).length],
+    [null, null, 1]);
+
+  // Found through an index built on the first lookup: a catalogue set again
+  // answers from its own entries, not the last one's.
+  const before = merged.feats;
+  setFeatCatalogue({ feats: [{ name: 'Cleave', type: 'Combat', text: 'x' }] });
+  check('a feat catalogue set again has only its own entries', [featEntry('Power Attack'), featEntry('cleave')?.name],
+    [null, 'Cleave']);
+  setFeatCatalogue(before);
 }
 
 /* ---------------- narrowing ---------------- */

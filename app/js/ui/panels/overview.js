@@ -23,10 +23,13 @@ import { proseText } from '../rows.js';
 import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetBonusHint } from '../badges.js';
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
+import { speedTable } from '../speeds.js';
 import {
   guileTalentRows, ownTalentRows, plannedLevels, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
-import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
+import {
+  formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, powerPointStepper, trackerLine,
+} from './trackers.js';
 import { slotSpend } from './subsystems.js';
 
 /**
@@ -99,7 +102,7 @@ import {
   conditionInfo, conditionTotals, fmt, prepStyle, skillLabel, statModDelta,
 } from '../../rules.js';
 import { hasTokens } from '../../inline.js';
-import { maneuverDetails } from '../../model.js';
+import { blankClassRow, maneuverDetails } from '../../model.js';
 import { colorControl } from '../color-control.js';
 import { abilitySelect, area, check, num, autoNum, roField, roValue, select, text } from '../fields.js';
 import {
@@ -806,7 +809,7 @@ function dashVancianCard(model) {
       const levels = (c.spells || []).map((s, si) => {
         if (!s.slots || s.atWill) return '';
         return `<span class="dashslot"><span class="dim">L${s.level}</span>${spends
-          ? slotSpend({ path: `${base}.spells|${si}|used`, total: s.slots, left: s.left, name: `${noun.one} level ${s.level}` })
+          ? slotSpend({ pool: `slots:${base}.spells|${si}`, total: s.slots, left: s.left, name: `${noun.one} level ${s.level}` })
           : `<span class="pool">${s.slots}/day</span>`}</span>`;
       }).filter(Boolean).join('');
       return `<div class="dashcaster">
@@ -820,7 +823,7 @@ function dashVancianCard(model) {
     // left edge -- pip one top-left, filling rightward, whatever the count.
     const prow = ({ r, i }) => `<div class="dashspell">
       <span class="sname" title="${esc(r.note ? `${r.name} — ${proseText(model, r.note)}` : r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
-      <span class="suses">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
+      <span class="suses">${slotSpend({ pool: `slots:vancian.prepared|${i}`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
         || '<span class="dim">—</span>'}</span>
     </div>`;
     return `<section class="panel span2">
@@ -850,12 +853,9 @@ function dashPsionicsCard(model) {
         <button class="linkish" style="margin-left:auto" data-action="psionics-new-day"
           title="The whole pool comes back">New day</button>
       </h3>
-      ${meterVisual(model.meterSpec('pp'))}
+      ${meterVisual(model.meterSpec('pp'), { pool: 'pp' })}
       <div class="tracker-controls" style="margin-top:6px">
-        <button data-pool-step="-1" aria-label="Spend one power point">−</button>
-        <input type="number" value="${left}" data-pool-left aria-label="Power points remaining">
-        <span class="pool">/ ${pool}</span>
-        <button data-pool-step="1" aria-label="Restore one power point">+</button>
+        ${powerPointStepper(left, pool)}
       </div>
     </section>`;
   }
@@ -1555,39 +1555,20 @@ function speedPanel(model) {
     const speeds = c.identity.speeds || [];
     return `<section class="panel">
       <h3>Speed</h3>
-      <div class="tablewrap"><table class="speeds stacked" data-fold="shut">
-        <thead><tr><th>Type</th><th class="num">Base</th>
-          <th class="num" title="A number, or a formula — e.g. floor(level / 3) * 10">Bonus</th>
-          <th class="num">Final</th><th></th></tr></thead>
-        <tbody>${speeds.map((sp, i) => {
-          const adj = cs.speeds[i];
-          const slowed = cs.changed && adj && adj.adjusted !== adj.final;
-          return `<tr>
-          <td data-stack="name">${itemText('identity.speeds', i, 'type', sp.type, 'Land')}
-            <div class="hint speedname">${sp.handle
-    ? `<code>${esc(sp.handle)}</code>`
-    : 'name it to use it in a formula'}</div></td>
-          <td class="num" data-label="Base">${itemNum('identity.speeds', i, 'base', sp.base)}</td>
-          <td class="num" data-label="Bonus">${exprField(`data-item="identity.speeds|${i}|bonus"`, sp.bonus, {
-            width: '5.6rem',
-            value: typeof sp.bonus === 'string' && sp.bonus.trim() ? sp.bonusNum : null,
-            error: sp.bonusError,
-            title: 'A number, or a formula — e.g. floor(level / 3) * 10 for fast movement',
-          })}</td>
-          <td class="num total" data-stack="head">${slowed
-    ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
-    : `${Number(sp.final) || 0} ft.`}${(() => {
-    // Under the total rather than beside it: the panel is one of the narrow
-    // ones, and a badge on the same line pushes the column wider for every
-    // character, including the ones with nothing forwarded anywhere.
-    const badge = forwardedBadge(model, sp.handle);
-    return badge ? `<div class="speedfwd">${badge}</div>` : '';
-  })()}</td>
-          <td class="tools quiet">${removeButton('identity.speeds', i, { what: sp.type || 'this movement', tiny: true })}</td>
-        </tr>`;
-        }).join('')}</tbody>
-      </table></div>
-      <div style="margin-top:8px">${addButton('identity.speeds', 'Add movement', { type: '', base: 30, bonus: 0 })}</div>
+      ${speedTable('identity.speeds', speeds, speeds.map((sp) => ({
+    bonus: sp.bonusNum, error: sp.bonusError, handle: sp.handle, final: sp.final,
+  })), {
+    named: true,
+    exampleFor: ' for fast movement',
+    // What conditions and buffs do to the rate, where they move it.
+    final: (i, w) => {
+      const adj = cs.speeds[i];
+      return cs.changed && adj && adj.adjusted !== adj.final
+        ? movedValue(`${adj.adjusted} ft.`, adj.adjusted - adj.final, { base: `${adj.final} ft.`, sources: cs.sources })
+        : null;
+    },
+    badge: (handle) => forwardedBadge(model, handle),
+  })}
       <p class="hint">Bonus takes a formula, so fast movement can be written as the rule
         it is — <code>floor(level / 3) * 10</code> — and keep up with the level.
         Each rate answers to the name under its type: a formula anywhere reads
@@ -1805,10 +1786,7 @@ function classesPanel(model, ctx) {
         </tr>${sysPicker(x, i)}`;
         }).join('')}</tbody>
       </table></div>
-      <div style="margin-top:8px">${addButton('classes', 'Add class', {
-        name: 'New class', hd: 8, bab: 0.75, goodFort: false, goodRef: false,
-        goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
-      })}</div>
+      <div style="margin-top:8px">${addButton('classes', 'Add class', blankClassRow())}</div>
       <div class="fieldgrid" style="margin-top:8px">
         <div class="statline"><span class="label">Save bases${gestalt ? ' (gestalt)' : ''}</span>
           <span class="value">Fort ${sv('fortitude').base ?? 0} &middot;

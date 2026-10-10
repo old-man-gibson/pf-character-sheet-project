@@ -6,7 +6,7 @@
  * looked up.
  */
 
-import { abilityKey, statMod } from '../../rules.js';
+import { statKeys, statMod } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
 import { closestName, manifesterForwardKey } from '../util.js';
@@ -253,11 +253,11 @@ export function recomputePsionics(model) {
     // so it earns no ability share either. The sheet gated the whole sum the
     // same way, and showing a share of points that are not in the pool would
     // only invite adding it up by hand and getting a different answer.
-    // The same ability in both slots counts once, as `statMod` reads a slot
+    // Each ability in the slot earns its own share, rounded on its own; the
+    // same ability in both slots counts once (statKeys), as a slot is read
     // everywhere else: Int and Int is Int, not twice its bonus points.
-    const same = abilityKey(c.stat) !== '' && abilityKey(c.stat) === abilityKey(c.stat2);
     c.abilityPoints = base === null ? 0
-      : Math.floor((oneStat(c.stat) * level) / 2) + (same ? 0 : Math.floor((oneStat(c.stat2) * level) / 2));
+      : statKeys(c.stat, c.stat2).reduce((n, k) => n + Math.floor((oneStat(k) * level) / 2), 0);
     c.points = base === null ? 0 : Math.max(0, base + c.abilityPoints);
     c.powerCount = (c.powers || []).filter((x) => x.name).length;
     pool += c.points;

@@ -30,13 +30,9 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import { slugId } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : (argv[i + 1] ?? true);
-};
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|split|author)$/.test(argv[i - 1])));
+const { opt, inputs } = readArgs(['out', 'split', 'author']);
 const out = opt('out');
 const split = (Number(opt('split', 10)) || 10) * 1024 * 1024;
 const authorOpt = opt('author');

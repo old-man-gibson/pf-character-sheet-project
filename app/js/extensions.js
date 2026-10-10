@@ -47,6 +47,7 @@ import { storageMedium } from './pack-storage.js';
 import { veilEntry } from './model/subsystems/akashic.js';
 import { talentKey } from './model/spheres.js';
 import { markUndo } from './model/undo.js';
+import { blankClassRow } from './model/document.js';
 
 export const EXTENSION_FORMAT = 'character-sheet-extension';
 export const EXTENSION_VERSION = 1;
@@ -556,6 +557,18 @@ export function archetypeTouches(block) {
   return set;
 }
 
+/**
+ * A name with the ability type written after it, split: "Rage (Ex)" is
+ * { name: 'Rage', type: 'Ex' }. The type is read in any case and given as
+ * the books write it; a name with none comes back whole, its type ''. Every
+ * route that files an option or feature by its type reads it here.
+ */
+export function splitAbilityType(text) {
+  const s = String(text ?? '').trim();
+  const m = /^(.*?)\s*\((Ex|Su|Sp)\)$/i.exec(s);
+  return m ? { name: m[1].trim(), type: m[2][0].toUpperCase() + m[2].slice(1).toLowerCase() } : { name: s, type: '' };
+}
+
 /** 'Full' / '3/4' / 'medium' / '1/2' -> the number the Classes table stores. */
 export function babFromText(v) {
   const s = lower(v);
@@ -823,16 +836,20 @@ export function extensionStore(medium = globalThis.localStorage) {
       await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
     },
 
-    /** Switch a pack on or off; bundled ones are remembered by id. */
+    /**
+     * Switch a pack on or off, or a list of them as one write (a fold's
+     * All on); bundled ones are remembered by id.
+     */
     async setEnabled(id, on, { bundled = false } = {}) {
       await open();
+      const ids = new Set([id].flat());
       const index = readIndex();
       if (bundled) {
         const set = new Set(index.disabledBundled);
-        if (on) set.delete(id); else set.add(id);
+        for (const one of ids) { if (on) set.delete(one); else set.add(one); }
         index.disabledBundled = [...set];
       } else {
-        index.extensions = index.extensions.map((e) => (e.id === id ? { ...e, enabled: !!on } : e));
+        index.extensions = index.extensions.map((e) => (ids.has(e.id) ? { ...e, enabled: !!on } : e));
       }
       await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
     },
@@ -1253,7 +1270,7 @@ export function applyBlock(model, rawBlock) {
         goodFort: block.goodFort, goodRef: block.goodRef, goodWill: block.goodWill,
         skillRanks: block.skillRanks, archetypes: block.archetypes, levelsOverride: null,
       };
-      if (existing === -1) model.listAdd('classes', { ...row, systems: block.systems });
+      if (existing === -1) model.listAdd('classes', { ...blankClassRow(), ...row, systems: block.systems });
       else {
         for (const [k, v] of Object.entries(row)) model.setItem('classes', existing, k, v);
         // The block's system tags join the row's rather than replace them --
@@ -1534,11 +1551,28 @@ export function optionCataloguesFrom(blocks) {
   return out.filter((c) => c.name && c.options.length);
 }
 
-/** "6th level" in an entry's prerequisites is the level a cell must be at to offer it. */
-const optionMinLevel = (text) => {
-  const m = str(text).match(/Prerequisites?:?\*{0,2}\s*(?:[^.\n]*?\b)?(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i);
-  return m ? Number(m[1]) : null;
-};
+/*
+ * The ways an option's text says the level it asks for -- in its
+ * prerequisites ("Prerequisites: 6th-level"), or in a sentence ("must be at
+ * least 6th level", "must be level 6 to select"). Each route that reads
+ * options used to know one of them; every route reads all of them here. Each
+ * keeps the word that anchors it, so "must be 5 feet away" is not a level.
+ */
+const MIN_LEVEL_SAYINGS = [
+  /Prerequisites?:?\*{0,2}\s*(?:[^.\n]*?\b)?(\d{1,2})(?:st|nd|rd|th)[ -]level\b/i,
+  /\bmust be (?:at least )?(\d{1,2})(?:st|nd|rd|th)? level(?: or higher)?\b/i,
+  /must be (?:at least |of )?(?:level )?(\d{1,2})(?:st|nd|rd|th)?(?: level)?(?: or higher)? to select/i,
+];
+
+/** The level an option's text asks for, or null when it names none. */
+export function minLevelIn(text) {
+  for (const saying of MIN_LEVEL_SAYINGS) {
+    const m = str(text).match(saying);
+    if (m) return Number(m[1]) || null;
+  }
+  return null;
+}
+const optionMinLevel = minLevelIn;
 
 /**
  * A page that is a list -- "Advancing Flurry (Ex)" on a line, its text under
@@ -1604,9 +1638,9 @@ export function optionCataloguesFromTables(tables) {
     const menuName = [g.class, g.feature].filter(Boolean).join(' ');
     const about = g.entries.length > 1 ? g.entries.find((e) => lower(e.name) === lower(menuName)) : null;
     const options = listed.length ? listed : g.entries.filter((e) => e !== about).map((e) => {
-      const typed = str(e.name).trim().match(/^(.*?)\s*\((Ex|Su|Sp)\)$/i);
+      const { name, type } = splitAbilityType(e.name);
       return {
-        name: typed ? typed[1] : str(e.name).trim(), type: typed ? typed[2] : '',
+        name, type,
         text: str(e.text), source: str(e.source), minLevel: optionMinLevel(e.text),
       };
     });
@@ -1621,13 +1655,12 @@ export function optionCataloguesFromTables(tables) {
     const kind = lower(row?.kind);
     if (!kind || kind === 'power' || !str(row?.name).trim()) continue;
     if (!kinds.has(kind)) kinds.set(kind, []);
-    const typed = str(row.type).match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
-    const type = (typed ? typed[1] : str(row.type)).trim();
+    const { name: type, type: abilityType } = splitAbilityType(row.type);
     const facts = [type, row.level != null && row.level !== '' ? `level ${row.level}` : '',
       str(row.burn).trim() ? `burn ${str(row.burn).trim()}` : '', str(row.element).trim()];
     kinds.get(kind).push({
       family: type,
-      option: { name: str(row.name).trim(), type: typed ? typed[2] : '', category: facts.filter(Boolean).join(', '), text: str(row.text), source: str(row.source) },
+      option: { name: str(row.name).trim(), type: abilityType, category: facts.filter(Boolean).join(', '), text: str(row.text), source: str(row.source) },
     });
   }
   for (const [kind, rows] of kinds) {

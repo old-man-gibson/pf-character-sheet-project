@@ -7,13 +7,13 @@ import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, summarize, TABLE_KINDS, looksLikeExtension, loadBundledExtensions, parseReplaces,
-  isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey,
+  isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey, splitAbilityType, minLevelIn,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
 import {
   parseClassFeatures, parseGroupFeatures, parseNamedLines, parseMenuOptions, menuOptionLines,
-  copyCost, packSize,
+  copyCost, packSize, packGroups, packFindText, PACK_GROUP_MIN,
 } from '../app/js/extension-manager.js';
 import {
   Character, setManeuverCatalogue, disciplineEntries, setOptionCatalogues, optionCatalogues, resolveOptionMenu, optionCatalogueFor,
@@ -54,6 +54,13 @@ check('slug from a name', slugId('Path of War: Expanded!'), 'path-of-war-expande
 check('slug strips accents', slugId('Dōkei Saburō'), 'dokei-saburo');
 check('slug of nothing', slugId('///'), '');
 check('bab words', [babFromText('Full'), babFromText('3/4'), babFromText('half'), babFromText('')], [1, 0.75, 0.5, 0.75]);
+// One reading of a name's ability type and of the level an option asks for,
+// for every route that files options (the paste, PDF and catalogue routes).
+check('a name and its ability type', [splitAbilityType('Rage Powers (Ex)'), splitAbilityType('Fury (su)'), splitAbilityType('Plain')],
+  [{ name: 'Rage Powers', type: 'Ex' }, { name: 'Fury', type: 'Su' }, { name: 'Plain', type: '' }]);
+check('the level an option asks for, however it is said',
+  ['Prerequisites: 6th-level', 'You must be at least 8th level or higher.', 'You must be level 4 to select this.', 'It must be 5 feet away.']
+    .map(minLevelIn), [6, 8, 4, null]);
 check('not an object', inspectExtension('nope').ok, false);
 check('wrong format', inspectExtension({ format: 'character-sheet' }).ok, false);
 check('newer format version refused', inspectExtension({ format: EXTENSION_FORMAT, formatVersion: 99, name: 'x' }).ok, false);
@@ -223,6 +230,17 @@ console.log('store -- save, list, read, enable, remove; bundled toggles remember
   check('bundled disable remembered', [...store.disabledBundled()], ['bundled-x']);
   await store.setEnabled('bundled-x', true, { bundled: true });
   check('bundled re-enabled', [...store.disabledBundled()], []);
+  // A fold's All on / All off switches its packs in one write.
+  await store.save({ format: EXTENSION_FORMAT, name: 'Pack B' });
+  await store.save({ format: EXTENSION_FORMAT, name: 'Pack C' });
+  await store.setEnabled(['pack-a', 'pack-c'], false);
+  check('a list switched at once', store.list().map((e) => [e.id, e.enabled]), [['pack-a', false], ['pack-b', true], ['pack-c', false]]);
+  await store.setEnabled(['b1', 'b2'], false, { bundled: true });
+  await store.setEnabled(['b1'], true, { bundled: true });
+  check('bundled lists too', [...store.disabledBundled()], ['b2']);
+  await store.setEnabled(['b2'], true, { bundled: true });
+  await store.remove('pack-b');
+  await store.remove('pack-c');
   await store.remove('pack-a');
   check('removed from index and storage', [store.list(), storage.keys().filter((k) => k.includes(':ext:'))], [[], []]);
   let threw = false;
@@ -1863,6 +1881,27 @@ console.log('copying a bundled pack -- what it costs, said before the Save');
   ok('a big one says it costs nothing where it is', line.includes('costs no storage at all'));
   ok('names the size the copy would take', line.includes(packSize(big)));
   ok('and that editing is not what spends it', line.includes('only Save spends anything'));
+}
+
+console.log('the pack list -- filed by author, found by name, author or contents');
+{
+  const item = (name, author, enabled = true) => ({ s: summarize(normalizeExtension({ name, author })), enabled });
+  const groups = packGroups([
+    item('Zeta', 'Second Press'), item('alpha 10', 'First Press'), item('Loose', ''),
+    item('alpha 9', 'First Press', false), item('Beta', 'second press'),
+  ]);
+  check('a group per author, in name order, the unauthored last',
+    groups.map((g) => g.author), ['First Press', 'Second Press', '']);
+  check('one author however it is capitalised', groups[1].items.map((it) => it.s.name), ['Beta', 'Zeta']);
+  check('packs by name inside, numbers read as numbers',
+    groups[0].items.map((it) => it.s.name), ['alpha 9', 'alpha 10']);
+  const s = summarize(normalizeExtension({
+    name: 'Book of Veils', author: 'Some Press', description: 'Chakra binds', blocks: [{ kind: 'note', name: 'n' }],
+  }));
+  const text = packFindText(s);
+  ok('found by name, author, description and what it holds',
+    ['book of veils', 'some press', 'chakra binds', '1 note'].every((w) => text.includes(w)));
+  ok('a short section is not worth folding', PACK_GROUP_MIN >= 8);
 }
 
 console.log('veils -- a catalogue read where it stands, not copied onto the sheet');

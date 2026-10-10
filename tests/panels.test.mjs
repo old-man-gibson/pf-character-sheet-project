@@ -273,7 +273,7 @@ console.log('a casting companion draws its pool and its tradition');
   m.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
   m.listAdd('conjured.0.tradition.boons', 'Easy Focus {conjured.cha.score += 2}');
   const html = renders('a casting companion', 'Conjured Companion', (x) => subsystems.companionPanel(x, 'conjured'), m);
-  for (const [what, needle] of [['its pool', 'data-tracker-step="conjured_spell_points"'],
+  for (const [what, needle] of [['its pool', 'data-pool-step="tracker:conjured_spell_points"'],
     ['its tradition', 'value="Fey Magic"'], ['a drawback', 'conjured.0.tradition.drawbacks|0|self'],
     ['a boon', 'conjured.0.tradition.boons|0|self'],
     // 9th level is 7 dice: four feat slots, open, and labelled by Hit Die.

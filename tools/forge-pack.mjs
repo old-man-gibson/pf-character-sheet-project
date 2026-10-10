@@ -39,6 +39,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { forgeToPack } from '../app/js/forge-pack.js';
+import { readArgs } from './lib/cli.mjs';
 export { forgeToPack, plainText } from '../app/js/forge-pack.js';
 
 /* ---------------- the command ---------------- */
@@ -47,15 +48,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const isMain = !!process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
 
 if (isMain) {
-  const args = process.argv.slice(2);
-  const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
-  const input = args.find((a) => !a.startsWith('--') && a !== opt('--out') && a !== opt('--id') && a !== opt('--name'));
+  const { opt, inputs: [input] } = readArgs(['out', 'id', 'name']);
   if (!input) {
     console.error('Usage: node tools/forge-pack.mjs <forge-export.json | pack.json> [--out private/extensions/homebrew-workbench.json] [--id id] [--name name]');
     process.exit(1);
   }
   const doc = JSON.parse(readFileSync(input, 'utf8'));
-  const out = opt('--out') || join(here, '..', 'private', 'extensions', `${opt('--id') || 'homebrew-workbench'}.json`);
+  const out = opt('out') || join(here, '..', 'private', 'extensions', `${opt('id') || 'homebrew-workbench'}.json`);
   const previous = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : null;
   let pack;
   if (doc.format === 'character-sheet-extension') {
@@ -64,7 +63,7 @@ if (isMain) {
   } else if ((doc.format === 'homebrew-workbench' || doc.format === 'primordia-forge') && Array.isArray(doc.entries)) {
     pack = forgeToPack(doc.entries, {
       customTypes: doc.customTypes,
-      id: opt('--id') || previous?.id, name: opt('--name') || previous?.name, author: previous?.author,
+      id: opt('id') || previous?.id, name: opt('name') || previous?.name, author: previous?.author,
       source: previous?.source, license: previous?.license, createdAt: previous?.createdAt,
       revision: previous ? Number(previous.revision) + 1 : 1,
     });

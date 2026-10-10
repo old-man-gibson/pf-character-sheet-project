@@ -43,7 +43,7 @@
  */
 import {
   ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
-  ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, stepDiceMap,
+  ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, readCrit, threatText, weaponMoves,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
 import { evaluateFormula } from './formula.js';
@@ -546,17 +546,6 @@ function companionTitle(c, kind, b, what) {
   return `${master ? `${master}’s ` : ''}${own} — ${what}`;
 }
 
-/** "19-20/×3" and its kin, as a range and a multiplier. */
-function parseCrit(text) {
-  const s = String(text ?? '');
-  const range = s.match(/(\d+)\s*[-–]\s*20/);
-  const mult = s.match(/[x×*]\s*(\d+)/i);
-  return {
-    range: range ? Math.min(20, Math.max(2, Number(range[1]))) : 20,
-    mult: mult ? Math.max(2, Number(mult[1])) : 2,
-  };
-}
-
 /**
  * Is this damage text something to roll, or something to read?
  *
@@ -572,7 +561,7 @@ function rollableDice(text) {
 
 /** One natural attack: to hit, damage as written, and what a threat does. */
 function companionAttackSpec(named, a) {
-  const { range, mult } = parseCrit(a.crit);
+  const { from: range, mult } = readCrit(a.crit);
   const rolls = [{ label: 'Attack', formula: d20(a.toHit, { critRange: range }) }];
   const notes = [];
   // What a rule or an item adds to this attack's damage. The column stays the
@@ -594,7 +583,7 @@ function companionAttackSpec(named, a) {
     notes.push({ label: 'Damage', text: fmt(bonus) });
   }
   if (range < 20 || mult !== 2) {
-    notes.push({ label: 'Threat', text: `${range < 20 ? `${range}-20` : '20'}/x${mult}` });
+    notes.push({ label: 'Threat', text: threatText(range, mult) });
   }
   if (String(a.damageType ?? '').trim()) notes.push({ label: 'Damage type', text: a.damageType });
   if (a.primaryResolved === false) {
@@ -768,9 +757,11 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
   const w = c?.equipment?.weapons?.[index];
   if (!w) return null;
   const { calc } = w;
-  const modeKey = WEAPON_MODE_KEYS[w.attackType];
-  const atkDelta = (modeKey && cs?.delta?.[modeKey]) || 0;
-  const dmgDelta = cs?.delta?.damage || 0;
+  // A size buff steps the weapon's own dice (weaponMoves); the token riders
+  // (sneak, flaming) keep theirs.
+  const {
+    modeKey, atkDelta, dmgDelta, sized,
+  } = weaponMoves(c, w, cs);
   const name = titled(c, String(w.name ?? '').trim() || 'Weapon');
   const critRange = Math.floor(Number(w.critRange) || 20);
 
@@ -787,14 +778,6 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
       queries: [],
     };
   }
-
-  // A size buff steps the weapon's own dice along the official chart; the
-  // token riders (sneak, flaming) keep their dice, exactly as the rules leave
-  // them alone.
-  const grow = cs?.sizeSteps || 0;
-  const sized = grow
-    ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
-    : { dice: calc.baseDmgDice || {}, flat: 0 };
 
   // The questions each pool holds. They follow the same four rules the dice
   // and the flat parts follow, because a question is only a number the player
@@ -885,7 +868,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
     });
   }
   if (critRange < 20 || mult !== 2) {
-    notes.push({ label: 'Threat', text: `${critRange < 20 ? `${critRange}-20` : '20'}/x${mult}` });
+    notes.push({ label: 'Threat', text: threatText(critRange, mult) });
   }
   if (String(w.damageType ?? '').trim()) notes.push({ label: 'Damage type', text: w.damageType });
   // A parenthesised aside in the Dice field ("4d6 (8d6)") is not rollable, so

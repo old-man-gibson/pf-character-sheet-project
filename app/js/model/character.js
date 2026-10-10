@@ -36,7 +36,6 @@ import {
   DERIVED, FORWARD_BY_DERIVED, SIZE_CARRY_MULTIPLIER, abilityMod, armorParts, carryTiers,
   flatFootedCmd, iterativeAttacks, skillTotal, statMod,
 } from '../rules.js';
-import { evaluateFormula } from '../formula.js';
 import {
   applyMythic, attunementUnlocked, pointBuySummary, pointBuyTable, refreshAbilities, setBuild,
   setMythicPick, setPick,
@@ -137,7 +136,7 @@ import {
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
-import { getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
+import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
 /** A number of hit points as an action takes it: whole, and never below none. */
 const points = (n) => Math.max(0, Math.floor(Number(n) || 0));
@@ -309,17 +308,10 @@ export class Character {
       // Bought ranks accept a plain number or a level-derived formula
       // ("level", "floor(level - 2)"), evaluated in the same sandbox as
       // the trackers.
-      let bought = 0;
-      s.boughtError = null;
-      if (typeof src.bought === 'string' && src.bought.trim() !== '') {
-        try {
-          bought = Math.max(0, Math.floor(Number(evaluateFormula(src.bought, { level })) || 0));
-        } catch (err) {
-          s.boughtError = err.message;
-        }
-      } else {
-        bought = Number(src.bought) || 0;
-      }
+      const r = evaluateAmount(src.bought, { level });
+      // A formula buys no fewer than no ranks; a number stands as typed.
+      const bought = isFormulaText(src.bought) ? Math.max(0, r.value) : r.value;
+      s.boughtError = r.error;
       s.boughtResolved = bought;
 
       const flags = (specialty ? 1 : 0) + (src.gear ? 1 : 0) + (src.other ? 1 : 0);
@@ -387,18 +379,8 @@ export class Character {
 
       // Misc accepts an integer or a formula ("int.mod", "skill_familiarity",
       // "floor(level/2)") reading abilities, level and inline names.
-      s.miscError = null;
-      let misc = 0;
-      if (typeof s.offset === 'string' && s.offset.trim() !== '') {
-        try {
-          const v = evaluateFormula(s.offset, miscScope);
-          misc = Math.floor(Number(v) || 0);
-        } catch (err) {
-          s.miscError = err.message;
-        }
-      } else {
-        misc = Number(s.offset) || 0;
-      }
+      const { value: misc, error: miscError } = evaluateAmount(s.offset, miscScope);
+      s.miscError = miscError;
       s.miscResolved = misc;
       // A bonus forwarded here from somewhere else on the sheet is kept beside
       // the Misc the player typed, never folded into it: the column has to go

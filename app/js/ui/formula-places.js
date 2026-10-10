@@ -373,6 +373,7 @@ function placeOf(model, ref) {
     /* ---------------- fields the audit names ---------------- */
     case 'skillRanks': return skillPlace(a, 'rankSources.bought');
     case 'skillMisc': return skillPlace(a, 'offset');
+    case 'skillBudget': return { tab: 'skills', sel: [set('skillBudget.bonusPerLevel')] };
     case 'weaponMisc': return weaponPlace(model, a, 'miscDamage');
     // The Other columns, the hit-point parts and the language slots are all on
     // the Overview's full page, beside the totals they belong to, in the
@@ -401,12 +402,14 @@ function placeOf(model, ref) {
     case 'statCell': return { tab: 'stats', sel: [set(ref.slice('statCell:'.length))] };
     case 'vancianConcentration': return { tab: 'vancian', sel: [set(`vancian.classes.${a}.concentration`)] };
     case 'deckManipulations': return deckPlace(set('cardcasting.manipulationsAvailable'), ['deck-manipulations']);
-    // A companion's number-or-formula box or a speed written as a formula:
-    // `companionCell:<kind>:<index>:<path>`, the index as the audit found it.
-    case 'companionCell':
-      return COMPANION_KINDS.includes(a) && /^\d+$/.test(b) && c
-        ? companionPlace(model, a, Number(b), (p) => [set(`${p}.${c}`)])
-        : null;
+    // A companion's number-or-formula box or a movement row's bonus:
+    // `companionCell:<kind>:<index>:<path>`, the index as the audit found it,
+    // and a row's bonus as `speeds.<row>.bonus`.
+    case 'companionCell': {
+      if (!COMPANION_KINDS.includes(a) || !/^\d+$/.test(b) || !c) return null;
+      const row = /^speeds\.(\d+)\.bonus$/.exec(c);
+      return companionPlace(model, a, Number(b), (p) => [row ? item(`${p}.speeds`, row[1], 'bonus') : set(`${p}.${c}`)]);
+    }
     case 'trackerForm': return trackerPlace(a, b, c, parts[4]);
 
     default: {

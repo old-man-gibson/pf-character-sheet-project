@@ -36,7 +36,7 @@ import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vanci
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
-import { normalizeName, skillKey, slug } from './util.js';
+import { normalizeName, skillKey, slug, speedRow } from './util.js';
 import { MONSTER_TAB_ORDER } from '../monster/block.js';
 
 // What the Spheres magic side works out and does not save: the sphere table,
@@ -70,6 +70,27 @@ export const PROFICIENCY_LISTS = {
   armor: ARMOR_PROFICIENCIES,
   shields: SHIELD_PROFICIENCIES,
 };
+
+/**
+ * A new row on the Classes table. Add class on the Overview starts from it
+ * and a pack's class block fills it in, so the two carry the same fields.
+ */
+export const blankClassRow = () => ({
+  name: 'New class', hd: 8, bab: 0.75, babOverride: null, goodFort: false, goodRef: false,
+  goodWill: false, skillRanks: 4, archetypes: '', levelsOverride: null, systems: [],
+});
+
+/**
+ * A new weapon row. Add weapon on the Gear tab starts from it, and an older
+ * save's simple weapon is brought up to it, so a weapon from either has every
+ * field the Gear tab draws.
+ */
+export const blankWeapon = () => ({
+  name: '', attackType: 'Melee', dice: '', damageAbility: 'Str', abilityMult: 1,
+  miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2',
+  damageType: '', groups: [], special: '', size: '', range: '', handedness: '',
+  familiarity: '', ammunition: '', weight: 0, price: 0, attackOffset: 0,
+});
 
 export const blankProficiencies = () => ({
   familiarities: [], handedness: [], groups: [], weapons: [], armor: [], shields: [], notes: '',
@@ -1355,6 +1376,7 @@ export function normalise(model) {
   if (Array.isArray(d.weapons) && d.weapons.length) {
     for (const w of d.weapons) {
       e.weapons.push({
+        ...blankWeapon(),
         name: w.name || '', attackType: w.type === 'ranged' ? 'Ranged' : w.type === 'cmb' ? 'CMB' : 'Melee',
         dice: w.damage || '', critMult: w.crit || '', special: w.notes || '',
         enhancement: 0, miscAttack: Number(w.bonus) || 0, miscDamage: 0,
@@ -1368,14 +1390,7 @@ export function normalise(model) {
   if (!d.mythic) d.mythic = {};
   if (!Array.isArray(d.mythic.abilities)) d.mythic.abilities = [];
   if (!Array.isArray(d.traits)) d.traits = [];
-  if (!Array.isArray(d.identity.speeds)) d.identity.speeds = [];
-  for (const sp of d.identity.speeds) {
-    sp.type = sp.type ?? '';
-    sp.base = Number(sp.base) || 0;
-    // The bonus may be a formula ("floor(level / 3) * 10" for fast
-    // movement), so only a real number is coerced to one.
-    if (typeof sp.bonus !== 'string') sp.bonus = Number(sp.bonus) || 0;
-  }
+  d.identity.speeds = Array.isArray(d.identity.speeds) ? d.identity.speeds.map(speedRow) : [];
   // Weapon and armor proficiencies: the workbook's three sentences become
   // lists (see parseProficiencyText); lists already saved are only tidied.
   d.identity.proficiencies = normalizeProficiencies(d.identity.proficiencies);
@@ -1612,20 +1627,31 @@ export function toDocument(model) {
       ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, MAGIC_DERIVED) } : {}),
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
-    // The defence boxes go on holding exactly what was typed; `calc` is the
-    // parts they were read into and every bonus forwarded at them, worked out
-    // again on every load.
-    defenses: stripDerived(model.data.defenses, DEFENCES_DERIVED),
-    hp: stripDerived(model.data.hp, HP_DERIVED),
-    akashic: stripDerived(model.data.akashic, AKASHIC_DERIVED),
-    maneuvers: stripDerived(model.data.maneuvers, MANEUVER_DERIVED),
-    vancian: stripDerived(model.data.vancian, VANCIAN_DERIVED),
-    psionics: stripDerived(model.data.psionics, PSIONIC_DERIVED),
-    altTraining: stripDerived(model.data.altTraining, ALT_TRAINING_DERIVED),
-    cardcasting: stripDerived(model.data.cardcasting, CARDCASTING_DERIVED),
-    familiar: (model.data.familiar || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    animalCompanion: (model.data.animalCompanion || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    eidolon: (model.data.eidolon || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    conjured: (model.data.conjured || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
+    ...Object.fromEntries(saveStrip().map(([key, derived, { list = false } = {}]) => [key, list
+      ? (model.data[key] || []).map((b) => stripDerived(b, derived))
+      : stripDerived(model.data[key], derived)])),
   };
 }
+
+/**
+ * The blocks saved without what `recompute` writes back into them, each with
+ * the list of what goes (see stripDerived). One row per block, so a new
+ * sub-system's worked fields are a row here rather than another line in
+ * toDocument; `list` marks a block kept as a list of them, each stripped.
+ * A function rather than a constant: the lists come from the sub-system
+ * modules, and a table built as this module loads would read them before
+ * they exist whenever another module is loaded first.
+ * The defence boxes keep exactly what was typed; `calc` is the parts they
+ * were read into and every bonus forwarded at them, worked out on each load.
+ */
+const saveStrip = () => [
+  ['defenses', DEFENCES_DERIVED],
+  ['hp', HP_DERIVED],
+  ['akashic', AKASHIC_DERIVED],
+  ['maneuvers', MANEUVER_DERIVED],
+  ['vancian', VANCIAN_DERIVED],
+  ['psionics', PSIONIC_DERIVED],
+  ['altTraining', ALT_TRAINING_DERIVED],
+  ['cardcasting', CARDCASTING_DERIVED],
+  ...COMPANION_KINDS.map((kind) => [kind, COMPANION_DERIVED, { list: true }]),
+];

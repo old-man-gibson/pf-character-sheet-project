@@ -7,9 +7,8 @@
  * here with any depth to it.
  */
 
-import { evaluateFormula } from '../formula.js';
-import { forwarded, scopeIfFormulas } from './scope.js';
-import { speedForwardKey } from './util.js';
+import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
+import { evaluateAmount, speedRows } from './util.js';
 
 /**
  * Movement rates: base plus bonus, with the bonus allowed to be a formula.
@@ -32,29 +31,19 @@ export function recomputeSpeeds(model) {
   // rather than merely unlikely -- the same line the inline names draw
   // against the skills.
   if (scope) scope.speed = {};
-  for (const sp of speeds) {
-    sp.bonusError = null;
-    let bonus = 0;
-    if (typeof sp.bonus === 'string' && sp.bonus.trim() !== '') {
-      try {
-        const v = Number(evaluateFormula(sp.bonus, scope));
-        bonus = Number.isFinite(v) ? v : 0;
-      } catch (err) {
-        sp.bonusError = err.message;
-      }
-    } else {
-      bonus = Number(sp.bonus) || 0;
-    }
-    sp.bonusNum = bonus;
-    // A bonus forwarded here from elsewhere on the sheet is kept beside the
-    // one typed in, never folded into it -- the same way a skill keeps its
-    // Misc and its forwarded amount apart, and for the same reason: the
-    // field has to go on saying what was written in it.
-    sp.handle = speedForwardKey(sp);
-    sp.forwarded = sp.handle ? forwarded(model, sp.handle) : 0;
-    sp.final = (Number(sp.base) || 0) + bonus + sp.forwarded;
-    if (scope && sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
-  }
+  // A bonus forwarded here from elsewhere on the sheet is kept beside the one
+  // typed in, never folded into it -- the same way a skill keeps its Misc and
+  // its forwarded amount apart, and for the same reason: the field has to go
+  // on saying what was written in it.
+  speedRows(speeds, scope, { forwardedAt: (handle) => forwarded(model, handle), named: scope?.speed })
+    .forEach((r, i) => {
+      const sp = speeds[i];
+      sp.bonusError = r.error;
+      sp.bonusNum = r.bonus;
+      sp.handle = r.handle;
+      sp.forwarded = r.forwarded;
+      sp.final = r.final;
+    });
 }
 
 /**
@@ -73,18 +62,7 @@ export function recomputeLanguages(model) {
   const ling = (c.skills || [])
     .filter((s) => /^Linguistics\b/i.test(String(s.name || '')))
     .reduce((t, s) => t + (Number(s.totalRanks) || 0), 0);
-  let extra = 0;
-  let extraError = null;
-  if (typeof i.languageExtra === 'string' && i.languageExtra.trim() !== '') {
-    try {
-      const v = Number(evaluateFormula(i.languageExtra, model.scope()));
-      extra = Number.isFinite(v) ? Math.floor(v) : 0;
-    } catch (err) {
-      extraError = err.message;
-    }
-  } else {
-    extra = Number(i.languageExtra) || 0;
-  }
+  const { value: extra, error: extraError } = evaluateAmount(i.languageExtra, lazyScope(model));
   const known = (i.languages || []).filter((l) => String(l).trim()).length;
   i.languageSlots = {
     int, linguistics: ling, extra, extraError, total: int + ling + extra, known,

@@ -136,6 +136,32 @@ export function trackerReading(t) {
 }
 
 /**
+ * − n + for any pool the sheet spends: the number its box shows, the range
+ * written beside it, and a step either way. `ref` is the pool as
+ * model/pools.js reads it (`tracker:<id>`, `pp`), and one set of handlers
+ * answers these wherever they are drawn.
+ */
+export function poolStepper(ref, { shown, range, what, minus, plus }) {
+  return `<button data-pool-step="${esc(ref)}" data-delta="-1" aria-label="${esc(minus)}">−</button>
+          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-pool-value="${esc(ref)}"
+            aria-label="${esc(what)}">
+          <span class="pool">${range}</span>
+          <button data-pool-step="${esc(ref)}" data-delta="1" aria-label="${esc(plus)}">+</button>`;
+}
+
+/** − n + for the power-point pool, on the Overview and the Psionics tab. */
+export const powerPointStepper = (left, pool) => poolStepper('pp', {
+  shown: left,
+  range: `/ ${pool}`,
+  what: 'Power points remaining',
+  minus: 'Spend one power point',
+  plus: 'Restore one power point',
+});
+
+/** A tracker's reference as the pool controls carry it. */
+export const trackerRef = (t) => `tracker:${t.id}`;
+
+/**
  * A tracker as one line to play from: its name, its meter, and − n +. The
  * Overview's resources card is a list of these, and a panel that owns a pool
  * (a casting companion's spell points) shows its own the same way.
@@ -146,11 +172,13 @@ export function trackerLine(t) {
         <span class="tname" title="${esc(t.refresh || '')}">${esc(t.name)}</span>
         <div class="dashmeter">${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}</div>
         <span class="tracker-controls">
-          <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${esc(t.name)} down one">−</button>
-          <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
-            aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
-          <span class="pool">${range}</span>
-          <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${esc(t.name)} up one">+</button>
+          ${poolStepper(trackerRef(t), {
+    shown,
+    range,
+    what: `${t.name} ${draining ? 'remaining' : 'current'}`,
+    minus: `${t.name} down one`,
+    plus: `${t.name} up one`,
+  })}
         </span>
       </div>`;
 }
@@ -202,11 +230,9 @@ function trackerRow(model, ctx, t) {
         ${trackerVisual(t, normalizeStyle(t.style), t.resolvedZones || [], { interactive: true })}
       </div>
       <div class="tracker-controls">
-        <button data-tracker-step="${esc(t.id)}" data-delta="-1" aria-label="${minusLabel}">−</button>
-        <input type="number" class="${shown < 0 ? 'neg' : ''}" value="${shown}" data-tracker-current="${esc(t.id)}"
-          aria-label="${esc(t.name)} ${draining ? 'remaining' : 'current'}">
-        <span class="pool">${range}</span>
-        <button data-tracker-step="${esc(t.id)}" data-delta="1" aria-label="${plusLabel}">+</button>
+        ${poolStepper(trackerRef(t), {
+    shown, range, what: `${t.name} ${draining ? 'remaining' : 'current'}`, minus: minusLabel, plus: plusLabel,
+  })}
         <button data-tracker-edit="${esc(t.id)}" aria-label="Edit ${esc(t.name)}" title="Edit">✎</button>
         ${protectedTracker ? '' : removeControl(`data-tracker-remove="${esc(t.id)}"`, { what: t.name })}
       </div>
@@ -231,8 +257,12 @@ function trackerRow(model, ctx, t) {
  * the count instead, and comes back to pips as the count falls.
  *
  * `interactive: false` renders inert spans (the editor's live preview).
+ * Clicks name the pool by `ref` (see model/pools.js), the tracker's own
+ * unless another pool is drawn with its shapes.
  */
-export function trackerVisual(t, style, resolvedZones, { interactive = true, current = null, layers = null } = {}) {
+export function trackerVisual(t, style, resolvedZones, {
+  interactive = true, current = null, layers = null, ref = trackerRef(t),
+} = {}) {
   const max = Number(t.max) || 0;
   const min = Number(t.min) || 0;
   const cur = current ?? (Number(t.current) || 0);
@@ -264,7 +294,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
     }
     const shownValue = draining ? max - cur : cur;
     const title = twoSided ? signed(cur) : `${shownValue} of ${draining ? max - Math.max(0, min) : max}`;
-    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-bar="${esc(t.id)}"` : ''}
+    return `<div class="bar ${twoSided ? 'two-sided' : ''}" ${interactive ? `data-pool-bar="${esc(ref)}"` : ''}
           title="${esc(title)}${interactive ? ' — click to set' : ''}">
         ${layout.bands.map((b) => `<div class="band" style="left:${pct(b.from)};width:${pct(b.to - b.from)};background:${rgba(b.color, 0.22)}"
           ${b.label ? `title="${esc(b.label)}"` : ''}></div>`).join('')}
@@ -300,7 +330,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         // `data-n` is the pip's own number; the click handler converts it for
         // a draining tracker and spends one when the last lit pip is clicked.
         return `<${tag} class="pip ${on ? 'used' : ''}" style="${paint}"
-            ${interactive ? `data-pip="${esc(t.id)}" data-n="${floor + n}"` : ''}
+            ${interactive ? `data-pool-pip="${esc(ref)}" data-n="${floor + n}"` : ''}
             title="${esc(`${n} of ${sq.total}`)}"
             aria-label="Set ${esc(t.name)} to ${floor + n}"></${tag}>`;
       }).join('')
@@ -317,7 +347,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
   for (let k = first; k <= max; k++) if (k !== 0) steps.push(k);
   const tag = interactive ? 'button' : 'span';
   const remaining = max - cur;
-  const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pip="${esc(t.id)}" data-n="0"` : ''} title="0"
+  const zeroMark = `<${tag} class="pip zero" ${interactive ? `data-pool-pip="${esc(ref)}" data-n="0"` : ''} title="0"
       aria-label="Set ${esc(t.name)} to 0"></${tag}>`;
   return `<div class="pips">${steps.map((k, i) => {
     const lit = twoSided ? (k > 0 ? cur >= k : cur <= k)
@@ -334,7 +364,7 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
         .map((l) => l.label).filter(Boolean).join(' · '))
       : '';
     const label = `${twoSided ? signed(k) : `${k} of ${max}`}${zone?.label ? ` · ${zone.label}` : ''}${layerLabel ? ` · ${layerLabel}` : ''}`;
-    const pip = `<${tag} class="pip ${k < 0 ? 'neg' : ''} ${lit ? 'used' : ''} ${marks}" ${interactive ? `data-pip="${esc(t.id)}" data-n="${k}"` : ''}
+    const pip = `<${tag} class="pip ${k < 0 ? 'neg' : ''} ${lit ? 'used' : ''} ${marks}" ${interactive ? `data-pool-pip="${esc(ref)}" data-n="${k}"` : ''}
           style="${paint}" title="${esc(label)}" aria-label="Set ${esc(t.name)} to ${twoSided ? signed(k) : k}"></${tag}>`;
     // The zero mark sits between the last negative pip and the first positive one.
     const markBefore = twoSided && k > 0 && (i === 0 || steps[i - 1] < 0);
@@ -357,8 +387,11 @@ export function trackerVisual(t, style, resolvedZones, { interactive = true, cur
  * Pips are refused rather than drawn badly: a hundred and eighty hit points
  * is not a row of pips, so a meter that would need more than the pip limit
  * falls back to its bar and the editor says so.
+ *
+ * A meter is a picture unless `pool` names the pool it draws (model/pools.js);
+ * then its pips and its bar spend it, as a tracker's do.
  */
-export function meterVisual(spec, { interactive = false } = {}) {
+export function meterVisual(spec, { pool = null } = {}) {
   if (!spec) return '';
   const style = spec.style;
   const min = Number(spec.min) || 0;
@@ -383,7 +416,9 @@ export function meterVisual(spec, { interactive = false } = {}) {
 
   const visual = trackerVisual(
     { ...spec, id: spec.id }, drawn, spec.resolvedZones || [],
-    { interactive, current: spec.current, layers: shape === 'pips' ? spec.layers : null },
+    {
+      interactive: !!pool, ref: pool, current: spec.current, layers: shape === 'pips' ? spec.layers : null,
+    },
   );
   // The alarm is the track's own: a red ground that deepens and a glow that
   // widens, both scaled by how far gone the character is, so 1 hit point

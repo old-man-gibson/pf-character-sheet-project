@@ -26,7 +26,7 @@ import { check, field, num, text } from '../ui/fields.js';
 import { hasTokens } from '../inline.js';
 import { proseText } from '../model/scope.js';
 import { dashSystemCards } from '../ui/panels/overview.js';
-import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, bonusColumnName, fmt } from '../rules.js';
+import { ABILITIES, ABILITY_LABELS, AC_BONUS_TYPES, acParts as acRecipe, bonusColumnName, critMultOf, fmt } from '../rules.js';
 import { group } from '../ui/format.js';
 
 /** The two-letter alignment a block prints, from the sheet's full words. */
@@ -122,7 +122,7 @@ function attackLines(model, type) {
     // The lowest roll that threatens, as the Gear tab keeps it (19 for
     // 19-20), and the multiplier whether it was saved as 3 or as "x3".
     const low = Number(w.critRange) || 20;
-    const mult = Number(String(w.critMult ?? '').replace(/^\s*[x×]/i, '')) || 2;
+    const mult = critMultOf(w.critMult);
     const crit = `${low < 20 ? `/${low}-20` : ''}${mult > 2 ? `/×${mult}` : ''}`;
     // The rider is prose, and prose takes formulas: a weapon whose special
     // says `{bloodburst.dmg}` prints the number here, as it does on

@@ -2407,6 +2407,34 @@ export function parseDiceExpr(text, evaluate) {
   return { dice, flat, notes, error };
 }
 
+/**
+ * A weapon's crit multiplier however it was saved -- 3, "3", "x3", "×3" --
+ * as the number it is, never below ×2. The weapon's damage, the Roll20 copy
+ * and the Stat Block all read it here.
+ */
+export function critMultOf(value) {
+  const m = String(value ?? '').match(/(\d+)/);
+  return Math.max(2, m ? Number(m[1]) : 2);
+}
+
+/**
+ * A threat as printed -- "19-20/×3", "18–20", "x4" -- as the lowest roll that
+ * threatens and the multiplier, `{ from, mult }`: 20 and ×2 where it says
+ * neither. The Roll20 copy reads a companion's crit column with it, and the
+ * monster reader the crit part of a damage line.
+ */
+export function readCrit(text) {
+  const s = String(text ?? '');
+  const range = s.match(/(\d+)\s*[-–]\s*20/);
+  return {
+    from: range ? Math.min(20, Math.max(2, Number(range[1]))) : 20,
+    mult: critMultOf(s.match(/[x×*]\s*(\d+)/i)?.[1]),
+  };
+}
+
+/** A threat range (its lowest roll) and multiplier as a short line writes them: "19-20/x3", "20/x2". */
+export const threatText = (from, mult) => `${from < 20 ? `${from}-20` : '20'}/x${mult}`;
+
 /** A typeset minus (U+2212) or dash read as the minus sign it stands for in dice text. */
 export const minusSign = (text) => String(text ?? '').replace(/[\u2212\u2013]/g, '-');
 
@@ -2437,6 +2465,28 @@ export const ATTACK_TYPE_MODE = {
   Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
   'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
 };
+
+/**
+ * What the conditions and buffs of the moment (`conditionState`) do to a
+ * weapon row: the attack and damage they move it by, and its own dice
+ * stepped along the damage-by-size table by a size change, from the size the
+ * weapon already is. The [[…]] riders keep their dice, as the rules leave
+ * them. The weapon cards and the Roll20 copy both start from this.
+ *
+ * `{ modeKey, atkDelta, dmgDelta, grow, sized: { dice, flat } }`; a row the
+ * model has not worked out yet (no `calc`) moves by its attack only.
+ */
+export function weaponMoves(c, w, cs) {
+  const { calc } = w;
+  const modeKey = ATTACK_TYPE_MODE[w.attackType];
+  const atkDelta = (modeKey && cs?.delta?.[modeKey]) || 0;
+  const dmgDelta = (calc && cs?.delta?.damage) || 0;
+  const grow = (calc && cs?.sizeSteps) || 0;
+  const sized = grow
+    ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
+    : { dice: calc?.baseDmgDice || {}, flat: 0 };
+  return { modeKey, atkDelta, dmgDelta, grow, sized };
+}
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
 export const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;
@@ -3431,13 +3481,22 @@ export function abilityOf(name) {
   return ABILITIES.includes(k) ? k : null;
 }
 
-/** Modifier for a stat slot, adding a second stat only when it differs. */
-export function statMod(c, stat1, stat2) {
+/**
+ * The abilities a two-stat slot is keyed to: the first, and the second only
+ * when it names a different one -- Int and Int is Int once. Every reader of a
+ * slot (statMod, statModDelta, statScore, a psionic class's ability share)
+ * goes through this, so none decides that for itself. Names that are no
+ * ability are left out.
+ */
+export function statKeys(stat1, stat2) {
   const one = abilityKey(stat1);
   const two = abilityKey(stat2);
-  let total = ABILITIES.includes(one) ? c.abilities[one].totalMod : 0;
-  if (two && two !== one && ABILITIES.includes(two)) total += c.abilities[two].totalMod;
-  return total;
+  return [one, two !== one ? two : null].filter((k) => k && ABILITIES.includes(k));
+}
+
+/** Modifier for a stat slot, adding a second stat only when it differs. */
+export function statMod(c, stat1, stat2) {
+  return statKeys(stat1, stat2).reduce((total, k) => total + c.abilities[k].totalMod, 0);
 }
 
 /**
@@ -3448,11 +3507,7 @@ export function statMod(c, stat1, stat2) {
  * way the slot itself is, second stat and all.
  */
 export function statModDelta(deltas, stat1, stat2) {
-  const one = abilityKey(stat1);
-  const two = abilityKey(stat2);
-  let total = ABILITIES.includes(one) ? (deltas[one] || 0) : 0;
-  if (two && two !== one && ABILITIES.includes(two)) total += deltas[two] || 0;
-  return total;
+  return statKeys(stat1, stat2).reduce((total, k) => total + (deltas[k] || 0), 0);
 }
 
 /**
@@ -3463,9 +3518,7 @@ export function statModDelta(deltas, stat1, stat2) {
  * one score, so the sheet took the higher. Zero when neither names an ability.
  */
 export function statScore(c, stat1, stat2) {
-  const scores = [stat1, stat2]
-    .map(abilityKey)
-    .filter((k) => ABILITIES.includes(k))
+  const scores = statKeys(stat1, stat2)
     .map((k) => Number(c.abilities[k].workingScore ?? c.abilities[k].tempScore) || 0);
   return scores.length ? Math.max(...scores) : 0;
 }

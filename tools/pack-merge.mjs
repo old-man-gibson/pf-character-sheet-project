@@ -25,10 +25,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { mergeTables } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
-const argv = process.argv.slice(2);
-const dry = argv.includes('--dry');
-const files = argv.filter((a) => !a.startsWith('--'));
+const { flag, inputs: files } = readArgs();
+const dry = flag('dry');
 if (files.length < 2) {
   console.error('usage: node tools/pack-merge.mjs <target.json> <source.json>… [--dry]');
   process.exit(2);

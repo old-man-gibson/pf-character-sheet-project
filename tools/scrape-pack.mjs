@@ -43,16 +43,11 @@ import { convertPack } from './veils-to-table.mjs';
 // The app's own id rule, so a pack built here and one built in the app from the
 // same name ("Café" -> cafe) replace each other on import.
 import { slugId } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : (argv[i + 1] ?? true);
-};
-const flag = (name) => argv.includes(`--${name}`);
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|match|one|id|author|sort|bind-order)$/.test(argv[i - 1])));
+const { opt, flag, inputs } = readArgs(['out', 'match', 'one', 'id', 'author', 'sort', 'bind-order']);
 
 const out = opt('out');
 const match = opt('match');

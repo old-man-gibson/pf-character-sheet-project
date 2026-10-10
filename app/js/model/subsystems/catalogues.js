@@ -59,6 +59,16 @@ function classList(raw) {
 
 /* ---------------- one catalogue ---------------- */
 
+/** A list of named entries as a Map from each name as lookups match it; the first of a name wins. */
+function indexByName(entries) {
+  const out = new Map();
+  for (const e of entries) {
+    const k = lower(e.name);
+    if (k && !out.has(k)) out.set(k, e);
+  }
+  return out;
+}
+
 /**
  * A catalogue and everything done to one.
  *
@@ -69,15 +79,23 @@ function classList(raw) {
  */
 function catalogue({ key, shape, fields }) {
   let held = { [key]: [] };
+  // The entries by name, built on the first lookup after a set: a feat
+  // catalogue runs to thousands, and a row looks its entry up every time it
+  // is drawn. The first of two entries with one name is the one found, as a
+  // scan of the list found it.
+  let byName = null;
 
   const set = (doc) => {
     held = { [key]: arr(doc?.[key]).map(shape).filter((x) => x.name) };
+    byName = null;
   };
   const all = () => held;
   const list = () => held[key];
   const entry = (name) => {
     const k = lower(name);
-    return k ? list().find((x) => lower(x.name) === k) || null : null;
+    if (!k) return null;
+    if (!byName) byName = indexByName(list());
+    return byName.get(k) || null;
   };
 
   /**
@@ -328,8 +346,11 @@ export function powersAvailable({ classes = [], level = null, kind = null } = {}
  * these do not. A kind that earns one stops arriving here.
  */
 let REFERENCE = { catalogues: [] };
+// Each kind's entries by name (see indexByName), built on first lookup.
+let REFERENCE_INDEX = null;
 
 export function setReferenceCatalogue(doc) {
+  REFERENCE_INDEX = null;
   REFERENCE = {
     catalogues: arr(doc?.catalogues).map((g) => ({
       kind: lower(g?.kind),
@@ -371,9 +392,10 @@ export function referenceEntries(kind) {
 export function referenceEntry(name, kind = null) {
   const n = lower(name);
   if (!n) return null;
+  REFERENCE_INDEX ??= new Map(REFERENCE.catalogues.map((g) => [g, indexByName(g.entries)]));
   for (const g of REFERENCE.catalogues) {
     if (kind && g.kind !== lower(kind)) continue;
-    const hit = g.entries.find((e) => lower(e.name) === n);
+    const hit = REFERENCE_INDEX.get(g).get(n);
     if (hit) return { ...hit, kind: g.kind };
   }
   return null;

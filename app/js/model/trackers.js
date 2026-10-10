@@ -9,7 +9,7 @@
  */
 
 import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
-import { COMPANION_KINDS, companionHeading } from '../companions.js';
+import { companionById, companionEntries, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
@@ -85,10 +85,6 @@ export const SYSTEM_POOLS = [
  */
 const COMPANION_POOL = /^sp:(.+)$/;
 
-const companionById = (d, id) => COMPANION_KINDS
-  .flatMap((kind) => (d[kind] || []).map((b) => ({ kind, b })))
-  .find(({ b }) => String(b?.id ?? '') === id) || null;
-
 function companionPoolDef(d, id) {
   const found = companionById(d, id);
   if (!found) return null;
@@ -108,7 +104,7 @@ function companionPoolDef(d, id) {
 
 /** Every pool a character may hold: its own casting pools, and each casting companion's. */
 function poolDefs(d) {
-  const ids = COMPANION_KINDS.flatMap((kind) => (d[kind] || []).map((b) => String(b?.id ?? '')));
+  const ids = companionEntries(d).map(({ b }) => String(b.id ?? ''));
   return [...SYSTEM_POOLS, ...ids.filter(Boolean).map((id) => companionPoolDef(d, id))];
 }
 
@@ -358,7 +354,9 @@ export function recomputeTrackers(model) {
       max = pool.max(model.data);
       if (pool.spent) t.current = pool.spent.get(model.data);
     } else if (t.maxFormula) {
-      try { max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
+      const r = evaluateAmount(t.maxFormula, scope);
+      max = toInt(r.value);
+      if (r.error) errs.push(`max: ${r.error}`);
     }
     t.max = max + t.forwardedMax;
     let min = 0;
@@ -366,7 +364,9 @@ export function recomputeTrackers(model) {
       // The max is already computed, so a symmetric meter can be written as
       // `-self.max` instead of repeating the whole max formula.
       const withMax = { ...scope, self: { max: t.max, current: Number(t.current) || 0 } };
-      try { min = toInt(evaluateFormula(t.minFormula, withMax)); } catch (err) { errs.push(`min: ${err.message}`); }
+      const r = evaluateAmount(t.minFormula, withMax);
+      min = toInt(r.value);
+      if (r.error) errs.push(`min: ${r.error}`);
     }
     t.min = min + t.forwardedMin;
     if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {

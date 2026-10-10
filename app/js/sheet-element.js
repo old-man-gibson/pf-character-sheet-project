@@ -56,7 +56,7 @@
 
 import {
   Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish,
-  featsAvailable, spellsAvailable, powersAvailable,
+  poolAt, poolBar, poolPip, poolStep, poolTyped,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
@@ -85,6 +85,7 @@ import { talentPopHtml } from './ui/talents.js';
 import { blankDraft, blankView } from './ui/view-state.js';
 import { foldValue, isOpen } from './ui/folds.js';
 import { colorControl } from './ui/color-control.js';
+import { datalistOptions } from './ui/datalist.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -124,8 +125,7 @@ import {
 } from './history.js';
 import { downloadFile } from './download.js';
 import {
-  TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, barClickValue,
-  pipClickValue, rgba, readableOn,
+  TRACKER_PALETTE, normalizeStyle, normalizeHex, isDefaultStyle, rgba, readableOn,
 } from './tracker-style.js';
 import { ROLL_FORMATS, DEFAULT_ROLL_FORMAT, rollSpec, rollText, weaponStrikes } from './roll20.js';
 
@@ -2752,37 +2752,25 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #fillDatalist(input) {
     const list = this.shadowRoot?.getElementById(input.getAttribute('list'));
-    // Only a list that asks to be filled. The veil and class-feature menu
-    // lists are drawn whole by their panels and say nothing, and reading
-    // silence as "feats" swapped their options for feat names on focus.
-    if (!list || !['feats', 'spells', 'powers'].includes(list.dataset.fill)) return;
-    const classes = (list.dataset.classes || '').split(',').filter(Boolean);
-    const pool = list.dataset.fill === 'spells' ? spellsAvailable({ classes })
-      : list.dataset.fill === 'powers' ? powersAvailable({ classes })
-        : featsAvailable();
-
-    const q = String(input.value || '').trim().toLowerCase();
-    const hits = [];
-    for (const e of pool) {
-      if (q && !e.name.toLowerCase().includes(q)) continue;
-      hits.push(e);
-      if (hits.length >= DATALIST_MAX) break;
-    }
+    // Only a list that asks to be filled (see FILLERS). The veil and
+    // class-feature menu lists are drawn whole by their panels and say
+    // nothing, and reading silence as "feats" swapped their options for feat
+    // names on focus.
+    const hits = list && datalistOptions(list.dataset.fill, {
+      classes: (list.dataset.classes || '').split(',').filter(Boolean),
+      query: input.value,
+      max: DATALIST_MAX,
+    });
+    if (!hits) return;
     // Rebuilt only when the answer actually changed: typing another letter
     // that narrows nothing should not churn the DOM.
-    const signature = hits.map((e) => e.name).join(' ');
+    const signature = hits.map((h) => h.value).join('\u0000');
     if (list.dataset.showing === signature) return;
     list.dataset.showing = signature;
-    list.replaceChildren(...hits.map((e) => {
+    list.replaceChildren(...hits.map((h) => {
       const o = document.createElement('option');
-      o.value = e.name;
-      const label = list.dataset.fill === 'feats' ? e.type
-        : list.dataset.fill === 'spells'
-          ? [e.school, e.classes.map((c) => `${c.name}${c.level === null ? '' : ` ${c.level}`}`).join(', ')]
-            .filter(Boolean).join(' · ')
-          : [e.discipline || e.element, e.points ? `${e.points} pp` : '', e.burn ? `burn ${e.burn}` : '']
-            .filter(Boolean).join(' · ');
-      if (label) o.label = label;
+      o.value = h.value;
+      if (h.label) o.label = h.label;
       return o;
     }));
   }
@@ -2823,7 +2811,6 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #trackersPanel() { return trackerUi.renderTrackersPanel(this.#model, this.#ctx()); }
 
-  #isDraining(...a) { return trackerUi.isDraining(...a); }
 
   #styleTarget(...a) { return trackerUi.styleTarget(this.#model, this.#ctx(), ...a); }
 
@@ -4613,78 +4600,44 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     /*
-     * Spending a slot. The nth pip leaves n unspent, and the lowest lit one
-     * spends it -- the same rule the tracker pips follow, so the two shapes
-     * behave alike wherever they turn up.
+     * Every pool spent at the table -- a tracker, a spell level's slots, a
+     * prepared spell's uses, the power-point pool -- answers the same four
+     * controls, each carrying the pool it spends (model/pools.js): − and +,
+     * the number typed in, a pip, and a click along a bar. What a control
+     * asks for is worked out there, once, for all of them.
      */
-    root.querySelectorAll('[data-spend]').forEach((b) => {
+    const poolFor = (el, key) => poolAt(this.#model, el.dataset[key]);
+    root.querySelectorAll('[data-pool-step]').forEach((b) => {
       b.addEventListener('click', () => {
-        const [list, index, field] = b.dataset.spend.split('|');
-        const total = Number(b.dataset.total) || 0;
-        const left = Number(b.dataset.left) || 0;
-        const keep = pipClickValue(left, Number(b.dataset.n) || 0);
-        this.#model.play(`${b.dataset.name || 'slots'} ${left} → ${keep}`, () => this.#model.setItem(list, Number(index), field,
-          Math.max(0, Math.min(total, total - keep))));
+        const pool = poolFor(b, 'poolStep');
+        if (!pool) return;
+        pool.set(poolStep(pool, Number(b.dataset.delta) || 0));
         this.#render();
       });
     });
-
-    /*
-     * The power-point pool. One pool for the character rather than a tracker of
-     * its own, so it carries its own controls: the bar sets what is left from
-     * where you click, and the field and the two buttons do it by the number.
-     */
-    const setPoolLeft = (left) => {
-      const pool = Number(this.#model.data.psionics?.pool) || 0;
-      const keep = Math.max(0, Math.min(pool, Math.round(left)));
-      const was = Math.max(0, pool - (Number(this.#model.data.psionics?.spent) || 0));
-      this.#model.play(`power points ${was} → ${keep}`, () => this.#model.set('psionics.spent', pool - keep));
-      this.#render();
-    };
-    root.querySelectorAll('[data-pool-step]').forEach((b) => {
-      b.addEventListener('click', () => setPoolLeft(
-        (Number(this.#model.data.psionics?.left) || 0) + Number(b.dataset.poolStep),
-      ));
-    });
-    root.querySelectorAll('[data-pool-left]').forEach((input) => {
-      input.addEventListener('change', () => setPoolLeft(Number(input.value) || 0));
-    });
-    // The power point meter is still click-to-set, whatever it has been
-    // restyled to: a bar reads the position along the track, and the pips
-    // carry the number they stand for.
-    // Not the style editor's preview, which draws the same meter and must not
-    // spend the pool it is only showing.
-    const live = (el) => !el.closest('.style-preview');
-    root.querySelectorAll('.meter.pp .bar').forEach((bar) => {
-      if (!live(bar)) return;
-      bar.classList.add('clickable');
-      bar.addEventListener('click', (e) => {
-        const box = bar.getBoundingClientRect();
-        if (!box.width) return;
-        const pool = Number(this.#model.data.psionics?.pool) || 0;
-        // `current` is what a tracker would store -- points spent -- and the
-        // pool stores what is left, so it goes back the other way. Doing it
-        // through barClickValue keeps a drained bar reading left-to-right.
-        const { current } = barClickValue((e.clientX - box.left) / box.width, {
-          min: 0, max: pool, style: this.#model.meterStyle('pp'),
-        });
-        setPoolLeft(pool - current);
+    root.querySelectorAll('[data-pool-value]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const pool = poolFor(input, 'poolValue');
+        if (!pool) return;
+        pool.set(poolTyped(pool, Number(input.value) || 0));
+        this.#rerender(input);
       });
     });
-    root.querySelectorAll('.meter.pp .pips').forEach((row) => {
-      if (!live(row)) return;
-      const pips = [...row.querySelectorAll('.pip')];
-      pips.forEach((pip, i) => {
-        pip.classList.add('clickable');
-        pip.addEventListener('click', () => {
-          const pool = Number(this.#model.data.psionics?.pool) || 0;
-          const n = i + 1;                      // the pool starts at 0, so pips run 1..max
-          const spent = Math.max(0, Math.min(pool, Number(this.#model.data.psionics?.spent) || 0));
-          // The pips show what is left on a draining meter and what is spent
-          // otherwise; either way the click follows the tracker pips' rule.
-          const draining = this.#model.meterStyle('pp').fill === 'remaining';
-          setPoolLeft(draining ? pipClickValue(pool - spent, n) : pool - pipClickValue(spent, n));
-        });
+    root.querySelectorAll('[data-pool-pip]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const pool = poolFor(b, 'poolPip');
+        if (!pool) return;
+        pool.set(poolPip(pool, Number(b.dataset.n) || 0));
+        this.#render();
+      });
+    });
+    root.querySelectorAll('[data-pool-bar]').forEach((bar) => {
+      bar.addEventListener('click', (e) => {
+        const pool = poolFor(bar, 'poolBar');
+        const box = bar.getBoundingClientRect();
+        if (!pool || !box.width) return;
+        pool.set(poolBar(pool, (e.clientX - box.left) / box.width));
+        this.#render();
       });
     });
 
@@ -5519,63 +5472,6 @@ export class CharacterSheetElement extends HTMLElement {
           this.#action('save-tracker', root.querySelector('[data-action="save-tracker"]'));
         }
         if (e.key === 'Escape') { e.preventDefault(); this.#action('cancel-tracker'); }
-      });
-    });
-
-    root.querySelectorAll('[data-tracker-current]').forEach((input) => {
-      input.addEventListener('change', () => {
-        const t = this.#model.trackers.find((x) => x.id === input.dataset.trackerCurrent);
-        if (!t) return;
-        const typed = Number(input.value) || 0;
-        // A draining tracker's number is what is left; the model stores spent.
-        const current = this.#isDraining(t) ? (Number(t.max) || 0) - typed : typed;
-        this.#model.updateTracker(t.id, { current });
-        this.#rerender(input);
-      });
-    });
-
-    root.querySelectorAll('[data-tracker-step]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const t0 = this.#model.trackers.find((x) => x.id === b.dataset.trackerStep);
-        if (!t0) return;
-        // "+" adds to what the row shows: spent for a filling pool, what is
-        // left for a draining one. Clamped to [min, max] by the model.
-        const delta = Number(b.dataset.delta) * (this.#isDraining(t0) ? -1 : 1);
-        this.#model.stepTracker(t0.id, delta);
-        this.#render();
-      });
-    });
-
-    root.querySelectorAll('[data-pip]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const t = this.#model.trackers.find((x) => x.id === b.dataset.pip);
-        if (!t) return;
-        const n = Number(b.dataset.n);
-        const max = Number(t.max) || 0;
-        const cur = Number(t.current) || 0;
-        // Pips show what is left on a draining tracker and the position
-        // otherwise; the click is the one rule either way (pipClickValue).
-        // A pip carries the value it stands for; on a draining tracker what is
-        // left is counted from the floor, so the pip's place is n - min.
-        const min = Math.max(0, Number(t.min) || 0);
-        const next = this.#isDraining(t) ? max - pipClickValue(max - cur, n - min) : pipClickValue(cur, n);
-        this.#model.updateTracker(t.id, { current: next });
-        this.#render();
-      });
-    });
-
-    // Bar shape: click anywhere on the track to set the value there.
-    root.querySelectorAll('[data-bar]').forEach((bar) => {
-      bar.addEventListener('click', (e) => {
-        const t = this.#model.trackers.find((x) => x.id === bar.dataset.bar);
-        if (!t) return;
-        const rect = bar.getBoundingClientRect();
-        if (!rect.width) return;
-        const { current } = barClickValue((e.clientX - rect.left) / rect.width, {
-          min: Number(t.min) || 0, max: Number(t.max) || 0, style: t.style,
-        });
-        this.#model.updateTracker(t.id, { current });
-        this.#render();
       });
     });
 

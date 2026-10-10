@@ -23,10 +23,11 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { inspectExtension, describeSummary } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
-const args = process.argv.slice(2);
-const check = args.includes('--check');
-const folder = args.find((a) => !a.startsWith('--')) || join('private', 'extensions');
+const { flag, inputs } = readArgs();
+const check = flag('check');
+const folder = inputs[0] || join('private', 'extensions');
 const INDEX = join(folder, 'index.json');
 
 if (!existsSync(folder)) {

@@ -18,7 +18,7 @@ import {
 import {
   Character, MYTHIC_POWER_FORMULA, SCHEMA_VERSION, DEFAULT_TAB_ORDER, inspectDocument,
   setManeuverCatalogue, disciplineEntries, describeSource, maneuverDetails, maneuverIsWritten,
-  maneuverOwn,
+  maneuverOwn, blankWeapon, blankClassRow,
   setVancianTables, castingTableNames, castingTable, closestName,
   setPsionicTables, psionicTables, psionicCurve, psionicPoints, psionicClassTotal,
   setCardcastingTables, deckManipulation, deckManipulationCatalogue,
@@ -43,7 +43,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -59,7 +59,8 @@ import { importPsionics } from '../app/js/model/subsystems/psionics.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
-  splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey,
+  splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
+  companionNameTest, levelSourceOf, levelSourceLabel, COMPANION_LEVEL_SOURCES, CONJURED_LEVEL_SOURCES, naturalAttack,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
@@ -335,7 +336,7 @@ console.log('companions -- a filled Animal Companion tab is read, not left as a 
   check('the good saves ticked', b.goodSaves, { fort: true, ref: true, will: false });
   check('the typed AC, CMD and initiative bonuses',
     [b.ac.all, b.ac.touch, b.ac.ff, b.cmdOther, b.initBonus], [1, 2, 3, 1, 2]);
-  check('the speeds', [b.speed.base, b.speed.fly, b.speed.swim], ['50', '', '20']);
+  check('the speeds, as movement rows', b.speeds.map((s) => [s.type, s.base, s.bonus]), [['Land', 50, 0], ['Swim', 20, 0]]);
   check('special qualities, both merged lines', b.specialQualities, 'Scent, low-light vision\nTrip on a bite');
   check('the tricks', b.tricks.map((t) => t.name), ['Attack', 'Come', 'Heel']);
   // The level is where the feat came from, so it lands in Source and leaves
@@ -1428,6 +1429,26 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   c.stepTracker(pool().id, 2);
   c.rest('day');
   check('and so does a new day', pool().current, 0);
+  // One companion rest (restCompanion in rest.js) serves both. A new day
+  // leaves the pool to its own Refresh, as it does every tracker: one set to
+  // weekly keeps what was spent, while the companion's hit points come back.
+  c.updateTracker(pool().id, { refresh: 'Weekly' });
+  c.stepTracker(pool().id, 2);
+  c.data.conjured[0].hp = { ...(c.data.conjured[0].hp || {}), damage: 4 };
+  c.rest('day');
+  check('a new day: hit points back, a weekly pool left as it is',
+    [c.data.conjured[0].hp.damage, pool().current], [0, 2]);
+  c.companionRest('conjured', 0);
+  check('the companion’s own rest refills it whatever its Refresh', pool().current, 0);
+  c.updateTracker(pool().id, { refresh: 'Daily' });
+  // Every walk over all the companions goes through companionEntries; a name
+  // is matched to one ignoring case, as a formula's names are.
+  const is = companionNameTest(c.data);
+  check('the companions are found by id, and a name is matched ignoring case',
+    [companionEntries(c.data).map(({ kind, b }) => `${kind}:${b.id}`).includes('conjured:conjured'),
+      companionById(c.data, 'conjured')?.kind, companionById(c.data, 'nobody'),
+      is('Conjured.cha.score'), is('conjured'), is('saves.will')],
+    [true, 'conjured', null, true, true, false]);
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('reopened, the same pool and no second',
     back.trackers.filter((t) => t.pool === 'sp:conjured').map((t) => [t.id, t.max]), [['conjured_spell_points', 9 + cha]]);
@@ -1498,10 +1519,22 @@ console.log('companions -- a typed box takes a formula');
     [k().typed.cmbOther.value, /nosuch/.test(k().typed.cmbOther.error || '')], [0, true]);
   c.set('conjured.0.cmbOther', 0);
 
-  c.set('conjured.0.speed.base', '30 ft.');
-  c.set('conjured.0.speed.fly', '20 + 10 * floor(conjured.hd / 5)');
-  check('a speed is text until it is a formula, then feet',
-    [k().speeds.base, k().speeds.fly], [undefined, { value: '30 ft.', feet: 30, error: null }]);
+  c.listAdd('conjured.0.speeds', { type: 'Land', base: 30, bonus: 0 });
+  c.listAdd('conjured.0.speeds', { type: 'Fly (good)', base: 0, bonus: '20 + 10 * floor(conjured.hd / 5)' });
+  check('a speed is a row, its bonus a number or a formula, as the character\'s are',
+    k().speeds.map((s) => [s.final, s.bonus, s.error]), [[30, 0, null], [30, 30, null]]);
+  // A block saved with the five speed boxes reads them into rows, and keeps
+  // nothing of the old shape.
+  const old = JSON.parse(JSON.stringify(c.toJSON()));
+  delete old.conjured[0].speeds;
+  old.conjured[0].speed = {
+    base: '30 ft.', fly: '60 ft. (good)', swim: '20 + 10 * floor(conjured.hd / 5)', climb: '20 ft. in trees', burrow: '',
+  };
+  const read = new Character(old).data.conjured[0];
+  check('the old speed boxes become rows, nothing typed lost',
+    [read.speeds.map((s) => [s.type, s.base, s.bonus]), read.speed, read.calc.speeds.map((s) => s.final)],
+    [[['Land', 30, 0], ['Fly (good)', 60, 0], ['Swim', 0, '20 + 10 * floor(conjured.hd / 5)'], ['Climb (20 ft. in trees)', 20, 0]],
+      undefined, [30, 60, 30, 20]]);
 
   // Every one of them is on the Formulas tab and in the audit, as the
   // character's own boxes are: by companion, with what it came to and the
@@ -1513,18 +1546,18 @@ console.log('companions -- a typed box takes a formula');
       [`${who} — Bonus AC (all)`, 3, 'ok', 'companionCell:conjured:0:ac.all', 'the Conjured Companion tab'],
       [`${who} — Initiative bonus`, k().scores.str.mod, 'ok', 'companionCell:conjured:0:initBonus', 'the Conjured Companion tab'],
       [`${who} — Will misc`, 2, 'ok', 'companionCell:conjured:0:saves.will.misc', 'the Conjured Companion tab'],
-      [`${who} — Fly speed`, 30, 'ok', 'companionCell:conjured:0:speed.fly', 'the Conjured Companion tab'],
+      [`${who} — Fly (good) bonus`, 30, 'ok', 'companionCell:conjured:0:speeds.1.bonus', 'the Conjured Companion tab'],
     ]);
   c.set('conjured.0.cmdOther', '2');
   check('a number kept as text counts, and is not listed as a formula',
     [k().typed.cmdOther, rows().some((r) => r.place.endsWith(':cmdOther'))], [{ value: 2, error: null }, false]);
   c.set('conjured.0.cmbOther', 'conjured.nosuch');
-  c.set('conjured.0.speed.swim', 'conjured.nosuch * 2');
+  c.listAdd('conjured.0.speeds', { type: 'Swim', base: 0, bonus: 'conjured.nosuch * 2' });
   check('a broken one is a problem the Formulas tab lists, with the way to it',
-    ['cmbOther', 'speed.swim'].map((p) => c.formulaProblems()
+    ['cmbOther', 'speeds.2.bonus'].map((p) => c.formulaProblems()
       .some((x) => x.places.some((pl) => pl.place === `companionCell:conjured:0:${p}`))), [true, true]);
   c.set('conjured.0.cmbOther', 0);
-  c.set('conjured.0.speed.swim', '');
+  c.listRemove('conjured.0.speeds', 2);
 
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('what was typed is what is saved, and works out again on load',
@@ -2211,6 +2244,107 @@ console.log('the formula scope is built only where a formula needs it');
   c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: 0 }, { type: 'Fly', base: 0, bonus: 'speed.land' }];
   c.recompute();
   check('a speed formula still reads the speeds above it', c.data.identity.speeds.map((sp) => sp.final), [30, 30]);
+}
+
+console.log('the last hand-written number-or-formula fields go through evaluateAmount');
+{
+  // Speeds were the one formula field that did not round down; the skill
+  // budget's bonus points per level were missing from the Formula Audit.
+  const c = new Character(blankDocument({ name: 'Amounts', level: 9 }));
+  c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: '35 / 2' }];
+  c.data.skillBudget = { ...(c.data.skillBudget || {}), bonusPerLevel: 'floor(level / 4)' };
+  c.recompute();
+  check('a speed bonus rounds down, as every formula field does',
+    [c.data.identity.speeds[0].bonusNum, c.data.identity.speeds[0].final], [17, 47]);
+  const row = () => c.audit().find((r) => r.id === 'skill-budget-bonus');
+  check('bonus skill points per level are in the audit, with their place',
+    [row()?.value, row()?.status, row()?.place, c.data.skillBudget.bonusResolved], [2, 'ok', 'skillBudget', 2]);
+  c.data.skillBudget.bonusPerLevel = 'floor(';
+  c.recompute();
+  check('and a broken one is among the problems',
+    c.formulaProblems().some((p) => p.places.some((pl) => pl.place === 'skillBudget')), true);
+}
+
+console.log('companions -- one table for where a level comes from; the character\'s names read and aim');
+{
+  // LEVEL_SOURCES decides a companion's level and how its working names it.
+  const src = (kind, b) => levelSourceOf(kind, b)?.id;
+  check('each kind\'s source, its pick, and a pick it does not offer',
+    [src('familiar', { levelSource: 'class' }), src('animalCompanion', {}), src('animalCompanion', { levelSource: 'ride' }),
+      src('animalCompanion', { levelSource: 'casterLevel' }), src('eidolon', { levelSource: 'ride' }),
+      src('conjured', {}), src('conjured', { levelSource: 'class' }), src('conjured', { levelSource: 'handleAnimal' })],
+    ['master', 'class', 'ride', 'class', 'class', 'casterLevel', 'class', 'class']);
+  check('the pickers list what each kind offers, in order',
+    [COMPANION_LEVEL_SOURCES.map(([id]) => id), CONJURED_LEVEL_SOURCES.map(([id]) => id)],
+    [['class', 'handleAnimal', 'ride'], ['casterLevel', 'class']]);
+  check('the working names the source, a pin, and never a familiar\'s pin',
+    [levelSourceLabel('eidolon', { masterClass: 'Summoner', levelOverride: null }),
+      levelSourceLabel('eidolon', { masterClass: 'Summoner', levelOverride: 5 }),
+      levelSourceLabel('familiar', { levelOverride: 5 })],
+    ['the master’s levels in Summoner', 'the level typed in', 'the master’s level']);
+
+  // The character's spellings, beside the companion's own.
+  const c = new Character(blankDocument({ name: 'Kin', level: 8 }));
+  c.set('conjured.0.levelOverride', 6);
+  c.set('conjured.0.baseForm', 'Orb');
+  const init = c.data.conjured[0].calc.initiative;
+  c.data.notes = [{ title: 'A', body: 'quick {conjured.initiative += 2}' }];
+  c.recompute();
+  const k = c.data.conjured[0].calc;
+  check('a bonus aimed at conjured.initiative lands on its initiative', k.initiative, init + 2);
+  check('and the character\'s names read the companion\'s numbers',
+    ['conjured.initiative', 'conjured.saves.will', 'conjured.attack.cmb', 'conjured.hp', 'conjured.hp.current']
+      .map((name) => evaluateAmount(name, c.scope()).value),
+    [k.initiative, k.saves.will.total, k.cmb, k.hpMax, k.hpCurrent]);
+
+  check('a natural attack is found singular or plural',
+    ['claws', 'talon', 'Tail Slaps', 'pincer', '', 'nope'].map((n) => naturalAttack(n)?.name ?? null),
+    ['Claw', 'Talons', 'Tail Slap', 'Pincers', null, null]);
+}
+
+console.log('a two-stat slot is read one way');
+{
+  // statKeys decides which abilities a slot holds for every reader of one:
+  // the second only when it differs, names that are no ability left out.
+  check('the abilities in a slot',
+    [statKeys('Int', 'Wis'), statKeys('Int', 'int'), statKeys('Intelligence', ''), statKeys('', 'Cha'), statKeys('Foo', 'Foo')],
+    [['int', 'wis'], ['int'], ['int'], ['cha'], []]);
+}
+
+console.log('a new weapon or class row starts from one blank');
+{
+  // Add weapon and an older save's simple weapon both start from blankWeapon;
+  // Add class and a pack's class block both from blankClassRow.
+  const doc = blankDocument({ name: 'Old', level: 3 });
+  doc.weapons = [{ name: 'Old Club', type: 'melee', damage: '1d6', crit: 'x2' }];
+  const c = new Character(doc);
+  const club = c.data.equipment.weapons.find((w) => w.name === 'Old Club');
+  check('an older save\'s weapon gets every field a new one has, keeping its own',
+    [Object.keys(blankWeapon()).every((k) => k in club), club.critRange, club.dice, club.damageAbility],
+    [true, 20, '1d6', null]);
+  check('a class row carries its BAB override, as a pack\'s class does',
+    ['babOverride', 'levelsOverride', 'systems'].every((k) => k in blankClassRow()), true);
+}
+
+console.log('a crit is read and written one way');
+{
+  // The weapon's damage, the Stat Block and the Roll20 copy read the
+  // multiplier through critMultOf; the short lines write a threat through
+  // threatText.
+  check('the multiplier however it was saved, never below x2',
+    [critMultOf(3), critMultOf('x3'), critMultOf('×4'), critMultOf(''), critMultOf('x1')], [3, 3, 4, 2, 2]);
+  check('a threat as a short line writes it', [threatText(19, 3), threatText(20, 2)], ['19-20/x3', '20/x2']);
+  check('and read back however it was printed',
+    ['19-20/×3', '18–20', 'x4', '', '17-20/x1'].map(readCrit),
+    [{ from: 19, mult: 3 }, { from: 18, mult: 2 }, { from: 20, mult: 4 }, { from: 20, mult: 2 }, { from: 17, mult: 2 }]);
+  // What a buff does to a weapon row: one reading for the weapon cards and the Roll20 copy.
+  const cs = { delta: { melee: 2, damage: 3 }, sizeSteps: 1 };
+  const w = { attackType: 'Melee', sizeNow: 'Medium', calc: { baseDmgDice: { 8: 1 } } };
+  const moved = weaponMoves({ identity: { size: 'Medium' } }, w, cs);
+  check('a buff moves the attack and damage, and a size step the weapon\'s own dice',
+    [moved.atkDelta, moved.dmgDelta, moved.grow, moved.sized.dice], [2, 3, 1, { 6: 2 }]);
+  check('a row not worked out yet moves by its attack only',
+    [weaponMoves({}, { attackType: 'Melee' }, cs).dmgDelta, weaponMoves({}, { attackType: 'Melee' }, cs).grow], [0, 0]);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');
@@ -11685,7 +11819,9 @@ console.log('companions -- readable from a formula, and only what was typed is s
   const c = new Character(load('angou'));
   c.set('eidolon.0.levelOverride', 20);
   const s = c.scope();
-  check('familiar.hp and eidolon.hd read', [s.familiar.hp, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar[0].calc.hpMax, 15, 15]);
+  check('familiar.hp and eidolon.hd read', [s.familiar.hp.total, s.eidolon.hd, s.eidolon.evoPool], [c.data.familiar[0].calc.hpMax, 15, 15]);
+  check('and familiar.hp, a branch now, still reads as the total in a formula',
+    evaluateAmount('familiar.hp', s).value, c.data.familiar[0].calc.hpMax);
   check('the names validate', c.scopeNames().includes('animalCompanion.str.mod'), true);
   c.set('familiar.0.notes', 'Bites for {= familiar.attack}');
   check('prose on the tab resolves', c.renderProse(c.data.familiar[0].notes).some((seg) => seg.kind !== 'text' && seg.value === c.data.familiar[0].calc.totalAttack), true);

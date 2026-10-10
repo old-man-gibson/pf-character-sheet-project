@@ -28,7 +28,9 @@ import {
   saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
-import { evaluateAmount, getPath, isPinned, normalizeName, setPath, slug } from './model/util.js';
+import {
+  evaluateAmount, getPath, isPinned, normalizeName, setPath, slug, speedRow, speedRows,
+} from './model/util.js';
 
 export const COMPANION_KINDS = ['familiar', 'animalCompanion', 'eidolon', 'conjured'];
 
@@ -52,6 +54,27 @@ export function companionHeading(kind, block) {
   const what = `${COMPANION_LABELS[kind] || kind}${nth ? ` ${nth}` : ''}`;
   const name = String(block?.name || '').trim();
   return name ? `${name} (${what})` : what;
+}
+
+/**
+ * Every companion on a character, each with its kind, kind by kind in
+ * COMPANION_KINDS order. Every walk over all of them goes through this.
+ */
+export const companionEntries = (d) => COMPANION_KINDS
+  .flatMap((kind) => (d?.[kind] || []).filter(Boolean).map((b) => ({ kind, b })));
+
+/** A companion by the id a formula reads it under (`conjured`, `eidolon2`), or null. */
+export const companionById = (d, id) => companionEntries(d)
+  .find(({ b }) => String(b.id ?? '') === String(id)) || null;
+
+/**
+ * A test for whether a dotted name starts with one of the character's
+ * companions -- `eidolon2.hp`, `Conjured.cha.score` -- ignoring case, as a
+ * formula's names do.
+ */
+export function companionNameTest(d) {
+  const ids = new Set(companionEntries(d).map(({ b }) => String(b.id ?? '').toLowerCase()).filter(Boolean));
+  return (name) => ids.has(String(name).split('.')[0].toLowerCase());
 }
 
 /** The worksheet each kind was imported from (none ever carried a conjured one). */
@@ -272,10 +295,64 @@ export const CONJURED_ARCHETYPES = [
  * typed CL bonus or a forwarded one -- and never another sphere's.
  */
 export const CONJURED_SPHERE = 'Conjuration';
-export const CONJURED_LEVEL_SOURCES = [
-  ['casterLevel', 'Conjuration caster level'],
-  ['class', 'Levels in a class'],
+/**
+ * Where a companion's level comes from, one row per source: the kinds that
+ * may use it, its label in the Level from picker, what the level's working
+ * calls it, and the level it gives. A pinned level wins over every source
+ * except a familiar's, which is always its master's. A kind's picker lists
+ * its rows in this order, and a companion that names no source takes its
+ * kind's first; one that names a source its kind does not offer counts
+ * levels in a class, as it always has.
+ */
+export const LEVEL_SOURCES = [
+  {
+    id: 'master', kinds: ['familiar'], label: 'The master’s level',
+    says: () => 'the master’s level',
+    level: (b, m) => Math.min(20, m.level),
+  },
+  {
+    // The conjured companion grows with its caster's caster level *in the
+    // Conjuration sphere* -- the global CL plus that sphere's own bonuses,
+    // which is the level its talents are cast at. A master with no magic side
+    // has no sphere rows, and the plain caster level stands in.
+    id: 'casterLevel', kinds: ['conjured'], label: 'Conjuration caster level',
+    says: () => 'the Conjuration sphere’s caster level',
+    level: (b, m) => {
+      const sphere = typeof m.sphereCL === 'function' ? m.sphereCL(CONJURED_SPHERE) : null;
+      return clampLevel(sphere ?? m.casterLevel, 40);
+    },
+  },
+  {
+    id: 'class', kinds: ['animalCompanion', 'eidolon', 'conjured'], label: 'Levels in a class',
+    says: (b) => (b.masterClass ? `the master’s levels in ${b.masterClass}` : 'no class named'),
+    level: (b, m, kind) => (b.masterClass ? clampLevel(m.classLevelCount(b.masterClass), levelCap(kind)) : 0),
+  },
+  {
+    // The Spheres beastmastery companion advances by Handle Animal or Ride
+    // ranks instead of a class.
+    id: 'handleAnimal', kinds: ['animalCompanion'], label: 'Handle Animal ranks',
+    says: () => 'the master’s Handle Animal ranks',
+    level: (b, m) => clampLevel(m.skillRanks('Handle Animal')),
+  },
+  {
+    id: 'ride', kinds: ['animalCompanion'], label: 'Ride ranks',
+    says: () => 'the master’s Ride ranks',
+    level: (b, m) => clampLevel(m.skillRanks('Ride')),
+  },
 ];
+
+/** A kind's choices for its Level from picker, as [id, label] pairs. */
+const levelSourceOptions = (kind) => LEVEL_SOURCES.filter((s) => s.kinds.includes(kind)).map((s) => [s.id, s.label]);
+
+/** The source a companion's level comes from (see LEVEL_SOURCES). */
+export function levelSourceOf(kind, b) {
+  const offered = LEVEL_SOURCES.filter((s) => s.kinds.includes(kind));
+  const pick = kind === 'familiar' ? '' : String(b?.levelSource || '');
+  if (!pick) return offered[0] || null;
+  return offered.find((s) => s.id === pick) || LEVEL_SOURCES.find((s) => s.id === 'class');
+}
+
+export const CONJURED_LEVEL_SOURCES = levelSourceOptions('conjured');
 
 /**
  * The levels at which each kind gets a +1 to one ability score of its choice.
@@ -310,8 +387,15 @@ export const NATURAL_ATTACKS = [
   ['Other', 'B, P, or S', false],
 ].map(([name, damageType, primary]) => ({ name, damageType, primary }));
 
-export const naturalAttack = (name) => NATURAL_ATTACKS
-  .find((a) => a.name.toLowerCase() === String(name || '').trim().toLowerCase()) || null;
+/**
+ * A natural attack by name, singular or plural and in any case: "claws" is
+ * the Claw row and "talon" the Talons one. Every reader of the table -- a
+ * companion's attack rows, the monster importer -- matches through this.
+ */
+const attackStem = (name) => String(name || '').trim().toLowerCase().replace(/s$/, '');
+export const naturalAttack = (name) => (attackStem(name)
+  ? NATURAL_ATTACKS.find((a) => attackStem(a.name) === attackStem(name)) || null
+  : null);
 
 /**
  * Body types and the item slots each can use, from `dataSheet!A168:R177`, and
@@ -377,11 +461,7 @@ export const splitAbilities = (text) => String(text ?? '')
   .split(',').map((x) => x.trim()).filter(Boolean);
 
 /** How the animal companion's level is found: a class, or a skill's ranks. */
-export const COMPANION_LEVEL_SOURCES = [
-  ['class', 'Levels in a class'],
-  ['handleAnimal', 'Handle Animal ranks'],
-  ['ride', 'Ride ranks'],
-];
+export const COMPANION_LEVEL_SOURCES = levelSourceOptions('animalCompanion');
 
 /* ------------------------------------------------------------------ *
  * Skill lists -- the rows each worksheet came with.
@@ -447,7 +527,8 @@ const common = (kind) => ({
   cmbOther: 0,
   initBonus: 0,
   saves: { fort: { misc: 0 }, ref: { misc: 0 }, will: { misc: 0 } },
-  speed: { base: '', fly: '', burrow: '', swim: '', climb: '' },
+  // Movement rows, the character's shape: a type, a base and a bonus.
+  speeds: [],
   skills: seedSkills(kind),
   attacks: [],
   feats: [],
@@ -597,9 +678,13 @@ export function normalizeCompanion(kind, block) {
   const base = defaultCompanion(kind);
   const b = block && typeof block === 'object' ? block : {};
   const out = { ...base, ...b };
-  for (const key of ['hp', 'ac', 'saves', 'speed', 'goodSaves']) {
+  for (const key of ['hp', 'ac', 'saves', 'goodSaves']) {
     if (base[key]) out[key] = { ...base[key], ...(b[key] && typeof b[key] === 'object' ? b[key] : {}) };
   }
+  // Speeds are rows; a block saved with the five speed boxes it used to have
+  // is read into them (legacySpeedRows).
+  out.speeds = Array.isArray(b.speeds) ? b.speeds.map(speedRow) : legacySpeedRows(b.speed);
+  delete out.speed;
   for (const k of ['fort', 'ref', 'will']) out.saves[k] = { misc: 0, ...(out.saves[k] || {}) };
   out.scores = Object.fromEntries(ABILITIES.map((k) => [
     k, { ...base.scores[k], ...(b.scores?.[k] && typeof b.scores[k] === 'object' ? b.scores[k] : {}) },
@@ -692,7 +777,7 @@ export function uniqueCompanionIds(d) {
       if (!b) continue;
       if (seen.has(String(b.id))) {
         let id = kind;
-        for (let n = 2; seen.has(id) || COMPANION_KINDS.some((k) => (d[k] || []).some((x) => x !== b && x?.id === id)); n++) {
+        for (let n = 2; seen.has(id) || companionEntries(d).some(({ b: x }) => x !== b && x.id === id); n++) {
           id = `${kind}${n}`;
         }
         b.id = id;
@@ -760,20 +845,8 @@ const abilityKey = abilityOf;
  * class). A pinned `levelOverride` wins over both.
  */
 function rawLevel(kind, b, master) {
-  if (kind === 'familiar') return Math.min(20, master.level);
-  if (pinnedLevel(b)) return clampLevel(b.levelOverride, levelCap(kind));
-  if (kind === 'animalCompanion' && b.levelSource === 'handleAnimal') return clampLevel(master.skillRanks('Handle Animal'));
-  if (kind === 'animalCompanion' && b.levelSource === 'ride') return clampLevel(master.skillRanks('Ride'));
-  // The conjured companion grows with its caster's caster level *in the
-  // Conjuration sphere* -- the global CL plus that sphere's own bonuses,
-  // which is the level its talents are cast at -- unless pointed at a
-  // class's levels instead. A master with no magic side has no sphere rows,
-  // and the plain caster level (the character's own level) stands in.
-  if (kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel') {
-    const sphere = typeof master.sphereCL === 'function' ? master.sphereCL(CONJURED_SPHERE) : null;
-    return clampLevel(sphere ?? master.casterLevel, 40);
-  }
-  return b.masterClass ? clampLevel(master.classLevelCount(b.masterClass), levelCap(kind)) : 0;
+  if (kind !== 'familiar' && pinnedLevel(b)) return clampLevel(b.levelOverride, levelCap(kind));
+  return levelSourceOf(kind, b).level(b, master, kind);
 }
 
 /** A level typed into the override field, which wins over every source. */
@@ -785,12 +858,8 @@ const pinnedLevel = (b) => isPinned(b.levelOverride);
  * it is standing in for.
  */
 export function levelSourceLabel(kind, b) {
-  if (kind === 'familiar') return 'the master’s level';
-  if (pinnedLevel(b)) return 'the level typed in';
-  if (kind === 'animalCompanion' && b.levelSource === 'handleAnimal') return 'the master’s Handle Animal ranks';
-  if (kind === 'animalCompanion' && b.levelSource === 'ride') return 'the master’s Ride ranks';
-  if (kind === 'conjured' && (b.levelSource || 'casterLevel') === 'casterLevel') return 'the Conjuration sphere’s caster level';
-  return b.masterClass ? `the master’s levels in ${b.masterClass}` : 'no class named';
+  if (kind !== 'familiar' && pinnedLevel(b)) return 'the level typed in';
+  return levelSourceOf(kind, b).says(b);
 }
 
 /**
@@ -1217,9 +1286,11 @@ export function companionScope(block) {
   if (!k) return null;
   const s = {
     level: k.level, hd: k.hd, bab: k.bab,
-    hp: k.hpMax, hpCurrent: k.hpCurrent,
+    // `hp` reads as the total, as the character's does; `hp.current` and
+    // the older `hpCurrent` are what is left.
+    hp: { current: k.hpCurrent, total: k.hpMax }, hpCurrent: k.hpCurrent,
     touch: k.touch, ff: k.flatFooted, cmd: k.cmd, ffCmd: k.ffCmd, cmb: k.cmb ?? 0,
-    init: k.initiative,
+    init: k.initiative, initiative: k.initiative,
     fort: k.saves.fort.total, ref: k.saves.ref.total, will: k.saves.will.total,
     ac: {
       touch: k.touch, flatFooted: k.flatFooted, cmd: k.cmd, total: k.ac,
@@ -1229,7 +1300,7 @@ export function companionScope(block) {
     // before its primary/secondary penalty.
     attack: { ...Object.fromEntries((block.attacks || [])
       .map((a) => [companionAttackKey(a), Number(a.toHit) || 0])
-      .filter(([key]) => key && key !== 'x')), total: k.totalAttack },
+      .filter(([key]) => key && key !== 'x')), cmb: k.cmb ?? 0, total: k.totalAttack },
     damage: { ...Object.fromEntries((block.attacks || [])
       .map((a) => [companionAttackKey(a), Number(a.damageBonus) || 0])
       .filter(([key]) => key && key !== 'x')), total: k.damageBonus ?? 0 },
@@ -1441,10 +1512,34 @@ export const COMPANION_FORMULA_FIELDS = {
   bonusFeats: 'Bonus feats',
 };
 
-/** The speed boxes, which hold text ("30 ft.") or a formula worked out in feet, by name. */
-export const COMPANION_SPEEDS = {
-  base: 'Speed', fly: 'Fly speed', swim: 'Swim speed', climb: 'Climb speed', burrow: 'Burrow speed',
+/**
+ * The five speed boxes a companion used to have, and the movement type each
+ * becomes as a row.
+ */
+export const LEGACY_SPEED_TYPES = {
+  base: 'Land', fly: 'Fly', swim: 'Swim', climb: 'Climb', burrow: 'Burrow',
 };
+
+/**
+ * The old speed boxes -- each text ("30 ft.", "60 ft. (good)") or a formula
+ * in feet -- as movement rows. A number is the row's base, with any bracket
+ * kept on its type ("Fly (good)"); a formula is its bonus, so it goes on
+ * being worked out; and text that is neither is kept whole on the type, so
+ * nothing typed is lost, with its first number as the base.
+ */
+export function legacySpeedRows(speed) {
+  if (!speed || typeof speed !== 'object') return [];
+  const rows = [];
+  for (const [key, type] of Object.entries(LEGACY_SPEED_TYPES)) {
+    const raw = String(speed[key] ?? '').trim();
+    if (!raw) continue;
+    const feet = /^(\d+)\s*(?:ft\.?|feet)?\s*(\([^)]*\))?$/i.exec(raw);
+    if (feet) rows.push({ type: feet[2] ? `${type} ${feet[2]}` : type, base: Number(feet[1]), bonus: 0 });
+    else if (parses(raw)) rows.push({ type, base: 0, bonus: raw });
+    else rows.push({ type: `${type} (${raw})`, base: Number(raw.match(/\d+/)?.[0]) || 0, bonus: 0 });
+  }
+  return rows;
+}
 
 /** A number kept as text -- an older save -- which needs no scope to read. */
 export const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
@@ -1464,20 +1559,15 @@ export function withTypedNumbers(b, typed) {
 }
 
 /**
- * Work out a companion's formula boxes, and its speeds where one is written
- * as a formula. `scope` is called only if there is a formula to read it for.
- * Returns `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds as
- * `{ key: { value, feet, error } }` with the value as shown ("40 ft.").
- * Each is worked out by evaluateAmount, the one rule every number-or-formula
- * box on the sheet follows.
- *
- * A speed is text first. "30 ft." and "60 ft. (good)" are not formulas and
- * stay as written; one that parses -- `30`, `20 + 10 * floor(conjured.hd / 5)`
- * -- is worked out, and one that parses and then fails says why.
+ * Work out a companion's formula boxes and its movement rows. `scope` is
+ * called only if there is a formula to read it for. Returns
+ * `{ typed, speeds }`: typed as withTypedNumbers takes it, speeds one per
+ * row as speedRows works them out for the character's (`{ bonus, error,
+ * handle, final }`). Each is worked out by evaluateAmount, the one rule
+ * every number-or-formula box on the sheet follows.
  */
 export function companionFormulas(b, scope) {
   const typed = {};
-  const speeds = {};
   let s = null;
   const sc = () => (s ??= scope());
   for (const path of Object.keys(COMPANION_FORMULA_FIELDS)) {
@@ -1487,14 +1577,7 @@ export function companionFormulas(b, scope) {
       ? { value: Math.floor(Number(raw)), error: null }
       : evaluateAmount(raw, sc());
   }
-  for (const key of Object.keys(COMPANION_SPEEDS)) {
-    const raw = String(b.speed?.[key] ?? '').trim();
-    if (!raw || !parses(raw)) continue;
-    const r = evaluateAmount(raw, sc());
-    speeds[key] = r.error
-      ? { value: null, feet: null, error: r.error }
-      : { value: `${r.value} ft.`, feet: r.value, error: null };
-  }
+  const speeds = speedRows(b.speeds, sc);
   return { typed, speeds };
 }
 
@@ -1535,6 +1618,22 @@ export const COMPANION_TARGETS = [
   ['will', 'Will', 'saves.will'],
   ...ABILITIES.map((a) => [`${a}.score`, ABILITY_LABELS[a], `scores.${a}`]),
 ];
+
+/**
+ * The character's own names for a companion's numbers, accepted beside the
+ * companion's: `conjured.initiative` is `conjured.init`, `eidolon.saves.will`
+ * is `eidolon.will`. A formula may read either and a bonus may be aimed at
+ * either; the companion's own name is the one the Formulas tab lists.
+ */
+export const COMPANION_ALIASES = {
+  initiative: 'init',
+  'hp.total': 'hp',
+  'saves.fortitude': 'fort',
+  'saves.reflex': 'ref',
+  'saves.will': 'will',
+  'attack.cmb': 'cmb',
+  'ac.cmd': 'cmd',
+};
 
 /** Destinations that stand for several of a companion's at once. */
 export const COMPANION_FAMILIES = {

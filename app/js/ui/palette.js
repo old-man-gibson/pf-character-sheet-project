@@ -42,7 +42,7 @@
 import { esc } from './html.js';
 import { trackerReading } from './panels/trackers.js';
 import { COMPANION_KINDS, COMPANION_LABELS, companionInUse } from '../companions.js';
-import { fmt, ABILITIES, ABILITY_LABELS } from '../rules.js';
+import { fmt, ABILITIES, ABILITY_LABELS, critMultOf, threatText } from '../rules.js';
 import { rollSpec } from '../roll20.js';
 
 /* ---------------- kinds ---------------- */
@@ -376,7 +376,7 @@ function equipment(model, add) {
       kind: 'weapon', title: text(w.name), tab: 'gear',
       value: bits(fmt(w.attackTotal ?? w.sheetAttack), text(w.dice)),
       sub: bits(text(w.attackType), text(w.damageType), text(w.special),
-        w.critRange ? `${w.critRange === 20 ? '20' : `${w.critRange}-20`}/${text(w.critMult) || 'x2'}` : ''),
+        w.critRange ? threatText(Number(w.critRange) || 20, critMultOf(w.critMult)) : ''),
       sel: `[data-item^="equipment.weapons|${i}|"]`,
       roll: { kind: 'weapon', ref: i, what: `${text(w.name)} — attack and damage` },
       keys: 'weapon attack damage',
@@ -821,7 +821,7 @@ function trackers(model, add) {
       value: `${shown}${range.replace(/^\/ /, '/')}`,
       sub: bits(text(t.refresh), t.source === 'sheet' ? 'from sheet' : '', clip(t.note, 60),
         t.error ? `formula error: ${t.error}` : ''),
-      sel: `[data-tracker-current="${t.id}"]`, keys: 'tracker pool uses resource',
+      sel: `[data-pool-value="tracker:${t.id}"]`, keys: 'tracker pool uses resource',
     });
   }
   (c.buffs || []).forEach((b, i) => {

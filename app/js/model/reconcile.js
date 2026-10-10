@@ -14,7 +14,7 @@ import {
   flatFootedLoss, skillLabel,
 } from '../rules.js';
 import {
-  COMPANION_FORMULA_FIELDS, COMPANION_KINDS, COMPANION_LABELS, COMPANION_SPEEDS, PLAIN_NUMBER, companionHeading,
+  COMPANION_FORMULA_FIELDS, COMPANION_KINDS, COMPANION_LABELS, PLAIN_NUMBER, companionHeading,
 } from '../companions.js';
 import { NameIndex, analyse, evaluateFormula, resolvePath } from '../formula.js';
 import { hasTokens, isTargetName } from '../inline.js';
@@ -477,6 +477,17 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // Bonus skill points per level, which may read only `level`.
+    key: 'skillBudget', source: 'skill', where: 'the Skills tab',
+    collect: (model) => {
+      const b = model.data.skillBudget;
+      return stringFormula(b?.bonusPerLevel) ? [{
+        id: 'skill-budget-bonus', place: 'skillBudget', name: 'Bonus skill points per level',
+        formula: b.bonusPerLevel, value: b.bonusResolved, error: b.bonusError,
+      }] : [];
+    },
+  },
+  {
     key: 'languages', source: 'player',
     collect: (model) => (stringFormula(model.data.identity?.languageExtra) ? [{
       id: 'languages-extra', place: 'languages', name: 'Extra language slots',
@@ -567,8 +578,8 @@ export const FORMULA_FIELDS = [
     }),
   },
   {
-    // A companion's number-or-formula boxes (COMPANION_FORMULA_FIELDS) and a
-    // speed written as a formula, each on its own kind's tab. The box keeps
+    // A companion's number-or-formula boxes (COMPANION_FORMULA_FIELDS) and
+    // its movement rows' bonuses, each on its own kind's tab. The box keeps
     // what was typed; the model left what it came to in calc.typed and
     // calc.speeds. A number, typed or kept as text, is not a formula.
     key: 'companionCell', source: 'player',
@@ -578,9 +589,9 @@ export const FORMULA_FIELDS = [
       const boxes = [
         ...Object.entries(COMPANION_FORMULA_FIELDS)
           .map(([path, label]) => [path, label, getPath(b, path), b.calc?.typed?.[path]]),
-        ...Object.entries(COMPANION_SPEEDS).map(([key, label]) => {
-          const r = b.calc?.speeds?.[key];
-          return [`speed.${key}`, label, b.speed?.[key], r && { value: r.feet, error: r.error }];
+        ...(b.speeds || []).map((sp, j) => {
+          const r = b.calc?.speeds?.[j];
+          return [`speeds.${j}.bonus`, `${sp?.type || `Speed ${j + 1}`} bonus`, sp?.bonus, r && { value: r.bonus, error: r.error }];
         }),
       ];
       return boxes

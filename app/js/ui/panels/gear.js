@@ -15,7 +15,7 @@
  * output identical, which is the whole point of moving them.
  */
 
-import { gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
+import { blankWeapon, gearColumnCount, gearColumnInUse, weaponHandle } from '../../model.js';
 import { esc } from '../html.js';
 import { roField } from '../fields.js';
 import { MATERIAL_CASTING_PER_LEVEL } from '../../model.js';
@@ -363,12 +363,7 @@ export function weaponsPanel(model, e) {
         ${w.sheetTotalDamage && String(w.sheetTotalDamage) !== w.damageTotal
     ? `<p class="hint">Sheet noted: ${esc(w.sheetTotalDamage)}</p>` : ''}
       </div>`).join('') || '<p class="empty">No weapons yet.</p>'}</div>
-      <div style="margin-top:8px">${addButton('equipment.weapons', 'Add weapon', {
-        name: '', attackType: 'Melee', dice: '', damageAbility: 'Str', abilityMult: 1,
-        miscDamage: 0, miscAttack: 0, enhancement: 0, critRange: 20, critMult: 'x2',
-        damageType: '', groups: [], special: '', size: '', range: '', handedness: '',
-        familiarity: '', ammunition: '', weight: 0, price: 0, attackOffset: 0,
-      })}</div>
+      <div style="margin-top:8px">${addButton('equipment.weapons', 'Add weapon', blankWeapon())}</div>
       <p class="hint">
         Attack = base mode total + enhancement + misc + adjustment; damage = dice +
         floor(ability × mult) + misc + enhancement. 🥊 makes a weapon an unarmed strike:
