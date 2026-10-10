@@ -103,8 +103,8 @@ import {
 } from './stats/wealth.js';
 import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {
-  cardRolls, castCheck, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
-  recomputeCardcasting, recomputeTable, rollFor, shuffle, spellPointTracker, spendSP,
+  cardAttuned, cardRef, cardRollFormulas, cardRollSpec, cardRolls, cardSiblings, castCheck, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
+  recomputeCardcasting, recomputeTable, rollFor, shareCardDice, shuffle, spellPointTracker, spendSP,
   tableBoost, tableBury, tableCard, tableDraw, tableEnd, tableExileRandom, tableInstances,
   tableKeywords, tableLog, tableMove, tableName, tableNextRound, tablePeek, tablePlay,
   tableRedraw, tableResolve, tableRetrace, tableReveal, tableRoll, tableSettle,
@@ -715,7 +715,7 @@ export class Character {
   tableRedraw(...a) { return this.play('Redraw hand', () => tableRedraw(this, ...a)); }
   tableNextRound(...a) { return this.play('Next round', () => tableNextRound(this, ...a)); }
   tableDraw(...a) { return this.play('Draw a card', () => tableDraw(this, ...a)); }
-  tablePlay(id, mode = 'cast') { return this.play(PLAY_MODES[mode]?.(tableName(this, id)) ?? `Play ${tableName(this, id)}`, () => tablePlay(this, id, mode)); }
+  tablePlay(id, mode = 'cast', opts = {}) { return this.play(PLAY_MODES[mode]?.(tableName(this, id)) ?? `Play ${tableName(this, id)}`, () => tablePlay(this, id, mode, opts)); }
   tableRetrace(id) { return this.play(`Retrace ${tableName(this, id)}`, () => tableRetrace(this, id)); }
   tableBury(id) { return this.play(`Bury ${tableName(this, id)}`, () => tableBury(this, id)); }
   #rollFor(...a) { return rollFor(this, ...a); }
@@ -728,6 +728,12 @@ export class Character {
   tableSpend(id, n = 1) { return this.play(`${n} SP${id ? ` on ${tableName(this, id)}` : ''}`, () => tableSpend(this, id, n)); }
   tableReveal(id) { return this.play(`Reveal ${tableName(this, id)}`, () => tableReveal(this, id)); }
   cardRolls(...a) { return cardRolls(this, ...a); }
+  cardRef(...a) { return cardRef(this, ...a); }
+  cardAttuned(...a) { return cardAttuned(this, ...a); }
+  cardRollFormulas(...a) { return cardRollFormulas(this, ...a); }
+  cardRollSpec(...a) { return cardRollSpec(this, ...a); }
+  cardSiblings(...a) { return cardSiblings(this, ...a); }
+  shareCardDice(...a) { return shareCardDice(this, ...a); }
   tableRoll(...a) { return tableRoll(this, ...a); }
   tableBoost(id, which) { return this.play(`Boost ${tableName(this, id)}`, () => tableBoost(this, id, which)); }
   tableMove(id, to) { return this.play(`${tableName(this, id)} to ${to}`, () => tableMove(this, id, to)); }

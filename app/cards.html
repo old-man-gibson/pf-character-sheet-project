@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Card table</title>
+<!--
+  The card table, or the hand, in a window of its own.
+
+  Opened from the Cardcasting tab's "Table window" and "Hand window" buttons,
+  and good for nothing on its own: the sheet that opened it renders the view
+  and posts the markup over on every change, and a button pressed here goes
+  back to the sheet as a message and runs there. So this page holds no
+  character, saves nothing, and closes when the sheet goes.
+
+  Two views, by ?view=:
+    table  what a shared screen may show -- in play, the deck's back, mana,
+           the piles and the log. Never the hand, never a card Read the Cards
+           turned up.
+    hand   the player's own: the hand with its buttons, the round controls,
+           the top of the deck, the last few lines of the log.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya:ital,wght@0,400;0,700;1,400;1,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/chrome.css">
+<style>
+  :root {
+    --cs-bg: #14161c; --cs-panel: #1c1f27; --cs-panel-2: #232733; --cs-line: #333949;
+    --cs-text: #e6e8ef; --cs-muted: #9aa2b8; --cs-accent: #d4a24a; --cs-accent-soft: rgba(212, 162, 74, 0.14);
+    --cs-edit: #6ea8fe; --cs-good: #6bbf7b; --cs-bad: #e0635f;
+    color-scheme: dark;
+  }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: var(--ui); }
+  header.app { position: sticky; top: 0; z-index: 5; }
+  header.app .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  header.app .what { color: var(--ink2); font-size: 0.86rem; }
+  /* The copy toast: what went to the clipboard, or the text to take by hand
+     when the clipboard would not have it. */
+  .copied {
+    position: fixed; right: 14px; bottom: 14px; z-index: 6; max-width: min(36rem, calc(100vw - 28px));
+    background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 8px 10px; font-size: 0.82rem; display: none;
+  }
+  .copied.on { display: block; }
+  .copied b { color: var(--accent); }
+  .copied textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; font: 0.78rem/1.35 var(--mono); min-height: 4.5rem; }
+  .empty { padding: 40px 16px; text-align: center; color: var(--ink2); }
+  /* The view itself: a shadow root wearing the sheet's stylesheet, so the
+     zones look exactly as they do on the tab. */
+  #cards { display: block; }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <strong id="title">Card table</strong>
+  <span class="what" id="what"></span>
+  <div class="tools">
+    <button type="button" id="plain" aria-pressed="false"
+      title="Hide the buttons and the rules notes — the cards alone, for a shared screen">Plain</button>
+  </div>
+</header>
+
+<div id="cards"></div>
+<p class="empty" id="empty">Nothing to show. Open this window from the Cardcasting tab — “Table window” or “Hand window” under the table.</p>
+
+<div class="copied" id="copied" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/card-window.js"></script>
+</body>
+</html>

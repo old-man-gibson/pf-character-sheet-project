@@ -71,6 +71,8 @@ export function blankView() {
     veilEdit: null,
     /** Cards peeked at with Read the Cards, by id, until the next action. */
     peek: [],
+    /** The card in hand whose mode-and-points chooser is open (instance id), or null. */
+    castPick: null,
 
     /* Trackers, and the style editor the meters on other tabs open */
     /** Id of the custom tracker being edited in place. */

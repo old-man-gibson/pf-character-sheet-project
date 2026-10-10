@@ -30,8 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount,
-} from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -3933,7 +3932,7 @@ console.log('only what the player wrote counts as a change');
 
 const missing = missingCharacters(REAL);
 if (missing.length) {
-  console.log(`\n${pass} passed, ${fail} failed`);
+console.log(`\n${pass} passed, ${fail} failed`);
   console.log(`\nmodel.test: the roster sweeps above ran against ${CHARACTERS_DIR}.`);
   console.log(`  The rest of the suite is written against the real characters and is skipped -- ${missingNote(missing)}`);
   process.exit(fail ? 1 : 0);
@@ -12908,5 +12907,123 @@ console.log('\ntalents per level -- each system\'s own three rates');
   check('and it is the one setting, bound to the character', guile.includes('data-set="training.guile.operativeMod"'), true);
 }
 
+  console.log('\na card as a Roll20 message: its dice worked out, its cost and effect as notes');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 15 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.castingStat = 'Int';
+  c.data.cardcasting.cards = [
+    { name: 'Big Sky', qty: 2, cost: '1', color: 'R', mana: 'RU', sphere: 'Destruction', tags: 'blast',
+      effect: 'Fire Blast (Chain Blast) — Reflex DC {= 10 + floor(level/2) + int.mod}',
+      dice: 'damage: {1+floor(level/2)}d6+level; boost (1 SP): 15d6; aside: see the sphere' },
+    { name: 'Betrayal', qty: 1, cost: '1', color: 'B', mana: '', sphere: 'Death', tags: '', effect: 'Corpse Bomb (Exhausting)', dice: '' },
+    { name: 'Desert', qty: 1, cost: '1', color: 'R', mana: '', sphere: 'Destruction', tags: '', effect: 'Fire Blast (Chain Blast) — Reflex DC {= 10 + floor(level/2) + int.mod}', dice: '' },
+    { name: 'Long', qty: 1, cost: '2', color: 'U', mana: '', sphere: 'Mind', tags: '', effect: 'A'.repeat(90) + '\nsecond line', dice: '' },
+  ];
+  c.recompute();
+  const intMod = c.data.abilities.int.mod;
+  const spec = c.cardRollSpec('cardcasting.cards|0');
+  check('a short effect joins the name, formulas resolved', spec.name, `Big Sky — Fire Blast (Chain Blast) — Reflex DC ${17 + intMod}`);
+  check('each dice entry is a roll with plain dice', spec.rolls, [
+    { label: 'damage', formula: '8d6+15' }, { label: 'boost (1 SP)', formula: '15d6' },
+  ]);
+  check('an entry that is not dice travels as a note, before the cost', spec.notes[0], { label: 'aside', text: 'see the sphere' });
+  check('cost with its colour, sphere with its tags, the mana a fused card carries',
+    spec.notes.slice(1), [{ label: 'Cost', text: '1 SP (Red)' }, { label: 'Sphere', text: 'Destruction — blast' }, { label: 'Mana', text: 'RU' }]);
+  check('an instance on the table names the same card', c.cardRollSpec('0#1').name, spec.name);
+  check('a card with no dice is notes alone', [c.cardRollSpec('cardcasting.cards|1').rolls, c.cardRollSpec('cardcasting.cards|1').notes.length], [[], 2]);
+  const long = c.cardRollSpec('cardcasting.cards|3');
+  check('a long effect is a note of its own, and the name stays the card\'s', [long.name, long.notes.at(-1).label, long.notes.at(-1).text.startsWith('AAAA')], ['Long', 'Effect', true]);
+  check('nothing for a reference that names no card', [c.cardRollSpec('9#0'), c.cardRollSpec('cardcasting.cards|9'), c.cardRollSpec('weapon|0')], [null, null, null]);
+  check('the face\'s preview reads the same entries, with the one that is not dice saying why',
+    c.cardRollFormulas(c.data.cardcasting.cards[0]).map((r) => [r.label, r.formula, !!r.error]),
+    [['damage', '8d6+15', false], ['boost (1 SP)', '15d6', false], ['aside', '', true]]);
+  check('a card with no Dice field rolls the first dice in its text', c.cardRollFormulas({ effect: 'Deals 3d8+2 and [Draw 1]' }).map((r) => r.formula), ['3d8+2']);
+
+  check('the cards that share an effect are the card\'s siblings', c.cardSiblings('cardcasting.cards', 0), [2]);
+  check('a card whose effect is unique has none', c.cardSiblings('cardcasting.cards', 1), []);
+  check('and the dice go to them, and to nobody else', [c.shareCardDice('cardcasting.cards', 0), c.data.cardcasting.cards[2].dice, c.data.cardcasting.cards[1].dice],
+    [1, c.data.cardcasting.cards[0].dice, '']);
+  check('the switch for copying on cast rides with the character', new Character({ ...c.toJSON(), cardcasting: { ...c.toJSON().cardcasting, copyOnCast: true } }).data.cardcasting.copyOnCast, true);
+}
+
+console.log('the Dice picker joins what it adds to what is there');
+{
+  check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');
+  check('a bonus onto a roll', appendDiceText('8d6', '+int.mod'), '8d6+int.mod');
+  check('a bonus into an empty field loses its plus', appendDiceText('', '+int.mod'), 'int.mod');
+  check('a second roll opens a new entry', appendDiceText('8d6+int.mod', '; boost (1 SP): '), '8d6+int.mod; boost (1 SP): ');
+  check('a new entry into an empty field starts the field', appendDiceText('', '; boost (1 SP): '), 'boost (1 SP): ');
+  check('a roll after an open label fills it', appendDiceText('damage: 8d6; boost (1 SP):', '15d6'), 'damage: 8d6; boost (1 SP): 15d6');
+  check('a roll after a finished roll becomes a second one', appendDiceText('8d6', '{caster.level}d6'), '8d6; {caster.level}d6');
+}
+
+console.log('\na card cast in a mode: that mode rolls, and the points put into it are spent');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 3, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '',
+      dice: '0 SP: 5d6; boost (1 SP): 7d6; big (3 SP): 11d6' },
+  ];
+  const sp = c.addTracker({ name: 'Spell Points', maxFormula: '20' });
+  c.recompute();
+  let seed = 3;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.tableStart();
+  const t = () => c.data.cardcasting.table;
+  const left = () => { const x = c.trackers.find((k) => k.id === sp.id); return x.max - x.current; };
+  const before = left();
+  c.tablePlay(t().hand[0], 'cast', { which: 'boost (1 SP)', sp: 1 });
+  check('the picked mode is what rolled', [t().lastRoll.label, t().lastRoll.rolls.length], ['boost (1 SP)', 7]);
+  check('the cost and the points on top both came off the tracker', before - left(), 2);
+  check('and the log says what the extra was for', t().log.some((l) => /Bolt — boost \(1 SP\)/.test(l)), true);
+  c.tablePlay(t().hand[0], 'cast', { which: 'BIG (3 SP)', sp: 3 });
+  check('a mode is matched by name, whatever the case', t().lastRoll.rolls.length, 11);
+  c.tableDraw(1);
+  c.tablePlay(t().hand[0], 'cast');
+  check('no mode picked: the first entry, as before', [t().lastRoll.label, t().lastRoll.rolls.length], ['0 SP', 5]);
+  const spec = c.cardRollSpec('cardcasting.cards|0', 'boost (1 SP)');
+  check('the Roll20 text for a mode is that roll alone, with the card\'s notes', [spec.rolls, spec.notes.length > 0], [[{ label: 'boost (1 SP)', formula: '7d6' }], true]);
+  check('and with no mode, every roll', c.cardRollSpec('cardcasting.cards|0').rolls.length, 3);
+}
+
+console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned sphere');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  const p = c.data.cardcasting;
+  p.enabled = true;
+  p.manaPool = true;
+  p.attunedSpheres = ['Destruction'];
+  p.cards = [
+    { name: 'Bolt', qty: 2, cost: '4', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '', dice: '' },
+    { name: 'Hex', qty: 2, cost: '4', color: 'B', mana: '', effect: 'Curse', sphere: 'Death', tags: '', dice: '' },
+    { name: 'Ember', qty: 4, cost: '', color: '', mana: 'R', effect: '', sphere: '', tags: '', dice: '' },
+  ];
+  c.recompute();
+  check('without the feat the rule is off, and says why', [p.calc.landAttuned, p.calc.landAttunedWhy], [false, 'Land-Attuned Magic is not among the feats']);
+  c.data.training.magic.tradition.boughtOff = ['Land-Attuned Magic [Deck]'];
+  c.recompute();
+  check('with it among the deck feats it still wants the tradition', p.calc.landAttunedWhy, 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition');
+  c.data.training.magic.tradition.drawbacks = ['Terrain Casting'];
+  c.recompute();
+  check('and then it is in force', p.calc.landAttuned, true);
+  c.tableStart();
+  const t = c.data.cardcasting.table;
+  // Two mana in play, by hand, and the two effect cards in hand.
+  t.hand = ['0#0', '1#0'];
+  t.deck = t.deck.filter((id) => !['0#0', '1#0', '2#0', '2#1'].includes(id));
+  t.mana = [{ id: '2#0', tapped: false }, { id: '2#1', tapped: false }];
+  c.recompute();
+  const bolt = c.data.cardcasting.table.calc.castable['0#0'];
+  const hex = c.data.cardcasting.table.calc.castable['1#0'];
+  check('an attuned card needs half the mana cards for its cost', [bolt.ok, bolt.need, bolt.spend, bolt.worth, bolt.why], [true, 4, 2, 2, 'attuned: each mana card pays two']);
+  check('a card of another sphere still needs one per point', [hex.ok, hex.spend, hex.why], [false, 4, 'needs 4 mana in play, has 2']);
+  p.mods.stagnantPool = true;
+  c.recompute();
+  c.tablePlay('0#0', 'cast');
+  check('casting it under Stagnant Pool taps two cards for four points', c.data.cardcasting.table.mana.filter((m) => m.tapped).length, 2);
+  check('and the log says so', c.data.cardcasting.table.log.some((l) => /cast for 4.*2 mana tapped \(attuned: two points each\)/.test(l)), true);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

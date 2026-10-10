@@ -9,7 +9,7 @@
  * what it did.
  */
 
-import { parseDiceExpr, statMod } from '../../rules.js';
+import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
 import { evaluateAmount } from '../util.js';
@@ -159,6 +159,12 @@ export function deckFeatNames(d) {
     if (/\[[^\]]*deck/i.test(String(x || ''))) out.push(String(x));
   }
   return out;
+}
+
+/** Every feat on the character by name, whatever group it sits in. */
+function allFeatNames(d) {
+  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g.entries || []) : Object.values(d?.feats || {});
+  return groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name || '')) : []));
 }
 
 /** Uppercase colour letters only, in first-seen order: "u/b" → "UB". */
@@ -750,7 +756,22 @@ export function recomputeCardcasting(model) {
   const lifebound = mods.lifeboundDeck && deckSize ? Math.max(1, Math.floor(hpTotal / 3 / deckSize)) : null;
   const handMax = mods.tightHand ? 3 + loadedHand : null;
 
+  // Land-Attuned Magic's special: with Card Casting and Mana Pool, every
+  // Mana Point card in play is worth two spell points on an effect of an
+  // attuned sphere rather than one. The feat wants Area Bound or Terrain
+  // Casting in the tradition, and is itself a deck feat, so it is found
+  // among those or among the feats proper.
+  const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || allFeatNames(c).some((f) => /land-?attuned magic/i.test(f));
+  const landDrawback = (c.training?.magic?.tradition?.drawbacks || []).some((x) => /^(terrain casting|area bound)/i.test(String(x || '').trim()));
+  const landAttuned = !!(p.manaPool && landFeat && landDrawback);
+  const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
+    : !landFeat ? 'Land-Attuned Magic is not among the feats'
+      : !landDrawback ? 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition'
+        : 'its special wants Mana Pool';
+
   p.calc = {
+    landAttuned,
+    landAttunedWhy,
     stat,
     cam,
     openingHand,
@@ -965,14 +986,26 @@ export function castCheck(model, id) {
     const letters = String(manaCard?.mana || '');
     return [...colors].some((c) => letters.includes(c));
   });
+  // Land-Attuned Magic: on an attuned sphere each mana card is two points,
+  // so the card needs half as many -- and spends half as many.
+  const worth = cardAttuned(model, card) ? 2 : 1;
+  const spend = Math.ceil(need / worth);
   // Rainbow Efficiency: a two-colour card needs a mana card of each colour.
-  let ok = usable.length >= need;
-  let why = ok ? '' : `needs ${need} mana in play, has ${usable.length}`;
+  let ok = usable.length >= spend;
+  let why = ok ? (worth > 1 ? 'attuned: each mana card pays two' : '') : `needs ${spend} mana in play${worth > 1 ? ' (attuned: each pays two)' : ''}, has ${usable.length}`;
   if (ok && p.mods.coloredMana && colors.length > 1) {
     const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
     if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, have: usable.length, why };
+  return { ok, need, spend, worth, have: usable.length, why };
+}
+
+/** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
+export function cardAttuned(model, card) {
+  const p = model.data.cardcasting;
+  if (!p?.calc?.landAttuned) return false;
+  const sphere = String(card?.sphere || '').trim().toLowerCase();
+  return !!sphere && (p.attunedSpheres || []).some((s) => String(s).trim().toLowerCase() === sphere);
 }
 
 /** A shuffle. `this.rng` may be replaced for a deterministic test. */
@@ -1131,7 +1164,7 @@ export function tableDraw(model, n = 1, why = 'draw') {
  * otherwise they simply need to be there. Nothing is refused -- the check
  * is shown beside the card and the player decides.
  */
-export function tablePlay(model, id, mode = 'cast') {
+export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
@@ -1167,7 +1200,8 @@ export function tablePlay(model, id, mode = 'cast') {
     const colors = String(card.calc?.colors || '');
     const eligible = (m) => !m.tapped && (!p.mods.coloredMana || !colors
       || [...colors].some((c) => String(model.tableCard(m.id)?.mana || '').includes(c)));
-    let left = cost;
+    // Land-Attuned Magic: an attuned card's mana pays two points each.
+    let left = check.spend ?? cost;
     // Colour-matching mana first, one of each colour a multi-colour card wants.
     const order = [...t.mana].sort((a, b) => (eligible(b) ? 1 : 0) - (eligible(a) ? 1 : 0));
     const spent = [];
@@ -1181,15 +1215,21 @@ export function tablePlay(model, id, mode = 'cast') {
       t.mana = t.mana.filter((m) => !spent.includes(m));
       t.discard.push(...spent.map((m) => m.id));
     } else for (const m of spent) m.tapped = true;
-    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` — ${check.why}`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}`);
+    tableLog(model, t, `${name} cast for ${cost}${check.ok ? '' : ` — ${check.why}`}; ${spent.length} mana ${p.manaGraveyard ? 'to the discard' : 'tapped'}${check.worth > 1 ? ' (attuned: two points each)' : ''}`);
   } else {
     tableLog(model, t, `${name} cast${cost ? ` for ${cost}` : ''}${check.ok ? '' : ` — ${check.why}`}`);
   }
 
   // The spell points themselves, from the tracker if there is one.
   if (cost > 0) spendSP(model, cost, name);
-  // Its dice, if it has any.
-  rollFor(model, id);
+  // A mode picked on the way in -- "boost (1 SP)" -- and whatever was put
+  // into it: the points on top of the cost, then that mode's dice. Otherwise
+  // the card's first dice, if it has any.
+  const extra = Math.max(0, Math.floor(Number(sp) || 0));
+  const mode_ = which ? model.cardRolls(card).find((r) => r.label.toLowerCase() === String(which).toLowerCase()) : null;
+  if (extra > 0) spendSP(model, extra, `${name} — ${mode_?.label || 'augmented'}`);
+  if (mode_) model.tableRoll(id, { quiet: true, which: mode_.label });
+  else rollFor(model, id);
 
   // Keywords in the card's text fire as it is cast.
   const fate = tableKeywords(model, id, card);
@@ -1485,6 +1525,159 @@ export function tableBoost(model, id, which) {
   if (!roll) return model;
   if (roll.sp > 0 && model.spellPointTracker()) spendSP(model, roll.sp, `${tableName(model, id)} — ${roll.label}`);
   return model.tableRoll(id, { which });
+}
+
+/* ------------------------------------------------------------------ *
+ * A card as text for a chat box.
+ *
+ * The table rolls a card's dice itself; a game run in Roll20 wants the chat
+ * box to roll them instead, and the GM wants to read what the card does in
+ * the same message. So a card becomes a roll spec -- the shape roll20.js
+ * turns into text for every other roll on the sheet -- with its dice as
+ * rolls, resolved to numbers Roll20 can add (`{1+floor(caster.level/2)}d6 +
+ * int.mod` is `8d6+13`), and its cost, sphere and effect as notes.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The card a reference names. Two spellings, because a card is addressed
+ * two ways: an instance on the table (`3#1`, the second copy of card 3), or
+ * a face in the deck or sideboard (`cardcasting.cards|3`).
+ */
+export function cardRef(model, ref) {
+  const text = String(ref || '');
+  if (/^\d+#\d+$/.test(text)) {
+    const card = tableCard(model, text);
+    return card ? { card, list: 'cardcasting.cards', index: Number(text.split('#')[0]), id: text } : null;
+  }
+  const m = /^(cardcasting\.(?:cards|sideboard))\|(\d+)$/.exec(text);
+  if (!m) return null;
+  const list = m[1] === 'cardcasting.cards' ? model.data.cardcasting?.cards : model.data.cardcasting?.sideboard;
+  const card = list?.[Number(m[2])];
+  return card ? { card, list: m[1], index: Number(m[2]), id: null } : null;
+}
+
+/** A card's text with its formulas worked out, as the face shows it. */
+function cardProse(model, text) {
+  return model.renderProse(String(text ?? '')).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
+}
+
+/**
+ * Each of a card's rolls worked out: `{ label, source, formula, sp }`, where
+ * `source` is the entry with its formulas resolved ("8d6+13" from
+ * "{1+floor(caster.level/2)}d6+int.mod") and `formula` the dice written out
+ * plainly -- or '' when the entry is not dice, in which case `error` says why.
+ * The deck face previews these beside the Dice field; the Roll20 text is
+ * built from them. One reading, so the two agree.
+ */
+export function cardRollFormulas(model, card) {
+  const rolls = cardRolls(model, card);
+  if (!rolls.length) return [];
+  const scope = model.scope();
+  return rolls.map((r) => {
+    const source = cardProse(model, r.expr).trim();
+    const { dice, flat, error } = parseDiceExpr(source, (rem) => evaluateFormula(rem, scope));
+    const ok = !error && Object.keys(dice).length > 0;
+    return {
+      label: r.label === 'roll' ? 'Roll' : r.label,
+      source,
+      formula: ok ? diceString(dice, flat) : '',
+      error: ok ? '' : (error || 'no dice'),
+      sp: r.sp,
+    };
+  });
+}
+
+/**
+ * A piece added to a Dice field by the picker beside it: a new roll opens
+ * with "; " and a bonus with "+", and either joins what is there -- or
+ * starts the field when it is empty, without the joiner.
+ */
+export function appendDiceText(current, piece) {
+  const now = String(current ?? '').trimEnd();
+  const add = String(piece ?? '');
+  if (!now) return add.replace(/^\s*;\s*/, '').replace(/^\s*\+\s*(?=[a-z{(])/i, '');
+  if (/^\s*[;+]/.test(add)) return `${now}${add.startsWith(';') ? add : add.trim()}`;
+  if (/[:;]\s*$/.test(now)) return `${now} ${add}`;
+  return `${now}; ${add}`;
+}
+
+/** How long a card's effect may be before it is a note rather than part of the name. */
+const SHORT_EFFECT = 80;
+
+/** How much of a long effect travels. A chat message is not a rulebook page. */
+const EFFECT_NOTE_MAX = 600;
+
+/**
+ * One card as a roll spec: `{ name, rolls, notes, queries }`.
+ *
+ * The name is the card's; a short, one-line effect joins it ("Big Sky — Fire
+ * Blast (Chain Blast)"), since on a Harrow deck the card's name says nothing
+ * about what it does. A longer effect is a note of its own. Every entry in
+ * the Dice field is a roll, formulas resolved first and the dice written out
+ * plainly; one that does not parse as dice still travels, as a note, rather
+ * than being dropped. A card without dice is a spec with notes alone, which
+ * is still a message worth posting.
+ */
+export function cardRollSpec(model, ref, which = null) {
+  const found = cardRef(model, ref);
+  if (!found) return null;
+  const { card } = found;
+  const p = model.data.cardcasting || {};
+  const effect = cardProse(model, card.effect).trim();
+  const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
+  const own = String(card.name || '').trim();
+  const name = own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
+
+  const rolls = [];
+  const notes = [];
+  // A mode picked at the table narrows the message to that one roll; the
+  // notes stay, since they are the card rather than the mode.
+  const want = which ? String(which).toLowerCase() : null;
+  for (const r of cardRollFormulas(model, card)) {
+    if (want && r.label.toLowerCase() !== want) continue;
+    if (r.formula) rolls.push({ label: r.label, formula: r.formula });
+    else if (r.source) notes.push({ label: r.label, text: r.source });
+  }
+
+  const cost = String(card.cost ?? '').trim();
+  const colors = String(card.calc?.colors || '');
+  if (cost) {
+    const words = [...colors].map((c) => (CARD_COLORS.find(([k]) => k === c) || [c, c])[1]).join('/');
+    notes.push({ label: 'Cost', text: `${cost} SP${words ? ` (${words})` : ''}` });
+  }
+  const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
+  if (type) notes.push({ label: 'Sphere', text: type });
+  if (card.mana) notes.push({ label: 'Mana', text: String(card.mana) });
+  if (effect && !shortEffect) {
+    notes.push({ label: 'Effect', text: effect.length > EFFECT_NOTE_MAX ? `${effect.slice(0, EFFECT_NOTE_MAX - 1)}…` : effect });
+  }
+  if (p.harrow && (card.suit || card.alignment)) {
+    notes.push({ label: 'Harrow', text: [card.suit, card.alignment].filter(Boolean).join(', ') });
+  }
+  return { name, rolls, notes, queries: [] };
+}
+
+/**
+ * The other cards in the same list with this card's effect: the three other
+ * Infernal Combustions, the second Grave Peril. They share an effect, so they
+ * share its dice; typing the dice once and handing them on is the point.
+ */
+export function cardSiblings(model, list, index) {
+  const cards = list === 'cardcasting.sideboard' ? model.data.cardcasting?.sideboard : model.data.cardcasting?.cards;
+  const card = cards?.[index];
+  const effect = String(card?.effect || '').trim().toLowerCase();
+  if (!card || !effect) return [];
+  return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
+}
+
+/** Give this card's Dice field to every card that shares its effect. Returns how many took it. */
+export function shareCardDice(model, list, index) {
+  const cards = list === 'cardcasting.sideboard' ? model.data.cardcasting?.sideboard : model.data.cardcasting?.cards;
+  const dice = String(cards?.[index]?.dice ?? '');
+  const siblings = cardSiblings(model, list, index);
+  for (const i of siblings) cards[i].dice = dice;
+  if (siblings.length) model.recompute();
+  return siblings.length;
 }
 
 /**

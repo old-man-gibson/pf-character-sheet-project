@@ -15,7 +15,8 @@ import { esc, val } from '../html.js';
 import { itemArea, prose, renderedProse } from '../prose.js';
 import { fillNotesButton, talentLegend, talentMark, talentNote } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
-import { rollButton } from '../roll.js';
+import { D20_ICON, rollButton } from '../roll.js';
+import { DEFAULT_ROLL_FORMAT, rollText } from '../../roll20.js';
 import {
   meterStyleButton, meterStyleEditor, meterVisual, powerPointStepper, trackerLine,
 } from './trackers.js';
@@ -2459,8 +2460,8 @@ export function cardcastingPanel(model, ctx) {
       </div>
       ${deckManipulationsPanel(model, p, k)}
       <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
-      ${deckTablePanel(model, p, k)}
-      ${sideboardPanel(model, p)}
+      ${deckTablePanel(model, ctx, p, k)}
+      ${sideboardPanel(model, ctx, p)}
       <section class="panel span2">
         <h3>Notes</h3>
         ${prose(model, 'data-set="cardcasting.notes"', p.notes, 3)}
@@ -2497,9 +2498,318 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false } = {}) 
     </div>`;
   }
 
-  /** A button that drives the table: `data-table="action|id|arg"`. */
-function tableBtn(action, id, label, { arg = '', title = '', cls = '', disabled = false } = {}) {
-    return `<button class="${cls}" data-table="${esc(action)}|${esc(id)}|${esc(arg)}" title="${esc(title)}"${disabled ? ' disabled' : ''}>${label}</button>`;
+  /** A button that drives the table: `data-table="action|id|arg"`. `copy` rides along as the Roll20 text a pop-out window copies on the click. */
+function tableBtn(action, id, label, { arg = '', title = '', cls = '', disabled = false, copy = '' } = {}) {
+    return `<button class="${cls}" data-table="${esc(action)}|${esc(id)}|${esc(arg)}" title="${esc(title)}"${copy ? ` data-copytext="${esc(copy)}"` : ''}${disabled ? ' disabled' : ''}>${label}</button>`;
+  }
+
+  /**
+   * The three faces the table is drawn with. The sheet shows everything; the
+   * two pop-out windows (see cardTableView) split it so a streamed table
+   * never shows the hand.
+   */
+const TABLE_VIEWS = {
+  sheet: { hand: true, field: true, controls: true, secrets: true, windows: true },
+  table: { hand: false, field: true, controls: false, secrets: false, windows: false },
+  hand: { hand: true, field: false, controls: true, secrets: true, windows: false },
+};
+
+/**
+ * The Roll20 text for a card, ready to copy: a d20 beside the card. The
+ * sheet copies it through the element (`data-roll`, with the toast and the
+ * format switch); a pop-out window has no element and copies the text the
+ * button carries (`data-copytext`). Both read the same spec.
+ */
+function cardCopyButton(model, ctx, ref, what) {
+    const spec = model.cardRollSpec(ref);
+    const text = spec ? rollText(spec, ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '';
+    if (!text) return '';
+    const shown = spec.rolls.slice(0, 3).map((r) => r.formula).join(' · ') || 'the card as text';
+    return `<button class="d20" data-roll="card|${esc(ref)}" data-rollwhat="${esc(what)}" data-copytext="${esc(text)}"
+      title="${esc(`Copy for Roll20 — ${shown}`)}" aria-label="${esc(`Copy a Roll20 roll for ${what}`)}">${D20_ICON}</button>`;
+  }
+
+  /**
+   * What every zone reads: the table, its figures, and the small helpers
+   * that draw a card's buttons. Worked out once per render and handed to the
+   * zone builders, so the sheet and the two windows draw from one state.
+   */
+function tableState(model, ctx, p, k, view) {
+    const t = p.table || {};
+    const tc = t.calc || {};
+    const faces = TABLE_VIEWS[view] || TABLE_VIEWS.sheet;
+    const sp = model.spellPointTracker();
+    const copyText = (id) => (p.copyOnCast ? rollText(model.cardRollSpec(id), ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '');
+    const s = {
+      model, ctx, p, k, t, tc, view, faces,
+      active: !!t.active,
+      // What is taken is asked of the model, matched the way the catalogue
+      // matches, rather than by a pattern of the panel's own.
+      has: (name) => hasManipulation(model, name),
+      readTwice: manipulationCount(model, 'Read the Cards') >= 2,
+      loaded: 2 * (k.loadedHand || 0),
+      redraw: redrawSize(model),
+      // Spell points, from the tracker if the character keeps one.
+      sp,
+      spLeft: sp ? (Number(sp.max) || 0) - (Number(sp.current) || 0) : null,
+      faceDown: new Set(t.faceDown || []),
+      stagnant: !!p.mods.stagnantPool,
+      peeked: faces.secrets ? (ctx.peek || []).filter((id) => (t.deck || []).slice(0, 3).includes(id)) : [],
+      castPick: faces.hand ? ctx.castPick || null : null,
+      copyText,
+    };
+    s.spBtn = (id) => (sp ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
+    s.copyBtn = (id) => cardCopyButton(model, ctx, id, model.tableCard(id)?.name || 'card');
+    s.zoneMoves = (id, from) => {
+      const opts = TABLE_DESTINATIONS.filter(([v]) => p.mods.lifeboundDeck || !LIFEBOUND_PILES.includes(v));
+      return `<select class="movesel" data-table-move="${esc(id)}" aria-label="Move this card" title="Move this card by hand">
+        <option value="">move…</option>${opts.filter(([v]) => v !== from).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
+      </select>`;
+    };
+    // 🎲 rolls the card's first dice; when the Dice field names more
+    // ("boost (1 SP): 15d6; milled: 8d4"), a picker offers them and spends
+    // what the label says.
+    s.rollBtn = (id, card) => {
+      const rolls = model.cardRolls(card);
+      if (!rolls.length) return '';
+      const first = tableBtn('roll', id, '🎲', { title: `Roll ${rolls[0].expr}` });
+      if (rolls.length === 1) return first;
+      return `${first}<select class="movesel rollsel" data-table-roll="${esc(id)}" aria-label="Other rolls" title="Other rolls on this card">
+        <option value="">roll…</option>
+        ${rolls.slice(1).map((r) => `<option value="${esc(r.label)}" title="${esc(r.expr)}">${esc(r.label)}</option>`).join('')}
+      </select>`;
+    };
+    s.listZone = (ids, from, extra = () => '') => (ids || []).map((id) => {
+      const card = model.tableCard(id);
+      return `<div class="zonerow" data-card="${esc(id)}">
+        ${manaChips(String(card?.calc?.colors || ''), '')}
+        <span class="zname">${esc(card?.name || card?.effect || 'card')}</span>
+        <span class="zsub">${esc(card?.effect || (card?.mana ? `Mana ${card.mana}` : ''))}</span>
+        <span class="pair tools">${extra(id)}${s.zoneMoves(id, from)}</span>
+      </div>`;
+    }).join('');
+    return s;
+  }
+
+  /**
+   * The head of the table: the round and its figures, the last roll and the
+   * last trigger, and -- where this face drives the game -- the controls the
+   * rules give: start, redraw, next round, draw, shuffle the discard back,
+   * end. The sheet's face also opens the two windows and keeps the Roll20
+   * switch.
+   */
+function tableHead(s) {
+    const { p, k, t, tc, active, has, readTwice, loaded, redraw, sp, spLeft, stagnant, faces, model } = s;
+    const controls = !faces.controls ? '' : active ? `
+        ${tableBtn('next', '', 'Next round', { title: p.mods.exposedGrip ? 'Exposed Grip: no automatic draw' : 'Draw one card' + (p.mods.stagnantPool ? '; untap Stagnant Pool mana' : ''), cls: 'primary' })}
+        ${tableBtn('draw', '', 'Draw a card', { title: 'Rapid Fill, Life Draw, Prize Card, Primed Hand — any draw the rules hand you' })}
+        ${tableBtn('redraw', '', `Redraw hand → ${redraw.next}`, { title: 'Shuffle the hand back and draw one fewer' + (has('Mulligan') ? ' (Mulligan: the same number the first time)' : ''), disabled: redraw.size <= 1 })}
+        ${p.cooldown ? tableBtn('shuffle', '', 'Shuffle discard in', { title: 'A full-round action: the discard pile shuffled into the deck', disabled: !(t.discard?.length) }) : ''}
+        ${has('Read the Cards') ? tableBtn('peek', '', `Read the cards (${readTwice ? 3 : 1})`, { arg: readTwice ? 3 : 1, title: 'Look at the top of the deck' }) : ''}
+        ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'A spell point on something the cards do not know about — Retrace, Read the Cards, Fresh Hand…' }) : ''}
+        ${tableBtn('end', '', 'End encounter', { title: 'Everything shuffled back into the deck', cls: 'danger' })}`
+      : `${tableBtn('start', '', `Start encounter — draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
+    // The two windows and the Roll20 switch: the sheet's own, since a window
+    // opens from the page that owns the character.
+    const windows = !faces.windows ? '' : `<span class="pair winctl">
+        ${tableBtn('window', 'table', '⧉ Table window', { title: 'The table in its own window, for the screen you share: in play, mana, the piles and the log — never the hand' })}
+        ${tableBtn('window', 'hand', '⧉ Hand window', { title: 'Your hand in its own window, for a screen you do not share: the hand, the controls and the top of the deck' })}
+        ${check('cardcasting.copyOnCast', p.copyOnCast, 'Copy for Roll20 on cast', 'Every Cast, Ongoing, Spring and Retrace also puts the card on the clipboard as a Roll20 message — paste it into chat')}
+      </span>`;
+
+    const notes = [];
+    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
+    if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
+    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
+    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle — in play after the next shuffle.`);
+    if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
+
+    const lastRoll = t.lastRoll && model.tableCard(t.lastRoll.id)
+      ? `<span class="badge roll" title="${esc(t.lastRoll.source)}">🎲 ${esc(model.tableCard(t.lastRoll.id).name || 'roll')}: [${t.lastRoll.rolls.join(', ')}]${t.lastRoll.flat ? ` ${t.lastRoll.flat >= 0 ? '+' : '−'} ${Math.abs(t.lastRoll.flat)}` : ''} = <b>${t.lastRoll.total}</b></span>` : '';
+
+    return `<section class="panel span2 tablehead">
+      <h3>${active ? `Round ${t.round}` : 'No encounter'}
+        <span class="badge">${tc.inDeck ?? 0} in deck</span>
+        <span class="badge">${tc.inHand ?? 0} in hand</span>
+        ${p.manaPool ? `<span class="badge">${tc.manaUntapped ?? 0}${stagnant ? ` of ${tc.manaInPlay ?? 0}` : ''} mana</span>` : ''}
+        ${p.cooldown ? `<span class="badge">${tc.inDiscard ?? 0} in discard</span>` : ''}
+        ${tc.inPlay ? `<span class="badge">${tc.inPlay} in play</span>` : ''}
+        ${k.landAttuned ? `<span class="badge" title="${esc(k.landAttunedWhy)}">land-attuned: mana pays ×2</span>` : ''}
+        ${!faces.controls ? '' : sp ? `<span class="badge ${spLeft <= 0 ? 'err' : ''}" title="${esc(sp.name)}: casts are paid from this tracker">${spLeft} of ${sp.max} SP</span>`
+    : '<span class="badge" title="Add a tracker named Spell Points and casts will be paid from it">no SP tracker</span>'}
+        ${lastRoll}
+        ${t.counters ? `<span class="badge" title="Perfect Draw's counters">[Ante] ${esc(model.tableCard(t.counters.id)?.name || '')}: ${t.counters.early} Early · ${t.counters.late} Late</span>` : ''}
+      </h3>
+      ${t.lastTrigger ? `<p class="hint trig">${esc(t.lastTrigger)}</p>` : ''}
+      ${controls || windows ? `<div class="pair tablectl">${controls}${windows}</div>` : ''}
+      ${notes.length ? `<ul class="hint" style="margin:8px 0 0 1.1rem;padding:0">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+      ${!active && faces.controls ? `<p class="hint">At initiative: shuffle the deck and draw ${k.openingHand ?? 2} (1 + casting modifier, at least 2)${loaded ? ` plus ${loaded} for Loaded Hand` : ''}.
+        ${p.manaPool ? ` Mana Point cards drawn go straight to the table${p.mods.gradualRamp ? ' — except under Gradual Ramp, where they wait in hand and one is played a round' : ''}.` : ''}
+        ${p.cooldown ? ' Resolved cards go to the discard; a full-round action shuffles it back, and so does running dry' + (p.mods.deckout ? ' — except that Deckout forbids both' : '') + '.' : ' Resolved cards shuffle straight back into the deck.'}
+        Out of combat there is no hand: search the deck and cast at +1 minute.
+        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}
+        — the ones that stand in for a manipulation want it taken.
+        A card with dice in its text, or in its Dice field, gets a 🎲${faces.windows ? '; the d20 beside it copies the card for Roll20' : ''}.</p>` : ''}
+    </section>`;
+  }
+
+  /**
+   * The chooser a many-mode card opens on Cast…: the modes as a list with
+   * what each works out to and what it asks for, the spell points to put in
+   * (the picked mode's price to begin with), and Cast or Ongoing. The press
+   * carries the two answers in its argument (`cast?mode=…&sp=…`), read off
+   * the form by whoever handles the click -- the element, or a window --
+   * and each option holds its own Roll20 text, so a window copies the mode
+   * that was cast and not the whole card.
+   */
+function castPicker(s, id, card, modes) {
+    const { model, ctx, p } = s;
+    const copy = (label) => (p.copyOnCast ? rollText(model.cardRollSpec(id, label), ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '');
+    const first = modes[0];
+    return `<div class="mcard mini castpick" data-card="${esc(id)}">
+      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      <div class="text">
+        <label class="pickrow">Mode
+          <select name="mode" aria-label="Mode">
+            ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? ` — ${esc(m.formula)}` : m.source ? ` — ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
+          </select>
+        </label>
+        <label class="pickrow">Spell points on top of the cost
+          <input type="number" name="sp" min="0" step="1" value="${first.sp || 0}" aria-label="Spell points to spend">
+        </label>
+      </div>
+      <div class="foot"><span class="pair tools">
+        ${tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast this mode: the effect resolves now', cls: 'primary' })}
+        ${tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast this mode as an effect that lasts' })}
+        ${tableBtn('pick', '', '×', { title: 'Never mind' })}
+      </span></div>
+    </div>`;
+  }
+
+  /** The hand: every card with the moves it may make from there. */
+function handZone(s) {
+    const { model, p, k, t, tc, copyText } = s;
+    const cards = (t.hand || []).map((id) => {
+      const card = model.tableCard(id);
+      const check = tc.castable?.[id] || {};
+      const manaOk = tc.manaOk?.[id] || {};
+      const isEffect = String(card?.effect || '').trim() !== '';
+      const badge = isEffect && p.manaPool
+        ? `<span class="badge ${check.ok ? 'ok' : 'err'}" title="${esc(check.why || `needs ${check.need}, has ${check.have}`)}">${check.ok ? `castable${check.worth > 1 ? ' ×2' : ''}` : `${check.have}/${check.spend ?? check.need} mana`}</span>` : '';
+      const copy = copyText(id);
+      // A card with several Dice entries is asked which, and for how many
+      // points, on the way in: Cast… opens the chooser in the card's place.
+      const modes = isEffect ? model.cardRollFormulas(card) : [];
+      const asks = modes.length > 1;
+      if (asks && s.castPick === id) return castPicker(s, id, card, modes);
+      const castBtns = !isEffect ? '' : asks
+        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one, and the spell points to put into it`, cls: 'primary' })
+        : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
+          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy });
+      return cardMini(model, id, {
+        badge,
+        buttons: `${castBtns}${isEffect && tc.trapCard ? tableBtn('play', id, 'Trap', { arg: 'trap', title: 'Trap Card: set it face down in play; spring it later' }) : ''}
+          ${card?.mana ? tableBtn('play', id, 'As mana', { arg: 'mana', title: manaOk.ok ? (manaOk.why || 'Play the Mana Point card onto the table') : manaOk.why, disabled: !manaOk.ok }) : ''}
+          ${s.rollBtn(id, card)}${s.copyBtn(id)}${isEffect ? s.spBtn(id) : ''}
+          ${tableBtn('move', id, '⤓', { arg: 'discard', title: 'Discard' })}
+          ${s.zoneMoves(id, 'hand')}`,
+      });
+    }).join('');
+    return `<section class="panel f-hand">
+      <h3>Hand <span class="badge">${t.hand.length}</span>${k.handMax ? `<span class="badge ${tc.handOver ? 'err' : ''}">limit ${k.handMax}</span>` : ''}
+        ${p.mods.gradualRamp ? `<span class="badge ${tc.manaBlocked ? 'err' : ''}">${tc.manaBlocked ? 'mana played this round' : 'one Mana Point card may be played'}</span>` : ''}</h3>
+      ${t.hand.length ? `<div class="zone hand">${cards}</div>` : '<p class="empty">Empty hand.</p>'}
+    </section>`;
+  }
+
+  /** In play: ongoing effects and face-down traps. */
+function playZone(s) {
+    const { model, t, faceDown, copyText } = s;
+    const cards = (t.play || []).map((id) => (faceDown.has(id)
+      ? `<div class="mcard mini trap" data-card="${esc(id)}">
+          <div class="trapback">Trap<br><small>face down</small></div>
+          <div class="foot"><span class="pair tools">
+            ${tableBtn('resolve', id, 'Spring', { title: 'The trap springs: it is cast now, keywords and all', cls: 'primary', copy: copyText(id) })}
+            ${tableBtn('reveal', id, 'Reveal', { title: 'Turn it face up, still in play' })}
+            ${s.zoneMoves(id, 'play')}
+          </span></div>
+        </div>`
+      : cardMini(model, id, {
+        buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
+      }))).join('');
+    return `<section class="panel f-play">
+      <h3>In play <span class="badge">${t.play.length}</span>${faceDown.size ? `<span class="badge">${faceDown.size} face down</span>` : ''}</h3>
+      <p class="hint">Ongoing effects and traps. Resolve an effect when it ends; spring a trap when it fires.</p>
+      ${t.play.length ? `<div class="zone">${cards}</div>` : '<p class="empty">Nothing in play.</p>'}
+    </section>`;
+  }
+
+  /**
+   * The deck: its back and its count, or -- on a face that keeps secrets --
+   * the cards Read the Cards turned up; and the Lifebound piles under it.
+   */
+function deckZone(s) {
+    const { model, p, k, t, peeked, readTwice } = s;
+    return `<section class="panel f-deck">
+      <h3>Deck <span class="badge">${t.deck.length}</span></h3>
+      ${peeked.length ? `<p class="hint">Top of the deck: </p><div class="zone one">${peeked.map((id, i) => cardMini(model, id, {
+    badge: `<span class="badge">${i === 0 ? 'top' : `${i + 1}${i === 1 ? 'nd' : 'rd'}`}</span>`,
+    buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: a spell point puts it on the bottom of the deck' })}
+      ${readTwice ? tableBtn('move', id, 'discard', { arg: 'discard', title: 'Read the Cards taken twice: discard it' }) : ''}`,
+  })).join('')}</div>` : `<div class="deckback"><span>${t.deck.length}</span></div>`}
+      ${p.mods.lifeboundDeck ? LIFEBOUND_PILES.map((z) => `<h4 class="subhead" style="margin-top:10px">${z[0].toUpperCase()}${z.slice(1)} pile <span class="badge">${t[z].length}</span></h4>
+        ${t[z].length ? `<div class="zonelist">${s.listZone(t[z], z)}</div>` : '<p class="empty">Empty.</p>'}`).join('')
+    + `<p class="hint">Lifebound value ${k.lifebound ?? '—'}: each multiple lost moves a card down the piles (deck → Stun → Wounds → Death); each multiple healed moves one back.</p>` : ''}
+    </section>`;
+  }
+
+  /** Mana in play, tapped or not. */
+function manaZone(s) {
+    const { model, p, t, tc, stagnant } = s;
+    const cards = (t.mana || []).map((m) => {
+      const card = model.tableCard(m.id);
+      const colors = String(card?.mana || '');
+      return `<div class="manacard${m.tapped ? ' tapped' : ''}" style="${esc(cardFrameStyle(colors))}" data-card="${esc(m.id)}">
+        <span class="mana">${manaChips(colors, '')}</span>
+        <span class="mname">${esc(card?.name || 'Mana Point')}</span>
+        ${p.mods.stagnantPool || m.tapped ? tableBtn('tap', m.id, m.tapped ? 'Untap' : 'Tap', { title: 'Stagnant Pool: a tapped Mana Point card is spent for the round' }) : ''}
+        ${s.zoneMoves(m.id, 'mana')}
+      </div>`;
+    }).join('');
+    return `<section class="panel f-mana">
+      <h3>Mana in play <span class="badge">${t.mana.length}</span>${stagnant ? `<span class="badge">${tc.manaUntapped} untapped</span>` : ''}</h3>
+      ${p.manaPool ? `<p class="hint">${p.manaGraveyard ? 'Mana Graveyard: casting sends Mana Point cards equal to the cost to the discard.'
+        : stagnant ? 'Stagnant Pool: mana in play is the spell points you may spend a round; tapped mana untaps at the start of your next turn.'
+          : 'A card needs as many Mana Point cards in play as it costs' + (p.mods.coloredMana ? ', of its colour' : '') + '.'}</p>` : '<p class="hint">Without Mana Pool, mana on the table is a note rather than a rule.</p>'}
+      ${t.mana.length ? `<div class="zone manazone">${cards}</div>` : '<p class="empty">No mana in play.</p>'}
+    </section>`;
+  }
+
+  /** The discard over the exile. */
+function pilesZone(s) {
+    const { model, p, t, has, copyText } = s;
+    return `<div class="f-piles">
+      <section class="panel">
+        <h3>Discard <span class="badge">${t.discard.length}</span>
+          ${t.discard.length ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
+        </h3>
+        ${t.discard.length ? `<div class="zonelist">${s.listZone(t.discard, 'discard', (id) => `${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard', copy: copyText(id) }) : ''}`)}</div>`
+    : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded — resolved cards shuffle straight back.'}</p>`}
+      </section>
+      <section class="panel">
+        <h3>Exile <span class="badge">${t.exile.length}</span></h3>
+        ${t.exile.length ? `<div class="zonelist">${s.listZone(t.exile, 'exile')}</div>` : '<p class="empty">Nothing exiled.</p>'}
+      </section>
+    </div>`;
+  }
+
+  /** The log, newest first. */
+function logZone(s, lines = 14) {
+    const log = s.t.log || [];
+    return `<section class="panel f-log">
+      <h3>Log</h3>
+      ${log.length ? `<ul class="tablelog">${[...log].reverse().slice(0, lines).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet.</p>'}
+    </section>`;
   }
 
   /**
@@ -2511,198 +2821,38 @@ function tableBtn(action, id, label, { arg = '', title = '', cls = '', disabled 
    * Lifebound piles. Every card offers the moves that make sense where it is,
    * and a card can always be moved anywhere by hand, because a table is a
    * place where things get picked up and put down.
+   *
+   * The field: hand across the top; in play three quarters with the deck
+   * beside it; then mana on the left and the discard over the exile on the right.
    */
 function tablePanel(model, ctx, p, k) {
-    const t = p.table || {};
-    const tc = t.calc || {};
-    const active = !!t.active;
-    // What is taken is asked of the model, matched the way the catalogue
-    // matches, rather than by a pattern of the panel's own.
-    const has = (name) => hasManipulation(model, name);
-    const readTwice = manipulationCount(model, 'Read the Cards') >= 2;
-    const loaded = 2 * (k.loadedHand || 0);
-    const redraw = redrawSize(model);
-    // Spell points, from the tracker if the character keeps one.
-    const sp = model.spellPointTracker();
-    const spLeft = sp ? (Number(sp.max) || 0) - (Number(sp.current) || 0) : null;
-    const spBtn = (id) => (sp ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
-
-    const controls = active ? `
-        ${tableBtn('next', '', 'Next round', { title: p.mods.exposedGrip ? 'Exposed Grip: no automatic draw' : 'Draw one card' + (p.mods.stagnantPool ? '; untap Stagnant Pool mana' : ''), cls: 'primary' })}
-        ${tableBtn('draw', '', 'Draw a card', { title: 'Rapid Fill, Life Draw, Prize Card, Primed Hand — any draw the rules hand you' })}
-        ${tableBtn('redraw', '', `Redraw hand → ${redraw.next}`, { title: 'Shuffle the hand back and draw one fewer' + (has('Mulligan') ? ' (Mulligan: the same number the first time)' : ''), disabled: redraw.size <= 1 })}
-        ${p.cooldown ? tableBtn('shuffle', '', 'Shuffle discard in', { title: 'A full-round action: the discard pile shuffled into the deck', disabled: !(t.discard?.length) }) : ''}
-        ${has('Read the Cards') ? tableBtn('peek', '', `Read the cards (${readTwice ? 3 : 1})`, { arg: readTwice ? 3 : 1, title: 'Look at the top of the deck' }) : ''}
-        ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'A spell point on something the cards do not know about — Retrace, Read the Cards, Fresh Hand…' }) : ''}
-        ${tableBtn('end', '', 'End encounter', { title: 'Everything shuffled back into the deck', cls: 'danger' })}`
-      : `${tableBtn('start', '', `Start encounter — draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
-
-    const notes = [];
-    if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
-    if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
-    if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
-    if (active && tc.missing) notes.push(`${tc.missing} cop${tc.missing === 1 ? 'y' : 'ies'} added to the deck since the shuffle — in play after the next shuffle.`);
-    if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
-
-    const zoneMoves = (id, from) => {
-      const opts = TABLE_DESTINATIONS.filter(([v]) => p.mods.lifeboundDeck || !LIFEBOUND_PILES.includes(v));
-      return `<select class="movesel" data-table-move="${esc(id)}" aria-label="Move this card" title="Move this card by hand">
-        <option value="">move…</option>${opts.filter(([v]) => v !== from).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
-      </select>`;
-    };
-
-    // 🎲 rolls the card's first dice; when the Dice field names more
-    // ("boost (1 SP): 15d6; milled: 8d4"), a picker offers them and spends
-    // what the label says.
-    const rollBtn = (id, card) => {
-      const rolls = model.cardRolls(card);
-      if (!rolls.length) return '';
-      const first = tableBtn('roll', id, '🎲', { title: `Roll ${rolls[0].expr}` });
-      if (rolls.length === 1) return first;
-      return `${first}<select class="movesel rollsel" data-table-roll="${esc(id)}" aria-label="Other rolls" title="Other rolls on this card">
-        <option value="">roll…</option>
-        ${rolls.slice(1).map((r) => `<option value="${esc(r.label)}" title="${esc(r.expr)}">${esc(r.label)}</option>`).join('')}
-      </select>`;
-    };
-
-    const handCards = (t.hand || []).map((id) => {
-      const card = model.tableCard(id);
-      const check = tc.castable?.[id] || {};
-      const manaOk = tc.manaOk?.[id] || {};
-      const isEffect = String(card?.effect || '').trim() !== '';
-      const badge = isEffect && p.manaPool
-        ? `<span class="badge ${check.ok ? 'ok' : 'err'}" title="${esc(check.why || `needs ${check.need}, has ${check.have}`)}">${check.ok ? 'castable' : `${check.have}/${check.need} mana`}</span>` : '';
-      return cardMini(model, id, {
-        badge,
-        buttons: `${isEffect ? tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary' })
-          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves' })
-          + (tc.trapCard ? tableBtn('play', id, 'Trap', { arg: 'trap', title: 'Trap Card: set it face down in play; spring it later' }) : '') : ''}
-          ${card?.mana ? tableBtn('play', id, 'As mana', { arg: 'mana', title: manaOk.ok ? (manaOk.why || 'Play the Mana Point card onto the table') : manaOk.why, disabled: !manaOk.ok }) : ''}
-          ${rollBtn(id, card)}${isEffect ? spBtn(id) : ''}
-          ${tableBtn('move', id, '⤓', { arg: 'discard', title: 'Discard' })}
-          ${zoneMoves(id, 'hand')}`,
-      });
-    }).join('');
-
-    const faceDown = new Set(t.faceDown || []);
-    const playCards = (t.play || []).map((id) => (faceDown.has(id)
-      ? `<div class="mcard mini trap" data-card="${esc(id)}">
-          <div class="trapback">Trap<br><small>face down</small></div>
-          <div class="foot"><span class="pair tools">
-            ${tableBtn('resolve', id, 'Spring', { title: 'The trap springs: it is cast now, keywords and all', cls: 'primary' })}
-            ${tableBtn('reveal', id, 'Reveal', { title: 'Turn it face up, still in play' })}
-            ${zoneMoves(id, 'play')}
-          </span></div>
-        </div>`
-      : cardMini(model, id, {
-        buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${rollBtn(id, model.tableCard(id))}${spBtn(id)}${zoneMoves(id, 'play')}`,
-      }))).join('');
-
-    const manaCards = (t.mana || []).map((m) => {
-      const card = model.tableCard(m.id);
-      const colors = String(card?.mana || '');
-      return `<div class="manacard${m.tapped ? ' tapped' : ''}" style="${esc(cardFrameStyle(colors))}" data-card="${esc(m.id)}">
-        <span class="mana">${manaChips(colors, '')}</span>
-        <span class="mname">${esc(card?.name || 'Mana Point')}</span>
-        ${p.mods.stagnantPool || m.tapped ? tableBtn('tap', m.id, m.tapped ? 'Untap' : 'Tap', { title: 'Stagnant Pool: a tapped Mana Point card is spent for the round' }) : ''}
-        ${zoneMoves(m.id, 'mana')}
-      </div>`;
-    }).join('');
-
-    const listZone = (ids, from, extra = () => '') => (ids || []).map((id) => {
-      const card = model.tableCard(id);
-      return `<div class="zonerow" data-card="${esc(id)}">
-        ${manaChips(String(card?.calc?.colors || ''), '')}
-        <span class="zname">${esc(card?.name || card?.effect || 'card')}</span>
-        <span class="zsub">${esc(card?.effect || (card?.mana ? `Mana ${card.mana}` : ''))}</span>
-        <span class="pair tools">${extra(id)}${zoneMoves(id, from)}</span>
-      </div>`;
-    }).join('');
-
-    const peeked = ctx.peek.filter((id) => (t.deck || []).slice(0, 3).includes(id));
-    const stagnant = p.mods.stagnantPool;
-
-    const lastRoll = t.lastRoll && model.tableCard(t.lastRoll.id)
-      ? `<span class="badge roll" title="${esc(t.lastRoll.source)}">🎲 ${esc(model.tableCard(t.lastRoll.id).name || 'roll')}: [${t.lastRoll.rolls.join(', ')}]${t.lastRoll.flat ? ` ${t.lastRoll.flat >= 0 ? '+' : '−'} ${Math.abs(t.lastRoll.flat)}` : ''} = <b>${t.lastRoll.total}</b></span>` : '';
-
-    // The field: hand across the top; in play three quarters with the deck
-    // beside it; then mana on the left and the discard over the exile on the right.
-    return `<section class="panel span2 tablehead">
-      <h3>${active ? `Round ${t.round}` : 'No encounter'}
-        <span class="badge">${tc.inDeck ?? 0} in deck</span>
-        <span class="badge">${tc.inHand ?? 0} in hand</span>
-        ${p.manaPool ? `<span class="badge">${tc.manaUntapped ?? 0}${stagnant ? ` of ${tc.manaInPlay ?? 0}` : ''} mana</span>` : ''}
-        ${p.cooldown ? `<span class="badge">${tc.inDiscard ?? 0} in discard</span>` : ''}
-        ${tc.inPlay ? `<span class="badge">${tc.inPlay} in play</span>` : ''}
-        ${sp ? `<span class="badge ${spLeft <= 0 ? 'err' : ''}" title="${esc(sp.name)}: casts are paid from this tracker">${spLeft} of ${sp.max} SP</span>`
-    : '<span class="badge" title="Add a tracker named Spell Points and casts will be paid from it">no SP tracker</span>'}
-        ${lastRoll}
-        ${t.counters ? `<span class="badge" title="Perfect Draw's counters">[Ante] ${esc(model.tableCard(t.counters.id)?.name || '')}: ${t.counters.early} Early · ${t.counters.late} Late</span>` : ''}
-      </h3>
-      ${t.lastTrigger ? `<p class="hint trig">${esc(t.lastTrigger)}</p>` : ''}
-      <div class="pair tablectl">${controls}</div>
-      ${notes.length ? `<ul class="hint" style="margin:8px 0 0 1.1rem;padding:0">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-      ${!active ? `<p class="hint">At initiative: shuffle the deck and draw ${k.openingHand ?? 2} (1 + casting modifier, at least 2)${loaded ? ` plus ${loaded} for Loaded Hand` : ''}.
-        ${p.manaPool ? ` Mana Point cards drawn go straight to the table${p.mods.gradualRamp ? ' — except under Gradual Ramp, where they wait in hand and one is played a round' : ''}.` : ''}
-        ${p.cooldown ? ' Resolved cards go to the discard; a full-round action shuffles it back, and so does running dry' + (p.mods.deckout ? ' — except that Deckout forbids both' : '') + '.' : ' Resolved cards shuffle straight back into the deck.'}
-        Out of combat there is no hand: search the deck and cast at +1 minute.
-        Keywords in a card's text fire when it is cast: ${CARD_KEYWORDS.map((w) => `<code>[${w[0].toUpperCase()}${w.slice(1)}${KEYWORD_EXAMPLE[w] ? ` ${KEYWORD_EXAMPLE[w]}` : ''}]</code>`).join(' ')}
-        — the ones that stand in for a manipulation want it taken.
-        A card with dice in its text, or in its Dice field, gets a 🎲.</p>` : ''}
-    </section>
-
-    ${active ? `<div class="span2 tablefield">
-    <section class="panel f-hand">
-      <h3>Hand <span class="badge">${t.hand.length}</span>${k.handMax ? `<span class="badge ${tc.handOver ? 'err' : ''}">limit ${k.handMax}</span>` : ''}
-        ${p.mods.gradualRamp ? `<span class="badge ${tc.manaBlocked ? 'err' : ''}">${tc.manaBlocked ? 'mana played this round' : 'one Mana Point card may be played'}</span>` : ''}</h3>
-      ${t.hand.length ? `<div class="zone hand">${handCards}</div>` : '<p class="empty">Empty hand.</p>'}
-    </section>
-
-    <section class="panel f-play">
-      <h3>In play <span class="badge">${t.play.length}</span>${faceDown.size ? `<span class="badge">${faceDown.size} face down</span>` : ''}</h3>
-      <p class="hint">Ongoing effects and traps. Resolve an effect when it ends; spring a trap when it fires.</p>
-      ${t.play.length ? `<div class="zone">${playCards}</div>` : '<p class="empty">Nothing in play.</p>'}
-    </section>
-
-    <section class="panel f-deck">
-      <h3>Deck <span class="badge">${t.deck.length}</span></h3>
-      ${peeked.length ? `<p class="hint">Top of the deck: </p><div class="zone one">${peeked.map((id, i) => cardMini(model, id, {
-    badge: `<span class="badge">${i === 0 ? 'top' : `${i + 1}${i === 1 ? 'nd' : 'rd'}`}</span>`,
-    buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: a spell point puts it on the bottom of the deck' })}
-      ${readTwice ? tableBtn('move', id, 'discard', { arg: 'discard', title: 'Read the Cards taken twice: discard it' }) : ''}`,
-  })).join('')}</div>` : `<div class="deckback"><span>${t.deck.length}</span></div>`}
-      ${p.mods.lifeboundDeck ? LIFEBOUND_PILES.map((z) => `<h4 class="subhead" style="margin-top:10px">${z[0].toUpperCase()}${z.slice(1)} pile <span class="badge">${t[z].length}</span></h4>
-        ${t[z].length ? `<div class="zonelist">${listZone(t[z], z)}</div>` : '<p class="empty">Empty.</p>'}`).join('')
-    + `<p class="hint">Lifebound value ${k.lifebound ?? '—'}: each multiple lost moves a card down the piles (deck → Stun → Wounds → Death); each multiple healed moves one back.</p>` : ''}
-    </section>
-
-    <section class="panel f-mana">
-      <h3>Mana in play <span class="badge">${t.mana.length}</span>${stagnant ? `<span class="badge">${tc.manaUntapped} untapped</span>` : ''}</h3>
-      ${p.manaPool ? `<p class="hint">${p.manaGraveyard ? 'Mana Graveyard: casting sends Mana Point cards equal to the cost to the discard.'
-        : stagnant ? 'Stagnant Pool: mana in play is the spell points you may spend a round; tapped mana untaps at the start of your next turn.'
-          : 'A card needs as many Mana Point cards in play as it costs' + (p.mods.coloredMana ? ', of its colour' : '') + '.'}</p>` : '<p class="hint">Without Mana Pool, mana on the table is a note rather than a rule.</p>'}
-      ${t.mana.length ? `<div class="zone manazone">${manaCards}</div>` : '<p class="empty">No mana in play.</p>'}
-    </section>
-
-    <div class="f-piles">
-      <section class="panel">
-        <h3>Discard <span class="badge">${t.discard.length}</span>
-          ${t.discard.length ? `<span class="pair" style="margin-left:auto">${tableBtn('exileRandom', '', 'Exile one at random', { arg: 1, title: 'Blood and Dust, Grave Peril: a random card from the graveyard into exile' })}</span>` : ''}
-        </h3>
-        ${t.discard.length ? `<div class="zonelist">${listZone(t.discard, 'discard', (id) => `${rollBtn(id, model.tableCard(id))}${spBtn(id)}${has('Recollection') || has('Resupply') ? tableBtn('move', id, '→ hand', { arg: 'hand', title: 'Recollection / Resupply' }) : ''}${has('Retrace') ? tableBtn('retrace', id, 'Retrace', { title: 'Retrace: cast it from the discard for its cost + 1 spell point (or a longer casting time); it rolls, its keywords fire, and it stays in the discard' }) : ''}`)}</div>`
-    : `<p class="empty">${p.cooldown ? 'Nothing discarded.' : 'Nothing discarded — resolved cards shuffle straight back.'}</p>`}
-      </section>
-      <section class="panel">
-        <h3>Exile <span class="badge">${t.exile.length}</span></h3>
-        ${t.exile.length ? `<div class="zonelist">${listZone(t.exile, 'exile')}</div>` : '<p class="empty">Nothing exiled.</p>'}
-      </section>
-    </div>
-
-    <section class="panel f-log">
-      <h3>Log</h3>
-      ${(t.log || []).length ? `<ul class="tablelog">${[...t.log].reverse().slice(0, 14).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet.</p>'}
-    </section>
+    const s = tableState(model, ctx, p, k, 'sheet');
+    return `${tableHead(s)}
+    ${s.active ? `<div class="span2 tablefield">
+      ${handZone(s)}
+      ${playZone(s)}
+      ${deckZone(s)}
+      ${manaZone(s)}
+      ${pilesZone(s)}
+      ${logZone(s)}
     </div>` : ''}`;
+  }
+
+  /**
+   * The table for a window of its own: `table` is the face a shared screen
+   * shows -- in play, the deck's back, mana, the piles and the log, with the
+   * hand and anything Read the Cards turned up left out -- and `hand` is the
+   * player's own: the hand, the controls, the top of the deck and the last
+   * few lines of the log. Each is the same zones the sheet draws, no more.
+   */
+export function cardTableView(model, ctx, view) {
+    const p = model.data.cardcasting;
+    if (!p) return '<div class="grid"><p class="empty">No card casting data.</p></div>';
+    const s = tableState(model, ctx, p, p.calc || {}, view);
+    const field = view === 'hand'
+      ? `${handZone(s)}${s.peeked.length ? deckZone(s) : ''}${logZone(s, 6)}`
+      : `${playZone(s)}${deckZone(s)}${manaZone(s)}${pilesZone(s)}${logZone(s)}`;
+    return `<div class="grid">${tableHead(s)}${s.active ? `<div class="span2 tablefield ${esc(view)}view">${field}</div>` : ''}</div>`;
   }
 
   /** The deck at a glance, and the rules it is checked against. */
@@ -2948,9 +3098,13 @@ function landAttunedPanel(p, k) {
     return `<section class="panel span2">
       <h3>Land-attuned magic
         ${attuned.size ? `<span class="badge">${attuned.size} attuned</span>` : ''}
+        <span class="badge ${k.landAttuned ? 'ok' : ''}" title="${esc(k.landAttunedWhy || '')}">${k.landAttuned ? 'mana pays ×2 on attuned spheres' : 'feat not in force'}</span>
       </h3>
       <p class="hint">The spheres each colour of mana covers, as the deck's own table had them; tick a
-        sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.</p>
+        sphere to mark it attuned. The count beside a sphere is how many cards in the deck belong to it.
+        With Land-Attuned Magic among the feats, Terrain Casting or Area Bound in the tradition and Mana Pool,
+        every Mana Point card in play pays two spell points on an attuned sphere's card instead of one
+        ${k.landAttunedWhy ? `— ${esc(k.landAttunedWhy)}.` : '.'}</p>
       ${CARD_COLORS.map(([c, name]) => {
     const list = `cardcasting.colorSpheres.${c}`;
     const rows = spheres[c] || [];
@@ -2984,7 +3138,7 @@ function landAttunedPanel(p, k) {
    * sphere — tags, and the effect in the text box. Everything on it is the
    * field it edits.
    */
-function cardFace(model, list, i, card, p, { inDeck = true } = {}) {
+function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
     const isMana = !String(card.effect || '').trim() && card.mana;
     const r = card.calc || {};
     const colors = String(r.colors || '');
@@ -3017,11 +3171,11 @@ function cardFace(model, list, i, card, p, { inDeck = true } = {}) {
           <input type="text" class="short" value="${esc(card.mana ?? '')}" data-item="${list}|${i}|mana" data-kind="text" placeholder="mana" aria-label="Mana carried">
           ${manaChips(card.mana, '')}
         </span>
-        <span class="pair" title="Dice to roll on the table — 6d6+int.mod, or a name from the sheet in the flat part; blank uses the first dice in the text">🎲<input type="text" class="short dice" value="${esc(card.dice ?? '')}" data-item="${list}|${i}|dice" data-kind="text" placeholder="dice" aria-label="Dice"></span>
         ${inDeck ? `<span class="pair" title="Copies in the deck">×${itemNum(list, i, 'qty', card.qty)}</span>` : ''}
         <label class="chk" title="A technique card"><input type="checkbox" ${card.tech ? 'checked' : ''} data-item="${list}|${i}|tech" data-kind="bool"><span>tech</span></label>
         ${inDeck && p.useD100 && range ? `<span class="roll" title="d100 roll for this card">${esc(range)}</span>` : ''}
       </div>
+      ${cardDiceRow(model, ctx, list, i, card, p, inDeck)}
       <div class="foot last">
         <input type="text" class="arturl" value="${esc(card.art ?? '')}" data-item="${list}|${i}|art" data-kind="text"
           placeholder="art: paste an image link" aria-label="Art URL">
@@ -3034,8 +3188,55 @@ function cardFace(model, list, i, card, p, { inDeck = true } = {}) {
     </article>`;
   }
 
+  /**
+   * What the picker beside the Dice field can add, in the sheet's own
+   * formula spelling so the field teaches it: the Spheres blast shapes off
+   * the caster level, the casting modifier, and a second labelled roll. The
+   * casting stat is the deck's (`castingStat`), so the modifier is the right
+   * one for this caster.
+   */
+function cardDicePresets(stat) {
+    const mod = `${String(stat || 'int').toLowerCase().slice(0, 3)}.mod`;
+    return [
+      ['{1+floor(caster.level/2)}d6', '1d6 + 1d6 per 2 caster levels (a blast)'],
+      ['{floor(caster.level/2)}d6', '1d6 per 2 caster levels'],
+      ['{caster.level}d6', '1d6 per caster level'],
+      ['{1+floor(caster.level/2)}d8', '1d8 + 1d8 per 2 caster levels'],
+      [`+${mod}`, `+ casting modifier (${mod})`],
+      ['+caster.level', '+ caster level'],
+      ['; boost (1 SP): ', 'a boosted roll, for 1 SP (a second line)'],
+      ['; ', 'another roll, with its own name'],
+    ];
+  }
+
+  /**
+   * The Dice row under a card's text: the field, what it works out to right
+   * now, a picker that adds a roll in the sheet's spelling, a button that
+   * hands the dice to the other cards with the same effect, and the d20 that
+   * copies the card for Roll20. The preview is the test of the field: a roll
+   * that reads as dice shows as `8d6+13`, and one that does not says so.
+   */
+function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
+    const ref = `${list}|${i}`;
+    const formulas = model.cardRollFormulas(card);
+    const preview = formulas.map((r) => (r.formula
+      ? `<span class="badge ok" title="${esc(`${r.label}: ${r.source}`)}">${esc(formulas.length > 1 ? `${r.label} ` : '')}${esc(r.formula)}</span>`
+      : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
+    const alike = inDeck && String(card.dice || '').trim() ? model.cardSiblings(list, i) : [];
+    return `<div class="foot dice">
+      <span class="pair grow" title="Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.">🎲<input type="text" class="dice" value="${esc(card.dice ?? '')}" data-item="${ref}|dice" data-kind="text" placeholder="dice — 8d6+int.mod; boost (1 SP): 15d6" aria-label="Dice"></span>
+      <select class="movesel dicepick" data-append="${ref}|dice" aria-label="Add dice" title="Add a roll in the sheet's own spelling">
+        <option value="">add…</option>
+        ${cardDicePresets(p.castingStat).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}
+      </select>
+      ${alike.length ? `<button data-dice-share="${ref}" title="Give these dice to the ${alike.length} other card${alike.length === 1 ? '' : 's'} with this effect">→ ${alike.length} alike</button>` : ''}
+      ${cardCopyButton(model, ctx, ref, card.name || card.effect || 'card')}
+      ${preview ? `<span class="pair preview">${preview}</span>` : ''}
+    </div>`;
+  }
+
   /** The deck: one face per card. */
-function deckTablePanel(model, p, k) {
+function deckTablePanel(model, ctx, p, k) {
     const list = 'cardcasting.cards';
     const cards = p.cards || [];
     const suitTally = k.suitTally || {};
@@ -3061,7 +3262,7 @@ function deckTablePanel(model, p, k) {
         <span class="t">·</span>
         ${Object.entries(alignTally).map(([a, n]) => `<span class="t">${esc(a)} <span class="n">${n}</span></span>`).join('')}
       </div>` : ''}
-      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, list, i, card, p)).join('')}</div>`
+      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p)).join('')}</div>`
     : '<p class="empty">No cards yet. A deck needs at least 20.</p>'}
       <div class="pair" style="margin-top:10px">
         ${addButton(list, 'Add effect card', newCard({}))}
@@ -3071,13 +3272,13 @@ function deckTablePanel(model, p, k) {
   }
 
   /** Cards kept aside for a swap at rest. */
-function sideboardPanel(model, p) {
+function sideboardPanel(model, ctx, p) {
     const list = 'cardcasting.sideboard';
     const cards = p.sideboard || [];
     return `<section class="panel span2">
       <h3>Sideboard <span class="badge">${cards.length}</span></h3>
       <p class="hint">Cards built but not in the deck — the deck can only change when you rest to regain spell points.</p>
-      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
+      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
       <div style="margin-top:10px">${addButton(list, 'Add to sideboard', {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',
   })}</div>
