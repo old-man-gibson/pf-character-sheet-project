@@ -8,7 +8,7 @@
  */
 
 import { evaluateFormula } from '../formula.js';
-import { forwarded } from './scope.js';
+import { forwarded, scopeIfFormulas } from './scope.js';
 import { speedForwardKey } from './util.js';
 
 /**
@@ -23,7 +23,7 @@ import { speedForwardKey } from './util.js';
 export function recomputeSpeeds(model) {
   const speeds = model.data.identity?.speeds;
   if (!Array.isArray(speeds) || !speeds.length) return;
-  const scope = model.scope();
+  const scope = scopeIfFormulas(model, speeds.map((sp) => sp.bonus));
   // A speed may read the speeds *above* it, and not the ones below. "Your
   // fly speed is equal to your land speed" is a real rule and wants saying
   // that way rather than restating a number that will move; a rule reading
@@ -31,7 +31,7 @@ export function recomputeSpeeds(model) {
   // bottom and the scope grows as they do, which makes the cycle impossible
   // rather than merely unlikely -- the same line the inline names draw
   // against the skills.
-  scope.speed = {};
+  if (scope) scope.speed = {};
   for (const sp of speeds) {
     sp.bonusError = null;
     let bonus = 0;
@@ -53,7 +53,7 @@ export function recomputeSpeeds(model) {
     sp.handle = speedForwardKey(sp);
     sp.forwarded = sp.handle ? forwarded(model, sp.handle) : 0;
     sp.final = (Number(sp.base) || 0) + bonus + sp.forwarded;
-    if (sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
+    if (scope && sp.handle) scope.speed[sp.handle.slice('speed.'.length)] = sp.final;
   }
 }
 

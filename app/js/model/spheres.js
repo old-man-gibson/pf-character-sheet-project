@@ -17,7 +17,7 @@ import {
 import { emit } from './events.js';
 import { evaluateFormula } from '../formula.js';
 import { classHasLevel, ownLevelCount } from './progression.js';
-import { forwarded } from './scope.js';
+import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
 import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
 import { featEntry, powerEntry, spellEntry } from './subsystems/catalogues.js';
@@ -2156,11 +2156,8 @@ export function recomputeSphereRows(model) {
   // levels" is one, and typed as the number it comes to today it goes stale.
   // The scope is the one every formula reads, built once and only if a row
   // asks for it. This runs after the prose, so a name defined there resolves.
-  let scope = null;
-  const amount = (raw) => {
-    if (typeof raw === 'string' && raw.trim() !== '') scope ??= model.scope();
-    return evaluateAmount(raw, scope);
-  };
+  const scope = lazyScope(model);
+  const amount = (raw) => evaluateAmount(raw, scope);
 
   if (t.combat) {
     const dcBase = t.combat.practitionerDC;

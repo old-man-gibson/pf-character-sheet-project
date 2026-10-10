@@ -13,6 +13,7 @@ import {
 import { sheetReader } from '../document.js';
 import { levelFollowingPin } from '../progression.js';
 import { closestName, evaluateAmount, vancianForwardKey } from '../util.js';
+import { lazyScope } from '../scope.js';
 
 let VANCIAN_TABLES = { classes: [] };
 
@@ -354,7 +355,7 @@ export function recomputeVancian(model) {
       c.concentrationNum = c.concentrationAuto;
       c.concentrationError = null;
     } else {
-      const conc = evaluateAmount(typed, formula ? model.scope() : null);
+      const conc = evaluateAmount(typed, lazyScope(model));
       c.concentrationNum = conc.value;
       c.concentrationError = conc.error;
     }

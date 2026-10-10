@@ -2660,8 +2660,17 @@ td.side-none select { border: 1px dashed var(--cs-bad); border-left: 3px solid v
 .trainhead > label.fld.blendticks { flex: 0 1 auto; }
 .trainhead .blendticks .pair { gap: 4px 10px; }
 .trainhead .blendticks .num { font-variant-numeric: tabular-nums; color: var(--cs-text); }
-table.talents.pools input[type="number"] { width: 100%; text-align: right; }
-table.talents.pools th[colspan] { text-align: right; }
+/* A tradition's boon pools, each split between spell points and essence: a
+   steps box with what it comes to straight beside it, each pair centred under
+   its own heading. The boxes and results take what they need; the pool's
+   name takes the rest. */
+.tablewrap > table.build.boonsplit { min-width: 0; }
+table.build.boonsplit th.splithead { text-align: center; }
+table.build.boonsplit th[scope="row"] { font-weight: 500; }
+table.build.boonsplit td.steps, table.build.boonsplit td.gives { width: 1%; white-space: nowrap; }
+table.build.boonsplit td.steps { padding-left: 10px; }
+table.build.boonsplit td.steps input[type="number"] { width: 4rem; text-align: right; }
+table.build.boonsplit td.gives { text-align: left; padding-right: 10px; }
 tr.future td { opacity: 0.55; }
 .subhead {
   margin: 12px 0 6px; font-size: 0.7rem; text-transform: uppercase;

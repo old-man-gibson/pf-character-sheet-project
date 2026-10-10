@@ -320,6 +320,28 @@ console.log('a conjured companion\'s talents are drawn in two groups');
   }
 }
 
+console.log('a tradition\'s boons are split in a table of their own');
+{
+  // Each split is a steps box with what it comes to beside it. It used to
+  // borrow the talent ladder's fixed columns, which squeezed the boxes into
+  // a column sized for an icon button.
+  const m = new Character(blankDocument('boon-split-test'));
+  for (const d of ['Verbal Casting', 'Somatic Casting', 'Focus Casting']) m.listAdd('training.magic.tradition.drawbacks', d);
+  const html = renders('boon split', 'Magic Spheres', (x) => combat.renderMagicPanel(x), m) || '';
+  const table = html.slice(html.indexOf('<table class="build compact boonsplit">'), html.indexOf('</table>', html.indexOf('boonsplit')));
+  for (const [what, ok] of [
+    ['its own table, not the talent ladder\'s', table.length > 0 && !html.includes('talents pools')],
+    ['a steps box beside what it comes to, for spell points and for essence',
+      /<td class="steps"><input[^>]*\|sp\|[\s\S]*?<\/td>\s*<td class="gives total">/.test(table)
+      && /<td class="steps"><input[^>]*\|essence\|[\s\S]*?<\/td>\s*<td class="gives total">/.test(table)],
+  ]) {
+    if (!ok) {
+      fail++;
+      console.log(`  FAIL boon split — ${what}`);
+    } else pass++;
+  }
+}
+
 console.log('a minionmancer\'s tab draws its chips and the companion selected');
 {
   // Two of a kind: the sweep above only ever sees one, and the chip strip,

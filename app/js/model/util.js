@@ -7,10 +7,22 @@
 
 import { carriesTotal, evaluateFormula } from '../formula.js';
 
-export const slug = (s) => String(s || '')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '_')
-  .replace(/^_+|_+$/g, '') || 'x';
+/**
+ * A name as a key: lower case, every run of anything else one underscore.
+ * Remembered per spelling, like normalizeName: the formula scope slugs every
+ * skill, sphere and companion skill each time it is built.
+ */
+const SLUGS = new Map();
+export const slug = (s) => {
+  const text = String(s || '');
+  let out = SLUGS.get(text);
+  if (out === undefined) {
+    out = text.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'x';
+    if (SLUGS.size >= 50000) SLUGS.clear();
+    SLUGS.set(text, out);
+  }
+  return out;
+};
 
 /** How the specialty picks name a skill: its skill and its variant together. */
 export const skillKey = (s) => `${s.name}|${s.spec || ''}`;
@@ -128,11 +140,14 @@ export const inEarlyFamily = (name) => FORWARD_KEY_FAMILIES
  * the scope handed in, and what comes back is an integer -- a bonus to a
  * caster level or a save is one -- with the error, if the formula had one,
  * kept beside it for the field and the audit to show.
+ *
+ * `scope` may be the scope or a function giving it (lazyScope in scope.js),
+ * which is only called when `raw` is a formula.
  */
 export function evaluateAmount(raw, scope) {
-  if (typeof raw === 'string' && raw.trim() !== '') {
+  if (isFormulaText(raw)) {
     try {
-      const v = Number(evaluateFormula(raw, scope));
+      const v = Number(evaluateFormula(raw, typeof scope === 'function' ? scope() : scope));
       return { value: Number.isFinite(v) ? Math.floor(v) : 0, error: null };
     } catch (err) {
       return { value: 0, error: err.message };
@@ -140,6 +155,9 @@ export function evaluateAmount(raw, scope) {
   }
   return { value: Number(raw) || 0, error: null };
 }
+
+/** Whether a stored value is a formula to work out: text, as against a number or a blank. */
+export const isFormulaText = (raw) => typeof raw === 'string' && raw.trim() !== '';
 
 /**
  * A name split into what it is called and the brackets written after it.

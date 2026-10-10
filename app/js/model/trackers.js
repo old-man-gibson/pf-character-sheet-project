@@ -12,7 +12,7 @@ import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
 import { COMPANION_KINDS, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
-import { forwarded } from './scope.js';
+import { forwarded, scopeIfFormulas } from './scope.js';
 import { markUndo, rowLabel } from './undo.js';
 import { evaluateAmount, slug, trackerForwardKey } from './util.js';
 
@@ -332,7 +332,9 @@ export function recomputeTrackers(model) {
   // caster their spell or power points.
   ensureMythicPower(model);
   ensureSystemPools(model);
-  const scope = model.scope();
+  // Each range written feeds the next tracker's scope, so it is built here,
+  // and only when some tracker has a range to work out.
+  const scope = model.trackers.some((t) => t.maxFormula || t.minFormula) ? model.scope() : null;
   const toInt = (v) => (typeof v === 'number' ? Math.floor(v) : Math.floor(Number(v)) || 0);
   const errors = new Map();
   // Which sheet-seeded trackers the player has since changed -- shown as an
@@ -380,7 +382,8 @@ export function recomputeTrackers(model) {
   // resolve zone bounds (they are formulas). Zones commonly refer to their
   // own tracker ("tracker.burn.max - 2"), so they see the ranges computed
   // just above rather than last recompute's.
-  const zoneScope = model.scope();
+  const zoneScope = model.trackers.some((t) => Array.isArray(t.style?.zones) && t.style.zones.length)
+    ? model.scope() : null;
   for (const t of model.trackers) {
     const errs = errors.get(t);
     t.style = t.style && !isDefaultStyle(t.style) ? normalizeStyle(t.style) : null;
@@ -506,7 +509,11 @@ export function removeTracker(model, id) {
 export function recomputeBuffs(model) {
   const buffs = model.data.buffs || [];
   if (!buffs.length) return;
-  const scope = model.scope();
+  // The dials feed the size the scope reads, so it is built here, and only
+  // when a dial or a bonus row is written as a formula.
+  const scope = scopeIfFormulas(model, buffs.flatMap((b) => (b && typeof b === 'object'
+    ? [...BUFF_MOD_KEYS.map(([key]) => b[key]), ...(Array.isArray(b.bonuses) ? b.bonuses.map((r) => r?.value) : [])]
+    : [])));
   for (const b of buffs) {
     if (!b || typeof b !== 'object') continue;
     const errs = [];

@@ -137,7 +137,7 @@ import {
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
-import { getPath, safe, setPath, skillForwardKey, skillKey } from './util.js';
+import { getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
 /** A number of hit points as an action takes it: whole, and never below none. */
 const points = (n) => Math.max(0, Math.floor(Number(n) || 0));
@@ -366,7 +366,9 @@ export class Character {
     // read, and before the skills, which may read `dr.fire` or `immune.sleep`
     // the way they read anything else.
     this.#resolveDefenceText();
-    const miscScope = this.scope();
+    // Each skill's total feeds the scope, so it is built here, and only when
+    // a Misc is written as a formula.
+    const miscScope = c.skills.some((s) => isFormulaText(s.offset)) ? this.scope() : null;
 
     c.skills.forEach((s, i) => {
       const primary = (s.abilities || [])[0];

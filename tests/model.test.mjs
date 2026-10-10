@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels,
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2186,6 +2186,31 @@ console.log('class levels are read through an index of the Planner, which never 
   check('a class renamed on the table is read as renamed', c.classLevelCount('Brawler'), 4);
   c.recompute();
   check('and a recompute after it agrees', [c.classLevelCount('Brawler'), c.data.classes[0].gestaltLevels], [4, 4]);
+}
+
+console.log('the formula scope is built only where a formula needs it');
+{
+  // A stage with nothing written as a formula builds no scope (lazyScope and
+  // scopeIfFormulas in scope.js), and one that has a formula builds it where
+  // it always did, so what the formula reads is unchanged.
+  check('evaluateAmount calls a scope function only for a formula',
+    [evaluateAmount(3, () => { throw new Error('built'); }).value, evaluateAmount('level + 1', () => ({ level: 4 })).value],
+    [3, 5]);
+  const c = new Character(blankDocument({ name: 'Scoped', level: 5 }));
+  c.recompute();
+  let builds = 0;
+  const own = c.scope;
+  c.scope = function counted(...a) { builds++; return own.apply(this, a); };
+  c.recompute();
+  const plain = builds;
+  c.data.skills.find((s) => s.name === 'Bluff').offset = 'floor(level / 2)';
+  builds = 0;
+  c.recompute();
+  check('a skill Misc written as a formula builds the one scope the skills need, and reads it',
+    [builds - plain, c.data.skills.find((s) => s.name === 'Bluff').miscResolved], [1, 2]);
+  c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: 0 }, { type: 'Fly', base: 0, bonus: 'speed.land' }];
+  c.recompute();
+  check('a speed formula still reads the speeds above it', c.data.identity.speeds.map((sp) => sp.final), [30, 30]);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');

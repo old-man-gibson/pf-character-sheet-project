@@ -13,7 +13,7 @@ import {
 } from '../rules.js';
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { orphans } from './reconcile.js';
-import { forwarded } from './scope.js';
+import { forwarded, scopeIfFormulas } from './scope.js';
 import { TEMPLATE_TYPES } from './templates.js';
 import { markUndo, rowLabel } from './undo.js';
 import { classForwardKey, closestName, isPinned, normalizeName, resolveNumberFields, slug } from './util.js';
@@ -1361,7 +1361,8 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
   // level and class levels are settled; skills and trackers are not -- which
   // is the same footing the AC bonus cells stand on, and the same advice
   // applies: write them in terms of abilities and levels.
-  const parts = resolveNumberFields(model.scope(), c.hp, ['fcb', 'toughness', 'misc']);
+  const parts = resolveNumberFields(scopeIfFormulas(model, [c.hp.fcb, c.hp.toughness, c.hp.misc]), c.hp,
+    ['fcb', 'toughness', 'misc']);
   const base = hitPointBase({
     perLevel: hdPerLevel,
     level,

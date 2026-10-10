@@ -34,7 +34,7 @@ import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import {
-  classForwardKey, flatNames, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
+  classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
 } from './util.js';
 
@@ -586,6 +586,36 @@ function addSheetAliases(s, c) {
 /** Every variable name a formula may legally use -- drives validation + autocomplete. */
 export function scopeNames(model) {
   return flatNames(model.scope()).sort();
+}
+
+/*
+ * The formula scope is the whole character flattened into one object, and a
+ * recalculation used to build it at every stage that might read it, formula
+ * or not -- ten times per recalculation on an ordinary sheet. A stage hands
+ * its fields a scope one of these two ways instead, and a stage with nothing
+ * written as a formula builds none.
+ */
+
+/**
+ * The scope, built the first time a formula asks for it and kept for the
+ * rest of the stage (evaluateAmount takes it as it is). Only for a stage
+ * that writes nothing the scope reads before its last formula: built later
+ * than the stage's start, it must still see what the stage started from.
+ */
+export function lazyScope(model) {
+  let scope = null;
+  return () => (scope ??= model.scope());
+}
+
+/**
+ * The scope now, when any of `raws` is a formula; null when none is. For a
+ * stage that writes what the scope reads as it goes (the skills write their
+ * totals, the buffs their dials): its formulas see the stage's starting point
+ * exactly as before, and a stage with none skips the build.
+ */
+export function scopeIfFormulas(model, raws) {
+  for (const raw of raws) if (isFormulaText(raw)) return model.scope();
+  return null;
 }
 
 /* -------------------------------------------------------------- *
