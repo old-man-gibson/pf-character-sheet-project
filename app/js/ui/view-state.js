@@ -73,6 +73,8 @@ export function blankView() {
     peek: [],
     /** The card in hand whose mode-and-points chooser is open (instance id), or null. */
     castPick: null,
+    /** Cards opened out to read or edit at length: table instance ids and deck faces ("cardcasting.cards|3"). */
+    openCards: new Set(),
 
     /* Trackers, and the style editor the meters on other tabs open */
     /** Id of the custom tracker being edited in place. */

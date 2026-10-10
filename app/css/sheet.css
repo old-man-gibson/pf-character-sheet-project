@@ -5377,3 +5377,20 @@ table.stacked .catface { margin-left: 0; }
 .mcard.mini.castpick .text { display: flex; flex-direction: column; gap: 5px; max-height: none; }
 .mcard.mini.castpick .pickrow { display: flex; flex-direction: column; gap: 2px; font-size: 0.7rem; font-weight: 600; color: var(--ink); }
 .mcard.mini.castpick .pickrow select, .mcard.mini.castpick .pickrow input { width: 100%; box-sizing: border-box; font-size: 0.74rem; font-weight: 400; padding: 2px 4px; }
+/* A card opened out, to read or edit at length. On a face: two columns of
+   the grid, the art kept short, the text tall and the Dice field a line a
+   roll. In hand or in play: the text unclamped and the rolls listed. */
+.mcard button.expand { padding: 0 4px; font-size: 0.72rem; line-height: 1.4; flex: none; }
+.mcard.mini .bar.title button.expand { margin-left: 2px; background: rgba(0,0,0,0.18); color: #f4efe4; border-color: transparent; }
+.cardgrid .mcard.open { grid-column: span 2; }
+@container (max-width: 560px) { .cardgrid .mcard.open { grid-column: auto; } }
+.mcard.open .art { aspect-ratio: auto; max-height: 150px; }
+.mcard.open .text .prose textarea, .mcard.open .text .prose-view { font-size: 0.86rem; line-height: 1.4; }
+.mcard .foot.dice.open .grow { align-items: flex-start; }
+.mcard .foot.dice textarea.dice { flex: 1; min-width: 0; width: auto; padding: 3px 6px; font: 0.76rem/1.35 var(--cs-mono, ui-monospace, Consolas, monospace); resize: vertical; }
+.mcard.mini.open .text { max-height: none; }
+.mcard.mini .rolls { display: flex; flex-direction: column; gap: 2px; padding: 2px 6px; font-size: 0.72rem; color: #f4efe4; }
+.mcard.mini .rolls .roll b { font-weight: 600; margin-right: 4px; }
+.mcard.mini .rolls .roll small { opacity: 0.8; margin-left: 4px; }
+.zone .mcard.mini.open { grid-column: span 2; }
+@container (max-width: 560px) { .zone .mcard.mini.open { grid-column: auto; } }
