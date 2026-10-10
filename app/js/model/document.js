@@ -1612,20 +1612,28 @@ export function toDocument(model) {
       ...(model.data.training.magic ? { magic: stripDerived(model.data.training.magic, MAGIC_DERIVED) } : {}),
       guile: stripDerived(model.data.training.guile, GUILE_DERIVED),
     },
-    // The defence boxes go on holding exactly what was typed; `calc` is the
-    // parts they were read into and every bonus forwarded at them, worked out
-    // again on every load.
-    defenses: stripDerived(model.data.defenses, DEFENCES_DERIVED),
-    hp: stripDerived(model.data.hp, HP_DERIVED),
-    akashic: stripDerived(model.data.akashic, AKASHIC_DERIVED),
-    maneuvers: stripDerived(model.data.maneuvers, MANEUVER_DERIVED),
-    vancian: stripDerived(model.data.vancian, VANCIAN_DERIVED),
-    psionics: stripDerived(model.data.psionics, PSIONIC_DERIVED),
-    altTraining: stripDerived(model.data.altTraining, ALT_TRAINING_DERIVED),
-    cardcasting: stripDerived(model.data.cardcasting, CARDCASTING_DERIVED),
-    familiar: (model.data.familiar || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    animalCompanion: (model.data.animalCompanion || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    eidolon: (model.data.eidolon || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
-    conjured: (model.data.conjured || []).map((b) => stripDerived(b, COMPANION_DERIVED)),
+    ...Object.fromEntries(SAVE_STRIP.map(([key, derived, { list = false } = {}]) => [key, list
+      ? (model.data[key] || []).map((b) => stripDerived(b, derived))
+      : stripDerived(model.data[key], derived)])),
   };
 }
+
+/**
+ * The blocks saved without what `recompute` writes back into them, each with
+ * the list of what goes (see stripDerived). One row per block, so a new
+ * sub-system's worked fields are a row here rather than another line in
+ * toDocument; `list` marks a block kept as a list of them, each stripped.
+ * The defence boxes keep exactly what was typed; `calc` is the parts they
+ * were read into and every bonus forwarded at them, worked out on each load.
+ */
+const SAVE_STRIP = [
+  ['defenses', DEFENCES_DERIVED],
+  ['hp', HP_DERIVED],
+  ['akashic', AKASHIC_DERIVED],
+  ['maneuvers', MANEUVER_DERIVED],
+  ['vancian', VANCIAN_DERIVED],
+  ['psionics', PSIONIC_DERIVED],
+  ['altTraining', ALT_TRAINING_DERIVED],
+  ['cardcasting', CARDCASTING_DERIVED],
+  ...COMPANION_KINDS.map((kind) => [kind, COMPANION_DERIVED, { list: true }]),
+];
