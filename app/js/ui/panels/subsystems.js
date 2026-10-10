@@ -66,7 +66,7 @@ import {
   BODY_TYPES, COMPANION_LABELS, COMPANION_LEVEL_SOURCES, CONJURED_ARCHETYPES,
   CONJURED_BASE_FORMS, CONJURED_LEVEL_SOURCES, NATURAL_ATTACKS,
   abilityTextKey, companionAbilityText,
-  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat,
+  companionAttackKey, companionScopeName, companionSkillKey, emptyCompanionFeat, isOtherConjurationTalent,
 } from '../../companions.js';
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
@@ -1504,9 +1504,9 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
    * matter in play in a strip. Then hit points, ability scores, defences and
    * saves, attacks, skills -- and the panels only one kind has: the eidolon's
    * evolutions, the animal companion's tricks and item slots, the conjured
-   * companion's contract (base form, archetypes) and talents. Everything not
-   * typed is worked out in `companions.js` from the tables the workbook's
-   * `dataSheet` carried (the wiki's, for the conjured companion), and reads
+   * companion's Archetype panel (base form, archetypes) and talents.
+   * Everything not typed is worked out in `companions.js` from the tables the
+   * workbook's `dataSheet` carried (the wiki's, for the conjured companion), and reads
    * back from a formula as `familiar.hp`, `eidolon.evoLeft`,
    * `animalCompanion.str.mod`, `conjured.summonCost`.
    *
@@ -1538,7 +1538,7 @@ export function companionPanel(model, kind) {
       ${companionScoresPanel(model, cc)}
       ${companionDefensePanel(model, cc)}
       ${companionSavesPanel(model, cc)}
-      ${kind === 'conjured' ? conjuredContractPanel(model, cc) : ''}
+      ${kind === 'conjured' ? conjuredArchetypePanel(model, cc) : ''}
       ${kind === 'conjured' ? conjuredCastingPanel(model, cc) : ''}
       ${companionAttacksPanel(model, cc)}
       ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, cc) : ''}
@@ -1997,22 +1997,29 @@ function eidolonEvolutionsPanel(model, cc) {
  */
 function companionListPanel(model, {
   list, rows, heading, badge, what, sourcePlaceholder, hint, slots = null, extra = '',
+  only = null, template = emptyCompanionFeat(),
 }) {
     // With `slots` (one label per place the list is owed a row), the list is
     // drawn slot by slot whether or not a row is stored for each -- writing
     // into an open one stores it (see companionOpenSlot) -- the source reads
     // the slot's label until something else is typed, and only a row past the
     // last slot can be removed. Without, it is a list rows are added to.
+    //
+    // With `only`, the panel draws the rows it passes and leaves the others
+    // to another panel over the same list (a conjured companion's two groups
+    // of talents). Each row keeps its place in the list, which is what its
+    // fields and its × are bound to, and Add adds `template`.
     const count = slots ? Math.max(rows.length, slots.length) : rows.length;
-    const shown = Array.from({ length: count }, (_, i) => rows[i] || {});
+    const shown = Array.from({ length: count }, (_, i) => [rows[i] || {}, i])
+      .filter(([r]) => !only || only(r));
     const over = (i) => slots && i >= slots.length;
     return `<section class="panel span2">
       <h3>${heading} ${badge}</h3>
       ${extra}
-      ${count ? `<div class="tablewrap"><table class="build stacked"><thead><tr>
+      ${shown.length ? `<div class="tablewrap"><table class="build stacked"><thead><tr>
         <th style="width:9rem">Source</th><th style="width:14rem">${esc(what)}</th><th>Notes</th><th></th>
       </tr></thead><tbody>
-        ${shown.map((r, i) => `<tr${over(i) ? ' class="over"' : ''}>
+        ${shown.map(([r, i]) => `<tr${over(i) ? ' class="over"' : ''}>
           <td data-stack="head">${itemText(list, i, 'source', r.source,
     slots ? (slots[i] ?? 'Over the allowance') : sourcePlaceholder)}</td>
           <td data-stack="name">${itemText(list, i, 'name', r.name, what)}</td>
@@ -2020,7 +2027,7 @@ function companionListPanel(model, {
           ${!slots || over(i) ? rowRemove(list, i) : '<td class="tools"></td>'}
         </tr>`).join('')}
       </tbody></table></div>` : `<p class="empty">No ${what.toLowerCase()}s yet.</p>`}
-      ${slots ? '' : `<div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, emptyCompanionFeat())}</div>`}
+      ${slots ? '' : `<div style="margin-top:6px">${addButton(list, `Add ${what.toLowerCase()}`, template)}</div>`}
       <p class="hint">${hint}</p>
     </section>`;
   }
@@ -2041,8 +2048,9 @@ function companionTricksPanel(model, cc) {
 
 
 /**
- * The conjured companion's contract: the base form as the sphere prints it,
- * and the archetypes it was called under.
+ * The conjured companion's Archetype panel: the base form as the sphere
+ * prints it, and the archetypes it was called under (the Conjuration sphere's
+ * own word for them).
  *
  * Most archetypes are rules prose the player applies through rows they
  * already own -- the warrior empties its own attacks list, the aquatic trades
@@ -2051,10 +2059,10 @@ function companionTricksPanel(model, cc) {
  * mindless and unwilling extra dice, the cheaper summon) are marked, and the
  * head's badges show the result.
  */
-function conjuredContractPanel(model, cc) {
+function conjuredArchetypePanel(model, cc) {
     const { p, b, k } = cc;
     return `<section class="panel">
-      <h3>Contract <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
+      <h3>Archetype <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
       ${k.formLine ? `<p class="hint"><strong>${esc(b.baseForm)}:</strong> ${esc(k.formLine)}.
         Speeds and attacks are written into their own rows; the form’s scores and natural armour are already counted.</p>`
     : '<p class="hint">Pick a base form above for its printed stat line, saves and starting scores.</p>'}
@@ -2126,10 +2134,16 @@ function conjuredCastingPanel(model, cc) {
 /** The (form) and (type) talents shaping this companion, one list per companion. */
 function conjuredTalentsPanel(model, cc) {
     const { p, b, k } = cc;
+    // One list, two groups: a row added under Other Conjuration Talents is
+    // marked `group: 'other'` (isOtherConjurationTalent); every other row is a
+    // (form) or (type) talent, including those saved before the split.
+    const list = `${p}.talents`;
+    const rows = b.talents || [];
     return companionListPanel(model, {
-      list: `${p}.talents`,
-      rows: b.talents || [],
-      heading: 'Conjuration talents',
+      list,
+      rows,
+      only: (t) => !isOtherConjurationTalent(t),
+      heading: 'Form and Type talents',
       badge: `<span class="badge">${k.talentsTaken ?? 0} shaping this companion</span>`,
       what: 'Talent',
       sourcePlaceholder: '(form), (type)…',
@@ -2137,6 +2151,18 @@ function conjuredTalentsPanel(model, cc) {
         + 'gained, and no more than one (type). They are spent from the master’s own magic '
         + 'talents, so nothing is budgeted here; what a talent changes goes into the rows it '
         + 'changes, and its note can forward a bonus the way any prose does.',
+    }) + companionListPanel(model, {
+      list,
+      rows,
+      only: isOtherConjurationTalent,
+      template: { ...emptyCompanionFeat(), group: 'other' },
+      heading: 'Other Conjuration Talents',
+      badge: `<span class="badge">${k.otherTalentsTaken ?? 0} taken</span>`,
+      what: 'Talent',
+      sourcePlaceholder: 'Conjuration',
+      hint: 'The master’s other Conjuration talents that bear on this companion. Like the (form) '
+        + 'and (type) talents, they are spent from the master’s own magic talents, so nothing is '
+        + 'budgeted here; a talent’s note can forward a bonus the way any prose does.',
     });
   }
 

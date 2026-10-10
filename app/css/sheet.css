@@ -3938,8 +3938,8 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
 
 /* ---------- a companion's tab ----------
    Five panels across the top -- hit points, scores, defences, saves and, for
-   the conjured companion, the contract -- and two of them hold a table wider
-   than the 310px floor every other grid shares: the saves at six columns
+   the conjured companion, its Archetype panel -- and two of them hold a table
+   wider than the 310px floor every other grid shares: the saves at six columns
    (355px), the eidolon's scores at seven (376px). On a wide window five
    panels shared the row at 354px each and both tables ran past their
    panel's edge, cutting the Total column off; at 90% it was worse. The floor

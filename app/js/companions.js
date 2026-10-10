@@ -552,9 +552,11 @@ export function defaultConjured() {
     // familiar's Intelligence already reads its table. A number pins it.
     scores: Object.fromEntries(ABILITIES.map((k) => [k, { base: null, evo: 0, misc: 0 }])),
     abilityIncreases: ABILITY_INCREASE_LEVELS.conjured.map((level) => ({ level, ability: '' })),
-    // The (form) and (type) talents shaping this companion. They are spent
-    // from the master's magic talents, so nothing here budgets them; the list
-    // is what this companion is built of.
+    // The Conjuration talents on this companion: the (form) and (type) talents
+    // shaping it, and the others (a row with `group: 'other'`, see
+    // isOtherConjurationTalent). They are spent from the master's magic
+    // talents, so nothing here budgets them; the list is what this companion
+    // is built of.
     talents: [],
     // Feats past the table's one per odd Hit Die, granted by whatever grants
     // them; a number or a formula, like the bonus boxes.
@@ -567,6 +569,15 @@ export function defaultConjured() {
     immunities: '',
   };
 }
+
+/**
+ * A conjured companion's talent rows fall in two groups on its tab: the (form)
+ * and (type) talents that shape it, and its other Conjuration talents. One
+ * list holds both, so a talent's notes, formulas and go-to place do not depend
+ * on its group; `group: 'other'` marks the second, and a row without it (every
+ * row saved before the split) is a (form) or (type) talent.
+ */
+export const isOtherConjurationTalent = (t) => t?.group === 'other';
 
 /** A casting companion's tradition with nothing chosen: natural casting. */
 const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boons: [] });
@@ -1151,7 +1162,9 @@ export function computeCompanion(kind, block, master, bonuses = null) {
     calc.formLine = form ? form.line : '';
     calc.formSaves = form ? form.goodSaves : null;
     calc.formNatural = form ? form.natural : 0;
-    calc.talentsTaken = (b.talents || []).filter((t) => String(t?.name || '').trim()).length;
+    const named = (b.talents || []).filter((t) => String(t?.name || '').trim());
+    calc.talentsTaken = named.filter((t) => !isOtherConjurationTalent(t)).length;
+    calc.otherTalentsTaken = named.filter(isOtherConjurationTalent).length;
     calc.archetypes = CONJURED_ARCHETYPES.filter((a) => arch(a.id)).map((a) => a.label);
     calc.casting = conjuredCasting(b, hd, mod('cha'), arch('mage'));
     // A feat slot for every odd Hit Die -- the table's feat column, which is

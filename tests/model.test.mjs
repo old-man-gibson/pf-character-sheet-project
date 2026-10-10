@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent,
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels,
 } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
@@ -2165,6 +2165,27 @@ console.log('a class on the Classes table casts at the levels its saves are coun
     [c.classLevelCount('Wizard'), c.data.vancian.classes[0].casterLevel, c.scope().class.wizard.level, c.data.saves.will.base],
     [5, 5, 5, 4]);
   check('a class on neither the table nor the Planner is nobody', c.classLevelCount('Druid'), 0);
+}
+
+console.log('class levels are read through an index of the Planner, which never answers from an old one');
+{
+  // plannerIndex in progression.js keeps, per character, which Planner rows
+  // name each class. It is checked once per recalculation and on every
+  // lookup outside one, so however the Planner changes, the next read sees it.
+  const c = new Character(blankDocument({ name: 'Indexed', level: 4 }));
+  c.data.classes = [{ name: 'Legendary Kineticist', hd: 8, bab: 0.75, goodFort: true, goodRef: true, goodWill: false, skillRanks: 4, levelsOverride: null }];
+  ['legendary kineticst', 'legendary kineticst', 'legendary kineticst', 'Fighter']
+    .forEach((name, i) => { c.data.progression.levels[i].classes = [name]; });
+  c.recompute();
+  check('a misspelt Planner row still counts for the class',
+    [c.classLevelCount('Legendary Kineticist'), plannedLevels(c, 'Legendary Kineticist', 4)], [3, [true, true, true, false]]);
+  check('and no recalculation token is left behind', c.recomputing, undefined);
+  c.data.progression.levels[3].classes[0] = 'Legendary Kineticist';
+  check('a row edited in place is read without a recompute', c.classLevelCount('Legendary Kineticist'), 4);
+  c.data.classes[0].name = 'Brawler';
+  check('a class renamed on the table is read as renamed', c.classLevelCount('Brawler'), 4);
+  c.recompute();
+  check('and a recompute after it agrees', [c.classLevelCount('Brawler'), c.data.classes[0].gestaltLevels], [4, 4]);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');

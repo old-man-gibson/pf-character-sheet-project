@@ -286,6 +286,40 @@ console.log('a casting companion draws its pool and its tradition');
   }
 }
 
+console.log('a conjured companion\'s talents are drawn in two groups');
+{
+  // One list, two panels: Form and Type talents, and Other Conjuration
+  // Talents (the rows marked `group: 'other'`). Each row keeps its place in
+  // the list, which is what its fields and its × are bound to.
+  const m = new Character(blankDocument('talent-groups-test'));
+  m.listAdd('conjured.0.talents', { source: '(form)', name: 'Glass Hide', notes: '' });
+  m.listAdd('conjured.0.talents', { source: 'Conjuration', name: 'Spark Bond', notes: '', group: 'other' });
+  m.listAdd('conjured.0.talents', { source: '(type)', name: 'Ember Kin', notes: '' });
+  const html = renders('talent groups', 'Conjured Companion', (x) => subsystems.companionPanel(x, 'conjured'), m) || '';
+  const section = (heading) => {
+    const at = html.indexOf(`<h3>${heading} `);
+    return at < 0 ? '' : html.slice(at, html.indexOf('</section>', at));
+  };
+  const shape = section('Form and Type talents');
+  const other = section('Other Conjuration Talents');
+  const row = (i) => `data-item="conjured.0.talents|${i}|name"`;
+  for (const [what, ok] of [
+    ['the (form) and (type) rows under Form and Type talents, at their places in the list',
+      shape.includes(row(0)) && shape.includes(row(2)) && !shape.includes(row(1))],
+    ['the other row under Other Conjuration Talents, at its place in the list',
+      other.includes(row(1)) && !other.includes(row(0)) && !other.includes(row(2))],
+    ['each group\'s count', shape.includes('2 shaping this companion') && other.includes('1 taken')],
+    ['Add under Other Conjuration Talents adds an other talent', other.includes('&quot;group&quot;:&quot;other&quot;')],
+    ['Add under Form and Type talents adds one with no group', shape.includes('data-add="conjured.0.talents"')
+      && !shape.includes('&quot;group&quot;')],
+  ]) {
+    if (!ok) {
+      fail++;
+      console.log(`  FAIL talent groups — ${what}`);
+    } else pass++;
+  }
+}
+
 console.log('a minionmancer\'s tab draws its chips and the companion selected');
 {
   // Two of a kind: the sweep above only ever sees one, and the chip strip,
