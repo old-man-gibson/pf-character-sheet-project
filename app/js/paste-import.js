@@ -23,7 +23,7 @@
  * Pure: text in, blocks and leftovers out. No DOM, no storage.
  */
 
-import { babFromText, normalizeBlock, featureKey } from './extensions.js';
+import { babFromText, minLevelIn, normalizeBlock, featureKey } from './extensions.js';
 import { isGuileSphere, sphereSide } from './rules.js';
 import { TEXT_STEPS, cleanText } from './text.js';
 
@@ -51,6 +51,16 @@ const clean = (s) => cleanText(s, [
   [/(^|\s)_([^_\n]+)_(?=\s|$|[.,;:])/g, '$1$2'], // _italic_
   TEXT_STEPS.trailing,
 ]);
+/*
+ * An ability's name with its type in brackets -- "Rage Powers (Ex)", "Step
+ * Up (Ex or Su)" -- the two ways a class page sets one: alone on a line as a
+ * heading, or inline with its text after a colon. The feature reader, the
+ * option-menu reader and the flavour scan all key on these, so they are said
+ * once.
+ */
+const TYPE_TAG = '(?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?';
+const TITLED_ABILITY = new RegExp(`^([A-Z][^\\n]{1,60}?)\\s*\\((${TYPE_TAG})\\)\\s*$`);
+const INLINE_ABILITY = new RegExp(`^([A-Z][^:\\n]{1,60}?)\\s*(?:\\((${TYPE_TAG})\\))?\\s*:\\s+(.{12,})$`);
 const lower = (s) => String(s || '').trim().toLowerCase();
 const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
 const isBlank = (line) => !line || !line.trim();
@@ -877,8 +887,8 @@ export function readClassTable(lines) {
  */
 export function readFeatureProse(lines, { skipLabels = new Set(), startAt = 0, tableKeys = new Set(), mark = () => {}, pre = new Set(), mode = 'class' } = {}) {
   const out = [];
-  const inline = /^([A-Z][^:\n]{1,60}?)\s*(?:\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\))?\s*:\s+(.{12,})$/;
-  const titleRe = /^([A-Z][^\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
+  const inline = INLINE_ABILITY;
+  const titleRe = TITLED_ABILITY;
   // a short capitalised line with no closing punctuation -- but not a swap sentence that lost its full stop ("This alters Iaijutsu Strike")
   const titleLike = (l) => l && words(l) <= 8 && /^[A-Z]/.test(l) && !/[.:;,]$/.test(l) && !inline.test(l) && !titleRe.test(l) && !/^This\b/.test(l) && !SWAP_SENTENCE.test(l);
   const nextNonBlank = (k) => { let j = k + 1; while (j < lines.length && (!lines[j].trim() || pre.has(j))) j++; return (lines[j] || '').trim(); };
@@ -2385,7 +2395,6 @@ export function readManeuver(lines, pre = new Set()) {
 
 const ARCH_INFO = /^(Classes Available|Options?|Systems?|Sources?|Requirements?|Prerequisites?)$/i;
 /** "A legendary samurai must be 5th level or higher to select this technique." */
-const MIN_LEVEL = /\bmust be (?:at least )?(\d{1,2})(?:st|nd|rd|th)? level(?: or higher)?\b/i;
 /** "Ultimate Psionics, pgs. 37–40" -- where a menu came from, not one of its entries. */
 const CITATION = /\bpgs?\.\s*\d/i;
 
@@ -2414,8 +2423,8 @@ function stripClassPrefix(s, className) {
 export function readOptionMenu(lines, { startAt = 0, pre = new Set(), className = '', name = '' } = {}) {
   const t = lines.map((l) => l.trim());
   const used = new Set();
-  const entry = /^([A-Z][^:\n]{1,60}?)\s*(?:\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\))?\s*:\s+(\S.*)$/;
-  const titled = /^([A-Z][^\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
+  const entry = new RegExp(`^([A-Z][^:\\n]{1,60}?)\\s*(?:\\((${TYPE_TAG})\\))?\\s*:\\s+(\\S.*)$`);
+  const titled = TITLED_ABILITY;
   const headingLike = (l) => !!l && words(l) <= 8 && /^[A-Z“"]/.test(l) && !/[.:;,!?]$/.test(l)
     && !l.includes('\t') && !CITATION.test(l) && !entry.test(l) && !titled.test(l);
   const nextText = (k) => { let j = k + 1; while (j < t.length && (!t[j] || pre.has(j))) j++; return t[j] || ''; };
@@ -2536,7 +2545,7 @@ export function readOptionMenu(lines, { startAt = 0, pre = new Set(), className 
   for (const o of options) {
     // The level an entry asks for: its own sentence, or the heading it sits
     // under where the page groups its entries by level ("7th Level").
-    o.minLevel = Number(o.text.match(MIN_LEVEL)?.[1])
+    o.minLevel = minLevelIn(o.text)
       || Number(o.category.match(/^(\d{1,2})(?:st|nd|rd|th) level$/i)?.[1]) || null;
     o.source = says(o.source) ? o.source : '';
     o.text = o.text.trim();
@@ -2653,8 +2662,8 @@ export function readArchetype(lines, pre = new Set()) {
   // Flavour: the paragraph(s) before the first feature -- or, in a plain
   // document, everything under a "Description" heading up to "Class Features".
   const flavour = [];
-  const inline = /^([A-Z][^:\n]{1,60}?)\s*(?:\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\))?\s*:\s+(.{12,})$/;
-  const titleRe = /^([A-Z][^\n]{1,60}?)\s*\(((?:Ex|Su|Sp)(?: or (?:Ex|Su|Sp))?)\)\s*$/;
+  const inline = INLINE_ABILITY;
+  const titleRe = TITLED_ABILITY;
   const descAt = t.findIndex((l, k) => k >= bodyStart && /^Description$/i.test(l));
   if (descAt !== -1) {
     mark(descAt);
@@ -2679,7 +2688,7 @@ export function readArchetype(lines, pre = new Set()) {
   // to the feature it names, as its options; the information entries under it
   // (a "Mapped:" condition) as its notes. A menu naming no feature gets one.
   const prose = read.filter((p) => !p.optionOf && !p.infoOf);
-  const minLevel = (t) => Number(String(t).match(/must be (?:at least |of )?(?:level )?(\d{1,2})(?:st|nd|rd|th)?(?: level)?(?: or higher)? to select/i)?.[1]) || null;
+  const minLevel = minLevelIn;
   for (const p of read) {
     if (!p.optionOf && !p.infoOf) continue;
     const section = p.optionOf || p.infoOf;

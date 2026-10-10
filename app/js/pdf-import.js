@@ -25,6 +25,8 @@
  * the app (`app/vendor/pdfjs`), loaded only when somebody chooses a PDF.
  */
 
+import { minLevelIn, splitAbilityType } from './extensions.js';
+
 const PDFJS = new URL('../vendor/pdfjs/pdf.min.mjs', import.meta.url).href;
 const PDFJS_WORKER = new URL('../vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
 
@@ -436,17 +438,19 @@ export function sectionOptions(section, { className = '', feature = '', book = '
   const cls = String(className).trim();
   const feat = String(feature).trim() || section.heading;
   const options = section.entries.map((e) => {
-    const typed = e.heading.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
+    const typed = splitAbilityType(e.heading);
     // "Level 2; Burn 1" in an entry's opening lines is what a player chooses
     // on, so it rides beside the name in the list.
     const opening = String(e.text).split(/\n{2,}/).slice(0, 2).join(' ');
     const facts = [...opening.matchAll(/\b(Level|Burn)\s+(\d+|[-–—])/g)].map((m) => `${m[1]} ${m[2]}`);
     return {
-      name: (typed ? typed[1] : e.heading).trim(),
-      type: typed ? typed[2] : '',
+      name: typed.name,
+      type: typed.type,
       category: [...new Set(facts)].join(', '),
       text: e.text,
       source: [book, e.page ? `p. ${e.page}` : ''].filter(Boolean).join(' '),
+      // The level it asks for, read the way every other route reads it.
+      minLevel: minLevelIn(e.text),
     };
   }).filter((o) => o.name);
   if (!options.length) return null;

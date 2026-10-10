@@ -7,7 +7,7 @@ import {
   EXTENSION_FORMAT, inspectExtension, normalizeExtension, normalizeBlock, blankExtension, slugId, babFromText,
   extensionStore, extensionKey, EXTENSIONS_KEY, mergeTables, registerTables, activeExtensions, activeBlocks, applyBlock,
   blocksFromCharacter, describeSummary, summarize, TABLE_KINDS, looksLikeExtension, loadBundledExtensions, parseReplaces,
-  isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey,
+  isPackKey, packsWorthMoving, mergeSphere, catalogueEntryKey, splitAbilityType, minLevelIn,
   swapKey, parseSwaps, parseStacksWith, archetypeStatus, removeArchetype,
   ruleForLevels, repeatColumns, optionCataloguesFrom, optionCataloguesFromTables, classFeatureTextFromTables, parseOptionReplaces, applyArchetype, swapsMeet,
 } from '../app/js/extensions.js';
@@ -54,6 +54,13 @@ check('slug from a name', slugId('Path of War: Expanded!'), 'path-of-war-expande
 check('slug strips accents', slugId('Dōkei Saburō'), 'dokei-saburo');
 check('slug of nothing', slugId('///'), '');
 check('bab words', [babFromText('Full'), babFromText('3/4'), babFromText('half'), babFromText('')], [1, 0.75, 0.5, 0.75]);
+// One reading of a name's ability type and of the level an option asks for,
+// for every route that files options (the paste, PDF and catalogue routes).
+check('a name and its ability type', [splitAbilityType('Rage Powers (Ex)'), splitAbilityType('Fury (su)'), splitAbilityType('Plain')],
+  [{ name: 'Rage Powers', type: 'Ex' }, { name: 'Fury', type: 'Su' }, { name: 'Plain', type: '' }]);
+check('the level an option asks for, however it is said',
+  ['Prerequisites: 6th-level', 'You must be at least 8th level or higher.', 'You must be level 4 to select this.', 'It must be 5 feet away.']
+    .map(minLevelIn), [6, 8, 4, null]);
 check('not an object', inspectExtension('nope').ok, false);
 check('wrong format', inspectExtension({ format: 'character-sheet' }).ok, false);
 check('newer format version refused', inspectExtension({ format: EXTENSION_FORMAT, formatVersion: 99, name: 'x' }).ok, false);

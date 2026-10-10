@@ -27,6 +27,7 @@ import { runtime } from './extension-runtime.js';
 import {
   BLOCK_KINDS, TABLE_KINDS, inspectExtension, normalizeExtension, normalizeBlock, blankExtension,
   describeSummary, summarize, slugId, looksLikeExtension, blocksFromCharacter, mergeSphere, catalogueEntryKey,
+  splitAbilityType,
 } from './extensions.js';
 import { parsePaste, readStructured, splitChunk } from './paste-import.js';
 import { SECTION_KINDS, guessTags, readSections } from './pdf-import.js';
@@ -1666,8 +1667,8 @@ export function parseClassFeatures(text) {
 /** "Name (Ex): text" -> {name, type, text}, one per line. */
 export function parseGroupFeatures(text) {
   return parseNamedLines(text).map(({ name, text: t }) => {
-    const m = name.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
-    return m ? { name: m[1].trim(), type: m[2][0].toUpperCase() + m[2].slice(1).toLowerCase(), text: t } : { name, type: null, text: t };
+    const split = splitAbilityType(name);
+    return { name: split.name, type: split.type || null, text: t };
   });
 }
 
@@ -1689,10 +1690,10 @@ export function parseMenuOptions(text) {
     let minLevel = null;
     const lvl = rest.match(/\s+(\d{1,2})(?:st|nd|rd|th)?\+$/);
     if (lvl) { minLevel = Number(lvl[1]); rest = rest.slice(0, lvl.index).trim(); }
-    const typed = rest.match(/^(.*?)\s*\((Ex|Su|Sp)\)\s*$/i);
+    const split = splitAbilityType(rest);
     return {
-      name: (typed ? typed[1] : rest).trim(),
-      type: typed ? typed[2][0].toUpperCase() + typed[2].slice(1).toLowerCase() : null,
+      name: split.name,
+      type: split.type || null,
       category,
       minLevel,
       text: t,
