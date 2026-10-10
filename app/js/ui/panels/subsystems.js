@@ -1504,9 +1504,9 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
    * matter in play in a strip. Then hit points, ability scores, defences and
    * saves, attacks, skills -- and the panels only one kind has: the eidolon's
    * evolutions, the animal companion's tricks and item slots, the conjured
-   * companion's contract (base form, archetypes) and talents. Everything not
-   * typed is worked out in `companions.js` from the tables the workbook's
-   * `dataSheet` carried (the wiki's, for the conjured companion), and reads
+   * companion's Archetype panel (base form, archetypes) and talents.
+   * Everything not typed is worked out in `companions.js` from the tables the
+   * workbook's `dataSheet` carried (the wiki's, for the conjured companion), and reads
    * back from a formula as `familiar.hp`, `eidolon.evoLeft`,
    * `animalCompanion.str.mod`, `conjured.summonCost`.
    *
@@ -1538,7 +1538,7 @@ export function companionPanel(model, kind) {
       ${companionScoresPanel(model, cc)}
       ${companionDefensePanel(model, cc)}
       ${companionSavesPanel(model, cc)}
-      ${kind === 'conjured' ? conjuredContractPanel(model, cc) : ''}
+      ${kind === 'conjured' ? conjuredArchetypePanel(model, cc) : ''}
       ${kind === 'conjured' ? conjuredCastingPanel(model, cc) : ''}
       ${companionAttacksPanel(model, cc)}
       ${kind === 'eidolon' ? eidolonEvolutionsPanel(model, cc) : ''}
@@ -2048,8 +2048,9 @@ function companionTricksPanel(model, cc) {
 
 
 /**
- * The conjured companion's contract: the base form as the sphere prints it,
- * and the archetypes it was called under.
+ * The conjured companion's Archetype panel: the base form as the sphere
+ * prints it, and the archetypes it was called under (the Conjuration sphere's
+ * own word for them).
  *
  * Most archetypes are rules prose the player applies through rows they
  * already own -- the warrior empties its own attacks list, the aquatic trades
@@ -2058,10 +2059,10 @@ function companionTricksPanel(model, cc) {
  * mindless and unwilling extra dice, the cheaper summon) are marked, and the
  * head's badges show the result.
  */
-function conjuredContractPanel(model, cc) {
+function conjuredArchetypePanel(model, cc) {
     const { p, b, k } = cc;
     return `<section class="panel">
-      <h3>Contract <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
+      <h3>Archetype <span class="badge">${k.summonCost ?? 1} sp to summon</span></h3>
       ${k.formLine ? `<p class="hint"><strong>${esc(b.baseForm)}:</strong> ${esc(k.formLine)}.
         Speeds and attacks are written into their own rows; the form’s scores and natural armour are already counted.</p>`
     : '<p class="hint">Pick a base form above for its printed stat line, saves and starting scores.</p>'}
