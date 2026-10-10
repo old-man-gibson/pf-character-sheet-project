@@ -218,6 +218,7 @@ function everywhere() {
   d.equipment.weapons[0] = { ...d.equipment.weapons[0], name: 'Glaive', dice: '1d10', special: 'reach {glaive.reach = 10}', miscDamage: 'floor(level / 4)' };
   d.formulaNotes = 'house rule {house.rule = 1}';
   d.identity.languageExtra = 'floor(level / 4)';
+  d.skillBudget = { ...(d.skillBudget || {}), bonusPerLevel: 'floor(level / 4)' };
   d.hp.misc = 'level';
   d.skills.find((s) => s.name === 'Bluff').offset = 'floor(level / 2)';
   d.skills.find((s) => s.name === 'Climb').rankSources.bought = 'level - 2';

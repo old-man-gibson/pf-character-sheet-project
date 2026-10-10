@@ -354,7 +354,9 @@ export function recomputeTrackers(model) {
       max = pool.max(model.data);
       if (pool.spent) t.current = pool.spent.get(model.data);
     } else if (t.maxFormula) {
-      try { max = toInt(evaluateFormula(t.maxFormula, scope)); } catch (err) { errs.push(`max: ${err.message}`); }
+      const r = evaluateAmount(t.maxFormula, scope);
+      max = toInt(r.value);
+      if (r.error) errs.push(`max: ${r.error}`);
     }
     t.max = max + t.forwardedMax;
     let min = 0;
@@ -362,7 +364,9 @@ export function recomputeTrackers(model) {
       // The max is already computed, so a symmetric meter can be written as
       // `-self.max` instead of repeating the whole max formula.
       const withMax = { ...scope, self: { max: t.max, current: Number(t.current) || 0 } };
-      try { min = toInt(evaluateFormula(t.minFormula, withMax)); } catch (err) { errs.push(`min: ${err.message}`); }
+      const r = evaluateAmount(t.minFormula, withMax);
+      min = toInt(r.value);
+      if (r.error) errs.push(`min: ${r.error}`);
     }
     t.min = min + t.forwardedMin;
     if (!errs.length && (Number(t.min) || 0) > (Number(t.max) || 0)) {

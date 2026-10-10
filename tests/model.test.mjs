@@ -2234,6 +2234,25 @@ console.log('the formula scope is built only where a formula needs it');
   check('a speed formula still reads the speeds above it', c.data.identity.speeds.map((sp) => sp.final), [30, 30]);
 }
 
+console.log('the last hand-written number-or-formula fields go through evaluateAmount');
+{
+  // Speeds were the one formula field that did not round down; the skill
+  // budget's bonus points per level were missing from the Formula Audit.
+  const c = new Character(blankDocument({ name: 'Amounts', level: 9 }));
+  c.data.identity.speeds = [{ type: 'Land', base: 30, bonus: '35 / 2' }];
+  c.data.skillBudget = { ...(c.data.skillBudget || {}), bonusPerLevel: 'floor(level / 4)' };
+  c.recompute();
+  check('a speed bonus rounds down, as every formula field does',
+    [c.data.identity.speeds[0].bonusNum, c.data.identity.speeds[0].final], [17, 47]);
+  const row = () => c.audit().find((r) => r.id === 'skill-budget-bonus');
+  check('bonus skill points per level are in the audit, with their place',
+    [row()?.value, row()?.status, row()?.place, c.data.skillBudget.bonusResolved], [2, 'ok', 'skillBudget', 2]);
+  c.data.skillBudget.bonusPerLevel = 'floor(';
+  c.recompute();
+  check('and a broken one is among the problems',
+    c.formulaProblems().some((p) => p.places.some((pl) => pl.place === 'skillBudget')), true);
+}
+
 console.log('a psionic class with no curve chosen manifests nothing');
 {
   const c = new Character(blankDocument({ name: 'Unset', level: 8 }));

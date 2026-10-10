@@ -373,6 +373,7 @@ function placeOf(model, ref) {
     /* ---------------- fields the audit names ---------------- */
     case 'skillRanks': return skillPlace(a, 'rankSources.bought');
     case 'skillMisc': return skillPlace(a, 'offset');
+    case 'skillBudget': return { tab: 'skills', sel: [set('skillBudget.bonusPerLevel')] };
     case 'weaponMisc': return weaponPlace(model, a, 'miscDamage');
     // The Other columns, the hit-point parts and the language slots are all on
     // the Overview's full page, beside the totals they belong to, in the

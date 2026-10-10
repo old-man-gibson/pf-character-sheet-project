@@ -7,9 +7,8 @@
  * here with any depth to it.
  */
 
-import { evaluateFormula } from '../formula.js';
-import { forwarded, scopeIfFormulas } from './scope.js';
-import { speedForwardKey } from './util.js';
+import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
+import { evaluateAmount, speedForwardKey } from './util.js';
 
 /**
  * Movement rates: base plus bonus, with the bonus allowed to be a formula.
@@ -33,18 +32,9 @@ export function recomputeSpeeds(model) {
   // against the skills.
   if (scope) scope.speed = {};
   for (const sp of speeds) {
-    sp.bonusError = null;
-    let bonus = 0;
-    if (typeof sp.bonus === 'string' && sp.bonus.trim() !== '') {
-      try {
-        const v = Number(evaluateFormula(sp.bonus, scope));
-        bonus = Number.isFinite(v) ? v : 0;
-      } catch (err) {
-        sp.bonusError = err.message;
-      }
-    } else {
-      bonus = Number(sp.bonus) || 0;
-    }
+    // Rounded down, as every formula field is.
+    const { value: bonus, error } = evaluateAmount(sp.bonus, scope);
+    sp.bonusError = error;
     sp.bonusNum = bonus;
     // A bonus forwarded here from elsewhere on the sheet is kept beside the
     // one typed in, never folded into it -- the same way a skill keeps its
@@ -73,18 +63,7 @@ export function recomputeLanguages(model) {
   const ling = (c.skills || [])
     .filter((s) => /^Linguistics\b/i.test(String(s.name || '')))
     .reduce((t, s) => t + (Number(s.totalRanks) || 0), 0);
-  let extra = 0;
-  let extraError = null;
-  if (typeof i.languageExtra === 'string' && i.languageExtra.trim() !== '') {
-    try {
-      const v = Number(evaluateFormula(i.languageExtra, model.scope()));
-      extra = Number.isFinite(v) ? Math.floor(v) : 0;
-    } catch (err) {
-      extraError = err.message;
-    }
-  } else {
-    extra = Number(i.languageExtra) || 0;
-  }
+  const { value: extra, error: extraError } = evaluateAmount(i.languageExtra, lazyScope(model));
   const known = (i.languages || []).filter((l) => String(l).trim()).length;
   i.languageSlots = {
     int, linguistics: ling, extra, extraError, total: int + ling + extra, known,

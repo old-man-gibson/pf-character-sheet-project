@@ -477,6 +477,17 @@ export const FORMULA_FIELDS = [
     },
   },
   {
+    // Bonus skill points per level, which may read only `level`.
+    key: 'skillBudget', source: 'skill', where: 'the Skills tab',
+    collect: (model) => {
+      const b = model.data.skillBudget;
+      return stringFormula(b?.bonusPerLevel) ? [{
+        id: 'skill-budget-bonus', place: 'skillBudget', name: 'Bonus skill points per level',
+        formula: b.bonusPerLevel, value: b.bonusResolved, error: b.bonusError,
+      }] : [];
+    },
+  },
+  {
     key: 'languages', source: 'player',
     collect: (model) => (stringFormula(model.data.identity?.languageExtra) ? [{
       id: 'languages-extra', place: 'languages', name: 'Extra language slots',

@@ -15,7 +15,6 @@ import {
   statMod, tempEssenceCost, trackCount, DEFAULT_TALENT_TRACKS,
 } from '../rules.js';
 import { emit } from './events.js';
-import { evaluateFormula } from '../formula.js';
 import { classHasLevel, ownLevelCount } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
@@ -1007,18 +1006,9 @@ export function applyBudget(model) {
   const level = Number(c.identity.level) || 0;
   const b = c.skillBudget || (c.skillBudget = { bonusPerLevel: 0, intPerLevel: 0 });
   b.intPerLevel = Number(c.abilities?.int?.mod) || 0;
-  b.bonusError = null;
-  let bonus = 0;
-  const raw = b.bonusPerLevel;
-  if (typeof raw === 'string' && raw.trim() !== '') {
-    try {
-      bonus = Math.floor(Number(evaluateFormula(raw, { level })) || 0);
-    } catch (err) {
-      b.bonusError = err.message;
-    }
-  } else {
-    bonus = Math.floor(Number(raw) || 0);
-  }
+  const { value, error } = evaluateAmount(b.bonusPerLevel, { level });
+  const bonus = Math.floor(value);
+  b.bonusError = error;
   b.bonusResolved = bonus;
   // A rule elsewhere on the sheet can grant a point per level -- see
   // `skill.pointsPerLevel` in FORWARD_LATE. Kept beside what the player typed
