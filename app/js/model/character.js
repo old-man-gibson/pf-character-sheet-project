@@ -103,12 +103,13 @@ import {
 } from './stats/wealth.js';
 import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {
-  cardAttuned, cardRef, cardRollFormulas, cardRollSpec, cardRolls, cardSiblings, castCheck, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
+  cardAttuned, cardOwner, cardRef, cardRollFormulas, cardRollSpec, cardRolls, cardSiblings, castCheck, casterFor, casterInfo,
+  deckSquad, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
   recomputeCardcasting, recomputeTable, rollFor, shareCardDice, shuffle, spellPointTracker, spendSP,
   tableBoost, tableBury, tableCard, tableDraw, tableEnd, tableExileRandom, tableInstances,
   tableKeywords, tableLog, tableMove, tableName, tableNextRound, tablePeek, tablePlay,
   tableRedraw, tableResolve, tableRetrace, tableReveal, tableRoll, tableSettle,
-  tableShuffleDiscard, tableSpend, tableStart, tableTap, tableTrigger,
+  tableShuffleDiscard, tableSpend, tableSquad, tableStart, tableTap, tableTrigger,
 } from './subsystems/cardcasting.js';
 import {
   addCompanion, companionDamage, companionHeal, companionMaster, companionOpenSlot, companionRest,
@@ -706,7 +707,7 @@ export class Character {
   #manaPlayCheck(...a) { return manaPlayCheck(this, ...a); }
   tableInstances(...a) { return tableInstances(this, ...a); }
   tableCard(...a) { return tableCard(this, ...a); }
-  #castCheck(...a) { return castCheck(this, ...a); }
+  castCheck(...a) { return castCheck(this, ...a); }
   #shuffle(...a) { return shuffle(this, ...a); }
   #tableLog(...a) { return tableLog(this, ...a); }
   #tableName(...a) { return tableName(this, ...a); }
@@ -730,6 +731,15 @@ export class Character {
   cardRolls(...a) { return cardRolls(this, ...a); }
   cardRef(...a) { return cardRef(this, ...a); }
   cardAttuned(...a) { return cardAttuned(this, ...a); }
+  cardOwner(...a) { return cardOwner(this, ...a); }
+  casterFor(...a) { return casterFor(this, ...a); }
+  casterInfo(...a) { return casterInfo(this, ...a); }
+  deckSquad(...a) { return deckSquad(this, ...a); }
+  tableSquad(id, present = null) {
+    const who = (this.data.cardcasting?.calc?.squad || []).find((m) => m.id === String(id))?.name || 'companion';
+    const joining = present === null ? !(this.data.cardcasting?.table?.squad || []).includes(String(id)) : !!present;
+    return this.play(`${who} ${joining ? 'joins' : 'leaves'} the table`, () => tableSquad(this, id, present));
+  }
   cardRollFormulas(...a) { return cardRollFormulas(this, ...a); }
   cardRollSpec(...a) { return cardRollSpec(this, ...a); }
   cardSiblings(...a) { return cardSiblings(this, ...a); }

@@ -2460,6 +2460,7 @@ export function cardcastingPanel(model, ctx) {
       </div>
       ${deckManipulationsPanel(model, p, k)}
       <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
+      ${(k.squad || []).length ? wrap('deck-squad', squadPanel(model, p, k)) : ''}
       ${deckTablePanel(model, ctx, p, k)}
       ${sideboardPanel(model, ctx, p)}
       <section class="panel span2">
@@ -2487,7 +2488,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
     const rolls = open && formulas.length ? `<div class="rolls">${formulas.map((f) => `<span class="roll"><b>${esc(f.label)}</b> ${esc(f.formula || f.source)}${f.sp ? ` <small>${f.sp} SP</small>` : ''}</span>`).join('')}</div>` : '';
     return `<div class="mcard mini ${frameClass}${tapped ? ' tapped' : ''}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}" data-card="${esc(id)}">
       <div class="bar title">
-        <span class="name">${esc(card.name || (isMana ? 'Mana Point' : card.effect || 'card'))}</span>
+        ${ownerTag(model, card)}<span class="name">${esc(card.name || (isMana ? 'Mana Point' : card.effect || 'card'))}</span>
         <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
         ${expandBtn(id, open)}
       </div>
@@ -2501,6 +2502,26 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
         <span class="pair tools">${buttons}</span>
       </div>
     </div>`;
+  }
+
+  /**
+   * The character's name short enough for a pick list or a heading: the
+   * nickname in quotes when there is one (Nicodemus "Nico" Vincent Marcone is
+   * Nico), else the first word.
+   */
+function shortName(name) {
+    const s = String(name || '').trim();
+    const nick = /["“]([^"”]+)["”]/.exec(s);
+    return nick ? nick[1].trim() : (s.split(/\s+/)[0] || 'you');
+  }
+
+  /** A squad member's card wears its owner's initial, so the borrowed cards read as borrowed. */
+function ownerTag(model, card) {
+    const owner = model.cardOwner(card);
+    if (!owner) return '';
+    const member = (model.data.cardcasting?.calc?.squad || []).find((m) => m.id === owner);
+    const name = member?.name || owner;
+    return `<span class="owner" title="${esc(`${name}'s card`)}">${esc(name.trim().charAt(0).toUpperCase() || '?')}</span>`;
   }
 
   /** The corner button that opens a card out, or folds it back: the same press wherever the card is. */
@@ -2566,6 +2587,8 @@ function tableState(model, ctx, p, k, view) {
       stagnant: !!p.mods.stagnantPool,
       peeked: faces.secrets ? (ctx.peek || []).filter((id) => (t.deck || []).slice(0, 3).includes(id)) : [],
       castPick: faces.hand ? ctx.castPick || null : null,
+      // The squad members at the table right now.
+      present: (tc.squad || []).filter((m) => m.present),
       copyText,
     };
     // A card opened out: the clamp comes off its text and its rolls are listed.
@@ -2624,6 +2647,15 @@ function tableHead(s) {
         ${sp ? tableBtn('sp', '', 'Spend 1 SP', { arg: 1, title: 'A spell point on something the cards do not know about — Retrace, Read the Cards, Fresh Hand…' }) : ''}
         ${tableBtn('end', '', 'End encounter', { title: 'Everything shuffled back into the deck', cls: 'danger' })}`
       : `${tableBtn('start', '', `Start encounter — draw ${k.openingHand ?? 2}${loaded ? ` + ${loaded}` : ''}`, { title: 'Shuffle every copy in the deck and draw the opening hand', cls: 'primary', disabled: !(k.deckSize > 0) })}`;
+    // The squad: each member in or out of the table, with its deck. A press
+    // is the player's, so the roster is drawn where the controls are; the
+    // shared screen only sees who is in.
+    const roster = (tc.squad || []).filter((m) => m.ok || m.present);
+    const squad = !roster.length ? '' : faces.controls
+      ? `<span class="pair squadctl" title="Multi-Headed Play: a member at the table has its deck shuffled in with yours, and may cast any card in the hand">
+          ${roster.map((m) => tableBtn('squad', m.id, `${m.present ? '✓' : '○'} ${esc(m.name)} <small>${m.cards}</small>`, { cls: m.present ? 'primary' : '', title: m.present ? `${m.name} is at the table: ${m.cards} cards in the deck — press to send ${m.name} away` : `Press when ${m.name} is summoned: ${m.cards} cards join the deck` }))}
+        </span>`
+      : '';
     // The two windows and the Roll20 switch: the sheet's own, since a window
     // opens from the page that owns the character.
     const windows = !faces.windows ? '' : `<span class="pair winctl">
@@ -2640,7 +2672,9 @@ function tableHead(s) {
     if (active && p.mods.bleedingHand) notes.push(`Bleeding Hand: discard a card for each ${p.mods.bleedingHand === 2 ? 'action' : 'standard or full-round action'} that does not play or discard one.`);
 
     const lastRoll = t.lastRoll && model.tableCard(t.lastRoll.id)
-      ? `<span class="badge roll" title="${esc(t.lastRoll.source)}">🎲 ${esc(model.tableCard(t.lastRoll.id).name || 'roll')}: [${t.lastRoll.rolls.join(', ')}]${t.lastRoll.flat ? ` ${t.lastRoll.flat >= 0 ? '+' : '−'} ${Math.abs(t.lastRoll.flat)}` : ''} = <b>${t.lastRoll.total}</b></span>` : '';
+      ? `<span class="badge roll" title="${esc(t.lastRoll.source)}">🎲 ${t.lastRoll.whoName ? `${esc(t.lastRoll.whoName)}: ` : ''}${esc(model.tableCard(t.lastRoll.id).name || 'roll')}: [${t.lastRoll.rolls.join(', ')}]${t.lastRoll.flat ? ` ${t.lastRoll.flat >= 0 ? '+' : '−'} ${Math.abs(t.lastRoll.flat)}` : ''} = <b>${t.lastRoll.total}</b></span>` : '';
+    const present = (tc.squad || []).filter((m) => m.present);
+    const withBadge = present.length ? `<span class="badge" title="Multi-Headed Play: their decks are shuffled in with yours">with ${esc(present.map((m) => m.name).join(', '))}</span>` : '';
 
     return `<section class="panel span2 tablehead">
       <h3>${active ? `Round ${t.round}` : 'No encounter'}
@@ -2650,13 +2684,14 @@ function tableHead(s) {
         ${p.cooldown ? `<span class="badge">${tc.inDiscard ?? 0} in discard</span>` : ''}
         ${tc.inPlay ? `<span class="badge">${tc.inPlay} in play</span>` : ''}
         ${k.landAttuned ? `<span class="badge" title="${esc(k.landAttunedWhy)}">land-attuned: mana pays ×2</span>` : ''}
+        ${withBadge}
         ${!faces.controls ? '' : sp ? `<span class="badge ${spLeft <= 0 ? 'err' : ''}" title="${esc(sp.name)}: casts are paid from this tracker">${spLeft} of ${sp.max} SP</span>`
     : '<span class="badge" title="Add a tracker named Spell Points and casts will be paid from it">no SP tracker</span>'}
         ${lastRoll}
         ${t.counters ? `<span class="badge" title="Perfect Draw's counters">[Ante] ${esc(model.tableCard(t.counters.id)?.name || '')}: ${t.counters.early} Early · ${t.counters.late} Late</span>` : ''}
       </h3>
       ${t.lastTrigger ? `<p class="hint trig">${esc(t.lastTrigger)}</p>` : ''}
-      ${controls || windows ? `<div class="pair tablectl">${controls}${windows}</div>` : ''}
+      ${controls || windows || squad ? `<div class="pair tablectl">${controls}${squad}${windows}</div>` : ''}
       ${notes.length ? `<ul class="hint" style="margin:8px 0 0 1.1rem;padding:0">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
       ${!active && faces.controls ? `<p class="hint">At initiative: shuffle the deck and draw ${k.openingHand ?? 2} (1 + casting modifier, at least 2)${loaded ? ` plus ${loaded} for Loaded Hand` : ''}.
         ${p.manaPool ? ` Mana Point cards drawn go straight to the table${p.mods.gradualRamp ? ' — except under Gradual Ramp, where they wait in hand and one is played a round' : ''}.` : ''}
@@ -2677,20 +2712,28 @@ function tableHead(s) {
    * and each option holds its own Roll20 text, so a window copies the mode
    * that was cast and not the whole card.
    */
-function castPicker(s, id, card, modes) {
+function castPicker(s, id, card, modes, casters = []) {
     const { model, ctx, p } = s;
     const copy = (label) => (p.copyOnCast ? rollText(model.cardRollSpec(id, label), ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '');
     const first = modes[0];
+    // Who casts it, when the squad is at the table: the card's owner first.
+    const byDefault = model.casterFor(null, card);
+    const who = !casters.length ? '' : `<label class="pickrow">Cast by
+          <select name="who" aria-label="Cast by">
+            ${casters.map((c) => `<option value="${esc(c.id)}"${c.id === byDefault ? ' selected' : ''}>${esc(c.name)} (CL ${c.cl})</option>`).join('')}
+          </select>
+        </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
       <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
       <div class="text">
-        <label class="pickrow">Mode
+        ${who}
+        ${modes.length ? `<label class="pickrow">Mode
           <select name="mode" aria-label="Mode">
             ${modes.map((m) => `<option value="${esc(m.label)}" data-sp="${m.sp}"${copy(m.label) ? ` data-copytext="${esc(copy(m.label))}"` : ''}>${esc(m.label)}${m.formula ? ` — ${esc(m.formula)}` : m.source ? ` — ${esc(m.source)}` : ''}${m.sp ? ` (${m.sp} SP)` : ''}</option>`).join('')}
           </select>
-        </label>
+        </label>` : ''}
         <label class="pickrow">Spell points on top of the cost
-          <input type="number" name="sp" min="0" step="1" value="${first.sp || 0}" aria-label="Spell points to spend">
+          <input type="number" name="sp" min="0" step="1" value="${first?.sp || 0}" aria-label="Spell points to spend">
         </label>
       </div>
       <div class="foot"><span class="pair tools">
@@ -2715,10 +2758,12 @@ function handZone(s) {
       // A card with several Dice entries is asked which, and for how many
       // points, on the way in: Cast… opens the chooser in the card's place.
       const modes = isEffect ? model.cardRollFormulas(card) : [];
-      const asks = modes.length > 1;
-      if (asks && s.castPick === id) return castPicker(s, id, card, modes);
+      // With squad members at the table, every cast asks who casts it.
+      const casters = isEffect && s.present.length ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
+      const asks = modes.length > 1 || casters.length > 0;
+      if (asks && s.castPick === id) return castPicker(s, id, card, modes, casters);
       const castBtns = !isEffect ? '' : asks
-        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one, and the spell points to put into it`, cls: 'primary' })
+        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length > 1 ? `${modes.length} modes: pick one, ` : ''}${casters.length ? 'who casts it, ' : ''}and the spell points to put into it`, cls: 'primary' })
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
           + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy });
       return cardMini(model, id, {
@@ -3193,6 +3238,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${manaChips(card.mana, '')}
         </span>
         ${inDeck ? `<span class="pair" title="Copies in the deck">×${itemNum(list, i, 'qty', card.qty)}</span>` : ''}
+        ${(p.calc?.squad || []).length ? `<span class="pair" title="Whose deck this card belongs to">${itemSelect(list, i, 'owner', card.owner || '', [['', shortName(model.casterInfo('').name)], ...p.calc.squad.map((m) => [m.id, m.name])], null)}</span>` : ''}
         <label class="chk" title="A technique card"><input type="checkbox" ${card.tech ? 'checked' : ''} data-item="${list}|${i}|tech" data-kind="bool"><span>tech</span></label>
         ${inDeck && p.useD100 && range ? `<span class="roll" title="d100 roll for this card">${esc(range)}</span>` : ''}
       </div>
@@ -3226,6 +3272,7 @@ function cardDicePresets(stat) {
       ['{1+floor(caster.level/2)}d8', '1d8 + 1d8 per 2 caster levels'],
       [`+${mod}`, `+ casting modifier (${mod})`],
       ['+caster.level', '+ caster level'],
+      ['+caster.mod', '+ the caster’s modifier, whoever casts it'],
       ['; boost (1 SP): ', 'a boosted roll, for 1 SP (a second line)'],
       ['; ', 'another roll, with its own name'],
     ];
@@ -3292,12 +3339,73 @@ function deckTablePanel(model, ctx, p, k) {
         <span class="t">·</span>
         ${Object.entries(alignTally).map(([a, n]) => `<span class="t">${esc(a)} <span class="n">${n}</span></span>`).join('')}
       </div>` : ''}
-      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p)).join('')}</div>`
-    : '<p class="empty">No cards yet. A deck needs at least 20.</p>'}
-      <div class="pair" style="margin-top:10px">
-        ${addButton(list, 'Add effect card', newCard({}))}
-        ${addButton(list, 'Add mana point card', newCard({ cost: '', mana: (k.colorsInPlay || 'R').slice(0, 1) }))}
-      </div>
+      ${deckGroups(model, ctx, p, k, list, cards, newCard)}
+    </section>`;
+  }
+
+  /**
+   * The faces, the character's own first and then each squad member's under
+   * its own heading with its own add buttons: a companion's deck is built
+   * here beside the character's and travels with the owner it is given.
+   * With no squad there is one group and no heading.
+   */
+function deckGroups(model, ctx, p, k, list, cards, newCard) {
+    const squad = k.squad || [];
+    const owners = [{ id: '', name: shortName(model.casterInfo('').name), colors: k.colorsInPlay || 'R', deck: k }, ...squad];
+    const faces = (own) => cards.map((card, i) => (model.cardOwner(card) === own ? cardFace(model, ctx, list, i, card, p) : '')).join('');
+    const adds = (own, colors) => `<div class="pair" style="margin-top:10px">
+        ${addButton(list, 'Add effect card', newCard({ owner: own }))}
+        ${addButton(list, 'Add mana point card', newCard({ cost: '', mana: (colors || 'R').slice(0, 1), owner: own }))}
+      </div>`;
+    if (!squad.length) {
+      return `${cards.length ? `<div class="cardgrid">${faces('')}</div>` : '<p class="empty">No cards yet. A deck needs at least 20.</p>'}${adds('', k.colorsInPlay)}`;
+    }
+    return owners.map((o) => {
+      const mine = cards.filter((card) => model.cardOwner(card) === o.id);
+      const d = o.id ? o.deck : k;
+      return `<div class="deckgroup">
+        <h4 class="subhead">${esc(o.name)}’s deck
+          <span class="badge">${d.deckSize ?? 0} cards</span>
+          ${o.id ? `${manaChips(o.colors, '')}${o.ok ? '' : `<span class="badge err" title="${esc(o.why)}">cannot combine</span>`}${d.issues?.length ? `<span class="badge err" title="${esc(d.issues.join('\n'))}">${d.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}` : ''}
+        </h4>
+        ${mine.length ? `<div class="cardgrid">${faces(o.id)}</div>` : `<p class="empty">${o.id ? `No cards yet for ${esc(o.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
+        ${adds(o.id, o.colors)}
+      </div>`;
+    }).join('');
+  }
+
+  /**
+   * The squad: Multi-Headed Play's members and whether each deck may combine.
+   * A companion is listed when it has a casting tradition of its own; it
+   * joins when that tradition lists Card Casting and the same switches as the
+   * character's -- Colored Mana's colours excepted, which are its own.
+   */
+function squadPanel(model, p, k) {
+    const squad = k.squad || [];
+    if (!squad.length) return '';
+    const c = k.combined || {};
+    return `<section class="panel span2">
+      <h3>Squad — Multi-Headed Play
+        <span class="badge">${c.members || 0} deck${c.members === 1 ? '' : 's'} combine</span>
+        <span class="badge" title="Every deck together, when every member is at the table">${c.deckSize ?? 0} cards in all</span>
+        ${c.colors ? `<span class="pair">${manaChips(c.colors, '')}</span>` : ''}
+      </h3>
+      <p class="hint">A squad member's deck shuffles in with yours while it is at the table (the roster under the table's
+        controls), and any member may cast any card in the hand, on its own caster level, modifier and spell points — write
+        a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
+        tradition must list Card Casting with the same switches as yours; its Colored Mana colours are its own. Your deck
+        feats and manipulations stay yours.</p>
+      ${squad.map((m) => `<div class="squadrow">
+        <div class="what"><strong>${esc(m.name)}</strong>
+          <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
+          ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
+          ${manaChips(m.colors, '')}
+          <span class="badge">${m.deck.deckSize} cards</span>
+          ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
+          ${!m.ok && m.why ? `<p class="hint">${esc(m.why)}.</p>` : ''}
+        </div>
+        <div class="hint">${m.pool ? `points from ${esc(m.name)}’s own pool` : ''}</div>
+      </div>`).join('')}
     </section>`;
   }
 

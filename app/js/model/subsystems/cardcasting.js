@@ -16,6 +16,7 @@ import { evaluateAmount } from '../util.js';
 import { sphereTally } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
 import { clampTracker, poolTracker } from '../trackers.js';
+import { companionById, companionEntries } from '../../companions.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
 export const CARD_COLORS = [
@@ -165,6 +166,127 @@ export function deckFeatNames(d) {
 function allFeatNames(d) {
   const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g.entries || []) : Object.values(d?.feats || {});
   return groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name || '')) : []));
+}
+
+/* ------------------------------------------------------------------ *
+ * The squad: Multi-Headed Play.
+ *
+ * "You may combine the spell decks, hands, and discard piles of any of your
+ * squadron members that share the Card Casting drawback (as well as the same
+ * associated combination of additions such as Cooldown and Mana Pool). Any
+ * member may use their actions to create an effect by playing a card, using
+ * their own class level, caster level, MSB, and MSD rather than those of the
+ * card's original owner."
+ *
+ * So there is one deck list, and each card knows its owner: the character
+ * (blank) or a companion that casts off its own deck. A companion is in the
+ * squad when its casting tradition lists Card Casting; it must match the
+ * character's switches -- Cooldown, Mana Pool and the modifications -- but
+ * Colored Mana's colours are its own, which is the point: a companion's deck
+ * brings the colours the character does not run. At the table a member is
+ * present or not (its cards shuffled in or out), and a cast names who casts
+ * it, whose caster level, modifier and spell points it then uses. Deck feats
+ * and manipulations stay with whoever has them.
+ * ------------------------------------------------------------------ */
+
+/** The switches a member's drawbacks must match, each with the name a tradition writes. */
+const SQUAD_SWITCHES = [
+  ['cooldown', /^cooldown\b/i, 'Cooldown'], ['manaPool', /^mana pool\b/i, 'Mana Pool'], ['manaGraveyard', /^mana graveyard\b/i, 'Mana Graveyard'],
+  ['bleedingHand', /^bleeding hand\b/i, 'Bleeding Hand'], ['coloredMana', /^colou?red mana\b/i, 'Colored Mana'], ['deckout', /^deckout\b/i, 'Deckout'],
+  ['exposedGrip', /^exposed grip\b/i, 'Exposed Grip'], ['gradualRamp', /^gradual ramp\b/i, 'Gradual Ramp'], ['lifeboundDeck', /^lifebound deck\b/i, 'Lifebound Deck'],
+  ['singleton', /^singleton\b/i, 'Singleton'], ['stagnantPool', /^stagnant pool\b/i, 'Stagnant Pool'], ['strikableAssets', /^strikable assets\b/i, 'Strikable Assets'],
+  ['tightHand', /^tight hand\b/i, 'Tight Hand'],
+];
+
+/** The character's switches, on or off, by the same keys. */
+function deckSwitches(p) {
+  const out = { cooldown: !!p.cooldown, manaPool: !!p.manaPool, manaGraveyard: !!p.manaGraveyard };
+  for (const m of CARD_MODIFICATIONS) out[m.key] = m.kind === 'bool' ? !!p.mods?.[m.key] : Number(p.mods?.[m.key]) > 0;
+  return out;
+}
+
+/**
+ * The companions that could be squad members: every one with a casting
+ * tradition of its own, read for Card Casting and the switches. `ok` is
+ * whether the feat lets its deck combine with the character's.
+ */
+export function deckSquad(model) {
+  const p = model.data.cardcasting;
+  if (!p) return [];
+  const mine = deckSwitches(p);
+  const owners = new Set((p.cards || []).map((card) => String(card.owner ?? '')).filter(Boolean));
+  // A candidate is a companion whose tradition lists Card Casting, or one
+  // that owns cards already -- not every blank companion on the sheet.
+  return companionEntries(model.data).filter(({ b }) => b && b.tradition && String(b.id ?? '') !== '').map(({ kind, b }) => {
+    const drawbacks = (b.tradition.drawbacks || []).map((x) => String(typeof x === 'object' ? x?.name ?? '' : x ?? '').trim()).filter(Boolean);
+    const cardCasting = drawbacks.some((x) => /^card\s*cast/i.test(x));
+    if (!cardCasting && !owners.has(String(b.id))) return null;
+    const theirs = Object.fromEntries(SQUAD_SWITCHES.map(([key, re]) => [key, drawbacks.some((x) => re.test(x))]));
+    const mismatch = SQUAD_SWITCHES.filter(([key]) => !!mine[key] !== !!theirs[key]).map(([key, , label]) => `${label} ${mine[key] ? 'missing' : 'extra'}`);
+    const coloured = drawbacks.find((x) => /^colou?red mana/i.test(x));
+    const named = coloured ? normalizeColors((/\(([^)]*)\)/.exec(coloured) || [])[1] || '') : '';
+    const casting = b.calc?.casting || null;
+    const mod = Number(b.calc?.scores?.cha?.mod) || 0;
+    const cl = Number(casting?.cl) || 0;
+    return {
+      id: String(b.id), kind, name: String(b.name || '').trim() || String(b.id),
+      cardCasting, mismatch, ok: cardCasting && !mismatch.length,
+      why: !cardCasting ? 'its tradition does not list Card Casting' : mismatch.length ? `switches differ: ${mismatch.join(', ')}` : '',
+      namedColors: named, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
+      dc: 10 + Math.floor(cl / 2) + mod, msb: cl, msd: 11 + cl,
+      pool: `sp:${b.id}`,
+    };
+  }).filter(Boolean);
+}
+
+/** A card's owner as the deck reads it: a squad member's id, or '' for the character. */
+export function cardOwner(model, card) {
+  return String(card?.calc?.owner ?? '');
+}
+
+/**
+ * Who casts a card: `who` when it names a member, else the card's owner when
+ * that member is at the table, else the character. '' is the character.
+ */
+export function casterFor(model, who, card) {
+  const t = model.data.cardcasting?.table;
+  const present = new Set(t?.squad || []);
+  const members = model.data.cardcasting?.calc?.squad || [];
+  const known = (id) => id && members.some((m) => m.id === id);
+  // Named is named: '' is the character, a member's id is that member, and
+  // an id the deck no longer knows falls back to the character. Only an
+  // unnamed caster (null) is read off the card.
+  if (who !== null && who !== undefined) return known(String(who)) ? String(who) : '';
+  const owner = cardOwner(model, card);
+  return known(owner) && (present.has(owner) || !t?.active) ? owner : '';
+}
+
+/**
+ * The numbers a cast runs on: the caster's level, modifier, DC, MSB, MSD and
+ * spell pool. For the character these are the sheet's own; `mod` is the
+ * deck's casting modifier, so a card may say `caster.mod` and be right for
+ * whoever casts it.
+ */
+export function casterInfo(model, who = '') {
+  const p = model.data.cardcasting;
+  const k = p?.calc || {};
+  const member = who ? (k.squad || []).find((m) => m.id === who) : null;
+  if (member) {
+    return {
+      id: member.id, name: member.name, pool: member.pool, mine: false,
+      local: { caster: { level: member.cl, mod: member.mod, dc: member.dc, msb: member.msb, msd: member.msd }, level: member.level },
+    };
+  }
+  return { id: '', name: String(model.data.identity?.name || model.data.name || 'you'), pool: 'sp', mine: true, local: { caster: { mod: Number(k.cam) || 0 } } };
+}
+
+/** The formula scope with the caster's numbers laid over the sheet's. */
+function casterScope(model, who) {
+  const base = model.scope();
+  const { local } = casterInfo(model, who);
+  const out = { ...base, caster: { ...(base.caster || {}), ...(local.caster || {}) } };
+  if (local.level !== undefined) out.level = local.level;
+  return out;
 }
 
 /** Uppercase colour letters only, in first-seen order: "u/b" → "UB". */
@@ -611,54 +733,46 @@ export function recomputeCardcasting(model) {
     }
     return '';
   };
+  // The squad: companions whose own deck may combine with this one. A card
+  // owned by a companion that is gone is the character's again, and said so.
+  const squadMembers = deckSquad(model);
+  const memberIds = new Set(squadMembers.map((m) => m.id));
+  let orphaned = 0;
   for (const card of [...p.cards, ...p.sideboard]) {
     const own = card.color;
     const fromSphere = own ? '' : sphereColor(card.sphere);
     const colors = own || fromSphere || (String(card.effect || '').trim() ? '' : card.mana);
     // Veilweaving sits outside sphere magic, so its cards are artifacts.
     const artifact = /veil/i.test(`${card.sphere || ''} ${card.tags || ''}`);
-    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact };
+    card.owner = String(card.owner ?? '');
+    const owner = memberIds.has(card.owner) ? card.owner : '';
+    if (card.owner && !owner) orphaned++;
+    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact, owner };
   }
 
-  // ---- the deck's shape ----
-  const inDeck = p.cards.filter((card) => card.qty > 0);
-  const deckSize = inDeck.reduce((n, card) => n + card.qty, 0);
-  const isEffect = (card) => card.effect.trim() !== '';
-  const effectCards = inDeck.filter(isEffect).reduce((n, card) => n + card.qty, 0);
-  const manaCards = inDeck.filter((card) => card.mana).reduce((n, card) => n + card.qty, 0);
-  const pureMana = inDeck.filter((card) => !isEffect(card) && card.mana).reduce((n, card) => n + card.qty, 0);
-  const fused = inDeck.filter((card) => isEffect(card) && card.mana).reduce((n, card) => n + card.qty, 0);
+  // ---- the deck's shape: the character's own cards ----
+  const own = p.cards.filter((card) => card.qty > 0 && !card.calc.owner);
+  const figures = deckFigures(own, { cam, rainbow, mods: p.mods, colors: p.colors });
+  const {
+    deckSize, effectCards, manaCards, pureMana, fused, effects, spreadMax, spreadMin,
+    colorTally, sphereTally, suitTally, alignTally, colorsInPlay,
+  } = figures;
 
-  // Copies of each distinct effect. The rule reads "identical effect", so the
-  // name is what is compared -- case and spacing aside.
-  const effectCounts = new Map();
-  for (const card of inDeck) {
-    if (!isEffect(card)) continue;
-    const key = card.effect.trim().replace(/\s+/g, ' ').toLowerCase();
-    const row = effectCounts.get(key) || { effect: card.effect.trim(), count: 0, sphere: card.sphere || '' };
-    row.count += card.qty;
-    effectCounts.set(key, row);
-  }
-  const effects = [...effectCounts.values()].sort((a, b) => b.count - a.count || a.effect.localeCompare(b.effect));
-  const spreadMax = effects.length ? Math.max(...effects.map((e) => e.count)) : 0;
-  const spreadMin = effects.length ? Math.min(...effects.map((e) => e.count)) : 0;
-
-  // ---- per colour, per sphere, per suit ----
-  const colorTally = Object.fromEntries(CARD_COLORS.map(([k]) => [k, { effects: 0, mana: 0 }]));
-  const sphereTally = {};
-  const suitTally = {};
-  const alignTally = {};
-  for (const card of inDeck) {
-    // A two-colour effect (Rainbow Efficiency) is of each of its colours.
-    if (isEffect(card)) for (const k of card.calc.colors) if (colorTally[k]) colorTally[k].effects += card.qty;
-    for (const m of card.mana) if (colorTally[m]) colorTally[m].mana += card.qty;
-    if (card.sphere) sphereTally[card.sphere] = (sphereTally[card.sphere] || 0) + card.qty;
-    if (card.suit) suitTally[card.suit] = (suitTally[card.suit] || 0) + card.qty;
-    if (card.alignment) alignTally[card.alignment] = (alignTally[card.alignment] || 0) + card.qty;
-  }
-  // The colours in play: what the player named, else every colour a card uses.
-  const colorsInPlay = p.colors
-    || CARD_COLORS.map(([k]) => k).filter((k) => colorTally[k].effects || colorTally[k].mana).join('');
+  // ---- each squad member's deck, checked as its own ----
+  const squad = squadMembers.map((m) => {
+    const cards = p.cards.filter((card) => card.qty > 0 && card.calc.owner === m.id);
+    const used = CARD_COLORS.map(([k]) => k).filter((k) => cards.some((card) => card.calc.colors.includes(k) || card.mana.includes(k))).join('');
+    const colors = m.namedColors || used;
+    // Its own casting modifier sets its spread; the character's deck feats
+    // do not reach it, so no Rainbow Efficiency.
+    const deck = deckFigures(cards, { cam: m.mod, rainbow: 0, mods: p.mods, colors, coloredCount: colors.length || null });
+    return { ...m, colors, deck };
+  });
+  const combined = {
+    deckSize: deckSize + squad.reduce((n, m) => n + m.deck.deckSize, 0),
+    colors: [...new Set([...colorsInPlay, ...squad.flatMap((m) => [...m.colors])])].join(''),
+    members: squad.filter((m) => m.ok).length,
+  };
 
   // ---- draw ranges: card n covers the copies before it ----
   let cursor = 0;
@@ -670,40 +784,11 @@ export function recomputeCardcasting(model) {
   }
 
   // ---- the checks ----
-  const issues = [];
+  const issues = [...figures.issues];
   const mods = p.mods;
-  if (deckSize && deckSize < 20) issues.push(`The deck holds ${deckSize} cards; the rules want at least 20.`);
-  if (effects.length && spreadMax - spreadMin > cam) {
-    issues.push(`Copies of one effect range from ${spreadMin} to ${spreadMax}, a spread of ${spreadMax - spreadMin}; the casting modifier allows ${cam}.`);
-  }
-  if (mods.coloredMana) {
-    const n = mods.coloredMana;
-    // Rainbow Efficiency loosens the balance: ¾ of effects may share a
-    // colour with three colours in play, ½ with five.
-    const share = n === 5 ? (rainbow ? 0.5 : 0.25) : (rainbow ? 0.75 : 0.5);
-    const named = colorsInPlay.split('').filter(Boolean);
-    if (named.length && named.length !== n) {
-      issues.push(`Colored Mana names ${n} colours but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
-    }
-    for (const k of named) {
-      const t = colorTally[k];
-      if (t && effectCards && t.effects === 0) issues.push(`No ${CARD_COLORS.find(([x]) => x === k)[1]} effect in the deck; every colour needs at least one.`);
-      if (t && effectCards && t.effects > effectCards * share) {
-        const cap = share === 0.75 ? 'three quarters' : share === 0.5 ? 'half' : 'quarter';
-        issues.push(`${CARD_COLORS.find(([x]) => x === k)[1]} effects are ${t.effects} of ${effectCards}, over the ${cap} ${rainbow ? 'Rainbow Efficiency' : 'Colored Mana'} allows.`);
-      }
-    }
-    // A card may cost as many colours as the feats allow: two with Rainbow
-    // Efficiency, up to five with Improved and Colored Mana taken twice.
-    const maxColors = rainbow === 2 ? (n === 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
-    const over = inDeck.filter((card) => card.color.length > maxColors);
-    if (over.length) {
-      issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} colour${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
-    }
-  }
-  if (mods.singleton) {
-    const dupes = effects.filter((e) => e.count > 1);
-    if (dupes.length) issues.push(`Singleton: ${dupes.map((e) => `${e.effect} ×${e.count}`).join(', ')}.`);
+  if (orphaned) issues.push(`${orphaned} card${orphaned === 1 ? '' : 's'} belong${orphaned === 1 ? 's' : ''} to a companion that is no longer on the sheet; counted as yours until given an owner.`);
+  for (const m of squad) {
+    if (m.deck.deckSize && !m.ok) issues.push(`${m.name}'s deck cannot combine with yours — ${m.why}.`);
   }
   if (p.manaGraveyard && !(p.cooldown && p.manaPool)) issues.push('Mana Graveyard needs both Cooldown and Mana Pool.');
   for (const m of CARD_MODIFICATIONS) {
@@ -772,6 +857,8 @@ export function recomputeCardcasting(model) {
   p.calc = {
     landAttuned,
     landAttunedWhy,
+    squad,
+    combined,
     stat,
     cam,
     openingHand,
@@ -804,6 +891,96 @@ export function recomputeCardcasting(model) {
   };
 
   recomputeTable(model);
+}
+
+/**
+ * One deck's figures and the checks the rules make of it, for whichever
+ * member's cards these are: size and the minimum of 20, effect and mana
+ * counts, copies of each effect against the spread the casting modifier
+ * allows, the colour tallies and Colored Mana's balance, Singleton. The
+ * checks that are about the character rather than a deck -- the ladder's
+ * prerequisites, the manipulations -- are the caller's.
+ */
+function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }) {
+  const isEffect = (card) => card.effect.trim() !== '';
+  const deckSize = inDeck.reduce((n, card) => n + card.qty, 0);
+  const effectCards = inDeck.filter(isEffect).reduce((n, card) => n + card.qty, 0);
+  const manaCards = inDeck.filter((card) => card.mana).reduce((n, card) => n + card.qty, 0);
+  const pureMana = inDeck.filter((card) => !isEffect(card) && card.mana).reduce((n, card) => n + card.qty, 0);
+  const fused = inDeck.filter((card) => isEffect(card) && card.mana).reduce((n, card) => n + card.qty, 0);
+
+  // Copies of each distinct effect. The rule reads "identical effect", so the
+  // name is what is compared -- case and spacing aside.
+  const effectCounts = new Map();
+  for (const card of inDeck) {
+    if (!isEffect(card)) continue;
+    const key = card.effect.trim().replace(/\s+/g, ' ').toLowerCase();
+    const row = effectCounts.get(key) || { effect: card.effect.trim(), count: 0, sphere: card.sphere || '' };
+    row.count += card.qty;
+    effectCounts.set(key, row);
+  }
+  const effects = [...effectCounts.values()].sort((a, b) => b.count - a.count || a.effect.localeCompare(b.effect));
+  const spreadMax = effects.length ? Math.max(...effects.map((e) => e.count)) : 0;
+  const spreadMin = effects.length ? Math.min(...effects.map((e) => e.count)) : 0;
+
+  // ---- per colour, per sphere, per suit ----
+  const colorTally = Object.fromEntries(CARD_COLORS.map(([k]) => [k, { effects: 0, mana: 0 }]));
+  const sphereTally = {};
+  const suitTally = {};
+  const alignTally = {};
+  for (const card of inDeck) {
+    // A two-colour effect (Rainbow Efficiency) is of each of its colours.
+    if (isEffect(card)) for (const k of card.calc.colors) if (colorTally[k]) colorTally[k].effects += card.qty;
+    for (const m of card.mana) if (colorTally[m]) colorTally[m].mana += card.qty;
+    if (card.sphere) sphereTally[card.sphere] = (sphereTally[card.sphere] || 0) + card.qty;
+    if (card.suit) suitTally[card.suit] = (suitTally[card.suit] || 0) + card.qty;
+    if (card.alignment) alignTally[card.alignment] = (alignTally[card.alignment] || 0) + card.qty;
+  }
+  // The colours in play: what the player named, else every colour a card uses.
+  const colorsInPlay = colors
+    || CARD_COLORS.map(([k]) => k).filter((k) => colorTally[k].effects || colorTally[k].mana).join('');
+
+  const issues = [];
+  if (deckSize && deckSize < 20) issues.push(`The deck holds ${deckSize} cards; the rules want at least 20.`);
+  if (effects.length && spreadMax - spreadMin > cam) {
+    issues.push(`Copies of one effect range from ${spreadMin} to ${spreadMax}, a spread of ${spreadMax - spreadMin}; the casting modifier allows ${cam}.`);
+  }
+  if (mods.coloredMana) {
+    // How many colours this deck's Colored Mana names: the switch's three or
+    // five for the character; a squad member's own count, since its colours
+    // are its own.
+    const n = coloredCount ?? mods.coloredMana;
+    // Rainbow Efficiency loosens the balance: ¾ of effects may share a
+    // colour with three colours in play, ½ with five.
+    const share = n >= 5 ? (rainbow ? 0.5 : 0.25) : (rainbow ? 0.75 : 0.5);
+    const named = colorsInPlay.split('').filter(Boolean);
+    if (named.length && named.length !== n) {
+      issues.push(`Colored Mana names ${n} colours but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
+    }
+    for (const k of named) {
+      const t = colorTally[k];
+      if (t && effectCards && t.effects === 0) issues.push(`No ${CARD_COLORS.find(([x]) => x === k)[1]} effect in the deck; every colour needs at least one.`);
+      if (t && effectCards && t.effects > effectCards * share) {
+        const cap = share === 0.75 ? 'three quarters' : share === 0.5 ? 'half' : 'quarter';
+        issues.push(`${CARD_COLORS.find(([x]) => x === k)[1]} effects are ${t.effects} of ${effectCards}, over the ${cap} ${rainbow ? 'Rainbow Efficiency' : 'Colored Mana'} allows.`);
+      }
+    }
+    // A card may cost as many colours as the feats allow: two with Rainbow
+    // Efficiency, up to five with Improved and Colored Mana taken twice.
+    const maxColors = rainbow === 2 ? (n === 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
+    const over = inDeck.filter((card) => card.color.length > maxColors);
+    if (over.length) {
+      issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} colour${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
+    }
+  }
+  if (mods.singleton) {
+    const dupes = effects.filter((e) => e.count > 1);
+    if (dupes.length) issues.push(`Singleton: ${dupes.map((e) => `${e.effect} ×${e.count}`).join(', ')}.`);
+  }
+  return {
+    deckSize, effectCards, manaCards, pureMana, fused, effects, spreadMax, spreadMin,
+    colorTally, sphereTally, suitTally, alignTally, colorsInPlay, issues,
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -895,6 +1072,9 @@ export function recomputeTable(model) {
   t.log = (Array.isArray(t.log) ? t.log : []).slice(-30).map(String);
 
   const k = p.calc;
+  // The squad members at the table, by id -- only ones the deck still knows.
+  const members = k.squad || [];
+  t.squad = (Array.isArray(t.squad) ? t.squad : []).map(String).filter((id, n, all) => members.some((m) => m.id === id) && all.indexOf(id) === n);
   const seen = new Set([...TABLE_ZONES.flatMap((z) => t[z]), ...t.mana.map((m) => m.id)]);
   // Gradual Ramp: one Mana Point card from the hand a round -- a Mana Rock
   // (for a spell point) or a Moxen may still be played.
@@ -917,6 +1097,8 @@ export function recomputeTable(model) {
     // With Mana Pool a card needs as many Mana Point cards in play as it
     // costs; under Colored Mana only mana of the card's colour counts.
     castable: Object.fromEntries(t.hand.map((id) => [id, castCheck(model, id)])),
+    // Who is at the table, for the roster and the chooser.
+    squad: members.map((m) => ({ id: m.id, name: m.name, ok: m.ok, why: m.why, present: t.squad.includes(m.id), cards: m.deck.deckSize, cl: m.cl })),
     manaOk: Object.fromEntries(t.hand.map((id) => [id, manaPlayCheck(model, id, manaBlocked)])),
     trapCard: hasDeckFeat(model, /trap card/i),
   };
@@ -952,11 +1134,52 @@ export function manaPlayCheck(model, id, blocked) {
 /** Every copy of every card as an instance id, in deck order. */
 export function tableInstances(model) {
   const p = model.data.cardcasting;
+  // The character's cards, and those of every squad member at the table.
+  const present = new Set(p?.table?.squad || []);
   const out = [];
   (p?.cards || []).forEach((card, i) => {
+    const owner = String(card.calc?.owner ?? '');
+    if (owner && !present.has(owner)) return;
     for (let n = 0; n < (Number(card.qty) || 0); n++) out.push(`${i}#${n}`);
   });
   return out;
+}
+
+/**
+ * A squad member arrives at, or leaves, the table. Mid-encounter its cards
+ * are shuffled into the deck on arrival -- a summoned companion brings its
+ * deck with it -- and taken out of every zone when it goes.
+ */
+export function tableSquad(model, id, present = null) {
+  const p = model.data.cardcasting;
+  if (!p?.table) return model;
+  const t = p.table;
+  const member = (p.calc?.squad || []).find((m) => m.id === String(id));
+  if (!member) return model;
+  const squad = new Set(t.squad || []);
+  const want = present === null ? !squad.has(member.id) : !!present;
+  if (want === squad.has(member.id)) return model;
+  if (want) squad.add(member.id); else squad.delete(member.id);
+  t.squad = [...squad];
+  if (t.active) {
+    const theirs = (id2) => cardOwner(model, model.tableCard(id2)) === member.id;
+    if (want) {
+      const seen = new Set([...TABLE_ZONES.flatMap((z) => t[z] || []), ...(t.mana || []).map((m) => m.id)]);
+      const arriving = tableInstances(model).filter((x) => theirs(x) && !seen.has(x));
+      t.deck = shuffle(model, [...t.deck, ...arriving]);
+      tableLog(model, t, `${member.name} joins: ${arriving.length} cards shuffled in`);
+    } else {
+      let gone = 0;
+      for (const z of [...TABLE_ZONES, 'faceDown']) {
+        const before = (t[z] || []).length;
+        t[z] = (t[z] || []).filter((x) => !theirs(x));
+        gone += before - t[z].length;
+      }
+      t.mana = (t.mana || []).filter((m) => !theirs(m.id));
+      tableLog(model, t, `${member.name} leaves: ${gone} cards go with ${member.name}`);
+    }
+  }
+  return model.recompute();
 }
 
 /** The card an instance id stands for, or null. */
@@ -969,11 +1192,12 @@ export function tableCard(model, id) {
 }
 
 /** Can this card in hand be cast right now, and with what? Advisory. */
-export function castCheck(model, id) {
+export function castCheck(model, id, who = null) {
   const p = model.data.cardcasting;
   const t = p.table;
   const card = model.tableCard(id);
   if (!card) return { ok: false, why: 'no such card' };
+  const caster = casterFor(model, who, card);
   const isEffect = String(card.effect || '').trim() !== '';
   const need = cardCost(card);
   if (!isEffect) return { ok: true, need: 0, have: 0, mana: true };
@@ -987,8 +1211,9 @@ export function castCheck(model, id) {
     return [...colors].some((c) => letters.includes(c));
   });
   // Land-Attuned Magic: on an attuned sphere each mana card is two points,
-  // so the card needs half as many -- and spends half as many.
-  const worth = cardAttuned(model, card) ? 2 : 1;
+  // so the card needs half as many -- and spends half as many. The feat is
+  // the character's: a squad member casting gets no such thing.
+  const worth = caster === '' && cardAttuned(model, card) ? 2 : 1;
   const spend = Math.ceil(need / worth);
   // Rainbow Efficiency: a two-colour card needs a mana card of each colour.
   let ok = usable.length >= spend;
@@ -997,7 +1222,7 @@ export function castCheck(model, id) {
     const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
     if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, spend, worth, have: usable.length, why };
+  return { ok, need, spend, worth, have: usable.length, why, caster };
 }
 
 /** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
@@ -1164,7 +1389,7 @@ export function tableDraw(model, n = 1, why = 'draw') {
  * otherwise they simply need to be there. Nothing is refused -- the check
  * is shown beside the card and the player decides.
  */
-export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {}) {
+export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who = null } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
@@ -1172,7 +1397,10 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {
   if (at < 0) return model;
   const card = model.tableCard(id);
   if (!card) return model;
-  const name = tableName(model, id);
+  // Who casts it: a squad member uses their own numbers and spell points.
+  const caster = casterFor(model, who, card);
+  const by = casterInfo(model, caster);
+  const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
 
   if (mode === 'mana') {
     const may = manaPlayCheck(model, id, !!(p.mods.gradualRamp && t.manaPlayed >= 1));
@@ -1194,7 +1422,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {
   }
 
   // Pay for it, where paying means anything.
-  const check = castCheck(model, id);
+  const check = castCheck(model, id, caster);
   const cost = check.need || 0;
   if (p.manaPool && cost > 0 && (p.manaGraveyard || p.mods.stagnantPool)) {
     const colors = String(card.calc?.colors || '');
@@ -1220,16 +1448,16 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0 } = {
     tableLog(model, t, `${name} cast${cost ? ` for ${cost}` : ''}${check.ok ? '' : ` — ${check.why}`}`);
   }
 
-  // The spell points themselves, from the tracker if there is one.
-  if (cost > 0) spendSP(model, cost, name);
+  // The spell points themselves, from the caster's tracker if there is one.
+  if (cost > 0) spendSP(model, cost, name, by.pool);
   // A mode picked on the way in -- "boost (1 SP)" -- and whatever was put
   // into it: the points on top of the cost, then that mode's dice. Otherwise
   // the card's first dice, if it has any.
   const extra = Math.max(0, Math.floor(Number(sp) || 0));
   const mode_ = which ? model.cardRolls(card).find((r) => r.label.toLowerCase() === String(which).toLowerCase()) : null;
-  if (extra > 0) spendSP(model, extra, `${name} — ${mode_?.label || 'augmented'}`);
-  if (mode_) model.tableRoll(id, { quiet: true, which: mode_.label });
-  else rollFor(model, id);
+  if (extra > 0) spendSP(model, extra, `${name} — ${mode_?.label || 'augmented'}`, by.pool);
+  if (mode_) model.tableRoll(id, { quiet: true, which: mode_.label, who: caster });
+  else rollFor(model, id, caster);
 
   // Keywords in the card's text fire as it is cast.
   const fate = tableKeywords(model, id, card);
@@ -1254,11 +1482,13 @@ export function tableRetrace(model, id) {
   const card = model.tableCard(id);
   if (!card) return model;
   t.discard.splice(at, 1);
-  const name = tableName(model, id);
+  const caster = casterFor(model, null, card);
+  const by = casterInfo(model, caster);
+  const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
   const cost = cardCost(card);
   tableLog(model, t, `Retrace: ${name} cast from the discard${cost ? ` for ${cost}` : ''} + 1 spell point`);
-  spendSP(model, cost + 1, `${name} (Retrace)`);
-  rollFor(model, id);
+  spendSP(model, cost + 1, `${name} (Retrace)`, by.pool);
+  rollFor(model, id, caster);
   const fate = tableKeywords(model, id, card);
   if (fate && fate !== 'deck') tableSettle(model, id, fate);
   else t.discard.push(id);
@@ -1279,10 +1509,10 @@ export function tableBury(model, id) {
 }
 
 /** Roll a card's dice as part of casting it, if it has any; quiet otherwise. */
-export function rollFor(model, id) {
+export function rollFor(model, id, who = null) {
   const card = model.tableCard(id);
   if (!card) return;
-  if (model.cardRolls(card).length) model.tableRoll(id, { quiet: true });
+  if (model.cardRolls(card).length) model.tableRoll(id, { quiet: true, who });
 }
 
 /**
@@ -1406,9 +1636,11 @@ export function tableResolve(model, id) {
   const card = model.tableCard(id);
   // A trap that springs is cast then: it is paid for and its keywords fire now.
   if (wasTrap) {
+    const caster = casterFor(model, null, card);
+    const by = casterInfo(model, caster);
     const cost = cardCost(card);
-    if (cost > 0) spendSP(model, cost, tableName(model, id));
-    rollFor(model, id);
+    if (cost > 0) spendSP(model, cost, `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`, by.pool);
+    rollFor(model, id, caster);
   }
   const fate = wasTrap ? tableKeywords(model, id, card) : null;
   tableSettle(model, id, fate);
@@ -1426,10 +1658,14 @@ export function spellPointTracker(model) {
   return poolTracker(model, 'sp');
 }
 
-/** Spend n spell points from the tracker, if there is one; log it on the table. */
-export function spendSP(model, n, why) {
+/**
+ * Spend n spell points from a pool's tracker, if there is one; log it on the
+ * table. The pool is the character's ('sp') unless a squad member is
+ * casting, when it is theirs ('sp:<id>').
+ */
+export function spendSP(model, n, why, pool = 'sp') {
   const t = model.data.cardcasting?.table;
-  const sp = model.spellPointTracker();
+  const sp = pool === 'sp' ? model.spellPointTracker() : poolTracker(model, pool);
   if (!sp || !(n > 0)) return null;
   const max = Number(sp.max) || 0;
   const before = Number(sp.current) || 0;
@@ -1485,22 +1721,27 @@ export function cardRolls(model, card) {
  * Roll a card's dice: its Dice field, or the first dice in its text.
  * `4d6+int.mod` rolls four dice and adds the modifier from the sheet.
  */
-export function tableRoll(model, id, { quiet = false, which = 0 } = {}) {
+export function tableRoll(model, id, { quiet = false, which = 0, who = null } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table) return model;
   const t = p.table;
   const card = model.tableCard(id);
   if (!card) return model;
   const done = () => (quiet ? model : model.recompute());
+  // Whose numbers: the caster's, which for a squad member's card means
+  // theirs unless the character is the one casting it.
+  const caster = casterFor(model, who, card);
+  const by = casterInfo(model, caster);
   // Formulas in the dice come first: "{ceil(caster.level/2)}d6" is 8d6 at
   // caster level 15, in the Dice field or in the text.
-  const resolved = (text) => model.renderProse(text).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
+  const resolved = (text) => cardProse(model, text, caster);
   const options = model.cardRolls(card);
   const pick = typeof which === 'number' ? options[which] : options.find((r) => r.label.toLowerCase() === String(which).toLowerCase());
   const source = pick ? resolved(pick.expr) : '';
   const label = pick && pick.label !== 'roll' ? ` (${pick.label})` : '';
-  if (!source) { if (!quiet) tableLog(model, t, `${tableName(model, id)}: nothing to roll`); return done(); }
-  const scope = model.scope();
+  const whoName = caster ? `${by.name}: ` : '';
+  if (!source) { if (!quiet) tableLog(model, t, `${whoName}${tableName(model, id)}: nothing to roll`); return done(); }
+  const scope = casterScope(model, caster);
   const { dice, flat, error } = parseDiceExpr(source, (rem) => evaluateFormula(rem, scope));
   const rng = model.rng || Math.random;
   const rolls = [];
@@ -1512,8 +1753,8 @@ export function tableRoll(model, id, { quiet = false, which = 0 } = {}) {
       total += count < 0 ? -r : r;
     }
   }
-  t.lastRoll = { id, source, rolls, flat, total, error: error || null, label: pick?.label || 'roll' };
-  tableLog(model, t, `${tableName(model, id)} rolls${label} ${source}: [${rolls.join(', ')}]${flat ? ` ${flat >= 0 ? '+' : '−'} ${Math.abs(flat)}` : ''} = ${total}${error ? ` (${error})` : ''}`);
+  t.lastRoll = { id, source, rolls, flat, total, error: error || null, label: pick?.label || 'roll', who: caster, whoName: caster ? by.name : '' };
+  tableLog(model, t, `${whoName}${tableName(model, id)} rolls${label} ${source}: [${rolls.join(', ')}]${flat ? ` ${flat >= 0 ? '+' : '−'} ${Math.abs(flat)}` : ''} = ${total}${error ? ` (${error})` : ''}`);
   return done();
 }
 
@@ -1556,9 +1797,10 @@ export function cardRef(model, ref) {
   return card ? { card, list: m[1], index: Number(m[2]), id: null } : null;
 }
 
-/** A card's text with its formulas worked out, as the face shows it. */
-function cardProse(model, text) {
-  return model.renderProse(String(text ?? '')).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
+/** A card's text with its formulas worked out, as the face shows it -- for the caster's numbers when one is named. */
+function cardProse(model, text, who = '') {
+  const local = who ? casterInfo(model, who).local : null;
+  return model.renderProse(String(text ?? ''), local).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
 }
 
 /**
@@ -1569,12 +1811,15 @@ function cardProse(model, text) {
  * The deck face previews these beside the Dice field; the Roll20 text is
  * built from them. One reading, so the two agree.
  */
-export function cardRollFormulas(model, card) {
+export function cardRollFormulas(model, card, who = null) {
   const rolls = cardRolls(model, card);
   if (!rolls.length) return [];
-  const scope = model.scope();
+  // The owner's numbers unless someone else is named: a companion's card
+  // previews at the companion's caster level.
+  const caster = who === null ? cardOwner(model, card) : String(who || '');
+  const scope = casterScope(model, caster);
   return rolls.map((r) => {
-    const source = cardProse(model, r.expr).trim();
+    const source = cardProse(model, r.expr, caster).trim();
     const { dice, flat, error } = parseDiceExpr(source, (rem) => evaluateFormula(rem, scope));
     const ok = !error && Object.keys(dice).length > 0;
     return {
@@ -1618,12 +1863,13 @@ const EFFECT_NOTE_MAX = 600;
  * than being dropped. A card without dice is a spec with notes alone, which
  * is still a message worth posting.
  */
-export function cardRollSpec(model, ref, which = null) {
+export function cardRollSpec(model, ref, which = null, who = null) {
   const found = cardRef(model, ref);
   if (!found) return null;
   const { card } = found;
   const p = model.data.cardcasting || {};
-  const effect = cardProse(model, card.effect).trim();
+  const caster = who === null ? cardOwner(model, card) : String(who || '');
+  const effect = cardProse(model, card.effect, caster).trim();
   const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
   const own = String(card.name || '').trim();
   const name = own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
@@ -1633,10 +1879,14 @@ export function cardRollSpec(model, ref, which = null) {
   // A mode picked at the table narrows the message to that one roll; the
   // notes stay, since they are the card rather than the mode.
   const want = which ? String(which).toLowerCase() : null;
-  for (const r of cardRollFormulas(model, card)) {
+  for (const r of cardRollFormulas(model, card, caster)) {
     if (want && r.label.toLowerCase() !== want) continue;
     if (r.formula) rolls.push({ label: r.label, formula: r.formula });
     else if (r.source) notes.push({ label: r.label, text: r.source });
+  }
+  if (caster) {
+    const by = casterInfo(model, caster);
+    notes.push({ label: 'Cast by', text: `${by.name} (CL ${by.local.caster.level})` });
   }
 
   const cost = String(card.cost ?? '').trim();

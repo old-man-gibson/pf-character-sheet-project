@@ -13025,5 +13025,82 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   check('casting it under Stagnant Pool taps two cards for four points', c.data.cardcasting.table.mana.filter((m) => m.tapped).length, 2);
   check('and the log says so', c.data.cardcasting.table.log.some((l) => /cast for 4.*2 mana tapped \(attuned: two points each\)/.test(l)), true);
 }
+console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts on its own numbers');
+{
+  const c = new Character(blankDocument({ name: 'Nico', level: 15 }));
+  const p = c.data.cardcasting;
+  Object.assign(p, { enabled: true, manaPool: true, cooldown: true, colors: 'RBU', castingStat: 'Int' });
+  p.mods.coloredMana = 3;
+  p.mods.stagnantPool = true;
+  c.addCompanion('conjured');
+  const cc = c.data.conjured.at(-1);
+  Object.assign(cc, { name: 'Lira', archetypes: { mage: true }, talents: [{ name: 'Magical Companion' }], levelSource: 'override', levelOverride: 12 });
+  cc.tradition = { name: 'Fey', drawbacks: ['Card Casting', 'Cooldown', 'Mana Pool', 'Stagnant Pool', 'Colored Mana (WG)', 'Verbal Casting'], boons: [] };
+  p.cards = [
+    { name: 'Bolt', qty: 20, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '', dice: '{1+floor(caster.level/2)}d6+caster.mod' },
+    { name: 'Mend', qty: 10, cost: '1', color: 'W', mana: '', effect: 'Cure', sphere: 'Life', tags: '', dice: '{caster.level}d8+caster.mod', owner: cc.id },
+    { name: 'Bloom', qty: 10, cost: '1', color: 'G', mana: '', effect: 'Grow', sphere: 'Enhancement', tags: '', dice: '', owner: cc.id },
+    { name: 'Leaf', qty: 4, cost: '', color: '', mana: 'G', effect: '', sphere: '', tags: '', dice: '', owner: cc.id },
+    { name: 'Ghost', qty: 1, cost: '1', color: 'B', mana: '', effect: 'Haunt', sphere: 'Death', tags: '', dice: '', owner: 'nobody' },
+  ];
+  c.recompute();
+  let k = p.calc;
+  const lira = k.squad.find((m) => m.id === cc.id);
+  check('the companion is a squad member: Card Casting, the same switches, its own colours', [lira.ok, lira.why, lira.colors, lira.casts, lira.cl], [true, '', 'WG', true, cc.calc.casting.cl]);
+  check('its deck is checked on its own', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, []]);
+  check('the character\'s own figures are the character\'s deck alone', [k.deckSize, k.colorsInPlay], [21, 'RBU']);
+  check('a card owned by nobody on the sheet is the character\'s, and said so', [c.cardOwner(p.cards[4]), k.issues.some((i) => /no longer on the sheet/.test(i))], ['', true]);
+  check('the combined deck is everything', [k.combined.deckSize, k.combined.colors, k.combined.members], [45, 'RBUWG', 1]);
+
+  cc.tradition.drawbacks = ['Card Casting', 'Cooldown', 'Colored Mana (WG)'];
+  c.recompute();
+  check('a switch missing keeps the decks apart', [p.calc.squad.at(-1).ok, p.calc.squad.at(-1).why], [false, 'switches differ: Mana Pool missing, Stagnant Pool missing']);
+  cc.tradition.drawbacks = ['Card Casting', 'Cooldown', 'Mana Pool', 'Stagnant Pool', 'Colored Mana (WG)'];
+  c.recompute();
+  k = p.calc;
+
+  let seed = 7;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  check('before the member is at the table only the character\'s cards shuffle', c.tableInstances().length, 21);
+  c.tableSquad(cc.id, true);
+  check('at the table, its cards come too', [c.tableInstances().length, p.table.squad], [45, [cc.id]]);
+  c.tableStart();
+  const t = p.table;
+  const mend = [...t.deck, ...t.hand].find((id) => id.startsWith('1#'));
+  c.tableMove(mend, 'hand');
+  const leaf = [...t.deck, ...t.hand].find((id) => id.startsWith('3#'));
+  c.tableMove(leaf, 'mana');
+  const pool = () => { const x = c.trackers.find((tr) => tr.pool === `sp:${cc.id}`); return x.max - x.current; };
+  const mine = () => { const x = c.trackers.find((tr) => tr.pool === 'sp'); return x ? x.max - x.current : null; };
+  const before = [pool(), mine()];
+  check('the companion\'s card previews on the companion\'s level and modifier', c.cardRollFormulas(c.tableCard(mend)).map((r) => r.formula), [`${lira.cl}d8${lira.mod ? `+${lira.mod}` : ''}`]);
+  const ownCl = c.scope().caster.level;
+  check('and as the character would cast it, on the character\'s', c.cardRollFormulas(c.tableCard(mend), '').map((r) => r.formula), [`${ownCl ? `${ownCl}d8` : '0'}${k.cam ? `+${k.cam}` : ''}`]);
+  c.tablePlay(mend, 'cast');
+  check('cast with no caster named, the owner casts: its points, its dice, its name in the log', [before[0] - pool(), mine() === before[1], t.lastRoll.whoName, t.lastRoll.rolls.length, t.log.some((l) => /^R1: Lira: Mend cast for 1/.test(l))],
+    [1, true, 'Lira', lira.cl, true]);
+  const spec = c.cardRollSpec(mend, null, cc.id);
+  check('the Roll20 text names the caster', spec.notes.find((n) => n.label === 'Cast by').text, `Lira (CL ${lira.cl})`);
+
+  // The character casting a borrowed card: the character's numbers, the character's pool.
+  const bloom = [...t.deck, ...t.hand].find((id) => id.startsWith('2#'));
+  c.tableMove(bloom, 'hand');
+  c.tablePlay(bloom, 'cast', { who: '' });
+  check('the character may cast a member\'s card, on the character\'s pool', [pool() === before[0] - 1, t.log.some((l) => /^R1: Bloom cast for 1/.test(l))], [true, true]);
+
+  // Land-Attuned Magic is the character's: a member casting gets no double.
+  p.attunedSpheres = ['Life'];
+  c.data.training.magic.tradition.boughtOff = ['Land-Attuned Magic [Deck]'];
+  c.data.training.magic.tradition.drawbacks = ['Terrain Casting'];
+  c.recompute();
+  const mend2 = [...t.deck].find((id) => id.startsWith('1#'));
+  c.tableMove(mend2, 'hand');
+  check('attuned mana pays double for the character but not for the member', [c.castCheck(mend2, '').worth, c.castCheck(mend2, cc.id).worth, c.castCheck(mend2).caster], [2, 1, cc.id]);
+
+  c.tableSquad(cc.id, false);
+  check('when the member leaves, every card of its goes with it', [t.hand.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.deck.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.mana.length, t.log.at(-1).startsWith('R1: Lira leaves')], [false, false, 0, true]);
+  c.tableSquad(cc.id, true);
+  check('and comes back shuffled in when it returns', [t.deck.filter((id) => c.cardOwner(c.tableCard(id)) === cc.id).length > 0, t.log.at(-1)], [true, 'R1: Lira joins: 24 cards shuffled in']);
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
