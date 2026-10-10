@@ -56,7 +56,6 @@
 
 import {
   Character, inspectDocument, deckManipulation, techniqueTitle, emptyDish,
-  featsAvailable, spellsAvailable, powersAvailable,
 } from './model.js';
 import { runtime as extensionRuntime } from './extension-runtime.js';
 import { COMPANION_KINDS, COMPANION_LABELS } from './companions.js';
@@ -85,6 +84,7 @@ import { talentPopHtml } from './ui/talents.js';
 import { blankDraft, blankView } from './ui/view-state.js';
 import { foldValue, isOpen } from './ui/folds.js';
 import { colorControl } from './ui/color-control.js';
+import { datalistOptions } from './ui/datalist.js';
 import * as badges from './ui/badges.js';
 import * as roll from './ui/roll.js';
 import * as palette from './ui/palette.js';
@@ -2752,37 +2752,25 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #fillDatalist(input) {
     const list = this.shadowRoot?.getElementById(input.getAttribute('list'));
-    // Only a list that asks to be filled. The veil and class-feature menu
-    // lists are drawn whole by their panels and say nothing, and reading
-    // silence as "feats" swapped their options for feat names on focus.
-    if (!list || !['feats', 'spells', 'powers'].includes(list.dataset.fill)) return;
-    const classes = (list.dataset.classes || '').split(',').filter(Boolean);
-    const pool = list.dataset.fill === 'spells' ? spellsAvailable({ classes })
-      : list.dataset.fill === 'powers' ? powersAvailable({ classes })
-        : featsAvailable();
-
-    const q = String(input.value || '').trim().toLowerCase();
-    const hits = [];
-    for (const e of pool) {
-      if (q && !e.name.toLowerCase().includes(q)) continue;
-      hits.push(e);
-      if (hits.length >= DATALIST_MAX) break;
-    }
+    // Only a list that asks to be filled (see FILLERS). The veil and
+    // class-feature menu lists are drawn whole by their panels and say
+    // nothing, and reading silence as "feats" swapped their options for feat
+    // names on focus.
+    const hits = list && datalistOptions(list.dataset.fill, {
+      classes: (list.dataset.classes || '').split(',').filter(Boolean),
+      query: input.value,
+      max: DATALIST_MAX,
+    });
+    if (!hits) return;
     // Rebuilt only when the answer actually changed: typing another letter
     // that narrows nothing should not churn the DOM.
-    const signature = hits.map((e) => e.name).join(' ');
+    const signature = hits.map((h) => h.value).join('\u0000');
     if (list.dataset.showing === signature) return;
     list.dataset.showing = signature;
-    list.replaceChildren(...hits.map((e) => {
+    list.replaceChildren(...hits.map((h) => {
       const o = document.createElement('option');
-      o.value = e.name;
-      const label = list.dataset.fill === 'feats' ? e.type
-        : list.dataset.fill === 'spells'
-          ? [e.school, e.classes.map((c) => `${c.name}${c.level === null ? '' : ` ${c.level}`}`).join(', ')]
-            .filter(Boolean).join(' · ')
-          : [e.discipline || e.element, e.points ? `${e.points} pp` : '', e.burn ? `burn ${e.burn}` : '']
-            .filter(Boolean).join(' · ');
-      if (label) o.label = label;
+      o.value = h.value;
+      if (h.label) o.label = h.label;
       return o;
     }));
   }
