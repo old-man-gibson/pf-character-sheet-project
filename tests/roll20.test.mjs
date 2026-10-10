@@ -676,5 +676,16 @@ console.log('mythic Vital Strike multiplies the damage bonuses too');
   check('one chosen at a tier not reached does not', hasMythicVitalStrike(c.data), false);
 }
 
+console.log('a spec with notes and no rolls is still a message -- a card with no dice');
+{
+  const spec = { name: 'Betrayal — Corpse Bomb', rolls: [], notes: [{ label: 'Cost', text: '1 SP (Black)' }, { label: 'Sphere', text: 'Death' }] };
+  check('as a template card', rollText(spec, 'template'), '&{template:default} {{name=Betrayal — Corpse Bomb}} {{Cost=1 SP (Black)}} {{Sphere=Death}}');
+  check('as plain text', rollText(spec, 'plain'), 'Betrayal — Corpse Bomb (Cost: 1 SP (Black); Sphere: Death)');
+  check('the Pathfinder template has no card without a roll, so it is the default one', rollText(spec, 'pf'), rollText(spec, 'template'));
+  check('nothing at all is still nothing', [rollText({ name: 'x', rolls: [], notes: [] }), rollText(null)], ['', '']);
+  const rolled = { ...spec, rolls: [{ label: 'damage', formula: '8d6+13' }] };
+  check('with a roll the Pathfinder template is the generic card', rollText(rolled, 'pf'), '&{template:pf_generic} {{name=Betrayal — Corpse Bomb}} {{check=[[8d6+13]]}} {{description=Cost: 1 SP (Black); Sphere: Death}}');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

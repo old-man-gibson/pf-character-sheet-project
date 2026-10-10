@@ -95,6 +95,7 @@ import { bindSessionBoard } from './ui/panels/session.js';
 import { bindClassActions } from './ui/class-actions.js';
 import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
+import { appendDiceText } from './model/subsystems/cardcasting.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
 import * as trainingPanels from './ui/panels/training.js';
@@ -143,6 +144,7 @@ function readRollFormat() {
 function writeRollFormat(format) {
   try { globalThis.localStorage?.setItem(ROLL_FORMAT_KEY, format); } catch { /* not fatal */ }
 }
+
 
 /**
  * The palette's three numbers: how many rows a page of results is, what one
@@ -815,11 +817,16 @@ export class CharacterSheetElement extends HTMLElement {
     // shadow boundary -- and is caught on the root in `#bindBreakdowns`.
     this.ownerDocument.addEventListener('scroll', this.#onViewportChange, true);
     window.addEventListener('resize', this.#onViewportChange);
+    // The card table's pop-out windows are told when the sheet goes.
+    window.addEventListener('pagehide', this.#closeCardWindows);
+    if (this.#model && !this.#cardChannel) this.#openCardChannel();
     const src = this.getAttribute('src');
     if (src && !this.#model) this.load(src);
   }
 
   disconnectedCallback() {
+    window.removeEventListener('pagehide', this.#closeCardWindows);
+    this.#closeCardWindows();
     extensionRuntime.removeEventListener('change', this.#onExtensionsChange);
     this.ownerDocument.removeEventListener('keydown', this.#onDocumentKey);
     this.shadowRoot.removeEventListener('pointerdown', this.#onPointerDownAway, true);
@@ -1116,6 +1123,8 @@ export class CharacterSheetElement extends HTMLElement {
    */
   #adoptDocument(doc) {
     this.#model = new Character(structuredClone(doc));
+    // The card table's windows listen on a channel named for the character.
+    this.#openCardChannel();
     /*
      * Settle the play state before anything is measured.
      *
@@ -1231,6 +1240,168 @@ export class CharacterSheetElement extends HTMLElement {
       : 'The preview was blocked by the browser. Allow pop-ups for this page and try again.';
     this.#render();
   }
+
+  /* ------------------------------------------------------------------ *
+   * The card table: its actions, and its two windows.
+   *
+   * A card caster who streams the game wants the table on the shared
+   * screen and the hand off it. So the table has two pop-out windows --
+   * `cards.html?view=table` and `?view=hand` -- that draw the same zones the
+   * tab draws (subsystems.cardTableView) and own nothing: this element
+   * renders them on every render of its own and posts the markup over, and
+   * a button pressed in one comes back as a message and runs through
+   * #tableAction exactly as a press on the tab would. One model, three
+   * faces.
+   *
+   * They talk over a BroadcastChannel named for the character rather than
+   * through the opener handle, because a browser may turn a pop-up into a
+   * tab, and a player may drag the window to another screen or open the
+   * address in a tab of their own: every one of those still reaches the
+   * sheet. The channel is open whenever a character is, and the markup is
+   * posted only while a window has said hello and not yet goodbye.
+   * ------------------------------------------------------------------ */
+
+  /** The channel the windows listen on, for the character open now. */
+  #cardChannel = null;
+  /** The windows that have said hello, by the name each gave itself. */
+  #cardViewers = new Set();
+  /** The windows this element opened, by view, so a second press focuses rather than reopens. */
+  #cardWindows = { table: null, hand: null };
+
+  /** The channel's name: this character's, so two sheets open side by side do not cross. */
+  #cardChannelName() { return `cs-cards:${this.#model?.data?.id || 'character'}`; }
+
+  /** Open the channel for the character just installed, closing the last one's. */
+  #openCardChannel() {
+    this.#closeCardChannel();
+    if (!this.#model || typeof BroadcastChannel === 'undefined') return;
+    try {
+      this.#cardChannel = new BroadcastChannel(this.#cardChannelName());
+      this.#cardChannel.addEventListener('message', this.#onCardWindowMessage);
+    } catch { this.#cardChannel = null; }
+  }
+
+  #closeCardChannel() {
+    if (!this.#cardChannel) return;
+    this.#cardChannel.removeEventListener('message', this.#onCardWindowMessage);
+    this.#cardChannel.close();
+    this.#cardChannel = null;
+    this.#cardViewers.clear();
+  }
+
+  /**
+   * One action on the card table, by name: what every table button does,
+   * wherever it was pressed. Returns whether anything happened, which is
+   * whether to render. `fromWindow` says the press was in a pop-out, whose
+   * own button copied the Roll20 text already (the clipboard wants a
+   * gesture in the document doing the copying, which that one had and this
+   * one does not).
+   */
+  #tableAction(action, id, arg, { fromWindow = false } = {}) {
+    const m = this.#model;
+    if (!m) return false;
+    if (action === 'window') { this.#openCardWindow(id); return false; }
+    const t = m.data.cardcasting?.table || {};
+    // A cast, by any of its names: Cast and Ongoing from the hand, a trap
+    // springing, a Retrace from the discard. Read before the action moves
+    // the card.
+    const casting = (action === 'play' && (!arg || arg === 'cast' || arg === 'ongoing'))
+      || (action === 'resolve' && (t.faceDown || []).includes(id))
+      || action === 'retrace';
+    this.#view.peek = [];
+    switch (action) {
+      case 'start': m.tableStart(); break;
+      case 'redraw': m.tableRedraw(); break;
+      case 'next': m.tableNextRound(); break;
+      case 'draw': m.tableDraw(1, 'draw'); break;
+      case 'shuffle': m.tableShuffleDiscard(); break;
+      case 'end': m.tableEnd(); break;
+      case 'play': m.tablePlay(id, arg || 'cast'); break;
+      case 'resolve': m.tableResolve(id); break;
+      case 'reveal': m.tableReveal(id); break;
+      case 'roll': m.tableRoll(id); break;
+      case 'boost': m.tableBoost(id, arg); break;
+      case 'exileRandom': m.tableExileRandom(Number(arg) || 1); break;
+      case 'sp': m.tableSpend(id, Number(arg) || 1); break;
+      case 'retrace': m.tableRetrace(id); break;
+      case 'bury': m.tableBury(id); break;
+      case 'move': m.tableMove(id, arg); break;
+      case 'tap': m.tableTap(id); break;
+      case 'peek': this.#view.peek = m.tablePeek(Number(arg) || 1); break;
+      default: return false;
+    }
+    if (casting && !fromWindow && m.data.cardcasting?.copyOnCast) {
+      this.#copyRoll('card', id, m.tableCard(id)?.name || 'card');
+    }
+    return true;
+  }
+
+  /** The address of one of the two windows, on this character's channel. */
+  #cardWindowUrl(view) {
+    const url = new URL('../cards.html', import.meta.url);
+    url.searchParams.set('view', view);
+    url.searchParams.set('ch', this.#cardChannelName());
+    return url.href;
+  }
+
+  /** Open one of the two windows, or bring it forward if it is open. */
+  #openCardWindow(view) {
+    if (!(view in this.#cardWindows)) return;
+    if (!this.#cardChannel) this.#openCardChannel();
+    const open = this.#cardWindows[view];
+    if (open && !open.closed) { open.focus(); return; }
+    const size = view === 'table' ? 'width=1180,height=820' : 'width=1100,height=600';
+    const win = window.open(this.#cardWindowUrl(view), `cs-cards-${view}`, `popup=yes,${size}`);
+    if (!win) {
+      this.#historyNote = 'The window was blocked by the browser. Allow pop-ups for this page and try again.';
+      this.#render();
+      return;
+    }
+    // Drawn when the page says hello (#onCardWindowMessage), and on every
+    // render after that.
+    this.#cardWindows[view] = win;
+  }
+
+  /** Draw the windows from the character as it is now: one message per view with a viewer. */
+  #postCardWindows(only = null) {
+    if (!this.#model || !this.#cardChannel || !this.#cardViewers.size) return;
+    const views = only ? [only] : ['table', 'hand'];
+    for (const view of views) {
+      if (![...this.#cardViewers].some((name) => name.startsWith(`${view}-`))) continue;
+      this.#cardChannel.postMessage({
+        type: 'cards:render',
+        view,
+        title: `${this.#model.data.identity?.name || this.#model.data.name || 'Character'} — ${view === 'table' ? 'the table' : 'your hand'}`,
+        html: subsystems.cardTableView(this.#model, this.#ctx(), view),
+        theme: this.getAttribute('theme') || '',
+        scheme: this.getAttribute('scheme') || '',
+      });
+    }
+  }
+
+  /** A message from a window: hello, goodbye, or a press. */
+  #onCardWindowMessage = (e) => {
+    const msg = e.data;
+    if (!msg || typeof msg !== 'object' || typeof msg.from !== 'string') return;
+    const view = msg.view === 'hand' ? 'hand' : 'table';
+    if (msg.type === 'cards:hello') { this.#cardViewers.add(msg.from); this.#postCardWindows(view); }
+    else if (msg.type === 'cards:bye') this.#cardViewers.delete(msg.from);
+    else if (msg.type === 'cards:action') {
+      const done = this.#tableAction(String(msg.action ?? ''), String(msg.id ?? ''), String(msg.arg ?? ''), { fromWindow: true });
+      if (done) this.#render();
+    }
+  };
+
+  /** The sheet is going: tell the windows, close the ones this element opened, and hang up. */
+  #closeCardWindows = () => {
+    try { this.#cardChannel?.postMessage({ type: 'cards:close' }); } catch { /* already closed */ }
+    for (const view of Object.keys(this.#cardWindows)) {
+      const win = this.#cardWindows[view];
+      this.#cardWindows[view] = null;
+      try { if (win && !win.closed) win.close(); } catch { /* already gone */ }
+    }
+    this.#closeCardChannel();
+  };
 
   get isAdmin() { return this.getAttribute('role') === 'admin'; }
 
@@ -1832,6 +2003,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.shadowRoot.append(this.#formulaDrawer());
     if (this.#fxOpen) this.#fxRefresh();
     this.#announceChanges();
+    this.#postCardWindows();
   }
 
   /**
@@ -2694,7 +2866,7 @@ export class CharacterSheetElement extends HTMLElement {
    * scratch on its ctx -- the Lore tab collects its option menus there --
    * leaves the view as it found it.
    */
-  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, ...extra }; }
+  #ctx(extra = {}) { return { ...this.#view, tab: this.#tab, rollFormat: this.#rollFormat, ...extra }; }
 
   #overviewPanel() { return overview.renderOverviewPanel(this.#model, this.#ctx()); }
 
@@ -3063,7 +3235,8 @@ export class CharacterSheetElement extends HTMLElement {
    */
   async #copyRoll(kind, ref, what, answers = null) {
     const spec = kind === 'session' ? sessionRollSpec(this.#model, ref, answers)
-      : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
+      : kind === 'card' ? this.#model.cardRollSpec(ref)
+        : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
     // A roll with a question in it is not a roll yet. Asking here rather than
     // copying a `?{…}` for Roll20 to ask is the difference between a number
     // the player has settled and one the table is still owed -- and the only
@@ -4646,48 +4819,44 @@ export class CharacterSheetElement extends HTMLElement {
       b.addEventListener('click', () => { this.#view.deckView = b.dataset.deckView; this.#render(); });
     });
 
-    // The table in play: every button carries its action, the card and an argument.
+    // The table in play: every button carries its action, the card and an
+    // argument. The same three controls reach here from a pop-out window
+    // (see #onCardWindowMessage), so what they do lives in #tableAction.
     root.querySelectorAll('[data-table]').forEach((b) => {
       b.addEventListener('click', () => {
         const [action, id, arg] = b.dataset.table.split('|');
-        const m = this.#model;
-        this.#view.peek = [];
-        switch (action) {
-          case 'start': m.tableStart(); break;
-          case 'redraw': m.tableRedraw(); break;
-          case 'next': m.tableNextRound(); break;
-          case 'draw': m.tableDraw(1, 'draw'); break;
-          case 'shuffle': m.tableShuffleDiscard(); break;
-          case 'end': m.tableEnd(); break;
-          case 'play': m.tablePlay(id, arg || 'cast'); break;
-          case 'resolve': m.tableResolve(id); break;
-          case 'reveal': m.tableReveal(id); break;
-          case 'roll': m.tableRoll(id); break;
-          case 'exileRandom': m.tableExileRandom(Number(arg) || 1); break;
-          case 'sp': m.tableSpend(id, Number(arg) || 1); break;
-          case 'retrace': m.tableRetrace(id); break;
-          case 'bury': m.tableBury(id); break;
-          case 'move': m.tableMove(id, arg); break;
-          case 'tap': m.tableTap(id); break;
-          case 'peek': this.#view.peek = m.tablePeek(Number(arg) || 1); break;
-          default: return;
-        }
-        this.#render();
+        if (this.#tableAction(action, id, arg)) this.#render();
       });
     });
     // A named roll picked on a card: spends what its label says, then rolls.
     root.querySelectorAll('[data-table-roll]').forEach((sel) => {
       sel.addEventListener('change', () => {
         if (!sel.value) return;
-        this.#model.tableBoost(sel.dataset.tableRoll, sel.value);
-        this.#render();
+        if (this.#tableAction('boost', sel.dataset.tableRoll, sel.value)) this.#render();
       });
     });
     root.querySelectorAll('[data-table-move]').forEach((sel) => {
       sel.addEventListener('change', () => {
         if (!sel.value) return;
-        this.#view.peek = [];
-        this.#model.tableMove(sel.dataset.tableMove, sel.value);
+        if (this.#tableAction('move', sel.dataset.tableMove, sel.value)) this.#render();
+      });
+    });
+
+    // The picker beside a card's Dice field: what it picked joins the field.
+    root.querySelectorAll('select[data-append]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        if (!sel.value) return;
+        const [list, index, field] = sel.dataset.append.split('|');
+        const current = this.#model.list(list)[Number(index)]?.[field];
+        this.#model.setItem(list, Number(index), field, appendDiceText(current, sel.value));
+        this.#render();
+      });
+    });
+    // One card's dice handed to every card with the same effect.
+    root.querySelectorAll('[data-dice-share]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const [list, index] = b.dataset.diceShare.split('|');
+        this.#model.shareCardDice(list, Number(index));
         this.#render();
       });
     });

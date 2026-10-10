@@ -138,6 +138,8 @@ const panelsWith = (CTX) => [
   ['Vancian', (m) => subsystems.vancianPanel(m)],
   ['Psionics', (m) => subsystems.psionicsPanel(m, CTX)],
   ['Cardcasting', (m) => subsystems.cardcastingPanel(m, CTX)],
+  ['Card table window', (m) => subsystems.cardTableView(m, CTX, 'table')],
+  ['Card hand window', (m) => subsystems.cardTableView(m, CTX, 'hand')],
   ['Familiar', (m) => subsystems.companionPanel(m, 'familiar')],
   ['Animal Companion', (m) => subsystems.companionPanel(m, 'animalCompanion')],
   ['Eidolon', (m) => subsystems.companionPanel(m, 'eidolon')],
@@ -918,6 +920,57 @@ console.log('\none way to write a sign');
   check('plus, a true minus, and a bare zero', [signed(2), signed(-3), signed(0)], ['+2', '−3', '0']);
   check('the size written its own way', signed(-1200, group), '−1,200');
   check('a figure that carries no plus', [minus(-12), minus(4)], ['−12', '4']);
+}
+
+console.log('\nthe card table has three faces: the tab, a table window, a hand window');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.manaPool = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 4, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', dice: '{1+floor(level/2)}d6', sphere: 'Destruction', tags: '' },
+    { name: 'Ember', qty: 3, cost: '', color: '', mana: 'R', effect: '', dice: '', sphere: '', tags: '' },
+  ];
+  c.data.cardcasting.copyOnCast = true;
+  c.recompute();
+  let seed = 5;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'table', rollFormat: 'template' };
+  const closed = subsystems.cardcastingPanel(c, ctx);
+  ok('before an encounter the tab offers the two windows and the Roll20 switch', /data-table="window\|table\|"/.test(closed) && /data-table="window\|hand\|"/.test(closed) && closed.includes('data-set="cardcasting.copyOnCast"'));
+  c.tableStart();
+  const t = c.data.cardcasting.table;
+  const inHand = t.hand[0];
+  c.tablePeek(1);
+  const peeked = t.deck[0];
+  ctx.peek = [peeked];
+  const sheet = subsystems.cardcastingPanel(c, ctx);
+  const table = subsystems.cardTableView(c, ctx, 'table');
+  const hand = subsystems.cardTableView(c, ctx, 'hand');
+  ok('the tab draws every zone', ['f-hand', 'f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => sheet.includes(z)));
+  ok('the table window has no hand, no round controls and no window buttons', !table.includes('f-hand') && !table.includes(`data-card="${inHand}"`)
+    && !/data-table="next\|/.test(table) && !/data-table="window\|/.test(table) && !table.includes('data-set="cardcasting.copyOnCast"'));
+  ok('and never shows the card Read the Cards turned up', !table.includes(`data-card="${peeked}"`));
+  ok('the table window still has the field: in play, the deck, mana, the piles, the log', ['f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => table.includes(z)));
+  ok('the hand window has the hand, the controls and the peeked card, and nothing in play', hand.includes(`data-card="${inHand}"`) && /data-table="next\|/.test(hand)
+    && hand.includes(`data-card="${peeked}"`) && !hand.includes('f-play') && !hand.includes('f-mana'));
+  ok('a card in hand carries its Roll20 text for the window to copy, on the d20 and on Cast',
+    new RegExp(`data-roll="card\\|${inHand}"[^>]*data-copytext="&amp;\\{template:default\\}`).test(hand)
+    && new RegExp(`data-table="play\\|${inHand}\\|cast"[^>]*data-copytext=`).test(hand));
+  c.data.cardcasting.copyOnCast = false;
+  ok('with the switch off a Cast carries nothing', !new RegExp(`data-table="play\\|${inHand}\\|cast"[^>]*data-copytext=`).test(subsystems.cardTableView(c, ctx, 'hand')));
+  ok('the hand zone is one implementation: the tab and the window draw the same card', sheet.includes(hand.match(/<div class="mcard mini[^]*?<\/div>\s*<\/div>/)[0]));
+  c.tableEnd();
+  ok('with no encounter the table window is the head alone', !subsystems.cardTableView(c, ctx, 'table').includes('tablefield'));
+
+  const deck = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('a face has its Dice row: the field, the picker, the d20 and the preview', deck.includes('data-item="cardcasting.cards|0|dice"')
+    && deck.includes('data-append="cardcasting.cards|0|dice"') && deck.includes('data-roll="card|cardcasting.cards|0"') && />5d6<\/span>/.test(deck));
+  ok('the picker offers the blast shapes and the casting modifier', deck.includes('value="{1+floor(caster.level/2)}d6"') && deck.includes('+int.mod'));
+  ok('a face with dice and a twin offers to hand them on; one without a twin does not', !deck.includes('data-dice-share="cardcasting.cards|0"'));
+  c.data.cardcasting.cards.push({ name: 'Spark', qty: 1, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', dice: '', sphere: '', tags: '' });
+  c.recompute();
+  ok('…and does once a twin exists', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-dice-share="cardcasting.cards|0"'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

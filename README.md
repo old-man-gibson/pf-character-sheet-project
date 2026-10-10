@@ -120,6 +120,8 @@ app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geome
 app/js/publish.js       a character as a third party receives it: only the pack entries it
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
+app/cards.html          the card table, or the hand, in a window of its own (js/card-window.js):
+                        drawn by the sheet that opened it, for a streamed game
 forge/                  Homebrew Workbench, the homebrew workbench: index.html, forge.css, js/
                         (schema, store, pack, forge) -- entries in this browser, packs out
                         to the sheet (docs/extensions.md, From Homebrew Workbench)

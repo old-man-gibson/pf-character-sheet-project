@@ -266,8 +266,10 @@ function subDice(a, b) {
  * here and nothing else.
  */
 export function rollText(spec, format = DEFAULT_ROLL_FORMAT) {
-  if (!spec || !(spec.rolls || []).length) return '';
-  const { rolls } = spec;
+  // A spec with notes and no rolls -- a card whose effect has no dice -- is
+  // still a message: the name and what it does, with nothing to roll.
+  if (!spec || !((spec.rolls || []).length || (spec.notes || []).length)) return '';
+  const rolls = spec.rolls || [];
   const notes = spec.notes || [];
   const name = escapeRoll20(spec.name);
 
@@ -278,10 +280,11 @@ export function rollText(spec, format = DEFAULT_ROLL_FORMAT) {
     // One roll is a real /roll command; several have to share a message, and
     // inline rolls are how Roll20 puts more than one result on one line.
     if (rolls.length === 1) return `/roll ${rolls[0].formula} ${name}${tail}`.trimEnd();
+    if (!rolls.length) return `${name}${tail}`;
     return `${name}: ${rolls.map((r) => `${escapeRoll20(r.label)} [[${r.formula}]]`).join(', ')}${tail}`;
   }
 
-  if (format === 'pf') {
+  if (format === 'pf' && rolls.length) {
     const pf = pfText(spec, name);
     if (pf) return pf;
   }

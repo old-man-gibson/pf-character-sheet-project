@@ -9,7 +9,7 @@
  * what it did.
  */
 
-import { parseDiceExpr, statMod } from '../../rules.js';
+import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
 import { evaluateAmount } from '../util.js';
@@ -1485,6 +1485,155 @@ export function tableBoost(model, id, which) {
   if (!roll) return model;
   if (roll.sp > 0 && model.spellPointTracker()) spendSP(model, roll.sp, `${tableName(model, id)} — ${roll.label}`);
   return model.tableRoll(id, { which });
+}
+
+/* ------------------------------------------------------------------ *
+ * A card as text for a chat box.
+ *
+ * The table rolls a card's dice itself; a game run in Roll20 wants the chat
+ * box to roll them instead, and the GM wants to read what the card does in
+ * the same message. So a card becomes a roll spec -- the shape roll20.js
+ * turns into text for every other roll on the sheet -- with its dice as
+ * rolls, resolved to numbers Roll20 can add (`{1+floor(caster.level/2)}d6 +
+ * int.mod` is `8d6+13`), and its cost, sphere and effect as notes.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The card a reference names. Two spellings, because a card is addressed
+ * two ways: an instance on the table (`3#1`, the second copy of card 3), or
+ * a face in the deck or sideboard (`cardcasting.cards|3`).
+ */
+export function cardRef(model, ref) {
+  const text = String(ref || '');
+  if (/^\d+#\d+$/.test(text)) {
+    const card = tableCard(model, text);
+    return card ? { card, list: 'cardcasting.cards', index: Number(text.split('#')[0]), id: text } : null;
+  }
+  const m = /^(cardcasting\.(?:cards|sideboard))\|(\d+)$/.exec(text);
+  if (!m) return null;
+  const list = m[1] === 'cardcasting.cards' ? model.data.cardcasting?.cards : model.data.cardcasting?.sideboard;
+  const card = list?.[Number(m[2])];
+  return card ? { card, list: m[1], index: Number(m[2]), id: null } : null;
+}
+
+/** A card's text with its formulas worked out, as the face shows it. */
+function cardProse(model, text) {
+  return model.renderProse(String(text ?? '')).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
+}
+
+/**
+ * Each of a card's rolls worked out: `{ label, source, formula, sp }`, where
+ * `source` is the entry with its formulas resolved ("8d6+13" from
+ * "{1+floor(caster.level/2)}d6+int.mod") and `formula` the dice written out
+ * plainly -- or '' when the entry is not dice, in which case `error` says why.
+ * The deck face previews these beside the Dice field; the Roll20 text is
+ * built from them. One reading, so the two agree.
+ */
+export function cardRollFormulas(model, card) {
+  const rolls = cardRolls(model, card);
+  if (!rolls.length) return [];
+  const scope = model.scope();
+  return rolls.map((r) => {
+    const source = cardProse(model, r.expr).trim();
+    const { dice, flat, error } = parseDiceExpr(source, (rem) => evaluateFormula(rem, scope));
+    const ok = !error && Object.keys(dice).length > 0;
+    return {
+      label: r.label === 'roll' ? 'Roll' : r.label,
+      source,
+      formula: ok ? diceString(dice, flat) : '',
+      error: ok ? '' : (error || 'no dice'),
+      sp: r.sp,
+    };
+  });
+}
+
+/**
+ * A piece added to a Dice field by the picker beside it: a new roll opens
+ * with "; " and a bonus with "+", and either joins what is there -- or
+ * starts the field when it is empty, without the joiner.
+ */
+export function appendDiceText(current, piece) {
+  const now = String(current ?? '').trimEnd();
+  const add = String(piece ?? '');
+  if (!now) return add.replace(/^\s*;\s*/, '').replace(/^\s*\+\s*(?=[a-z{(])/i, '');
+  if (/^\s*[;+]/.test(add)) return `${now}${add.startsWith(';') ? add : add.trim()}`;
+  if (/[:;]\s*$/.test(now)) return `${now} ${add}`;
+  return `${now}; ${add}`;
+}
+
+/** How long a card's effect may be before it is a note rather than part of the name. */
+const SHORT_EFFECT = 80;
+
+/** How much of a long effect travels. A chat message is not a rulebook page. */
+const EFFECT_NOTE_MAX = 600;
+
+/**
+ * One card as a roll spec: `{ name, rolls, notes, queries }`.
+ *
+ * The name is the card's; a short, one-line effect joins it ("Big Sky — Fire
+ * Blast (Chain Blast)"), since on a Harrow deck the card's name says nothing
+ * about what it does. A longer effect is a note of its own. Every entry in
+ * the Dice field is a roll, formulas resolved first and the dice written out
+ * plainly; one that does not parse as dice still travels, as a note, rather
+ * than being dropped. A card without dice is a spec with notes alone, which
+ * is still a message worth posting.
+ */
+export function cardRollSpec(model, ref) {
+  const found = cardRef(model, ref);
+  if (!found) return null;
+  const { card } = found;
+  const p = model.data.cardcasting || {};
+  const effect = cardProse(model, card.effect).trim();
+  const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
+  const own = String(card.name || '').trim();
+  const name = own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
+
+  const rolls = [];
+  const notes = [];
+  for (const r of cardRollFormulas(model, card)) {
+    if (r.formula) rolls.push({ label: r.label, formula: r.formula });
+    else if (r.source) notes.push({ label: r.label, text: r.source });
+  }
+
+  const cost = String(card.cost ?? '').trim();
+  const colors = String(card.calc?.colors || '');
+  if (cost) {
+    const words = [...colors].map((c) => (CARD_COLORS.find(([k]) => k === c) || [c, c])[1]).join('/');
+    notes.push({ label: 'Cost', text: `${cost} SP${words ? ` (${words})` : ''}` });
+  }
+  const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
+  if (type) notes.push({ label: 'Sphere', text: type });
+  if (card.mana) notes.push({ label: 'Mana', text: String(card.mana) });
+  if (effect && !shortEffect) {
+    notes.push({ label: 'Effect', text: effect.length > EFFECT_NOTE_MAX ? `${effect.slice(0, EFFECT_NOTE_MAX - 1)}…` : effect });
+  }
+  if (p.harrow && (card.suit || card.alignment)) {
+    notes.push({ label: 'Harrow', text: [card.suit, card.alignment].filter(Boolean).join(', ') });
+  }
+  return { name, rolls, notes, queries: [] };
+}
+
+/**
+ * The other cards in the same list with this card's effect: the three other
+ * Infernal Combustions, the second Grave Peril. They share an effect, so they
+ * share its dice; typing the dice once and handing them on is the point.
+ */
+export function cardSiblings(model, list, index) {
+  const cards = list === 'cardcasting.sideboard' ? model.data.cardcasting?.sideboard : model.data.cardcasting?.cards;
+  const card = cards?.[index];
+  const effect = String(card?.effect || '').trim().toLowerCase();
+  if (!card || !effect) return [];
+  return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
+}
+
+/** Give this card's Dice field to every card that shares its effect. Returns how many took it. */
+export function shareCardDice(model, list, index) {
+  const cards = list === 'cardcasting.sideboard' ? model.data.cardcasting?.sideboard : model.data.cardcasting?.cards;
+  const dice = String(cards?.[index]?.dice ?? '');
+  const siblings = cardSiblings(model, list, index);
+  for (const i of siblings) cards[i].dice = dice;
+  if (siblings.length) model.recompute();
+  return siblings.length;
 }
 
 /**

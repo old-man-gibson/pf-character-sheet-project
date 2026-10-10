@@ -739,6 +739,16 @@ ids (`<card>#<copy>`) — deck order, hand, in play, mana in play (with a tapped
 discard, exile and the three Lifebound piles — so an encounter is play state like hit
 points: saved, restored, and a few hundred bytes.
 
+**Dice on a card.** The Dice row under a face's text takes one roll or several with
+names — `8d6+int.mod`, or `damage: {1+floor(caster.level/2)}d6+int.mod; boost (1 SP):
+15d6` — and shows beside the field what each works out to right now (`8d6+13`), or
+says when an entry is not dice. The **add…** picker beside it writes the common
+shapes in the sheet's own spelling — a blast's 1d6 + 1d6 per two caster levels, 1d6
+per caster level, the casting modifier, a boosted second roll — so the field teaches
+the syntax as it fills. A deck usually holds the same effect under several names
+(four *Infernal Combustion*s, six blasts); **→ N alike** hands one card's dice to
+every card with the same effect.
+
 | Control | What the rules say, and what it does |
 |---|---|
 | **Start encounter** | shuffle every copy; draw 1 + casting modifier (at least 2), plus 2 per Loaded Hand. Under Mana Pool a plain Mana Point card drawn goes straight to the table — except under Gradual Ramp, where it waits in hand to be played one a round. |
@@ -749,6 +759,8 @@ points: saved, restored, and a few hundred bytes.
 | **As mana** | a Mana Point card, or the mana half of a fused card, onto the table. Gradual Ramp allows one a round — the button greys out after it — except a card tagged *Mana Rock* (for a spell point) or *Moxen*. |
 | **Trap** | with the *Trap Card* deck feat: the card goes face down into play; **Spring** casts it then (keywords and all), **Reveal** turns it up. |
 | 🎲 | a cast (or a springing trap, or a Retrace) rolls the card's dice by itself — the **Dice** field (`6d6+int.mod` — the flat part reads the sheet) or the first dice in its text, formulas resolved first — and logs `[5, 1, 3, 3, 5, 5] + 13 = 35`; the header shows the last roll and 🎲 rolls again. |
+| d20 (beside 🎲) | copies the card for Roll20, in the format the sheet's other d20s use: its name with a short effect (*Big Sky — Fire Blast*), each Dice entry as a roll with the formulas worked out (`8d6+13`), and its cost, sphere, mana and a long effect as lines. A card with no dice is still a message — the GM reads what it does. **Copy for Roll20 on cast** (in the controls) does the same on every Cast, Ongoing, Spring and Retrace, so a cast is one click and a paste. |
+| **Table window** / **Hand window** | the table in two windows of its own, for streaming: the *table* window is what a shared screen may show — in play, the deck's back, mana, the piles, the log, the last roll — and never the hand or a card Read the Cards turned up; the *hand* window is the player's: the hand with its buttons, the round controls, the top of the deck. Both are drawn by the sheet on every change and send their presses back to it, so there is one table, shown three ways. **Plain** in a window's bar hides the buttons and the rules notes for the screen being shared. |
 | **Shuffle discard in** | Cooldown's full-round action. |
 | **Read the cards** | the top card, or three when taken twice; *bottom (1 SP)* buries it for the spell point the rule charges, *discard* is the twice-taken option. |
 | **Retrace** (on a discard row) | casts the card from the discard: its cost + 1 spell point (or a longer casting time — leave the point alone then), it rolls, its keywords fire, and it stays in the discard. |
