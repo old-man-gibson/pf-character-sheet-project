@@ -43,7 +43,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -2297,6 +2297,16 @@ console.log('a two-stat slot is read one way');
   check('the abilities in a slot',
     [statKeys('Int', 'Wis'), statKeys('Int', 'int'), statKeys('Intelligence', ''), statKeys('', 'Cha'), statKeys('Foo', 'Foo')],
     [['int', 'wis'], ['int'], ['int'], ['cha'], []]);
+}
+
+console.log('a crit is read and written one way');
+{
+  // The weapon's damage, the Stat Block and the Roll20 copy read the
+  // multiplier through critMultOf; the short lines write a threat through
+  // threatText.
+  check('the multiplier however it was saved, never below x2',
+    [critMultOf(3), critMultOf('x3'), critMultOf('×4'), critMultOf(''), critMultOf('x1')], [3, 3, 4, 2, 2]);
+  check('a threat as a short line writes it', [threatText(19, 3), threatText(20, 2)], ['19-20/x3', '20/x2']);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');

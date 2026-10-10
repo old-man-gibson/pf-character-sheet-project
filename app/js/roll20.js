@@ -43,7 +43,7 @@
  */
 import {
   ABILITIES, ABILITY_LABELS, fmt, diceString, addDice, skillLabel, statModDelta,
-  ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, stepDiceMap,
+  ATTACK_TYPE_MODE, attackModeTotal, parseDiceExpr, stepDiceMap, threatText,
 } from './rules.js';
 import { COMPANION_LABELS } from './companions.js';
 import { evaluateFormula } from './formula.js';
@@ -594,7 +594,7 @@ function companionAttackSpec(named, a) {
     notes.push({ label: 'Damage', text: fmt(bonus) });
   }
   if (range < 20 || mult !== 2) {
-    notes.push({ label: 'Threat', text: `${range < 20 ? `${range}-20` : '20'}/x${mult}` });
+    notes.push({ label: 'Threat', text: threatText(range, mult) });
   }
   if (String(a.damageType ?? '').trim()) notes.push({ label: 'Damage type', text: a.damageType });
   if (a.primaryResolved === false) {
@@ -885,7 +885,7 @@ export function weaponRollSpec(c, index, cs = null, answers = null, single = fal
     });
   }
   if (critRange < 20 || mult !== 2) {
-    notes.push({ label: 'Threat', text: `${critRange < 20 ? `${critRange}-20` : '20'}/x${mult}` });
+    notes.push({ label: 'Threat', text: threatText(critRange, mult) });
   }
   if (String(w.damageType ?? '').trim()) notes.push({ label: 'Damage type', text: w.damageType });
   // A parenthesised aside in the Dice field ("4d6 (8d6)") is not rollable, so

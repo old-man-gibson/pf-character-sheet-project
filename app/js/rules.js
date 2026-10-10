@@ -2407,6 +2407,19 @@ export function parseDiceExpr(text, evaluate) {
   return { dice, flat, notes, error };
 }
 
+/**
+ * A weapon's crit multiplier however it was saved -- 3, "3", "x3", "×3" --
+ * as the number it is, never below ×2. The weapon's damage, the Roll20 copy
+ * and the Stat Block all read it here.
+ */
+export function critMultOf(value) {
+  const m = String(value ?? '').match(/(\d+)/);
+  return Math.max(2, m ? Number(m[1]) : 2);
+}
+
+/** A threat range (its lowest roll) and multiplier as a short line writes them: "19-20/x3", "20/x2". */
+export const threatText = (from, mult) => `${from < 20 ? `${from}-20` : '20'}/x${mult}`;
+
 /** A typeset minus (U+2212) or dash read as the minus sign it stands for in dice text. */
 export const minusSign = (text) => String(text ?? '').replace(/[\u2212\u2013]/g, '-');
 

@@ -12,7 +12,7 @@ import {
   TALENTED_KNUCKLE_TALENTS, UNARMED_NATIVE_THRESHOLD, UNARMED_SPHERES, UNORTHODOX_FEAT,
   UNORTHODOX_SPHERES_PER_FEAT,
   addDice, diceAverage, diceString, fmt, ladderRung, parseDiceExpr, sizeAttackMod, statMod,
-  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap,
+  raiseDice, unarmedDice, SIZE_MODIFIERS, stepDiceMap, critMultOf,
 } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { parseQuery } from '../../inline.js';
@@ -452,8 +452,7 @@ export function recomputeEquipment(model) {
     //   - [[… Crit]] tokens: crit-only damage, multiplied;
     //   - the Bonus Crit Damage column: crit-only, unmultiplied (burst dice);
     //   - {{… Crit}}: applies to confirmation rolls only.
-    const multMatch = String(w.critMult ?? '').match(/(\d+)/);
-    const critMultNum = Math.max(2, multMatch ? Number(multMatch[1]) : 2);
+    const critMultNum = critMultOf(w.critMult);
     const critTagged = critDmg;
     const hasCritTagged = Object.keys(critTagged.dice).length > 0 || critTagged.flat !== 0;
     const hasBcd = !bcd.error && (Object.keys(bcd.dice).length > 0 || bcd.flat !== 0);
