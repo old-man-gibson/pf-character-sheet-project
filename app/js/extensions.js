@@ -836,16 +836,20 @@ export function extensionStore(medium = globalThis.localStorage) {
       await write([[EXTENSIONS_KEY, JSON.stringify(index)], [extensionKey(id), null]]);
     },
 
-    /** Switch a pack on or off; bundled ones are remembered by id. */
+    /**
+     * Switch a pack on or off, or a list of them as one write (a fold's
+     * All on); bundled ones are remembered by id.
+     */
     async setEnabled(id, on, { bundled = false } = {}) {
       await open();
+      const ids = new Set([id].flat());
       const index = readIndex();
       if (bundled) {
         const set = new Set(index.disabledBundled);
-        if (on) set.delete(id); else set.add(id);
+        for (const one of ids) { if (on) set.delete(one); else set.add(one); }
         index.disabledBundled = [...set];
       } else {
-        index.extensions = index.extensions.map((e) => (e.id === id ? { ...e, enabled: !!on } : e));
+        index.extensions = index.extensions.map((e) => (ids.has(e.id) ? { ...e, enabled: !!on } : e));
       }
       await write([[EXTENSIONS_KEY, JSON.stringify(index)]]);
     },

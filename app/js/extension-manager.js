@@ -93,6 +93,37 @@ const sourceLink = (source) => {
     : ` · ${esc(s)}`;
 };
 
+/**
+ * A section of the pack list longer than this is filed by author, one fold
+ * per author; a shorter one stays a single list, where folds would only add
+ * clicks.
+ */
+export const PACK_GROUP_MIN = 12;
+
+/** What the list's search box looks through: a pack's name, author, contents and source. */
+export const packFindText = (s) => lower([s.name, s.author, s.description, describeSummary(s), s.source].join(' '));
+
+/**
+ * A long section of the pack list, filed by author: a group per author in
+ * name order, the packs inside it by name, and packs with no author last.
+ * Authors spelled with different capitals are one group, under the first
+ * spelling met. Each item is `{ s, ... }` with `s` the pack's summary.
+ */
+export function packGroups(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const author = String(item.s.author || '').trim();
+    const key = lower(author);
+    if (!groups.has(key)) groups.set(key, { author, items: [] });
+    groups.get(key).items.push(item);
+  }
+  const order = { sensitivity: 'base', numeric: true };
+  const byName = (x, y) => String(x.s.name).localeCompare(String(y.s.name), undefined, order);
+  return [...groups.values()]
+    .sort((a, b) => (!a.author) - (!b.author) || a.author.localeCompare(b.author, undefined, order))
+    .map((g) => ({ author: g.author, items: g.items.sort(byName) }));
+}
+
 const CSS = `
 .extmgr { font-size: 0.86rem; min-width: min(46rem, 94vw); max-width: 94vw; max-height: 88vh; overflow: auto; }
 .extmgr h2 { margin: 0 0 4px; font-size: 1rem; }
@@ -106,6 +137,17 @@ const CSS = `
 .extmgr .row .meta a { color: inherit; }
 .extmgr .row .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .extmgr .row.off .name, .extmgr .row.off .meta { opacity: 0.45; }
+/* Rows and folds hidden by the pack list's search; a row's own display would win otherwise. */
+.extmgr [hidden] { display: none !important; }
+.extmgr .packfind { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 6px; }
+.extmgr .packfind input[type=search] { flex: 1; min-width: 12rem; }
+.extmgr .d { opacity: 0.65; font-size: 0.76rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
+/* A long section of the list, filed by author: one fold per author. */
+.extmgr details.packgroup { border-top: 1px solid var(--line, #333); }
+.extmgr details.packgroup > summary { cursor: pointer; padding: 6px 0; }
+.extmgr details.packgroup .gacts { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.extmgr details.packgroup .gacts button { padding: 1px 9px; font-size: 0.76rem; }
+.extmgr details.packgroup > .row { margin-left: 16px; }
 .extmgr button { font: inherit; font-size: 0.82rem; color: inherit; background: transparent; border: 1px solid var(--line, #555); border-radius: 16px; padding: 3px 11px; cursor: pointer; }
 .extmgr button:hover { border-color: var(--accent, #d4a24a); }
 .extmgr button.primary { border-color: var(--accent, #d4a24a); color: var(--accent, #d4a24a); }
@@ -114,7 +156,7 @@ const CSS = `
 .extmgr label.sw { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; white-space: nowrap; }
 .extmgr .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .extmgr .actions .spacer { flex: 1; }
-.extmgr textarea, .extmgr input[type=text], .extmgr input[type=number], .extmgr input[type=url], .extmgr select {
+.extmgr textarea, .extmgr input[type=text], .extmgr input[type=search], .extmgr input[type=number], .extmgr input[type=url], .extmgr select {
   font: inherit; font-size: 0.84rem; color: inherit; background: var(--bg, #111); border: 1px solid var(--line, #444); border-radius: 6px; padding: 4px 7px; }
 .extmgr textarea { width: 100%; box-sizing: border-box; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; }
 .extmgr textarea.prose { font-family: inherit; font-size: 0.84rem; }
@@ -194,6 +236,10 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
   let notice = null;
   let showPaste = false;
   let confirmRemove = null;
+  // The pack list's search, its All/On/Off choice, and which author folds are open.
+  let packQuery = '';
+  let packShow = 'all';
+  const openGroups = new Set();
   const openBlocks = new Set();
   const openDisciplines = new Set();   // discipline index
   const openEntries = new Set();       // "<discipline>|<entry>", whose cells are showing
@@ -219,7 +265,7 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
     const off = store ? store.disabledBundled() : new Set();
     const local = store ? store.list() : [];
     const row = (s, { bundled: isBundled, enabled }) => `
-      <div class="row ${enabled ? '' : 'off'}" data-id="${esc(s.id)}">
+      <div class="row ${enabled ? '' : 'off'}" data-id="${esc(s.id)}" data-find="${esc(packFindText(s))}">
         <label class="sw" title="${enabled ? 'On — its tables and blocks are in use' : 'Off — ignored until switched on'}">
           <input type="checkbox" data-toggle="${esc(s.id)}" data-bundled="${isBundled}" ${enabled ? 'checked' : ''}>
         </label>
@@ -238,6 +284,40 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         </div>
       </div>`;
 
+    /*
+     * One section of the list. A long one is filed by author, a fold per
+     * author with a switch for every pack it shows. The search box and the
+     * All/On/Off buttons hide rows where they stand (applyPackFilter), so
+     * typing never redraws the dialog under the caret.
+     */
+    const section = (key, items) => {
+      if (items.length <= PACK_GROUP_MIN) return items.map((it) => row(it.s, it)).join('');
+      return packGroups(items).map(({ author, items: list }) => {
+        const group = `${key}|${author}`;
+        const count = `${list.length} pack${list.length === 1 ? '' : 's'} · ${list.filter((it) => it.enabled).length} on`;
+        return `<details class="packgroup" data-group="${esc(group)}"${openGroups.has(group) ? ' open' : ''}>
+          <summary><strong>${esc(author || 'No author')}</strong>
+            <span class="d" data-group-count data-text="${esc(count)}">${esc(count)}</span>
+            <span class="gacts">
+              <button data-group-switch="on" title="Switch on every pack shown in this group">All on</button>
+              <button data-group-switch="off" title="Switch off every pack shown in this group">All off</button>
+            </span></summary>
+          ${list.map((it) => row(it.s, it)).join('')}
+        </details>`;
+      }).join('');
+    };
+    const bundledItems = bundled.map((e) => ({ s: summarize(e), bundled: true, enabled: !off.has(e.id) }));
+    const localItems = local.map((s) => ({ s, bundled: false, enabled: s.enabled !== false }));
+    const tally = (items) => (items.length > PACK_GROUP_MIN
+      ? ` <span class="d">${items.length} packs · ${items.filter((it) => it.enabled).length} on</span>` : '');
+    const finder = bundledItems.length + localItems.length > PACK_GROUP_MIN ? `<div class="packfind">
+        <input type="search" data-pack-find value="${esc(packQuery)}" spellcheck="false"
+          placeholder="Find a pack — its name, author, or what it holds" aria-label="Find a pack">
+        ${[['all', 'All'], ['on', 'On'], ['off', 'Off']].map(([v, label]) => `<button data-pack-show="${v}"
+          aria-pressed="${packShow === v}"${packShow === v ? ' class="primary"' : ''}>${label}</button>`).join('')}
+        <span class="d" data-pack-count></span>
+      </div>` : '';
+
     return `
       <h2>Extensions</h2>
       <p class="hint">Content the sheet does not carry on its own — class and discipline
@@ -247,15 +327,16 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         Everything stays in this browser.</p>
       ${notice ? `<p class="ok">${esc(notice)}</p>` : ''}
       ${error ? `<p class="err">${esc(error)}</p>` : ''}
+      ${finder}
 
-      <h3>Bundled with this deployment</h3>
-      ${bundled.length
-    ? bundled.map((e) => row(summarize(e), { bundled: true, enabled: !off.has(e.id) })).join('')
+      <h3>Bundled with this deployment${tally(bundledItems)}</h3>
+      ${bundledItems.length
+    ? section('bundled', bundledItems)
     : '<p class="hint">None — this deployment ships the engine alone.</p>'}
 
-      <h3>Mine, in this browser</h3>
-      ${local.length
-    ? local.map((s) => row(s, { bundled: false, enabled: s.enabled !== false })).join('')
+      <h3>Mine, in this browser${tally(localItems)}</h3>
+      ${localItems.length
+    ? section('local', localItems)
     : '<p class="hint">Nothing yet. Start one below, or import a pack somebody sent you.</p>'}
 
       <div class="actions">
@@ -272,6 +353,36 @@ export function mountExtensionManager(dialog, { say = () => {}, currentCharacter
         <textarea rows="6" data-paste placeholder='{"format": "character-sheet-extension", "name": "…", …}'></textarea>
         <div class="actions" style="margin-top:6px"><button class="primary" data-action="paste-go">Import pasted JSON</button></div>
       </div>` : ''}`;
+  }
+
+  const packFiltering = () => !!lower(packQuery) || packShow !== 'all';
+
+  /*
+   * The search box and the All/On/Off buttons, applied to the drawn list: a
+   * row that does not match is hidden, a fold with nothing left showing goes
+   * too, and while anything is being looked for every fold with a match is
+   * open. With nothing looked for the folds go back to how they were left.
+   */
+  function applyPackFilter() {
+    const words = lower(packQuery).split(/\s+/).filter(Boolean);
+    const filtering = packFiltering();
+    const rows = [...dialog.querySelectorAll('.row[data-find]')];
+    let shown = 0;
+    for (const r of rows) {
+      const state = packShow === 'all' || (packShow === 'on') === !r.classList.contains('off');
+      r.hidden = !(state && words.every((w) => r.dataset.find.includes(w)));
+      if (!r.hidden) shown++;
+    }
+    for (const g of dialog.querySelectorAll('details.packgroup')) {
+      const all = g.querySelectorAll('.row[data-find]').length;
+      const visible = g.querySelectorAll('.row[data-find]:not([hidden])').length;
+      g.hidden = !visible;
+      g.open = filtering ? visible > 0 : openGroups.has(g.dataset.group);
+      const count = g.querySelector('[data-group-count]');
+      if (count) count.textContent = filtering ? `${visible} of ${all} shown` : count.dataset.text;
+    }
+    const counter = dialog.querySelector('[data-pack-count]');
+    if (counter) counter.textContent = filtering ? `${shown} of ${rows.length}` : '';
   }
 
   /**
@@ -1222,6 +1333,38 @@ Hit Die: d12.
         confirmRemove = null;
         render();
       }));
+      const find = q('[data-pack-find]');
+      find?.addEventListener('input', () => { packQuery = find.value; applyPackFilter(); });
+      qa('[data-pack-show]').forEach((el) => el.addEventListener('click', () => {
+        packShow = el.dataset.packShow;
+        qa('[data-pack-show]').forEach((b) => {
+          b.setAttribute('aria-pressed', String(b === el));
+          b.classList.toggle('primary', b === el);
+        });
+        applyPackFilter();
+      }));
+      // A fold opened or shut by hand is remembered; one opened by a search is not.
+      qa('details.packgroup').forEach((g) => g.addEventListener('toggle', () => {
+        if (packFiltering()) return;
+        if (g.open) openGroups.add(g.dataset.group); else openGroups.delete(g.dataset.group);
+      }));
+      qa('[data-group-switch]').forEach((el) => el.addEventListener('click', async (e) => {
+        e.preventDefault();   // a button in a fold's heading would fold it as well
+        const on = el.dataset.groupSwitch === 'on';
+        const switches = [...el.closest('details.packgroup').querySelectorAll('.row:not([hidden]) [data-toggle]')];
+        if (!switches.length) return;
+        try {
+          await runtime.store?.setEnabled(switches.map((s) => s.dataset.toggle), on, { bundled: switches[0].dataset.bundled === 'true' });
+          notice = `Switched ${on ? 'on' : 'off'} ${switches.length} pack${switches.length === 1 ? '' : 's'}.`;
+          error = null;
+        } catch (err) {
+          notice = null;
+          error = `Could not switch those packs — ${err.message}`;
+        }
+        runtime.refresh();
+        render();
+      }));
+      applyPackFilter();
       q('[data-action="new"]')?.addEventListener('click', () => startEdit(blankExtension({ name: 'My extension' }), true));
       q('[data-action="import"]')?.addEventListener('click', () => q('[data-file]').click());
       q('[data-file]')?.addEventListener('change', (e) => {
