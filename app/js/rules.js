@@ -3431,13 +3431,22 @@ export function abilityOf(name) {
   return ABILITIES.includes(k) ? k : null;
 }
 
-/** Modifier for a stat slot, adding a second stat only when it differs. */
-export function statMod(c, stat1, stat2) {
+/**
+ * The abilities a two-stat slot is keyed to: the first, and the second only
+ * when it names a different one -- Int and Int is Int once. Every reader of a
+ * slot (statMod, statModDelta, statScore, a psionic class's ability share)
+ * goes through this, so none decides that for itself. Names that are no
+ * ability are left out.
+ */
+export function statKeys(stat1, stat2) {
   const one = abilityKey(stat1);
   const two = abilityKey(stat2);
-  let total = ABILITIES.includes(one) ? c.abilities[one].totalMod : 0;
-  if (two && two !== one && ABILITIES.includes(two)) total += c.abilities[two].totalMod;
-  return total;
+  return [one, two !== one ? two : null].filter((k) => k && ABILITIES.includes(k));
+}
+
+/** Modifier for a stat slot, adding a second stat only when it differs. */
+export function statMod(c, stat1, stat2) {
+  return statKeys(stat1, stat2).reduce((total, k) => total + c.abilities[k].totalMod, 0);
 }
 
 /**
@@ -3448,11 +3457,7 @@ export function statMod(c, stat1, stat2) {
  * way the slot itself is, second stat and all.
  */
 export function statModDelta(deltas, stat1, stat2) {
-  const one = abilityKey(stat1);
-  const two = abilityKey(stat2);
-  let total = ABILITIES.includes(one) ? (deltas[one] || 0) : 0;
-  if (two && two !== one && ABILITIES.includes(two)) total += deltas[two] || 0;
-  return total;
+  return statKeys(stat1, stat2).reduce((total, k) => total + (deltas[k] || 0), 0);
 }
 
 /**
@@ -3463,9 +3468,7 @@ export function statModDelta(deltas, stat1, stat2) {
  * one score, so the sheet took the higher. Zero when neither names an ability.
  */
 export function statScore(c, stat1, stat2) {
-  const scores = [stat1, stat2]
-    .map(abilityKey)
-    .filter((k) => ABILITIES.includes(k))
+  const scores = statKeys(stat1, stat2)
     .map((k) => Number(c.abilities[k].workingScore ?? c.abilities[k].tempScore) || 0);
   return scores.length ? Math.max(...scores) : 0;
 }

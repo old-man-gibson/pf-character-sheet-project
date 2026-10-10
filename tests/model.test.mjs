@@ -43,7 +43,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -2251,6 +2251,15 @@ console.log('the last hand-written number-or-formula fields go through evaluateA
   c.recompute();
   check('and a broken one is among the problems',
     c.formulaProblems().some((p) => p.places.some((pl) => pl.place === 'skillBudget')), true);
+}
+
+console.log('a two-stat slot is read one way');
+{
+  // statKeys decides which abilities a slot holds for every reader of one:
+  // the second only when it differs, names that are no ability left out.
+  check('the abilities in a slot',
+    [statKeys('Int', 'Wis'), statKeys('Int', 'int'), statKeys('Intelligence', ''), statKeys('', 'Cha'), statKeys('Foo', 'Foo')],
+    [['int', 'wis'], ['int'], ['int'], ['cha'], []]);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');
