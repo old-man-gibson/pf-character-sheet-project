@@ -225,8 +225,19 @@ export class Character {
    */
   recompute() {
     this.contributions = null;
-    this.#computePass();
-    if (this.#forwardsEarly()) this.#computePass();
+    // A token for this recalculation. What a recalculation reads but never
+    // writes -- the Planner's rows and the Classes table's names -- is checked
+    // once per token by what caches it (plannerIndex in progression.js), not
+    // on every lookup. Put back as it was after, so a recompute run inside
+    // another leaves the outer one checking again.
+    const outer = this.recomputing;
+    this.recomputing = {};
+    try {
+      this.#computePass();
+      if (this.#forwardsEarly()) this.#computePass();
+    } finally {
+      this.recomputing = outer;
+    }
     this.#emit({ type: 'recompute' });
     return this;
   }

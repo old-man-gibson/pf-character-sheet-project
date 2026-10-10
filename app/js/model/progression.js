@@ -359,13 +359,7 @@ export function removeProgressionTrack(model, index) {
 
 /** Every class named anywhere in the progression, in first-appearance order. */
 export function progressionClasses(model) {
-  const out = [];
-  for (const row of model.data.progression?.levels || []) {
-    for (const n of row.classes || []) {
-      if (n && !out.includes(n)) out.push(n);
-    }
-  }
-  return out;
+  return [...plannerIndex(model).classes];
 }
 
 /**
@@ -424,7 +418,7 @@ export function classLevelCount(model, className) {
  * customized weapon count is read from; `classLevelCount` adds the rules.
  */
 export function ownLevelCount(model, className) {
-  const planned = closestName(className, model.progressionClasses());
+  const planned = plannerSpelling(model, className);
   const cap = Number(model.data.identity?.level) || 20;
   // A class on the Classes table is counted the way its saves, hit points and
   // BAB are (classPresence): its Levels box when one is set, the Planner's
@@ -432,7 +426,7 @@ export function ownLevelCount(model, className) {
   // the Planner used to count here, so a Wizard 12 with an empty Planner had
   // 12th-level saves and cast as nobody at all.
   const table = (model.data.classes || []).filter((x) => x?.name);
-  const listed = closestName(className, table.map((x) => x.name));
+  const listed = tableSpelling(model, className);
   let own = 0;
   if (listed) {
     const row = table.find((x) => x.name === listed);
@@ -1152,7 +1146,7 @@ export function classPresence(model, classes, level) {
     if (override != null) {
       byLevel = Array.from({ length: level }, (_, i) => i + 1 <= override);
     } else {
-      byLevel = Array.from({ length: level }, (_, i) => plannerHasClass(model, cls.name, i + 1));
+      byLevel = plannedLevels(model, cls.name, level);
       // A class the Planner never mentions is assumed to run all levels —
       // sparse planners name a class once rather than on every row.
       if (!byLevel.some(Boolean)) byLevel = byLevel.map(() => true);
@@ -1412,15 +1406,6 @@ export function applyHitPoints(model, summary, hdPerLevel = []) {
 }
 
 /**
- * Does the progression grant a level of `className` at character level `lvl`?
- *
- * Matched the way `classLevelCount` matches, because it is the same join and
- * the same trap: a class table reading `Legendary Kineticist` against a
- * Planner reading `legendary kineticst` is one character, and an exact
- * comparison answers "never" for every level -- which the caller then reads
- * as a class the Planner does not mention at all.
- */
-/**
  * Whether a class has character level `lvl`: by its pinned levels when a
  * block pins them (the first N), else by the Planner's row.
  */
@@ -1445,10 +1430,96 @@ export function levelFollowingPin(model, className, override, { forwardKey = '',
   };
 }
 
+/*
+ * The Planner, read once.
+ *
+ * Every class-level reader asks the same few questions -- which Planner rows
+ * name this class, and which spelling on the Planner or the Classes table is
+ * this name -- for every level, every casting block and every talent budget,
+ * on every recompute, and each answer is a forgiving match against the names
+ * on a row. So the answers are kept, per character, until the Planner's rows
+ * or the Classes table's names change. The check is their text rather than
+ * the arrays holding it, so a row edited in place is seen as surely as one
+ * replaced -- once per recalculation (`model.recomputing`, which nothing in a
+ * recalculation changes them under) and on every lookup outside one.
+ */
+const PLANNER_INDEX = new WeakMap();
+
+function plannerIndex(model) {
+  const known = PLANNER_INDEX.get(model);
+  if (known && model.recomputing && known.checked === model.recomputing) return known;
+  const index = readPlanner(model, known);
+  index.checked = model.recomputing || null;
+  return index;
+}
+
+/** The index as the Planner and Classes table stand: `known` while they still read the same. */
+function readPlanner(model, known) {
+  const lists = (model.data.progression?.levels || []).map((row) => (Array.isArray(row?.classes) ? row.classes : []));
+  const table = (model.data.classes || []).map((x) => x?.name).filter(Boolean);
+  const text = `${lists.map((names) => names.join('\u0001')).join('\u0002')}\u0003${table.join('\u0001')}`;
+  if (known && known.text === text) return known;
+  const named = lists.map((names) => [...names]);
+  const classes = [];
+  for (const names of named) for (const n of names) if (n && !classes.includes(n)) classes.push(n);
+  const index = { text, named, table, classes, rows: new Map(), planned: new Map(), listed: new Map() };
+  PLANNER_INDEX.set(model, index);
+  return index;
+}
+
+/**
+ * A question put to the index, answered once: `cache` holds the answers by
+ * the name asked about. A name that is not a string is answered afresh, so
+ * `null` and `''` cannot share an answer.
+ */
+function remembered(cache, name, answer) {
+  if (typeof name !== 'string') return answer();
+  let hit = cache.get(name);
+  if (hit === undefined) {
+    hit = answer();
+    cache.set(name, hit);
+  }
+  return hit;
+}
+
+/** The spelling on the Planner that a class name means, or '' (see closestName). */
+export function plannerSpelling(model, className) {
+  const index = plannerIndex(model);
+  return remembered(index.planned, className, () => closestName(className, index.classes));
+}
+
+/** The spelling on the Classes table that a class name means, or ''. */
+export function tableSpelling(model, className) {
+  const index = plannerIndex(model);
+  return remembered(index.listed, className, () => closestName(className, index.table));
+}
+
+/**
+ * Does the progression grant a level of `className` at character level `lvl`?
+ *
+ * Matched the way `classLevelCount` matches, because it is the same join and
+ * the same trap: a class table reading `Legendary Kineticist` against a
+ * Planner reading `legendary kineticst` is one character, and an exact
+ * comparison answers "never" for every level -- which the caller then reads
+ * as a class the Planner does not mention at all.
+ */
 export function plannerHasClass(model, className, lvl) {
-  const row = model.data.progression?.levels?.[lvl - 1];
-  if (!row) return false;
-  const classes = row.classes || [];
-  return classes.includes(className)
-    || !!closestName(className, classes);
+  return plannerRows(model, className)[lvl - 1] ?? false;
+}
+
+/** One entry per Planner row: whether the row names this class. */
+function plannerRows(model, className) {
+  const index = plannerIndex(model);
+  return remembered(index.rows, className,
+    () => index.named.map((names) => names.includes(className) || !!closestName(className, names)));
+}
+
+/**
+ * Character levels 1 to `level`, each true where the Planner's row for it
+ * names the class. No fallback: a class the Planner never names is false
+ * throughout (classPresence is what reads that as every level).
+ */
+export function plannedLevels(model, className, level) {
+  const rows = plannerRows(model, className);
+  return Array.from({ length: level }, (_, i) => rows[i] ?? false);
 }

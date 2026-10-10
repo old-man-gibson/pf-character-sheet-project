@@ -24,7 +24,7 @@ import { forwardedBadge, sheetBonusCell, sheetBonusField, sheetBonusHead, sheetB
 import { rollButton } from '../roll.js';
 import { weaponNow } from '../weapon-now.js';
 import {
-  guileTalentRows, ownTalentRows, plannerHasClass, trackTalentSide, trainingSideInUse,
+  guileTalentRows, ownTalentRows, plannedLevels, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
 import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
 import { slotSpend } from './subsystems.js';
@@ -1765,7 +1765,7 @@ function classesPanel(model, ctx) {
           const over = x.levelsOverride == null ? null : Number(x.levelsOverride);
           // What the box goes back to when cleared: the Planner's rows, or
           // every level when the Planner never names the class.
-          const planned = Array.from({ length: level }, (_, l) => plannerHasClass(model, x.name, l + 1)).filter(Boolean).length;
+          const planned = plannedLevels(model, x.name, level).filter(Boolean).length;
           const auto = planned || level;
           const from = planned
             ? `the Planner features it on ${planned} of ${level} level${level === 1 ? '' : 's'}`

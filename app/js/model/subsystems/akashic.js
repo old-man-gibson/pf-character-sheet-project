@@ -9,7 +9,7 @@ import {
   ESSENCE_SOURCES, KHESHIG_VEILS, essenceInvested, statMod, tempEssence, tempEssenceCost, veilDC,
 } from '../../rules.js';
 import { sheetReader } from '../document.js';
-import { classPresence } from '../progression.js';
+import { classPresence, tableSpelling } from '../progression.js';
 import { sphereTalent, sphereTalentKnowledge } from '../spheres.js';
 import { closestName, normalizeName, slug, splitTags } from '../util.js';
 
@@ -319,9 +319,8 @@ function applyVeilweaving(model, a) {
   const presence = classPresence(model, table, level);
   const sphere = (Number(d.training?.magic?.tally?.Veilweaving) || 0) > 0;
   const casters = (d.training?.magic?.classes || []).filter((x) => x?.name && !x.blendedMirror);
-  const tableNames = table.map((x) => x.name);
   const tableClass = (name) => {
-    const hit = closestName(name, tableNames);
+    const hit = tableSpelling(model, name);
     return hit ? table.find((x) => x.name === hit) : null;
   };
   const caster = (name) => {
