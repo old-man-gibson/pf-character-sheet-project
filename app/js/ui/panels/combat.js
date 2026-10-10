@@ -396,18 +396,19 @@ function boonSplit(m) {
       value="${value}" data-split="training.magic.tradition.boonSP|${p.steps}|${kind}|${esc(p.label)}"
       aria-label="${esc(p.label)} — steps as ${kind === 'sp' ? 'spell points' : 'essence'}">`;
 
+    // Each split is a steps box with what it comes to straight beside it, the
+    // pair under one heading; see table.build.boonsplit in sheet.css.
     return `<h4 class="subhead">Granted, and how it was spent</h4>
-      <div class="tablewrap"><table class="talents pools">
-        <colgroup><col class="talent"><col class="tool"><col class="sphere"><col class="tool"><col class="sphere"></colgroup>
-        <thead><tr><th>Pool</th>
-          <th class="num" colspan="2">As spell points</th>
-          <th class="num" colspan="2">As essence</th></tr></thead>
+      <div class="tablewrap"><table class="build compact boonsplit">
+        <thead><tr><th scope="col">Pool</th>
+          <th scope="colgroup" colspan="2" class="splithead">As spell points</th>
+          <th scope="colgroup" colspan="2" class="splithead">As essence</th></tr></thead>
         <tbody>${pools.map((p) => `<tr>
-          <td>${esc(p.label)} <span class="badge">${p.points}</span></td>
-          <td class="num">${steps(p, p.spSteps, 'sp')}</td>
-          <td class="num total">${p.sp} SP</td>
-          <td class="num">${steps(p, p.essenceSteps, 'essence')}</td>
-          <td class="num total">${p.essence}</td>
+          <th scope="row">${esc(p.label)} <span class="badge" title="What this pool's ${p.steps} steps come to in all">${p.points}</span></th>
+          <td class="steps">${steps(p, p.spSteps, 'sp')}</td>
+          <td class="gives total">${p.sp} SP</td>
+          <td class="steps">${steps(p, p.essenceSteps, 'essence')}</td>
+          <td class="gives total">${p.essence}</td>
         </tr>`).join('')}</tbody>
       </table></div>
       <p class="hint">Steps, not points: each pool's steps add back up to its ladder
