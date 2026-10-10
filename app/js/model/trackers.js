@@ -9,7 +9,7 @@
  */
 
 import { BUFF_MOD_KEYS, tierAtLevel } from '../rules.js';
-import { COMPANION_KINDS, companionHeading } from '../companions.js';
+import { companionById, companionEntries, companionHeading } from '../companions.js';
 import { evaluateFormula } from '../formula.js';
 import { isDefaultStyle, normalizeStyle, resolveZones } from '../tracker-style.js';
 import { forwarded, scopeIfFormulas } from './scope.js';
@@ -85,10 +85,6 @@ export const SYSTEM_POOLS = [
  */
 const COMPANION_POOL = /^sp:(.+)$/;
 
-const companionById = (d, id) => COMPANION_KINDS
-  .flatMap((kind) => (d[kind] || []).map((b) => ({ kind, b })))
-  .find(({ b }) => String(b?.id ?? '') === id) || null;
-
 function companionPoolDef(d, id) {
   const found = companionById(d, id);
   if (!found) return null;
@@ -108,7 +104,7 @@ function companionPoolDef(d, id) {
 
 /** Every pool a character may hold: its own casting pools, and each casting companion's. */
 function poolDefs(d) {
-  const ids = COMPANION_KINDS.flatMap((kind) => (d[kind] || []).map((b) => String(b?.id ?? '')));
+  const ids = companionEntries(d).map(({ b }) => String(b.id ?? ''));
   return [...SYSTEM_POOLS, ...ids.filter(Boolean).map((id) => companionPoolDef(d, id))];
 }
 

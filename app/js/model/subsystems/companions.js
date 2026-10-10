@@ -6,14 +6,14 @@
  */
 
 import {
-  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionFormulas, companionSkillKey,
+  COMPANION_KINDS, COMPANION_TARGETS, companionAttackKey, companionEntries, companionFormulas, companionSkillKey,
   computeCompanion, defaultCompanion, emptyCompanionFeat, seedSkills, withTypedNumbers,
 } from '../../companions.js';
 import { ABILITIES, abilityOf } from '../../rules.js';
 import { sheetReader } from '../document.js';
 import { classLevelCount } from '../progression.js';
 import { forwarded } from '../scope.js';
-import { poolTracker } from '../trackers.js';
+import { restCompanion } from '../rest.js';
 import { setPath, skillRanksNamed } from '../util.js';
 
 // A companion: the level, HD, hit points, attack, saves, AC and every skill
@@ -381,7 +381,7 @@ export function companionOpenSlot(model, path, index) {
  */
 export function addCompanion(model, kind) {
   const list = model.data[kind] || (model.data[kind] = []);
-  const taken = new Set(COMPANION_KINDS.flatMap((k) => (model.data[k] || []).map((b) => String(b.id))));
+  const taken = new Set(companionEntries(model.data).map(({ b }) => String(b.id)));
   let id = kind;
   for (let n = 2; taken.has(id); n++) id = `${kind}${n}`;
   const block = { ...defaultCompanion(kind), id };
@@ -419,10 +419,8 @@ export function companionHeal(model, kind, index, amount) {
 export function companionRest(model, kind, index) {
   const b = blockAt(model, kind, index);
   if (!b) return model;
-  b.hp = { ...(b.hp || {}), damage: 0, temp: 0 };
   // Its own spell points come back with its hit points: a companion recovers
   // its resources when its caster rests, and this is that rest.
-  const pool = b.id ? poolTracker(model, `sp:${b.id}`) : null;
-  if (pool) pool.current = 0;
+  restCompanion(model, b);
   return model.recompute();
 }

@@ -54,6 +54,27 @@ export function companionHeading(kind, block) {
   return name ? `${name} (${what})` : what;
 }
 
+/**
+ * Every companion on a character, each with its kind, kind by kind in
+ * COMPANION_KINDS order. Every walk over all of them goes through this.
+ */
+export const companionEntries = (d) => COMPANION_KINDS
+  .flatMap((kind) => (d?.[kind] || []).filter(Boolean).map((b) => ({ kind, b })));
+
+/** A companion by the id a formula reads it under (`conjured`, `eidolon2`), or null. */
+export const companionById = (d, id) => companionEntries(d)
+  .find(({ b }) => String(b.id ?? '') === String(id)) || null;
+
+/**
+ * A test for whether a dotted name starts with one of the character's
+ * companions -- `eidolon2.hp`, `Conjured.cha.score` -- ignoring case, as a
+ * formula's names do.
+ */
+export function companionNameTest(d) {
+  const ids = new Set(companionEntries(d).map(({ b }) => String(b.id ?? '').toLowerCase()).filter(Boolean));
+  return (name) => ids.has(String(name).split('.')[0].toLowerCase());
+}
+
 /** The worksheet each kind was imported from (none ever carried a conjured one). */
 export const COMPANION_TABS = {
   familiar: 'Familiar',
@@ -692,7 +713,7 @@ export function uniqueCompanionIds(d) {
       if (!b) continue;
       if (seen.has(String(b.id))) {
         let id = kind;
-        for (let n = 2; seen.has(id) || COMPANION_KINDS.some((k) => (d[k] || []).some((x) => x !== b && x?.id === id)); n++) {
+        for (let n = 2; seen.has(id) || companionEntries(d).some(({ b: x }) => x !== b && x.id === id); n++) {
           id = `${kind}${n}`;
         }
         b.id = id;

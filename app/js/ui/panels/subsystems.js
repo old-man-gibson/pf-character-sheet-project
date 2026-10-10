@@ -52,7 +52,7 @@ import {
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
   spellCatalogue, spellDetails, powerCatalogue, powerDetails, veilsAvailable, veilDetails, veilOwn,
-  slug, manifesterForwardKey, vancianForwardKey,
+  slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
 import { round } from '../format.js';
@@ -2096,7 +2096,7 @@ function conjuredCastingPanel(model, cc) {
     const { p, b, k, sn } = cc;
     const cast = k.casting;
     if (!cast) return '';
-    const pool = (model.trackers || []).find((t) => t.pool === `sp:${b.id}`);
+    const pool = poolTracker(model, `sp:${b.id}`);
     const cha = k.scores?.cha?.mod ?? 0;
     const tr = b.tradition || {};
     const dlist = `${p}.tradition.drawbacks`;

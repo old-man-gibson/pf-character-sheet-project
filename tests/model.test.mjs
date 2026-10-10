@@ -59,7 +59,8 @@ import { importPsionics } from '../app/js/model/subsystems/psionics.js';
 import { sessionState, useSessionAction } from '../app/js/model/session.js';
 import {
   CONJURED_TABLE, COMPANION_KINDS, companionBreakdown, companionScopeName, defaultCompanion, normalizeCompanion,
-  splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey,
+  splitAbilities, setCompanionAbilityText, companionAbilityText, abilityTextKey, companionById, companionEntries,
+  companionNameTest,
 } from '../app/js/companions.js';
 import { namedTextFrom } from '../app/js/extensions.js';
 import { parseDiceExpr as readDice, stepDamageDice, stepDiceMap } from '../app/js/rules.js';
@@ -1428,6 +1429,26 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   c.stepTracker(pool().id, 2);
   c.rest('day');
   check('and so does a new day', pool().current, 0);
+  // One companion rest (restCompanion in rest.js) serves both. A new day
+  // leaves the pool to its own Refresh, as it does every tracker: one set to
+  // weekly keeps what was spent, while the companion's hit points come back.
+  c.updateTracker(pool().id, { refresh: 'Weekly' });
+  c.stepTracker(pool().id, 2);
+  c.data.conjured[0].hp = { ...(c.data.conjured[0].hp || {}), damage: 4 };
+  c.rest('day');
+  check('a new day: hit points back, a weekly pool left as it is',
+    [c.data.conjured[0].hp.damage, pool().current], [0, 2]);
+  c.companionRest('conjured', 0);
+  check('the companion’s own rest refills it whatever its Refresh', pool().current, 0);
+  c.updateTracker(pool().id, { refresh: 'Daily' });
+  // Every walk over all the companions goes through companionEntries; a name
+  // is matched to one ignoring case, as a formula's names are.
+  const is = companionNameTest(c.data);
+  check('the companions are found by id, and a name is matched ignoring case',
+    [companionEntries(c.data).map(({ kind, b }) => `${kind}:${b.id}`).includes('conjured:conjured'),
+      companionById(c.data, 'conjured')?.kind, companionById(c.data, 'nobody'),
+      is('Conjured.cha.score'), is('conjured'), is('saves.will')],
+    [true, 'conjured', null, true, true, false]);
   const back = new Character(JSON.parse(JSON.stringify(c.toJSON())));
   check('reopened, the same pool and no second',
     back.trackers.filter((t) => t.pool === 'sp:conjured').map((t) => [t.id, t.max]), [['conjured_spell_points', 9 + cha]]);

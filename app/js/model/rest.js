@@ -21,7 +21,8 @@
  * the model runs it as a play action (see `playAction` in undo.js).
  */
 
-import { COMPANION_KINDS } from '../companions.js';
+import { companionEntries } from '../companions.js';
+import { poolTracker } from './trackers.js';
 import { emit } from './events.js';
 
 export const REST_SPANS = ['encounter', 'day', 'week'];
@@ -47,6 +48,18 @@ export function refreshKind(text) {
 
 /** A tracker back at rest: nothing spent, or a two-sided meter at 0, inside its range. */
 const restingPoint = (t) => Math.max(Number(t.min) || 0, Math.min(Number(t.max) || 0, 0));
+
+/**
+ * A companion as a rest leaves it: its hit points whole and, unless `pool` is
+ * false, its own spell points back. A companion's Rest button does both; a
+ * new day only the hit points, because the pool's tracker has already come
+ * back by its own Refresh, like every other tracker.
+ */
+export function restCompanion(model, b, { pool = true } = {}) {
+  b.hp = { ...(b.hp || {}), damage: 0, temp: 0 };
+  const t = pool && b.id ? poolTracker(model, `sp:${b.id}`) : null;
+  if (t) t.current = restingPoint(t);
+}
 
 /**
  * Take a rest of `span` ('encounter', 'day' or 'week'). Returns what moved --
@@ -80,9 +93,7 @@ export function rest(model, span) {
     for (const p of d.vancian?.prepared || []) p.used = 0;
     if (d.psionics) d.psionics.spent = 0;
     if (d.akashic?.essence) d.akashic.essence.spTemp = 0;
-    for (const kind of COMPANION_KINDS) {
-      for (const b of d[kind] || []) b.hp = { ...(b.hp || {}), damage: 0, temp: 0 };
-    }
+    for (const { b } of companionEntries(d)) restCompanion(model, b, { pool: false });
     // Lifebound Deck: "When you rest to regain spell points, remove all cards
     // from your Stun, Death, and Wounds piles." They are in the deck again at
     // the next shuffle.
