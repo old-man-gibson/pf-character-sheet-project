@@ -16,6 +16,24 @@ const LEVEL_UP_NAME = /^level[\s-]*ups?(\s+feats?)?$/i;
 const blankSlot = (level) => ({ name: '', detail: String(level), note: '' });
 const hasContent = (e) => Boolean(String(e?.name ?? '').trim() || String(e?.note ?? '').trim());
 
+/**
+ * Every feat on the character by name: each feat group's rows, and with
+ * `granted` the feats the sheet hands out by rule (the drawback feat, the
+ * specialty feat and the others). A document not yet normalised keeps its
+ * feats keyed by group under `feats`; that shape is read too. The one walk
+ * every "does the character have this feat" question goes through.
+ */
+export function featNames(d, { granted = true } = {}) {
+  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g?.entries)
+    : Object.values(d?.feats || {});
+  const names = groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name ?? '')) : []));
+  if (granted) {
+    const gf = d?.grantedFeats || {};
+    for (const f of [gf.drawback, gf.specialty, ...(gf.others || [])]) if (f) names.push(String(f.name ?? ''));
+  }
+  return names;
+}
+
 /** The index of the level-up group in `featGroups`, or -1. */
 export function levelUpGroupIndex(d) {
   return (d?.featGroups || []).findIndex((g) => g?.levelUp === true);

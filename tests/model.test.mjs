@@ -50,6 +50,7 @@ import {
 import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { featNames } from '../app/js/model/feats.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
@@ -13024,6 +13025,25 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   c.tablePlay('0#0', 'cast');
   check('casting it under Stagnant Pool taps two cards for four points', c.data.cardcasting.table.mana.filter((m) => m.tapped).length, 2);
   check('and the log says so', c.data.cardcasting.table.log.some((l) => /cast for 4.*2 mana tapped \(attuned: two points each\)/.test(l)), true);
+  // A sphere is matched however it is spaced or capitalised, as every other name is.
+  p.attunedSpheres = ['  destruction '];
+  c.recompute();
+  check('an attuned sphere ticked in other spelling still matches', c.cardAttuned(c.data.cardcasting.cards[0]), true);
+}
+
+console.log('one walk over every feat on the character');
+{
+  const d = {
+    featGroups: [{ name: 'Level Up', entries: [{ name: 'Adept Initiator' }, { name: '' }] }, { name: 'Other', entries: [{ name: 'Lucky Break [Chance]' }] }],
+    grantedFeats: { drawback: { name: 'Card Shark [Deck]' }, specialty: null, others: [{ name: 'Toughness' }] },
+  };
+  check('the groups and the granted feats', featNames(d), ['Adept Initiator', '', 'Lucky Break [Chance]', 'Card Shark [Deck]', 'Toughness']);
+  check('the groups alone', featNames(d, { granted: false }), ['Adept Initiator', '', 'Lucky Break [Chance]']);
+  check('a document not yet normalised, its feats keyed by group', featNames({ feats: { General: [{ name: 'Dodge' }] } }), ['Dodge']);
+  const c = new Character(blankDocument({ name: 'Feats', level: 3 }));
+  c.data.featGroups[0].entries[0].name = 'Weapon Focus';
+  c.data.grantedFeats = { others: [{ name: 'Weapon Focus (dagger)' }] };
+  check('featCount counts both', c.featCount(/^weapon focus/i), 2);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

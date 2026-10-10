@@ -33,6 +33,7 @@ import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
+import { featNames } from './feats.js';
 import {
   classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
@@ -1732,10 +1733,7 @@ export function proseText(model, text, local = null) {
  * "Card Shark [Chance, Deck]" once toward each.
  */
 export function tagCounts(d) {
-  const names = [];
-  for (const g of d?.featGroups || []) for (const f of g.entries || []) names.push(f?.name);
-  const granted = d?.grantedFeats || {};
-  names.push(granted.drawback?.name, granted.specialty?.name, ...(granted.others || []).map((f) => f?.name));
+  const names = featNames(d);
   for (const side of Object.values(d?.training || {})) names.push(...(side?.tradition?.boughtOff || []));
 
   const counts = {};
