@@ -3596,7 +3596,7 @@ table.build td.linked select:disabled {
   position: relative; height: 14px; margin-top: 6px; border-radius: 4px;
   border: 1px solid var(--cs-line); background: var(--cs-bg); overflow: hidden;
 }
-.bar[data-bar] { cursor: pointer; }
+.bar[data-pool-bar] { cursor: pointer; }
 .bar .band, .bar .fill, .bar .seg { position: absolute; top: 0; bottom: 0; }
 .bar .fill { background: var(--cs-accent); }
 .bar .zero-line {
@@ -3659,9 +3659,6 @@ table.build td.linked select:disabled {
     rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 5px);
 }
 .meter-style { margin: 8px 0; display: grid; gap: 7px; }
-/* A meter is a readout, not a control, unless something binds a click to it --
-   the power point pool does, whatever shape it has been restyled to. */
-.meter .clickable { cursor: pointer; }
 
 /* Tracker style editor */
 .tstyle { display: grid; gap: 7px; padding: 8px 10px; border: 1px dashed var(--cs-line); border-radius: 6px; }

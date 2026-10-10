@@ -821,7 +821,7 @@ function trackers(model, add) {
       value: `${shown}${range.replace(/^\/ /, '/')}`,
       sub: bits(text(t.refresh), t.source === 'sheet' ? 'from sheet' : '', clip(t.note, 60),
         t.error ? `formula error: ${t.error}` : ''),
-      sel: `[data-tracker-current="${t.id}"]`, keys: 'tracker pool uses resource',
+      sel: `[data-pool-value="tracker:${t.id}"]`, keys: 'tracker pool uses resource',
     });
   }
   (c.buffs || []).forEach((b, i) => {

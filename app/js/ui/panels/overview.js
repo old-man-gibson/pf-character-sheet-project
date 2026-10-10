@@ -26,7 +26,9 @@ import { weaponNow } from '../weapon-now.js';
 import {
   guileTalentRows, ownTalentRows, plannedLevels, trackTalentSide, trainingSideInUse,
 } from '../../model.js';
-import { formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
+import {
+  formulaMeta, meterStyleButton, meterStyleEditor, meterVisual, powerPointStepper, trackerLine,
+} from './trackers.js';
 import { slotSpend } from './subsystems.js';
 
 /**
@@ -806,7 +808,7 @@ function dashVancianCard(model) {
       const levels = (c.spells || []).map((s, si) => {
         if (!s.slots || s.atWill) return '';
         return `<span class="dashslot"><span class="dim">L${s.level}</span>${spends
-          ? slotSpend({ path: `${base}.spells|${si}|used`, total: s.slots, left: s.left, name: `${noun.one} level ${s.level}` })
+          ? slotSpend({ pool: `slots:${base}.spells|${si}`, total: s.slots, left: s.left, name: `${noun.one} level ${s.level}` })
           : `<span class="pool">${s.slots}/day</span>`}</span>`;
       }).filter(Boolean).join('');
       return `<div class="dashcaster">
@@ -820,7 +822,7 @@ function dashVancianCard(model) {
     // left edge -- pip one top-left, filling rightward, whatever the count.
     const prow = ({ r, i }) => `<div class="dashspell">
       <span class="sname" title="${esc(r.note ? `${r.name} — ${proseText(model, r.note)}` : r.name)}">${esc(r.name)}${r.classLevel ? ` <span class="dim">${esc(r.classLevel)}</span>` : ''}</span>
-      <span class="suses">${slotSpend({ path: `vancian.prepared|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
+      <span class="suses">${slotSpend({ pool: `slots:vancian.prepared|${i}`, total: r.uses, left: r.left, shape: 'squares', name: r.name })
         || '<span class="dim">—</span>'}</span>
     </div>`;
     return `<section class="panel span2">
@@ -850,12 +852,9 @@ function dashPsionicsCard(model) {
         <button class="linkish" style="margin-left:auto" data-action="psionics-new-day"
           title="The whole pool comes back">New day</button>
       </h3>
-      ${meterVisual(model.meterSpec('pp'))}
+      ${meterVisual(model.meterSpec('pp'), { pool: 'pp' })}
       <div class="tracker-controls" style="margin-top:6px">
-        <button data-pool-step="-1" aria-label="Spend one power point">−</button>
-        <input type="number" value="${left}" data-pool-left aria-label="Power points remaining">
-        <span class="pool">/ ${pool}</span>
-        <button data-pool-step="1" aria-label="Restore one power point">+</button>
+        ${powerPointStepper(left, pool)}
       </div>
     </section>`;
   }

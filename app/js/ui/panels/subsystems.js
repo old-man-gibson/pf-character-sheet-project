@@ -16,7 +16,9 @@ import { itemArea, prose, renderedProse } from '../prose.js';
 import { fillNotesButton, talentLegend, talentMark, talentNote } from '../talents.js';
 import { forwardedBadge } from '../badges.js';
 import { rollButton } from '../roll.js';
-import { meterStyleButton, meterStyleEditor, meterVisual, trackerLine } from './trackers.js';
+import {
+  meterStyleButton, meterStyleEditor, meterVisual, powerPointStepper, trackerLine,
+} from './trackers.js';
 
 /**
  * The frame colours a card wears: frame, its darker edge, and the card-stock
@@ -118,16 +120,16 @@ const slotText = (s) => {
  * levels would be sixty trackers, which is not a list anybody wants. The shapes
  * and their layout maths are shared; only the plumbing differs.
  *
- * `path` is the item the click writes to, as `list|index|field`. Clicking the nth
- * pip leaves n unspent, and clicking the last lit one spends it -- the rule the
- * tracker pips follow too (`pipClickValue`).
+ * `pool` is the row the click spends from, as `slots:<list>|<index>` (see
+ * model/pools.js). Clicking the nth pip leaves n unspent, and clicking the last
+ * lit one spends it -- the rule the tracker pips follow too, and the one
+ * handler that answers both.
  */
-export function slotSpend({ path, total, left, shape = 'pips', name = 'slot' }) {
+export function slotSpend({ pool, total, left, shape = 'pips', name = 'slot' }) {
   const cap = Math.max(0, Number(total) || 0);
   if (!cap) return '';
   const lit = Math.max(0, Math.min(cap, Number(left) || 0));
-  // The name rides along for the Undo button: "Undo Fireball 2 → 1".
-  const attrs = (n) => `data-spend="${path}" data-total="${cap}" data-left="${lit}" data-n="${n}" data-name="${esc(name)}"`;
+  const attrs = (n) => `data-pool-pip="${esc(pool)}" data-n="${n}"`;
   const title = `${lit} of ${cap} left`;
   // A count in place of pips spends one: it is a click on the last lit pip.
   // With none left there is nothing to spend, and the old way of asking gave
@@ -1017,7 +1019,7 @@ function castingClassPanel(model, c, i) {
           <td class="num total">${s.dc ?? 0}</td>
           ${spends ? `<td>${s.atWill ? '<span class="hint">at will</span>'
       : slotSpend({
-        path: `${base}.spells|${si}|used`,
+        pool: `slots:${base}.spells|${si}`,
         total: s.slots,
         left: s.left,
         name: `${noun.one} level ${s.level}`,
@@ -1149,7 +1151,7 @@ function vancianPreparedPanel(model, v, ctx = {}) {
   ) : ''}</td>
           <td class="num">${r.name ? itemNum(list, i, 'uses', r.uses) : ''}</td>
           <td class="spendcell">${r.name ? slotSpend({
-    path: `${list}|${i}|used`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
+    pool: `slots:${list}|${i}`, total: r.uses, left: r.left, shape: 'squares', name: r.name,
   }) : ''}</td>
           ${rowRemove(list, i, { what: r.name || 'this row', armed: ctx.armedRemove ?? null })}
         </tr>`).join('')}
@@ -1404,13 +1406,10 @@ export function psionicsPanel(model, ctx) {
             ${meterStyleButton(ctx, 'pp')}
           </span>
         </h3>
-        ${meterVisual(model.meterSpec('pp'))}
+        ${meterVisual(model.meterSpec('pp'), { pool: 'pp' })}
         ${meterStyleEditor(model, ctx, 'pp')}
         <div class="tracker-controls" style="margin-top:6px">
-          <button data-pool-step="-1" aria-label="Spend one power point">−</button>
-          <input type="number" value="${left}" data-pool-left aria-label="Power points remaining">
-          <span class="pool">/ ${pool}</span>
-          <button data-pool-step="1" aria-label="Restore one power point">+</button>
+          ${powerPointStepper(left, pool)}
         </div>
         <div class="fieldgrid" style="margin-top:8px">
           ${field('Bonus points', num('psionics.bonusPoints', p.bonusPoints))}
