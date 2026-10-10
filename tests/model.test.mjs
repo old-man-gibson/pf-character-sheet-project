@@ -43,7 +43,7 @@ import {
   ATTACK_MODES, ATTACK_MODE_KEY, attackModeTotal, attackModeAbility,
   WEAPON_ATTACK_TYPES,
   KHESHIG_VEILS, wikiUrl, mergeLayout,
-  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText,
+  CONDITIONS, SHEET_CONDITIONS, conditionInfo, conditionCount, abilityMod, armorParts, statMod, statKeys, critMultOf, threatText, readCrit, weaponMoves,
   AC_BONUS_TYPES, SAVE_BONUS_TYPES, SHEET_ALIASES, ABILITIES,
   MONK_UNARMED_LADDER, UNARMED_NATIVE_THRESHOLD, ladderDice, stepDice, raiseDice, unarmedDice,
   gestaltSaveBase,
@@ -2322,6 +2322,17 @@ console.log('a crit is read and written one way');
   check('the multiplier however it was saved, never below x2',
     [critMultOf(3), critMultOf('x3'), critMultOf('×4'), critMultOf(''), critMultOf('x1')], [3, 3, 4, 2, 2]);
   check('a threat as a short line writes it', [threatText(19, 3), threatText(20, 2)], ['19-20/x3', '20/x2']);
+  check('and read back however it was printed',
+    ['19-20/×3', '18–20', 'x4', '', '17-20/x1'].map(readCrit),
+    [{ from: 19, mult: 3 }, { from: 18, mult: 2 }, { from: 20, mult: 4 }, { from: 20, mult: 2 }, { from: 17, mult: 2 }]);
+  // What a buff does to a weapon row: one reading for the weapon cards and the Roll20 copy.
+  const cs = { delta: { melee: 2, damage: 3 }, sizeSteps: 1 };
+  const w = { attackType: 'Melee', sizeNow: 'Medium', calc: { baseDmgDice: { 8: 1 } } };
+  const moved = weaponMoves({ identity: { size: 'Medium' } }, w, cs);
+  check('a buff moves the attack and damage, and a size step the weapon\'s own dice',
+    [moved.atkDelta, moved.dmgDelta, moved.grow, moved.sized.dice], [2, 3, 1, { 6: 2 }]);
+  check('a row not worked out yet moves by its attack only',
+    [weaponMoves({}, { attackType: 'Melee' }, cs).dmgDelta, weaponMoves({}, { attackType: 'Melee' }, cs).grow], [0, 0]);
 }
 
 console.log('a psionic class with no curve chosen manifests nothing');

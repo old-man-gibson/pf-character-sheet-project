@@ -2417,6 +2417,21 @@ export function critMultOf(value) {
   return Math.max(2, m ? Number(m[1]) : 2);
 }
 
+/**
+ * A threat as printed -- "19-20/×3", "18–20", "x4" -- as the lowest roll that
+ * threatens and the multiplier, `{ from, mult }`: 20 and ×2 where it says
+ * neither. The Roll20 copy reads a companion's crit column with it, and the
+ * monster reader the crit part of a damage line.
+ */
+export function readCrit(text) {
+  const s = String(text ?? '');
+  const range = s.match(/(\d+)\s*[-–]\s*20/);
+  return {
+    from: range ? Math.min(20, Math.max(2, Number(range[1]))) : 20,
+    mult: critMultOf(s.match(/[x×*]\s*(\d+)/i)?.[1]),
+  };
+}
+
 /** A threat range (its lowest roll) and multiplier as a short line writes them: "19-20/x3", "20/x2". */
 export const threatText = (from, mult) => `${from < 20 ? `${from}-20` : '20'}/x${mult}`;
 
@@ -2450,6 +2465,28 @@ export const ATTACK_TYPE_MODE = {
   Melee: 'melee', 'Alt Melee': 'altMelee', Ranged: 'ranged',
   'Alt Ranged': 'altRanged', CMB: 'cmb', 'Alt CMB': 'altCmb',
 };
+
+/**
+ * What the conditions and buffs of the moment (`conditionState`) do to a
+ * weapon row: the attack and damage they move it by, and its own dice
+ * stepped along the damage-by-size table by a size change, from the size the
+ * weapon already is. The [[…]] riders keep their dice, as the rules leave
+ * them. The weapon cards and the Roll20 copy both start from this.
+ *
+ * `{ modeKey, atkDelta, dmgDelta, grow, sized: { dice, flat } }`; a row the
+ * model has not worked out yet (no `calc`) moves by its attack only.
+ */
+export function weaponMoves(c, w, cs) {
+  const { calc } = w;
+  const modeKey = ATTACK_TYPE_MODE[w.attackType];
+  const atkDelta = (modeKey && cs?.delta?.[modeKey]) || 0;
+  const dmgDelta = (calc && cs?.delta?.damage) || 0;
+  const grow = (calc && cs?.sizeSteps) || 0;
+  const sized = grow
+    ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
+    : { dice: calc?.baseDmgDice || {}, flat: 0 };
+  return { modeKey, atkDelta, dmgDelta, grow, sized };
+}
 
 /** "4d6", "2d8+3", "d6 + 1d4 - 1": a value that is dice text rather than a number. */
 export const DICE_TEXT = /^\s*[+-]?\d*d\d+(?:\s*[+-]\s*(?:\d*d\d+|\d+))*\s*$/i;

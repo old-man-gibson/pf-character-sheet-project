@@ -29,7 +29,7 @@
 import { blankDocument } from '../convert.js';
 import { naturalAttack } from '../companions.js';
 import {
-  RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, saveBase, sizeModifiers,
+  RULE_CORRECTIONS, STANDARD_SKILLS, SIZE_MODIFIERS, abilityMod, readCrit, saveBase, sizeModifiers,
 } from '../rules.js';
 import { MONSTER_TAB_ORDER, normalizeMonster } from './block.js';
 import { TEXT_STEPS, cleanText } from '../text.js';
@@ -567,9 +567,10 @@ export function readDamage(text) {
   out.flat = m[2] ? signed(m[2]) : 0;
   const lo = m[3] ?? m[6];
   const hi = m[4] ?? m[7];
-  if (lo && hi) out.critRange = Math.min(20, Math.max(1, Number(lo)));
   const mult = m[5] ?? m[8];
-  if (mult) out.critMult = Number(mult);
+  const crit = readCrit(`${lo && hi ? `${lo}-${hi}` : ''}/${mult ? `x${mult}` : ''}`);
+  out.critRange = crit.from;
+  out.critMult = crit.mult;
   const rest = (m[9] || '').replace(/^plus\s+/i, '').trim();
   if (rest) {
     for (const part of rest.split(/\s+(?:plus|and)\s+|,\s*/i)) {

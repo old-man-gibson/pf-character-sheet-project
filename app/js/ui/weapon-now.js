@@ -10,8 +10,9 @@
  * the same.
  */
 
-import { WEAPON_MODE_KEYS } from '../roll20.js';
-import { addDice, diceString, fmt, stepDiceMap } from '../rules.js';
+import {
+  addDice, diceString, fmt, weaponMoves,
+} from '../rules.js';
 import { movedTitle } from './rows.js';
 
 /**
@@ -20,10 +21,9 @@ import { movedTitle } from './rows.js';
  */
 export function weaponNow(c, w, cs) {
   const { calc } = w;
-  const modeKey = WEAPON_MODE_KEYS[w.attackType];
-  const atkDelta = (cs?.changed && modeKey && cs.delta[modeKey]) || 0;
-  const dmgDelta = (cs?.changed && calc && cs.delta.damage) || 0;
-  const grow = (cs?.changed && calc && cs.sizeSteps) || 0;
+  const {
+    atkDelta, dmgDelta, grow, sized,
+  } = weaponMoves(c, w, cs);
   const atkBase = calc?.totalAtkStr ?? fmt(w.attackTotal ?? 0);
   const atk = !atkDelta ? atkBase
     : calc
@@ -32,9 +32,6 @@ export function weaponNow(c, w, cs) {
         : fmt(calc.totalAtk + atkDelta))
       : fmt((Number(w.attackTotal) || 0) + atkDelta);
   const dmgBase = calc?.totalDmgStr ?? w.damageTotal ?? '—';
-  const sized = grow
-    ? stepDiceMap(calc.baseDmgDice || {}, grow, w.sizeNow || c.identity?.size)
-    : { dice: calc?.baseDmgDice || {}, flat: 0 };
   const dmg = !(dmgDelta || grow) ? dmgBase
     : diceString(
       addDice(addDice(sized.dice, calc.tokDmg?.dice || {}), calc.tokMultDmg?.dice || {}),
