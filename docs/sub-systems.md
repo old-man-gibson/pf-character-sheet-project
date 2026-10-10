@@ -747,7 +747,10 @@ shapes in the sheet's own spelling — a blast's 1d6 + 1d6 per two caster levels
 per caster level, the casting modifier, a boosted second roll — so the field teaches
 the syntax as it fills. A deck usually holds the same effect under several names
 (four *Infernal Combustion*s, six blasts); **→ N alike** hands one card's dice to
-every card with the same effect.
+every card with the same effect. The ⤢ in a card's corner **opens it out**: a face
+takes two columns with a taller text box and the Dice field as a line per roll; a
+card in hand or in play loses the clamp on its text and lists its rolls worked out.
+Open cards are a way of looking, kept for the session and not saved.
 
 | Control | What the rules say, and what it does |
 |---|---|

@@ -2475,27 +2475,37 @@ export function cardcastingPanel(model, ctx) {
    * the effect, and whatever buttons the zone offers. Same frame rules as
    * the full face.
    */
-function cardMini(model, id, { buttons = '', badge = '', tapped = false } = {}) {
+function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [] } = {}) {
     const card = model.tableCard(id);
     if (!card) return '';
     const r = card.calc || {};
     const colors = String(r.colors || '');
     const frameClass = r.artifact ? 'A' : colors.length === 1 ? esc(colors) : colors.length ? 'multi' : 'C';
     const isMana = !String(card.effect || '').trim() && card.mana;
-    return `<div class="mcard mini ${frameClass}${tapped ? ' tapped' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}" data-card="${esc(id)}">
+    // Opened out, the text is no longer clamped and the card's rolls are
+    // listed under it, worked out: what a reader wants of a card in hand.
+    const rolls = open && formulas.length ? `<div class="rolls">${formulas.map((f) => `<span class="roll"><b>${esc(f.label)}</b> ${esc(f.formula || f.source)}${f.sp ? ` <small>${f.sp} SP</small>` : ''}</span>`).join('')}</div>` : '';
+    return `<div class="mcard mini ${frameClass}${tapped ? ' tapped' : ''}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}" data-card="${esc(id)}">
       <div class="bar title">
         <span class="name">${esc(card.name || (isMana ? 'Mana Point' : card.effect || 'card'))}</span>
         <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
+        ${expandBtn(id, open)}
       </div>
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
       <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
+      ${rolls}
       <div class="foot">
         ${card.mana ? `<span class="pair" title="Mana this card carries">${manaChips(card.mana, '')}</span>` : ''}
         ${badge}
         <span class="pair tools">${buttons}</span>
       </div>
     </div>`;
+  }
+
+  /** The corner button that opens a card out, or folds it back: the same press wherever the card is. */
+function expandBtn(ref, open) {
+    return tableBtn('expand', ref, open ? '⤡' : '⤢', { cls: 'expand', title: open ? 'Fold the card back' : 'Open the card out to read and edit it at length' });
   }
 
   /** A button that drives the table: `data-table="action|id|arg"`. `copy` rides along as the Roll20 text a pop-out window copies on the click. */
@@ -2557,6 +2567,11 @@ function tableState(model, ctx, p, k, view) {
       peeked: faces.secrets ? (ctx.peek || []).filter((id) => (t.deck || []).slice(0, 3).includes(id)) : [],
       castPick: faces.hand ? ctx.castPick || null : null,
       copyText,
+    };
+    // A card opened out: the clamp comes off its text and its rolls are listed.
+    s.miniOpts = (id) => {
+      const open = !!ctx.openCards?.has?.(id);
+      return { open, formulas: open ? model.cardRollFormulas(model.tableCard(id)) : [] };
     };
     s.spBtn = (id) => (sp ? tableBtn('sp', id, '+1 SP', { arg: 1, title: 'Spend one spell point on this card — a boost, a modal option' }) : '');
     s.copyBtn = (id) => cardCopyButton(model, ctx, id, model.tableCard(id)?.name || 'card');
@@ -2707,6 +2722,7 @@ function handZone(s) {
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
           + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy });
       return cardMini(model, id, {
+        ...s.miniOpts(id),
         badge,
         buttons: `${castBtns}${isEffect && tc.trapCard ? tableBtn('play', id, 'Trap', { arg: 'trap', title: 'Trap Card: set it face down in play; spring it later' }) : ''}
           ${card?.mana ? tableBtn('play', id, 'As mana', { arg: 'mana', title: manaOk.ok ? (manaOk.why || 'Play the Mana Point card onto the table') : manaOk.why, disabled: !manaOk.ok }) : ''}
@@ -2735,6 +2751,7 @@ function playZone(s) {
           </span></div>
         </div>`
       : cardMini(model, id, {
+        ...s.miniOpts(id),
         buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
       }))).join('');
     return `<section class="panel f-play">
@@ -2753,6 +2770,7 @@ function deckZone(s) {
     return `<section class="panel f-deck">
       <h3>Deck <span class="badge">${t.deck.length}</span></h3>
       ${peeked.length ? `<p class="hint">Top of the deck: </p><div class="zone one">${peeked.map((id, i) => cardMini(model, id, {
+    ...s.miniOpts(id),
     badge: `<span class="badge">${i === 0 ? 'top' : `${i + 1}${i === 1 ? 'nd' : 'rd'}`}</span>`,
     buttons: `${tableBtn('bury', id, '⤓ bottom (1 SP)', { title: 'Read the Cards: a spell point puts it on the bottom of the deck' })}
       ${readTwice ? tableBtn('move', id, 'discard', { arg: 'discard', title: 'Read the Cards taken twice: discard it' }) : ''}`,
@@ -3144,7 +3162,10 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
     const colors = String(r.colors || '');
     const range = r.from ? (r.from === r.to ? String(r.from) : `${r.from}–${r.to}`) : '';
     const frameClass = r.artifact ? 'A' : colors.length === 1 ? esc(colors) : colors.length ? 'multi' : 'C';
-    return `<article class="mcard ${frameClass}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}">
+    // Opened out, the face takes two columns, the text a taller box and the
+    // Dice field a line per roll: room to read and to edit.
+    const open = !!ctx.openCards?.has?.(`${list}.${i}`);
+    return `<article class="mcard ${frameClass}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}">
       <div class="bar title">
         <input type="text" class="name" value="${esc(card.name ?? '')}" data-item="${list}|${i}|name" data-kind="text"
           placeholder="${isMana ? 'Mana Point' : 'Card name'}" aria-label="Card name">
@@ -3165,7 +3186,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
         <span class="dash">—</span>
         <input type="text" value="${esc(card.tags ?? '')}" data-item="${list}|${i}|tags" data-kind="text" placeholder="tags" aria-label="Tags">
       </div>
-      <div class="text">${prose(model, `data-item="${list}|${i}|effect"`, card.effect, 3, 'grow')}</div>
+      <div class="text">${prose(model, `data-item="${list}|${i}|effect"`, card.effect, open ? 9 : 3, 'grow')}</div>
       <div class="foot">
         <span class="pair" title="Mana this card puts on the table (fused Mana Point): letters R B U W G">
           <input type="text" class="short" value="${esc(card.mana ?? '')}" data-item="${list}|${i}|mana" data-kind="text" placeholder="mana" aria-label="Mana carried">
@@ -3180,6 +3201,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
         <input type="text" class="arturl" value="${esc(card.art ?? '')}" data-item="${list}|${i}|art" data-kind="text"
           placeholder="art: paste an image link" aria-label="Art URL">
         <span class="pair tools">
+          ${expandBtn(`${list}.${i}`, open)}
           ${inDeck ? `<button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
           <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>` : ''}
           ${removeButton(list, i, { what: 'card' })}
@@ -3223,8 +3245,16 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
       ? `<span class="badge ok" title="${esc(`${r.label}: ${r.source}`)}">${esc(formulas.length > 1 ? `${r.label} ` : '')}${esc(r.formula)}</span>`
       : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
     const alike = inDeck && String(card.dice || '').trim() ? model.cardSiblings(list, i) : [];
-    return `<div class="foot dice">
-      <span class="pair grow" title="Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.">🎲<input type="text" class="dice" value="${esc(card.dice ?? '')}" data-item="${ref}|dice" data-kind="text" placeholder="dice — 8d6+int.mod; boost (1 SP): 15d6" aria-label="Dice"></span>
+    const title = 'Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
+    // Opened out, the field is a line per roll; the entries are read the
+    // same way either way, since a new line separates them as a ; does.
+    const open = !!ctx.openCards?.has?.(`${list}.${i}`);
+    const lines = String(card.dice ?? '').split(/;\s*|\n/).filter((x, n, all) => x.trim() || n < all.length - 1);
+    const field = open
+      ? `<textarea class="dice" data-item="${ref}|dice" data-kind="text" rows="${Math.max(2, lines.length + 1)}" spellcheck="false" placeholder="one roll a line — damage: 8d6+int.mod" aria-label="Dice">${esc(lines.join('\n'))}</textarea>`
+      : `<input type="text" class="dice" value="${esc(card.dice ?? '')}" data-item="${ref}|dice" data-kind="text" placeholder="dice — 8d6+int.mod; boost (1 SP): 15d6" aria-label="Dice">`;
+    return `<div class="foot dice${open ? ' open' : ''}">
+      <span class="pair grow" title="${esc(title)}">🎲${field}</span>
       <select class="movesel dicepick" data-append="${ref}|dice" aria-label="Add dice" title="Add a roll in the sheet's own spelling">
         <option value="">add…</option>
         ${cardDicePresets(p.castingStat).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}

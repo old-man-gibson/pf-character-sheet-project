@@ -1304,6 +1304,12 @@ export class CharacterSheetElement extends HTMLElement {
     if (action === 'window') { this.#openCardWindow(id); return false; }
     // The mode chooser opening on a card, or closing.
     if (action === 'pick') { this.#view.castPick = id || null; return true; }
+    // A card opened out to read or edit, or folded back. A way of looking,
+    // so it leaves the peek and the chooser alone.
+    if (action === 'expand') {
+      if (this.#view.openCards.has(id)) this.#view.openCards.delete(id); else this.#view.openCards.add(id);
+      return true;
+    }
     const t = m.data.cardcasting?.table || {};
     // A play's argument may carry the chooser's answers: `cast?mode=…&sp=…`.
     const [how, query] = String(arg ?? '').split('?');

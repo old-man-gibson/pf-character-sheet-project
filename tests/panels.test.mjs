@@ -1002,5 +1002,31 @@ console.log('\na card with several modes asks on the way in');
   ok('the chooser is the hand\'s: the table window never draws it', !subsystems.cardTableView(c, { ...ctx, castPick: bolt }, 'table').includes('castpick'));
   ok('the sheet draws it too', subsystems.cardcastingPanel(c, { ...ctx, castPick: bolt }).includes('castpick'));
 }
+console.log('\na card opens out to be read or edited at length');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 1, cost: '1', color: 'R', mana: '', effect: 'Fire Blast, a long effect that wants room', dice: '0 SP: 5d6; boost (1 SP): 7d6', sphere: 'Destruction', tags: '' },
+  ];
+  c.recompute();
+  const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'deck', rollFormat: 'template' };
+  const shut = subsystems.cardcastingPanel(c, ctx);
+  ok('a face shut has the opener, a one-line Dice field and a three-line text', shut.includes('data-table="expand|cardcasting.cards.0|"')
+    && shut.includes('<input type="text" class="dice"') && /rows="3"[^>]*>Fire Blast/.test(shut) && !/class="mcard R open"/.test(shut));
+  ctx.openCards = new Set(['cardcasting.cards.0']);
+  const open = subsystems.cardcastingPanel(c, ctx);
+  ok('opened: the face is marked, the text has nine lines, the Dice field is a line a roll', /class="mcard R open"/.test(open)
+    && /rows="9"[^>]*>Fire Blast/.test(open) && /<textarea class="dice"[^>]*rows="3"[^>]*>0 SP: 5d6\nboost \(1 SP\): 7d6<\/textarea>/.test(open));
+  c.tableStart();
+  const id = c.data.cardcasting.table.hand[0];
+  const tctx = { ...ctx, deckView: 'table', openCards: new Set() };
+  const hand = subsystems.cardTableView(c, tctx, 'hand');
+  ok('a card in hand has the opener and no roll list', hand.includes(`data-table="expand|${id}|"`) && !hand.includes('class="rolls"'));
+  tctx.openCards.add(id);
+  const wide = subsystems.cardTableView(c, tctx, 'hand');
+  ok('opened, it is marked and lists its rolls worked out', new RegExp(`class="mcard mini R open"[^>]*data-card="${id}"`).test(wide)
+    && /<div class="rolls"><span class="roll"><b>0 SP<\/b> 5d6<\/span><span class="roll"><b>boost \(1 SP\)<\/b> 7d6 <small>1 SP<\/small><\/span><\/div>/.test(wide));
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
