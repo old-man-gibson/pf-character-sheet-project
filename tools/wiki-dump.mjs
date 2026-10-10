@@ -35,17 +35,11 @@
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { unxml, templateEnd, splitArgs } from './wikitext.mjs';
+import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : (argv[i + 1] ?? true);
-};
-const flag = (name) => argv.includes(`--${name}`);
-const VALUED = /^--(out|ns|kind|limit)$/;
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUED.test(argv[i - 1])));
+const { opt, flag, inputs } = readArgs(['out', 'ns', 'kind', 'limit']);
 
 const out = opt('out');
 const keepNs = new Set(String(opt('ns', '0')).split(',').map((s) => s.trim()));

@@ -40,16 +40,11 @@ import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { slugId } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : (argv[i + 1] ?? true);
-};
-const flag = (name) => argv.includes(`--${name}`);
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|by|packs|yaml|author)$/.test(argv[i - 1])));
+const { opt, flag, inputs } = readArgs(['out', 'by', 'packs', 'yaml', 'author']);
 const out = opt('out');
 const by = String(opt('by', 'book'));
 const onlyPacks = opt('packs') ? new Set(String(opt('packs')).split(',').map((s) => s.trim())) : null;

@@ -29,11 +29,10 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { readArgs } from './lib/cli.mjs';
 
-const argv = process.argv.slice(2);
-const at = argv.indexOf('--out');
-const out = at === -1 ? null : argv[at + 1];
-const urls = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && argv[i - 1] === '--out'));
+const { opt, inputs: urls } = readArgs(['out']);
+const out = opt('out');
 if (!urls.length || !out) {
   console.error('usage: node tools/page-paste.mjs <page.html | url>… --out <dir>');
   process.exit(2);

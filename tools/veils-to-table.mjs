@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeExtension, inspectExtension } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
 /** Every .json under a path, or the path itself when it is one. */
 function files(path) {
@@ -135,11 +136,9 @@ export function convertPack(doc) {
 /* ---------------- the command ---------------- */
 
 function main(argv) {
-  const args = argv.slice(2);
-  const dry = args.includes('--dry');
-  const outAt = args.indexOf('--out');
-  const outFile = outAt === -1 ? null : args[outAt + 1];
-  const targets = args.filter((a, i) => !a.startsWith('--') && !(outAt !== -1 && i === outAt + 1));
+  const { opt, flag, inputs: targets } = readArgs(['out'], argv.slice(2));
+  const dry = flag('dry');
+  const outFile = opt('out');
 
   if (!targets.length) {
     console.error('usage: node tools/veils-to-table.mjs <pack.json|dir>… [--out <file>] [--dry]');

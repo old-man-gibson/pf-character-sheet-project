@@ -59,17 +59,11 @@ import {
 } from './wikitext.mjs';
 import { systemClassifier, GENERAL } from './wiki-systems.mjs';
 import { slugId } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
 /* ---------------- arguments ---------------- */
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? fallback : (argv[i + 1] ?? true);
-};
-const flag = (name) => argv.includes(`--${name}`);
-const VALUED = /^--(out|by|kind|skip|source|max|min)$/;
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUED.test(argv[i - 1])));
+const { opt, flag, inputs } = readArgs(['out', 'by', 'kind', 'skip', 'source', 'max', 'min']);
 
 const out = opt('out');
 const by = String(opt('by', 'kind'));

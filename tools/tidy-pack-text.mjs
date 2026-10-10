@@ -27,6 +27,7 @@ import { join, relative, sep, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeExtension, inspectExtension } from '../app/js/extensions.js';
 import { tidyScrapeResidue } from '../app/js/paste-import.js';
+import { readArgs } from './lib/cli.mjs';
 
 /** Every text-bearing field in a pack, as get/set pairs over the document. */
 function textFields(ext) {
@@ -102,9 +103,8 @@ const show = (s) => {
 };
 
 function main(argv) {
-  const args = argv.slice(2);
-  const dry = args.includes('--dry');
-  const targets = args.filter((a) => !a.startsWith('--'));
+  const { flag, inputs: targets } = readArgs([], argv.slice(2));
+  const dry = flag('dry');
   if (!targets.length) {
     console.error('usage: node tools/tidy-pack-text.mjs <pack.json|dir>… [--dry]');
     process.exit(1);

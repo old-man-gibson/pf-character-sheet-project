@@ -35,11 +35,9 @@ import { pathToFileURL } from 'node:url';
 import { outlineOf, guessTags, readSections } from '../app/js/pdf-import.js';
 import { parsePaste, readStructured } from '../app/js/paste-import.js';
 import { inspectExtension, normalizeBlock, slugId } from '../app/js/extensions.js';
+import { readArgs } from './lib/cli.mjs';
 
-const argv = process.argv.slice(2);
-const opt = (name, fallback = null) => { const i = argv.indexOf(`--${name}`); return i === -1 ? fallback : argv[i + 1]; };
-const flag = (name) => argv.includes(`--${name}`);
-const input = argv.find((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|name|author|tags|modules)$/.test(argv[i - 1])));
+const { opt, flag, inputs: [input] } = readArgs(['out', 'name', 'author', 'tags', 'modules']);
 const out = opt('out');
 if (!input || (!out && !flag('list'))) {
   console.error('usage: node tools/pdf-pack.mjs <book.pdf> --list | --out <dir> [--name "…"] [--author "…"] [--tags tags.json]');

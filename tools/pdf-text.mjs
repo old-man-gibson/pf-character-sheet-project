@@ -34,11 +34,10 @@
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { readArgs } from './lib/cli.mjs';
 
-const argv = process.argv.slice(2);
-const opt = (name) => { const i = argv.indexOf(`--${name}`); return i === -1 ? null : argv[i + 1]; };
-const drops = argv.map((a, i) => (a === '--drop' ? argv[i + 1] : null)).filter(Boolean).map((p) => new RegExp(p));
-const inputs = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(out|drop)$/.test(argv[i - 1])));
+const { opt, all, inputs } = readArgs(['out', 'drop']);
+const drops = all('drop').filter(Boolean).map((p) => new RegExp(p));
 const out = opt('out');
 if (inputs.length !== 2 || !out) {
   console.error('usage: node tools/pdf-text.mjs <raw.txt> <layout.txt> --out <file> [--drop "<regex>"]…');

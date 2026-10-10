@@ -26,10 +26,9 @@ import { join } from 'node:path';
 import { Character, changesByGroup, compareRevisions } from '../app/js/model.js';
 import { normalizeExtension } from '../app/js/extensions.js';
 import { registerPacks } from '../app/js/extension-runtime.js';
+import { readArgs } from './lib/cli.mjs';
 
-const args = process.argv.slice(2);
-const flags = new Set(args.filter((a) => a.startsWith('--')));
-const [beforePath, afterPath] = args.filter((a) => !a.startsWith('--'));
+const { flag, inputs: [beforePath, afterPath] } = readArgs();
 
 if (!beforePath || !afterPath) {
   console.error('usage: node tools/audit-diff.mjs <before.json> <after.json> [--all] [--json]');
@@ -57,7 +56,7 @@ registerPacks(bundledPacks().map(normalizeExtension));
 const read = (path) => new Character(JSON.parse(readFileSync(path, 'utf8'))).toJSON();
 const { changes, counts } = compareRevisions(read(beforePath), read(afterPath));
 
-if (flags.has('--json')) {
+if (flag('json')) {
   console.log(JSON.stringify({ counts, changes }, null, 1));
   process.exit(0);
 }
@@ -77,13 +76,13 @@ if (!counts.total) {
 const headline = ['unexplained', 'authored', 'structural']
   .map((v) => `${counts[v]} ${v}`).join(', ');
 console.log(`${counts.total} changes: ${headline}, ${counts.consequence} consequence`);
-if (!flags.has('--all') && counts.consequence) {
+if (!flag('all') && counts.consequence) {
   console.log('(consequences folded away -- pass --all to see them)\n');
 } else {
   console.log('');
 }
 
-const shown = flags.has('--all') ? changes : changes.filter((c) => c.verdict !== 'consequence');
+const shown = flag('all') ? changes : changes.filter((c) => c.verdict !== 'consequence');
 const width = Math.min(34, Math.max(...shown.map((c) => String(c.label).length), 0));
 
 for (const [group, rows] of changesByGroup(shown)) {
