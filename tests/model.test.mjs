@@ -13073,20 +13073,21 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   const pool = () => { const x = c.trackers.find((tr) => tr.pool === `sp:${cc.id}`); return x.max - x.current; };
   const mine = () => { const x = c.trackers.find((tr) => tr.pool === 'sp'); return x ? x.max - x.current : null; };
   const before = [pool(), mine()];
-  check('the companion\'s card previews on the companion\'s level and modifier', c.cardRollFormulas(c.tableCard(mend)).map((r) => r.formula), [`${lira.cl}d8${lira.mod ? `+${lira.mod}` : ''}`]);
   const ownCl = c.scope().caster.level;
-  check('and as the character would cast it, on the character\'s', c.cardRollFormulas(c.tableCard(mend), '').map((r) => r.formula), [`${ownCl ? `${ownCl}d8` : '0'}${k.cam ? `+${k.cam}` : ''}`]);
+  check('a member\'s card previews on the character\'s level and modifier, who casts by default', c.cardRollFormulas(c.tableCard(mend)).map((r) => r.formula), [`${ownCl ? `${ownCl}d8` : '0'}${k.cam ? `+${k.cam}` : ''}`]);
+  check('and as the member would cast it, on the member\'s', c.cardRollFormulas(c.tableCard(mend), cc.id).map((r) => r.formula), [`${lira.cl}d8${lira.mod ? `+${lira.mod}` : ''}`]);
   c.tablePlay(mend, 'cast');
-  check('cast with no caster named, the owner casts: its points, its dice, its name in the log', [before[0] - pool(), mine() === before[1], t.lastRoll.whoName, t.lastRoll.rolls.length, t.log.some((l) => /^R1: Lira: Mend cast for 1/.test(l))],
-    [1, true, 'Lira', lira.cl, true]);
+  check('cast with no caster named, the character casts a borrowed card: the member\'s pool is untouched, no name in the log', [pool() === before[0], t.lastRoll.whoName, t.log.some((l) => /^R1: Mend cast for 1/.test(l))],
+    [true, '', true]);
   const spec = c.cardRollSpec(mend, null, cc.id);
-  check('the Roll20 text names the caster', spec.notes.find((n) => n.label === 'Cast by').text, `Lira (CL ${lira.cl})`);
+  check('the Roll20 text names a member casting', spec.notes.find((n) => n.label === 'Cast by').text, `Lira (CL ${lira.cl})`);
+  check('and not the character', c.cardRollSpec(mend).notes.some((n) => n.label === 'Cast by'), false);
 
-  // The character casting a borrowed card: the character's numbers, the character's pool.
+  // The member casting, when the chooser says so: its numbers, its pool, its name.
   const bloom = [...t.deck, ...t.hand].find((id) => id.startsWith('2#'));
   c.tableMove(bloom, 'hand');
-  c.tablePlay(bloom, 'cast', { who: '' });
-  check('the character may cast a member\'s card, on the character\'s pool', [pool() === before[0] - 1, t.log.some((l) => /^R1: Bloom cast for 1/.test(l))], [true, true]);
+  c.tablePlay(bloom, 'cast', { who: cc.id });
+  check('a member casts when named: its points, its name in the log', [before[0] - pool(), mine() === before[1], t.log.some((l) => /^R1: Lira: Bloom cast for 1/.test(l))], [1, true, true]);
 
   // Land-Attuned Magic is the character's: a member casting gets no double.
   p.attunedSpheres = ['Life'];
@@ -13095,7 +13096,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   c.recompute();
   const mend2 = [...t.deck].find((id) => id.startsWith('1#'));
   c.tableMove(mend2, 'hand');
-  check('attuned mana pays double for the character but not for the member', [c.castCheck(mend2, '').worth, c.castCheck(mend2, cc.id).worth, c.castCheck(mend2).caster], [2, 1, cc.id]);
+  check('attuned mana pays double for the character but not for the member', [c.castCheck(mend2, '').worth, c.castCheck(mend2, cc.id).worth, c.castCheck(mend2).caster], [2, 1, '']);
 
   c.tableSquad(cc.id, false);
   check('when the member leaves, every card of its goes with it', [t.hand.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.deck.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.mana.length, t.log.at(-1).startsWith('R1: Lira leaves')], [false, false, 0, true]);

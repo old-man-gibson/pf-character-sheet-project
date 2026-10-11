@@ -1065,10 +1065,11 @@ console.log('\nthe squad on the deck and at the table');
   const hand = subsystems.cardTableView(c, ctx, 'hand');
   ok('with the member at the table the head says so and the roster shows it in', hand.includes('with Lira') && new RegExp(`data-table="squad\\|${cc.id}\\|"[^>]*>✓ Lira`).test(hand));
   ok('a member\'s card wears its owner\'s initial', new RegExp(`data-card="${mend}"[^>]*>\\s*<div class="bar title">\\s*<span class="owner" title="Lira&#39;s card">L</span>`).test(hand));
-  ok('every effect card now asks on the way in, even with one mode', hand.includes(`data-table="pick|${bolt}|"`) && hand.includes(`data-table="pick|${mend}|"`));
+  ok('a one-mode card keeps its plain Cast, with a … beside it to cast as a member', hand.includes(`data-table="play|${bolt}|cast"`) && hand.includes(`data-table="pick|${bolt}|"`)
+    && hand.includes(`data-table="play|${mend}|cast"`) && hand.includes(`data-table="pick|${mend}|"`));
   const open = subsystems.cardTableView(c, { ...ctx, castPick: mend }, 'hand');
   const who = open.match(/<select name="who"[^]*?<\/select>/)?.[0] || '';
-  ok('the chooser asks who casts, the owner first', who.includes('<option value="" >Nico'.replace(' >', '>')) && new RegExp(`<option value="${cc.id}" selected>Lira \\(CL ${cc.calc.casting.cl}\\)`).test(who));
+  ok('the chooser offers who casts, the character first and by default', /<option value="" selected>Nico \(CL \d+\)/.test(who) && new RegExp(`<option value="${cc.id}">Lira \\(CL ${cc.calc.casting.cl}\\)`).test(who));
   const table = subsystems.cardTableView(c, ctx, 'table');
   ok('the shared screen sees who is in but has no roster buttons', table.includes('with Lira') && !table.includes('data-table="squad|'));
 }

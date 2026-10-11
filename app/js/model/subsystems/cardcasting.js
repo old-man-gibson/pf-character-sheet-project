@@ -245,20 +245,16 @@ export function cardOwner(model, card) {
 }
 
 /**
- * Who casts a card: `who` when it names a member, else the card's owner when
- * that member is at the table, else the character. '' is the character.
+ * Who casts a card: the member `who` names, else the character. '' is the
+ * character, and so is an id the deck no longer knows. The character is the
+ * default whatever the card's owner: the squad's decks are pooled so that
+ * the one with the spell points can cast off all of them, and a member
+ * casting is the exception the chooser offers.
  */
-export function casterFor(model, who, card) {
-  const t = model.data.cardcasting?.table;
-  const present = new Set(t?.squad || []);
+export function casterFor(model, who) {
   const members = model.data.cardcasting?.calc?.squad || [];
-  const known = (id) => id && members.some((m) => m.id === id);
-  // Named is named: '' is the character, a member's id is that member, and
-  // an id the deck no longer knows falls back to the character. Only an
-  // unnamed caster (null) is read off the card.
-  if (who !== null && who !== undefined) return known(String(who)) ? String(who) : '';
-  const owner = cardOwner(model, card);
-  return known(owner) && (present.has(owner) || !t?.active) ? owner : '';
+  const id = who === null || who === undefined ? '' : String(who);
+  return id && members.some((m) => m.id === id) ? id : '';
 }
 
 /**
@@ -1197,7 +1193,7 @@ export function castCheck(model, id, who = null) {
   const t = p.table;
   const card = model.tableCard(id);
   if (!card) return { ok: false, why: 'no such card' };
-  const caster = casterFor(model, who, card);
+  const caster = casterFor(model, who);
   const isEffect = String(card.effect || '').trim() !== '';
   const need = cardCost(card);
   if (!isEffect) return { ok: true, need: 0, have: 0, mana: true };
@@ -1398,7 +1394,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
   const card = model.tableCard(id);
   if (!card) return model;
   // Who casts it: a squad member uses their own numbers and spell points.
-  const caster = casterFor(model, who, card);
+  const caster = casterFor(model, who);
   const by = casterInfo(model, caster);
   const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
 
@@ -1482,7 +1478,7 @@ export function tableRetrace(model, id) {
   const card = model.tableCard(id);
   if (!card) return model;
   t.discard.splice(at, 1);
-  const caster = casterFor(model, null, card);
+  const caster = casterFor(model, null);
   const by = casterInfo(model, caster);
   const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
   const cost = cardCost(card);
@@ -1636,7 +1632,7 @@ export function tableResolve(model, id) {
   const card = model.tableCard(id);
   // A trap that springs is cast then: it is paid for and its keywords fire now.
   if (wasTrap) {
-    const caster = casterFor(model, null, card);
+    const caster = casterFor(model, null);
     const by = casterInfo(model, caster);
     const cost = cardCost(card);
     if (cost > 0) spendSP(model, cost, `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`, by.pool);
@@ -1730,7 +1726,7 @@ export function tableRoll(model, id, { quiet = false, which = 0, who = null } = 
   const done = () => (quiet ? model : model.recompute());
   // Whose numbers: the caster's, which for a squad member's card means
   // theirs unless the character is the one casting it.
-  const caster = casterFor(model, who, card);
+  const caster = casterFor(model, who);
   const by = casterInfo(model, caster);
   // Formulas in the dice come first: "{ceil(caster.level/2)}d6" is 8d6 at
   // caster level 15, in the Dice field or in the text.
@@ -1814,9 +1810,9 @@ function cardProse(model, text, who = '') {
 export function cardRollFormulas(model, card, who = null) {
   const rolls = cardRolls(model, card);
   if (!rolls.length) return [];
-  // The owner's numbers unless someone else is named: a companion's card
-  // previews at the companion's caster level.
-  const caster = who === null ? cardOwner(model, card) : String(who || '');
+  // The character's numbers unless a member is named: the character is who
+  // casts a borrowed card unless the chooser says otherwise.
+  const caster = casterFor(model, who);
   const scope = casterScope(model, caster);
   return rolls.map((r) => {
     const source = cardProse(model, r.expr, caster).trim();
@@ -1868,7 +1864,7 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   if (!found) return null;
   const { card } = found;
   const p = model.data.cardcasting || {};
-  const caster = who === null ? cardOwner(model, card) : String(who || '');
+  const caster = casterFor(model, who);
   const effect = cardProse(model, card.effect, caster).trim();
   const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
   const own = String(card.name || '').trim();

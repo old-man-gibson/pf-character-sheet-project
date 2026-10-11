@@ -2716,8 +2716,8 @@ function castPicker(s, id, card, modes, casters = []) {
     const { model, ctx, p } = s;
     const copy = (label) => (p.copyOnCast ? rollText(model.cardRollSpec(id, label), ctx.rollFormat || DEFAULT_ROLL_FORMAT) : '');
     const first = modes[0];
-    // Who casts it, when the squad is at the table: the card's owner first.
-    const byDefault = model.casterFor(null, card);
+    // Who casts it, when the squad is at the table: the character first.
+    const byDefault = model.casterFor(null);
     const who = !casters.length ? '' : `<label class="pickrow">Cast by
           <select name="who" aria-label="Cast by">
             ${casters.map((c) => `<option value="${esc(c.id)}"${c.id === byDefault ? ' selected' : ''}>${esc(c.name)} (CL ${c.cl})</option>`).join('')}
@@ -2758,14 +2758,17 @@ function handZone(s) {
       // A card with several Dice entries is asked which, and for how many
       // points, on the way in: Cast… opens the chooser in the card's place.
       const modes = isEffect ? model.cardRollFormulas(card) : [];
-      // With squad members at the table, every cast asks who casts it.
+      // With squad members at the table the chooser can also say who casts;
+      // the character does unless it says otherwise, so a plain Cast stays a
+      // plain Cast and a … beside it opens the chooser.
       const casters = isEffect && s.present.length ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
-      const asks = modes.length > 1 || casters.length > 0;
-      if (asks && s.castPick === id) return castPicker(s, id, card, modes, casters);
+      const asks = modes.length > 1;
+      if ((asks || casters.length) && s.castPick === id) return castPicker(s, id, card, modes, casters);
       const castBtns = !isEffect ? '' : asks
-        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length > 1 ? `${modes.length} modes: pick one, ` : ''}${casters.length ? 'who casts it, ' : ''}and the spell points to put into it`, cls: 'primary' })
+        ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one${casters.length ? ', who casts it' : ''}, and the spell points to put into it`, cls: 'primary' })
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
-          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy });
+          + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy })
+          + (casters.length ? tableBtn('pick', id, '…', { title: 'Cast it as a squad member, or with spell points on top' }) : '');
       return cardMini(model, id, {
         ...s.miniOpts(id),
         badge,
