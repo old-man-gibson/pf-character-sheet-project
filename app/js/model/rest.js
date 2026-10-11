@@ -21,7 +21,7 @@
  * the model runs it as a play action (see `playAction` in undo.js).
  */
 
-import { companionEntries } from '../companions.js';
+import { subsystems } from './subsystems/registry.js';
 import { poolTracker } from './trackers.js';
 import { emit } from './events.js';
 
@@ -89,16 +89,9 @@ export function rest(model, span) {
       d.hp.tempSpent = 0;
       d.hp.nonlethal = 0;
     }
-    for (const c of d.vancian?.classes || []) for (const s of c.spells || []) s.used = 0;
-    for (const p of d.vancian?.prepared || []) p.used = 0;
-    if (d.psionics) d.psionics.spent = 0;
-    if (d.akashic?.essence) d.akashic.essence.spTemp = 0;
-    for (const { b } of companionEntries(d)) restCompanion(model, b, { pool: false });
-    // Lifebound Deck: "When you rest to regain spell points, remove all cards
-    // from your Stun, Death, and Wounds piles." They are in the deck again at
-    // the next shuffle.
-    const table = d.cardcasting?.table;
-    if (table) for (const pile of ['stun', 'wounds', 'death']) table[pile] = [];
+    // What each sub-system gives back with the day: slots, power points,
+    // temporary essence, the companions' hit points, the Lifebound piles.
+    for (const s of subsystems()) s.newDay?.(model);
   }
 
   model.recompute();

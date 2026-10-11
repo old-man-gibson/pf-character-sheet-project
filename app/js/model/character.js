@@ -136,6 +136,7 @@ import {
   recomputeBuffs, recomputeTrackers, removeTracker, seedTrackers, stepTracker, tierNow, updateTracker,
 } from './trackers.js';
 import { featCount, recomputeLanguages, recomputeSpeeds } from './traits.js';
+import { casterLevelSources, toggleCountsToward } from './transparency.js';
 import { evaluateAmount, getPath, isFormulaText, safe, setPath, skillForwardKey, skillKey } from './util.js';
 
 /** A number of hit points as an action takes it: whole, and never below none. */
@@ -610,6 +611,8 @@ export class Character {
   #recomputeSpeeds(...a) { return recomputeSpeeds(this, ...a); }
   #recomputeLanguages(...a) { return recomputeLanguages(this, ...a); }
   featCount(...a) { return featCount(this, ...a); }
+  casterLevelSources(...a) { return casterLevelSources(this, ...a); }
+  toggleCountsToward(...a) { return toggleCountsToward(this, ...a); }
 
   // templates.js
   moveTemplateGroup(...a) { return moveTemplateGroup(this, ...a); }

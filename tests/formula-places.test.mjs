@@ -28,6 +28,8 @@ import * as gear from '../app/js/ui/panels/gear.js';
 import * as trackers from '../app/js/ui/panels/trackers.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel } from '../app/js/ui/panels/skills.js';
+import * as statBlock from '../app/js/monster/panel.js';
+import { emptyMonster } from '../app/js/monster/block.js';
 import { normalizeStyle } from '../app/js/tracker-style.js';
 
 let pass = 0;
@@ -114,6 +116,7 @@ const RENDER = {
   lore: (m, c) => lore.renderLorePanel(m, c.lore),
   extras: (m, c) => lore.renderExtrasPanel(m, c.lore),
   formulas: (m, c) => admin.renderFormulaPanel(m, c.admin),
+  statblock: (m) => statBlock.renderStatBlockPanel(m, {}),
 };
 
 /** Is the element a selector names in this markup? Attribute selectors only. */
@@ -335,6 +338,35 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);
   const forwarded = admin.forwardedRows(c);
   for (const f of forwarded) checkPlace(c, f.place, `bonus to ${f.to}`);
+}
+
+console.log('a monster block\'s prose is read, and its bonuses go back to the field');
+{
+  const c = new Character(blankDocument({ name: 'Wyrmling', level: 4 }));
+  c.data.monster = { ...emptyMonster(), senses: 'darkvision 60 ft. {skill.perception += 4}', specialAttacks: 'breath weapon {breath.dc = 10 + 2}' };
+  c.recompute();
+  const rows = admin.forwardedRows(c).filter((f) => f.place === 'monster:senses');
+  check('the bonus in its senses is listed, from the field', rows.length, 1);
+  for (const f of rows) checkPlace(c, f.place, `bonus to ${f.to}`);
+  checkPlace(c, 'monster:specialAttacks', 'the special attacks field');
+}
+
+console.log('a caster level marked to count toward another goes back to its mark');
+{
+  const c = new Character(blankDocument({ name: 'Theurge', level: 10 }));
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 5, concentration: 0 });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 3, powers: [] });
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  const rows = admin.forwardedRows(c).filter((f) => String(f.place).startsWith('transparency:'));
+  check('both marks are listed as bonuses', rows.map((f) => f.place).sort(),
+    ['transparency:manifester.psion.level:vancian.wizard.cl', 'transparency:vancian.wizard.cl:manifester.psion.level']);
+  for (const f of rows) checkPlace(c, f.place, `bonus to ${f.to}`);
+  // The psion gone, the wizard's mark stays, pressed, and is a problem with a way to it.
+  c.listRemove('psionics.classes', 0);
+  const problem = c.formulaProblems().find((p) => p.places.some((pl) => String(pl.place).startsWith('transparency:')));
+  check('a mark toward a level the character no longer has is a problem', !!problem, true);
+  for (const pl of problem?.places || []) if (pl.place) checkPlace(c, pl.place, 'the mark left behind');
 }
 
 console.log('a formula that does not work can be gone to from Needs attention');

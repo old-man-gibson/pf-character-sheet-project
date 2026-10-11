@@ -432,6 +432,16 @@ recompute have anywhere to *put* an arriving bonus:
 | `immune.sleep`, `immune.fire`, … | an immunity, which is a switch rather than an amount: any positive number grants it, and `-=` suppresses one that was typed in |
 | `familiar.*`, `animalCompanion.*`, `eidolon.*` | a companion's own numbers — see below |
 
+**Caster levels count separately unless marked.** The Spheres caster level, each Vancian
+class's caster level and each manifesting class's manifester level are separate numbers.
+Under each one, on the Magic, Vancian and Psionics tabs, **Counts toward** lists the
+others; pressing one adds this caster level to it, exactly as
+`{manifester.psion.level += vancian.wizard.cl}` written in a note would, and it is
+listed with the forwarded bonuses as "the Wizard caster level, marked to count toward
+this". A bonus to a caster level reads the levels from before any bonus applies, so two
+levels marked toward each other each count the other's own levels once: Wizard 5 and
+Psion 3 marked both ways are 8 and 8, not 13.
+
 **The defence boxes.** Spell resistance, DR, energy resistance, vulnerability and the
 immunities are free text, because that is how a stat block writes them — and each is
 parsed into the parts it is already made of, so `5/magic` is `dr.magic` and `fire 10,

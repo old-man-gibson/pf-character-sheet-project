@@ -33,6 +33,9 @@ import { wealthView } from './stats/wealth.js';
 import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
+import { featNames } from './feats.js';
+import { MONSTER_PROSE_FIELDS } from '../monster/block.js';
+import { transparencySources } from './transparency.js';
 import {
   classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
@@ -1417,6 +1420,12 @@ export function proseSources(model) {
     push(`defenses:${key}`, d.defenses?.[key]);
   }
   (d.notes || []).forEach((n, i) => push(`note:${i}`, n.body));
+  // A monster block's prose -- a breath weapon's DC in its special attacks,
+  // a racial bonus in its racial modifiers -- read like any note.
+  if (d.monster) for (const key of MONSTER_PROSE_FIELDS) push(`monster:${key}`, d.monster[key]);
+  // A caster level marked to count toward another is the bonus that says so
+  // (see model/transparency.js), read with the rest.
+  for (const s of transparencySources(model)) push(s.path, s.text);
   // The Formulas tab's own writing space: the place for a rule that is about
   // nothing in particular. Read exactly like any other prose on the sheet.
   push('formulas', d.formulaNotes);
@@ -1732,10 +1741,7 @@ export function proseText(model, text, local = null) {
  * "Card Shark [Chance, Deck]" once toward each.
  */
 export function tagCounts(d) {
-  const names = [];
-  for (const g of d?.featGroups || []) for (const f of g.entries || []) names.push(f?.name);
-  const granted = d?.grantedFeats || {};
-  names.push(granted.drawback?.name, granted.specialty?.name, ...(granted.others || []).map((f) => f?.name));
+  const names = featNames(d);
   for (const side of Object.values(d?.training || {})) names.push(...(side?.tradition?.boughtOff || []));
 
   const counts = {};

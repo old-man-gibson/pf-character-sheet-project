@@ -20,6 +20,7 @@ import {
 } from '../rows.js';
 import { itemArea, prose } from '../prose.js';
 import { forwardedBadge } from '../badges.js';
+import { countsTowardLine } from '../counts-toward.js';
 import { fillNotesButton, noteField, talentCell, talentLegend } from '../talents.js';
 import { rollButton } from '../roll.js';
 import {
@@ -432,6 +433,7 @@ function magicGlobalsPanel(model, m) {
         <span class="value big">${m.globalCL} ${hint(m.globalCL, s.totalCL)}${forwardedBadge(model, 'spheres.cl', {
     waiting: m.castingUnlocked === false ? 'no casting class has a level yet' : '' })}</span></div>
       ${editLine('CL bonus', 'training.magic.clBonus', m.clBonus)}
+      ${countsTowardLine(model, 'spheres.cl')}
       ${m.clWaiting ? `<p class="hint">No casting class has a level yet, so ${fmt(m.clWaiting)} caster level
         is held back until one does.</p>` : ''}
       ${(m.classes || []).filter((x) => x.levelWaiting).map((x) => `<p class="hint">${fmt(x.levelWaiting)}

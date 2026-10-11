@@ -28,6 +28,8 @@ import { applyGestalt } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { resolveDefenceBonuses } from './stats/defenses.js';
 import { evaluateAmount, flatNames, getPath, safe, sphereForwardKey } from './util.js';
+import { MONSTER_PROSE_LABELS } from '../monster/block.js';
+import { casterLevelLabel } from './transparency.js';
 
 /** Where a non-prose formula lives, for a reader who needs to go and find it. */
 const SOURCE_WORD = {
@@ -101,6 +103,8 @@ export function describeSource(path) {
     case 'featureNote': return `${parts.slice(2).join(':') || 'a feature'}, under ${a} features`;
     case 'template': return 'a template feature';
     case 'note': return `note ${nth(a)} on Lore`;
+    case 'monster': return `the stat block’s ${MONSTER_PROSE_LABELS[a] || a}`;
+    case 'transparency': return `the ${casterLevelLabel(a)}, marked to count toward this`;
     case 'approvalNotes': return 'the approvals notes';
     case 'formulas': return 'the Formulas tab';
     case 'background': return `background section ${nth(a)}`;

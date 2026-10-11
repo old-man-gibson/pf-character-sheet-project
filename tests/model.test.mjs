@@ -50,6 +50,10 @@ import {
 import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/tracker-style.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
+import { featNames } from '../app/js/model/feats.js';
+import { emptyMonster } from '../app/js/monster/block.js';
+import { subsystems } from '../app/js/model/subsystems/registry.js';
+import { GAME_SYSTEMS } from '../app/js/rules.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
@@ -13024,6 +13028,83 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   c.tablePlay('0#0', 'cast');
   check('casting it under Stagnant Pool taps two cards for four points', c.data.cardcasting.table.mana.filter((m) => m.tapped).length, 2);
   check('and the log says so', c.data.cardcasting.table.log.some((l) => /cast for 4.*2 mana tapped \(attuned: two points each\)/.test(l)), true);
+  // A sphere is matched however it is spaced or capitalised, as every other name is.
+  p.attunedSpheres = ['  destruction '];
+  c.recompute();
+  check('an attuned sphere ticked in other spelling still matches', c.cardAttuned(c.data.cardcasting.cards[0]), true);
+}
+
+console.log('a monster block\'s prose is read like any note');
+{
+  const c = new Character(blankDocument({ name: 'Wyrmling', level: 4 }));
+  c.data.monster = {
+    ...emptyMonster(),
+    senses: 'darkvision 60 ft. {skill.perception += 4}',
+    specialAttacks: 'breath weapon (DC {breath.dc = 10 + 2})',
+    tactics: 'opens with it {= breath.dc}',
+  };
+  c.recompute();
+  const perception = c.data.skills.find((s) => s.name === 'Perception');
+  check('a bonus in its senses lands', perception.forwarded, 4);
+  check('a name defined in its special attacks reads elsewhere', c.inlineNames.breath?.dc ?? c.inlineNames['breath.dc'], 12);
+  check('and the source is named as the field', describeSource('monster:senses'), 'the stat block’s senses');
+  delete c.data.monster;
+  c.recompute();
+  check('without a block, nothing is read', c.data.skills.find((s) => s.name === 'Perception').forwarded, 0);
+}
+
+console.log('caster levels are separate until one is marked to count toward another');
+{
+  const c = new Character(blankDocument({ name: 'Theurge', level: 10 }));
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 5, concentration: 0 });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 3, powers: [] });
+  const levels = () => [c.data.vancian.classes[0].casterLevel, c.data.psionics.classes[0].manifesterLevel];
+  check('each caster level the character has, by the name a bonus goes to',
+    c.casterLevelSources().map((s) => [s.name, s.label]),
+    [['vancian.wizard.cl', 'Wizard caster level'], ['manifester.psion.level', 'Psion manifester level']]);
+  check('separate by default', levels(), [5, 3]);
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  check('the wizard\'s levels count toward the psion\'s, and not the other way', levels(), [5, 8]);
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  check('marked both ways, each counts its own levels once', levels(), [8, 8]);
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('the marks are saved and read back', [reopened.data.vancian.classes[0].casterLevel, reopened.data.psionics.classes[0].manifesterLevel], [8, 8]);
+  check('the mark is listed as where the bonus comes from',
+    c.contributions.entries.filter((e) => e.path.startsWith('transparency:')).map((e) => describeSource(e.path)),
+    ['the Wizard caster level, marked to count toward this', 'the Psion manifester level, marked to count toward this']);
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  check('taken off, they are separate again, and nothing is left saved', [levels(), 'countsToward' in c.data.vancian.classes[0]], [[5, 3], false]);
+  c.toggleCountsToward('vancian.wizard.cl', 'vancian.wizard.cl');
+  check('a level cannot count toward itself', 'countsToward' in c.data.vancian.classes[0], false);
+}
+
+console.log('every sub-system is one row: what it saves, whether it is in use, what a day gives back');
+{
+  const rows = subsystems();
+  const tabs = new Set(rows.filter((s) => s.inUse).map((s) => s.tab));
+  check('every tab a game system names has an in-use test',
+    GAME_SYSTEMS.flatMap((s) => s.tabs).filter((t) => !tabs.has(t)), []);
+  check('a block with worked-out fields names where it lives',
+    rows.filter((s) => s.derived && !s.key).map((s) => s.tab), []);
+  const c = new Character(blankDocument({ name: 'Rows', level: 5 }));
+  check('the in-use map is the table, in its order',
+    Object.keys(c.systemTabsInUse()), rows.filter((s) => s.inUse).map((s) => s.tab));
+}
+
+console.log('one walk over every feat on the character');
+{
+  const d = {
+    featGroups: [{ name: 'Level Up', entries: [{ name: 'Adept Initiator' }, { name: '' }] }, { name: 'Other', entries: [{ name: 'Lucky Break [Chance]' }] }],
+    grantedFeats: { drawback: { name: 'Card Shark [Deck]' }, specialty: null, others: [{ name: 'Toughness' }] },
+  };
+  check('the groups and the granted feats', featNames(d), ['Adept Initiator', '', 'Lucky Break [Chance]', 'Card Shark [Deck]', 'Toughness']);
+  check('the groups alone', featNames(d, { granted: false }), ['Adept Initiator', '', 'Lucky Break [Chance]']);
+  check('a document not yet normalised, its feats keyed by group', featNames({ feats: { General: [{ name: 'Dodge' }] } }), ['Dodge']);
+  const c = new Character(blankDocument({ name: 'Feats', level: 3 }));
+  c.data.featGroups[0].entries[0].name = 'Weapon Focus';
+  c.data.grantedFeats = { others: [{ name: 'Weapon Focus (dagger)' }] };
+  check('featCount counts both', c.featCount(/^weapon focus/i), 2);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

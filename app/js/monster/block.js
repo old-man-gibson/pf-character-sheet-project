@@ -68,14 +68,26 @@ export const emptyMonster = () => normalizeMonster({});
 
 /**
  * The fields of the block that are prose -- read for {…} tokens, so a save
- * DC written as `{= 10 + con.mod + floor(level / 2)}` moves with the score.
+ * DC written as `{= 10 + con.mod + floor(level / 2)}` moves with the score --
+ * with what each is called where a formula's source is named.
  *
- * Not read yet. The panel renders each field's tokens where it stands, but
- * the prose walk in model/scope.js does not visit these, so a name defined
- * here (`{breath.dc = …}`) or a bonus sent from here (`{ac += 2}`) reaches
- * nothing else. This is the list that walk should take when it is wired up.
+ * The prose walk in model/scope.js visits each, as it does a note or a trait:
+ * a name defined here (`{breath.dc = …}`) reads anywhere on the sheet, and a
+ * bonus sent from here (`{skill.perception += 4}`) lands.
  */
-export const MONSTER_PROSE_FIELDS = [
-  'senses', 'aura', 'healing', 'saveNote', 'defensiveAbilities', 'specialAttacks',
-  'spellLike', 'spells', 'racialModifiers', 'sq', 'gear', 'tactics', 'description',
-];
+export const MONSTER_PROSE_LABELS = {
+  senses: 'senses',
+  aura: 'aura',
+  healing: 'regeneration / fast healing',
+  saveNote: 'save note',
+  defensiveAbilities: 'defensive abilities',
+  specialAttacks: 'special attacks',
+  spellLike: 'spell-like abilities',
+  spells: 'spells',
+  racialModifiers: 'racial modifiers',
+  sq: 'special qualities',
+  gear: 'gear',
+  tactics: 'tactics',
+  description: 'description',
+};
+export const MONSTER_PROSE_FIELDS = Object.keys(MONSTER_PROSE_LABELS);

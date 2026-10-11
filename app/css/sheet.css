@@ -1541,6 +1541,8 @@ select.jumpto[hidden] { display: none; }
 button.tiny {
   flex: none; padding: 1px 5px; font-size: 0.75rem; line-height: 1.2; min-width: 0;
 }
+/* Under a caster level: the other caster levels it may be marked to count toward. */
+.hint.countstoward { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .discipline-body { padding: 3px 5px 6px; }
 .dlevel {
   font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em;
