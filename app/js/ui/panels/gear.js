@@ -1031,7 +1031,20 @@ export function wealthPanel(model, ctx) {
     // switch goes on they are fields again with whatever was in them.
     const off = v.due ? '' : ' disabled';
     const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
-    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} a caster level every whole month — ${n(v.castingPerMonth)} a month at caster level ${v.casterLevel}.`;
+    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} per Spheres caster level every whole month since the last offering — ${n(v.castingPerMonth)} a month at caster level ${v.casterLevel}.`;
+    const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
+    // What each switch adds to the offering, and how, so the figure can be checked.
+    const owedParts = [
+      v.oathOfOfferings ? `<li><b>Oath of Offerings ${n(v.expected.oath)}</b> ${v.lastOffering
+        ? `${plural(v.days, 'day')} since ${esc(v.lastOffering)} × ${n(v.offeringPerDay)}`
+        : 'no offering recorded, so no days are counted'}${v.sessionMana ? `, plus half of ${n(v.sessionMana)} session mana` : ''}</li>` : '',
+      v.materialCasting ? `<li><b>Material casting ${n(v.expected.casting)}</b> ${!v.lastOffering
+        ? 'no offering recorded, so no month is counted yet'
+        : !v.casterLevel
+          ? 'no Spheres caster level, so no components are owed'
+          : `${plural(v.months, 'whole month')} since ${esc(v.lastOffering)} × ${n(v.castingPerMonth)} (${MATERIAL_CASTING_PER_LEVEL} × caster level ${v.casterLevel})${
+            v.nextMonth ? `; the next month is counted on ${esc(v.nextMonth)}` : ''}`}</li>` : '',
+    ].filter(Boolean).join('');
     return `<section class="panel span2 wealth">
       <h3>Wealth
         <span class="badge">${esc(v.currency)}</span>
@@ -1065,6 +1078,7 @@ export function wealthPanel(model, ctx) {
               ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"${off}>`)}
               ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, `min="0" title="Mana earned in sessions since the last offering; the oath takes half"${off}`))}
             </div>
+            ${owedParts ? `<ul class="owedparts" aria-label="What the offering is made of">${owedParts}</ul>` : ''}
           </div>
         </div>
       </div>

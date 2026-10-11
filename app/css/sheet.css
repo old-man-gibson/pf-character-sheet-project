@@ -1046,6 +1046,9 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
 .offeringfields { border-top: 1px solid var(--cs-line); padding-top: 8px; }
 .offeringfields.dormant { opacity: 0.5; }
 .offeringfields.dormant input { cursor: not-allowed; }
+/* What each switch adds to the offering, worked out where it can be checked. */
+.owedparts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: 0.8rem; line-height: 1.4; color: var(--cs-muted); }
+.owedparts b { color: var(--cs-fg); font-weight: 620; margin-right: 4px; font-variant-numeric: tabular-nums; }
 .wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
 /* The label field carries an inline `width: 15rem`, which is wider than a
    phone: the inline rule wins on `width`, so the cap has to be a max. */

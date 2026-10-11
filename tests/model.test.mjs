@@ -7385,6 +7385,15 @@ console.log('auto-cooking -- the iron chef dish maker, read from Bryva and cooke
   check('round-trips through JSON', back.data.cooking.sides, ['Carrots', 'Bread']);
 }
 
+console.log('material casting: the next whole month, counted as DATEDIF counts it');
+{
+  const w = { materialCasting: true, lastOffering: '2026-01-31' };
+  // No 31st in February: DATEDIF counts the month from the 1st of March.
+  check('a month-end offering is counted again from the 1st', wealthView(w, new Date(2026, 1, 15), 3).nextMonth, '2026-03-01');
+  check('nothing to count without a date', wealthView({ materialCasting: true }, new Date(2026, 1, 15), 3).nextMonth, '');
+  check('nor without the switch', wealthView({ lastOffering: '2026-01-31' }, new Date(2026, 1, 15), 3).nextMonth, '');
+}
+
 console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
 {
   const c = new Character(load('saburo'));
@@ -7405,6 +7414,7 @@ console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
   check('material casting is charged against the caster level, not the character level', [c.casterLevel, c.data.identity.level], [4, 9]);
   check('a whole month costs 10 a caster level', c.wealthView(new Date(2026, 8, 2)).expected.casting, MATERIAL_CASTING_PER_LEVEL * 4);
   check('and the day before it does not', c.wealthView(new Date(2026, 8, 1)).expected.casting, 0);
+  check('the day the next month is counted', [c.wealthView(today).nextMonth, c.wealthView(new Date(2026, 8, 2)).nextMonth], ['2026-09-02', '2026-10-02']);
   c.set('wealth.sessionMana', 0);
   // The switches.
   c.set('wealth.oathOfOfferings', false);

@@ -605,6 +605,19 @@ console.log('\nthe dashboard lays out the cards a character uses, and the wallet
   c.set('wealth.currency', 'Gold & Glory');
   const html = overview.renderOverviewPanel(c, CTX);
   check('the currency is escaped once', [html.includes('Gold &amp; Glory'), html.includes('&amp;amp;')], [true, false]);
+  // Each switch says what it adds to the offering and how.
+  const parts = () => (/<ul class="owedparts"[^>]*>(.*?)<\/ul>/s.exec(gear.wealthPanel(c, CTX))?.[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  check('no switch on, no parts', parts(), '');
+  c.set('wealth.materialCasting', true);
+  check('no offering recorded, no month counted', /Material casting 0 no offering recorded/.test(parts()), true);
+  const ago = new Date();
+  ago.setDate(ago.getDate() - 70);
+  c.set('wealth.lastOffering', `${ago.getFullYear()}-${String(ago.getMonth() + 1).padStart(2, '0')}-${String(ago.getDate()).padStart(2, '0')}`);
+  check('material casting shows its months, rate and caster level, and the next month',
+    /Material casting \d[\d,]* \d+ whole months? since .* × 50 \(10 × caster level 5\); the next month is counted on \d{4}-\d{2}-\d{2}/.test(parts()), true);
+  c.set('wealth.oathOfOfferings', true);
+  c.set('wealth.manaPerDay', 10);
+  check('the oath shows its days and rate beside it', /Oath of Offerings 350 70 days since .* × 5/.test(parts()), true);
 }
 
 console.log('\nthe spell list\'s ask-twice × says when it is armed');
