@@ -9,6 +9,7 @@
 
 import { forwarded, lazyScope, scopeIfFormulas } from './scope.js';
 import { evaluateAmount, speedRows } from './util.js';
+import { featNames } from './feats.js';
 
 /**
  * Movement rates: base plus bonus, with the bonus allowed to be a formula.
@@ -71,14 +72,5 @@ export function recomputeLanguages(model) {
 
 /** How many feats on the character match `re` -- feat groups and granted feats. */
 export function featCount(model, re) {
-  const d = model.data;
-  let n = 0;
-  for (const g of d.featGroups || []) {
-    for (const f of g.entries || []) if (re.test(String(f?.name || ''))) n += 1;
-  }
-  const gf = d.grantedFeats || {};
-  for (const f of [gf.drawback, gf.specialty, ...(gf.others || [])]) {
-    if (re.test(String(f?.name || ''))) n += 1;
-  }
-  return n;
+  return featNames(model.data).filter((name) => re.test(name)).length;
 }

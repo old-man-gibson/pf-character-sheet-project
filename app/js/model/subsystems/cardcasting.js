@@ -12,11 +12,12 @@
 import { diceString, parseDiceExpr, statMod } from '../../rules.js';
 import { evaluateFormula } from '../../formula.js';
 import { sheetReader } from '../document.js';
-import { evaluateAmount } from '../util.js';
+import { evaluateAmount, normalizeName } from '../util.js';
 import { sphereTally } from '../spheres.js';
 import { splitVeilName } from './akashic.js';
 import { clampTracker, poolTracker } from '../trackers.js';
 import { companionById, companionEntries } from '../../companions.js';
+import { featNames } from '../feats.js';
 
 /** The five mana colours, in the order the deck tab lists them. */
 export const CARD_COLORS = [
@@ -147,25 +148,13 @@ const isManipulation = (m, name) => !!manipulationKey(m?.name) && manipulationKe
 
 /** The deck feats a character has: every feat or bought-off drawback tagged [Deck]. */
 export function deckFeatNames(d) {
-  const out = [];
   // Feats arrive keyed by group and are normalised into `featGroups`; a
-  // document may be at either stage when this is asked.
-  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g.entries || [])
-    : Object.values(d?.feats || {});
-  for (const rows of groups) {
-    if (!Array.isArray(rows)) continue;
-    for (const f of rows) if (/\[[^\]]*deck/i.test(String(f?.name || ''))) out.push(String(f.name));
-  }
+  // document may be at either stage when this is asked, and featNames reads both.
+  const out = featNames(d, { granted: false }).filter((name) => /\[[^\]]*deck/i.test(name));
   for (const x of d?.training?.magic?.tradition?.boughtOff || []) {
     if (/\[[^\]]*deck/i.test(String(x || ''))) out.push(String(x));
   }
   return out;
-}
-
-/** Every feat on the character by name, whatever group it sits in. */
-function allFeatNames(d) {
-  const groups = Array.isArray(d?.featGroups) ? d.featGroups.map((g) => g.entries || []) : Object.values(d?.feats || {});
-  return groups.flatMap((rows) => (Array.isArray(rows) ? rows.map((f) => String(f?.name || '')) : []));
 }
 
 /* ------------------------------------------------------------------ *
@@ -722,10 +711,10 @@ export function recomputeCardcasting(model) {
   // A card with no colour of its own takes its sphere's, from the
   // land-attuned table; a plain Mana Point card wears its mana.
   const sphereColor = (sphere) => {
-    const want = String(sphere || '').trim().toLowerCase();
+    const want = normalizeName(sphere);
     if (!want) return '';
     for (const [k] of CARD_COLORS) {
-      if ((p.colorSpheres[k] || []).some((s) => String(s).trim().toLowerCase() === want)) return k;
+      if ((p.colorSpheres[k] || []).some((s) => normalizeName(s) === want)) return k;
     }
     return '';
   };
@@ -842,7 +831,7 @@ export function recomputeCardcasting(model) {
   // attuned sphere rather than one. The feat wants Area Bound or Terrain
   // Casting in the tradition, and is itself a deck feat, so it is found
   // among those or among the feats proper.
-  const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || allFeatNames(c).some((f) => /land-?attuned magic/i.test(f));
+  const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || featNames(c).some((f) => /land-?attuned magic/i.test(f));
   const landDrawback = (c.training?.magic?.tradition?.drawbacks || []).some((x) => /^(terrain casting|area bound)/i.test(String(x || '').trim()));
   const landAttuned = !!(p.manaPool && landFeat && landDrawback);
   const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
@@ -1225,8 +1214,8 @@ export function castCheck(model, id, who = null) {
 export function cardAttuned(model, card) {
   const p = model.data.cardcasting;
   if (!p?.calc?.landAttuned) return false;
-  const sphere = String(card?.sphere || '').trim().toLowerCase();
-  return !!sphere && (p.attunedSpheres || []).some((s) => String(s).trim().toLowerCase() === sphere);
+  const sphere = normalizeName(card?.sphere);
+  return !!sphere && (p.attunedSpheres || []).some((s) => normalizeName(s) === sphere);
 }
 
 /** A shuffle. `this.rng` may be replaced for a deterministic test. */

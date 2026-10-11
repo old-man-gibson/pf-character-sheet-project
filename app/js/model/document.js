@@ -20,19 +20,20 @@ import {
 import { FEATURE_GROUP_COLORS, normalizeHex } from '../tracker-style.js';
 import { Character } from './character.js';
 import { normalizeWealth } from './stats/wealth.js';
-import { AKASHIC_DERIVED, importAkashic, splitVeilName } from './subsystems/akashic.js';
+import { importAkashic, splitVeilName } from './subsystems/akashic.js';
 import {
-  CARDCASTING_DERIVED, deckFeatNames, importCardcasting,
+  deckFeatNames, importCardcasting,
 } from './subsystems/cardcasting.js';
-import { COMPANION_DERIVED, importAnimalCompanion } from './subsystems/companions.js';
+import { importAnimalCompanion } from './subsystems/companions.js';
 import { importCooking, normalizeDish } from './subsystems/cooking.js';
 import { importCrafting } from './subsystems/crafting.js';
 import { GUILE_DERIVED, normalizeGuileTraining } from './subsystems/guile.js';
-import { MANEUVER_DERIVED, importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
-import { ALT_TRAINING_DERIVED, altTrainingLevels } from './subsystems/alt-training.js';
-import { PSIONIC_DERIVED, importPsionics } from './subsystems/psionics.js';
+import { importManeuvers, shrinkDiscipline } from './subsystems/maneuvers.js';
+import { altTrainingLevels } from './subsystems/alt-training.js';
+import { importPsionics } from './subsystems/psionics.js';
 import { importTechniques, normalizeTechniques } from './subsystems/techniques.js';
-import { VANCIAN_DERIVED, importVancian, mergeVancian } from './subsystems/vancian.js';
+import { importVancian, mergeVancian } from './subsystems/vancian.js';
+import { subsystems } from './subsystems/registry.js';
 import { TEMPLATE_TABS, TEMPLATE_TYPES, importTemplateTab, templateEntry } from './templates.js';
 import { shapeLevelUpFeats } from './feats.js';
 import { SHEET_TRACKER_OVERRIDES, seedTrackers } from './trackers.js';
@@ -1647,11 +1648,6 @@ export function toDocument(model) {
 const saveStrip = () => [
   ['defenses', DEFENCES_DERIVED],
   ['hp', HP_DERIVED],
-  ['akashic', AKASHIC_DERIVED],
-  ['maneuvers', MANEUVER_DERIVED],
-  ['vancian', VANCIAN_DERIVED],
-  ['psionics', PSIONIC_DERIVED],
-  ['altTraining', ALT_TRAINING_DERIVED],
-  ['cardcasting', CARDCASTING_DERIVED],
-  ...COMPANION_KINDS.map((kind) => [kind, COMPANION_DERIVED, { list: true }]),
+  // Each sub-system's block, from its row (model/subsystems/registry.js).
+  ...subsystems().filter((s) => s.derived).map((s) => [s.key, s.derived, { list: !!s.list }]),
 ];

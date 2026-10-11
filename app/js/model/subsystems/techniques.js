@@ -14,6 +14,7 @@ import { emit } from '../events.js';
 import { positionedRows } from '../templates.js';
 import { cleanText, pad } from '../util.js';
 import { markUndo, rowLabel } from '../undo.js';
+import { featNames } from '../feats.js';
 
 /* ------------------------------------------------------------------ *
  * custom techniques: the Technique List and AutoTechnique tabs.
@@ -389,12 +390,8 @@ export function techniqueExport(t, stats, { characterName = '' } = {}) {
 
 /** What the technique formulas read off the character: BAB and the Adept Initiator feat. */
 export function techniqueContext(model) {
-  let adept = 0;
-  for (const g of model.data.featGroups || []) {
-    for (const f of g.entries || []) {
-      if (/^adept initiator\b/i.test(String(f?.name || '').trim())) adept += 1;
-    }
-  }
+  const adept = featNames(model.data, { granted: false })
+    .filter((name) => /^adept initiator\b/i.test(name.trim())).length;
   return { bab: Number(model.data.attack?.bab) || 0, adeptInitiator: adept };
 }
 

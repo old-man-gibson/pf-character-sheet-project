@@ -6705,6 +6705,11 @@ export class CharacterSheetElement extends HTMLElement {
         this.#model.toggleClassSystem(Number(button?.dataset.index), button?.dataset.system);
         this.#render();
         break;
+      // A caster level counting toward another, or not (model/transparency.js).
+      case 'counts-toward':
+        this.#model.toggleCountsToward(button?.dataset.source, button?.dataset.target);
+        this.#render();
+        break;
       // The dashboard's condition chips: the picker puts a condition on
       // ticked (Energy Drain climbs a level per click), × takes it off (it
       // stays in the build view's grid, unticked).

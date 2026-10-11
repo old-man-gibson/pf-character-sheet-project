@@ -74,6 +74,7 @@ import {
 import { hasTokens } from '../../inline.js';
 import { getPath } from '../../model/util.js';
 import { speedTable } from '../speeds.js';
+import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
@@ -991,6 +992,7 @@ function castingClassPanel(model, c, i) {
       ${c.tableName && c.tableName !== c.slotType
     ? `<p class="hint">Reading <strong>${esc(c.tableName)}</strong>'s table.</p>` : ''}
       ${levelPinHint(c.casterLevelOverride, c.casterLevelBase ?? c.casterLevel, c.plannerLevel)}
+      ${countsTowardLine(model, vancianForwardKey(c) || '')}
       ${c.levelClass && c.levelClass !== String(c.name || '').trim()
     ? `<p class="hint">Counts <strong>${esc(c.levelClass)}</strong> levels.</p>` : ''}
       <table class="build vslots"><thead><tr>
@@ -1474,6 +1476,7 @@ function manifestingClassPanel(model, c, i, ctx = {}) {
       ${line('From the curve', c.basePoints === null ? '—' : c.basePoints)}
       ${line('From abilities', fmt(c.abilityPoints ?? 0))}
       ${levelPinHint(c.manifesterLevelOverride, c.manifesterLevelBase ?? c.manifesterLevel, c.plannerLevel)}
+      ${countsTowardLine(model, manifesterForwardKey(c) || '')}
       ${powerDatalist(c)}
       ${(c.powers || []).length ? `<table style="margin-top:8px"><thead><tr>
         <th>Power</th><th style="width:7rem">Level</th>

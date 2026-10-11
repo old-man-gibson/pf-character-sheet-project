@@ -98,7 +98,10 @@ Under the block:
   hit die, space and reach, the notes, and the prose fields (senses, aura, regeneration,
   defensive abilities, special attacks, spell-like abilities, spells, racial modifiers, SQ,
   gear, tactics, description). The rest of the block reads from its own tabs, and the
-  hint says which.
+  hint says which. The prose fields are read like any note: a name defined in one
+  (`{breath.dc = 10 + floor(hd / 2) + con.mod}`) reads anywhere on the sheet, and a
+  bonus sent from one (`{skill.perception += 4}`) lands and is listed on the Formulas
+  tab with a way back to the field.
 - **Not read** — the leftover lines, if any.
 
 ### Any sheet as a stat block
