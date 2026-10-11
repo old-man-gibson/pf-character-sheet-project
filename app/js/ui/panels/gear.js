@@ -757,11 +757,13 @@ function loadPanel(model, e) {
 export function renderCraftingPanel(model, ctx) {
     const cr = model.data.crafting;
     if (!cr) return '<div class="grid"><p class="empty">No crafting data.</p></div>';
-    return `<div class="grid crafting">
+    return `<div class="grid">
       ${craftSummaryPanel(cr)}
-      ${craftSpeedPanel(cr)}
-      ${craftCostPanel(cr)}
-      ${craftCrafterPanel(model, cr)}
+      <div class="band">
+        ${craftSpeedPanel(cr)}
+        ${craftCostPanel(cr)}
+        ${craftCrafterPanel(model, cr)}
+      </div>
       ${craftProjectsPanel(ctx, model, cr)}
       ${systemExtrasPanel(cr, 'crafting', 'Item Crafting')}
     </div>`;

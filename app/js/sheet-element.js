@@ -567,6 +567,8 @@ export class CharacterSheetElement extends HTMLElement {
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
   #roBoxObserver = null;    // watches the width of the self-sizing read-only boxes
   #tableWrapObserver = null; // watches the table scroll boxes that may shed their cap
+  #renderedNarrow = null;   // the last render was laid out for 620px or less (null: drawn hidden)
+  #widthObserver = null;    // redraws when the sheet's width crosses 620px
   #checkpointDraft = '';
   #renameDraft = null;      // { key, label } while a checkpoint is being renamed
   #snapshotTimer = null;
@@ -786,6 +788,28 @@ export class CharacterSheetElement extends HTMLElement {
   };
 
   /**
+   * The sheet got wider or narrower than 620px since it was drawn.
+   *
+   * The narrow screen's extras -- row folds, help disclosures, stacked
+   * column widths -- are put in by the render, not the stylesheet, so a
+   * window dragged across the line kept the ones it had: folds and Help
+   * buttons on a wide sheet, or none on a narrow one. It is drawn again
+   * when it crosses, which is rare enough to cost nothing. Watched on the
+   * element rather than the window, since the stylesheet's own switch is a
+   * container query on the element and an embedded sheet can change width
+   * with the window standing still.
+   */
+  #onWidthChange = () => {
+    // A task later rather than inside the observer: drawing changes the
+    // sheet's height, which an observer still delivering reports as a loop.
+    setTimeout(() => {
+      if (!this.#model || !this.clientWidth || (this.clientWidth <= 620) === this.#renderedNarrow) return;
+      const active = this.shadowRoot.activeElement;
+      if (active) this.#rerender(active); else this.#render();
+    });
+  };
+
+  /**
    * Size the side rail to the part of the window it is actually in.
    *
    * The rail pins at the top of the window and scrolls inside itself, and a
@@ -830,6 +854,10 @@ export class CharacterSheetElement extends HTMLElement {
     // shadow boundary -- and is caught on the root in `#bindBreakdowns`.
     this.ownerDocument.addEventListener('scroll', this.#onViewportChange, true);
     window.addEventListener('resize', this.#onViewportChange);
+    if (typeof ResizeObserver === 'function') {
+      this.#widthObserver ??= new ResizeObserver(this.#onWidthChange);
+      this.#widthObserver.observe(this);
+    }
     // The card table's pop-out windows are told when the sheet goes.
     window.addEventListener('pagehide', this.#closeCardWindows);
     if (this.#model && !this.#cardChannel) this.#openCardChannel();
@@ -849,6 +877,7 @@ export class CharacterSheetElement extends HTMLElement {
     this.#unbindColumnResize = null;
     this.ownerDocument.removeEventListener('scroll', this.#onViewportChange, true);
     window.removeEventListener('resize', this.#onViewportChange);
+    this.#widthObserver?.disconnect();
     this.#closeBreakdown();
     this.#closePalette();
     this.#schemeQuery?.removeEventListener('change', this.#onSchemeChange);
@@ -2021,6 +2050,8 @@ export class CharacterSheetElement extends HTMLElement {
     this.#showActiveTab();
     this.#fillJumpTo();
     this.#markLongText();
+    // null for a sheet drawn while hidden, which has no width to go by.
+    this.#renderedNarrow = this.clientWidth ? this.clientWidth <= 620 : null;
     this.#stackRows();
     // After the stacking, which decides whether a table has columns at all.
     applyColumnWidths(this.shadowRoot, readColumnWidths(), { stacked: this.clientWidth <= 620 });

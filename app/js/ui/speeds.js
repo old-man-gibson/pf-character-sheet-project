@@ -27,7 +27,7 @@ import {
 export function speedTable(list, rows, worked, {
   named = false, final = null, badge = null, example = 'floor(level / 3) * 10', exampleFor = '',
 } = {}) {
-  return `<div class="tablewrap"><table class="speeds stacked" data-fold="shut">
+  return `<div class="tablewrap"><table class="speeds stacked fitcols" data-fold="shut">
         <thead><tr><th>Type</th><th class="num">Base</th>
           <th class="num" title="A number, or a formula — e.g. ${esc(example)}">Bonus</th>
           <th class="num">Final</th><th></th></tr></thead>

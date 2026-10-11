@@ -555,7 +555,6 @@
 .session-support .dashtracker .tname { max-width: none; white-space: normal; font-size: .9rem; }
 .session-support .dashmeter { grid-column: 1 / -1; grid-row: 2; }
 .session-support .dashtracker .tracker-controls { grid-column: 2; grid-row: 1; }
-.session-reference .grid { align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); }
 .session-reference > summary { font-size: 1rem; border-top: 1px solid var(--cs-line); }
 @media (max-width: 1050px) {
   .session-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -1031,10 +1030,7 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
    comes in a day, and -- for the two characters who owe one -- the offering.
    Across the full width it was mostly rule, so it is capped and left where the
    column starts. */
-.panel.wealth { max-width: 54rem; }
-/* Already bounded by its column in the pair; a second cap would leave a gap
-   inside a gap. */
-.pairrow.wealthpair > .panel.wealth { max-width: none; }
+.panel.wealth { max-width: min(100%, 54rem); }
 .wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
 .wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
@@ -1457,6 +1453,43 @@ select.jumpto[hidden] { display: none; }
   letter-spacing: 0.09em; color: var(--cs-accent); font-weight: 650;
 }
 .panel.span2 { grid-column: 1 / -1; }
+
+/* ---------- bands ----------
+   Panels that share rows. A grid cuts the row into tracks before it knows
+   what the panels hold, so every pairing on the sheet carried a breakpoint
+   measured off one character at one font size -- and between breakpoints a
+   panel was either squeezed under its table, which then scrolled, or handed
+   a whole row it had no use for. A band asks the panels instead. Each wants
+   the width its tables, fields and buttons need (not its paragraphs, which
+   wrap to whatever they are given); panels sit side by side while that fits
+   and wrap to the next row when it does not; and the panels on a row share
+   what is left of it. So a panel is narrower than what it holds only when
+   the whole band is, at any window size, font size or character.
+
+   `lead` hands what is left to the first panel, so the one beside it keeps
+   its measure. A band can sit in a band: it asks for the width of its
+   widest panel, its panels stacked, and puts them side by side when what it
+   is given holds them. */
+.band {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
+}
+.band > * { flex: 1 1 auto; min-width: min(100%, 12rem); max-width: 100%; }
+.band > .band { width: min-content; }
+.band.lead > :first-child { flex-grow: 1000; }
+.band p:not(.empty), .band .longhint, .band .langlist, .band .chips { contain: inline-size; }
+.band td p, .band th p { contain: none; }
+/* Panels whose rows all wrap -- fields, toggles, chips, swatches -- would ask
+   for everything on one line, or for nothing and get a column of one. Their
+   width is asked for here instead. */
+.band > .panel.details { flex-basis: 30rem; }
+.band > .panel.conditions { flex-basis: 36rem; }
+.band > .panel.notes { flex-basis: 20rem; }
+/* A table with a cell told to be 100% wide reports a natural width of a
+   million pixels, which would give its panel every row to itself; the
+   traditions start from the 28rem their table is floored at instead. */
+.band > .panel.wide { flex: 1.5 1 30rem; }
+/* Folded, any of them is its header line, which knows its own width. */
+.band > .panel.collapsed { flex-basis: auto; }
 
 /* ---------- stat blocks ---------- */
 .statline {
@@ -2180,7 +2213,7 @@ tr.untrained { color: var(--cs-muted); }
    * they were told to, and stay there.
    *
    * `.fieldgrid` is named twice on purpose. The desktop rule that pairs this
-   * panel beside another -- `.pairrow > .panel.details .fieldgrid`, four
+   * panel beside another -- `.band > .panel.details .fieldgrid`, four
    * classes -- ties with any honest way of writing this one and sits later in
    * the file, so it won; and losing here does not fall back to one tidy
    * column, it leaves `auto-fit` with a single explicit track while the spans
@@ -2189,7 +2222,7 @@ tr.untrained { color: var(--cs-muted); }
    * card rules further down: a narrow-screen rule that loses to a wide-screen
    * one leaves the layout wearing the wrong shape.
    */
-  .pairrow > .panel.details .fieldgrid.fieldgrid,
+  .band > .panel.details .fieldgrid.fieldgrid,
   .panel.details .fieldgrid.fieldgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .fieldgrid label.fld.col2 { grid-column: span 2; }
   .fieldgrid label.fld.col3 { grid-column: span 3; }
@@ -2291,23 +2324,6 @@ table.build.statcols th.num, table.build.statcols td.num, table.build.statcols t
 }
 table.build.statcols input[type="number"] { width: 100%; box-sizing: border-box; }
 
-/* Permanent and temporary bonuses read as one pair and are edited together, so
-   they sit side by side wherever the sheet is wide enough for both tables --
-   which a 1080p screen is. Narrower, they stack as before. */
-/* minmax(0, 1fr) rather than a bare column: an auto-sized track would take the
-   table's own width as its minimum and push the panel past the viewport
-   instead of letting .tablewrap scroll. */
-.statpair {
-  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-}
-/* The two minimums are what the tables actually measure (their headers do not
-   wrap and their inputs are a fixed width), so neither panel is ever handed
-   less room than its table needs; the breakpoint is where both fit at once. */
-@container (min-width: 1385px) {
-  .statpair { grid-template-columns: minmax(46.5rem, 1.15fr) minmax(37.5rem, 1fr); }
-}
-
 /* ABP and gear are one bonus type sharing one cap: banded together, with the
    group's own total closing the band. */
 table.build tr.groups th { border-bottom: 0; padding-bottom: 0; height: 1.1em; }
@@ -2337,17 +2353,6 @@ table.build td.noslot { background: transparent; }
  * columns and have no business being 26rem wide.
  */
 .tablewrap > table.build.picks { min-width: 0; }
-/* The three ladders share a row and do not want equal thirds of it: ABP and
-   the Level/4 ladder are three narrow columns each, the array is five. Below
-   900px they stack, like every other pairing on the sheet. */
-.pickrow {
-  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-}
-@container (min-width: 900px) {
-  .pickrow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); }
-}
-.pickrow > .panel.span2, .pickrow > .panel { grid-column: auto; }
 table.build.picks select { width: auto; min-width: 4.4rem; max-width: 100%; padding: 3px 4px; }
 table.build.picks th, table.build.picks td { padding: 3px 5px; }
 /* The level a locked choice was made at, as a caption under its box rather
@@ -2517,23 +2522,10 @@ label.cond.on { border-color: var(--cs-bad); color: var(--cs-bad); }
   border-radius: 6px; padding: 8px 10px; }
 .noterow { display: flex; gap: 6px; margin-bottom: 5px; }
 
-/* ---------- spheres training ---------- */
-/* The small panels of one training side share a row of their own rather than
-   the page grid's columns. The page grid is shared by both sides, so a side
-   with three panels left a fourth column standing empty; here the row is
-   filled by whatever the side actually has, and the leftover width goes to the
-   panels that asked for it -- the traditions, whose rows are text and a
-   dropdown rather than a number. */
-.sidepanels {
-  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: start;
-}
-/* The caps are what a panel may grow to, not what it wants: any two of them
-   still add up past the row, so a full row never has a gap in it, while a
-   panel left alone on a wrapped row stops before it is stretched across a
-   width its five columns have no use for. */
-.sidepanels > .panel { flex: 1 1 300px; min-width: 0; max-width: 55%; }
-.sidepanels > .panel.wide { flex: 1.5 1 400px; max-width: 70%; }
-.sidepanels > .panel.collapsed { flex: 1 1 240px; }
+/* ---------- spheres training ----------
+   The small panels of one training side (`.sidepanels`) are a band of their
+   own rather than the page grid's columns: the page grid is shared by both
+   sides, so a side with three panels left a fourth column standing empty. */
 
 /* A run of full-width panels that folds down into a row of pills.
    ------------------------------------------------------------------
@@ -3072,14 +3064,7 @@ table.gear th.colhead { white-space: nowrap; }
 .wcalc .crit { color: var(--cs-bad); font-size: 0.8rem; margin-left: 9px; }
 
 /* ---------- item crafting ---------- */
-/* The three setup panels are whole tables of controls, not stat lines, so they
-   need wider columns than the sheet's default three-across grid gives them. */
-.grid.crafting { grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); }
-/* Three setup panels, three tracks: on a wide screen four 430px tracks left
-   the fourth empty beside them. */
-@container (min-width: 1300px) {
-  .grid.crafting { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
+/* The three setup panels share a band (see `.band`). */
 /* An increase's or reduction's name takes the room the row has, down to a
    short word, instead of a text box's fixed default width. */
 table.craftlist td[data-stack="name"] input[type="text"] { width: 100%; min-width: 7rem; }
@@ -3091,8 +3076,12 @@ table.craftlist td[data-stack="name"] input[type="text"] { width: 100%; min-widt
 .crafthead input[type="text"] { flex: 1; font-weight: 640; }
 .craftcols {
   display: grid; gap: 12px; margin-top: 9px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
+/* A project's two lists are a name and a number or two, not the setup
+   panels' five columns: the 26rem floor those tables carry put a scrollbar
+   under each of them whenever the pair shared a row. */
+.craftcols .tablewrap > table.craftlist { min-width: 0; }
 .craftcols .subhead { margin-top: 0; }
 .craft .wcalc .ok { color: var(--cs-good); font-size: 0.8rem; margin-left: 9px; }
 .craft input.invalid { border-color: var(--cs-bad); color: var(--cs-bad); }
@@ -3568,7 +3557,7 @@ table.build td.linked select:disabled {
 /* The character colour sits under the Details fields rather than inside the
    grid: sixteen swatches plus a hex box need the width of the panel. */
 .charcolor { margin-top: 9px; padding-top: 9px; border-top: 1px dotted var(--cs-line); }
-.charcolor .hint { flex-basis: 100%; }
+.charcolor .hint { flex-basis: 100%; contain: inline-size; }
 .tracker .tnote-edit > span:first-child {
   font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cs-muted);
 }
@@ -3856,7 +3845,7 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
   .wrap { --cs-wrap-pad: 8px; }
   .panel { padding: 9px 8px; }
   .supergroup { padding: 8px 8px 9px; }
-  .supergroup-body { gap: 8px; }
+  .band { gap: 8px; }
   .grid { gap: 8px; }
   th, td { padding: 4px 5px; }
   .fieldgrid { gap: 6px; }
@@ -3864,10 +3853,6 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
 }
 
 @container (max-width: 560px) {
-  /* Narrower than a single crafting column: one panel per row, tables scroll.
-     `minmax(0, …)` and not a bare `1fr`, or the track takes its floor from the
-     widest table in it and the row stops being one panel wide. */
-  .grid.crafting { grid-template-columns: minmax(0, 1fr); }
   /* The temporary pair goes; the score, the modifier and the die stay. */
   .ability, .ability-head { grid-template-columns: 2.8rem 3.4rem 2.6rem 1.7rem; }
   .ability .temp-score, .ability .temp-mod, .ability-head .h-temp { display: none; }
@@ -3911,53 +3896,14 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
   font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em;
   color: var(--cs-accent); font-weight: 700; margin: 0 0 9px 2px;
 }
-.supergroup-body {
-  display: grid; gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-  align-items: start;
-}
-/* Attack, speed and proficiencies read as one row: what you swing with, how
-   fast you get there, and what you are allowed to hold. Attack and speed are
-   short tables and were being stretched to half the band each; three tracks
-   gives them their measure and hands the spare width to the proficiency chips,
-   which are the only thing here that wants it.
-
-   Under about a thousand pixels three tracks stop fitting, and the band falls
-   back to what it was: the pair side by side with proficiencies full width. */
-.supergroup-body.offenses {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
-}
-@container (max-width: 1040px) {
-  .supergroup-body.offenses { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
-  .supergroup-body.offenses > .panel.proficiencies { grid-column: 1 / -1; }
-}
-/* Hit points, armour class, then the saves over initiative. Four even tracks
-   left the saves and initiative tables (about 480 and 510px of selects and
-   boxes) in 454px columns on a 1920px screen and 360px ones at 125% scaling,
-   so they scrolled. The two short tables share the third track, which never
-   goes narrower than its widest table. Under about 1300px, where armour
-   class would be squeezed instead, hit points and armour class share a row
-   and the saves and initiative take the next, side by side where they fit. */
-.supergroup-body.defenses { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(min-content, 1.2fr); }
-@container (max-width: 1300px) {
-  .supergroup-body.defenses { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
-  .supergroup-body.defenses > .defstack {
-    grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
-  }
-}
-.defstack { display: grid; gap: inherit; align-content: start; }
-/* Two panels that read as one row: the wide one takes what is left after
-   the narrow one has its measure. Details beside the ability scores, and the
-   conditions beside carrying capacity. Narrow screens stack them. */
-.pairrow {
-  grid-column: 1 / -1; display: grid; gap: 12px; align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-}
-@container (min-width: 900px) {
-  .pairrow { grid-template-columns: minmax(0, 1fr) minmax(320px, 24rem); }
-  .pairrow.wide-first { grid-template-columns: minmax(0, 1fr) minmax(300px, 22rem); }
-}
-.pairrow > .panel.span2, .pairrow > .panel { grid-column: auto; }
+/* A supergroup's panels are a band (see `.band`). Defenses: hit points,
+   armour class, and the saves and initiative as a band of their own, so the
+   two tables of selects and boxes stay together -- side by side where they
+   fit, one over the other where they do not -- rather than the initiative
+   wrapping alone onto a row of its own. Offenses: attack and speed keep
+   their tables' measure, and the proficiency chips, the one thing here that
+   can use more width, take most of what is left. */
+.band > .panel.proficiencies { flex: 3 1 20rem; }
 
 /* A companion's skills, in two tables side by side -- one across the panel
    put a skill's name in a box four times its length. Every column but the
@@ -3995,13 +3941,6 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
    what put the eidolon's seven columns two pixels over a 400px panel. */
 table.build.compact input[type="number"] { width: 3rem; }
 @container (max-width: 560px) { .grid.companion { grid-template-columns: minmax(0, 1fr); } }
-@container (min-width: 900px) {
-  .pairrow.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  /* The ledger takes the width it is worth and the buffs take the rest -- with
-     a floor under "the rest", or between 900px and 1200px the ledger takes its
-     whole 54rem and leaves the buff chips 104px to fit a 16rem grid into. */
-  .pairrow.wealthpair { grid-template-columns: minmax(0, 54rem) minmax(18rem, 1fr); }
-}
 
 /* ---------- the class table ----------
    Fixed columns, because the two that were growing to fill are the two with
@@ -4115,7 +4054,7 @@ button.chip-toggle { padding: 1px 7px; font-size: 0.74rem; border-radius: 999px;
 .weaponhead .badge.nonprof { white-space: nowrap; }
 table.perks td:first-child { width: 100%; }
 label.fld .xf { width: 100%; }
-.pairrow > .panel.details .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.band > .panel.details .fieldgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
 /* The conditioned reading, under a base that a ticked condition has moved. */
 .now {
@@ -4144,17 +4083,16 @@ table.speeds input[type="text"] { min-width: 4.4rem; }
 table.speeds td.num input[type="number"] { width: 4.4rem; }
 table.speeds td.total { white-space: nowrap; }
 
-/* The attack modes: five columns in a panel a third of the page wide. Mode,
-   Total and Other are as wide as what they hold and no wider -- the table used
-   to be floored at 30rem and share the slack out over all five, so "Melee" sat
-   in a column three times its width and the whole thing scrolled inside a panel
-   it would have fitted. What is left over goes to the two ability pickers, and
-   the picker fills its cell, so the surplus reads as a control rather than as
-   a gap beside one. */
-table.attackmodes th:nth-child(-n+3), table.attackmodes td:nth-child(-n+3) {
-  width: 1%; white-space: nowrap;
-}
-table.attackmodes select { width: 100%; min-width: 3.4rem; }
+/* A short table that can be handed a whole row -- the saves, initiative,
+   armour class, attack modes and speeds, each a panel that ends up alone on
+   its row of a band when the window is too narrow to pair it. Shared out
+   evenly, the spare width went into the controls, and a picker for three
+   letters at 200px reads as stretched. So every column is as wide as what it
+   holds, and the first -- the row's name -- takes the rest. `:where` keeps
+   this under the narrow screen's card rules, which give each cell its own
+   line. */
+table.fitcols :where(th:not(:first-child), td:not(:first-child)) { width: 1%; white-space: nowrap; }
+table.fitcols select { min-width: 4.6rem; }
 td.tools.quiet { width: 1%; padding-left: 2px; padding-right: 2px; }
 td.tools.quiet button { opacity: 0; transition: opacity 0.12s; }
 tr:hover > td.tools.quiet button,

@@ -66,7 +66,7 @@ export function renderGuilePanel(model) {
         ${wrap('guile-spheres', guileSpherePanel(model, g))}
         ${wrap('guile-bonus', guileBonusPanel(model, g))}
       </div>
-      <div class="sidepanels">
+      <div class="band sidepanels">
         ${wrap('guile-tradition', tradeTraditionPanel(model, g))}
         ${wrap('guile-operative', operativePanel(model, g))}
       </div>

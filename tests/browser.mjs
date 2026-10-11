@@ -210,6 +210,26 @@ run.addEventListener('click', async () => {
       assert(sheet.model.data.wealth.lastOffering === '2026-01-01', 'The last date was not kept');
       assert(root.querySelector('[data-set="wealth.lastOffering"]').value === '2026-01-01', 'Drawn without its date');
     });
+    // The row folds and Help buttons are put in by the render below 620px,
+    // so a sheet dragged across that width has to be drawn again to gain or
+    // lose them; before, it kept whichever it had.
+    await test('A sheet crossing 620px wide gains and loses the narrow layout', async () => {
+      const root = sheet.shadowRoot;
+      root.getElementById('tab-overview').click();
+      // The sheet hears of its width from a ResizeObserver, which reports on
+      // drawn frames only; a window behind another draws none.
+      const drawing = await new Promise((resolve) => {
+        requestAnimationFrame(() => resolve(true));
+        setTimeout(() => resolve(false), 1000);
+      });
+      assert(drawing, 'The page is not being drawn; bring the window forward and run again');
+      try {
+        mount.style.width = '600px';
+        await until(() => root.querySelector('button.rowfold'));
+        mount.style.width = '900px';
+        await until(() => !root.querySelector('button.rowfold'));
+      } finally { mount.style.width = ''; }
+    });
   } finally {
     sheet.remove();
     await forget(id);
