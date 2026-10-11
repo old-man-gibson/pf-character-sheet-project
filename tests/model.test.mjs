@@ -51,6 +51,7 @@ import { zoneAt, barLayout, normalizeStyle, squareLayout } from '../app/js/track
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { featNames } from '../app/js/model/feats.js';
+import { emptyMonster } from '../app/js/monster/block.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
@@ -13029,6 +13030,25 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   p.attunedSpheres = ['  destruction '];
   c.recompute();
   check('an attuned sphere ticked in other spelling still matches', c.cardAttuned(c.data.cardcasting.cards[0]), true);
+}
+
+console.log('a monster block\'s prose is read like any note');
+{
+  const c = new Character(blankDocument({ name: 'Wyrmling', level: 4 }));
+  c.data.monster = {
+    ...emptyMonster(),
+    senses: 'darkvision 60 ft. {skill.perception += 4}',
+    specialAttacks: 'breath weapon (DC {breath.dc = 10 + 2})',
+    tactics: 'opens with it {= breath.dc}',
+  };
+  c.recompute();
+  const perception = c.data.skills.find((s) => s.name === 'Perception');
+  check('a bonus in its senses lands', perception.forwarded, 4);
+  check('a name defined in its special attacks reads elsewhere', c.inlineNames.breath?.dc ?? c.inlineNames['breath.dc'], 12);
+  check('and the source is named as the field', describeSource('monster:senses'), 'the stat block’s senses');
+  delete c.data.monster;
+  c.recompute();
+  check('without a block, nothing is read', c.data.skills.find((s) => s.name === 'Perception').forwarded, 0);
 }
 
 console.log('one walk over every feat on the character');

@@ -34,6 +34,7 @@ import { essenceScope } from './subsystems/akashic.js';
 import { manipulationName } from './subsystems/cardcasting.js';
 import { trackerFacts, trackerShown } from './trackers.js';
 import { featNames } from './feats.js';
+import { MONSTER_PROSE_FIELDS } from '../monster/block.js';
 import {
   classForwardKey, flatNames, isFormulaText, manifesterForwardKey, skillForwardKey, skillRanksNamed, slug,
   inEarlyFamily, speedForwardKey, sphereForwardKey, trackerForwardKey, vancianForwardKey,
@@ -1418,6 +1419,9 @@ export function proseSources(model) {
     push(`defenses:${key}`, d.defenses?.[key]);
   }
   (d.notes || []).forEach((n, i) => push(`note:${i}`, n.body));
+  // A monster block's prose -- a breath weapon's DC in its special attacks,
+  // a racial bonus in its racial modifiers -- read like any note.
+  if (d.monster) for (const key of MONSTER_PROSE_FIELDS) push(`monster:${key}`, d.monster[key]);
   // The Formulas tab's own writing space: the place for a rule that is about
   // nothing in particular. Read exactly like any other prose on the sheet.
   push('formulas', d.formulaNotes);

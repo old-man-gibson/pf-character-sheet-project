@@ -28,6 +28,8 @@ import * as gear from '../app/js/ui/panels/gear.js';
 import * as trackers from '../app/js/ui/panels/trackers.js';
 import { renderStatsPanel } from '../app/js/ui/panels/stats.js';
 import { renderSkillsPanel } from '../app/js/ui/panels/skills.js';
+import * as statBlock from '../app/js/monster/panel.js';
+import { emptyMonster } from '../app/js/monster/block.js';
 import { normalizeStyle } from '../app/js/tracker-style.js';
 
 let pass = 0;
@@ -114,6 +116,7 @@ const RENDER = {
   lore: (m, c) => lore.renderLorePanel(m, c.lore),
   extras: (m, c) => lore.renderExtrasPanel(m, c.lore),
   formulas: (m, c) => admin.renderFormulaPanel(m, c.admin),
+  statblock: (m) => statBlock.renderStatBlockPanel(m, {}),
 };
 
 /** Is the element a selector names in this markup? Attribute selectors only. */
@@ -335,6 +338,17 @@ console.log('every formula on the Formulas tab has somewhere to go, and it is th
   check('every formula row carries its place', rows.filter((r) => !r.place).map((r) => r.id), []);
   const forwarded = admin.forwardedRows(c);
   for (const f of forwarded) checkPlace(c, f.place, `bonus to ${f.to}`);
+}
+
+console.log('a monster block\'s prose is read, and its bonuses go back to the field');
+{
+  const c = new Character(blankDocument({ name: 'Wyrmling', level: 4 }));
+  c.data.monster = { ...emptyMonster(), senses: 'darkvision 60 ft. {skill.perception += 4}', specialAttacks: 'breath weapon {breath.dc = 10 + 2}' };
+  c.recompute();
+  const rows = admin.forwardedRows(c).filter((f) => f.place === 'monster:senses');
+  check('the bonus in its senses is listed, from the field', rows.length, 1);
+  for (const f of rows) checkPlace(c, f.place, `bonus to ${f.to}`);
+  checkPlace(c, 'monster:specialAttacks', 'the special attacks field');
 }
 
 console.log('a formula that does not work can be gone to from Needs attention');

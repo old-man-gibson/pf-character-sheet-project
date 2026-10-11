@@ -196,6 +196,8 @@ function placeOf(model, ref) {
     // "Note 1 on Lore" is what the notes have always been called; the tab
     // that draws them is Extras & Notes.
     case 'note': return { tab: 'extras', sel: [item('notes', a, 'body')] };
+    // A monster block's prose field, on the Stat Block tab: `monster:<field>`.
+    case 'monster': return { tab: 'statblock', sel: [set(`monster.${a}`)] };
     case 'approvalNotes': return { tab: 'extras', sel: [set('extras.approvalNotes')] };
     case 'background': return { tab: 'lore', sel: [item('backgroundSections', a, 'text')] };
     case 'defenses': return overviewPlace([set(`defenses.${a}`)], ['sg-defenses']);
