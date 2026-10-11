@@ -1950,7 +1950,7 @@ option[data-ab]:not([data-ab=""]) {
 .tablewrap > table.tradition { min-width: 28rem; }
 .tablewrap > table.attackmodes { min-width: 21rem; }
 .tablewrap > table.racetraits { min-width: 26rem; }
-.tablewrap > table.craftlist { min-width: 30rem; }
+.tablewrap > table.craftlist { min-width: 26rem; }
 .tablewrap > table.perks { min-width: 0; }
 table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
 th, td { padding: 4px 7px; text-align: left; border-bottom: 1px solid var(--cs-line); }
@@ -2944,13 +2944,17 @@ table.gear tr.gearcardrow > td { padding: 0; }
    thousand pounds or costs more than a million, an item's name is read in
    full on its card, and a bonus type is a short word -- so none of these
    needs the width an unsized box takes in an auto-layout table. */
-table.gear td.name input { width: 9rem; min-width: 7rem; }
-table.gear td.other input { width: 7rem; min-width: 5rem; }
+/* Name, Other and To share what the panel has and give way down to their
+   minimums, so a three-bonus row fits a 1920px screen and scrolls less at
+   125% scaling; the To picker reads more of a target's name when there is
+   room. */
+table.gear td.name input { width: 100%; min-width: 7rem; }
+table.gear td.other input { width: 100%; min-width: 5rem; }
 table.gear td.wt input { width: 3.6rem; }
-table.gear td.cost input { width: 5rem; }
+table.gear td.cost input { width: 100%; min-width: 4.2rem; }
 table.gear td.bval > .xf:only-child { min-width: 0; width: var(--xf-w, 3.6rem); }
 table.gear td.btype select { width: auto; min-width: 4.6rem; padding: 3px 4px; }
-table.gear td.bto select.target { width: 7.5rem; min-width: 6rem; padding: 3px 4px; }
+table.gear td.bto select.target { width: 100%; min-width: 6rem; padding: 3px 4px; }
 table.gear th.num, table.gear td.bval { text-align: center; }
 /* A destination the sheet cannot place: said on the cell, and on its tooltip. */
 table.gear select.target.invalid, .gearcard select.target.invalid {
@@ -3070,7 +3074,15 @@ table.gear th.colhead { white-space: nowrap; }
 /* ---------- item crafting ---------- */
 /* The three setup panels are whole tables of controls, not stat lines, so they
    need wider columns than the sheet's default three-across grid gives them. */
-.grid.crafting { grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+.grid.crafting { grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); }
+/* Three setup panels, three tracks: on a wide screen four 430px tracks left
+   the fourth empty beside them. */
+@container (min-width: 1300px) {
+  .grid.crafting { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* An increase's or reduction's name takes the room the row has, down to a
+   short word, instead of a text box's fixed default width. */
+table.craftlist td[data-stack="name"] input[type="text"] { width: 100%; min-width: 7rem; }
 .craft {
   border: 1px solid var(--cs-line); border-radius: 6px;
   padding: 9px 11px; margin-bottom: 9px; background: var(--cs-panel-2);
@@ -3704,6 +3716,9 @@ input[type="color"] {
 .formrow { display: grid; gap: 7px; grid-template-columns: 1fr; margin-bottom: 8px; }
 .formrow .cols { display: grid; grid-template-columns: 1.1fr 2fr 1.6fr 0.8fr; gap: 7px; }
 .hint { font-size: 0.72rem; color: var(--cs-muted); }
+/* A full-width panel on a 1920px screen ran a help paragraph to about 300
+   characters a line; held to a readable measure, it leaves the rest blank. */
+p.hint { max-width: 100ch; }
 .hint code {
   font-family: var(--cs-mono); background: var(--cs-panel-2);
   padding: 1px 4px; border-radius: 3px; color: var(--cs-text);
@@ -3916,6 +3931,21 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
   .supergroup-body.offenses { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
   .supergroup-body.offenses > .panel.proficiencies { grid-column: 1 / -1; }
 }
+/* Hit points, armour class, then the saves over initiative. Four even tracks
+   left the saves and initiative tables (about 480 and 510px of selects and
+   boxes) in 454px columns on a 1920px screen and 360px ones at 125% scaling,
+   so they scrolled. The two short tables share the third track, which never
+   goes narrower than its widest table. Under about 1300px, where armour
+   class would be squeezed instead, hit points and armour class share a row
+   and the saves and initiative take the next, side by side where they fit. */
+.supergroup-body.defenses { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(min-content, 1.2fr); }
+@container (max-width: 1300px) {
+  .supergroup-body.defenses { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+  .supergroup-body.defenses > .defstack {
+    grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
+  }
+}
+.defstack { display: grid; gap: inherit; align-content: start; }
 /* Two panels that read as one row: the wide one takes what is left after
    the narrow one has its measure. Details beside the ability scores, and the
    conditions beside carrying capacity. Narrow screens stack them. */

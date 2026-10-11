@@ -168,13 +168,15 @@ export function renderOverviewPanel(model, ctx) {
         ${languagesPanel(model)}
       </div>
 
-      ${classesPanel(model, ctx, model, ctx)}
+      ${classesPanel(model, ctx)}
 
-      ${supergroup(model, 'defenses', 'Defenses', '', `
+      ${supergroup(model, 'defenses', 'Defenses', 'defenses', `
           ${hitPointsPanel(ctx, model)}
           ${acPanel(model)}
-          ${savesPanel(model)}
-          ${initiativePanel(model)}`)}
+          <div class="defstack">
+            ${savesPanel(model)}
+            ${initiativePanel(model)}
+          </div>`)}
 
       ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
           ${attackPanel(model)}
@@ -194,9 +196,9 @@ export function renderOverviewPanel(model, ctx) {
            */''}
       <div class="pairrow span2 wealthpair">
         ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
-        ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
+        ${collapsible(model, 'buffs', buffsPanel(model, ctx))}
       </div>
-      ${traitsPanel(model, ctx, model, ctx)}
+      ${traitsPanel(model, ctx)}
     </div>`;
   }
 
