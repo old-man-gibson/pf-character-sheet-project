@@ -52,6 +52,8 @@ import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { blankDocument } from '../app/js/convert.js';
 import { featNames } from '../app/js/model/feats.js';
 import { emptyMonster } from '../app/js/monster/block.js';
+import { subsystems } from '../app/js/model/subsystems/registry.js';
+import { GAME_SYSTEMS } from '../app/js/rules.js';
 import { countChanges } from '../app/js/history.js';
 import { isComputedPath } from '../app/js/model/computed-paths.js';
 import { importCrafting } from '../app/js/model/subsystems/crafting.js';
@@ -13075,6 +13077,19 @@ console.log('caster levels are separate until one is marked to count toward anot
   check('taken off, they are separate again, and nothing is left saved', [levels(), 'countsToward' in c.data.vancian.classes[0]], [[5, 3], false]);
   c.toggleCountsToward('vancian.wizard.cl', 'vancian.wizard.cl');
   check('a level cannot count toward itself', 'countsToward' in c.data.vancian.classes[0], false);
+}
+
+console.log('every sub-system is one row: what it saves, whether it is in use, what a day gives back');
+{
+  const rows = subsystems();
+  const tabs = new Set(rows.filter((s) => s.inUse).map((s) => s.tab));
+  check('every tab a game system names has an in-use test',
+    GAME_SYSTEMS.flatMap((s) => s.tabs).filter((t) => !tabs.has(t)), []);
+  check('a block with worked-out fields names where it lives',
+    rows.filter((s) => s.derived && !s.key).map((s) => s.tab), []);
+  const c = new Character(blankDocument({ name: 'Rows', level: 5 }));
+  check('the in-use map is the table, in its order',
+    Object.keys(c.systemTabsInUse()), rows.filter((s) => s.inUse).map((s) => s.tab));
 }
 
 console.log('one walk over every feat on the character');

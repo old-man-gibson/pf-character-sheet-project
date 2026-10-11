@@ -9,12 +9,11 @@
  */
 
 import { GAME_SYSTEMS, cleanSkillVariant } from '../rules.js';
-import { COMPANION_KINDS, companionsInUse } from '../companions.js';
 import { DEFAULT_TAB_ORDER, PROFICIENCY_LISTS, blankProficiencies, buildDefaultTabs } from './document.js';
 import { normalizeHex } from '../tracker-style.js';
 import { emit } from './events.js';
 import { lockedFeatList } from './feats.js';
-import { COOKING_COURSES } from './subsystems/cooking.js';
+import { subsystems } from './subsystems/registry.js';
 import { guileInUse } from './subsystems/guile.js';
 import { markUndo, rowLabel } from './undo.js';
 import { getPath, setPath, skillKey } from './util.js';
@@ -306,64 +305,15 @@ export function trainingSideInUse(model, key) {
     && (x[flag] || (k !== 'guile' && key !== 'guile' && x.blended))));
 }
 
-/** Text with something in it. */
-const filled = (v) => String(v ?? '').trim() !== '';
-
 /**
  * Which modelled sub-system tabs already hold this character's data, keyed
  * by tab id -- the single source for the ⚙ manager's "in use"/"empty"
  * badges and for seeding the session bar.
  */
 export function systemTabsInUse(model) {
-  const d = model.data;
-  const cr = d.crafting;
-  const out = {
-    martial: trainingSideInUse(model, 'combat'),
-    magic: trainingSideInUse(model, 'magic'),
-    guile: trainingSideInUse(model, 'guile'),
-    crafting: !!cr && ((cr.projects || []).some((p) => String(p.name || '').trim() || Number(p.value))
-      || (cr.speedIncreases || []).length > 0 || (cr.costReductions || []).length > 0),
-    // Not `slots.length`: the workbook's Akashic tab prints the chakra rows
-    // ("Storm Veil", "Feet Veil", …) whether or not anyone weaves, so the
-    // importer finds fifteen receptacles on a character who has never shaped a
-    // veil and this read true for every character carrying the tab. It asks
-    // whether anything is *in* them instead -- a veil shaped, a chakra bound,
-    // a class named, essence allocated -- which is what the manager's `in use`
-    // badge has always claimed to mean.
-    akashic: akashicInUse(d.akashic),
-    // A row with something in it, as Martial and Magic ask for a class's
-    // name: an empty one left by "Add" is not a system in use.
-    maneuvers: (d.maneuvers?.disciplines || []).some((x) => filled(x?.name) || (x?.entries || []).length),
-    vancian: (d.vancian?.classes || []).some((c) => filled(c?.name) || filled(c?.slotType)),
-    psionics: (d.psionics?.classes || []).some((c) => filled(c?.name) || (c?.powers || []).length),
-    // A deck, or the Card Casting drawback on the tradition, is enough.
-    cardcasting: !!(d.cardcasting?.cards || []).length || !!d.cardcasting?.enabled,
-    techniques: !!(d.techniques?.catalogue || []).length,
-    autoTechnique: !!d.techniques?.draft?.name,
-    cooking: COOKING_COURSES.some(([k]) => (d.cooking?.[k] || []).some(Boolean)),
-    template: !!(d.templates || []).length,
-  };
-  for (const kind of COMPANION_KINDS) out[kind] = companionsInUse(kind, d[kind]);
+  const out = {};
+  for (const s of subsystems()) if (s.inUse) out[s.tab] = s.inUse(model);
   return out;
-}
-
-/**
- * Whether anyone has actually woven with this character's akashic block.
- *
- * The receptacles arrive pre-printed from the workbook and an untouched one is
- * `{ slot: 'Storm', bound: false, twinveil: false, veils: [] }`, so their
- * *existence* says nothing. Anything a player could have put there does:
- * a veil in a receptacle, a chakra bound, a twin veil, a veilweaving class
- * named, essence allocated, or a receptacle of their own.
- */
-function akashicInUse(a) {
-  if (!a || typeof a !== 'object') return false;
-  const named = (list) => (list || []).some((x) => String(x?.name || '').trim());
-  const holding = (r) => (r?.veils || []).length > 0 || !!r?.bound || !!r?.twinveil;
-  return named(a.classes)
-    || [...(a.slots || []), ...(a.kheshig || [])].some(holding)
-    || (a.otherReceptacles || []).some((r) => String(r?.name || '').trim() || Number(r?.essence) > 0)
-    || Object.values(a.essence || {}).some((v) => Number(v) > 0);
 }
 
 /** The tab ids lit up by the systems marked on the Classes table. */
