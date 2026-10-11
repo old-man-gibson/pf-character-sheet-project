@@ -351,6 +351,24 @@ console.log('a monster block\'s prose is read, and its bonuses go back to the fi
   checkPlace(c, 'monster:specialAttacks', 'the special attacks field');
 }
 
+console.log('a caster level marked to count toward another goes back to its mark');
+{
+  const c = new Character(blankDocument({ name: 'Theurge', level: 10 }));
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 5, concentration: 0 });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 3, powers: [] });
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  const rows = admin.forwardedRows(c).filter((f) => String(f.place).startsWith('transparency:'));
+  check('both marks are listed as bonuses', rows.map((f) => f.place).sort(),
+    ['transparency:manifester.psion.level:vancian.wizard.cl', 'transparency:vancian.wizard.cl:manifester.psion.level']);
+  for (const f of rows) checkPlace(c, f.place, `bonus to ${f.to}`);
+  // The psion gone, the wizard's mark stays, pressed, and is a problem with a way to it.
+  c.listRemove('psionics.classes', 0);
+  const problem = c.formulaProblems().find((p) => p.places.some((pl) => String(pl.place).startsWith('transparency:')));
+  check('a mark toward a level the character no longer has is a problem', !!problem, true);
+  for (const pl of problem?.places || []) if (pl.place) checkPlace(c, pl.place, 'the mark left behind');
+}
+
 console.log('a formula that does not work can be gone to from Needs attention');
 {
   const c = everywhere();

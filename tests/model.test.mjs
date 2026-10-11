@@ -13051,6 +13051,32 @@ console.log('a monster block\'s prose is read like any note');
   check('without a block, nothing is read', c.data.skills.find((s) => s.name === 'Perception').forwarded, 0);
 }
 
+console.log('caster levels are separate until one is marked to count toward another');
+{
+  const c = new Character(blankDocument({ name: 'Theurge', level: 10 }));
+  c.listAdd('vancian.classes', { name: 'Wizard', slotType: '', stat: 'Int', stat2: '', types: '', casterLevelOverride: 5, concentration: 0 });
+  c.listAdd('psionics.classes', { name: 'Psion', stat: 'Int', stat2: '', curveTotal: 343, manifesterLevelOverride: 3, powers: [] });
+  const levels = () => [c.data.vancian.classes[0].casterLevel, c.data.psionics.classes[0].manifesterLevel];
+  check('each caster level the character has, by the name a bonus goes to',
+    c.casterLevelSources().map((s) => [s.name, s.label]),
+    [['vancian.wizard.cl', 'Wizard caster level'], ['manifester.psion.level', 'Psion manifester level']]);
+  check('separate by default', levels(), [5, 3]);
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  check('the wizard\'s levels count toward the psion\'s, and not the other way', levels(), [5, 8]);
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  check('marked both ways, each counts its own levels once', levels(), [8, 8]);
+  const reopened = new Character(JSON.parse(JSON.stringify(c.toJSON())));
+  check('the marks are saved and read back', [reopened.data.vancian.classes[0].casterLevel, reopened.data.psionics.classes[0].manifesterLevel], [8, 8]);
+  check('the mark is listed as where the bonus comes from',
+    c.contributions.entries.filter((e) => e.path.startsWith('transparency:')).map((e) => describeSource(e.path)),
+    ['the Wizard caster level, marked to count toward this', 'the Psion manifester level, marked to count toward this']);
+  c.toggleCountsToward('vancian.wizard.cl', 'manifester.psion.level');
+  c.toggleCountsToward('manifester.psion.level', 'vancian.wizard.cl');
+  check('taken off, they are separate again, and nothing is left saved', [levels(), 'countsToward' in c.data.vancian.classes[0]], [[5, 3], false]);
+  c.toggleCountsToward('vancian.wizard.cl', 'vancian.wizard.cl');
+  check('a level cannot count toward itself', 'countsToward' in c.data.vancian.classes[0], false);
+}
+
 console.log('one walk over every feat on the character');
 {
   const d = {
