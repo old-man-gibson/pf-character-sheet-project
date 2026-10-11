@@ -366,6 +366,16 @@ const AFFECTS_DERIVED = /^(abilities|attack|saves|defenses|carry|hp|conditions|b
 const CARET_TYPES = new Set(['text', 'search', 'url', 'tel', 'password']);
 
 /**
+ * Boxes the browser splits into parts and moves between itself: a date's
+ * month, day and year. Typing one reports a whole value as soon as its parts
+ * make one -- "01 01 2" is already the year 2 -- and a box drawn again comes
+ * back with the browser's cursor in its first part, where no script can move
+ * it. So while one is still being typed in, the value is kept and the
+ * drawing waits until the box is left.
+ */
+const PART_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
+
+/**
  * Put the caret after what a box already says.
  *
  * A box focused by script rather than by a click opens with the caret at 0,
@@ -586,6 +596,8 @@ export class CharacterSheetElement extends HTMLElement {
   #renderOwed = null;
   /** The last Tab keystroke ({ at, back }); see `#rerender`. */
   #lastTab = null;
+  /** Date and time boxes drawn again once they are left; see `#renderOnLeave`. */
+  #waitingToLeave = new WeakSet();
   /** Whether the header's Reset is asking to be armed (type RESET to confirm). */
   #confirmReset = false;
   /** Whether the rail's `⋯` menu is open. */
@@ -1746,6 +1758,10 @@ export class CharacterSheetElement extends HTMLElement {
       this.#oweRender(press);
       return;
     }
+    if (PART_TYPES.has(activeInput?.type) && this.shadowRoot.activeElement === activeInput) {
+      this.#renderOnLeave(activeInput);
+      return;
+    }
     // Read before the render, which can take longer than the window.
     const tab = this.#lastTab && Date.now() - this.#lastTab.at < 150 ? this.#lastTab : null;
     this.#render();
@@ -1783,6 +1799,21 @@ export class CharacterSheetElement extends HTMLElement {
       && (CARET_TYPES.has(next.type) || next.tagName === 'TEXTAREA')) {
       try { next.setSelectionRange(caret, caret); } catch { /* unsupported input type */ }
     }
+  }
+
+  /**
+   * Draw again once a date or time box being typed in is left (PART_TYPES),
+   * once however many values it reported on the way. Leaving it by a press on
+   * something else waits for that press, as any edit ended by one does.
+   */
+  #renderOnLeave(field) {
+    if (this.#waitingToLeave.has(field)) return;
+    this.#waitingToLeave.add(field);
+    field.addEventListener('blur', () => {
+      this.#waitingToLeave.delete(field);
+      const press = this.#pressLeaving(field);
+      if (press) this.#oweRender(press); else this.#render();
+    }, { once: true });
   }
 
   /**
