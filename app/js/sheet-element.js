@@ -1329,7 +1329,8 @@ export class CharacterSheetElement extends HTMLElement {
       case 'draw': m.tableDraw(1, 'draw'); break;
       case 'shuffle': m.tableShuffleDiscard(); break;
       case 'end': m.tableEnd(); break;
-      case 'play': m.tablePlay(id, how || 'cast', { which: answers.get('mode') || null, sp: Number(answers.get('sp')) || 0 }); break;
+      case 'play': m.tablePlay(id, how || 'cast', { which: answers.get('mode') || null, sp: Number(answers.get('sp')) || 0, who: answers.get('who') ?? null }); break;
+      case 'squad': m.tableSquad(id); break;
       case 'resolve': m.tableResolve(id); break;
       case 'reveal': m.tableReveal(id); break;
       case 'roll': m.tableRoll(id); break;
@@ -1344,7 +1345,7 @@ export class CharacterSheetElement extends HTMLElement {
       default: return false;
     }
     if (casting && !fromWindow && m.data.cardcasting?.copyOnCast) {
-      this.#copyRoll('card', id, m.tableCard(id)?.name || 'card', { mode: answers.get('mode') || null });
+      this.#copyRoll('card', id, m.tableCard(id)?.name || 'card', { mode: answers.get('mode') || null, who: answers.get('who') ?? null });
     }
     return true;
   }
@@ -3248,7 +3249,7 @@ export class CharacterSheetElement extends HTMLElement {
    */
   async #copyRoll(kind, ref, what, answers = null) {
     const spec = kind === 'session' ? sessionRollSpec(this.#model, ref, answers)
-      : kind === 'card' ? this.#model.cardRollSpec(ref, answers?.mode || null)
+      : kind === 'card' ? this.#model.cardRollSpec(ref, answers?.mode || null, answers?.who ?? null)
         : rollSpec(this.#model.data, kind, ref, this.#model.conditionState, answers);
     // A roll with a question in it is not a roll yet. Asking here rather than
     // copying a `?{…}` for Roll20 to ask is the difference between a number

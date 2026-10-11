@@ -5394,3 +5394,17 @@ table.stacked .catface { margin-left: 0; }
 .mcard.mini .rolls .roll small { opacity: 0.8; margin-left: 4px; }
 .zone .mcard.mini.open { grid-column: span 2; }
 @container (max-width: 560px) { .zone .mcard.mini.open { grid-column: auto; } }
+/* Multi-Headed Play: a squad member's card wears its owner's initial, and
+   the roster in the controls says who is at the table. */
+.mcard .owner {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem;
+  border-radius: 50%; font-size: 0.62rem; font-weight: 700; background: rgba(26,29,38,0.75); color: #f4efe4; margin-right: 4px;
+}
+.mcard .bar.title .owner { margin-right: 2px; }
+.tablectl .squadctl { gap: 4px; }
+.tablectl .squadctl button small { opacity: 0.8; margin-left: 2px; }
+.squadrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: start; padding: 6px 0; border-top: 1px solid var(--cs-line); }
+.squadrow:first-of-type { border-top: 0; }
+.squadrow .hint { margin: 2px 0 0; }
+.deckgroup { margin-top: 10px; }
+.deckgroup > h4 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 4px; }
