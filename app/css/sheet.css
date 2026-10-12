@@ -882,6 +882,12 @@
   border: 1px solid var(--cs-line); border-radius: 6px;
 }
 .histnote button { margin-left: auto; padding: 0 6px; }
+/* The share link after Publish: the address in a box that can be selected. */
+.pubnote { flex-wrap: wrap; align-items: center; }
+.pubnote span { flex-basis: 100%; }
+.pubnote input { flex: 1 1 18ch; min-width: 0; font: inherit; font-size: 0.8rem; }
+.pubnote button { margin-left: 0; }
+.pubnote button[aria-label="Dismiss"] { margin-left: auto; }
 
 .history {
   flex-basis: 100%; margin-top: 8px; padding: 10px 12px;

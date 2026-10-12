@@ -290,8 +290,10 @@ the character (`uiPrefs.tabOrder`), so it survives a reload and travels with an 
 once the header above it has scrolled away — a tab runs several screens deep, and the way
 through them should not be one of the things that leaves first. **Search** and **Save**
 ride the rail with it, and everything else the sheet can do is under **⋯**: switching
-view, ƒx Formulas, the theme and layout, History, Export JSON, Preview published, Import
-and Reset.
+view, ƒx Formulas, the theme and layout, History, Export JSON, Publish, Preview published,
+Import and Reset. **Publish** puts the character on the site the app is served from and
+gives you a link anyone can open read-only; it is the same view Preview published shows,
+and publishing again keeps the link (see Publishing it, in the README).
 <kbd>Ctrl</kbd>+<kbd>S</kbd> saves without going near the button. Clicking a tab lands you
 at the top of it rather than at whatever offset the last tab had, and leaves the keyboard
 on the tab you pressed. Below 700px the bar is one row that scrolls sideways instead of

@@ -75,6 +75,17 @@ that. Do not run `wrangler pages deploy .` on a checkout: wrangler uploads every
 file under the directory, reads no ignore file, and would publish the gitignored
 `private/` roster.
 
+**Publish**, on a sheet's ⋯ menu, puts the character on the site and gives a link
+(`published.html?s=<id>`) that anyone can open: the read-only view that **Preview
+published** shows, carrying only the pack entries the character has. Publishing again
+keeps the link and adds a revision (`&r=<n>` opens an earlier one). The store behind it
+is a Pages Function (`functions/api/c`) over one Workers KV namespace: in the Pages
+project go to Settings → Bindings → Add → KV namespace, name the variable `SHEETS`,
+and redeploy. Without the binding the button says this copy of the app has no
+publishing server, and everything else still works. The free plan allows 1,000 KV
+writes a day; a publish is two. To run it locally, `npx wrangler pages dev . --kv SHEETS`
+serves the repository with a store that lives under `.wrangler/`.
+
 To pre-load a roster on a deployment of your own, drop each character's JSON into
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
 does both when it converts a workbook (below). Anything listed there is public to
@@ -131,6 +142,8 @@ app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geome
 app/js/publish.js       a character as a third party receives it: only the pack entries it
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
+functions/api/c/        the publishing store (a Cloudflare Pages Function over one KV namespace)
+404.html                a real 404 for Cloudflare Pages, which otherwise answers index.html
 app/cards.html          the card table, or the hand, in a window of its own (js/card-window.js):
                         drawn by the sheet that opened it, for a streamed game
 forge/                  Homebrew Workbench, the homebrew workbench: index.html, forge.css, js/

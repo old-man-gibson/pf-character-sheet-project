@@ -17,17 +17,17 @@
   in the gaps a stranger gets empty -- which would make this page agree with
   the author about a sheet only a stranger can judge.
 
-  The document arrives one of two ways, and the page does not care which:
+  The document arrives one of three ways, and the page does not care which:
 
+    ?s=<id>    a character the Publish button put in this site's own store
+               (functions/api/c). This is the link players send each other;
+               `&r=<rev>` pins one revision instead of the latest.
     ?k=<key>   a one-shot localStorage handover from the Preview published
                button one tab over, removed the moment it is read. This is a
                pointer into one browser and travels nowhere.
     ?src=<url> a published document fetched from wherever it is hosted -- a
                file in a Pages deploy, a gist, anything that answers with JSON
-               and permissive CORS. This is the one you can send someone.
-
-  A server, when there is one, adds `?s=<id>` and resolves it to a URL. That is
-  the whole of the difference, which is why the fetch path is worth having now.
+               and permissive CORS.
 -->
 <style>
   :root { color-scheme: dark light; }
@@ -116,14 +116,34 @@ async function fromUrl(raw) {
   return { doc: await res.json(), summary: '' };
 }
 
+/**
+ * A character in this site's own store.
+ *
+ * The store answers with the document, when it was published and which
+ * revision this is; the summary line says so, because a reader deciding
+ * whether a sheet is current needs the date more than the carried-entry count.
+ */
+async function fromStore(id, rev) {
+  const path = `../api/c/${encodeURIComponent(id)}${rev ? `/${encodeURIComponent(rev)}` : ''}`;
+  const res = await fetch(new URL(path, location.href), { credentials: 'omit' });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `the store answered ${res.status} ${res.statusText}.`);
+  const when = data.published ? new Date(data.published).toLocaleString() : '';
+  const summary = [
+    data.rev ? `revision ${data.rev}` : '', when ? `published ${when}` : '', data.summary || '',
+  ].filter(Boolean).join(' · ');
+  return { doc: data.doc, summary };
+}
+
 let payload = null;
 const key = params.get('k');
 const src = params.get('src');
+const stored = params.get('s');
 
 if (key) payload = fromStorage(key);
-else if (src) {
+else if (stored || src) {
   try {
-    payload = await fromUrl(src);
+    payload = stored ? await fromStore(stored, params.get('r')) : await fromUrl(src);
   } catch (err) {
     fail(`Could not open that published character — ${err.message}`);
   }

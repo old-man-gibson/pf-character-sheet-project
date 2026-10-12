@@ -562,6 +562,7 @@ export class CharacterSheetElement extends HTMLElement {
   #showHistory = false;
   #snapshots = [];
   #historyNote = null;      // "Saved", "Restored ..." -- clears on the next action
+  #publishedLink = null;    // { url, rev, summary, copied } after Publish, until dismissed
   #storageFailed = false;   // the working state is not being written -- see #writeWorking
   #changePending = false;   // an edit has announced itself and its one write is queued
   #tabColorFor = null;      // { key, label, x, y } while the tab colour panel is open
@@ -1281,6 +1282,63 @@ export class CharacterSheetElement extends HTMLElement {
       ? `Published preview opened — ${describePublish(report)}`
       : 'The preview was blocked by the browser. Allow pop-ups for this page and try again.';
     this.#render();
+  }
+
+  /**
+   * Put this character on the site the app is served from, and get a link.
+   *
+   * What leaves is exactly what the preview shows: the document through
+   * `publishDocument`, carrying its own entries and no catalogue. The store
+   * (functions/api/c) answers the first publish with an id and a token. The
+   * token is kept in this browser under the character's id, so the next
+   * publish moves the same link to a new revision instead of minting another
+   * -- and a link this browser has lost the token for, or the store no longer
+   * has, simply gets a fresh one. The link itself carries nothing but the id.
+   */
+  async #publish() {
+    const { doc, report } = publishDocument(this.#model.toJSON());
+    const summary = describePublish(report);
+    const body = JSON.stringify({ doc, summary });
+    const api = new URL('../../api/c', import.meta.url);   // this file is app/js/; the store is /api/c
+    const linkKey = `published-link:${doc?.id || 'character'}`;
+    let kept = null;
+    try { kept = JSON.parse(localStorage.getItem(linkKey) || 'null'); } catch { kept = null; }
+    const send = (method, url, extra = {}) => fetch(url, {
+      method, body, credentials: 'omit', headers: { 'content-type': 'application/json', ...extra },
+    });
+
+    this.#historyNote = 'Publishing…';
+    this.#renderHeader();
+    try {
+      let res = kept?.id && kept?.token
+        ? await send('PUT', `${api.href}/${kept.id}`, { authorization: `Bearer ${kept.token}` })
+        : null;
+      // The link is gone, or was made by another browser: start a new one.
+      if (res && (res.status === 403 || res.status === 404)) res = null;
+      if (!res) res = await send('POST', api.href);
+      if (res.status === 404 || res.status === 405) throw new Error('this copy of the app has no publishing server');
+      const answer = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(answer?.error || `the server answered ${res.status}`);
+      const link = { id: answer.id, token: answer.token || kept?.token || '', rev: answer.rev };
+      try { localStorage.setItem(linkKey, JSON.stringify(link)); } catch { /* private window: the link still works; the next publish makes a new one */ }
+      const url = new URL('../published.html', import.meta.url);
+      url.searchParams.set('s', link.id);
+      this.#publishedLink = { url: url.href, rev: answer.rev, summary, copied: null };
+      this.#historyNote = null;
+    } catch (err) {
+      this.#historyNote = `Could not publish — ${err.message}.`;
+    }
+    this.#renderHeader();
+  }
+
+  /** The share link to the clipboard, or selected where the clipboard is refused. */
+  async #copyPublishedLink() {
+    if (!this.#publishedLink) return;
+    let ok = true;
+    try { await navigator.clipboard.writeText(this.#publishedLink.url); } catch { ok = false; }
+    this.#publishedLink.copied = ok;
+    this.#renderHeader();
+    if (!ok) this.shadowRoot.querySelector('.pubnote input')?.select();
   }
 
   /* ------------------------------------------------------------------ *
@@ -2607,6 +2665,8 @@ export class CharacterSheetElement extends HTMLElement {
           title="Earlier states of this sheet">History${this.#snapshots.length ? ` (${this.#snapshots.length})` : ''}</button>`}
         <button data-view data-action="export">Export JSON</button>
         ${this.isPublished ? '' : `
+        <button data-action="publish"
+          title="Put this character on this site and get a link anyone can open: the read-only view the preview shows, kept until you publish again">Publish</button>
         <button data-action="preview-published"
           title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
         <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
@@ -2645,6 +2705,15 @@ export class CharacterSheetElement extends HTMLElement {
         ${this.#historyNote ? `<div class="histnote" role="status">
           ${esc(this.#historyNote)}
           <button data-view data-action="dismiss-history-note" aria-label="Dismiss">×</button>
+        </div>` : ''}
+        ${this.#publishedLink ? `<div class="histnote pubnote" role="status">
+          <span><strong>Published</strong> as revision ${this.#publishedLink.rev}${this.#publishedLink.summary ? ` — ${esc(this.#publishedLink.summary)}` : '.'}
+            Anyone with this link can open it; publishing again keeps the link and adds a revision.</span>
+          <input readonly value="${esc(this.#publishedLink.url)}" aria-label="Share link">
+          <a href="${esc(this.#publishedLink.url)}" target="_blank" rel="noopener">Open</a>
+          <button data-view data-action="copy-published-link">${this.#publishedLink.copied === true ? 'Copied'
+            : this.#publishedLink.copied === false ? 'Select it and copy' : 'Copy link'}</button>
+          <button data-view data-action="dismiss-published-link" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${this.#showHistory ? this.#historyPanel() : ''}
         ${this.#importError ? `<div class="importerr" role="alert">
@@ -6525,6 +6594,16 @@ export class CharacterSheetElement extends HTMLElement {
       }
       case 'preview-published':
         this.#previewPublished();
+        break;
+      case 'publish':
+        this.#publish();
+        break;
+      case 'copy-published-link':
+        this.#copyPublishedLink();
+        break;
+      case 'dismiss-published-link':
+        this.#publishedLink = null;
+        this.#renderHeader();
         break;
       case 'chrome-menu':
         this.#chromeMenu = !this.#chromeMenu;

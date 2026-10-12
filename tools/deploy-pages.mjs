@@ -65,12 +65,14 @@ try {
     console.log('Dry run: nothing uploaded.');
   } else {
     // npx is a .cmd on Windows, which Node will only start through a shell; one
-    // quoted string keeps the arguments intact either way.
+    // quoted string keeps the arguments intact either way. Run from inside the
+    // export: wrangler takes the Pages Functions from the `functions/` folder of
+    // the directory it is run in, and that has to be the committed one too.
     const quote = (s) => `"${s}"`;
-    const line = ['npx wrangler pages deploy', quote(site),
+    const line = ['npx wrangler pages deploy .',
       '--project-name', quote(project), '--branch', quote(branch),
       '--commit-hash', commit, '--commit-dirty=false'].join(' ');
-    run(line, [], { shell: true });
+    run(line, [], { shell: true, cwd: site });
   }
 } catch (err) {
   failed = true;

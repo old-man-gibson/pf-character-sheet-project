@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Not found</title>
+<!--
+  Cloudflare Pages serves the root index.html, with a 200, for every path that
+  has no file -- unless a 404.html exists. The app asks for files that may not
+  be there (private/extensions/index.json on a deployment with no private
+  packs) and tells a missing one from a present one by the status, so the
+  fallback has to be a real 404. GitHub Pages and tools/serve.mjs already
+  answer 404; this makes Pages match them.
+-->
+<p>There is nothing at this address. <a href="/app/">Open the app.</a></p>
