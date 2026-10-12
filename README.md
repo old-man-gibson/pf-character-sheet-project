@@ -57,13 +57,23 @@ file on the page) for a workbook exported from Google Sheets or a JSON this app 
 Tick **GM / inspector view** to reveal the Formula Audit tab. `app/embed-example.html`
 shows the same sheet embedded in a hostile-looking host page.
 
-### Publishing it (GitHub Pages or any static host)
+### Publishing it (Cloudflare Pages, GitHub Pages or any static host)
 
 There is no build step. Push the repository and serve its root: on GitHub Pages, set
 the source to the branch root, and the app is at `https://<you>.github.io/<repo>/` (the
 root `index.html` forwards to `app/`; `.nojekyll` keeps Pages from touching the
 files). Visitors' characters live in their own browsers, so a read-only host is all
 it needs.
+
+On Cloudflare Pages, connect the GitHub repository (Workers & Pages → Create → Pages →
+Connect to Git) and set the production branch to `main`, leave the build command
+empty, and set the build output directory to `/`. Every push to `main` then deploys
+to `https://<project>.pages.dev/`, and every other branch gets a preview URL of its
+own. To deploy from the command line instead, run `node tools/deploy-pages.mjs`
+(`--dry-run` to see what would ship); it exports the committed tree and uploads
+that. Do not run `wrangler pages deploy .` on a checkout: wrangler uploads every
+file under the directory, reads no ignore file, and would publish the gitignored
+`private/` roster.
 
 To pre-load a roster on a deployment of your own, drop each character's JSON into
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
@@ -89,6 +99,7 @@ tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
 tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
 tools/extension_pack.py what the *_ref tools use to write a table as a pack
 tools/audit-diff.mjs    the audit diff between two character JSON documents, for a GM
+tools/deploy-pages.mjs  upload the committed tree to Cloudflare Pages (never a checkout)
 tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
                         reader the Paste text… panel uses
 tools/forge-pack.mjs    a Homebrew Workbench export into a pack under private/extensions,
