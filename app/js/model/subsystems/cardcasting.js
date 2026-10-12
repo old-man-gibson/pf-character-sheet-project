@@ -1785,6 +1785,9 @@ export function cardRef(model, ref) {
 
 /** A card's text with its formulas worked out, as the face shows it -- for the caster's numbers when one is named. */
 function cardProse(model, text, who = '') {
+  // Most card text has no formula in it, and rendering it anyway cost the
+  // deck ~0.2 ms a field: fifty cards, five stat fields each, every render.
+  if (!/\{/.test(String(text ?? ''))) return String(text ?? '');
   const local = who ? casterInfo(model, who).local : null;
   return model.renderProse(String(text ?? ''), local).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
 }
@@ -1847,7 +1850,7 @@ export function appendDiceText(current, piece) {
  * ------------------------------------------------------------------ */
 
 /** The fields of a card's stat line, in the order the face shows them. */
-export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'damage'];
+export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'damage'];
 /** The saves a card may call for, as the picker offers them. */
 export const CARD_SAVES = ['Ref', 'Fort', 'Will', 'none'];
 /** The range words, and the Pathfinder bands behind three of them (feet at a caster level). */
@@ -1859,6 +1862,8 @@ const RANGE_BANDS = {
 };
 /** The shapes a card may take. */
 export const CARD_TARGETS = ['single', 'line', 'cone', 'burst'];
+/** How long a card's effect lasts, as the picker offers it; a formula may say ("{caster.level} rounds"). */
+export const CARD_DURATIONS = ['instantaneous', 'concentration', '1 round', '1 round/level', '1 minute/level', '10 minutes/level', '1 hour/level', 'permanent'];
 /** The damage types the picker offers; the field takes any word as well. */
 export const CARD_DAMAGE_TYPES = [
   'bludgeoning', 'piercing', 'slashing',
@@ -1879,7 +1884,10 @@ const SAVE_WORDS = { ref: 'Reflex', reflex: 'Reflex', fort: 'Fortitude', fortitu
  */
 export function cardStats(model, card, who = null) {
   const caster = casterFor(model, who);
-  const scope = casterScope(model, caster);
+  // The scope is built only for a card that needs it -- a DC formula or a
+  // range word -- since it is the one costly part of reading a card.
+  let scope = null;
+  const scopeOnce = () => (scope ??= casterScope(model, caster));
   const text = (f) => cardProse(model, card?.[f], caster).trim();
   const save = text('save');
   const dcRaw = text('dc');
@@ -1887,7 +1895,7 @@ export function cardStats(model, card, who = null) {
   let dcError = '';
   if (dcRaw && !/^-?\d+$/.test(dcRaw)) {
     try {
-      const v = Number(evaluateFormula(dcRaw, scope));
+      const v = Number(evaluateFormula(dcRaw, scopeOnce()));
       if (Number.isFinite(v)) dc = String(Math.floor(v));
       else dcError = 'not a number';
     } catch (err) {
@@ -1896,12 +1904,12 @@ export function cardStats(model, card, who = null) {
   }
   const range = text('range');
   const band = RANGE_BANDS[range.toLowerCase()];
-  const cl = Number(scope.caster?.level) || 0;
-  const rangeFeet = band ? band(cl) : /^\d+$/.test(range) ? Number(range) : null;
+  const rangeFeet = band ? band(Number(scopeOnce().caster?.level) || 0) : /^\d+$/.test(range) ? Number(range) : null;
   const target = text('target');
+  const duration = text('duration');
   const damage = text('damage').split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
-  const any = !!(save || dcRaw || range || target || damage.length);
-  return { save, dc, dcError, range, rangeFeet, target, damage, any };
+  const any = !!(save || dcRaw || range || target || duration || damage.length);
+  return { save, dc, dcError, range, rangeFeet, target, duration, damage, any };
 }
 
 /**
@@ -1927,6 +1935,7 @@ export function cardStatLines(model, card, who = null) {
     lines.push(['Range', `${s.range}${feet}`]);
   }
   if (s.target) lines.push(['Target', s.target]);
+  if (s.duration) lines.push(['Duration', s.duration]);
   if (s.damage.length) lines.push(['Damage type', s.damage.join(', ')]);
   return lines;
 }

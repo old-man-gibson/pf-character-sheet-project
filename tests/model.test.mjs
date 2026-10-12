@@ -12998,7 +12998,7 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   c.data.cardcasting.castingStat = 'Int';
   c.data.cardcasting.cards = [
     { name: 'Big Sky', qty: 2, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '8d6',
-      save: 'Ref', dc: '10 + floor(level/2) + int.mod', range: 'close', target: 'burst', damage: 'fire, cold' },
+      save: 'Ref', dc: '10 + floor(level/2) + int.mod', range: 'close', target: 'burst', duration: '{level} rounds', damage: 'fire, cold' },
     { name: 'Desert', qty: 1, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '' },
     { name: 'Touch', qty: 1, cost: '1', color: 'B', effect: 'Corpse Bomb', dc: '24', range: 'melee', target: '{= 2 + 3} targets', damage: 'negative energy' },
     { name: 'Far', qty: 1, cost: '1', color: 'U', effect: 'Push', dc: 'no.such.name', range: '{= 10 * level}', save: 'none' },
@@ -13013,9 +13013,9 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range word is feet for the caster level', [big.range, big.rangeFeet], ['close', 25 + 5 * Math.floor(cl / 2)]);
   check('damage types split on commas', big.damage, ['fire', 'cold']);
   check('the line as read: save and DC together, the range with its feet', c.cardStatLines(cards[0]),
-    [['Save', `Reflex DC ${17 + intMod}`], ['Range', `close (${25 + 5 * Math.floor(cl / 2)} ft)`], ['Target', 'burst'], ['Damage type', 'fire, cold']]);
+    [['Save', `Reflex DC ${17 + intMod}`], ['Range', `close (${25 + 5 * Math.floor(cl / 2)} ft)`], ['Target', 'burst'], ['Duration', '15 rounds'], ['Damage type', 'fire, cold']]);
   check('and the Roll20 message carries it after the cost', c.cardRollSpec('cardcasting.cards|0').notes.map((n) => n.label),
-    ['Cost', 'Save', 'Range', 'Target', 'Damage type', 'Sphere']);
+    ['Cost', 'Save', 'Range', 'Target', 'Duration', 'Damage type', 'Sphere']);
   const touch = c.cardStats(cards[2]);
   check('a number is a number, melee has no feet, an inline formula resolves in any field',
     [touch.dc, touch.rangeFeet, touch.target], ['24', null, '5 targets']);
@@ -13025,16 +13025,16 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range worked out to a number is feet', [far.rangeFeet, c.cardStatLines(cards[3]).find(([l]) => l === 'Range')], [150, ['Range', '150 ft']]);
   check('"none" is a save line of its own', c.cardStatLines(cards[3])[0], ['Save', 'none']);
   check('a card with none of it has nothing to say', [c.cardStats(cards[4]).any, c.cardStatLines(cards[4]), c.cardStats({}).any], [false, [], false]);
-  check('every card carries the five fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '']);
+  check('every card carries the six fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '']);
   c.shareCardDice('cardcasting.cards', 0);
   check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
-    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', 'fire, cold']);
+    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'fire, cold']);
   check('and leaves a card with another effect alone', cards[2].save, '');
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits each field, with a pick list behind it',
-    ['save', 'dc', 'range', 'target', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true]);
+    ['save', 'dc', 'range', 'target', 'duration', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true, true]);
   check('and previews what differs from what was typed', [html.includes(`DC ${17 + intMod}</span>`), html.includes('Range close = ')], [true, true]);
-  check('the pick lists are declared once', ['card-saves', 'card-dcs', 'card-ranges', 'card-targets', 'card-damage'].map((id) => html.split(`<datalist id="${id}"`).length - 1), [1, 1, 1, 1, 1]);
+  check('the pick lists are declared once', ['card-saves', 'card-dcs', 'card-ranges', 'card-targets', 'card-durations', 'card-damage'].map((id) => html.split(`<datalist id="${id}"`).length - 1), [1, 1, 1, 1, 1, 1]);
 }
 
 console.log('the damage type picker adds a word to the list once');

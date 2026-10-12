@@ -5134,9 +5134,30 @@ export class CharacterSheetElement extends HTMLElement {
       t.style.height = 'auto';
       t.style.height = `${Math.max(26, t.scrollHeight)}px`;
     };
+    /*
+     * The first sizing of every box is done together. A grow writes a
+     * height and then reads scrollHeight, and a read after a write lays the
+     * whole sheet out again: the fifty-nine boxes of a deck cost ~700 ms of
+     * layout a render that way. All the writes first, then all the reads,
+     * is one layout.
+     */
+    const pendingGrow = [];
+    const growMany = (boxes) => {
+      const live = boxes.filter((t) => {
+        const wrap = t.closest('.prose');
+        if (wrap?.querySelector('.prose-view') && !wrap.classList.contains('editing')) return false;
+        // A box inside a face the browser is not rendering (content-visibility)
+        // would be laid out on its own just to be measured: it is sized when
+        // its face scrolls in instead (see the listener below).
+        return typeof t.checkVisibility !== 'function' || t.checkVisibility({ contentVisibilityAuto: true });
+      });
+      for (const t of live) t.style.height = 'auto';
+      const heights = live.map((t) => Math.max(26, t.scrollHeight));
+      live.forEach((t, i) => { t.style.height = `${heights[i]}px`; });
+    };
     root.querySelectorAll('.cfeat').forEach((t) => {
       const isBox = t.tagName === 'TEXTAREA';
-      if (isBox) { grow(t); t.addEventListener('input', () => grow(t)); }
+      if (isBox) { pendingGrow.push(t); t.addEventListener('input', () => grow(t)); }
       t.addEventListener('change', () => {
         const { c, l, k, g } = JSON.parse(t.dataset.cfeat);
         this.#model.setClassFeature(c, Number(l), k, t.value, g ?? null);
@@ -5153,7 +5174,7 @@ export class CharacterSheetElement extends HTMLElement {
       const view = wrap.querySelector('.prose-view');
       if (!ta) return;
       if (wrap.classList.contains('grow') && !ta.classList.contains('cfeat')) {
-        grow(ta);
+        pendingGrow.push(ta);
         ta.addEventListener('input', () => grow(ta));
       }
       if (view) {
@@ -5172,6 +5193,13 @@ export class CharacterSheetElement extends HTMLElement {
           if (hasTokens(ta.value) || wrap.classList.contains('has-tokens')) this.#rerender(ta);
         });
       }
+    });
+    growMany(pendingGrow);
+    // A face that scrolls into view is laid out then; its boxes are sized then too.
+    root.querySelectorAll('.cardgrid .mcard').forEach((card) => {
+      card.addEventListener('contentvisibilityautostatechange', (e) => {
+        if (!e.skipped) growMany([...card.querySelectorAll('.prose.grow textarea, textarea.cfeat')]);
+      });
     });
 
     // Formula fields: the resolved value sits in the cell, the source appears

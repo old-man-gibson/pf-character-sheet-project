@@ -58,7 +58,7 @@ import {
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
-import { CARD_DAMAGE_TYPES, CARD_RANGES, CARD_SAVES, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
+import { CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -3291,16 +3291,18 @@ function cardStatBars(model, list, i, card) {
       s.dcError ? ['DC', `${s.dc} — ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
       feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
       changed('target', s.target) ? ['Target', s.target] : null,
+      changed('duration', s.duration) ? ['Duration', s.duration] : null,
       changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
     ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
     // Two to a row while the entries are words; a formula in any of them
     // puts each on a row of its own, so it can be read whole.
-    const wide = ['save', 'dc', 'range', 'target'].some((f) => String(card[f] ?? '').trim().length > 8);
+    const wide = ['save', 'dc', 'range', 'target', 'duration'].some((f) => String(card[f] ?? '').trim().length > 8);
     return `<div class="bar stats${wide ? ' rows' : ''}">
         ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
         ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
         ${stat('target', 'target', 'Target or area: single, line, cone, burst — or a formula', 'card-targets')}
+        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level… — or a formula, {caster.level} rounds', 'card-durations')}
       </div>
       <div class="bar stats dmg">
         <span class="stat grow" title="Damage types, comma-separated — fire, cold — or a formula in braces"><small>dmg</small>
@@ -3330,6 +3332,7 @@ function cardDatalists(p) {
       + list('card-dcs', ['caster.dc', `10 + floor(caster.level/2) + ${castingModName(p.castingStat)}`])
       + list('card-ranges', CARD_RANGES)
       + list('card-targets', CARD_TARGETS)
+      + list('card-durations', CARD_DURATIONS)
       + list('card-damage', CARD_DAMAGE_TYPES);
   }
 
@@ -3374,7 +3377,8 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
     const preview = formulas.map((r) => (r.formula
       ? `<span class="badge ok" title="${esc(`${r.label}: ${r.source}`)}">${esc(formulas.length > 1 ? `${r.label} ` : '')}${esc(r.formula)}</span>`
       : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
-    const alike = inDeck && (String(card.dice || '').trim() || model.cardStats(card).any) ? model.cardSiblings(list, i) : [];
+    const hasStats = CARD_STAT_FIELDS.some((f) => String(card[f] ?? '').trim());
+    const alike = inDeck && (String(card.dice || '').trim() || hasStats) ? model.cardSiblings(list, i) : [];
     const title = 'Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
     // Opened out, the field is a line per roll; the entries are read the
     // same way either way, since a new line separates them as a ; does.
