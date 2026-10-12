@@ -691,6 +691,8 @@ export function recomputeCardcasting(model) {
     card.effect = String(card.effect ?? '');
     card.art = String(card.art ?? '');
     card.dice = String(card.dice ?? '');
+    // A Harrow or poker deck keeps its own names; the subtitle says what the card does.
+    card.subtitle = String(card.subtitle ?? '');
     for (const f of CARD_STAT_FIELDS) card[f] = String(card[f] ?? '');
   }
   for (const card of p.cards) card.qty = Math.max(0, Math.floor(Number(card.qty ?? 1) || 0));
@@ -833,7 +835,7 @@ export function recomputeCardcasting(model) {
   // Casting in the tradition, and is itself a deck feat, so it is found
   // among those or among the feats proper.
   const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || featNames(c).some((f) => /land-?attuned magic/i.test(f));
-  const landDrawback = (c.training?.magic?.tradition?.drawbacks || []).some((x) => /^(terrain casting|area bound)/i.test(String(x || '').trim()));
+  const landDrawback = hasTraditionDrawback(c, /^(terrain casting|area bound)/i);
   const landAttuned = !!(p.manaPool && landFeat && landDrawback);
   const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
     : !landFeat ? 'Land-Attuned Magic is not among the feats'
@@ -1046,6 +1048,10 @@ export function recomputeTable(model) {
   }
   // A trap is a card in play that is face down; the list is the flag.
   t.faceDown = t.faceDown.filter((id) => t.play.includes(id));
+  // Who an ongoing card is affecting, written by the player; it goes with the card when the card leaves play.
+  t.targets = Object.fromEntries(Object.entries(t.targets && typeof t.targets === 'object' ? t.targets : {})
+    .filter(([id, text]) => t.play.includes(id) && String(text || '').trim())
+    .map(([id, text]) => [id, String(text)]));
   if (t.lastRoll && typeof t.lastRoll !== 'object') t.lastRoll = null;
   if (t.counters && (typeof t.counters !== 'object' || !model.tableCard(t.counters.id))) t.counters = null;
   t.lastTrigger = typeof t.lastTrigger === 'string' ? t.lastTrigger : '';
@@ -1178,16 +1184,105 @@ export function tableCard(model, id) {
 }
 
 /** Can this card in hand be cast right now, and with what? Advisory. */
-export function castCheck(model, id, who = null) {
+/* ------------------------------------------------------------------ *
+ * Terrain Casting
+ *
+ * The drawback: "Whenever you use a sphere talent or ability you must
+ * either spend an additional spell point or increase your casting time by
+ * one step, else your magic drains and corrupts your space and all adjacent
+ * squares." So every cast pays one of three ways, chosen on the way in; a
+ * Drawback Freedom (Terrain Casting) use waives it. The table applies it to
+ * cards -- the one place the sheet sees a cast happen -- with the spell
+ * point as the default on a card that costs any, and the casting step on an
+ * at-will one. The Cost field is the card's own cost; the terrain point is
+ * added here, so a two-colour card under Rainbow Efficiency is typed at its
+ * discounted cost and still pays the terrain point on top.
+ * ------------------------------------------------------------------ */
+
+/** Whether the tradition carries a drawback, and has not bought it off. */
+export function hasTraditionDrawback(c, re) {
+  const tr = c?.training?.magic?.tradition || {};
+  const named = (list) => (list || []).some((x) => re.test(String(x || '').trim()));
+  return named(tr.drawbacks) && !named(tr.boughtOff);
+}
+
+/** Terrain Casting is in force: on the tradition, not bought off. */
+export function terrainCasting(model) {
+  return hasTraditionDrawback(model.data, /^terrain casting/i);
+}
+
+/** The ways a cast may pay the drawback, as the chooser lists them. */
+export const TERRAIN_CHOICES = [
+  ['sp', 'one spell point more'],
+  ['step', 'casting time one step slower'],
+  ['blight', 'blight this square and the eight around it'],
+  ['waive', 'Drawback Freedom: waive it'],
+];
+
+/** The tracker a Drawback Freedom (Terrain Casting) use is spent from, if the player made one. */
+export function terrainFreedomTracker(model) {
+  return (model.trackers || []).find((t) => /drawback freedom/i.test(String(t.name || '')) && /terrain/i.test(String(t.name || ''))) || null;
+}
+
+/** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force. */
+export function terrainDefault(model, card) {
+  if (!terrainCasting(model)) return null;
+  return cardCost(card) > 0 ? 'sp' : 'step';
+}
+
+/** The toll a cast pays: the chooser's pick when it is one of the four, else the card's default. */
+export function terrainToll(model, card, choice = null) {
+  if (!terrainCasting(model)) return null;
+  const pick = String(choice || '').toLowerCase();
+  return TERRAIN_CHOICES.some(([k]) => k === pick) ? pick : terrainDefault(model, card);
+}
+
+/** A casting time one step slower along the picker's ladder: a standard action becomes a full-round action. Null off the ladder, or at its top. */
+export function stepCastingTime(text) {
+  const now = String(text || '').trim().toLowerCase();
+  if (!now) return null;
+  const at = CARD_CASTING_TIMES.findIndex((t) => now.startsWith(t) || t.startsWith(now));
+  return at >= 0 && at + 1 < CARD_CASTING_TIMES.length ? CARD_CASTING_TIMES[at + 1] : null;
+}
+
+/**
+ * Pay Terrain Casting on a cast, by the toll chosen, and say so in the log.
+ * The spell point itself is already inside the cast's cost (see castCheck),
+ * so here it is only written down; the step names the slower casting time
+ * when the card has one; blight is a note for the GM's map; a waiver spends
+ * one use from the Drawback Freedom tracker.
+ */
+function payTerrain(model, t, card, toll, name) {
+  if (!toll) return;
+  if (toll === 'sp') tableLog(model, t, `${name}: Terrain Casting — one spell point more, paid with the cost`);
+  else if (toll === 'step') {
+    const slower = stepCastingTime(card.casting);
+    tableLog(model, t, `${name}: Terrain Casting — ${slower ? `cast as a ${slower} rather than a ${String(card.casting).trim()}` : 'casting time one step slower'}`);
+  } else if (toll === 'blight') {
+    tableLog(model, t, `${name}: Terrain Casting — this square and the eight around it are blighted: dead magic for you, for about a year`);
+  } else if (toll === 'waive') {
+    const tr = terrainFreedomTracker(model);
+    if (!tr) { tableLog(model, t, `${name}: no Drawback Freedom (Terrain Casting) tracker to spend from — the drawback stands`); return; }
+    const before = Number(tr.current) || 0;
+    tr.current = clampTracker(tr, before + 1);
+    const left = (Number(tr.max) || 0) - tr.current;
+    tableLog(model, t, `${name}: Drawback Freedom — Terrain Casting waived, ${left} use${left === 1 ? '' : 's'} left${tr.current === before ? ' (the pool was empty)' : ''}`);
+  }
+}
+
+export function castCheck(model, id, who = null, terrain = null) {
   const p = model.data.cardcasting;
   const t = p.table;
   const card = model.tableCard(id);
   if (!card) return { ok: false, why: 'no such card' };
   const caster = casterFor(model, who);
   const isEffect = String(card.effect || '').trim() !== '';
-  const need = cardCost(card);
-  if (!isEffect) return { ok: true, need: 0, have: 0, mana: true };
-  if (!p.manaPool) return { ok: true, need, have: need };
+  // Terrain Casting's point rides on the cost, so the mana it needs and the
+  // points it spends both count it.
+  const toll = terrainToll(model, card, terrain);
+  const need = cardCost(card) + (toll === 'sp' ? 1 : 0);
+  if (!isEffect) return { ok: true, need: 0, have: 0, mana: true, terrain: null };
+  if (!p.manaPool) return { ok: true, need, have: need, terrain: toll };
   const colors = String(card.calc?.colors || '');
   const usable = t.mana.filter((m) => {
     if (m.tapped) return false;
@@ -1208,7 +1303,7 @@ export function castCheck(model, id, who = null) {
     const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
     if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, spend, worth, have: usable.length, why, caster };
+  return { ok, need, spend, worth, have: usable.length, why, caster, terrain: toll };
 }
 
 /** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
@@ -1305,7 +1400,7 @@ export function tableStart(model) {
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
-    ...piles, faceDown: [], log: [], counters: null, lastRoll: null, lastTrigger: '',
+    ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
   tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled`);
@@ -1375,7 +1470,7 @@ export function tableDraw(model, n = 1, why = 'draw') {
  * otherwise they simply need to be there. Nothing is refused -- the check
  * is shown beside the card and the player decides.
  */
-export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who = null } = {}) {
+export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who = null, terrain = null } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
@@ -1407,8 +1502,10 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
     return model.recompute();
   }
 
-  // Pay for it, where paying means anything.
-  const check = castCheck(model, id, caster);
+  // Pay for it, where paying means anything. Terrain Casting's toll is
+  // chosen on the way in; its spell point, when that is the choice, is
+  // inside the cost from here on.
+  const check = castCheck(model, id, caster, terrain);
   const cost = check.need || 0;
   if (p.manaPool && cost > 0 && (p.manaGraveyard || p.mods.stagnantPool)) {
     const colors = String(card.calc?.colors || '');
@@ -1436,6 +1533,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
 
   // The spell points themselves, from the caster's tracker if there is one.
   if (cost > 0) spendSP(model, cost, name, by.pool);
+  payTerrain(model, t, card, check.terrain, name);
   // A mode picked on the way in -- "boost (1 SP)" -- and whatever was put
   // into it: the points on top of the cost, then that mode's dice. Otherwise
   // the card's first dice, if it has any.
@@ -1785,6 +1883,9 @@ export function cardRef(model, ref) {
 
 /** A card's text with its formulas worked out, as the face shows it -- for the caster's numbers when one is named. */
 function cardProse(model, text, who = '') {
+  // Most card text has no formula in it, and rendering it anyway cost the
+  // deck ~0.2 ms a field: fifty cards, five stat fields each, every render.
+  if (!/\{/.test(String(text ?? ''))) return String(text ?? '');
   const local = who ? casterInfo(model, who).local : null;
   return model.renderProse(String(text ?? ''), local).map((s) => (s.kind === 'text' ? s.text : s.error ? s.raw : String(s.value))).join('');
 }
@@ -1847,7 +1948,7 @@ export function appendDiceText(current, piece) {
  * ------------------------------------------------------------------ */
 
 /** The fields of a card's stat line, in the order the face shows them. */
-export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'damage'];
+export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'casting', 'damage'];
 /** The saves a card may call for, as the picker offers them. */
 export const CARD_SAVES = ['Ref', 'Fort', 'Will', 'none'];
 /** The range words, and the Pathfinder bands behind three of them (feet at a caster level). */
@@ -1859,6 +1960,10 @@ const RANGE_BANDS = {
 };
 /** The shapes a card may take. */
 export const CARD_TARGETS = ['single', 'line', 'cone', 'burst'];
+/** How long a card's effect lasts, as the picker offers it; a formula may say ("{caster.level} rounds"). */
+export const CARD_DURATIONS = ['instantaneous', 'concentration', '1 round', '1 round/level', '1 minute/level', '10 minutes/level', '1 hour/level', 'permanent'];
+/** Casting times, as the picker offers them; Terrain Casting's "one step slower" is a step up this list. */
+export const CARD_CASTING_TIMES = ['free action', 'swift action', 'immediate action', 'move action', 'standard action', 'full-round action', '1 round', '1 minute', '10 minutes'];
 /** The damage types the picker offers; the field takes any word as well. */
 export const CARD_DAMAGE_TYPES = [
   'bludgeoning', 'piercing', 'slashing',
@@ -1879,7 +1984,10 @@ const SAVE_WORDS = { ref: 'Reflex', reflex: 'Reflex', fort: 'Fortitude', fortitu
  */
 export function cardStats(model, card, who = null) {
   const caster = casterFor(model, who);
-  const scope = casterScope(model, caster);
+  // The scope is built only for a card that needs it -- a DC formula or a
+  // range word -- since it is the one costly part of reading a card.
+  let scope = null;
+  const scopeOnce = () => (scope ??= casterScope(model, caster));
   const text = (f) => cardProse(model, card?.[f], caster).trim();
   const save = text('save');
   const dcRaw = text('dc');
@@ -1887,7 +1995,7 @@ export function cardStats(model, card, who = null) {
   let dcError = '';
   if (dcRaw && !/^-?\d+$/.test(dcRaw)) {
     try {
-      const v = Number(evaluateFormula(dcRaw, scope));
+      const v = Number(evaluateFormula(dcRaw, scopeOnce()));
       if (Number.isFinite(v)) dc = String(Math.floor(v));
       else dcError = 'not a number';
     } catch (err) {
@@ -1896,12 +2004,13 @@ export function cardStats(model, card, who = null) {
   }
   const range = text('range');
   const band = RANGE_BANDS[range.toLowerCase()];
-  const cl = Number(scope.caster?.level) || 0;
-  const rangeFeet = band ? band(cl) : /^\d+$/.test(range) ? Number(range) : null;
+  const rangeFeet = band ? band(Number(scopeOnce().caster?.level) || 0) : /^\d+$/.test(range) ? Number(range) : null;
   const target = text('target');
+  const duration = text('duration');
+  const casting = text('casting');
   const damage = text('damage').split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
-  const any = !!(save || dcRaw || range || target || damage.length);
-  return { save, dc, dcError, range, rangeFeet, target, damage, any };
+  const any = !!(save || dcRaw || range || target || duration || casting || damage.length);
+  return { save, dc, dcError, range, rangeFeet, target, duration, casting, damage, any };
 }
 
 /**
@@ -1927,6 +2036,8 @@ export function cardStatLines(model, card, who = null) {
     lines.push(['Range', `${s.range}${feet}`]);
   }
   if (s.target) lines.push(['Target', s.target]);
+  if (s.duration) lines.push(['Duration', s.duration]);
+  if (s.casting) lines.push(['Casting time', s.casting]);
   if (s.damage.length) lines.push(['Damage type', s.damage.join(', ')]);
   return lines;
 }
@@ -1971,9 +2082,14 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   const p = model.data.cardcasting || {};
   const caster = casterFor(model, who);
   const effect = cardProse(model, card.effect, caster).trim();
-  const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
+  const subtitle = String(card.subtitle || '').trim();
+  // With a subtitle the name is the card's own and its subtitle, and the
+  // effect is a note whatever its length: the subtitle is what says what
+  // the card does.
+  const shortEffect = !subtitle && effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
   const own = String(card.name || '').trim();
-  const name = own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
+  const name = subtitle ? [own, subtitle].filter(Boolean).join(' — ')
+    : own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
 
   const rolls = [];
   const notes = [];
@@ -2020,6 +2136,51 @@ export function cardSiblings(model, list, index) {
   const effect = String(card?.effect || '').trim().toLowerCase();
   if (!card || !effect) return [];
   return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
+}
+
+/**
+ * Who an ongoing card is affecting, in the player's words -- "the ogre and
+ * both guards" -- kept on the table beside the card while it is in play,
+ * and gone with it when it resolves. Blank clears it.
+ */
+export function tableTargets(model, id, text) {
+  const t = model.data.cardcasting?.table;
+  if (!t || !(t.play || []).includes(id)) return model;
+  t.targets = t.targets && typeof t.targets === 'object' ? t.targets : {};
+  const clean = String(text ?? '').trim();
+  if (clean) t.targets[id] = clean; else delete t.targets[id];
+  return model.recompute();
+}
+
+/** The two lists a card may live in. */
+const CARD_LISTS = ['cardcasting.cards', 'cardcasting.sideboard'];
+
+/**
+ * Move a card from the deck to the sideboard or back, or copy it across.
+ * The table addresses a deck card by its index, so while an encounter is
+ * on nothing leaves the deck -- a copy is still fine, and so is a card
+ * joining the deck, which lands at the end and is in play after the next
+ * shuffle. A card joining the deck has at least one copy.
+ */
+export function moveCard(model, from, index, to, { copy = false } = {}) {
+  if (!CARD_LISTS.includes(from) || !CARD_LISTS.includes(to) || from === to) return { ok: false, why: 'no such list' };
+  const src = model.list(from);
+  const card = src?.[index];
+  if (!card) return { ok: false, why: 'no such card' };
+  const active = !!model.data.cardcasting?.table?.active;
+  if (!copy && from === 'cardcasting.cards' && active) return { ok: false, why: 'the deck is in play: end the encounter first, or copy it instead' };
+  const dest = model.list(to);
+  if (copy) {
+    const { calc, ...rest } = card;
+    const twin = JSON.parse(JSON.stringify(rest));
+    if (to === 'cardcasting.cards' && !(twin.qty > 0)) twin.qty = 1;
+    dest.push(twin);
+    model.recompute();
+  } else {
+    if (to === 'cardcasting.cards' && !(card.qty > 0)) card.qty = 1;
+    model.listMoveInto(from, index, to, dest.length);
+  }
+  return { ok: true };
 }
 
 /**
@@ -2126,7 +2287,7 @@ export function tableEnd(model) {
   const exiled = t.exile.length;
   Object.assign(t, {
     active: false, round: 0, redraws: 0, manaPlayed: 0,
-    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [],
+    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
   tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}`);

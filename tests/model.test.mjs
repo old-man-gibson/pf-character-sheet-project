@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -11557,9 +11557,10 @@ console.log('card casting -- the table: an encounter played through');
   s.tableStart();
   const paid = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) === 1);
   s.tablePlay(paid, 'cast');
-  check('a 1-point card spends one from the tracker', s.spellPointTracker().current, 1);
+  // Nico's tradition carries Terrain Casting, so a cast pays its point as well.
+  check('a 1-point card spends one from the tracker, and one more for Terrain Casting', s.spellPointTracker().current, 2);
   s.tableSpend(s.data.cardcasting.table.hand[0], 1);
-  check('and a modal +1 SP spends another', s.spellPointTracker().current, 2);
+  check('and a modal +1 SP spends another', s.spellPointTracker().current, 3);
   check('the log says what was spent and what is left', /1 spell point spent, \d+ left/.test(s.data.cardcasting.table.log[s.data.cardcasting.table.log.length - 1]), true);
   s.updateTracker(spT.id, { current: spT.max });
   s.tableSpend(null, 1);
@@ -12980,6 +12981,112 @@ console.log('\ntalents per level -- each system\'s own three rates');
   check('the switch for copying on cast rides with the character', new Character({ ...c.toJSON(), cardcasting: { ...c.toJSON().cardcasting, copyOnCast: true } }).data.cardcasting.copyOnCast, true);
 }
 
+console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a Drawback Freedom use');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.training.magic.tradition = { ...(c.data.training.magic.tradition || {}), drawbacks: ['Terrain Casting'], boughtOff: [] };
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 3, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast', dice: '', casting: 'standard action' },
+    { name: 'Glow', qty: 3, cost: '0', color: 'W', mana: '', sphere: 'Light', effect: 'Glow', dice: '', casting: 'standard action' },
+  ];
+  c.addTracker({ name: 'Spell Points', maxFormula: '20' });
+  c.addTracker({ name: 'Drawback Freedom (Terrain Casting)', maxFormula: '3' });
+  c.recompute();
+  const cards = c.data.cardcasting.cards;
+  const t = () => c.data.cardcasting.table;
+  const sp = () => Number(c.spellPointTracker().current) || 0;
+  const log = () => t().log.join('\n');
+  const inHand = (id) => { if (!t().hand.includes(id)) { t().hand.push(id); t().deck = t().deck.filter((x) => x !== id); } };
+  check('the drawback is read off the tradition', c.terrainCasting(), true);
+  check('a costed card defaults to the point, an at-will one to the step', [c.terrainDefault(cards[0]), c.terrainDefault(cards[1])], ['sp', 'step']);
+  check('the step walks the casting-time ladder', [stepCastingTime('standard action'), stepCastingTime('Swift Action'), stepCastingTime('10 minutes'), stepCastingTime('')], ['full-round action', 'immediate action', null, null]);
+  c.tableStart();
+  inHand('0#0'); inHand('1#0');
+  check('the cast check counts the terrain point in the cost', [c.castCheck('0#0').need, c.castCheck('0#0').terrain, c.castCheck('1#0').need, c.castCheck('1#0').terrain], [2, 'sp', 0, 'step']);
+  const before = sp();
+  c.tablePlay('0#0', 'cast');
+  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting — one spell point more/.test(log())], [2, true]);
+  const b2 = sp();
+  c.tablePlay('1#0', 'cast');
+  check('an at-will card pays nothing and is cast a step slower', [sp() - b2, /cast as a full-round action rather than a standard action/.test(log())], [0, true]);
+  inHand('0#1');
+  const b3 = sp();
+  c.tablePlay('0#1', 'cast', { terrain: 'blight' });
+  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
+  inHand('0#2');
+  const b4 = sp();
+  const freedom = () => Number(c.terrainFreedomTracker().current) || 0;
+  c.tablePlay('0#2', 'cast', { terrain: 'waive' });
+  check('Drawback Freedom waives it for one use from its tracker', [sp() - b4, freedom(), /Terrain Casting waived, 2 uses left/.test(log())], [1, 1, true]);
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
+  check('the table says the drawback is in force, with the uses left', /Terrain Casting: every cast pays one spell point more/.test(html) && /Drawback Freedom use \(2 left\)/.test(html), true);
+  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
+  c.data.training.magic.tradition.boughtOff = ['Terrain Casting'];
+  c.recompute();
+  check('bought off, the drawback is gone', [c.terrainCasting(), c.terrainDefault(cards[0]), c.castCheck('0#0').need], [false, null, 1]);
+}
+
+console.log('\na card moves between the deck and the sideboard, or is copied across; a subtitle names what it does');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Big Sky', subtitle: 'Explosive Orb (Fire Blast)', qty: 2, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast (Explosive Orb) — a short effect', dice: '' },
+    { name: 'Desert', qty: 1, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast', dice: '' },
+  ];
+  c.data.cardcasting.sideboard = [{ name: 'Spare', cost: '2', color: 'U', mana: '', sphere: 'Mind', effect: 'Suggestion', dice: '' }];
+  c.recompute();
+  const deck = () => c.data.cardcasting.cards.map((x) => x.name);
+  const side = () => c.data.cardcasting.sideboard.map((x) => x.name);
+  check('a subtitle is the name\'s second half in the Roll20 text, and the effect a note of its own',
+    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky — Explosive Orb (Fire Blast)', true]);
+  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert — Fire Blast');
+  check('to the sideboard', [c.moveCard('cardcasting.cards', 1, 'cardcasting.sideboard').ok, deck(), side()], [true, ['Big Sky'], ['Spare', 'Desert']]);
+  check('back to the deck, with a copy to play', [c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck(), side(), c.data.cardcasting.cards[1].qty], [true, ['Big Sky', 'Spare'], ['Desert'], 1]);
+  check('a copy leaves the original where it is, and carries no worked-out fields', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, deck(), side(), 'calc' in c.data.cardcasting.sideboard[1]], [true, ['Big Sky', 'Spare'], ['Desert', 'Big Sky'], true]);
+  check('and the copy is its own card', c.data.cardcasting.sideboard[1] !== c.data.cardcasting.cards[0] && c.data.cardcasting.sideboard[1].subtitle, 'Explosive Orb (Fire Blast)');
+  check('the same list, or no such card, is refused', [c.moveCard('cardcasting.cards', 0, 'cardcasting.cards').ok, c.moveCard('cardcasting.cards', 9, 'cardcasting.sideboard').ok, c.moveCard('weapons', 0, 'cardcasting.sideboard').ok], [false, false, false]);
+  c.tableStart();
+  const held = c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard');
+  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
+  check('but a copy, and a card joining the deck, are fine', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck()], [true, true, ['Big Sky', 'Spare', 'Desert']]);
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  check('the face edits the subtitle and offers the move and the copy', [html.includes('data-item="cardcasting.cards|0|subtitle"'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|move" disabled'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|copy"'), html.includes('data-card-move="cardcasting.sideboard|0|cardcasting.cards|move" ')], [true, true, true, true]);
+  c.data.cardcasting.table.hand = ['0#0'];
+  check('and the small face shows the subtitle under the name', subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<div class="bar sub subtitle"><span>Explosive Orb (Fire Blast)</span></div>'), true);
+  c.tableEnd();
+}
+
+console.log('\nan ongoing card carries who it is affecting while it is in play');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [{ name: 'Slow', qty: 3, cost: '1', color: 'U', mana: '', sphere: 'Time', effect: 'Slow', dice: '' }];
+  c.recompute();
+  const t = () => c.data.cardcasting.table;
+  c.tableStart();
+  const id = t().hand[0];
+  c.tablePlay(id, 'ongoing');
+  check('the card is in play', t().play.includes(id), true);
+  c.tableTargets(id, '  the ogre and both guards ');
+  check('the targets are written beside it, trimmed', t().targets[id], 'the ogre and both guards');
+  check('undo takes it back as one step, named for the card', [c.undo(), id in t().targets], ['Slow targets', false]);
+  c.tableTargets(id, 'the ogre and both guards');
+  const tab = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() });
+  check('the tab draws a field to type them in', tab.includes(`data-table-targets="${id}"`) && tab.includes('value="the ogre and both guards"'), true);
+  const screen = subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table');
+  check('the shared screen reads them, with no field', screen.includes('<small>targets</small> the ogre and both guards') && !screen.includes('data-table-targets'), true);
+  c.tableTargets(id, '');
+  check('blank clears them', id in t().targets, false);
+  c.tableTargets(id, 'the ogre');
+  c.tableMove(id, 'discard');
+  check('and they go with the card when it leaves play', [t().play.includes(id), id in t().targets], [false, false]);
+  check('a card not in play takes none', [c.tableTargets(t().hand[0] || '9#9', 'x'), Object.keys(t().targets).length], [c, 0]);
+  check('an encounter starts with none', (c.tableEnd(), c.tableStart(), t().targets), {});
+  c.tableEnd();
+}
+
 console.log('the Dice picker joins what it adds to what is there');
 {
   check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');
@@ -12998,7 +13105,7 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   c.data.cardcasting.castingStat = 'Int';
   c.data.cardcasting.cards = [
     { name: 'Big Sky', qty: 2, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '8d6',
-      save: 'Ref', dc: '10 + floor(level/2) + int.mod', range: 'close', target: 'burst', damage: 'fire, cold' },
+      save: 'Ref', dc: '10 + floor(level/2) + int.mod', range: 'close', target: 'burst', duration: '{level} rounds', casting: 'standard action', damage: 'fire, cold' },
     { name: 'Desert', qty: 1, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '' },
     { name: 'Touch', qty: 1, cost: '1', color: 'B', effect: 'Corpse Bomb', dc: '24', range: 'melee', target: '{= 2 + 3} targets', damage: 'negative energy' },
     { name: 'Far', qty: 1, cost: '1', color: 'U', effect: 'Push', dc: 'no.such.name', range: '{= 10 * level}', save: 'none' },
@@ -13013,9 +13120,9 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range word is feet for the caster level', [big.range, big.rangeFeet], ['close', 25 + 5 * Math.floor(cl / 2)]);
   check('damage types split on commas', big.damage, ['fire', 'cold']);
   check('the line as read: save and DC together, the range with its feet', c.cardStatLines(cards[0]),
-    [['Save', `Reflex DC ${17 + intMod}`], ['Range', `close (${25 + 5 * Math.floor(cl / 2)} ft)`], ['Target', 'burst'], ['Damage type', 'fire, cold']]);
+    [['Save', `Reflex DC ${17 + intMod}`], ['Range', `close (${25 + 5 * Math.floor(cl / 2)} ft)`], ['Target', 'burst'], ['Duration', '15 rounds'], ['Casting time', 'standard action'], ['Damage type', 'fire, cold']]);
   check('and the Roll20 message carries it after the cost', c.cardRollSpec('cardcasting.cards|0').notes.map((n) => n.label),
-    ['Cost', 'Save', 'Range', 'Target', 'Damage type', 'Sphere']);
+    ['Cost', 'Save', 'Range', 'Target', 'Duration', 'Casting time', 'Damage type', 'Sphere']);
   const touch = c.cardStats(cards[2]);
   check('a number is a number, melee has no feet, an inline formula resolves in any field',
     [touch.dc, touch.rangeFeet, touch.target], ['24', null, '5 targets']);
@@ -13025,16 +13132,16 @@ console.log('\na card\'s stat line: save, DC, range, target and damage types, ea
   check('a range worked out to a number is feet', [far.rangeFeet, c.cardStatLines(cards[3]).find(([l]) => l === 'Range')], [150, ['Range', '150 ft']]);
   check('"none" is a save line of its own', c.cardStatLines(cards[3])[0], ['Save', 'none']);
   check('a card with none of it has nothing to say', [c.cardStats(cards[4]).any, c.cardStatLines(cards[4]), c.cardStats({}).any], [false, [], false]);
-  check('every card carries the five fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '']);
+  check('every card carries the seven fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '', '', '']);
   c.shareCardDice('cardcasting.cards', 0);
   check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
-    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', 'fire, cold']);
+    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', '{level} rounds', 'standard action', 'fire, cold']);
   check('and leaves a card with another effect alone', cards[2].save, '');
   const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
   check('the face edits each field, with a pick list behind it',
-    ['save', 'dc', 'range', 'target', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true]);
+    ['save', 'dc', 'range', 'target', 'duration', 'casting', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true, true, true]);
   check('and previews what differs from what was typed', [html.includes(`DC ${17 + intMod}</span>`), html.includes('Range close = ')], [true, true]);
-  check('the pick lists are declared once', ['card-saves', 'card-dcs', 'card-ranges', 'card-targets', 'card-damage'].map((id) => html.split(`<datalist id="${id}"`).length - 1), [1, 1, 1, 1, 1]);
+  check('the pick lists are declared once', ['card-saves', 'card-dcs', 'card-ranges', 'card-targets', 'card-durations', 'card-casting-times', 'card-damage'].map((id) => html.split(`<datalist id="${id}"`).length - 1), [1, 1, 1, 1, 1, 1, 1]);
 }
 
 console.log('the damage type picker adds a word to the list once');
@@ -13092,7 +13199,8 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   c.data.training.magic.tradition.boughtOff = ['Land-Attuned Magic [Deck]'];
   c.recompute();
   check('with it among the deck feats it still wants the tradition', p.calc.landAttunedWhy, 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition');
-  c.data.training.magic.tradition.drawbacks = ['Terrain Casting'];
+  // Area Bound rather than Terrain Casting, so the costs here are the feat's alone.
+  c.data.training.magic.tradition.drawbacks = ['Area Bound'];
   c.recompute();
   check('and then it is in force', p.calc.landAttuned, true);
   c.tableStart();

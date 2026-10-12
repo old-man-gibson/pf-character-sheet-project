@@ -58,7 +58,10 @@ import {
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
-import { CARD_DAMAGE_TYPES, CARD_RANGES, CARD_SAVES, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
+import {
+  CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
+  TERRAIN_CHOICES, stepCastingTime,
+} from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -2482,7 +2485,7 @@ export function cardcastingPanel(model, ctx) {
    * the effect, and whatever buttons the zone offers. Same frame rules as
    * the full face.
    */
-function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [] } = {}) {
+function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [], extra = '' } = {}) {
     const card = model.tableCard(id);
     if (!card) return '';
     const r = card.calc || {};
@@ -2498,11 +2501,13 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
         <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
         ${expandBtn(id, open)}
       </div>
+      ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
       <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
       ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
       ${rolls}
+      ${extra}
       <div class="foot">
         ${card.mana ? `<span class="pair" title="Mana this card carries">${manaChips(card.mana, '')}</span>` : ''}
         ${badge}
@@ -2672,6 +2677,11 @@ function tableHead(s) {
       </span>`;
 
     const notes = [];
+    if (model.terrainCasting()) {
+      const tr = model.terrainFreedomTracker();
+      const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
+      notes.push(`Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way${tr ? `, or spends a Drawback Freedom use (${left} left)` : ''}.`);
+    }
     if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
     if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
@@ -2732,6 +2742,7 @@ function castPicker(s, id, card, modes, casters = []) {
         </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
       <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${statsLine(model, card)}
       <div class="text">
         ${who}
@@ -2743,6 +2754,7 @@ function castPicker(s, id, card, modes, casters = []) {
         <label class="pickrow">Spell points on top of the cost
           <input type="number" name="sp" min="0" step="1" value="${first?.sp || 0}" aria-label="Spell points to spend">
         </label>
+        ${terrainRow(model, card)}
       </div>
       <div class="foot"><span class="pair tools">
         ${tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast this mode: the effect resolves now', cls: 'primary' })}
@@ -2750,6 +2762,26 @@ function castPicker(s, id, card, modes, casters = []) {
         ${tableBtn('pick', '', '×', { title: 'Never mind' })}
       </span></div>
     </div>`;
+  }
+
+  /**
+   * Terrain Casting's row in the chooser: how this cast pays the drawback.
+   * The default is already chosen -- the point on a card that costs any,
+   * the step on an at-will one -- so a plain Cast never asks; the row is
+   * for paying another way, or waiving it with a Drawback Freedom use.
+   */
+function terrainRow(model, card) {
+    const fallback = model.terrainDefault(card);
+    if (!fallback) return '';
+    const tr = model.terrainFreedomTracker();
+    const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
+    const slower = stepCastingTime(card.casting);
+    const label = (k, text) => (k === 'step' && slower ? `casting time one step slower (${slower})` : k === 'waive' ? (tr ? `${text} (${left} left)` : `${text} — no tracker named Drawback Freedom (Terrain Casting)`) : text);
+    return `<label class="pickrow">Terrain Casting
+          <select name="terrain" aria-label="Terrain Casting">
+            ${TERRAIN_CHOICES.map(([k, text]) => `<option value="${k}"${k === fallback ? ' selected' : ''}${k === 'waive' && !tr ? ' disabled' : ''}>${esc(label(k, text))}</option>`).join('')}
+          </select>
+        </label>`;
   }
 
   /** The hand: every card with the moves it may make from there. */
@@ -2771,12 +2803,15 @@ function handZone(s) {
       // plain Cast and a … beside it opens the chooser.
       const casters = isEffect && s.present.length ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
       const asks = modes.length > 1;
-      if ((asks || casters.length) && s.castPick === id) return castPicker(s, id, card, modes, casters);
+      // Terrain Casting gives every card a chooser too: a plain Cast pays the
+      // default toll, and the … is where another way is picked.
+      const terrain = isEffect && !!model.terrainDefault(card);
+      if ((asks || casters.length || terrain) && s.castPick === id) return castPicker(s, id, card, modes, casters);
       const castBtns = !isEffect ? '' : asks
         ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one${casters.length ? ', who casts it' : ''}, and the spell points to put into it`, cls: 'primary' })
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
           + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy })
-          + (casters.length ? tableBtn('pick', id, '…', { title: 'Cast it as a squad member, or with spell points on top' }) : '');
+          + (casters.length || terrain ? tableBtn('pick', id, '…', { title: [casters.length ? 'cast it as a squad member' : '', 'spell points on top', terrain ? 'how Terrain Casting is paid' : ''].filter(Boolean).join(', ').replace(/^./, (ch) => ch.toUpperCase()) }) : '');
       return cardMini(model, id, {
         ...s.miniOpts(id),
         badge,
@@ -2808,6 +2843,11 @@ function playZone(s) {
         </div>`
       : cardMini(model, id, {
         ...s.miniOpts(id),
+        // Who it is affecting: the player writes it where the controls are;
+        // the shared screen reads it.
+        extra: s.faces.controls
+          ? `<div class="targets"><input type="text" value="${esc(t.targets?.[id] || '')}" data-table-targets="${esc(id)}" placeholder="targets — who it affects" aria-label="Targets"></div>`
+          : (t.targets?.[id] ? `<div class="targets"><small>targets</small> ${esc(t.targets[id])}</div>` : ''),
         buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
       }))).join('');
     return `<section class="panel f-play">
@@ -3232,6 +3272,9 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${manaChips(colors, '')}
         </span>
       </div>
+      <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
+        <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle — the effect in a few words" aria-label="Subtitle">
+      </div>
       ${p.harrow ? `<div class="bar sub">
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
         <input type="text" value="${esc(card.alignment ?? '')}" data-item="${list}|${i}|alignment" data-kind="text" placeholder="align." aria-label="Alignment">
@@ -3262,6 +3305,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${expandBtn(`${list}.${i}`, open)}
           ${inDeck ? `<button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
           <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>` : ''}
+          ${cardShelfButtons(model, list, i, inDeck)}
           ${removeButton(list, i, { what: 'card' })}
         </span>
       </div>
@@ -3291,16 +3335,23 @@ function cardStatBars(model, list, i, card) {
       s.dcError ? ['DC', `${s.dc} — ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
       feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
       changed('target', s.target) ? ['Target', s.target] : null,
+      changed('duration', s.duration) ? ['Duration', s.duration] : null,
+      changed('casting', s.casting) ? ['Casting time', s.casting] : null,
       changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
     ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
     // Two to a row while the entries are words; a formula in any of them
     // puts each on a row of its own, so it can be read whole.
-    const wide = ['save', 'dc', 'range', 'target'].some((f) => String(card[f] ?? '').trim().length > 8);
+    const wide = ['save', 'dc', 'range', 'target', 'duration', 'casting'].some((f) => {
+      const v = String(card[f] ?? '').trim();
+      return /[{}()+*/]/.test(v) || v.length > 14;
+    });
     return `<div class="bar stats${wide ? ' rows' : ''}">
         ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
         ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
         ${stat('target', 'target', 'Target or area: single, line, cone, burst — or a formula', 'card-targets')}
+        ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level… — or a formula, {caster.level} rounds', 'card-durations')}
+        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute… — or a formula', 'card-casting-times')}
       </div>
       <div class="bar stats dmg">
         <span class="stat grow" title="Damage types, comma-separated — fire, cold — or a formula in braces"><small>dmg</small>
@@ -3311,6 +3362,21 @@ function cardStatBars(model, list, i, card) {
         </select>
         ${preview ? `<span class="preview">${preview}</span>` : ''}
       </div>`;
+  }
+
+  /**
+   * The two buttons that move a card between the deck and the sideboard, or
+   * copy it across. While an encounter is on, nothing may leave the deck --
+   * the table addresses deck cards by their place -- so that button says so
+   * and does nothing; a copy is always fine.
+   */
+function cardShelfButtons(model, list, i, inDeck) {
+    const to = inDeck ? 'cardcasting.sideboard' : 'cardcasting.cards';
+    const where = inDeck ? 'sideboard' : 'deck';
+    const active = !!model.data.cardcasting?.table?.active;
+    const held = inDeck && active;
+    return `<button data-card-move="${list}|${i}|${to}|move" ${held ? 'disabled' : ''} title="${held ? 'The deck is in play: end the encounter first, or copy it instead' : `Move this card to the ${where}`}" aria-label="Move to ${where}">→ ${where}</button>
+          <button data-card-move="${list}|${i}|${to}|copy" title="Copy this card to the ${where}" aria-label="Copy to ${where}">⧉ ${where}</button>`;
   }
 
   /** A card's stat line as read -- Save Reflex DC 24 · Range close (60 ft) -- for the small faces and the chooser. */
@@ -3330,6 +3396,8 @@ function cardDatalists(p) {
       + list('card-dcs', ['caster.dc', `10 + floor(caster.level/2) + ${castingModName(p.castingStat)}`])
       + list('card-ranges', CARD_RANGES)
       + list('card-targets', CARD_TARGETS)
+      + list('card-durations', CARD_DURATIONS)
+      + list('card-casting-times', CARD_CASTING_TIMES)
       + list('card-damage', CARD_DAMAGE_TYPES);
   }
 
@@ -3374,7 +3442,8 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
     const preview = formulas.map((r) => (r.formula
       ? `<span class="badge ok" title="${esc(`${r.label}: ${r.source}`)}">${esc(formulas.length > 1 ? `${r.label} ` : '')}${esc(r.formula)}</span>`
       : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
-    const alike = inDeck && (String(card.dice || '').trim() || model.cardStats(card).any) ? model.cardSiblings(list, i) : [];
+    const hasStats = CARD_STAT_FIELDS.some((f) => String(card[f] ?? '').trim());
+    const alike = inDeck && (String(card.dice || '').trim() || hasStats) ? model.cardSiblings(list, i) : [];
     const title = 'Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
     // Opened out, the field is a line per roll; the entries are read the
     // same way either way, since a new line separates them as a ; does.

@@ -754,7 +754,9 @@ Open cards are a way of looking, kept for the session and not saved.
 
 **The stat line.** Under a face's type line sit five fields the table reads without
 reading the effect: **save** (Ref, Fort, Will, none), **DC**, **range** (melee, close,
-medium, long, or a number of feet), **target** (single, line, cone, burst) and **dmg**,
+medium, long, or a number of feet), **target** (single, line, cone, burst), **duration**
+(instantaneous, concentration, 1 round/level… or `{caster.level} rounds`), **cast** (the
+casting time: standard action, swift action, full-round action, 1 minute…) and **dmg**,
 the damage types, with a picker that adds one at a time. Each takes a formula — `{10 +
 caster.level}` in any of them, and the DC a bare `caster.dc` or `10 +
 floor(caster.level/2) + int.mod` as well — and what it works out to shows under the bar
@@ -764,6 +766,30 @@ the caster's level (close is 25 ft + 5 ft per two levels, medium 100 + 10 a leve
 with the dice: **→ N alike** hands both on, a card in hand or in the chooser shows it
 under its type line, and the d20 copies it as lines (*Save: Reflex DC 24; Range: close
 (60 ft); Target: burst; Damage type: fire*).
+
+**Subtitle, and the shelf.** A card may carry a **subtitle** under its name — *Big Sky ·
+Explosive Orb (Fire Blast)* — so a Harrow or poker deck keeps its own names while the
+table reads what each card does; the Roll20 text uses it as the name's second half and
+sends the effect as a line of its own. Every face has **→ sideboard** / **⧉ sideboard**
+(or **→ deck** / **⧉ deck** on the sideboard): a move, or a copy that leaves the original
+where it is. While an encounter is on, nothing leaves the deck — the table addresses deck
+cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
+the deck is in play after the next shuffle.
+
+**Targets.** A card in play has a **targets** line under its text — "the ogre and both
+guards" — typed on the tab or in the hand window, read on the shared table screen, and
+gone with the card when it resolves. Each change is one undo step, named for the card.
+
+**Terrain Casting.** With the drawback on the tradition (and not bought off), every cast
+pays it one of three ways: one spell point more, a casting-time step, or blighting your
+square and the eight around it. A plain **Cast** pays the point on a card with a cost and
+the step on an at-will one; the **…** beside Cast opens the chooser to pay another way, or
+to waive it with a use from a tracker named *Drawback Freedom (Terrain Casting)*. The point
+rides on the cost, so the mana it needs and the points it spends both count it; the step
+names the slower casting time when the card has one (*standard action* → *full-round
+action*); blight is a log line for the GM's map. The **Cost** field stays the card's own
+cost — type a two-colour card at its Rainbow Efficiency price and the terrain point is added
+on top. The table's notes and the tradition panel both say when the drawback is in force.
 
 | Control | What the rules say, and what it does |
 |---|---|
