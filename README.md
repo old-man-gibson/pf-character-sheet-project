@@ -57,13 +57,35 @@ file on the page) for a workbook exported from Google Sheets or a JSON this app 
 Tick **GM / inspector view** to reveal the Formula Audit tab. `app/embed-example.html`
 shows the same sheet embedded in a hostile-looking host page.
 
-### Publishing it (GitHub Pages or any static host)
+### Publishing it (Cloudflare, GitHub Pages or any static host)
 
 There is no build step. Push the repository and serve its root: on GitHub Pages, set
 the source to the branch root, and the app is at `https://<you>.github.io/<repo>/` (the
 root `index.html` forwards to `app/`; `.nojekyll` keeps Pages from touching the
 files). Visitors' characters live in their own browsers, so a read-only host is all
 it needs.
+
+On Cloudflare, connect the GitHub repository as a Worker (Workers & Pages → Create →
+Import a repository): build command empty, deploy command `npx wrangler deploy`, path
+`/`. `wrangler.jsonc` makes the repository the Worker's static files, with
+`.assetsignore` keeping the test suites, tooling and `private/` off the address, and
+`worker.js` answering `/api/c` (below). Every push to `main` then deploys, and every
+other branch gets a preview address. To deploy from the command line instead, run
+`node tools/deploy-site.mjs` (`--dry-run` to see what would ship); it exports the
+committed tree and uploads that, never a checkout.
+
+**Publish**, on a sheet's ⋯ menu, puts the character on the site and gives a link
+(`published.html?s=<id>`) that anyone can open: the read-only view that **Preview
+published** shows, carrying only the pack entries the character has. Publishing again
+keeps the link and adds a revision (`&r=<n>` opens an earlier one). The store behind it
+is one Workers KV namespace: create it (Storage & Databases → KV), put its id in
+`wrangler.jsonc` under `kv_namespaces` as the `SHEETS` binding, and push. Bindings come
+from that file, not the dashboard. Without one the button says this copy of the app has
+no publishing server, and everything else still works. The free plan allows 1,000 KV
+writes a day; a publish is two. With the id in place, `npx wrangler dev --persist-to ../sheets-state`
+runs the site locally with a store of its own; the state has to live outside the
+repository, because the repository is the watched asset folder and a store inside it
+reloads the server on its own writes.
 
 To pre-load a roster on a deployment of your own, drop each character's JSON into
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
@@ -89,6 +111,7 @@ tools/dump_tab.py       debugging aid: print a worksheet as a coordinate grid
 tools/maneuvers_ref.py  build the disciplines pack from a workbook's maneuversRef tab
 tools/extension_pack.py what the *_ref tools use to write a table as a pack
 tools/audit-diff.mjs    the audit diff between two character JSON documents, for a GM
+tools/deploy-pages.mjs  upload the committed tree to Cloudflare Pages (never a checkout)
 tools/scrape-pack.mjs   a directory of scraper markdown into packs, using the same
                         reader the Paste text… panel uses
 tools/forge-pack.mjs    a Homebrew Workbench export into a pack under private/extensions,
@@ -120,6 +143,10 @@ app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geome
 app/js/publish.js       a character as a third party receives it: only the pack entries it
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
+functions/api/c/        the publishing store: request handlers over one KV namespace
+worker.js               the Cloudflare Worker: static files, plus /api/c through those handlers
+wrangler.jsonc          the Cloudflare deployment (assets, Worker, KV binding); .assetsignore lists what stays home
+404.html                the not-found page a deployment serves
 app/cards.html          the card table, or the hand, in a window of its own (js/card-window.js):
                         drawn by the sheet that opened it, for a streamed game
 forge/                  Homebrew Workbench, the homebrew workbench: index.html, forge.css, js/

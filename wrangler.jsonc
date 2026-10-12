@@ -1,0 +1,26 @@
+// The Cloudflare deployment: the repository served as static assets, with
+// worker.js answering /api/c (the publishing store) and the 404 page.
+//
+//   npx wrangler deploy              what the connected-repository build runs
+//   node tools/deploy-site.mjs       the same from a clean export of a commit
+//   npx wrangler dev --persist-to ../sheets-state
+//                                    locally; the store must sit outside the watched folder
+//
+// A deploy takes its bindings from this file and drops any added in the
+// dashboard, so the KV namespace that holds published characters is named
+// here: create one (Storage & Databases > KV) and put its id below. Without
+// it the app works and Publish reports that this copy has no store.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pf-character-sheet-project",
+  "main": "worker.js",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "kv_namespaces": [
+    // { "binding": "SHEETS", "id": "<the namespace id>" }
+  ]
+}
