@@ -5342,10 +5342,14 @@ table.stacked .catface { margin-left: 0; }
    a second; the small faces read it as text. */
 /* The meter's .bar rule (14px, clipped) reaches these; a wrapping row needs its own height. */
 .mcard .bar.stats { flex-wrap: wrap; gap: 1px 6px; padding: 2px 5px; height: auto; margin-top: 0; overflow: visible; }
-.mcard .bar.stats .stat { display: inline-flex; align-items: center; gap: 3px; flex: 1 1 40%; min-width: 0; }
-.mcard .bar.stats .stat.grow { flex: 1 1 9rem; }
-.mcard .bar.stats small { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(26,29,38,0.6); flex: none; }
-.mcard .bar.stats input { font-size: 0.74rem; padding: 0 3px; flex: 1; min-width: 2.2rem; }
+.mcard .bar.stats .stat { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 40%; min-width: 0; }
+.mcard .bar.stats.rows .stat { flex: 1 1 100%; }
+.mcard .bar.stats .stat.grow { flex: 1 1 10rem; }
+.mcard .bar.stats small { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(26,29,38,0.75); flex: none; min-width: 2.4rem; }
+/* The entries are cells, not bare text: a formula wants an edge to read against. */
+.mcard .bar.stats input { font-size: 0.74rem; padding: 1px 4px; flex: 1; min-width: 2.2rem; background: rgba(255,255,255,0.65); border: 1px solid rgba(26,29,38,0.25); border-radius: 3px; }
+.mcard .bar.stats input:focus { background: #fff; }
+.mcard .bar.stats.read small { font-weight: 700; color: rgba(26,29,38,0.75); }
 .mcard .bar.stats select.dmgpick { flex: none; max-width: 4.2rem; font-size: 0.7rem; }
 .mcard .bar.stats .preview { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 3px; }
 .mcard .bar.stats .preview .badge { font-size: 0.62rem; text-transform: none; letter-spacing: 0; }

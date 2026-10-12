@@ -3293,7 +3293,10 @@ function cardStatBars(model, list, i, card) {
       changed('target', s.target) ? ['Target', s.target] : null,
       changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
     ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
-    return `<div class="bar stats">
+    // Two to a row while the entries are words; a formula in any of them
+    // puts each on a row of its own, so it can be read whole.
+    const wide = ['save', 'dc', 'range', 'target'].some((f) => String(card[f] ?? '').trim().length > 8);
+    return `<div class="bar stats${wide ? ' rows' : ''}">
         ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
         ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}

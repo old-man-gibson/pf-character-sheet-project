@@ -12960,6 +12960,9 @@ console.log('\ntalents per level -- each system\'s own three rates');
   check('a card with no dice is notes alone', [c.cardRollSpec('cardcasting.cards|1').rolls, c.cardRollSpec('cardcasting.cards|1').notes.length], [[], 2]);
   const long = c.cardRollSpec('cardcasting.cards|3');
   check('a long effect is a note of its own, and the name stays the card\'s', [long.name, long.notes.at(-1).label, long.notes.at(-1).text.startsWith('AAAA')], ['Long', 'Effect', true]);
+  c.data.cardcasting.cards[3].effect = 'A talent copied verbatim. '.repeat(100);
+  c.recompute();
+  check('a talent copied verbatim travels whole', c.cardRollSpec('cardcasting.cards|3').notes.at(-1).text.length, 'A talent copied verbatim. '.repeat(100).trim().length);
   check('nothing for a reference that names no card', [c.cardRollSpec('9#0'), c.cardRollSpec('cardcasting.cards|9'), c.cardRollSpec('weapon|0')], [null, null, null]);
   check('the face\'s preview reads the same entries, with the one that is not dice saying why',
     c.cardRollFormulas(c.data.cardcasting.cards[0]).map((r) => [r.label, r.formula, !!r.error]),

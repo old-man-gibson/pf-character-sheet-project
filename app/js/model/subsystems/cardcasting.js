@@ -1947,7 +1947,9 @@ export function appendListText(current, piece) {
 const SHORT_EFFECT = 80;
 
 /** How much of a long effect travels. A chat message is not a rulebook page. */
-const EFFECT_NOTE_MAX = 600;
+// Roll20's chat takes a message of several thousand characters; a talent
+// copied verbatim runs to a thousand or two, and the GM wants all of it.
+const EFFECT_NOTE_MAX = 6000;
 
 /**
  * One card as a roll spec: `{ name, rolls, notes, queries }`.
