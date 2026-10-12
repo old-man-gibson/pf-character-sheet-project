@@ -4,7 +4,8 @@
  * Everything here is data or pure functions, so it is trivially inspectable.
  */
 
-import { analyse, evaluateFormula } from './formula.js';
+import { analyse, evaluateFormula, DIE_STEP, STEP_DIE, stepDice } from './formula.js';
+export { DIE_STEP, STEP_DIE, stepDice };
 
 export const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 
@@ -1645,32 +1646,7 @@ export const UNARMED_TABLE = [
   ['2d8', '2d10', '4d8', '6d8', '8d8', '12d8'], // 20+
 ];
 
-/** Die -> step index and back, matching the sheet's M:O chain exactly
- *  (2d10 and 3d8 share step 11; the reverse lookup keeps the first match). */
-export const DIE_STEP = {
-  '1d2': 2, '1d3': 3, '1d4': 4, '1d6': 5, '1d8': 6, '1d10': 7, '2d6': 8, '2d8': 9,
-  '3d6': 10, '2d10': 11, '3d8': 11, '4d6': 12, '4d8': 13, '6d6': 14, '6d8': 15,
-  '8d6': 16, '8d8': 17, '12d6': 18, '12d8': 19, '16d6': 20,
-};
-export const STEP_DIE = {
-  2: '1d2', 3: '1d3', 4: '1d4', 5: '1d6', 6: '1d8', 7: '1d10', 8: '2d6', 9: '2d8',
-  10: '3d6', 11: '2d10', 12: '4d6', 13: '4d8', 14: '6d6', 15: '6d8', 16: '8d6',
-  17: '8d8', 18: '12d6', 19: '12d8', 20: '16d6',
-};
-
-/**
- * One die value moved along that chain, clamped to its ends: a plain step
- * increase is one step. A size increase is not a fixed number of steps -- see
- * `raiseDice`.
- *
- * Returns null for a die the chain does not list, so a caller can say so
- * rather than silently substituting something else.
- */
-export function stepDice(die, steps = 0) {
-  const at = DIE_STEP[String(die ?? '').trim().toLowerCase()];
-  if (at === undefined) return null;
-  return STEP_DIE[Math.max(2, Math.min(20, at + (Number(steps) || 0)))];
-}
+// The die chain (DIE_STEP, STEP_DIE, stepDice) lives in formula.js, where step() walks it; re-exported above.
 
 /**
  * A Medium base die under size increases and then step increases.

@@ -12968,6 +12968,8 @@ console.log('\ntalents per level -- each system\'s own three rates');
     c.cardRollFormulas(c.data.cardcasting.cards[0]).map((r) => [r.label, r.formula, !!r.error]),
     [['damage', '8d6+15', false], ['boost (1 SP)', '15d6', false], ['aside', '', true]]);
   check('a card with no Dice field rolls the first dice in its text', c.cardRollFormulas({ effect: 'Deals 3d8+2 and [Draw 1]' }).map((r) => r.formula), ['3d8+2']);
+  check('a die stepped by level — Mana Siphon\'s spell-point die — is dice the field rolls',
+    c.cardRollFormulas({ dice: 'siphon: {step("1d2", floor(level/5))}' }).map((r) => [r.label, r.formula]), [['siphon', '1d6']]);
 
   check('the cards that share an effect are the card\'s siblings', c.cardSiblings('cardcasting.cards', 0), [2]);
   check('a card whose effect is unique has none', c.cardSiblings('cardcasting.cards', 1), []);

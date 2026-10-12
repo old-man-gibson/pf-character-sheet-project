@@ -510,6 +510,11 @@ export const FUNCTION_HELP = [
     eg: 'dice(floor(level / 4) + 1, 6)',
   },
   {
+    name: 'step', sig: 'step("die", steps)', group: 'Pathfinder',
+    what: 'A die moved along the damage chain — 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10, 4d6 … 16d6 — the way "one die size per five levels" asks. step("1d2", 2) is 1d4. The chain stops at its ends, and a die it does not list is an error rather than a guess.',
+    eg: 'step("1d2", floor(caster.level / 5))',
+  },
+  {
     name: 'tags', sig: 'tags("name")', group: 'Pathfinder',
     what: 'How many feats carry a tag in square brackets: tags("Chance") counts every [Chance] feat, granted feat and bought-off drawback. Only a tag inside brackets counts, and [Chance, Deck] counts once toward each. A tag nobody has is 0, where tags.chance would be an unknown value.',
     eg: 'tags("Chance") + tags("Deck")',

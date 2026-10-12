@@ -79,7 +79,7 @@ export function renderTrackersPanel(model, ctx) {
           evaluated in a sandbox, and every one is visible to your GM in the Formula Audit tab.
           Functions: <code>floor</code> <code>ceil</code> <code>round</code> <code>min</code>
           <code>max</code> <code>sum</code> <code>abs</code> <code>clamp</code> <code>if</code>
-          <code>mod</code> <code>iterations</code> <code>dice</code> <code>tags</code>.
+          <code>mod</code> <code>iterations</code> <code>dice</code> <code>step</code> <code>tags</code>.
           <button data-view data-action="formulas" class="linkish"
             title="The guide, a scratchpad, and every value with its current number"
             >ƒx Formulas</button> has all of them explained, somewhere to try one, and every
