@@ -767,6 +767,17 @@ with the dice: **→ N alike** hands both on, a card in hand or in the chooser s
 under its type line, and the d20 copies it as lines (*Save: Reflex DC 24; Range: close
 (60 ft); Target: burst; Damage type: fire*).
 
+**Terrain Casting.** With the drawback on the tradition (and not bought off), every cast
+pays it one of three ways: one spell point more, a casting-time step, or blighting your
+square and the eight around it. A plain **Cast** pays the point on a card with a cost and
+the step on an at-will one; the **…** beside Cast opens the chooser to pay another way, or
+to waive it with a use from a tracker named *Drawback Freedom (Terrain Casting)*. The point
+rides on the cost, so the mana it needs and the points it spends both count it; the step
+names the slower casting time when the card has one (*standard action* → *full-round
+action*); blight is a log line for the GM's map. The **Cost** field stays the card's own
+cost — type a two-colour card at its Rainbow Efficiency price and the terrain point is added
+on top. The table's notes and the tradition panel both say when the drawback is in force.
+
 | Control | What the rules say, and what it does |
 |---|---|
 | **Start encounter** | shuffle every copy; draw 1 + casting modifier (at least 2), plus 2 per Loaded Hand. Under Mana Pool a plain Mana Point card drawn goes straight to the table — except under Gradual Ramp, where it waits in hand to be played one a round. |

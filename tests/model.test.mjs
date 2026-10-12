@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -11557,9 +11557,10 @@ console.log('card casting -- the table: an encounter played through');
   s.tableStart();
   const paid = s.data.cardcasting.table.hand.find((id) => parseInt(s.tableCard(id).cost, 10) === 1);
   s.tablePlay(paid, 'cast');
-  check('a 1-point card spends one from the tracker', s.spellPointTracker().current, 1);
+  // Nico's tradition carries Terrain Casting, so a cast pays its point as well.
+  check('a 1-point card spends one from the tracker, and one more for Terrain Casting', s.spellPointTracker().current, 2);
   s.tableSpend(s.data.cardcasting.table.hand[0], 1);
-  check('and a modal +1 SP spends another', s.spellPointTracker().current, 2);
+  check('and a modal +1 SP spends another', s.spellPointTracker().current, 3);
   check('the log says what was spent and what is left', /1 spell point spent, \d+ left/.test(s.data.cardcasting.table.log[s.data.cardcasting.table.log.length - 1]), true);
   s.updateTracker(spT.id, { current: spT.max });
   s.tableSpend(null, 1);
@@ -12980,6 +12981,52 @@ console.log('\ntalents per level -- each system\'s own three rates');
   check('the switch for copying on cast rides with the character', new Character({ ...c.toJSON(), cardcasting: { ...c.toJSON().cardcasting, copyOnCast: true } }).data.cardcasting.copyOnCast, true);
 }
 
+console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a Drawback Freedom use');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
+  c.data.training.magic.tradition = { ...(c.data.training.magic.tradition || {}), drawbacks: ['Terrain Casting'], boughtOff: [] };
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Bolt', qty: 3, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast', dice: '', casting: 'standard action' },
+    { name: 'Glow', qty: 3, cost: '0', color: 'W', mana: '', sphere: 'Light', effect: 'Glow', dice: '', casting: 'standard action' },
+  ];
+  c.addTracker({ name: 'Spell Points', maxFormula: '20' });
+  c.addTracker({ name: 'Drawback Freedom (Terrain Casting)', maxFormula: '3' });
+  c.recompute();
+  const cards = c.data.cardcasting.cards;
+  const t = () => c.data.cardcasting.table;
+  const sp = () => Number(c.spellPointTracker().current) || 0;
+  const log = () => t().log.join('\n');
+  const inHand = (id) => { if (!t().hand.includes(id)) { t().hand.push(id); t().deck = t().deck.filter((x) => x !== id); } };
+  check('the drawback is read off the tradition', c.terrainCasting(), true);
+  check('a costed card defaults to the point, an at-will one to the step', [c.terrainDefault(cards[0]), c.terrainDefault(cards[1])], ['sp', 'step']);
+  check('the step walks the casting-time ladder', [stepCastingTime('standard action'), stepCastingTime('Swift Action'), stepCastingTime('10 minutes'), stepCastingTime('')], ['full-round action', 'immediate action', null, null]);
+  c.tableStart();
+  inHand('0#0'); inHand('1#0');
+  check('the cast check counts the terrain point in the cost', [c.castCheck('0#0').need, c.castCheck('0#0').terrain, c.castCheck('1#0').need, c.castCheck('1#0').terrain], [2, 'sp', 0, 'step']);
+  const before = sp();
+  c.tablePlay('0#0', 'cast');
+  check('a cast pays the card and the terrain point, and says so', [sp() - before, /Terrain Casting — one spell point more/.test(log())], [2, true]);
+  const b2 = sp();
+  c.tablePlay('1#0', 'cast');
+  check('an at-will card pays nothing and is cast a step slower', [sp() - b2, /cast as a full-round action rather than a standard action/.test(log())], [0, true]);
+  inHand('0#1');
+  const b3 = sp();
+  c.tablePlay('0#1', 'cast', { terrain: 'blight' });
+  check('blight costs nothing now and is written down for the map', [sp() - b3, /blighted: dead magic for you/.test(log())], [1, true]);
+  inHand('0#2');
+  const b4 = sp();
+  const freedom = () => Number(c.terrainFreedomTracker().current) || 0;
+  c.tablePlay('0#2', 'cast', { terrain: 'waive' });
+  check('Drawback Freedom waives it for one use from its tracker', [sp() - b4, freedom(), /Terrain Casting waived, 2 uses left/.test(log())], [1, 1, true]);
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set(), castPick: t().hand[0] || null });
+  check('the table says the drawback is in force, with the uses left', /Terrain Casting: every cast pays one spell point more/.test(html) && /Drawback Freedom use \(2 left\)/.test(html), true);
+  check('and the tradition panel does too', /Terrain Casting is in force/.test(combatPanels.renderMagicPanel(c)), true);
+  c.data.training.magic.tradition.boughtOff = ['Terrain Casting'];
+  c.recompute();
+  check('bought off, the drawback is gone', [c.terrainCasting(), c.terrainDefault(cards[0]), c.castCheck('0#0').need], [false, null, 1]);
+}
+
 console.log('the Dice picker joins what it adds to what is there');
 {
   check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');
@@ -13092,7 +13139,8 @@ console.log('Land-Attuned Magic: a Mana Point card pays two points on an attuned
   c.data.training.magic.tradition.boughtOff = ['Land-Attuned Magic [Deck]'];
   c.recompute();
   check('with it among the deck feats it still wants the tradition', p.calc.landAttunedWhy, 'Land-Attuned Magic wants Terrain Casting or Area Bound in the tradition');
-  c.data.training.magic.tradition.drawbacks = ['Terrain Casting'];
+  // Area Bound rather than Terrain Casting, so the costs here are the feat's alone.
+  c.data.training.magic.tradition.drawbacks = ['Area Bound'];
   c.recompute();
   check('and then it is in force', p.calc.landAttuned, true);
   c.tableStart();

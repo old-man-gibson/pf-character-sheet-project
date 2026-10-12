@@ -1370,7 +1370,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'draw': m.tableDraw(1, 'draw'); break;
       case 'shuffle': m.tableShuffleDiscard(); break;
       case 'end': m.tableEnd(); break;
-      case 'play': m.tablePlay(id, how || 'cast', { which: answers.get('mode') || null, sp: Number(answers.get('sp')) || 0, who: answers.get('who') ?? null }); break;
+      case 'play': m.tablePlay(id, how || 'cast', { which: answers.get('mode') || null, sp: Number(answers.get('sp')) || 0, who: answers.get('who') ?? null, terrain: answers.get('terrain') || null }); break;
       case 'squad': m.tableSquad(id); break;
       case 'resolve': m.tableResolve(id); break;
       case 'reveal': m.tableReveal(id); break;

@@ -833,7 +833,7 @@ export function recomputeCardcasting(model) {
   // Casting in the tradition, and is itself a deck feat, so it is found
   // among those or among the feats proper.
   const landFeat = deckFeats.some((f) => /land-?attuned magic/i.test(f)) || featNames(c).some((f) => /land-?attuned magic/i.test(f));
-  const landDrawback = (c.training?.magic?.tradition?.drawbacks || []).some((x) => /^(terrain casting|area bound)/i.test(String(x || '').trim()));
+  const landDrawback = hasTraditionDrawback(c, /^(terrain casting|area bound)/i);
   const landAttuned = !!(p.manaPool && landFeat && landDrawback);
   const landAttunedWhy = landAttuned ? `each Mana Point card in play pays two spell points on ${p.attunedSpheres.length ? 'an attuned sphere' : 'an attuned sphere — none is ticked'}`
     : !landFeat ? 'Land-Attuned Magic is not among the feats'
@@ -1178,16 +1178,105 @@ export function tableCard(model, id) {
 }
 
 /** Can this card in hand be cast right now, and with what? Advisory. */
-export function castCheck(model, id, who = null) {
+/* ------------------------------------------------------------------ *
+ * Terrain Casting
+ *
+ * The drawback: "Whenever you use a sphere talent or ability you must
+ * either spend an additional spell point or increase your casting time by
+ * one step, else your magic drains and corrupts your space and all adjacent
+ * squares." So every cast pays one of three ways, chosen on the way in; a
+ * Drawback Freedom (Terrain Casting) use waives it. The table applies it to
+ * cards -- the one place the sheet sees a cast happen -- with the spell
+ * point as the default on a card that costs any, and the casting step on an
+ * at-will one. The Cost field is the card's own cost; the terrain point is
+ * added here, so a two-colour card under Rainbow Efficiency is typed at its
+ * discounted cost and still pays the terrain point on top.
+ * ------------------------------------------------------------------ */
+
+/** Whether the tradition carries a drawback, and has not bought it off. */
+export function hasTraditionDrawback(c, re) {
+  const tr = c?.training?.magic?.tradition || {};
+  const named = (list) => (list || []).some((x) => re.test(String(x || '').trim()));
+  return named(tr.drawbacks) && !named(tr.boughtOff);
+}
+
+/** Terrain Casting is in force: on the tradition, not bought off. */
+export function terrainCasting(model) {
+  return hasTraditionDrawback(model.data, /^terrain casting/i);
+}
+
+/** The ways a cast may pay the drawback, as the chooser lists them. */
+export const TERRAIN_CHOICES = [
+  ['sp', 'one spell point more'],
+  ['step', 'casting time one step slower'],
+  ['blight', 'blight this square and the eight around it'],
+  ['waive', 'Drawback Freedom: waive it'],
+];
+
+/** The tracker a Drawback Freedom (Terrain Casting) use is spent from, if the player made one. */
+export function terrainFreedomTracker(model) {
+  return (model.trackers || []).find((t) => /drawback freedom/i.test(String(t.name || '')) && /terrain/i.test(String(t.name || ''))) || null;
+}
+
+/** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force. */
+export function terrainDefault(model, card) {
+  if (!terrainCasting(model)) return null;
+  return cardCost(card) > 0 ? 'sp' : 'step';
+}
+
+/** The toll a cast pays: the chooser's pick when it is one of the four, else the card's default. */
+export function terrainToll(model, card, choice = null) {
+  if (!terrainCasting(model)) return null;
+  const pick = String(choice || '').toLowerCase();
+  return TERRAIN_CHOICES.some(([k]) => k === pick) ? pick : terrainDefault(model, card);
+}
+
+/** A casting time one step slower along the picker's ladder: a standard action becomes a full-round action. Null off the ladder, or at its top. */
+export function stepCastingTime(text) {
+  const now = String(text || '').trim().toLowerCase();
+  if (!now) return null;
+  const at = CARD_CASTING_TIMES.findIndex((t) => now.startsWith(t) || t.startsWith(now));
+  return at >= 0 && at + 1 < CARD_CASTING_TIMES.length ? CARD_CASTING_TIMES[at + 1] : null;
+}
+
+/**
+ * Pay Terrain Casting on a cast, by the toll chosen, and say so in the log.
+ * The spell point itself is already inside the cast's cost (see castCheck),
+ * so here it is only written down; the step names the slower casting time
+ * when the card has one; blight is a note for the GM's map; a waiver spends
+ * one use from the Drawback Freedom tracker.
+ */
+function payTerrain(model, t, card, toll, name) {
+  if (!toll) return;
+  if (toll === 'sp') tableLog(model, t, `${name}: Terrain Casting — one spell point more, paid with the cost`);
+  else if (toll === 'step') {
+    const slower = stepCastingTime(card.casting);
+    tableLog(model, t, `${name}: Terrain Casting — ${slower ? `cast as a ${slower} rather than a ${String(card.casting).trim()}` : 'casting time one step slower'}`);
+  } else if (toll === 'blight') {
+    tableLog(model, t, `${name}: Terrain Casting — this square and the eight around it are blighted: dead magic for you, for about a year`);
+  } else if (toll === 'waive') {
+    const tr = terrainFreedomTracker(model);
+    if (!tr) { tableLog(model, t, `${name}: no Drawback Freedom (Terrain Casting) tracker to spend from — the drawback stands`); return; }
+    const before = Number(tr.current) || 0;
+    tr.current = clampTracker(tr, before + 1);
+    const left = (Number(tr.max) || 0) - tr.current;
+    tableLog(model, t, `${name}: Drawback Freedom — Terrain Casting waived, ${left} use${left === 1 ? '' : 's'} left${tr.current === before ? ' (the pool was empty)' : ''}`);
+  }
+}
+
+export function castCheck(model, id, who = null, terrain = null) {
   const p = model.data.cardcasting;
   const t = p.table;
   const card = model.tableCard(id);
   if (!card) return { ok: false, why: 'no such card' };
   const caster = casterFor(model, who);
   const isEffect = String(card.effect || '').trim() !== '';
-  const need = cardCost(card);
-  if (!isEffect) return { ok: true, need: 0, have: 0, mana: true };
-  if (!p.manaPool) return { ok: true, need, have: need };
+  // Terrain Casting's point rides on the cost, so the mana it needs and the
+  // points it spends both count it.
+  const toll = terrainToll(model, card, terrain);
+  const need = cardCost(card) + (toll === 'sp' ? 1 : 0);
+  if (!isEffect) return { ok: true, need: 0, have: 0, mana: true, terrain: null };
+  if (!p.manaPool) return { ok: true, need, have: need, terrain: toll };
   const colors = String(card.calc?.colors || '');
   const usable = t.mana.filter((m) => {
     if (m.tapped) return false;
@@ -1208,7 +1297,7 @@ export function castCheck(model, id, who = null) {
     const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
     if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, spend, worth, have: usable.length, why, caster };
+  return { ok, need, spend, worth, have: usable.length, why, caster, terrain: toll };
 }
 
 /** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
@@ -1375,7 +1464,7 @@ export function tableDraw(model, n = 1, why = 'draw') {
  * otherwise they simply need to be there. Nothing is refused -- the check
  * is shown beside the card and the player decides.
  */
-export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who = null } = {}) {
+export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who = null, terrain = null } = {}) {
   const p = model.data.cardcasting;
   if (!p?.table?.active) return model;
   const t = p.table;
@@ -1407,8 +1496,10 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
     return model.recompute();
   }
 
-  // Pay for it, where paying means anything.
-  const check = castCheck(model, id, caster);
+  // Pay for it, where paying means anything. Terrain Casting's toll is
+  // chosen on the way in; its spell point, when that is the choice, is
+  // inside the cost from here on.
+  const check = castCheck(model, id, caster, terrain);
   const cost = check.need || 0;
   if (p.manaPool && cost > 0 && (p.manaGraveyard || p.mods.stagnantPool)) {
     const colors = String(card.calc?.colors || '');
@@ -1436,6 +1527,7 @@ export function tablePlay(model, id, mode = 'cast', { which = null, sp = 0, who 
 
   // The spell points themselves, from the caster's tracker if there is one.
   if (cost > 0) spendSP(model, cost, name, by.pool);
+  payTerrain(model, t, card, check.terrain, name);
   // A mode picked on the way in -- "boost (1 SP)" -- and whatever was put
   // into it: the points on top of the cost, then that mode's dice. Otherwise
   // the card's first dice, if it has any.

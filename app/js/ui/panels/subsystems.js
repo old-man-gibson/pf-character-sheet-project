@@ -58,7 +58,10 @@ import {
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
-import { CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
+import {
+  CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS,
+  TERRAIN_CHOICES, stepCastingTime,
+} from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -2672,6 +2675,11 @@ function tableHead(s) {
       </span>`;
 
     const notes = [];
+    if (model.terrainCasting()) {
+      const tr = model.terrainFreedomTracker();
+      const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
+      notes.push(`Terrain Casting: every cast pays one spell point more, or a casting-time step, or blights your square and the eight around it. Cast pays the point on a card with a cost and the step on an at-will one; … pays another way${tr ? `, or spends a Drawback Freedom use (${left} left)` : ''}.`);
+    }
     if (active && k.handMax) notes.push(`Tight Hand: ${t.hand.length} of ${k.handMax} in hand${tc.handOver ? ` — ${tc.handOver} over` : ''}.`);
     if (active && p.mods.gradualRamp) notes.push(`Gradual Ramp: ${t.manaPlayed} Mana Point card${t.manaPlayed === 1 ? '' : 's'} played this round (one allowed).`);
     if (active && p.mods.deckout && !t.deck.length) notes.push('Deckout: the deck is empty — 4 Constitution burn every turn it stays so.');
@@ -2743,6 +2751,7 @@ function castPicker(s, id, card, modes, casters = []) {
         <label class="pickrow">Spell points on top of the cost
           <input type="number" name="sp" min="0" step="1" value="${first?.sp || 0}" aria-label="Spell points to spend">
         </label>
+        ${terrainRow(model, card)}
       </div>
       <div class="foot"><span class="pair tools">
         ${tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast this mode: the effect resolves now', cls: 'primary' })}
@@ -2750,6 +2759,26 @@ function castPicker(s, id, card, modes, casters = []) {
         ${tableBtn('pick', '', '×', { title: 'Never mind' })}
       </span></div>
     </div>`;
+  }
+
+  /**
+   * Terrain Casting's row in the chooser: how this cast pays the drawback.
+   * The default is already chosen -- the point on a card that costs any,
+   * the step on an at-will one -- so a plain Cast never asks; the row is
+   * for paying another way, or waiving it with a Drawback Freedom use.
+   */
+function terrainRow(model, card) {
+    const fallback = model.terrainDefault(card);
+    if (!fallback) return '';
+    const tr = model.terrainFreedomTracker();
+    const left = tr ? Math.max(0, (Number(tr.max) || 0) - (Number(tr.current) || 0)) : null;
+    const slower = stepCastingTime(card.casting);
+    const label = (k, text) => (k === 'step' && slower ? `casting time one step slower (${slower})` : k === 'waive' ? (tr ? `${text} (${left} left)` : `${text} — no tracker named Drawback Freedom (Terrain Casting)`) : text);
+    return `<label class="pickrow">Terrain Casting
+          <select name="terrain" aria-label="Terrain Casting">
+            ${TERRAIN_CHOICES.map(([k, text]) => `<option value="${k}"${k === fallback ? ' selected' : ''}${k === 'waive' && !tr ? ' disabled' : ''}>${esc(label(k, text))}</option>`).join('')}
+          </select>
+        </label>`;
   }
 
   /** The hand: every card with the moves it may make from there. */
@@ -2771,12 +2800,15 @@ function handZone(s) {
       // plain Cast and a … beside it opens the chooser.
       const casters = isEffect && s.present.length ? [{ id: '', name: shortName(model.casterInfo('').name), cl: Number(model.scope().caster?.level) || 0 }, ...s.present.map((m) => ({ id: m.id, name: m.name, cl: m.cl }))] : [];
       const asks = modes.length > 1;
-      if ((asks || casters.length) && s.castPick === id) return castPicker(s, id, card, modes, casters);
+      // Terrain Casting gives every card a chooser too: a plain Cast pays the
+      // default toll, and the … is where another way is picked.
+      const terrain = isEffect && !!model.terrainDefault(card);
+      if ((asks || casters.length || terrain) && s.castPick === id) return castPicker(s, id, card, modes, casters);
       const castBtns = !isEffect ? '' : asks
         ? tableBtn('pick', id, 'Cast…', { title: `${modes.length} modes: pick one${casters.length ? ', who casts it' : ''}, and the spell points to put into it`, cls: 'primary' })
         : tableBtn('play', id, 'Cast', { arg: 'cast', title: 'Cast: the effect resolves now', cls: 'primary', copy })
           + tableBtn('play', id, 'Ongoing', { arg: 'ongoing', title: 'Cast an effect that lasts: the card stays in play until it resolves', copy })
-          + (casters.length ? tableBtn('pick', id, '…', { title: 'Cast it as a squad member, or with spell points on top' }) : '');
+          + (casters.length || terrain ? tableBtn('pick', id, '…', { title: [casters.length ? 'cast it as a squad member' : '', 'spell points on top', terrain ? 'how Terrain Casting is paid' : ''].filter(Boolean).join(', ').replace(/^./, (ch) => ch.toUpperCase()) }) : '');
       return cardMini(model, id, {
         ...s.miniOpts(id),
         badge,
