@@ -691,6 +691,8 @@ export function recomputeCardcasting(model) {
     card.effect = String(card.effect ?? '');
     card.art = String(card.art ?? '');
     card.dice = String(card.dice ?? '');
+    // A Harrow or poker deck keeps its own names; the subtitle says what the card does.
+    card.subtitle = String(card.subtitle ?? '');
     for (const f of CARD_STAT_FIELDS) card[f] = String(card[f] ?? '');
   }
   for (const card of p.cards) card.qty = Math.max(0, Math.floor(Number(card.qty ?? 1) || 0));
@@ -2076,9 +2078,14 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   const p = model.data.cardcasting || {};
   const caster = casterFor(model, who);
   const effect = cardProse(model, card.effect, caster).trim();
-  const shortEffect = effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
+  const subtitle = String(card.subtitle || '').trim();
+  // With a subtitle the name is the card's own and its subtitle, and the
+  // effect is a note whatever its length: the subtitle is what says what
+  // the card does.
+  const shortEffect = !subtitle && effect && effect.length <= SHORT_EFFECT && !effect.includes('\n');
   const own = String(card.name || '').trim();
-  const name = own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
+  const name = subtitle ? [own, subtitle].filter(Boolean).join(' — ')
+    : own && shortEffect ? `${own} — ${effect}` : own || effect.split('\n')[0] || (card.mana ? `Mana (${card.mana})` : 'card');
 
   const rolls = [];
   const notes = [];
@@ -2125,6 +2132,37 @@ export function cardSiblings(model, list, index) {
   const effect = String(card?.effect || '').trim().toLowerCase();
   if (!card || !effect) return [];
   return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
+}
+
+/** The two lists a card may live in. */
+const CARD_LISTS = ['cardcasting.cards', 'cardcasting.sideboard'];
+
+/**
+ * Move a card from the deck to the sideboard or back, or copy it across.
+ * The table addresses a deck card by its index, so while an encounter is
+ * on nothing leaves the deck -- a copy is still fine, and so is a card
+ * joining the deck, which lands at the end and is in play after the next
+ * shuffle. A card joining the deck has at least one copy.
+ */
+export function moveCard(model, from, index, to, { copy = false } = {}) {
+  if (!CARD_LISTS.includes(from) || !CARD_LISTS.includes(to) || from === to) return { ok: false, why: 'no such list' };
+  const src = model.list(from);
+  const card = src?.[index];
+  if (!card) return { ok: false, why: 'no such card' };
+  const active = !!model.data.cardcasting?.table?.active;
+  if (!copy && from === 'cardcasting.cards' && active) return { ok: false, why: 'the deck is in play: end the encounter first, or copy it instead' };
+  const dest = model.list(to);
+  if (copy) {
+    const { calc, ...rest } = card;
+    const twin = JSON.parse(JSON.stringify(rest));
+    if (to === 'cardcasting.cards' && !(twin.qty > 0)) twin.qty = 1;
+    dest.push(twin);
+    model.recompute();
+  } else {
+    if (to === 'cardcasting.cards' && !(card.qty > 0)) card.qty = 1;
+    model.listMoveInto(from, index, to, dest.length);
+  }
+  return { ok: true };
 }
 
 /**

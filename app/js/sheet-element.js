@@ -4949,6 +4949,14 @@ export class CharacterSheetElement extends HTMLElement {
         this.#render();
       });
     });
+    // A card moved or copied between the deck and the sideboard.
+    root.querySelectorAll('[data-card-move]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const [list, index, to, how] = b.dataset.cardMove.split('|');
+        this.#model.moveCard(list, Number(index), to, { copy: how === 'copy' });
+        this.#render();
+      });
+    });
     // One card's dice handed to every card with the same effect.
     root.querySelectorAll('[data-dice-share]').forEach((b) => {
       b.addEventListener('click', () => {

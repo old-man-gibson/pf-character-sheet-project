@@ -5358,6 +5358,10 @@ table.stacked .catface { margin-left: 0; }
 .mcard .bar.stats select.dmgpick { flex: none; max-width: 4.2rem; font-size: 0.7rem; }
 .mcard .bar.stats .preview { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 3px; }
 .mcard .bar.stats .preview .badge { font-size: 0.62rem; text-transform: none; letter-spacing: 0; }
+/* The subtitle: what the card does, under a name of its own. */
+.mcard .bar.sub.subtitle { font-style: italic; }
+.mcard .bar.sub.subtitle input { width: 100%; flex: 1; font-size: 0.76rem; font-style: italic; }
+.mcard.mini .bar.sub.subtitle { padding: 0 5px; font-size: 0.72rem; color: rgba(26,29,38,0.85); }
 .mcard .bar.stats.read { font-size: 0.7rem; gap: 1px 8px; }
 .mcard .bar.stats.read span { white-space: nowrap; }
 .mcard.mini .bar.stats.read { font-size: 0.66rem; padding: 1px 5px; }

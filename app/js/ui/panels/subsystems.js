@@ -2501,6 +2501,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
         <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
         ${expandBtn(id, open)}
       </div>
+      ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
       <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
       ${statsLine(model, card)}
@@ -2740,6 +2741,7 @@ function castPicker(s, id, card, modes, casters = []) {
         </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
       <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${statsLine(model, card)}
       <div class="text">
         ${who}
@@ -3264,6 +3266,9 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${manaChips(colors, '')}
         </span>
       </div>
+      <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
+        <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle — the effect in a few words" aria-label="Subtitle">
+      </div>
       ${p.harrow ? `<div class="bar sub">
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
         <input type="text" value="${esc(card.alignment ?? '')}" data-item="${list}|${i}|alignment" data-kind="text" placeholder="align." aria-label="Alignment">
@@ -3294,6 +3299,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           ${expandBtn(`${list}.${i}`, open)}
           ${inDeck ? `<button data-move="${list}|${i}|-1" title="Move up" aria-label="Move up">↑</button>
           <button data-move="${list}|${i}|1" title="Move down" aria-label="Move down">↓</button>` : ''}
+          ${cardShelfButtons(model, list, i, inDeck)}
           ${removeButton(list, i, { what: 'card' })}
         </span>
       </div>
@@ -3350,6 +3356,21 @@ function cardStatBars(model, list, i, card) {
         </select>
         ${preview ? `<span class="preview">${preview}</span>` : ''}
       </div>`;
+  }
+
+  /**
+   * The two buttons that move a card between the deck and the sideboard, or
+   * copy it across. While an encounter is on, nothing may leave the deck --
+   * the table addresses deck cards by their place -- so that button says so
+   * and does nothing; a copy is always fine.
+   */
+function cardShelfButtons(model, list, i, inDeck) {
+    const to = inDeck ? 'cardcasting.sideboard' : 'cardcasting.cards';
+    const where = inDeck ? 'sideboard' : 'deck';
+    const active = !!model.data.cardcasting?.table?.active;
+    const held = inDeck && active;
+    return `<button data-card-move="${list}|${i}|${to}|move" ${held ? 'disabled' : ''} title="${held ? 'The deck is in play: end the encounter first, or copy it instead' : `Move this card to the ${where}`}" aria-label="Move to ${where}">→ ${where}</button>
+          <button data-card-move="${list}|${i}|${to}|copy" title="Copy this card to the ${where}" aria-label="Copy to ${where}">⧉ ${where}</button>`;
   }
 
   /** A card's stat line as read -- Save Reflex DC 24 · Range close (60 ft) -- for the small faces and the chooser. */

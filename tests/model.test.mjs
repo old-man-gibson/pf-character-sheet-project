@@ -13027,6 +13027,37 @@ console.log('\nTerrain Casting: every cast pays a point, a step, a blight, or a 
   check('bought off, the drawback is gone', [c.terrainCasting(), c.terrainDefault(cards[0]), c.castCheck('0#0').need], [false, null, 1]);
 }
 
+console.log('\na card moves between the deck and the sideboard, or is copied across; a subtitle names what it does');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [
+    { name: 'Big Sky', subtitle: 'Explosive Orb (Fire Blast)', qty: 2, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast (Explosive Orb) — a short effect', dice: '' },
+    { name: 'Desert', qty: 1, cost: '1', color: 'R', mana: '', sphere: 'Destruction', effect: 'Fire Blast', dice: '' },
+  ];
+  c.data.cardcasting.sideboard = [{ name: 'Spare', cost: '2', color: 'U', mana: '', sphere: 'Mind', effect: 'Suggestion', dice: '' }];
+  c.recompute();
+  const deck = () => c.data.cardcasting.cards.map((x) => x.name);
+  const side = () => c.data.cardcasting.sideboard.map((x) => x.name);
+  check('a subtitle is the name\'s second half in the Roll20 text, and the effect a note of its own',
+    [c.cardRollSpec('cardcasting.cards|0').name, c.cardRollSpec('cardcasting.cards|0').notes.some((n) => n.label === 'Effect')], ['Big Sky — Explosive Orb (Fire Blast)', true]);
+  check('without one, a short effect still joins the name', c.cardRollSpec('cardcasting.cards|1').name, 'Desert — Fire Blast');
+  check('to the sideboard', [c.moveCard('cardcasting.cards', 1, 'cardcasting.sideboard').ok, deck(), side()], [true, ['Big Sky'], ['Spare', 'Desert']]);
+  check('back to the deck, with a copy to play', [c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck(), side(), c.data.cardcasting.cards[1].qty], [true, ['Big Sky', 'Spare'], ['Desert'], 1]);
+  check('a copy leaves the original where it is, and carries no worked-out fields', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, deck(), side(), 'calc' in c.data.cardcasting.sideboard[1]], [true, ['Big Sky', 'Spare'], ['Desert', 'Big Sky'], true]);
+  check('and the copy is its own card', c.data.cardcasting.sideboard[1] !== c.data.cardcasting.cards[0] && c.data.cardcasting.sideboard[1].subtitle, 'Explosive Orb (Fire Blast)');
+  check('the same list, or no such card, is refused', [c.moveCard('cardcasting.cards', 0, 'cardcasting.cards').ok, c.moveCard('cardcasting.cards', 9, 'cardcasting.sideboard').ok, c.moveCard('weapons', 0, 'cardcasting.sideboard').ok], [false, false, false]);
+  c.tableStart();
+  const held = c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard');
+  check('while the deck is in play nothing leaves it, and the reason is given', [held.ok, /end the encounter/.test(held.why), deck()], [false, true, ['Big Sky', 'Spare']]);
+  check('but a copy, and a card joining the deck, are fine', [c.moveCard('cardcasting.cards', 0, 'cardcasting.sideboard', { copy: true }).ok, c.moveCard('cardcasting.sideboard', 0, 'cardcasting.cards').ok, deck()], [true, true, ['Big Sky', 'Spare', 'Desert']]);
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  check('the face edits the subtitle and offers the move and the copy', [html.includes('data-item="cardcasting.cards|0|subtitle"'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|move" disabled'), html.includes('data-card-move="cardcasting.cards|0|cardcasting.sideboard|copy"'), html.includes('data-card-move="cardcasting.sideboard|0|cardcasting.cards|move" ')], [true, true, true, true]);
+  c.data.cardcasting.table.hand = ['0#0'];
+  check('and the small face shows the subtitle under the name', subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() }).includes('<div class="bar sub subtitle"><span>Explosive Orb (Fire Blast)</span></div>'), true);
+  c.tableEnd();
+}
+
 console.log('the Dice picker joins what it adds to what is there');
 {
   check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');

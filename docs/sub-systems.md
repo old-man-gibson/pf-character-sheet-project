@@ -767,6 +767,15 @@ with the dice: **→ N alike** hands both on, a card in hand or in the chooser s
 under its type line, and the d20 copies it as lines (*Save: Reflex DC 24; Range: close
 (60 ft); Target: burst; Damage type: fire*).
 
+**Subtitle, and the shelf.** A card may carry a **subtitle** under its name — *Big Sky ·
+Explosive Orb (Fire Blast)* — so a Harrow or poker deck keeps its own names while the
+table reads what each card does; the Roll20 text uses it as the name's second half and
+sends the effect as a line of its own. Every face has **→ sideboard** / **⧉ sideboard**
+(or **→ deck** / **⧉ deck** on the sideboard): a move, or a copy that leaves the original
+where it is. While an encounter is on, nothing leaves the deck — the table addresses deck
+cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
+the deck is in play after the next shuffle.
+
 **Terrain Casting.** With the drawback on the tradition (and not bought off), every cast
 pays it one of three ways: one spell point more, a casting-time step, or blighting your
 square and the eight around it. A plain **Cast** pays the point on a card with a cost and
