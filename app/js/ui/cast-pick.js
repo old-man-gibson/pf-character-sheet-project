@@ -14,9 +14,11 @@ export function castPickArg(button, arg) {
   const form = button.closest?.('.castpick');
   if (!form) return arg;
   const mode = form.querySelector('select[name="mode"]');
+  const who = form.querySelector('select[name="who"]');
   const sp = form.querySelector('input[name="sp"]');
   const q = new URLSearchParams();
   if (mode?.value) q.set('mode', mode.value);
+  if (who) q.set('who', who.value);
   q.set('sp', String(Math.max(0, Math.floor(Number(sp?.value) || 0))));
   return `${arg || 'cast'}?${q}`;
 }

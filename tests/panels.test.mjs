@@ -1028,5 +1028,50 @@ console.log('\na card opens out to be read or edited at length');
   ok('opened, it is marked and lists its rolls worked out', new RegExp(`class="mcard mini R open"[^>]*data-card="${id}"`).test(wide)
     && /<div class="rolls"><span class="roll"><b>0 SP<\/b> 5d6<\/span><span class="roll"><b>boost \(1 SP\)<\/b> 7d6 <small>1 SP<\/small><\/span><\/div>/.test(wide));
 }
+console.log('\nthe squad on the deck and at the table');
+{
+  const c = new Character(blankDocument({ name: 'Nico', level: 15 }));
+  const p = c.data.cardcasting;
+  Object.assign(p, { enabled: true, manaPool: true, cooldown: true, colors: 'RBU', castingStat: 'Int' });
+  p.mods.coloredMana = 3;
+  c.addCompanion('conjured');
+  const cc = c.data.conjured.at(-1);
+  Object.assign(cc, { name: 'Lira', archetypes: { mage: true }, talents: [{ name: 'Magical Companion' }], levelSource: 'override', levelOverride: 12 });
+  cc.tradition = { name: 'Fey', drawbacks: ['Card Casting', 'Cooldown', 'Mana Pool', 'Colored Mana (WG)'], boons: [] };
+  p.cards = [
+    { name: 'Bolt', qty: 2, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '', dice: '5d6' },
+    { name: 'Mend', qty: 2, cost: '1', color: 'W', mana: '', effect: 'Cure', sphere: 'Life', tags: '', dice: '', owner: cc.id },
+  ];
+  c.recompute();
+  const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'deck', rollFormat: 'template' };
+  const deck = subsystems.cardcastingPanel(c, ctx);
+  ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad — Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
+  ok('the faces are grouped by owner, each group with its own add buttons', deck.includes('Nico’s deck') && deck.includes('Lira’s deck')
+    && (deck.match(/data-add="cardcasting\.cards"/g) || []).length === 4);
+  ok('every face has an owner pick', (deck.match(/data-item="cardcasting\.cards\|\d+\|owner"/g) || []).length === 2 && deck.includes(`<option value="${cc.id}" selected>Lira</option>`));
+
+  ctx.deckView = 'table';
+  const shut = subsystems.cardcastingPanel(c, ctx);
+  ok('the roster offers the member before the encounter, out', new RegExp(`data-table="squad\\|${cc.id}\\|"[^>]*>○ Lira`).test(shut) && !shut.includes('with Lira'));
+  c.tableSquad(cc.id, true);
+  let seed = 3;
+  c.rng = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  c.tableStart();
+  const t = p.table;
+  const mend = [...t.deck, ...t.hand].find((id) => id.startsWith('1#'));
+  c.tableMove(mend, 'hand');
+  const bolt = [...t.deck, ...t.hand].find((id) => id.startsWith('0#'));
+  c.tableMove(bolt, 'hand');
+  const hand = subsystems.cardTableView(c, ctx, 'hand');
+  ok('with the member at the table the head says so and the roster shows it in', hand.includes('with Lira') && new RegExp(`data-table="squad\\|${cc.id}\\|"[^>]*>✓ Lira`).test(hand));
+  ok('a member\'s card wears its owner\'s initial', new RegExp(`data-card="${mend}"[^>]*>\\s*<div class="bar title">\\s*<span class="owner" title="Lira&#39;s card">L</span>`).test(hand));
+  ok('a one-mode card keeps its plain Cast, with a … beside it to cast as a member', hand.includes(`data-table="play|${bolt}|cast"`) && hand.includes(`data-table="pick|${bolt}|"`)
+    && hand.includes(`data-table="play|${mend}|cast"`) && hand.includes(`data-table="pick|${mend}|"`));
+  const open = subsystems.cardTableView(c, { ...ctx, castPick: mend }, 'hand');
+  const who = open.match(/<select name="who"[^]*?<\/select>/)?.[0] || '';
+  ok('the chooser offers who casts, the character first and by default', /<option value="" selected>Nico \(CL \d+\)/.test(who) && new RegExp(`<option value="${cc.id}">Lira \\(CL ${cc.calc.casting.cl}\\)`).test(who));
+  const table = subsystems.cardTableView(c, ctx, 'table');
+  ok('the shared screen sees who is in but has no roster buttons', table.includes('with Lira') && !table.includes('data-table="squad|'));
+}
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
