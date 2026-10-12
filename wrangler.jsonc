@@ -8,8 +8,9 @@
 //
 // A deploy takes its bindings from this file and drops any added in the
 // dashboard, so the KV namespace that holds published characters is named
-// here: create one (Storage & Databases > KV) and put its id below. Without
-// it the app works and Publish reports that this copy has no store.
+// here (Storage & Databases > KV). On a deployment of your own, replace the
+// id with your namespace's; without one the app works and Publish reports
+// that this copy has no store.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pf-character-sheet-project",
@@ -21,6 +22,6 @@
     "not_found_handling": "404-page"
   },
   "kv_namespaces": [
-    // { "binding": "SHEETS", "id": "<the namespace id>" }
+    { "binding": "SHEETS", "id": "4e52b930d33f4b449da628387c48b08c" }
   ]
 }
