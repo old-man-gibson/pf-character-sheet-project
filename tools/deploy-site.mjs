@@ -1,19 +1,17 @@
-// Deploy the committed tree to Cloudflare Pages from the command line.
+// Deploy the committed tree to Cloudflare from the command line.
 //
-//   node tools/deploy-pages.mjs [--project <name>] [--branch <name>] [--ref <git ref>] [--dry-run]
+//   node tools/deploy-site.mjs [--ref <git ref>] [--dry-run]
 //
-// Never run `wrangler pages deploy .` from a checkout of this repository. Wrangler
-// uploads every file under the directory it is given -- it skips node_modules, .git
-// and a few of its own names, and reads no ignore file -- so the gitignored
-// `private/` roster, the `.claude/` worktrees and any stray folder would all go
-// to the public site. This script uploads what git has, and nothing else: it
-// exports a commit with `git archive` into a temporary directory, hands that to
-// wrangler, and deletes it afterwards. Uncommitted changes do not ship, which is
-// the point.
+// Do not run `wrangler deploy` from a checkout of this repository. Wrangler uploads
+// the whole assets directory (minus .assetsignore), so a checkout's gitignored
+// `private/` roster, `.claude/` worktrees and stray folders are one missed ignore
+// line away from the public site. This script uploads what git has, and nothing
+// else: it exports a commit with `git archive` into a temporary directory, runs
+// wrangler there with the committed wrangler.jsonc, and deletes it afterwards.
+// Uncommitted changes do not ship, which is the point.
 //
 // The first run needs `npx wrangler login` (a browser sign-in to the Cloudflare
-// account) and creates the project if it does not exist. `--dry-run` only does the
-// export and reports what would be uploaded.
+// account). `--dry-run` only does the export and reports what would be uploaded.
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs';
@@ -28,8 +26,6 @@ const option = (name, fallback) => {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
-const project = option('--project', 'character-sheets');
-const branch = option('--branch', 'main');
 const ref = option('--ref', 'HEAD');
 const dryRun = args.includes('--dry-run');
 
@@ -64,15 +60,10 @@ try {
   if (dryRun) {
     console.log('Dry run: nothing uploaded.');
   } else {
-    // npx is a .cmd on Windows, which Node will only start through a shell; one
-    // quoted string keeps the arguments intact either way. Run from inside the
-    // export: wrangler takes the Pages Functions from the `functions/` folder of
-    // the directory it is run in, and that has to be the committed one too.
-    const quote = (s) => `"${s}"`;
-    const line = ['npx wrangler pages deploy .',
-      '--project-name', quote(project), '--branch', quote(branch),
-      '--commit-hash', commit, '--commit-dirty=false'].join(' ');
-    run(line, [], { shell: true, cwd: site });
+    // npx is a .cmd on Windows, which Node will only start through a shell. Run
+    // from inside the export so the committed wrangler.jsonc and worker.js are
+    // the ones that go.
+    run('npx wrangler deploy', [], { shell: true, cwd: site });
   }
 } catch (err) {
   failed = true;

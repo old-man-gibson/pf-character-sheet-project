@@ -57,7 +57,7 @@ file on the page) for a workbook exported from Google Sheets or a JSON this app 
 Tick **GM / inspector view** to reveal the Formula Audit tab. `app/embed-example.html`
 shows the same sheet embedded in a hostile-looking host page.
 
-### Publishing it (Cloudflare Pages, GitHub Pages or any static host)
+### Publishing it (Cloudflare, GitHub Pages or any static host)
 
 There is no build step. Push the repository and serve its root: on GitHub Pages, set
 the source to the branch root, and the app is at `https://<you>.github.io/<repo>/` (the
@@ -65,26 +65,27 @@ root `index.html` forwards to `app/`; `.nojekyll` keeps Pages from touching the
 files). Visitors' characters live in their own browsers, so a read-only host is all
 it needs.
 
-On Cloudflare Pages, connect the GitHub repository (Workers & Pages → Create → Pages →
-Connect to Git) and set the production branch to `main`, leave the build command
-empty, and set the build output directory to `/`. Every push to `main` then deploys
-to `https://<project>.pages.dev/`, and every other branch gets a preview URL of its
-own. To deploy from the command line instead, run `node tools/deploy-pages.mjs`
-(`--dry-run` to see what would ship); it exports the committed tree and uploads
-that. Do not run `wrangler pages deploy .` on a checkout: wrangler uploads every
-file under the directory, reads no ignore file, and would publish the gitignored
-`private/` roster.
+On Cloudflare, connect the GitHub repository as a Worker (Workers & Pages → Create →
+Import a repository): build command empty, deploy command `npx wrangler deploy`, path
+`/`. `wrangler.jsonc` makes the repository the Worker's static files, with
+`.assetsignore` keeping the test suites, tooling and `private/` off the address, and
+`worker.js` answering `/api/c` (below). Every push to `main` then deploys, and every
+other branch gets a preview address. To deploy from the command line instead, run
+`node tools/deploy-site.mjs` (`--dry-run` to see what would ship); it exports the
+committed tree and uploads that, never a checkout.
 
 **Publish**, on a sheet's ⋯ menu, puts the character on the site and gives a link
 (`published.html?s=<id>`) that anyone can open: the read-only view that **Preview
 published** shows, carrying only the pack entries the character has. Publishing again
 keeps the link and adds a revision (`&r=<n>` opens an earlier one). The store behind it
-is a Pages Function (`functions/api/c`) over one Workers KV namespace: in the Pages
-project go to Settings → Bindings → Add → KV namespace, name the variable `SHEETS`,
-and redeploy. Without the binding the button says this copy of the app has no
-publishing server, and everything else still works. The free plan allows 1,000 KV
-writes a day; a publish is two. To run it locally, `npx wrangler pages dev . --kv SHEETS`
-serves the repository with a store that lives under `.wrangler/`.
+is one Workers KV namespace: create it (Storage & Databases → KV), put its id in
+`wrangler.jsonc` under `kv_namespaces` as the `SHEETS` binding, and push. Bindings come
+from that file, not the dashboard. Without one the button says this copy of the app has
+no publishing server, and everything else still works. The free plan allows 1,000 KV
+writes a day; a publish is two. With the id in place, `npx wrangler dev --persist-to ../sheets-state`
+runs the site locally with a store of its own; the state has to live outside the
+repository, because the repository is the watched asset folder and a store inside it
+reloads the server on its own writes.
 
 To pre-load a roster on a deployment of your own, drop each character's JSON into
 `data/characters/` and list it in `data/characters/index.json` — `tools/convert.mjs`
@@ -142,8 +143,10 @@ app/js/tracker-style.js tracker appearance: palette, zones, gradients, bar geome
 app/js/publish.js       a character as a third party receives it: only the pack entries it
                         actually carries, never the catalogues they came from
 app/published.html      what a published character looks like to someone who is not you
-functions/api/c/        the publishing store (a Cloudflare Pages Function over one KV namespace)
-404.html                a real 404 for Cloudflare Pages, which otherwise answers index.html
+functions/api/c/        the publishing store: request handlers over one KV namespace
+worker.js               the Cloudflare Worker: static files, plus /api/c through those handlers
+wrangler.jsonc          the Cloudflare deployment (assets, Worker, KV binding); .assetsignore lists what stays home
+404.html                the not-found page a deployment serves
 app/cards.html          the card table, or the hand, in a window of its own (js/card-window.js):
                         drawn by the sheet that opened it, for a streamed game
 forge/                  Homebrew Workbench, the homebrew workbench: index.html, forge.css, js/

@@ -5,6 +5,9 @@
  *  back, publish again to the same link, read a fixed revision, and every way
  *  a stranger or a bad body is turned away.
  *
+ *  The Worker in worker.js fronts the same handlers on a Workers deployment,
+ *  so the tail of the suite runs the round trip through it as well.
+ *
  *  Run: node tests/publish-api.test.mjs */
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -99,6 +102,24 @@ check('POST to an id is 405', (await call('POST', made.id, { body: { doc } })).s
 check('no store is 503', (await api.onRequestGet({ env: {}, params: { path: [made.id] } })).status, 503);
 check('preflight is 204', (await api.onRequestOptions()).status, 204);
 check('a wrong token left the store alone', got.rev, 2);
+
+// The Worker that fronts the same handlers on a Workers deployment.
+const worker = (await import(pathToFileURL(resolve('worker.js')).href)).default;
+const wenv = { SHEETS: fakeKv(), ASSETS: { fetch: (req) => new Response(`asset ${new URL(req.url).pathname}`) } };
+const wfetch = (method, path, body, headers = {}) => worker.fetch(new Request(`https://sheets.example${path}`, {
+  method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body),
+}), wenv);
+res = await wfetch('POST', '/api/c', { doc, summary: 'via worker' });
+check('worker: publish answers 201', res.status, 201);
+const viaWorker = await res.json();
+res = await wfetch('GET', `/api/c/${viaWorker.id}`);
+check('worker: latest comes back', (await res.json()).summary, 'via worker');
+res = await wfetch('PUT', `/api/c/${viaWorker.id}`, { doc: doc2 }, { authorization: `Bearer ${viaWorker.token}` });
+check('worker: republish is revision 2', (await res.json()).rev, 2);
+check('worker: revision 1 is served', (await wfetch('GET', `/api/c/${viaWorker.id}/1`)).status, 200);
+check('worker: a verb the store lacks is 405', (await wfetch('DELETE', `/api/c/${viaWorker.id}`)).status, 405);
+check('worker: everything else is an asset', await (await wfetch('GET', '/app/published.html')).text(), 'asset /app/published.html');
+check('worker: /api alone is an asset miss', await (await wfetch('GET', '/api')).text(), 'asset /api');
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
