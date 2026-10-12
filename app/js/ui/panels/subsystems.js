@@ -58,7 +58,7 @@ import {
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
-import { CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
+import { CARD_CASTING_TIMES, CARD_DAMAGE_TYPES, CARD_DURATIONS, CARD_RANGES, CARD_SAVES, CARD_STAT_FIELDS, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -3292,17 +3292,22 @@ function cardStatBars(model, list, i, card) {
       feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
       changed('target', s.target) ? ['Target', s.target] : null,
       changed('duration', s.duration) ? ['Duration', s.duration] : null,
+      changed('casting', s.casting) ? ['Casting time', s.casting] : null,
       changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
     ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
     // Two to a row while the entries are words; a formula in any of them
     // puts each on a row of its own, so it can be read whole.
-    const wide = ['save', 'dc', 'range', 'target', 'duration'].some((f) => String(card[f] ?? '').trim().length > 8);
+    const wide = ['save', 'dc', 'range', 'target', 'duration', 'casting'].some((f) => {
+      const v = String(card[f] ?? '').trim();
+      return /[{}()+*/]/.test(v) || v.length > 14;
+    });
     return `<div class="bar stats${wide ? ' rows' : ''}">
         ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
         ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
         ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
         ${stat('target', 'target', 'Target or area: single, line, cone, burst — or a formula', 'card-targets')}
         ${stat('duration', 'duration', 'Duration: instantaneous, concentration, 1 round/level… — or a formula, {caster.level} rounds', 'card-durations')}
+        ${stat('casting', 'cast', 'Casting time: standard action, swift action, full-round action, 1 minute… — or a formula', 'card-casting-times')}
       </div>
       <div class="bar stats dmg">
         <span class="stat grow" title="Damage types, comma-separated — fire, cold — or a formula in braces"><small>dmg</small>
@@ -3333,6 +3338,7 @@ function cardDatalists(p) {
       + list('card-ranges', CARD_RANGES)
       + list('card-targets', CARD_TARGETS)
       + list('card-durations', CARD_DURATIONS)
+      + list('card-casting-times', CARD_CASTING_TIMES)
       + list('card-damage', CARD_DAMAGE_TYPES);
   }
 

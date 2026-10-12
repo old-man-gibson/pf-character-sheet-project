@@ -1850,7 +1850,7 @@ export function appendDiceText(current, piece) {
  * ------------------------------------------------------------------ */
 
 /** The fields of a card's stat line, in the order the face shows them. */
-export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'damage'];
+export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'duration', 'casting', 'damage'];
 /** The saves a card may call for, as the picker offers them. */
 export const CARD_SAVES = ['Ref', 'Fort', 'Will', 'none'];
 /** The range words, and the Pathfinder bands behind three of them (feet at a caster level). */
@@ -1864,6 +1864,8 @@ const RANGE_BANDS = {
 export const CARD_TARGETS = ['single', 'line', 'cone', 'burst'];
 /** How long a card's effect lasts, as the picker offers it; a formula may say ("{caster.level} rounds"). */
 export const CARD_DURATIONS = ['instantaneous', 'concentration', '1 round', '1 round/level', '1 minute/level', '10 minutes/level', '1 hour/level', 'permanent'];
+/** Casting times, as the picker offers them; Terrain Casting's "one step slower" is a step up this list. */
+export const CARD_CASTING_TIMES = ['free action', 'swift action', 'immediate action', 'move action', 'standard action', 'full-round action', '1 round', '1 minute', '10 minutes'];
 /** The damage types the picker offers; the field takes any word as well. */
 export const CARD_DAMAGE_TYPES = [
   'bludgeoning', 'piercing', 'slashing',
@@ -1907,9 +1909,10 @@ export function cardStats(model, card, who = null) {
   const rangeFeet = band ? band(Number(scopeOnce().caster?.level) || 0) : /^\d+$/.test(range) ? Number(range) : null;
   const target = text('target');
   const duration = text('duration');
+  const casting = text('casting');
   const damage = text('damage').split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
-  const any = !!(save || dcRaw || range || target || duration || damage.length);
-  return { save, dc, dcError, range, rangeFeet, target, duration, damage, any };
+  const any = !!(save || dcRaw || range || target || duration || casting || damage.length);
+  return { save, dc, dcError, range, rangeFeet, target, duration, casting, damage, any };
 }
 
 /**
@@ -1936,6 +1939,7 @@ export function cardStatLines(model, card, who = null) {
   }
   if (s.target) lines.push(['Target', s.target]);
   if (s.duration) lines.push(['Duration', s.duration]);
+  if (s.casting) lines.push(['Casting time', s.casting]);
   if (s.damage.length) lines.push(['Damage type', s.damage.join(', ')]);
   return lines;
 }
