@@ -1,14 +1,19 @@
 {
   "extensions": [
     {
+      "id": "alt-training-techniques",
+      "name": "Alternate Training techniques (Primordia)",
+      "file": "alt-training-techniques.json"
+    },
+    {
+      "id": "iron-chef-ingredients",
+      "name": "Iron Chef ingredients",
+      "file": "iron-chef-ingredients.json"
+    },
+    {
       "id": "path-of-war-disciplines",
       "name": "Path of War disciplines",
       "file": "path-of-war-disciplines.json"
-    },
-    {
-      "id": "vancian-casting-tables",
-      "name": "Vancian casting tables",
-      "file": "vancian-casting-tables.json"
     },
     {
       "id": "psionic-manifesting-tables",
@@ -16,9 +21,9 @@
       "file": "psionic-manifesting-tables.json"
     },
     {
-      "id": "iron-chef-ingredients",
-      "name": "Iron Chef ingredients",
-      "file": "iron-chef-ingredients.json"
+      "id": "vancian-casting-tables",
+      "name": "Vancian casting tables",
+      "file": "vancian-casting-tables.json"
     }
   ]
 }

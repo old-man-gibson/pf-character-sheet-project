@@ -80,8 +80,9 @@ names match however they are capitalised.
 **Where packs come from.** *Bundled* packs are listed in an `index.json` and sit beside
 it, in either of two folders. `data/extensions/` is the repository's own — the same
 arrangement as `data/characters/`, and like it the published engine can ship the index
-empty. This repository's four bundled packs are the campaign's shared tables (disciplines,
-casting and manifesting tables, cooking ingredients), which used to be
+empty. This repository's five bundled packs are the campaign's shared tables (disciplines,
+casting and manifesting tables, cooking ingredients) and its Alternate Training
+techniques, which a deployment has to carry for that tab to offer anything; the tables used to be
 bare files under `data/`; the `tools/*_ref.py` scripts now write them as packs, keeping an
 existing pack's header and bumping its revision. `private/extensions/` is the folder git
 ignores — the same bargain as `private/` characters: yours to hold, not the repository's
