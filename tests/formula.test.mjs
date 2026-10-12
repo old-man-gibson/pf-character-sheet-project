@@ -65,9 +65,10 @@ check('sum', ev('sum(1, 2, 3, 4)'), 10);
 check('abs', ev('abs(0 - 7)'), 7);
 check('iterations', ev('iterations(11)'), 3);
 check('step walks the die chain', ev('step("1d2", 2)'), '1d4');
+check('step starts from a flat 1: Mana Siphon drains 1, then 1d2, 1d3', [ev('step("1", 0)'), ev('step("1", 1)'), ev('step("1", 2)')], ['1', '1d2', '1d3']);
 check('step takes a formula for the steps', ev('step("1d2", floor(level/5))'), '1d6');
 check('step of none is the die itself', ev('step("2d6")'), '2d6');
-check('step clamps at both ends', [ev('step("1d2", -3)'), ev('step("12d8", 9)')], ['1d2', '16d6']);
+check('step clamps at both ends', [ev('step("1d2", -3)'), ev('step("12d8", 9)')], ['1', '16d6']);
 check('step on a die off the chain is an error, not a guess', (() => { try { ev('step("1d7", 1)'); return 'no error'; } catch (e) { return e instanceof FormulaError && /die chain/.test(e.message); } })(), true);
 check('round', ev('round(3.456, 2)'), 3.46);
 

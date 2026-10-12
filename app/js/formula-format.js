@@ -511,8 +511,8 @@ export const FUNCTION_HELP = [
   },
   {
     name: 'step', sig: 'step("die", steps)', group: 'Pathfinder',
-    what: 'A die moved along the damage chain — 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10, 4d6 … 16d6 — the way "one die size per five levels" asks. step("1d2", 2) is 1d4. The chain stops at its ends, and a die it does not list is an error rather than a guess.',
-    eg: 'step("1d2", floor(level / 5))',
+    what: 'A die moved along the damage chain — 1, 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10, 4d6 … 16d6 — the way "one die size per five levels" asks. step("1", 2) is 1d3. The chain stops at its ends, and a die it does not list is an error rather than a guess.',
+    eg: 'step("1", floor(level / 5))',
   },
   {
     name: 'tags', sig: 'tags("name")', group: 'Pathfinder',

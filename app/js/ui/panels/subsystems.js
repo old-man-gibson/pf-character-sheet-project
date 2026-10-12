@@ -3352,7 +3352,7 @@ function cardDicePresets(stat) {
       ['{floor(caster.level/2)}d6', '1d6 per 2 caster levels'],
       ['{caster.level}d6', '1d6 per caster level'],
       ['{1+floor(caster.level/2)}d8', '1d8 + 1d8 per 2 caster levels'],
-      ['{step("1d2", floor(caster.level/5))}', 'a die one step bigger per 5 caster levels (1d2, 1d3, 1d4…)'],
+      ['{step("1", floor(caster.level/5))}', '1, then a die one step bigger per 5 caster levels (1d2, 1d3, 1d4…)'],
       [`+${mod}`, `+ casting modifier (${mod})`],
       ['+caster.level', '+ caster level'],
       ['+caster.mod', '+ the caster’s modifier, whoever casts it'],

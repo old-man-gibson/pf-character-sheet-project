@@ -1807,7 +1807,9 @@ export function cardRollFormulas(model, card, who = null) {
   return rolls.map((r) => {
     const source = cardProse(model, r.expr, caster).trim();
     const { dice, flat, error } = parseDiceExpr(source, (rem) => evaluateFormula(rem, scope));
-    const ok = !error && Object.keys(dice).length > 0;
+    // A flat number is a roll of nothing plus itself: step("1", …) is 1
+    // until the fifth level, and that 1 is what the card drains.
+    const ok = !error && (Object.keys(dice).length > 0 || flat !== 0);
     return {
       label: r.label === 'roll' ? 'Roll' : r.label,
       source,

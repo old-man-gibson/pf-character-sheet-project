@@ -1666,7 +1666,7 @@ export function raiseDice(die, { sizeIncreases = 0, stepIncreases = 0 } = {}) {
   if (sizes) {
     const [n, d] = value.split('d').map(Number);
     const moved = stepDamageDice(n, d, sizes, 'Medium');
-    // The chart bottoms out at a flat 1; the chain's floor is 1d2.
+    // The chart bottoms out at a flat 1; a weapon die stays 1d2 at the least.
     if (moved) value = moved[1] > 1 ? `${moved[0]}d${moved[1]}` : STEP_DIE[2];
   }
   // Only when there are steps to take: the chain files 3d8 and 2d10 on one
