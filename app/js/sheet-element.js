@@ -95,7 +95,7 @@ import { bindSessionBoard } from './ui/panels/session.js';
 import { bindClassActions } from './ui/class-actions.js';
 import { bindChains } from './ui/session-chains.js';
 import { sessionRollSpec } from './model/session-rolls.js';
-import { appendDiceText } from './model/subsystems/cardcasting.js';
+import { appendDiceText, appendListText } from './model/subsystems/cardcasting.js';
 import { castPickArg, followCastPick } from './ui/cast-pick.js';
 import * as combat from './ui/panels/combat.js';
 import * as guile from './ui/panels/guile.js';
@@ -4937,13 +4937,15 @@ export class CharacterSheetElement extends HTMLElement {
       });
     });
 
-    // The picker beside a card's Dice field: what it picked joins the field.
+    // The picker beside a card's Dice field, or its damage types: what it
+    // picked joins the field -- as a roll, or as one more word in a list.
     root.querySelectorAll('select[data-append]').forEach((sel) => {
       sel.addEventListener('change', () => {
         if (!sel.value) return;
         const [list, index, field] = sel.dataset.append.split('|');
         const current = this.#model.list(list)[Number(index)]?.[field];
-        this.#model.setItem(list, Number(index), field, appendDiceText(current, sel.value));
+        const join = sel.dataset.join === ',' ? appendListText : appendDiceText;
+        this.#model.setItem(list, Number(index), field, join(current, sel.value));
         this.#render();
       });
     });

@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -444,7 +444,7 @@ console.log('a class’s own unarmed progression -- rungs, and the die chain the
   check('the practitioner table: 4 talents and one size is 1d8, not 1d10',
     unarmedDice(4, { sizeIncreases: 1 }), '1d8');
   check('clamped at the top', stepDice('16d6', 3), '16d6');
-  check('clamped at the bottom', stepDice('1d2', -5), '1d2');
+  check('clamped at the bottom, which is a flat 1', [stepDice('1d2', -5), stepDice('1', 1)], ['1', '1d2']);
   check('a die the chain never lists says so rather than guessing', stepDice('1d5', 1), null);
 
   // The ladder: the highest rung at or below the level, and nothing below the
@@ -12960,11 +12960,18 @@ console.log('\ntalents per level -- each system\'s own three rates');
   check('a card with no dice is notes alone', [c.cardRollSpec('cardcasting.cards|1').rolls, c.cardRollSpec('cardcasting.cards|1').notes.length], [[], 2]);
   const long = c.cardRollSpec('cardcasting.cards|3');
   check('a long effect is a note of its own, and the name stays the card\'s', [long.name, long.notes.at(-1).label, long.notes.at(-1).text.startsWith('AAAA')], ['Long', 'Effect', true]);
+  c.data.cardcasting.cards[3].effect = 'A talent copied verbatim. '.repeat(100);
+  c.recompute();
+  check('a talent copied verbatim travels whole', c.cardRollSpec('cardcasting.cards|3').notes.at(-1).text.length, 'A talent copied verbatim. '.repeat(100).trim().length);
   check('nothing for a reference that names no card', [c.cardRollSpec('9#0'), c.cardRollSpec('cardcasting.cards|9'), c.cardRollSpec('weapon|0')], [null, null, null]);
   check('the face\'s preview reads the same entries, with the one that is not dice saying why',
     c.cardRollFormulas(c.data.cardcasting.cards[0]).map((r) => [r.label, r.formula, !!r.error]),
     [['damage', '8d6+15', false], ['boost (1 SP)', '15d6', false], ['aside', '', true]]);
   check('a card with no Dice field rolls the first dice in its text', c.cardRollFormulas({ effect: 'Deals 3d8+2 and [Draw 1]' }).map((r) => r.formula), ['3d8+2']);
+  check('a die stepped by level — Mana Siphon\'s spell-point drain — is dice the field rolls',
+    c.cardRollFormulas({ dice: 'siphon: {step("1", floor(level/5))}' }).map((r) => [r.label, r.formula]), [['siphon', '1d4']]);
+  check('and before the fifth level the flat 1 it drains is still a roll, not "no dice"',
+    c.cardRollFormulas({ dice: 'siphon: {step("1", 0)}' }).map((r) => [r.formula, r.error]), [['1', '']]);
 
   check('the cards that share an effect are the card\'s siblings', c.cardSiblings('cardcasting.cards', 0), [2]);
   check('a card whose effect is unique has none', c.cardSiblings('cardcasting.cards', 1), []);
@@ -12982,6 +12989,60 @@ console.log('the Dice picker joins what it adds to what is there');
   check('a new entry into an empty field starts the field', appendDiceText('', '; boost (1 SP): '), 'boost (1 SP): ');
   check('a roll after an open label fills it', appendDiceText('damage: 8d6; boost (1 SP):', '15d6'), 'damage: 8d6; boost (1 SP): 15d6');
   check('a roll after a finished roll becomes a second one', appendDiceText('8d6', '{caster.level}d6'), '8d6; {caster.level}d6');
+}
+
+console.log('\na card\'s stat line: save, DC, range, target and damage types, each taking a formula');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 15 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.castingStat = 'Int';
+  c.data.cardcasting.cards = [
+    { name: 'Big Sky', qty: 2, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '8d6',
+      save: 'Ref', dc: '10 + floor(level/2) + int.mod', range: 'close', target: 'burst', damage: 'fire, cold' },
+    { name: 'Desert', qty: 1, cost: '1', color: 'R', sphere: 'Destruction', effect: 'Fire Blast', dice: '' },
+    { name: 'Touch', qty: 1, cost: '1', color: 'B', effect: 'Corpse Bomb', dc: '24', range: 'melee', target: '{= 2 + 3} targets', damage: 'negative energy' },
+    { name: 'Far', qty: 1, cost: '1', color: 'U', effect: 'Push', dc: 'no.such.name', range: '{= 10 * level}', save: 'none' },
+    { name: 'Plain', qty: 1, cost: '1', color: 'G', effect: 'Nothing special' },
+  ];
+  c.recompute();
+  const cards = c.data.cardcasting.cards;
+  const intMod = c.data.abilities.int.mod;
+  const cl = c.scope().caster.level;
+  const big = c.cardStats(cards[0]);
+  check('a bare formula in the DC works out to a number', [big.dc, big.dcError], [String(17 + intMod), '']);
+  check('a range word is feet for the caster level', [big.range, big.rangeFeet], ['close', 25 + 5 * Math.floor(cl / 2)]);
+  check('damage types split on commas', big.damage, ['fire', 'cold']);
+  check('the line as read: save and DC together, the range with its feet', c.cardStatLines(cards[0]),
+    [['Save', `Reflex DC ${17 + intMod}`], ['Range', `close (${25 + 5 * Math.floor(cl / 2)} ft)`], ['Target', 'burst'], ['Damage type', 'fire, cold']]);
+  check('and the Roll20 message carries it after the cost', c.cardRollSpec('cardcasting.cards|0').notes.map((n) => n.label),
+    ['Cost', 'Save', 'Range', 'Target', 'Damage type', 'Sphere']);
+  const touch = c.cardStats(cards[2]);
+  check('a number is a number, melee has no feet, an inline formula resolves in any field',
+    [touch.dc, touch.rangeFeet, touch.target], ['24', null, '5 targets']);
+  check('a DC alone is its own line', c.cardStatLines(cards[2])[0], ['DC', '24']);
+  const far = c.cardStats(cards[3]);
+  check('a DC that does not work out keeps its text and says why', [far.dc, far.dcError !== ''], ['no.such.name', true]);
+  check('a range worked out to a number is feet', [far.rangeFeet, c.cardStatLines(cards[3]).find(([l]) => l === 'Range')], [150, ['Range', '150 ft']]);
+  check('"none" is a save line of its own', c.cardStatLines(cards[3])[0], ['Save', 'none']);
+  check('a card with none of it has nothing to say', [c.cardStats(cards[4]).any, c.cardStatLines(cards[4]), c.cardStats({}).any], [false, [], false]);
+  check('every card carries the five fields as text once read', CARD_STAT_FIELDS.map((f) => cards[4][f]), ['', '', '', '', '']);
+  c.shareCardDice('cardcasting.cards', 0);
+  check('"alike" hands the stat line on with the dice', CARD_STAT_FIELDS.map((f) => cards[1][f]),
+    ['Ref', '10 + floor(level/2) + int.mod', 'close', 'burst', 'fire, cold']);
+  check('and leaves a card with another effect alone', cards[2].save, '');
+  const html = subsystemPanels.cardcastingPanel(c, { deckView: 'deck', openCards: new Set() });
+  check('the face edits each field, with a pick list behind it',
+    ['save', 'dc', 'range', 'target', 'damage'].map((f) => html.includes(`data-item="cardcasting.cards|0|${f}" data-kind="text" list="card-`)), [true, true, true, true, true]);
+  check('and previews what differs from what was typed', [html.includes(`DC ${17 + intMod}</span>`), html.includes('Range close = ')], [true, true]);
+  check('the pick lists are declared once', ['card-saves', 'card-dcs', 'card-ranges', 'card-targets', 'card-damage'].map((id) => html.split(`<datalist id="${id}"`).length - 1), [1, 1, 1, 1, 1]);
+}
+
+console.log('the damage type picker adds a word to the list once');
+{
+  check('a word into an empty field', appendListText('', 'fire'), 'fire');
+  check('a second word joins with a comma', appendListText('fire', 'cold'), 'fire, cold');
+  check('a word already there is not added twice', appendListText('fire, cold', 'Fire'), 'fire, cold');
+  check('a trailing comma is tidied first', appendListText('fire, ', 'acid'), 'fire, acid');
 }
 
 console.log('\na card cast in a mode: that mode rolls, and the points put into it are spent');

@@ -752,6 +752,19 @@ takes two columns with a taller text box and the Dice field as a line per roll; 
 card in hand or in play loses the clamp on its text and lists its rolls worked out.
 Open cards are a way of looking, kept for the session and not saved.
 
+**The stat line.** Under a face's type line sit five fields the table reads without
+reading the effect: **save** (Ref, Fort, Will, none), **DC**, **range** (melee, close,
+medium, long, or a number of feet), **target** (single, line, cone, burst) and **dmg**,
+the damage types, with a picker that adds one at a time. Each takes a formula — `{10 +
+caster.level}` in any of them, and the DC a bare `caster.dc` or `10 +
+floor(caster.level/2) + int.mod` as well — and what it works out to shows under the bar
+when it differs from what was typed: the DC from its formula, a range word as feet for
+the caster's level (close is 25 ft + 5 ft per two levels, medium 100 + 10 a level, long
+400 + 40). The pick lists suggest; the field keeps whatever is typed. The stat line rides
+with the dice: **→ N alike** hands both on, a card in hand or in the chooser shows it
+under its type line, and the d20 copies it as lines (*Save: Reflex DC 24; Range: close
+(60 ft); Target: burst; Damage type: fire*).
+
 | Control | What the rules say, and what it does |
 |---|---|
 | **Start encounter** | shuffle every copy; draw 1 + casting modifier (at least 2), plus 2 per Loaded Hand. Under Mana Pool a plain Mana Point card drawn goes straight to the table — except under Gradual Ramp, where it waits in hand to be played one a round. |

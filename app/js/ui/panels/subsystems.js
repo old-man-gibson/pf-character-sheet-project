@@ -58,6 +58,7 @@ import {
   slug, manifesterForwardKey, vancianForwardKey, poolTracker,
 } from '../../model.js';
 import { ABILITY_LABELS_LIST, nameDatalist, noteCell, packText } from '../html.js';
+import { CARD_DAMAGE_TYPES, CARD_RANGES, CARD_SAVES, CARD_TARGETS } from '../../model/subsystems/cardcasting.js';
 import { round } from '../format.js';
 import {
   ABILITIES, ABILITY_LABELS, CASTING_SOURCES, ESSENCE_SOURCES, MANEUVER_FIELDS,
@@ -2465,6 +2466,7 @@ export function cardcastingPanel(model, ctx) {
       ${deckManipulationsPanel(model, p, k)}
       <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
       ${(k.squad || []).length ? wrap('deck-squad', squadPanel(model, p, k)) : ''}
+      ${cardDatalists(p)}
       ${deckTablePanel(model, ctx, p, k)}
       ${sideboardPanel(model, ctx, p)}
       <section class="panel span2">
@@ -2498,6 +2500,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
       </div>
       ${card.art ? `<div class="art"><img src="${esc(card.art)}" alt="" loading="lazy"></div>` : ''}
       <div class="bar type"><span>${esc(card.sphere || (isMana ? 'Mana Point' : ''))}${card.tags ? ` — ${esc(card.tags)}` : ''}</span></div>
+      ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
       ${rolls}
       <div class="foot">
@@ -2729,6 +2732,7 @@ function castPicker(s, id, card, modes, casters = []) {
         </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
       <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      ${statsLine(model, card)}
       <div class="text">
         ${who}
         ${modes.length ? `<label class="pickrow">Mode
@@ -3238,6 +3242,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
         <span class="dash">—</span>
         <input type="text" value="${esc(card.tags ?? '')}" data-item="${list}|${i}|tags" data-kind="text" placeholder="tags" aria-label="Tags">
       </div>
+      ${cardStatBars(model, list, i, card)}
       <div class="text">${prose(model, `data-item="${list}|${i}|effect"`, card.effect, open ? 9 : 3, 'grow')}</div>
       <div class="foot">
         <span class="pair" title="Mana this card puts on the table (fused Mana Point): letters R B U W G">
@@ -3264,6 +3269,76 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
   }
 
   /**
+   * The stat line under a face's type line: save, DC, range and target on
+   * one bar, the damage types on a second with a picker that adds one at a
+   * time. Every field takes a formula -- `{10 + caster.level}` in any of
+   * them, and the DC a bare `caster.dc` as well -- and what one works out to
+   * shows under the bar when it differs from what was typed: a DC from its
+   * formula, a range word as feet for this caster's level, a token resolved,
+   * a DC that does not work out saying why. The pick lists suggest; the
+   * field keeps whatever is typed in it.
+   */
+function cardStatBars(model, list, i, card) {
+    const ref = `${list}|${i}`;
+    const s = model.cardStats(card);
+    const stat = (field, label, title, listId) => `<span class="stat" title="${esc(title)}"><small>${esc(label)}</small>
+        <input type="text" value="${esc(card[field] ?? '')}" data-item="${ref}|${field}" data-kind="text" list="${listId}" aria-label="${esc(label)}"></span>`;
+    const typed = (field) => String(card[field] ?? '').trim().toLowerCase();
+    const changed = (field, shown) => shown && String(shown).toLowerCase() !== typed(field);
+    const feetWord = s.rangeFeet !== null && !/^\d+$/.test(s.range);
+    const preview = [
+      changed('save', s.save) ? ['Save', s.save] : null,
+      s.dcError ? ['DC', `${s.dc} — ${s.dcError}`, 'err'] : changed('dc', s.dc) ? ['DC', s.dc] : null,
+      feetWord ? ['Range', `${s.range} = ${s.rangeFeet} ft`] : changed('range', s.range) ? ['Range', s.range] : null,
+      changed('target', s.target) ? ['Target', s.target] : null,
+      changed('damage', s.damage.join(', ')) ? ['Damage', s.damage.join(', ')] : null,
+    ].filter(Boolean).map(([l, t, cls = 'ok']) => `<span class="badge ${cls}">${esc(l)} ${esc(t)}</span>`).join('');
+    // Two to a row while the entries are words; a formula in any of them
+    // puts each on a row of its own, so it can be read whole.
+    const wide = ['save', 'dc', 'range', 'target'].some((f) => String(card[f] ?? '').trim().length > 8);
+    return `<div class="bar stats${wide ? ' rows' : ''}">
+        ${stat('save', 'save', 'Saving throw: Ref, Fort, Will or none — or a formula in braces', 'card-saves')}
+        ${stat('dc', 'DC', 'Save DC: a number or a formula — caster.dc, 10 + floor(caster.level/2) + int.mod', 'card-dcs')}
+        ${stat('range', 'range', 'Range: melee, close, medium or long (worked out in feet for the caster level), a number of feet, or a formula', 'card-ranges')}
+        ${stat('target', 'target', 'Target or area: single, line, cone, burst — or a formula', 'card-targets')}
+      </div>
+      <div class="bar stats dmg">
+        <span class="stat grow" title="Damage types, comma-separated — fire, cold — or a formula in braces"><small>dmg</small>
+          <input type="text" value="${esc(card.damage ?? '')}" data-item="${ref}|damage" data-kind="text" list="card-damage" placeholder="damage types" aria-label="Damage types"></span>
+        <select class="movesel dmgpick" data-append="${ref}|damage" data-join="," aria-label="Add a damage type" title="Add a damage type">
+          <option value="">add…</option>
+          ${CARD_DAMAGE_TYPES.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+        </select>
+        ${preview ? `<span class="preview">${preview}</span>` : ''}
+      </div>`;
+  }
+
+  /** A card's stat line as read -- Save Reflex DC 24 · Range close (60 ft) -- for the small faces and the chooser. */
+function statsLine(model, card) {
+    const lines = model.cardStatLines(card);
+    return lines.length ? `<div class="bar stats read">${lines.map(([l, t]) => `<span><small>${esc(l)}</small> ${esc(t)}</span>`).join('')}</div>` : '';
+  }
+
+  /**
+   * The pick lists the stat fields offer, declared once for the deck view:
+   * the saves, two DC spellings, the range words, the shapes and the damage
+   * types. A list suggests and the field still takes anything.
+   */
+function cardDatalists(p) {
+    const list = (id, items) => `<datalist id="${id}">${items.map((v) => `<option value="${esc(v)}"></option>`).join('')}</datalist>`;
+    return list('card-saves', CARD_SAVES)
+      + list('card-dcs', ['caster.dc', `10 + floor(caster.level/2) + ${castingModName(p.castingStat)}`])
+      + list('card-ranges', CARD_RANGES)
+      + list('card-targets', CARD_TARGETS)
+      + list('card-damage', CARD_DAMAGE_TYPES);
+  }
+
+  /** The deck's casting modifier in the formula spelling: `int.mod` for a deck cast on Int. */
+function castingModName(stat) {
+    return `${String(stat || 'int').toLowerCase().slice(0, 3)}.mod`;
+  }
+
+  /**
    * What the picker beside the Dice field can add, in the sheet's own
    * formula spelling so the field teaches it: the Spheres blast shapes off
    * the caster level, the casting modifier, and a second labelled roll. The
@@ -3271,12 +3346,13 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
    * one for this caster.
    */
 function cardDicePresets(stat) {
-    const mod = `${String(stat || 'int').toLowerCase().slice(0, 3)}.mod`;
+    const mod = castingModName(stat);
     return [
       ['{1+floor(caster.level/2)}d6', '1d6 + 1d6 per 2 caster levels (a blast)'],
       ['{floor(caster.level/2)}d6', '1d6 per 2 caster levels'],
       ['{caster.level}d6', '1d6 per caster level'],
       ['{1+floor(caster.level/2)}d8', '1d8 + 1d8 per 2 caster levels'],
+      ['{step("1", floor(caster.level/5))}', '1, then a die one step bigger per 5 caster levels (1d2, 1d3, 1d4…)'],
       [`+${mod}`, `+ casting modifier (${mod})`],
       ['+caster.level', '+ caster level'],
       ['+caster.mod', '+ the caster’s modifier, whoever casts it'],
@@ -3298,7 +3374,7 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
     const preview = formulas.map((r) => (r.formula
       ? `<span class="badge ok" title="${esc(`${r.label}: ${r.source}`)}">${esc(formulas.length > 1 ? `${r.label} ` : '')}${esc(r.formula)}</span>`
       : `<span class="badge err" title="${esc(r.error)}">${esc(r.label)}: ${esc(r.source || '—')}</span>`)).join('');
-    const alike = inDeck && String(card.dice || '').trim() ? model.cardSiblings(list, i) : [];
+    const alike = inDeck && (String(card.dice || '').trim() || model.cardStats(card).any) ? model.cardSiblings(list, i) : [];
     const title = 'Dice to roll on the table — 8d6+int.mod, {1+floor(caster.level/2)}d6, or several with names: damage: 8d6; boost (1 SP): 15d6. Blank uses the first dice in the text.';
     // Opened out, the field is a line per roll; the entries are read the
     // same way either way, since a new line separates them as a ; does.
@@ -3313,7 +3389,7 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
         <option value="">add…</option>
         ${cardDicePresets(p.castingStat).map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}
       </select>
-      ${alike.length ? `<button data-dice-share="${ref}" title="Give these dice to the ${alike.length} other card${alike.length === 1 ? '' : 's'} with this effect">→ ${alike.length} alike</button>` : ''}
+      ${alike.length ? `<button data-dice-share="${ref}" title="Give these dice and this stat line to the ${alike.length} other card${alike.length === 1 ? '' : 's'} with this effect">→ ${alike.length} alike</button>` : ''}
       ${cardCopyButton(model, ctx, ref, card.name || card.effect || 'card')}
       ${preview ? `<span class="pair preview">${preview}</span>` : ''}
     </div>`;
@@ -3327,6 +3403,7 @@ function deckTablePanel(model, ctx, p, k) {
     const alignTally = k.alignTally || {};
     const newCard = (extra) => ({
       name: '', suit: '', alignment: '', color: '', mana: '', effect: '', cost: '1', sphere: '', tags: '',
+      save: '', dc: '', range: '', target: '', damage: '',
       qty: 1, tech: false, roll: null, art: '', notes: '', ...extra,
     });
     return `<section class="panel span2">
@@ -3426,6 +3503,7 @@ function sideboardPanel(model, ctx, p) {
       ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
       <div style="margin-top:10px">${addButton(list, 'Add to sideboard', {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',
+    save: '', dc: '', range: '', target: '', damage: '',
   })}</div>
     </section>`;
   }

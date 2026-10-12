@@ -5338,6 +5338,24 @@ table.stacked .catface { margin-left: 0; }
 .mcard .foot.dice button.d20 { padding: 1px 3px; color: #f4efe4; }
 .mcard .foot.dice .preview { flex: 1 1 100%; flex-wrap: wrap; gap: 3px; }
 .mcard .foot.dice .preview .badge { font-size: 0.62rem; text-transform: none; letter-spacing: 0; }
+/* The stat line: save, DC, range and target on one bar, the damage types on
+   a second; the small faces read it as text. */
+/* The meter's .bar rule (14px, clipped) reaches these; a wrapping row needs its own height. */
+.mcard .bar.stats { flex-wrap: wrap; gap: 1px 6px; padding: 2px 5px; height: auto; margin-top: 0; overflow: visible; }
+.mcard .bar.stats .stat { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 40%; min-width: 0; }
+.mcard .bar.stats.rows .stat { flex: 1 1 100%; }
+.mcard .bar.stats .stat.grow { flex: 1 1 10rem; }
+.mcard .bar.stats small { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: rgba(26,29,38,0.75); flex: none; min-width: 2.4rem; }
+/* The entries are cells, not bare text: a formula wants an edge to read against. */
+.mcard .bar.stats input { font-size: 0.74rem; padding: 1px 4px; flex: 1; min-width: 2.2rem; background: rgba(255,255,255,0.65); border: 1px solid rgba(26,29,38,0.25); border-radius: 3px; }
+.mcard .bar.stats input:focus { background: #fff; }
+.mcard .bar.stats.read small { font-weight: 700; color: rgba(26,29,38,0.75); }
+.mcard .bar.stats select.dmgpick { flex: none; max-width: 4.2rem; font-size: 0.7rem; }
+.mcard .bar.stats .preview { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 3px; }
+.mcard .bar.stats .preview .badge { font-size: 0.62rem; text-transform: none; letter-spacing: 0; }
+.mcard .bar.stats.read { font-size: 0.7rem; gap: 1px 8px; }
+.mcard .bar.stats.read span { white-space: nowrap; }
+.mcard.mini .bar.stats.read { font-size: 0.66rem; padding: 1px 5px; }
 /* The two windows and the Roll20 switch sit apart from the round's controls. */
 .tablectl .winctl { margin-left: auto; gap: 6px; align-items: center; }
 .tablectl .winctl .chk { font-size: 0.78rem; }

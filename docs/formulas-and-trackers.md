@@ -938,10 +938,17 @@ Operators `+ - * / % ^`, comparisons `< > <= >= == !=` (a bare `=` is accepted a
 equality, out of spreadsheet habit), `&& || ?:`, and parentheses.
 
 Functions: `floor` `ceil` `round` `trunc` `abs` `sign` `min` `max` `sum` `clamp`
-`if` `and` `or` `not` `mod` `iterations`.
+`if` `and` `or` `not` `mod` `iterations` `dice` `step` `tags`.
 
 `floor(n, step)` rounds down to a multiple, matching the sheet's `Floor(x, 1)` idiom.
 `mod(score)` is the ability-modifier rule. `iterations(bab)` counts iterative attacks.
+`dice(n, d, bonus)` writes dice text (`dice(4, 8)` → `4d8`). `step(die, n)` moves a die
+`n` steps along the damage chain — 1, 1d2, 1d3, 1d4, 1d6, 1d8, 1d10, 2d6, 2d8, 3d6, 2d10,
+4d6, 4d8, 6d6, 6d8, 8d6, 8d8, 12d6, 12d8, 16d6 — so a Mana Siphon's spell-point drain,
+"1, increasing one die size every five caster levels", is `step("1", floor(caster.level/5))`:
+1 until level 5, then 1d2, 1d3 at 10, 1d4 at 15. The chain is clamped at both ends, and a
+die it does not list (`1d7`) is an error, not a guess. A card's Dice field or a weapon's
+takes the result as it takes `dice()`; a flat `1` rolls as itself.
 
 Readable values include `level`, `bab`, `hp.total`, `mythic.tier`, `initiative`,
 `str.score` / `str.mod` / `str.temp` / `str.tempMod` (and the other five abilities),
