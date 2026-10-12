@@ -23,5 +23,10 @@
   },
   "kv_namespaces": [
     { "binding": "SHEETS", "id": "4e52b930d33f4b449da628387c48b08c" }
-  ]
+  ],
+  // Every other branch builds as a Preview, which takes its settings from here
+  // and inherits none of the above. Empty on purpose: a preview is for looking
+  // at the sheet, and gets no store, so Publish there says so instead of
+  // writing into the live one.
+  "previews": {}
 }
