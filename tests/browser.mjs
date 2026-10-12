@@ -231,6 +231,22 @@ run.addEventListener('click', async () => {
       await until(() => root.querySelector('[data-set="wealth.lastOffering"]') !== box);
       assert(sheet.model.data.wealth.lastOffering === '2026-02-01', 'The date was not kept');
     });
+    // A chip list in a band asks for no width of its own, so beside its label
+    // it was given none: one chip per line, each broken at its longest word.
+    await test('The proficiency chips take the row beside their label', async () => {
+      const root = sheet.shadowRoot;
+      root.getElementById('tab-overview').click();
+      const lists = [...root.querySelectorAll('.panel.proficiencies .profrow .chips')];
+      assert(lists.length >= 5, 'Proficiency chip lists missing');
+      for (const list of lists) {
+        const row = list.parentElement.getBoundingClientRect().width;
+        const width = list.getBoundingClientRect().width;
+        assert(width > row / 2, `A chip list has ${Math.round(width)}px of a ${Math.round(row)}px row`);
+        for (const chip of list.children) {
+          assert(chip.getBoundingClientRect().height < 24, `"${chip.textContent}" is broken over two lines`);
+        }
+      }
+    });
     // The row folds and Help buttons are put in by the render below 620px,
     // so a sheet dragged across that width has to be drawn again to gain or
     // lose them; before, it kept whichever it had.
