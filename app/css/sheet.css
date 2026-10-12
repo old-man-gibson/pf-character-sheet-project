@@ -4021,6 +4021,11 @@ input.autonum.auto::placeholder { color: var(--cs-accent); opacity: 1; font-weig
 .profrow:last-child { border-bottom: 0; }
 .profrow .tlabel { padding-top: 4px; flex: 0 0 5.4rem; min-width: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+/* In a band the chips ask for no width of their own (see `.band`), so as a
+   flex item beside its label a list would start from nothing and stay there:
+   one chip per line, each broken at its longest word. The rest of the row
+   is theirs. */
+.profrow .chips { flex: 1 1 0; min-width: 0; }
 button.chip-toggle { padding: 1px 7px; font-size: 0.74rem; border-radius: 999px; }
 .proflist { margin-top: 0; }
 .proflist .lang input[type="text"] { width: 7rem; min-width: 5rem; }
