@@ -159,29 +159,31 @@ export function renderOverviewPanel(model, ctx) {
         </div>
       </section>
 
-      <div class="pairrow span2">
+      <div class="band lead">
         ${detailsPanel(model)}
         ${abilityScoresPanel(model)}
       </div>
-      <div class="pairrow even span2">
+      <div class="band">
         ${specialtyPanel(model)}
         ${languagesPanel(model)}
       </div>
 
-      ${classesPanel(model, ctx, model, ctx)}
+      ${classesPanel(model, ctx)}
 
-      ${supergroup(model, 'defenses', 'Defenses', '', `
+      ${supergroup(model, 'defenses', 'Defenses', 'defenses', `
           ${hitPointsPanel(ctx, model)}
           ${acPanel(model)}
-          ${savesPanel(model)}
-          ${initiativePanel(model)}`)}
+          <div class="band">
+            ${savesPanel(model)}
+            ${initiativePanel(model)}
+          </div>`)}
 
       ${supergroup(model, 'offenses', 'Offenses', 'offenses', `
           ${attackPanel(model)}
           ${speedPanel(model)}
           ${proficienciesPanel(model)}`)}
 
-      <div class="pairrow span2 wide-first">
+      <div class="band lead">
         ${conditionsPanel(model)}
         ${carryPanel(model)}
       </div>
@@ -189,14 +191,14 @@ export function renderOverviewPanel(model, ctx) {
            * Wealth is capped at 54rem -- a ledger reads worse the wider it gets --
            * which on a laptop left 495px of empty grid beside it, and Buffs is a
            * short row of chips directly above. Paired, so the gap holds the thing
-           * that was going to be under it anyway. Below 900px the pair is one
-           * column again, which is what `.pairrow` does on its own.
+           * that was going to be under it anyway. Where the two do not fit side
+           * by side the band stacks them (see `.band`).
            */''}
-      <div class="pairrow span2 wealthpair">
+      <div class="band">
         ${collapsible(model, 'wealth', wealthPanel(model, ctx))}
-        ${collapsible(model, 'buffs', buffsPanel(model, ctx, model, ctx))}
+        ${collapsible(model, 'buffs', buffsPanel(model, ctx))}
       </div>
-      ${traitsPanel(model, ctx, model, ctx)}
+      ${traitsPanel(model, ctx)}
     </div>`;
   }
 
@@ -247,7 +249,7 @@ export function renderDashboardPanel(model, ctx) {
         </aside>
       </div>
       <details class="session-reference" open><summary>Character reference</summary>
-        <div class="grid">${ids.filter(id => !support.has(id)).map(id => render[id]?.() || '').join('')}</div>
+        <div class="band">${ids.filter(id => !support.has(id)).map(id => render[id]?.() || '').join('')}</div>
       </details>
     </div>`;
   }
@@ -1124,7 +1126,7 @@ function supergroup(model, key, title, bodyClass, body) {
     const shut = isCollapsed(model, `sg-${key}`);
     return `<div class="supergroup span2${shut ? ' collapsed' : ''}" aria-label="${esc(title)}">
         <div class="supergroup-title">${esc(title)} ${foldButton(model, `sg-${key}`)}</div>
-        ${shut ? '' : `<div class="supergroup-body ${bodyClass}">${body}</div>`}
+        ${shut ? '' : `<div class="supergroup-body band ${bodyClass}">${body}</div>`}
       </div>`;
   }
 
@@ -1305,7 +1307,7 @@ function acPanel(model) {
     const cell = (key, base) => `<td class="num total">${movedInline(cs, key, base, String, model)}</td>`;
     return `<section class="panel">
       <h3>Armor class</h3>
-      <div class="tablewrap"><table class="defense">
+      <div class="tablewrap"><table class="defense fitcols">
         <thead><tr><th></th><th class="num">Total</th>
           <th class="num" title="Your own flat bonus">Misc</th>
           ${sheetBonusHead()}</tr></thead>
@@ -1401,7 +1403,7 @@ function savesPanel(model) {
     const cs = model.conditionState;
     return `<section class="panel">
       <h3>Saving throws</h3>
-      <div class="tablewrap"><table class="saves stacked" data-fold="shut">
+      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th>Save</th><th class="num">Total</th>
           <th class="num" title="Computed from the class table (gestalt)">Base</th>
           <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
@@ -1434,7 +1436,7 @@ function initiativePanel(model) {
     const cs = model.conditionState;
     return `<section class="panel">
       <h3>Initiative</h3>
-      <div class="tablewrap"><table class="saves stacked" data-fold="shut">
+      <div class="tablewrap"><table class="saves stacked fitcols" data-fold="shut">
         <thead><tr><th></th><th class="num">Total</th>
           <th>Ability</th><th title="A second ability that adds its modifier">2nd</th>
           <th class="num" title="Your own flat bonus: a trait, a feat, a familiar">Misc</th>
@@ -1483,7 +1485,7 @@ function attackPanel(model) {
   })()}
       ${editLine('Misc attack bonus', 'attack.miscBonus', c.attack.miscBonus)}
       ${cs.changed && cs.delta.damage ? `<p class="hint warn">${fmt(cs.delta.damage)} on weapon damage rolls from ${cs.sources}.</p>` : ''}
-      <div class="tablewrap" style="margin-top:8px"><table class="attackmodes">
+      <div class="tablewrap" style="margin-top:8px"><table class="attackmodes fitcols">
         <thead><tr><th>Mode</th>
           <th class="num" title="An alternate is this attack with the ability beside it in the slot instead">Total</th>
           ${sheetBonusHead()}

@@ -1556,8 +1556,9 @@ export function companionPanel(model, kind) {
             of four and took a quarter of the window between them, with the
             rest of the row empty behind them. The abilities are a list that
             opens out and want the room; the notes are a box to write in and
-            read fine at their measure. Below 900px `.pairrow` stacks them. */''}
-      <div class="pairrow span2">
+            read fine at their measure; a `lead` band, stacked where the
+            pair does not fit. */''}
+      <div class="band lead">
         ${companionGainsPanel(model, cc)}
         ${companionNotesPanel(model, cc)}
       </div>
@@ -2397,7 +2398,7 @@ function companionGainsPanel(model, cc) {
 
 function companionNotesPanel(model, cc) {
     const { p, sn, b } = cc;
-    return `<section class="panel">
+    return `<section class="panel notes">
       <h3>Notes</h3>
       ${prose(model, `data-set="${p}.notes"`, b.notes, 6)}
       <p class="hint">Formulas work here: <code>{= ${esc(sn)}.hp}</code>, <code>{= ${esc(sn)}.hd * 2}</code>.</p>

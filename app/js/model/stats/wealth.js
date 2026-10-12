@@ -13,7 +13,12 @@ import { markUndo, rowLabel } from '../undo.js';
 
 export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust'];
 
-/** Material casting costs this much per caster level, every whole month. */
+/**
+ * Material casting costs this much per caster level, every whole month: the
+ * drawback's own shorthand, "10 gp per caster level per month on components"
+ * in place of tracking every component. The caster level is the Spheres one,
+ * since the drawback is a casting tradition's.
+ */
 export const MATERIAL_CASTING_PER_LEVEL = 10;
 
 /** "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''. */
@@ -81,6 +86,18 @@ function monthsBetween(from, to) {
   return Math.max(0, months);
 }
 
+/** The first day after `today` on which one more whole month since `from` is counted; '' with no date. */
+function nextMonthDay(from, today) {
+  if (!from) return '';
+  const now = monthsBetween(from, today);
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  for (let i = 0; i < 32; i++) {
+    d.setDate(d.getDate() + 1);
+    if (monthsBetween(from, d) > now) return isoDay(d);
+  }
+  return '';
+}
+
 /**
  * The wallet as it stands today: what the next offering will cost, part by
  * part, and what is left after it. `today` is injectable so a test does not
@@ -101,6 +118,8 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
   return {
     ...v,
     offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
+    // When the material-casting upkeep next grows by a month.
+    nextMonth: v.materialCasting ? nextMonthDay(v.lastOffering, today) : '',
     expected: { oath, casting, total: expected },
     after: v.current - expected,
     gains: v.baseline === null ? null : v.current - v.baseline,

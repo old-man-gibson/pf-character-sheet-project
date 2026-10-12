@@ -112,8 +112,8 @@ export function renderSkillsPanel(model, ctx) {
       ${/* The two budgets are half a dozen short fields each and were a full
             width apiece, one under the other -- so the tab opened on two bands
             of mostly empty panel before the table anybody came for. Side by
-            side above 900px, stacked below. */''}
-      <div class="pairrow even span2">
+            side wherever both fit (see `.band`). */''}
+      <div class="band">
       <section class="panel">
         <h3>Skill points
           <span class="badge ${budgetClass === 'err' ? 'err' : budgetClass === 'ok' ? 'ok' : ''}">

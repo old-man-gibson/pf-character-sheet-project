@@ -181,6 +181,55 @@ run.addEventListener('click', async () => {
       assert(!!sheet.model.data.conditions.Blinded === !was, 'The click never reached the box');
       assert(sheet.model.data.identity.heroPoints.current === 1, 'The edit was lost');
     });
+    // A date box reports a whole date as soon as its parts make one: typing
+    // 01 01 2026 reports the year 2 on the way. Drawn again there, the box
+    // came back with the cursor in its month and the rest of the year went in.
+    await test('A date box being typed in is drawn again once it is left', async () => {
+      const root = sheet.shadowRoot;
+      sheet.model.set('wealth.oathOfOfferings', true);   // the box takes a date only while something is owed
+      root.getElementById('tab-overview').click();
+      const box = root.querySelector('[data-set="wealth.lastOffering"]');
+      assert(box && !box.disabled, 'Last offering box missing');
+      // Past the window in which the check before's press could still be
+      // ending, so nothing here is put off for a press instead.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      box.focus();
+      box.value = '0002-01-01';
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert(root.querySelector('[data-set="wealth.lastOffering"]') === box, 'Drawn again while still being typed in');
+      assert(sheet.model.data.wealth.lastOffering === '0002-01-01', 'The date was not kept');
+      box.value = '2026-01-01';
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      box.blur();
+      // A window that does not itself have focus moves focus without firing
+      // the event, so the leaving is said outright too; a box already left
+      // has stopped listening for it.
+      box.dispatchEvent(new FocusEvent('blur'));
+      await until(() => root.querySelector('[data-set="wealth.lastOffering"]') !== box);
+      assert(sheet.model.data.wealth.lastOffering === '2026-01-01', 'The last date was not kept');
+      assert(root.querySelector('[data-set="wealth.lastOffering"]').value === '2026-01-01', 'Drawn without its date');
+    });
+    // The row folds and Help buttons are put in by the render below 620px,
+    // so a sheet dragged across that width has to be drawn again to gain or
+    // lose them; before, it kept whichever it had.
+    await test('A sheet crossing 620px wide gains and loses the narrow layout', async () => {
+      const root = sheet.shadowRoot;
+      root.getElementById('tab-overview').click();
+      // The sheet hears of its width from a ResizeObserver, which reports on
+      // drawn frames only; a window behind another draws none.
+      const drawing = await new Promise((resolve) => {
+        requestAnimationFrame(() => resolve(true));
+        setTimeout(() => resolve(false), 1000);
+      });
+      assert(drawing, 'The page is not being drawn; bring the window forward and run again');
+      try {
+        mount.style.width = '600px';
+        await until(() => root.querySelector('button.rowfold'));
+        mount.style.width = '900px';
+        await until(() => !root.querySelector('button.rowfold'));
+      } finally { mount.style.width = ''; }
+    });
   } finally {
     sheet.remove();
     await forget(id);

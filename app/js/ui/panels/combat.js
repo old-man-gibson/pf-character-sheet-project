@@ -51,7 +51,7 @@ const NEW_TEMPLATE_TABLE = () => ({
    * learned, the talents that came from elsewhere, then the numbers that fall
    * out of both. The first two are full width because their tables are; the
    * rest share a row of their own, which is why they sit in a `.sidepanels`
-   * strip rather than in the page grid. In the page grid a side with three
+   * band rather than in the page grid. In the page grid a side with three
    * panels left the fourth column of the shared four empty, and a side with
    * four squeezed all of them into a quarter each.
    *
@@ -83,7 +83,7 @@ export function renderMartialPanel(model) {
     ].filter(Boolean).join('');
     return `<div class="grid">
       <div class="foldstrip">${groups}</div>
-      <div class="sidepanels">
+      <div class="band sidepanels">
         ${wrap('combat-tradition', combatTraditionPanel(model, side))}
         ${wrap('sphere-skills', sphereSkillPanel(model))}
         ${wrap('combat-spheres', sphereBonusPanel(model, 'combat', side))}
@@ -102,7 +102,7 @@ export function renderMagicPanel(model) {
     ].filter(Boolean).join('');
     return `<div class="grid">
       <div class="foldstrip">${groups}</div>
-      <div class="sidepanels">
+      <div class="band sidepanels">
         ${wrap('magic-tradition', magicTraditionPanel(model, magic))}
         ${wrap('magic-globals', magicGlobalsPanel(model, magic))}
         ${wrap('magic-spheres', sphereBonusPanel(model, 'magic', magic))}

@@ -67,7 +67,7 @@ export function renderStatsPanel(model, ctx) {
   const over = ABILITIES.filter((a) => build[a].resolved?.enhancementWasted > 0);
 
   return `<div class="grid">
-      <div class="statpair">
+      <div class="band">
       <section class="panel">
         <h3>Permanent bonuses
           ${BUILD_OPTIONAL_KEYS.map((k) => {
@@ -190,9 +190,9 @@ export function renderStatsPanel(model, ctx) {
       ${defenceBonusPanel(model)}
       ${/* The three ladders in a row of their own. Left to the outer grid they
             each took one 310px track, which is not enough for the array's four
-            columns and more than the other two need -- so they are given the
-            widths they actually want. See `.pickrow`. */''}
-      <div class="pickrow span2">
+            columns and more than the other two need -- so they share a band,
+            which gives each the width its table wants. */''}
+      <div class="band">
         ${abpPicksPanel(model)}
         ${milestonePicksPanel(model)}
         ${arrayPicksPanel(model)}

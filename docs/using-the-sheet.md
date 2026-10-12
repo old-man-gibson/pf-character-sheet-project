@@ -762,7 +762,7 @@ two switches the earlier one (Narockro's) had:
 |---|---|
 | OoO / day | Mana/Day ÷ 2 |
 | owed under the Oath | days since the last offering × OoO/day + ⌊session mana ÷ 2⌋ — half of everything earned |
-| owed for material casting | whole months since the last offering × 10 × caster level |
+| owed for material casting | whole months since the last offering × 10 × the Spheres caster level — the drawback's "10 gp per caster level per month" in place of tracking each component |
 | **Mana after** | current − (the parts whose switch is on) |
 
 Days and months are counted the way `TODAY() − date` and `DATEDIF(…, "M")` count them,
@@ -773,9 +773,10 @@ The panel says only as much as the character owes. **On hand**, **Current mana**
 **Mana / day** are everyone's. The rest — *Owed*, *After offering*, the baseline, the
 date of the last offering, OoO/day and the session mana since — belongs to the two
 switches, and with neither of them on those fields are readable but not writable:
-there is no offering to keep a baseline for. The switches themselves say what they
-cost on hover rather than in the row, since the answer to the formula is already the
-*Owed* figure above them.
+there is no offering to keep a baseline for. Under the fields, each switch that is on
+says what it adds to the offering and how: the Oath's days since the last offering
+times OoO/day plus half the session mana, and material casting's whole months times
+10 × the caster level, with the day the next month is counted.
 
 The panel is also the hook for what comes later: a **ledger**. Every reward, spend and
 offering is a dated line with a label and an amount, and the wallet moves with it — a
