@@ -1031,20 +1031,20 @@ textarea.exportbox { width: 100%; font-family: var(--cs-mono); font-size: 0.76re
    Across the full width it was mostly rule, so it is capped and left where the
    column starts. */
 .panel.wealth { max-width: min(100%, 54rem); }
-.wealthgrid { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(300px, 2fr); gap: 14px; align-items: start; }
-@media (max-width: 760px) { .wealthgrid { grid-template-columns: 1fr; } }
-.wealthnums { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
-.wealthnums .bigstat .v.neg { color: var(--cs-bad); }
-.wealthfieldcol { display: grid; gap: 9px; }
+/* Top to bottom in the order it is read: what is on hand and what is owed,
+   the wallet's own two fields, the two switches side by side, and then, for
+   each switch that is on, a part of its own -- its fields, what it owes and
+   how that was worked out. */
+.bigstats.wealthstats { grid-template-columns: repeat(auto-fit, minmax(9rem, 13rem)); margin-bottom: 10px; }
+.wealthstats .neg { color: var(--cs-bad); }
+/* A date typed past the box's max -- a picker cannot choose one, a keyboard can. */
+input[type="date"]:out-of-range { border-color: var(--cs-bad); color: var(--cs-bad); }
 .wealthfields { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-/* The offering half, with neither switch on: still readable, no longer
-   writable, and ruled off so it is plain which half it is. */
-.offeringfields { border-top: 1px solid var(--cs-line); padding-top: 8px; }
-.offeringfields.dormant { opacity: 0.5; }
-.offeringfields.dormant input { cursor: not-allowed; }
-/* What each switch adds to the offering, worked out where it can be checked. */
-.owedparts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: 0.8rem; line-height: 1.4; color: var(--cs-muted); }
-.owedparts b { color: var(--cs-fg); font-weight: 620; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.wealthswitches { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 10px 0; padding: 8px 0; border-block: 1px solid var(--cs-line); }
+.wealthswitches label.chk { font-weight: 600; }
+.owedpart { margin-top: 12px; }
+.owedpart > h4.subhead .badge { font-variant-numeric: tabular-nums; }
+.owedpart p.working { margin: 6px 0 0; font-variant-numeric: tabular-nums; }
 .wealthactions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
 /* The label field carries an inline `width: 15rem`, which is wider than a
    phone: the inline rule wins on `width`, so the cap has to be a max. */

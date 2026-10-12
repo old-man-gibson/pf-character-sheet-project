@@ -770,13 +770,14 @@ so the figure moves with the calendar exactly as the sheet's does. Formulas can 
 `mana.current`, `mana.expected` and `mana.after`.
 
 The panel says only as much as the character owes. **On hand**, **Current mana** and
-**Mana / day** are everyone's. The rest — *Owed*, *After offering*, the baseline, the
-date of the last offering, OoO/day and the session mana since — belongs to the two
-switches, and with neither of them on those fields are readable but not writable:
-there is no offering to keep a baseline for. Under the fields, each switch that is on
-says what it adds to the offering and how: the Oath's days since the last offering
-times OoO/day plus half the session mana, and material casting's whole months times
-10 × the caster level, with the day the next month is counted.
+**Mana / day** are everyone's, and under them the two switches sit side by side; with
+neither on, that is the whole panel. With either on it adds *Owed* and *After offering*
+beside *On hand*, the date of the last offering (no later than today) with the baseline
+kept after it, and a part for each switch that is on. The Oath's part holds OoO/day and
+the session mana since; material casting's holds the Spheres caster level, what a month
+costs and the day the next month is counted. Each part says what it owes and how that
+was worked out: days × OoO/day plus half the session mana, or whole months × the cost
+of a month.
 
 The panel is also the hook for what comes later: a **ledger**. Every reward, spend and
 offering is a dated line with a label and an amount, and the wallet moves with it — a

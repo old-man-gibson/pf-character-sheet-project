@@ -210,6 +210,27 @@ run.addEventListener('click', async () => {
       assert(sheet.model.data.wealth.lastOffering === '2026-01-01', 'The last date was not kept');
       assert(root.querySelector('[data-set="wealth.lastOffering"]').value === '2026-01-01', 'Drawn without its date');
     });
+    // Clicking into a date box ends the edit in the field before it, and the
+    // render that edit owes waited for the date box's first value -- which is
+    // the month, typed -- so the box was drawn again with its cursor sent back.
+    await test('A date box clicked into from another field waits until it is left', async () => {
+      const root = sheet.shadowRoot;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const box = root.querySelector('[data-set="wealth.lastOffering"]');
+      assert(box && !box.disabled, 'Last offering box missing');
+      pressOutOf(root.querySelector('[data-set="wealth.manaPerDay"]'), '12', box);
+      box.focus();
+      release(box);
+      box.value = '2026-02-01';
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert(root.querySelector('[data-set="wealth.lastOffering"]') === box, 'Drawn again on its first value');
+      assert(sheet.model.data.wealth.manaPerDay === 12, 'The field before it lost its edit');
+      box.blur();
+      box.dispatchEvent(new FocusEvent('blur'));
+      await until(() => root.querySelector('[data-set="wealth.lastOffering"]') !== box);
+      assert(sheet.model.data.wealth.lastOffering === '2026-02-01', 'The date was not kept');
+    });
     // The row folds and Help buttons are put in by the render below 620px,
     // so a sheet dragged across that width has to be drawn again to gain or
     // lose them; before, it kept whichever it had.

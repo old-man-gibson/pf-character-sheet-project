@@ -1029,61 +1029,64 @@ export function wealthPanel(model, ctx) {
     const draft = { amount: ctx.draft.wealthAmount ?? '', label: ctx.draft.wealthLabel ?? '', kind: ctx.draft.wealthKind || 'session' };
     const ledger = [...v.ledger].map((l, i) => ({ ...l, i })).reverse();
     const kindLabel = { session: 'session', reward: 'reward', spend: 'spend', offering: 'offering', adjust: 'adjustment' };
-    // Dead rather than gone: the numbers stay readable, and the moment either
-    // switch goes on they are fields again with whatever was in them.
-    const off = v.due ? '' : ' disabled';
-    const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
-    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} per Spheres caster level every whole month since the last offering — ${n(v.castingPerMonth)} a month at caster level ${v.casterLevel}.`;
     const plural = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
-    // What each switch adds to the offering, and how, so the figure can be checked.
-    const owedParts = [
-      v.oathOfOfferings ? `<li><b>Oath of Offerings ${n(v.expected.oath)}</b> ${v.lastOffering
-        ? `${plural(v.days, 'day')} since ${esc(v.lastOffering)} × ${n(v.offeringPerDay)}`
-        : 'no offering recorded, so no days are counted'}${v.sessionMana ? `, plus half of ${n(v.sessionMana)} session mana` : ''}</li>` : '',
-      v.materialCasting ? `<li><b>Material casting ${n(v.expected.casting)}</b> ${!v.lastOffering
-        ? 'no offering recorded, so no month is counted yet'
-        : !v.casterLevel
-          ? 'no Spheres caster level, so no components are owed'
-          : `${plural(v.months, 'whole month')} since ${esc(v.lastOffering)} × ${n(v.castingPerMonth)} (${MATERIAL_CASTING_PER_LEVEL} × caster level ${v.casterLevel})${
-            v.nextMonth ? `; the next month is counted on ${esc(v.nextMonth)}` : ''}`}</li>` : '',
-    ].filter(Boolean).join('');
+    const oathRule = 'Half the mana a day for every day since the last offering, plus half the mana earned in sessions since it.';
+    const castingRule = `${MATERIAL_CASTING_PER_LEVEL} per Spheres caster level for every whole month since the last offering.`;
+    // How each part came to what it is, in the order it is worked out, so the
+    // figure can be checked against the fields above it.
+    const undated = !v.lastOffering ? 'No offering recorded yet, so nothing is counted.'
+      : v.future ? `The last offering is dated after today (${esc(v.today)}), so nothing is counted yet.` : '';
+    const oathWorking = undated || `${plural(v.days, 'day')} × ${n(v.offeringPerDay)}${
+      v.sessionMana ? ` + half of ${n(v.sessionMana)} session mana` : ''} = ${n(v.expected.oath)}`;
+    const castingWorking = undated || (!v.casterLevel ? 'No Spheres caster level, so no components are owed.'
+      : `${plural(v.months, 'whole month')} × ${n(v.castingPerMonth)} = ${n(v.expected.casting)}${
+        v.nextMonth ? `; the next month is counted on ${esc(v.nextMonth)}` : ''}`);
+    // A part shows only while its switch is on: the Oath's rate and session
+    // mana mean nothing to a character who keeps no oath, and were sitting
+    // there live beside the one switch that was ticked.
+    const part = (title, owed, fields, working, rule) => `<div class="owedpart">
+          <h4 class="subhead">${title} <span class="badge${owed > 0 ? ' err' : ''}">owes ${n(owed)}</span></h4>
+          <div class="fieldgrid wealthfields">${fields}</div>
+          <p class="hint working" title="${esc(rule)}">${working}</p>
+        </div>`;
     return `<section class="panel span2 wealth">
       <h3>Wealth
         <span class="badge">${esc(v.currency)}</span>
         ${v.due ? `<span class="badge ${v.expected.total > 0 ? 'err' : ''}" title="What the next offering comes to today">owed ${n(v.expected.total)}</span>` : ''}
       </h3>
-      <div class="wealthgrid">
-        <div class="wealthnums">
-          <div class="bigstat"><div class="k">On hand</div><div class="v">${n(v.current)}</div><div class="sub">${esc(v.currency)}</div></div>
-          ${v.due ? `<div class="bigstat"><div class="k">Owed</div><div class="v">${n(v.expected.total)}</div>
-            <div class="sub">${[
+      <div class="bigstats wealthstats">
+        ${bigStat('On hand', n(v.current), v.currency)}
+        ${v.due ? `${bigStat('Owed', n(v.expected.total), [
     v.oathOfOfferings ? `oath ${n(v.expected.oath)}` : '',
     v.materialCasting ? `casting ${n(v.expected.casting)}` : '',
-  ].filter(Boolean).join(' · ')}</div></div>
-          <div class="bigstat"><div class="k">After offering</div><div class="v ${v.after < 0 ? 'neg' : ''}">${n(v.after)}</div>
-            <div class="sub">${v.lastOffering ? `${v.days} day${v.days === 1 ? '' : 's'} since ${esc(v.lastOffering)}` : 'no offering recorded'}</div></div>` : ''}
-        </div>
-        <div class="wealthfieldcol">
-          <div class="fieldgrid wealthfields">
-            ${field('Current mana', num('wealth.current', v.current))}
-            ${field('Mana / day', num('wealth.manaPerDay', v.manaPerDay))}
-            <label class="fld"><span>Oath of Offerings</span>${check('wealth.oathOfOfferings', v.oathOfOfferings, '', oathRule)}</label>
-            <label class="fld"><span>Material Casting</span>${check('wealth.materialCasting', v.materialCasting, '', castingRule)}</label>
-          </div>
-          <div class="offeringfields${v.due ? '' : ' dormant'}"${v.due ? ''
-    : ' title="Only the Oath of Offerings and material casting are paid this way — tick one to fill these in."'}>
-            <div class="fieldgrid wealthfields">
-              ${field('Baseline after last offering', autoNum('data-set="wealth.baseline"', v.baseline, {
-    placeholder: '—', title: 'The balance recorded after the last offering', extra: off.trim(),
-  }))}
-              ${field('OoO / day', roField(n(v.offeringPerDay), 'Mana/Day ÷ 2'))}
-              ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"${off}>`)}
-              ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, `min="0" title="Mana earned in sessions since the last offering; the oath takes half"${off}`))}
-            </div>
-            ${owedParts ? `<ul class="owedparts" aria-label="What the offering is made of">${owedParts}</ul>` : ''}
-          </div>
-        </div>
+  ].filter(Boolean).join(' · '))}
+        ${bigStat('After offering', { html: `<span class="${v.after < 0 ? 'neg' : ''}">${n(v.after)}</span>` },
+    v.lastOffering && !v.future ? `${plural(v.days, 'day')} since ${v.lastOffering}` : 'no offering counted')}` : ''}
       </div>
+      <div class="fieldgrid wealthfields">
+        ${field('Current mana', num('wealth.current', v.current))}
+        ${field('Mana / day', num('wealth.manaPerDay', v.manaPerDay))}
+      </div>
+      <div class="wealthswitches">
+        ${check('wealth.oathOfOfferings', v.oathOfOfferings, 'Oath of Offerings', oathRule)}
+        ${check('wealth.materialCasting', v.materialCasting, 'Material casting', castingRule)}
+      </div>
+      ${v.due ? `<div class="fieldgrid wealthfields">
+        ${field('Last offering', `<input type="date" value="${esc(v.lastOffering)}" data-set="wealth.lastOffering" data-kind="text"
+          min="1900-01-01" max="${esc(v.today)}" title="The day the last offering was made; today at the latest">`)}
+        ${field('Baseline after last offering', autoNum('data-set="wealth.baseline"', v.baseline, {
+    placeholder: '—', title: 'The balance recorded after the last offering',
+  }))}
+      </div>
+      ${v.oathOfOfferings ? part('Oath of Offerings', v.expected.oath, `
+        ${field('OoO / day', roField(n(v.offeringPerDay), 'Mana / day ÷ 2'))}
+        ${field('Session mana since', num('wealth.sessionMana', v.sessionMana, 'min="0" title="Mana earned in sessions since the last offering; the oath takes half"'))}`,
+  oathWorking, oathRule) : ''}
+      ${v.materialCasting ? part('Material casting', v.expected.casting, `
+        ${field('Spheres caster level', roField(String(v.casterLevel), 'From the Magic Spheres tab'))}
+        ${field('Per month', roField(n(v.castingPerMonth), `${MATERIAL_CASTING_PER_LEVEL} × caster level ${v.casterLevel}`))}
+        ${field('Next month counted', roField(v.nextMonth || '—', 'The day one more whole month since the last offering is owed'))}`,
+  castingWorking, castingRule) : ''}` : ''}
       <div class="wealthactions">
         <span class="pair">
           <select data-draft="wealthKind" aria-label="Kind">

@@ -1788,7 +1788,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#oweRender(press);
       return;
     }
-    if (PART_TYPES.has(activeInput?.type) && this.shadowRoot.activeElement === activeInput) {
+    if (PART_TYPES.has(activeInput?.type)) {
       this.#renderOnLeave(activeInput);
       return;
     }
@@ -1835,15 +1835,28 @@ export class CharacterSheetElement extends HTMLElement {
    * Draw again once a date or time box being typed in is left (PART_TYPES),
    * once however many values it reported on the way. Leaving it by a press on
    * something else waits for that press, as any edit ended by one does.
+   *
+   * Whether it is still being typed in is not asked of the focus when the
+   * value arrives: a box reports the value that completes a part while the
+   * browser is moving its cursor on to the next part, and for that moment the
+   * page's focus is on nothing. Asked then, the box looked left, was drawn
+   * again, and its cursor went back to the month every other keystroke. So it
+   * waits for the blur, and looks again a task later -- by when the cursor has
+   * landed -- for a box that really has been left without one: a value set
+   * from the calendar, or reported after the box lost focus.
    */
   #renderOnLeave(field) {
     if (this.#waitingToLeave.has(field)) return;
     this.#waitingToLeave.add(field);
-    field.addEventListener('blur', () => {
+    const left = () => {
+      if (!this.#waitingToLeave.has(field)) return;
       this.#waitingToLeave.delete(field);
+      field.removeEventListener('blur', left);
       const press = this.#pressLeaving(field);
       if (press) this.#oweRender(press); else this.#render();
-    }, { once: true });
+    };
+    field.addEventListener('blur', left);
+    setTimeout(() => { if (this.shadowRoot.activeElement !== field) left(); }, 0);
   }
 
   /**
@@ -1883,7 +1896,9 @@ export class CharacterSheetElement extends HTMLElement {
         const next = this.#pressLeaving(picker);
         if (next) this.#oweRender(next); else pay();
       };
-      picker.addEventListener('change', done, { once: true });
+      // A box typed in part by part reports a value per part; only leaving it
+      // is the end of the press. See `#renderOnLeave`.
+      if (!PART_TYPES.has(picker.type)) picker.addEventListener('change', done, { once: true });
       picker.addEventListener('blur', done, { once: true });
     } else if (press.up) pay();                     // let go already -- a tap -- so its click is running now
     else owed.timer = setTimeout(() => this.#payRender(owed), 1000);
