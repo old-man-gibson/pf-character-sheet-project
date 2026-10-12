@@ -77,13 +77,36 @@ export function companionNameTest(d) {
   return (name) => ids.has(String(name).split('.')[0].toLowerCase());
 }
 
-/** The worksheet each kind was imported from (none ever carried a conjured one). */
+/**
+ * The worksheet each kind is imported from. The first three are the
+ * template's; the conjured one is a tab built to the same pattern after the
+ * fact, so it answers to the sphere's name for the tab as well as the app's.
+ */
 export const COMPANION_TABS = {
   familiar: 'Familiar',
   animalCompanion: 'Animal Companion',
   eidolon: 'Eidolon',
-  conjured: 'Conjured Companion',
+  conjured: 'Conjuration Companion',
 };
+const COMPANION_TAB_ALIASES = { conjured: ['Conjured Companion'] };
+
+/**
+ * Which of a kind's companions a worksheet tab holds, by its name: 1 for the
+ * bare name ("Animal Companion", "Conjuration Companion"), n for a numbered
+ * one ("Conjuration Companion 2"), 0 when the tab is not one of the kind's.
+ * The number is the block's place in the kind's list, so a workbook can
+ * carry a second and third of a kind the way the app keeps them.
+ */
+export function companionTabNumber(kind, tabName) {
+  const names = [COMPANION_TABS[kind], ...(COMPANION_TAB_ALIASES[kind] || [])].filter(Boolean);
+  const name = String(tabName ?? '').trim();
+  for (const base of names) {
+    if (name === base) return 1;
+    const m = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d+)$`, 'i').exec(name);
+    if (m && Number(m[1]) >= 1) return Number(m[1]);
+  }
+  return 0;
+}
 
 /* ------------------------------------------------------------------ *
  * Progressions, one row per master level (index 0 = level 1).
