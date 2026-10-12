@@ -1326,7 +1326,7 @@ export class CharacterSheetElement extends HTMLElement {
       this.#publishedLink = { url: url.href, rev: answer.rev, summary, copied: null };
       this.#historyNote = null;
     } catch (err) {
-      this.#historyNote = `Could not publish — ${err.message}.`;
+      this.#historyNote = `Could not publish — ${err.message.replace(/\.$/, '')}.`;
     }
     this.#renderHeader();
   }
