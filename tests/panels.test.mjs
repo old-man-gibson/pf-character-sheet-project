@@ -605,19 +605,28 @@ console.log('\nthe dashboard lays out the cards a character uses, and the wallet
   c.set('wealth.currency', 'Gold & Glory');
   const html = overview.renderOverviewPanel(c, CTX);
   check('the currency is escaped once', [html.includes('Gold &amp; Glory'), html.includes('&amp;amp;')], [true, false]);
-  // Each switch says what it adds to the offering and how.
-  const parts = () => (/<ul class="owedparts"[^>]*>(.*?)<\/ul>/s.exec(gear.wealthPanel(c, CTX))?.[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-  check('no switch on, no parts', parts(), '');
+  // Each switch that is on gets a part of its own: its fields, what it owes,
+  // and how that was worked out. A switch that is off shows none of it.
+  const wealth = () => gear.wealthPanel(c, CTX);
+  const parts = () => [...wealth().matchAll(/<div class="owedpart">([\s\S]*?)<\/p>\s*<\/div>/g)]
+    .map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+  check('no switch on: no parts, and no offering date to fill in', [parts().length, wealth().includes('wealth.lastOffering')], [0, false]);
   c.set('wealth.materialCasting', true);
-  check('no offering recorded, no month counted', /Material casting 0 no offering recorded/.test(parts()), true);
+  check('material casting alone: its part, and none of the oath\'s fields',
+    [parts().length, /^Material casting owes 0 .*No offering recorded yet/.test(parts()[0]), wealth().includes('OoO / day')], [1, true, false]);
+  check('it says what a month costs', /<span>Per month<\/span>\s*<input[^>]*value="50"/.test(wealth()), true);
+  const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  check('the date box stops at today', wealth().includes(`max="${day(new Date())}"`), true);
   const ago = new Date();
   ago.setDate(ago.getDate() - 70);
-  c.set('wealth.lastOffering', `${ago.getFullYear()}-${String(ago.getMonth() + 1).padStart(2, '0')}-${String(ago.getDate()).padStart(2, '0')}`);
-  check('material casting shows its months, rate and caster level, and the next month',
-    /Material casting \d[\d,]* \d+ whole months? since .* × 50 \(10 × caster level 5\); the next month is counted on \d{4}-\d{2}-\d{2}/.test(parts()), true);
+  c.set('wealth.lastOffering', day(ago));
+  check('and works out its months, the cost and the next month',
+    /\d+ whole months? × 50 = [\d,]+; the next month is counted on \d{4}-\d{2}-\d{2}/.test(parts()[0]), true);
   c.set('wealth.oathOfOfferings', true);
   c.set('wealth.manaPerDay', 10);
-  check('the oath shows its days and rate beside it', /Oath of Offerings 350 70 days since .* × 5/.test(parts()), true);
+  check('the oath gets its own part, first', /^Oath of Offerings owes 350 .*70 days × 5 = 350/.test(parts()[0]), true);
+  c.set('wealth.lastOffering', '275760-05-05');
+  check('a six-digit year is no date, not NaN', [wealth().includes('NaN'), /No offering recorded yet/.test(parts()[0])], [false, true]);
 }
 
 console.log('\nthe spell list\'s ask-twice × says when it is armed');

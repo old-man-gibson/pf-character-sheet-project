@@ -7394,6 +7394,18 @@ console.log('material casting: the next whole month, counted as DATEDIF counts i
   check('nor without the switch', wealthView({ lastOffering: '2026-01-31' }, new Date(2026, 1, 15), 3).nextMonth, '');
 }
 
+console.log('a date box\'s six-digit year is no date, and a date after today counts nothing');
+{
+  // A date box lets its year run to 275760; the counts read "2757" off it and came out NaN.
+  check('a year that is not four digits is not a date', [isoDay('275760-05-05'), isoDay('20261-05-05'), isoDay(new Date(275760, 4, 5))], ['', '', '']);
+  const owing = { materialCasting: true, oathOfOfferings: true, manaPerDay: 10, current: 100 };
+  const v = wealthView({ ...owing, lastOffering: '275760-05-05' }, new Date(2026, 9, 11), 16);
+  check('so nothing is counted from it, and nothing is NaN', [v.lastOffering, v.days, v.months, v.expected.total, v.after], ['', 0, 0, 0, 100]);
+  const f = wealthView({ ...owing, lastOffering: '2026-12-01' }, new Date(2026, 9, 11), 16);
+  check('a last offering after today is flagged and counts nothing', [f.future, f.days, f.months, f.expected.total, f.today], [true, 0, 0, 0, '2026-10-11']);
+  check('today is not after today', wealthView({ ...owing, lastOffering: '2026-10-11' }, new Date(2026, 9, 11), 16).future, false);
+}
+
 console.log('wealth -- the wallet in mana, the offering owed, and the ledger');
 {
   const c = new Character(load('saburo'));

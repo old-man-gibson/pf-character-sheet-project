@@ -21,15 +21,25 @@ export const WEALTH_KINDS = ['session', 'reward', 'spend', 'offering', 'adjust']
  */
 export const MATERIAL_CASTING_PER_LEVEL = 10;
 
-/** "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''. */
+/**
+ * "2026-08-02T00:00:00" or a Date → "2026-08-02"; anything unreadable → ''.
+ *
+ * Four-digit years only. A date box lets its year run to six digits, and
+ * "275760-05-05" went through the loose parser, was kept as it was typed,
+ * and every count read "2757" as its year and came out NaN.
+ */
 export function isoDay(v) {
   if (v === null || v === undefined || v === '') return '';
   // Local calendar day, not UTC: an offering made at eleven at night is made
   // that day, and the day count reads the same clock.
-  const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const local = (d) => {
+    const y = d.getFullYear();
+    if (y < 1000 || y > 9999) return '';
+    return `${y}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : local(v);
   const s = String(v).trim();
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?!\d)/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? '' : local(d);
@@ -115,9 +125,14 @@ export function wealthView(w, today = new Date(), casterLevel = 0) {
   const oath = v.oathOfOfferings ? days * offeringPerDay + Math.floor(v.sessionMana / 2) : 0;
   const casting = v.materialCasting ? months * castingPerMonth : 0;
   const expected = oath + casting;
+  const day = isoDay(today);
   return {
     ...v,
     offeringPerDay, days, months, casterLevel: cl, castingPerMonth,
+    // The date box's ceiling, and a last offering past it -- typed, not
+    // picked -- which counts no days and no months rather than going negative.
+    today: day,
+    future: !!v.lastOffering && v.lastOffering > day,
     // When the material-casting upkeep next grows by a month.
     nextMonth: v.materialCasting ? nextMonthDay(v.lastOffering, today) : '',
     expected: { oath, casting, total: expected },
