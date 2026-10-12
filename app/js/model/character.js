@@ -104,7 +104,7 @@ import {
 import { essenceScope, recomputeAkashic, veilScope } from './subsystems/akashic.js';
 import {
   cardAttuned, cardOwner, cardRef, cardRollFormulas, cardRollSpec, cardRolls, cardSiblings, cardStatLines, cardStats, castCheck, casterFor, casterInfo,
-  terrainCasting, terrainDefault, terrainFreedomTracker, moveCard,
+  terrainCasting, terrainDefault, terrainFreedomTracker, moveCard, tableTargets,
   deckSquad, drawCards, hasDeckFeat, hasManipulation, manaPlayCheck,
   recomputeCardcasting, recomputeTable, rollFor, shareCardDice, shuffle, spellPointTracker, spendSP,
   tableBoost, tableBury, tableCard, tableDraw, tableEnd, tableExileRandom, tableInstances,
@@ -751,6 +751,7 @@ export class Character {
   terrainDefault(card) { return terrainDefault(this, card); }
   terrainFreedomTracker() { return terrainFreedomTracker(this); }
   moveCard(...a) { return moveCard(this, ...a); }
+  tableTargets(id, text) { return this.play(`${tableName(this, id)} targets`, () => tableTargets(this, id, text)); }
   cardRollSpec(...a) { return cardRollSpec(this, ...a); }
   cardSiblings(...a) { return cardSiblings(this, ...a); }
   shareCardDice(...a) { return shareCardDice(this, ...a); }

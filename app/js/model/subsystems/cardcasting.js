@@ -1048,6 +1048,10 @@ export function recomputeTable(model) {
   }
   // A trap is a card in play that is face down; the list is the flag.
   t.faceDown = t.faceDown.filter((id) => t.play.includes(id));
+  // Who an ongoing card is affecting, written by the player; it goes with the card when the card leaves play.
+  t.targets = Object.fromEntries(Object.entries(t.targets && typeof t.targets === 'object' ? t.targets : {})
+    .filter(([id, text]) => t.play.includes(id) && String(text || '').trim())
+    .map(([id, text]) => [id, String(text)]));
   if (t.lastRoll && typeof t.lastRoll !== 'object') t.lastRoll = null;
   if (t.counters && (typeof t.counters !== 'object' || !model.tableCard(t.counters.id))) t.counters = null;
   t.lastTrigger = typeof t.lastTrigger === 'string' ? t.lastTrigger : '';
@@ -1396,7 +1400,7 @@ export function tableStart(model) {
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
-    ...piles, faceDown: [], log: [], counters: null, lastRoll: null, lastTrigger: '',
+    ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
   tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled`);
@@ -2134,6 +2138,20 @@ export function cardSiblings(model, list, index) {
   return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
 }
 
+/**
+ * Who an ongoing card is affecting, in the player's words -- "the ogre and
+ * both guards" -- kept on the table beside the card while it is in play,
+ * and gone with it when it resolves. Blank clears it.
+ */
+export function tableTargets(model, id, text) {
+  const t = model.data.cardcasting?.table;
+  if (!t || !(t.play || []).includes(id)) return model;
+  t.targets = t.targets && typeof t.targets === 'object' ? t.targets : {};
+  const clean = String(text ?? '').trim();
+  if (clean) t.targets[id] = clean; else delete t.targets[id];
+  return model.recompute();
+}
+
 /** The two lists a card may live in. */
 const CARD_LISTS = ['cardcasting.cards', 'cardcasting.sideboard'];
 
@@ -2269,7 +2287,7 @@ export function tableEnd(model) {
   const exiled = t.exile.length;
   Object.assign(t, {
     active: false, round: 0, redraws: 0, manaPlayed: 0,
-    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [],
+    deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
   tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}`);

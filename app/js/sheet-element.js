@@ -1381,6 +1381,7 @@ export class CharacterSheetElement extends HTMLElement {
       case 'retrace': m.tableRetrace(id); break;
       case 'bury': m.tableBury(id); break;
       case 'move': m.tableMove(id, arg); break;
+      case 'targets': m.tableTargets(id, arg); break;
       case 'tap': m.tableTap(id); break;
       case 'peek': this.#view.peek = m.tablePeek(Number(arg) || 1); break;
       default: return false;
@@ -4934,6 +4935,12 @@ export class CharacterSheetElement extends HTMLElement {
       sel.addEventListener('change', () => {
         if (!sel.value) return;
         if (this.#tableAction('move', sel.dataset.tableMove, sel.value)) this.#render();
+      });
+    });
+    // Who an ongoing card is affecting, typed beside it; blank clears it.
+    root.querySelectorAll('[data-table-targets]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (this.#tableAction('targets', input.dataset.tableTargets, input.value)) this.#rerender(input);
       });
     });
 

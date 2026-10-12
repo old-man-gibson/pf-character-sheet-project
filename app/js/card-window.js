@@ -118,6 +118,8 @@ root.addEventListener('click', (e) => {
 root.addEventListener('change', (e) => {
   const sel = e.target;
   if (sel?.matches?.('.castpick select[name="mode"]')) { followCastPick(sel); return; }
+  // Who an ongoing card is affecting: typed in the hand window, kept on the sheet; blank clears it.
+  if (sel?.dataset?.tableTargets) { send({ type: 'cards:action', action: 'targets', id: sel.dataset.tableTargets, arg: sel.value }); return; }
   if (!sel?.value) return;
   if (sel.dataset.tableMove) send({ type: 'cards:action', action: 'move', id: sel.dataset.tableMove, arg: sel.value });
   else if (sel.dataset.tableRoll) send({ type: 'cards:action', action: 'boost', id: sel.dataset.tableRoll, arg: sel.value });

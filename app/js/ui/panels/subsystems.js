@@ -2485,7 +2485,7 @@ export function cardcastingPanel(model, ctx) {
    * the effect, and whatever buttons the zone offers. Same frame rules as
    * the full face.
    */
-function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [] } = {}) {
+function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = false, formulas = [], extra = '' } = {}) {
     const card = model.tableCard(id);
     if (!card) return '';
     const r = card.calc || {};
@@ -2507,6 +2507,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
       ${statsLine(model, card)}
       ${String(card.effect || '').trim() ? `<div class="text">${markKeywords(hasTokens(card.effect) ? renderedProse(model, card.effect) : esc(card.effect))}</div>` : ''}
       ${rolls}
+      ${extra}
       <div class="foot">
         ${card.mana ? `<span class="pair" title="Mana this card carries">${manaChips(card.mana, '')}</span>` : ''}
         ${badge}
@@ -2842,6 +2843,11 @@ function playZone(s) {
         </div>`
       : cardMini(model, id, {
         ...s.miniOpts(id),
+        // Who it is affecting: the player writes it where the controls are;
+        // the shared screen reads it.
+        extra: s.faces.controls
+          ? `<div class="targets"><input type="text" value="${esc(t.targets?.[id] || '')}" data-table-targets="${esc(id)}" placeholder="targets — who it affects" aria-label="Targets"></div>`
+          : (t.targets?.[id] ? `<div class="targets"><small>targets</small> ${esc(t.targets[id])}</div>` : ''),
         buttons: `${tableBtn('resolve', id, 'Resolve', { title: 'The effect ends: back to the deck, or the discard under Cooldown', cls: 'primary' })}${s.rollBtn(id, model.tableCard(id))}${s.copyBtn(id)}${s.spBtn(id)}${s.zoneMoves(id, 'play')}`,
       }))).join('');
     return `<section class="panel f-play">

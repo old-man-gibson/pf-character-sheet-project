@@ -13058,6 +13058,35 @@ console.log('\na card moves between the deck and the sideboard, or is copied acr
   c.tableEnd();
 }
 
+console.log('\nan ongoing card carries who it is affecting while it is in play');
+{
+  const c = new Character(blankDocument({ name: 'Dealer', level: 5 }));
+  c.data.cardcasting.enabled = true;
+  c.data.cardcasting.cards = [{ name: 'Slow', qty: 3, cost: '1', color: 'U', mana: '', sphere: 'Time', effect: 'Slow', dice: '' }];
+  c.recompute();
+  const t = () => c.data.cardcasting.table;
+  c.tableStart();
+  const id = t().hand[0];
+  c.tablePlay(id, 'ongoing');
+  check('the card is in play', t().play.includes(id), true);
+  c.tableTargets(id, '  the ogre and both guards ');
+  check('the targets are written beside it, trimmed', t().targets[id], 'the ogre and both guards');
+  check('undo takes it back as one step, named for the card', [c.undo(), id in t().targets], ['Slow targets', false]);
+  c.tableTargets(id, 'the ogre and both guards');
+  const tab = subsystemPanels.cardcastingPanel(c, { deckView: 'table', openCards: new Set() });
+  check('the tab draws a field to type them in', tab.includes(`data-table-targets="${id}"`) && tab.includes('value="the ogre and both guards"'), true);
+  const screen = subsystemPanels.cardTableView(c, { openCards: new Set() }, 'table');
+  check('the shared screen reads them, with no field', screen.includes('<small>targets</small> the ogre and both guards') && !screen.includes('data-table-targets'), true);
+  c.tableTargets(id, '');
+  check('blank clears them', id in t().targets, false);
+  c.tableTargets(id, 'the ogre');
+  c.tableMove(id, 'discard');
+  check('and they go with the card when it leaves play', [t().play.includes(id), id in t().targets], [false, false]);
+  check('a card not in play takes none', [c.tableTargets(t().hand[0] || '9#9', 'x'), Object.keys(t().targets).length], [c, 0]);
+  check('an encounter starts with none', (c.tableEnd(), c.tableStart(), t().targets), {});
+  c.tableEnd();
+}
+
 console.log('the Dice picker joins what it adds to what is there');
 {
   check('a roll into an empty field', appendDiceText('', '{1+floor(caster.level/2)}d6'), '{1+floor(caster.level/2)}d6');

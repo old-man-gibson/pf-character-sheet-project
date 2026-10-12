@@ -776,6 +776,10 @@ where it is. While an encounter is on, nothing leaves the deck — the table add
 cards by their place — but a copy, or a card joining the deck, is fine; a card that joins
 the deck is in play after the next shuffle.
 
+**Targets.** A card in play has a **targets** line under its text — "the ogre and both
+guards" — typed on the tab or in the hand window, read on the shared table screen, and
+gone with the card when it resolves. Each change is one undo step, named for the card.
+
 **Terrain Casting.** With the drawback on the tradition (and not bought off), every cast
 pays it one of three ways: one spell point more, a casting-time step, or blighting your
 square and the eight around it. A plain **Cast** pays the point on a card with a cost and

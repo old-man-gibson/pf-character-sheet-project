@@ -5358,6 +5358,11 @@ table.stacked .catface { margin-left: 0; }
 .mcard .bar.stats select.dmgpick { flex: none; max-width: 4.2rem; font-size: 0.7rem; }
 .mcard .bar.stats .preview { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 3px; }
 .mcard .bar.stats .preview .badge { font-size: 0.62rem; text-transform: none; letter-spacing: 0; }
+/* Who an ongoing card is affecting, written beside it in play. */
+.mcard.mini .targets { padding: 0 2px; font-size: 0.7rem; color: #f4efe4; }
+.mcard.mini .targets small { font-weight: 700; text-transform: uppercase; font-size: 0.6rem; letter-spacing: 0.04em; opacity: 0.8; }
+.mcard.mini .targets input { width: 100%; box-sizing: border-box; font-size: 0.72rem; padding: 1px 5px; background: rgba(0,0,0,0.18); border-color: transparent; color: #f4efe4; }
+.mcard.mini .targets input::placeholder { color: rgba(244,239,228,0.6); }
 /* The subtitle: what the card does, under a name of its own. */
 .mcard .bar.sub.subtitle { font-style: italic; }
 .mcard .bar.sub.subtitle input { width: 100%; flex: 1; font-size: 0.76rem; font-style: italic; }

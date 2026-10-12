@@ -3843,6 +3843,7 @@
    "wounds": [],
    "death": [],
    "faceDown": [],
+   "targets": {},
    "lastTrigger": "",
    "mana": [],
    "log": [],
