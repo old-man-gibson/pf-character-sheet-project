@@ -17,12 +17,14 @@ _Part of the [Pathfinder Character Sheet Program](../README.md) docs. Things agr
   in `rules.js` (they drive skill-rank and unarmed logic), the Primordia techniques, and the
   mythic path names. To be lifted into packs so the engine ships fully content-free.
 - **Empty `data/extensions/` before 1.0.** The complement of the item above: those are
-  names the *engine* holds, these are packs the *repository* ships. Four are left —
+  names the *engine* holds, these are packs the *repository* ships. Five are left —
   `path-of-war-disciplines` (76 KB), `vancian-casting-tables` (54 KB),
-  `psionic-manifesting-tables`, `iron-chef-ingredients` — and they are structure rather
+  `psionic-manifesting-tables`, `iron-chef-ingredients`, and `alt-training-techniques`
+  (the campaign's own, shipped on 2026-10-12 so a deployment's Alternate Training tab
+  has something to offer). The four tables are structure rather
   than prose: names, levels and numbers, with no rules text in any of them (asserted in
-  `tests/extensions.test.mjs`, which fails if a bundled pack grows a `text`, `note`,
-  `desc` or `body` field). That is why they are still here and why shipping them is fine
+  `tests/extensions.test.mjs`, which fails if one of them grows a `text`, `note`,
+  `desc` or `body` field; the techniques pack is the named exception). That is why they are still here and why shipping them is fine
   for now. It is not fine for a release: a discipline's maneuver list is somebody's table
   even with the rules text taken out of it, and the engine's claim is that it carries no
   content at all. **At 1.0 all four move to `private/extensions/`, and `data/extensions/`
