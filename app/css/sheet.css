@@ -3834,20 +3834,22 @@ button.badge:hover { background: color-mix(in srgb, currentColor 10%, transparen
  *
  * So the furniture gets thinner as the screen does. Nothing is removed: the
  * bands, the panels and the rules are all still there, drawn tighter. */
+/* Helper text longer than a caption is folded behind a line that says what it
+   is about, at every width: the sheet explains itself, and once read the
+   explanation is in the way. Which are open is element state (#clampHints). */
+.body .hint.longhint { display: none; }
+.body .hint.longhint.is-open { display: block; margin-top: 2px; }
+button.helpopen {
+  display: inline-block; text-align: left; margin: 4px 0 0;
+  padding: 2px 7px; font-size: 0.72rem; font-weight: 600;
+  color: var(--cs-muted); background: var(--cs-panel-2);
+  border-color: var(--cs-line); border-radius: 5px;
+}
+button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
+
 @container (max-width: 620px) {
-  /* An explanation longer than a paragraph, folded behind a line that says
-     what it is about. Away entirely rather than clamped to three lines: three
-     lines of a paragraph is neither the paragraph nor out of the way, and the
-     line above it is a control that goes both ways, which a clamp was not. */
-  .body .hint.longhint { display: none; }
-  .body .hint.longhint.is-open { display: block; margin-top: 2px; }
-  button.helpopen {
-    display: block; width: 100%; text-align: left; margin: 4px 0 0;
-    padding: 3px 7px; font-size: 0.72rem; font-weight: 600;
-    color: var(--cs-muted); background: var(--cs-panel-2);
-    border-color: var(--cs-line); border-radius: 5px;
-  }
-  button.helpopen:hover, button.helpopen[aria-expanded="true"] { color: var(--cs-accent); }
+  /* The help line takes the row on a phone, where there is no room beside it. */
+  button.helpopen { display: block; width: 100%; }
   .wrap { --cs-wrap-pad: 8px; }
   .panel { padding: 9px 8px; }
   .supergroup { padding: 8px 8px 9px; }
