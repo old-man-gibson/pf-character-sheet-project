@@ -293,10 +293,13 @@ export function describePublish(report) {
   const parts = [n
     ? `carrying ${n} entr${n === 1 ? 'y' : 'ies'} of pack content`
     : 'carrying no pack content'];
+  // The three shortfalls are told apart because the fixes differ: an outline
+  // is the catalogue's choice, a blank is a pack to correct, and an unknown
+  // is a pack this browser does not have switched on.
   if (report.outline.length) {
     parts.push(`${report.outline.length} with no rules text behind the name`);
   }
-  const short = report.blank.length + report.unknown.length;
-  if (short) parts.push(`${short} with nothing at all`);
+  if (report.blank.length) parts.push(`${report.blank.length} in a pack that has no text for it`);
+  if (report.unknown.length) parts.push(`${report.unknown.length} in no pack this browser has loaded`);
   return `${parts.join('; ')}.`;
 }
