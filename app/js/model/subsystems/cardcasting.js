@@ -691,6 +691,7 @@ export function recomputeCardcasting(model) {
     card.effect = String(card.effect ?? '');
     card.art = String(card.art ?? '');
     card.dice = String(card.dice ?? '');
+    for (const f of CARD_STAT_FIELDS) card[f] = String(card[f] ?? '');
   }
   for (const card of p.cards) card.qty = Math.max(0, Math.floor(Number(card.qty ?? 1) || 0));
   p.harrow = !!p.harrow;
@@ -1831,6 +1832,117 @@ export function appendDiceText(current, piece) {
   return `${now}; ${add}`;
 }
 
+/* ------------------------------------------------------------------ *
+ * A card's stat line: save, DC, range, target, damage type.
+ *
+ * Five fields beside the text, so the table can read a card without reading
+ * its effect, and the Roll20 message can carry them as lines. Each is text,
+ * and each takes a formula: the inline grammar (`{10 + caster.level}`) in
+ * any of them, and the DC also as a bare one (`caster.dc`), since a DC is a
+ * number before it is anything else. The range words resolve to feet for the
+ * caster's level (close is 25 ft + 5 ft per two levels), so "close" on a
+ * card reads as "close (60 ft)" at the table.
+ * ------------------------------------------------------------------ */
+
+/** The fields of a card's stat line, in the order the face shows them. */
+export const CARD_STAT_FIELDS = ['save', 'dc', 'range', 'target', 'damage'];
+/** The saves a card may call for, as the picker offers them. */
+export const CARD_SAVES = ['Ref', 'Fort', 'Will', 'none'];
+/** The range words, and the Pathfinder bands behind three of them (feet at a caster level). */
+export const CARD_RANGES = ['melee', 'close', 'medium', 'long'];
+const RANGE_BANDS = {
+  close: (cl) => 25 + 5 * Math.floor(cl / 2),
+  medium: (cl) => 100 + 10 * cl,
+  long: (cl) => 400 + 40 * cl,
+};
+/** The shapes a card may take. */
+export const CARD_TARGETS = ['single', 'line', 'cone', 'burst'];
+/** The damage types the picker offers; the field takes any word as well. */
+export const CARD_DAMAGE_TYPES = [
+  'bludgeoning', 'piercing', 'slashing',
+  'acid', 'cold', 'electricity', 'fire', 'sonic', 'force',
+  'negative energy', 'positive energy', 'nonlethal', 'bleed', 'untyped',
+];
+const SAVE_WORDS = { ref: 'Reflex', reflex: 'Reflex', fort: 'Fortitude', fortitude: 'Fortitude', will: 'Will', none: 'none' };
+
+/**
+ * A card's stat line worked out for the caster: `{ save, dc, dcError, range,
+ * rangeFeet, target, damage, any }`. `save`, `range` and `target` are the
+ * text with its formulas resolved; `dc` is a number as text when the field
+ * is one or works out to one, else the text as typed with `dcError` saying
+ * why; `rangeFeet` is the band in feet, or the number typed, or null for
+ * melee and anything else; `damage` is the list of types, split on commas.
+ * The face previews these beside the fields and the Roll20 text is built
+ * from them. One reading, so the two agree.
+ */
+export function cardStats(model, card, who = null) {
+  const caster = casterFor(model, who);
+  const scope = casterScope(model, caster);
+  const text = (f) => cardProse(model, card?.[f], caster).trim();
+  const save = text('save');
+  const dcRaw = text('dc');
+  let dc = dcRaw;
+  let dcError = '';
+  if (dcRaw && !/^-?\d+$/.test(dcRaw)) {
+    try {
+      const v = Number(evaluateFormula(dcRaw, scope));
+      if (Number.isFinite(v)) dc = String(Math.floor(v));
+      else dcError = 'not a number';
+    } catch (err) {
+      dcError = err.message;
+    }
+  }
+  const range = text('range');
+  const band = RANGE_BANDS[range.toLowerCase()];
+  const cl = Number(scope.caster?.level) || 0;
+  const rangeFeet = band ? band(cl) : /^\d+$/.test(range) ? Number(range) : null;
+  const target = text('target');
+  const damage = text('damage').split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
+  const any = !!(save || dcRaw || range || target || damage.length);
+  return { save, dc, dcError, range, rangeFeet, target, damage, any };
+}
+
+/**
+ * The stat line as it is read -- `[label, text]` pairs: "Save: Reflex DC 24",
+ * "Range: close (60 ft)", "Target: burst", "Damage type: fire, cold". The
+ * save and the DC are one line when both are there, since that is how a
+ * save is said; a DC with no save is a line of its own. The hand's small
+ * faces and the Roll20 notes both read from here.
+ */
+export function cardStatLines(model, card, who = null) {
+  const s = cardStats(model, card, who);
+  const lines = [];
+  const saveWord = SAVE_WORDS[s.save.toLowerCase()] || s.save;
+  // A DC that did not work out stays a line of its own, as typed, so the
+  // broken formula is read as one rather than as a save's number.
+  if (s.save && s.dc && !s.dcError) lines.push(['Save', `${saveWord} DC ${s.dc}`]);
+  else {
+    if (s.save) lines.push(['Save', saveWord]);
+    if (s.dc) lines.push(['DC', s.dc]);
+  }
+  if (s.range) {
+    const feet = s.rangeFeet === null ? '' : /^\d+$/.test(s.range) ? ' ft' : ` (${s.rangeFeet} ft)`;
+    lines.push(['Range', `${s.range}${feet}`]);
+  }
+  if (s.target) lines.push(['Target', s.target]);
+  if (s.damage.length) lines.push(['Damage type', s.damage.join(', ')]);
+  return lines;
+}
+
+/**
+ * A word added to a comma-separated field by the picker beside it -- the
+ * damage types: it joins what is there with ", ", and a word the field
+ * already holds is not added twice.
+ */
+export function appendListText(current, piece) {
+  const now = String(current ?? '').trim().replace(/[,;\s]+$/, '');
+  const add = String(piece ?? '').trim();
+  if (!add) return now;
+  const have = now.split(/\s*[,;]\s*/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (have.includes(add.toLowerCase())) return now;
+  return now ? `${now}, ${add}` : add;
+}
+
 /** How long a card's effect may be before it is a note rather than part of the name. */
 const SHORT_EFFECT = 80;
 
@@ -1880,6 +1992,7 @@ export function cardRollSpec(model, ref, which = null, who = null) {
     const words = [...colors].map((c) => (CARD_COLORS.find(([k]) => k === c) || [c, c])[1]).join('/');
     notes.push({ label: 'Cost', text: `${cost} SP${words ? ` (${words})` : ''}` });
   }
+  for (const [label, text] of cardStatLines(model, card, caster)) notes.push({ label, text });
   const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
   if (type) notes.push({ label: 'Sphere', text: type });
   if (card.mana) notes.push({ label: 'Mana', text: String(card.mana) });
@@ -1905,12 +2018,19 @@ export function cardSiblings(model, list, index) {
   return cards.map((c, i) => i).filter((i) => i !== index && String(cards[i].effect || '').trim().toLowerCase() === effect);
 }
 
-/** Give this card's Dice field to every card that shares its effect. Returns how many took it. */
+/**
+ * Give this card's Dice field, and its stat line, to every card that shares
+ * its effect. Returns how many took it. Cards with one effect have one save,
+ * range and damage type as surely as they have one set of dice.
+ */
 export function shareCardDice(model, list, index) {
   const cards = list === 'cardcasting.sideboard' ? model.data.cardcasting?.sideboard : model.data.cardcasting?.cards;
-  const dice = String(cards?.[index]?.dice ?? '');
+  const from = cards?.[index] || {};
   const siblings = cardSiblings(model, list, index);
-  for (const i of siblings) cards[i].dice = dice;
+  for (const i of siblings) {
+    cards[i].dice = String(from.dice ?? '');
+    for (const f of CARD_STAT_FIELDS) cards[i][f] = String(from[f] ?? '');
+  }
   if (siblings.length) model.recompute();
   return siblings.length;
 }
