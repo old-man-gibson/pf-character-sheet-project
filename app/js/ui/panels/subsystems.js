@@ -82,7 +82,7 @@ import { countsTowardLine } from '../counts-toward.js';
 import { squareLayout } from '../../tracker-style.js';
 import { abilitySelect, check, field, num, autoNum, levelPin, levelPinHint, select, text } from '../fields.js';
 import {
-  addButton, bigStat, collapsible, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
+  addButton, bigStat, collapsible, collapsibleSub, exprField, foldButton, isCollapsed, isOpen, itemCheck, itemNum,
   itemSelect, itemText, line,
   lineHtml, miniStat, proseList, removeButton, rowRemove, rowTools, working,
 } from '../rows.js';
@@ -2492,6 +2492,14 @@ export function cardcastingPanel(model, ctx) {
     </div>`;
   }
 
+  /** A card's cost as a zone shows it: the cost to pay, with the typed figure and the Rainbow Efficiency discount on hover. */
+function costMark(card) {
+    const typed = String(card.cost ?? '').trim();
+    if (!typed) return '';
+    const off = Number(card.calc?.discount) || 0;
+    return off ? `<b title="${esc(`Typed ${typed}; Rainbow Efficiency takes ${off} off`)}">${esc(String(card.calc.cost))}</b>` : `<b>${esc(typed)}</b>`;
+  }
+
   /**
    * A card small enough for a zone: title bar with cost, the type line and
    * the effect, and whatever buttons the zone offers. Same frame rules as
@@ -2510,7 +2518,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
     return `<div class="mcard mini ${frameClass}${tapped ? ' tapped' : ''}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}" data-card="${esc(id)}">
       <div class="bar title">
         ${ownerTag(model, card)}<span class="name">${esc(card.name || (isMana ? 'Mana Point' : card.effect || 'card'))}</span>
-        <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
+        <span class="cost">${costMark(card)}${manaChips(colors, '')}</span>
         ${expandBtn(id, open)}
       </div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
@@ -2753,7 +2761,7 @@ function castPicker(s, id, card, modes, casters = []) {
           </select>
         </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
-      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${costMark(card)}</span></div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${statsLine(model, card)}
       <div class="text">
@@ -3287,6 +3295,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           <input type="text" class="colorpick" value="${esc(card.color ?? '')}" data-item="${list}|${i}|color" data-kind="text"
             placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colours" title="Colour letters: R B U W G">
           ${manaChips(colors, '')}
+          ${r.discount ? `<span class="badge" title="${esc(`Rainbow Efficiency: ${r.discount} off for ${colors.length} colours — ${r.cost} to cast`)}">→ ${r.cost}</span>` : ''}
         </span>
       </div>
       <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
@@ -3481,8 +3490,12 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
     </div>`;
   }
 
-  /** The deck: one face per card. */
+  /** The deck: one face per card. Folds, like the panels above it, and each owner's group folds on its own. */
 function deckTablePanel(model, ctx, p, k) {
+    return collapsible(model, 'deck:cards', deckTableBody(model, ctx, p, k));
+  }
+
+function deckTableBody(model, ctx, p, k) {
     const list = 'cardcasting.cards';
     const cards = p.cards || [];
     const suitTally = k.suitTally || {};
@@ -3537,14 +3550,11 @@ function deckGroups(model, ctx, p, k, list, cards, newCard) {
     return owners.map((o) => {
       const mine = cards.filter((card) => model.cardOwner(card) === o.id);
       const d = o.id ? o.deck : k;
-      return `<div class="deckgroup">
-        <h4 class="subhead">${esc(o.name)}’s deck
+      const title = `${esc(o.name)}’s deck
           <span class="badge">${d.deckSize ?? 0} cards</span>
-          ${o.id ? `${manaChips(o.colors, '')}${o.ok ? '' : `<span class="badge err" title="${esc(o.why)}">cannot combine</span>`}${d.issues?.length ? `<span class="badge err" title="${esc(d.issues.join('\n'))}">${d.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}` : ''}
-        </h4>
-        ${mine.length ? `<div class="cardgrid">${faces(o.id)}</div>` : `<p class="empty">${o.id ? `No cards yet for ${esc(o.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
-        ${adds(o.id, o.colors)}
-      </div>`;
+          ${o.id ? `${manaChips(o.colors, '')}${o.rainbow ? `<span class="badge">${o.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}${o.ok ? '' : `<span class="badge err" title="${esc(o.why)}">cannot combine</span>`}${d.issues?.length ? `<span class="badge err" title="${esc(d.issues.join('\n'))}">${d.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}` : ''}`;
+      return collapsibleSub(model, `deck:${o.id || 'me'}`, title, `${mine.length ? `<div class="cardgrid">${faces(o.id)}</div>` : `<p class="empty">${o.id ? `No cards yet for ${esc(o.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
+        ${adds(o.id, o.colors)}`, 'deckgroup');
     }).join('');
   }
 
@@ -3567,13 +3577,15 @@ function squadPanel(model, p, k) {
       <p class="hint">A squad member's deck is shuffled in with yours while it is at the table (the roster under the table's
         controls). Any member may cast any card in the hand, using its own caster level, modifier and spell points. Write
         a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
-        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own. Your deck
+        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own, and so is
+        Rainbow Efficiency: a member's multi-colour cards are discounted by its own feat, yours by yours. Your other deck
         feats and manipulations stay yours.</p>
       ${squad.map((m) => `<div class="squadrow">
         <div class="what"><strong>${esc(m.name)}</strong>
           <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
           ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
           ${manaChips(m.colors, '')}
+          ${m.rainbow ? `<span class="badge" title="Its own deck feat: its multi-colour effects cost less">${m.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
           <span class="badge">${m.deck.deckSize} cards</span>
           ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
           ${!m.ok && m.why ? `<p class="hint">${esc(m.why)}.</p>` : ''}
@@ -3583,11 +3595,11 @@ function squadPanel(model, p, k) {
     </section>`;
   }
 
-  /** Cards kept aside for a swap at rest. */
+  /** Cards kept aside for a swap at rest. Folds like the deck. */
 function sideboardPanel(model, ctx, p) {
     const list = 'cardcasting.sideboard';
     const cards = p.sideboard || [];
-    return `<section class="panel span2">
+    return collapsible(model, 'deck:sideboard', `<section class="panel span2">
       <h3>Sideboard <span class="badge">${cards.length}</span></h3>
       <p class="hint">Cards built but not in the deck. The deck can only change when you rest to regain spell points.</p>
       ${cards.length ? `<div class="cardgrid">${deckOrder(cards, p.deckSort).map((i) => cardFace(model, ctx, list, i, cards[i], p, { inDeck: false })).join('')}</div>` : ''}
@@ -3595,5 +3607,5 @@ function sideboardPanel(model, ctx, p) {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',
     save: '', dc: '', range: '', target: '', damage: '',
   })}</div>
-    </section>`;
+    </section>`);
   }

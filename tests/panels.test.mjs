@@ -1003,6 +1003,28 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.set('cardcasting.deckSort', 'cost');
   const byCost = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
   ok('sorted by cost the Mana Point card goes last while every face keeps its binding', at(byCost, 0) < at(byCost, 2) && at(byCost, 2) < at(byCost, 1) && byCost.includes('data-item="cardcasting.cards|1|mana"'));
+
+  // The deck and the sideboard fold, the fold kept with the character.
+  ok('the deck and the sideboard offer a fold', byCost.includes('data-collapse="deck:cards"') && byCost.includes('data-collapse="deck:sideboard"'));
+  c.set('uiPrefs.collapsed', { 'deck:cards': true });
+  const shut = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('shut, the deck is its heading alone', !shut.includes('class="cardgrid"') && shut.includes('data-collapse="deck:cards"'));
+  c.set('uiPrefs.collapsed', {});
+
+  // Rainbow Efficiency: the face shows the cost to pay beside the typed one.
+  c.data.cardcasting.mods.coloredMana = 3;
+  c.data.cardcasting.colors = 'RUB';
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.data.cardcasting.cards[0].color = 'RU';
+  c.data.cardcasting.cards[0].cost = '2';
+  c.recompute();
+  const rainbow = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colours — 1 to cast"[^>]*>→ 1</.test(rainbow));
+  c.tableStart();
+  const bolt = c.data.cardcasting.table.hand.find((id) => id.startsWith('0#')) || c.data.cardcasting.table.deck.find((id) => id.startsWith('0#'));
+  c.tableMove(bolt, 'hand');
+  ok('and the hand shows the cost to pay, the typed one on hover', /title="Typed 2; Rainbow Efficiency takes 1 off">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
+  c.tableEnd();
 }
 
 console.log('\na card with several modes asks on the way in');

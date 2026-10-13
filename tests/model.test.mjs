@@ -11540,7 +11540,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
     [true, true, true, 3, false]);
   check('three colours in play', p.colors, 'RBU');
   check('worth seven drawbacks for boons', k.drawbackValue, 7);
-  check('the deck is legal as imported', k.issues, []);
+  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no colour (Keep); Colored Mana assigns every effect one.']);
   check('the identical-effect spread is 1 to 4', [k.spreadMin, k.spreadMax], [1, 4]);
   // A fused card: the effect, and the mana it carries, split from one cell.
   const reanimate = p.cards[1];
@@ -11584,7 +11584,22 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('two colours is within Rainbow Efficiency', c.data.cardcasting.calc.issues.some((i) => /more than/.test(i)), false);
   c.setItem('cardcasting.cards', 0, 'color', 'RUB');
   check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colours/.test(i)), true);
+  // Rainbow Efficiency's discount comes off the typed cost.
+  const cost0 = c.data.cardcasting.cards[0].cost;
+  const card0 = () => c.data.cardcasting.cards[0].calc;
+  c.setItem('cardcasting.cards', 0, 'color', 'RU');
+  c.setItem('cardcasting.cards', 0, 'cost', '3');
+  check('a two-colour card costs one less than typed', [card0().cost, card0().discount], [2, 1]);
+  c.setItem('cardcasting.cards', 0, 'cost', '1');
+  check('to a minimum of one', [card0().cost, card0().discount], [1, 0]);
+  c.setItem('cardcasting.cards', 0, 'cost', '0');
+  check('an at-will card has nothing to take off', card0().cost, 0);
+  c.setItem('cardcasting.cards', 0, 'cost', '5');
+  c.setItem('cardcasting.cards', 0, 'color', 'RUB');
+  check('a third colour is not discounted without Improved', [card0().cost, card0().rainbow], [4, 1]);
   c.setItem('cardcasting.cards', 0, 'color', 'B');
+  check('and a one-colour card costs what it says', [card0().cost, card0().discount], [5, 0]);
+  c.setItem('cardcasting.cards', 0, 'cost', cost0);
   // A manipulation that wants a switch the caster lacks is flagged, not refused.
   c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Trimmed Deck', note: '', count: 1 });
   check('Trimmed Deck without Singleton is flagged', c.data.cardcasting.calc.issues.some((i) => /Trimmed Deck needs Singleton/.test(i)), true);
@@ -13637,7 +13652,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   let k = p.calc;
   const lira = k.squad.find((m) => m.id === cc.id);
   check('the companion is a squad member: Card Casting, the same switches, its own colours', [lira.ok, lira.why, lira.colors, lira.casts, lira.cl], [true, '', 'WG', true, cc.calc.casting.cl]);
-  check('its deck is checked on its own', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, []]);
+  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colours; the rule wants three or five.']]);
   check('the character\'s own figures are the character\'s deck alone', [k.deckSize, k.colorsInPlay], [21, 'RBU']);
   check('a card owned by nobody on the sheet is the character\'s, and said so', [c.cardOwner(p.cards[4]), k.issues.some((i) => /no longer on the sheet/.test(i))], ['', true]);
   check('the combined deck is everything', [k.combined.deckSize, k.combined.colors, k.combined.members], [45, 'RBUWG', 1]);
@@ -13692,6 +13707,55 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   check('when the member leaves, every card of its goes with it', [t.hand.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.deck.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.mana.length, t.log.at(-1).startsWith('R1: Lira leaves')], [false, false, 0, true]);
   c.tableSquad(cc.id, true);
   check('and comes back shuffled in when it returns', [t.deck.filter((id) => c.cardOwner(c.tableCard(id)) === cc.id).length > 0, t.log.at(-1)], [true, 'R1: Lira joins: 24 cards shuffled in']);
+
+  // Rainbow Efficiency is read per deck: the member's own feat discounts the
+  // member's cards, the character's feat the character's.
+  cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency', notes: '' }];
+  p.cards.push(
+    { name: 'Dawn', qty: 1, cost: '3', color: 'WG', mana: '', effect: 'Bless', sphere: 'Life', tags: '', dice: '', owner: cc.id },
+    { name: 'Dusk', qty: 1, cost: '2', color: 'RB', mana: '', effect: 'Curse', sphere: 'Death', tags: '', dice: '', owner: '' },
+    { name: 'Ruby', qty: 1, cost: '', color: '', mana: 'R', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+    { name: 'Onyx', qty: 1, cost: '', color: '', mana: 'B', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+    { name: 'Alloy', qty: 1, cost: '', color: '', mana: 'RB', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+  );
+  c.recompute();
+  const dawn = () => p.cards.find((x) => x.name === 'Dawn').calc;
+  const dusk = () => p.cards.find((x) => x.name === 'Dusk').calc;
+  check('the member\'s two-colour card is discounted by its own feat', [p.calc.squad.find((m) => m.id === cc.id).rainbow, dawn().cost, dawn().discount], [1, 2, 1]);
+  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 colour/.test(i))], [2, 0, true]);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.recompute();
+  check('with the feat the character\'s card costs one less', [dusk().cost, dusk().discount, dusk().rainbow], [1, 1, 1]);
+  p.cards.find((x) => x.name === 'Dusk').color = 'RBU';
+  p.cards.find((x) => x.name === 'Dusk').cost = '5';
+  c.recompute();
+  check('a third colour takes nothing more off without Improved', dusk().cost, 4);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]', 'Rainbow Efficiency, Improved [Deck]'];
+  c.recompute();
+  check('Improved takes one more off per colour past the second', [dusk().cost, dusk().rainbow], [3, 2]);
+  p.cards.find((x) => x.name === 'Dusk').cost = '2';
+  c.recompute();
+  check('to a minimum of one less than the colours', dusk().cost, 2);
+  // At the table: mana of each colour, and under Improved one card a colour.
+  // Terrain Casting's toll is set aside so the cost read is the card's own.
+  p.cards.find((x) => x.name === 'Dusk').color = 'RB';
+  c.data.training.magic.tradition.drawbacks = [];
+  c.recompute();
+  c.tableEnd();
+  c.tableStart();
+  const find = (name) => [...t.deck, ...t.hand, ...t.mana.map((m) => m.id)].find((id) => c.tableCard(id).name === name);
+  const duskId = find('Dusk');
+  c.tableMove(duskId, 'hand');
+  for (const id of [...t.mana.map((m) => m.id)]) c.tableMove(id, 'deck');
+  c.tableMove(find('Alloy'), 'mana');
+  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each colour (RB), one colour a card']);
+  c.tableMove(find('Ruby'), 'mana');
+  check('a card for each colour is', [c.castCheck(duskId).ok, c.castCheck(duskId).need, c.castCheck(duskId).why], [true, 1, 'Rainbow Efficiency: 1 off']);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.recompute();
+  c.tableMove(find('Ruby'), 'deck');
+  check('without Improved the two-colour card covers both colours', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [true, 'Rainbow Efficiency: 1 off']);
+  check('the Roll20 text says what is paid and why', c.cardRollSpec(duskId).notes.find((n) => n.label === 'Cost').text, '1 SP (2 less 1 for Rainbow Efficiency) (Red/Black)');
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

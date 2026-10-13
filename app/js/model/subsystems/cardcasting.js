@@ -214,6 +214,9 @@ export function deckSquad(model) {
     const mismatch = SQUAD_SWITCHES.filter(([key]) => !!mine[key] !== !!theirs[key]).map(([key, , label]) => `${label} ${mine[key] ? 'missing' : 'extra'}`);
     const coloured = drawbacks.find((x) => /^colou?red mana/i.test(x));
     const named = coloured ? normalizeColors((/\(([^)]*)\)/.exec(coloured) || [])[1] || '') : '';
+    // Its own deck feats: Rainbow Efficiency among its feats or its bought-off drawbacks.
+    const feats = [...(b.feats || []).map((f) => String(typeof f === 'object' ? f?.name ?? '' : f ?? '')), ...(b.tradition.boughtOff || []).map((x) => String(typeof x === 'object' ? x?.name ?? '' : x ?? ''))];
+    const rainbow = rainbowLevel(feats);
     const casting = b.calc?.casting || null;
     const mod = Number(b.calc?.scores?.cha?.mod) || 0;
     const cl = Number(casting?.cl) || 0;
@@ -221,7 +224,7 @@ export function deckSquad(model) {
       id: String(b.id), kind, name: String(b.name || '').trim() || String(b.id),
       cardCasting, mismatch, ok: cardCasting && !mismatch.length,
       why: !cardCasting ? 'its tradition does not list Card Casting' : mismatch.length ? `switches differ: ${mismatch.join(', ')}` : '',
-      namedColors: named, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
+      namedColors: named, rainbow, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
       dc: 10 + Math.floor(cl / 2) + mod, msb: cl, msd: 11 + cl,
       pool: `sp:${b.id}`,
     };
@@ -710,8 +713,7 @@ export function recomputeCardcasting(model) {
 
   // ---- deck feats, and what they bring ----
   const deckFeats = deckFeatNames(c);
-  const rainbow = deckFeats.some((f) => /rainbow efficiency,? improved|improved rainbow/i.test(f)) ? 2
-    : deckFeats.some((f) => /rainbow efficiency/i.test(f)) ? 1 : 0;
+  const rainbow = rainbowLevel(deckFeats);
 
   // A card with no colour of its own takes its sphere's, from the
   // land-attuned table; a plain Mana Point card wears its mana.
@@ -727,6 +729,7 @@ export function recomputeCardcasting(model) {
   // owned by a companion that is gone is the character's again, and said so.
   const squadMembers = deckSquad(model);
   const memberIds = new Set(squadMembers.map((m) => m.id));
+  const memberOf = new Map(squadMembers.map((m) => [m.id, m]));
   let orphaned = 0;
   for (const card of [...p.cards, ...p.sideboard]) {
     const own = card.color;
@@ -737,7 +740,18 @@ export function recomputeCardcasting(model) {
     card.owner = String(card.owner ?? '');
     const owner = memberIds.has(card.owner) ? card.owner : '';
     if (card.owner && !owner) orphaned++;
-    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact, owner };
+    // Rainbow Efficiency is a deck feat of whoever owns the card's deck: the
+    // character's for the character's cards, a member's own for its. It
+    // wants Mana Pool and Colored Mana, and takes the discount off the
+    // typed cost of a multi-colour effect.
+    const member = owner ? memberOf.get(owner) : null;
+    const ownRainbow = member ? member.rainbow : rainbow;
+    const ownColored = member ? (member.namedColors.length || 3) : (Number(p.mods.coloredMana) || 3);
+    const isEffect = String(card.effect || '').trim() !== '';
+    const price = p.manaPool && p.mods.coloredMana && isEffect
+      ? rainbowCost(cardCost(card), colors, ownRainbow, ownColored)
+      : { cost: cardCost(card), discount: 0 };
+    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact, owner, cost: price.cost, discount: price.discount, rainbow: ownRainbow };
   }
 
   // ---- the deck's shape: the character's own cards ----
@@ -753,9 +767,9 @@ export function recomputeCardcasting(model) {
     const cards = p.cards.filter((card) => card.qty > 0 && card.calc.owner === m.id);
     const used = CARD_COLORS.map(([k]) => k).filter((k) => cards.some((card) => card.calc.colors.includes(k) || card.mana.includes(k))).join('');
     const colors = m.namedColors || used;
-    // Its own casting modifier sets its spread; the character's deck feats
-    // do not reach it, so no Rainbow Efficiency.
-    const deck = deckFigures(cards, { cam: m.mod, rainbow: 0, mods: p.mods, colors, coloredCount: colors.length || null });
+    // Its own casting modifier sets its spread, and its own feats bring
+    // Rainbow Efficiency; the character's do not reach it.
+    const deck = deckFigures(cards, { cam: m.mod, rainbow: m.rainbow, mods: p.mods, colors, coloredCount: colors.length || null });
     return { ...m, colors, deck };
   });
   const combined = {
@@ -938,14 +952,27 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
   if (mods.coloredMana) {
     // How many colours this deck's Colored Mana names: the switch's three or
     // five for the character; a squad member's own count, since its colours
-    // are its own.
+    // are its own. The rule allows three or five and nothing else.
     const n = coloredCount ?? mods.coloredMana;
+    if (coloredCount !== null && coloredCount !== 3 && coloredCount !== 5) {
+      issues.push(`Colored Mana names ${coloredCount} colour${coloredCount === 1 ? '' : 's'}; the rule wants three or five.`);
+    }
     // Rainbow Efficiency loosens the balance: ¾ of effects may share a
     // colour with three colours in play, ½ with five.
     const share = n >= 5 ? (rainbow ? 0.5 : 0.25) : (rainbow ? 0.75 : 0.5);
     const named = colorsInPlay.split('').filter(Boolean);
     if (named.length && named.length !== n) {
       issues.push(`Colored Mana names ${n} colours but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
+    }
+    const few = (list) => `${list.slice(0, 3).map((x) => x.name || x.effect || 'a card').join(', ')}${list.length > 3 ? '…' : ''}`;
+    // Every effect is assigned a colour, and nothing wears a colour the
+    // deck does not run. (A fused card's mana half may carry two colours:
+    // that is how the sheet's own deck is built, and left alone.)
+    const uncoloured = inDeck.filter((card) => isEffect(card) && !card.calc.colors && !card.calc.artifact);
+    if (uncoloured.length) issues.push(`${uncoloured.length} effect card${uncoloured.length === 1 ? ' has' : 's have'} no colour (${few(uncoloured)}); Colored Mana assigns every effect one.`);
+    if (colors) {
+      const off = inDeck.filter((card) => [...card.calc.colors, ...card.mana].some((k) => !colors.includes(k)));
+      if (off.length) issues.push(`${off.length} card${off.length === 1 ? ' wears' : 's wear'} a colour the deck does not run (${few(off)}); the colours in play are ${named.join(', ')}.`);
     }
     for (const k of named) {
       const t = colorTally[k];
@@ -957,7 +984,7 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
     }
     // A card may cost as many colours as the feats allow: two with Rainbow
     // Efficiency, up to five with Improved and Colored Mana taken twice.
-    const maxColors = rainbow === 2 ? (n === 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
+    const maxColors = rainbowMaxColors(rainbow, n);
     const over = inDeck.filter((card) => card.color.length > maxColors);
     if (over.length) {
       issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} colour${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
@@ -1020,6 +1047,60 @@ export function cardCost(card) {
   return Number.isFinite(cost) ? Math.max(0, cost) : 0;
 }
 
+/** What a card costs to cast: the typed cost less the Rainbow Efficiency discount worked out at recompute. */
+export function effectiveCost(card) {
+  const cost = Number(card?.calc?.cost);
+  return Number.isFinite(cost) ? cost : cardCost(card);
+}
+
+/** 0 without the feat, 1 for Rainbow Efficiency, 2 for Rainbow Efficiency, Improved -- from a list of feat names. */
+export function rainbowLevel(names) {
+  const list = (names || []).map((f) => String(f || ''));
+  if (list.some((f) => /rainbow efficiency,? improved|improved rainbow/i.test(f))) return 2;
+  return list.some((f) => /rainbow efficiency/i.test(f)) ? 1 : 0;
+}
+
+/** How many colours an effect may cost: one; two with Rainbow Efficiency; three with Improved, five with Improved and five-colour Colored Mana. */
+export function rainbowMaxColors(rainbow, coloredCount = 3) {
+  return rainbow === 2 ? (coloredCount >= 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
+}
+
+/**
+ * Rainbow Efficiency's discount on a multi-colour effect: two colours cost
+ * one less, to a minimum of 1; Improved takes one more off for every colour
+ * past the second, to a minimum of one less than the number of colours (a
+ * five-colour effect costs at least 4). Only as many colours as the feats
+ * allow count, and an at-will card has nothing to take off. Returns the
+ * cost to pay and what came off the typed cost.
+ */
+export function rainbowCost(printed, colors, rainbow, coloredCount = 3) {
+  const n = Math.min(String(colors || '').length, rainbowMaxColors(rainbow, coloredCount));
+  if (printed <= 0 || n < 2) return { cost: printed, discount: 0 };
+  const cost = Math.max(Math.max(1, n - 1), printed - (n - 1));
+  return { cost, discount: printed - cost };
+}
+
+/**
+ * Can each colour be given a Mana Point card of its own? Improved Rainbow
+ * Efficiency: "a single Mana Point Card can only count as providing a single
+ * color". `cards` is the mana each untapped card carries; a card is used once.
+ */
+export function coverColors(colors, cards) {
+  const want = [...String(colors || '')];
+  const used = new Set();
+  const place = (i) => {
+    if (i >= want.length) return true;
+    for (let c = 0; c < cards.length; c++) {
+      if (used.has(c) || !String(cards[c] || '').includes(want[i])) continue;
+      used.add(c);
+      if (place(i + 1)) return true;
+      used.delete(c);
+    }
+    return false;
+  };
+  return place(0);
+}
+
 /** The orders the deck view offers; the first is the order the cards were typed in. */
 export const DECK_SORTS = [
   ['', 'as entered'], ['color', 'colour (WUBRG)'], ['cost', 'cost'], ['tags', 'tags'], ['sphere', 'sphere'],
@@ -1049,8 +1130,8 @@ export function deckOrder(cards, by) {
     const name = String(card.name || card.effect || '').toLowerCase();
     const word = (f) => { const s = String(card[f] || '').trim().toLowerCase(); return [s ? 0 : 1, s]; };
     switch (by) {
-      case 'color': return [...color, mana, cardCost(card), name];
-      case 'cost': return [mana, cardCost(card), ...color, name];
+      case 'color': return [...color, mana, effectiveCost(card), name];
+      case 'cost': return [mana, effectiveCost(card), ...color, name];
       case 'tags': return [...word('tags'), ...color, name];
       default: return [...word('sphere'), ...color, name];
     }
@@ -1285,7 +1366,7 @@ export function terrainFreedomTracker(model) {
 /** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force. */
 export function terrainDefault(model, card) {
   if (!terrainCasting(model)) return null;
-  return cardCost(card) > 0 ? 'sp' : 'step';
+  return effectiveCost(card) > 0 ? 'sp' : 'step';
 }
 
 /** The toll a cast pays: the chooser's pick when it is one of the four, else the card's default. */
@@ -1338,9 +1419,10 @@ export function castCheck(model, id, who = null, terrain = null) {
   // Terrain Casting's point rides on the cost, so the mana it needs and the
   // points it spends both count it.
   const toll = terrainToll(model, card, terrain);
-  const need = cardCost(card) + (toll === 'sp' ? 1 : 0);
+  const need = effectiveCost(card) + (toll === 'sp' ? 1 : 0);
+  const discount = Number(card.calc?.discount) || 0;
   if (!isEffect) return { ok: true, need: 0, have: 0, mana: true, terrain: null };
-  if (!p.manaPool) return { ok: true, need, have: need, terrain: toll };
+  if (!p.manaPool) return { ok: true, need, have: need, discount, terrain: toll };
   const colors = String(card.calc?.colors || '');
   const usable = t.mana.filter((m) => {
     if (m.tapped) return false;
@@ -1354,14 +1436,19 @@ export function castCheck(model, id, who = null, terrain = null) {
   // the character's: a squad member casting gets no such thing.
   const worth = caster === '' && cardAttuned(model, card) ? 2 : 1;
   const spend = Math.ceil(need / worth);
-  // Rainbow Efficiency: a two-colour card needs a mana card of each colour.
+  // Rainbow Efficiency: a multi-colour card needs mana of each of its
+  // colours in play; under Improved a Mana Point card provides one colour
+  // only, so each colour wants a card of its own.
   let ok = usable.length >= spend;
   let why = ok ? (worth > 1 ? 'attuned: each mana card pays two' : '') : `needs ${spend} mana in play${worth > 1 ? ' (attuned: each pays two)' : ''}, has ${usable.length}`;
   if (ok && p.mods.coloredMana && colors.length > 1) {
-    const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
-    if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
+    const untapped = t.mana.filter((m) => !m.tapped).map((m) => String(model.tableCard(m.id)?.mana || ''));
+    const strict = card.calc?.rainbow === 2;
+    const covered = strict ? coverColors(colors, untapped) : [...colors].every((c) => untapped.some((letters) => letters.includes(c)));
+    if (!covered) { ok = false; why = strict ? `needs a Mana Point card for each colour (${colors}), one colour a card` : `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, spend, worth, have: usable.length, why, caster, terrain: toll };
+  if (ok && discount) why = `${why ? `${why}; ` : ''}Rainbow Efficiency: ${discount} off`;
+  return { ok, need, spend, worth, have: usable.length, why, caster, discount, terrain: toll };
 }
 
 /** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
@@ -1628,7 +1715,7 @@ export function tableRetrace(model, id) {
   const caster = casterFor(model, null);
   const by = casterInfo(model, caster);
   const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
-  const cost = cardCost(card);
+  const cost = effectiveCost(card);
   tableLog(model, t, `Retrace: ${name} cast from the discard${cost ? ` for ${cost}` : ''} + 1 spell point`);
   spendSP(model, cost + 1, `${name} (Retrace)`, by.pool);
   rollFor(model, id, caster);
@@ -1784,7 +1871,7 @@ export function tableResolve(model, id) {
   if (wasTrap) {
     const caster = casterFor(model, null);
     const by = casterInfo(model, caster);
-    const cost = cardCost(card);
+    const cost = effectiveCost(card);
     if (cost > 0) spendSP(model, cost, `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`, by.pool);
     rollFor(model, id, caster);
   }
@@ -2172,7 +2259,8 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   const colors = String(card.calc?.colors || '');
   if (cost) {
     const words = [...colors].map((c) => (CARD_COLORS.find(([k]) => k === c) || [c, c])[1]).join('/');
-    notes.push({ label: 'Cost', text: `${cost} SP${words ? ` (${words})` : ''}` });
+    const off = Number(card.calc?.discount) || 0;
+    notes.push({ label: 'Cost', text: `${off ? `${effectiveCost(card)} SP (${cost} less ${off} for Rainbow Efficiency)` : `${cost} SP`}${words ? ` (${words})` : ''}` });
   }
   for (const [label, text] of cardStatLines(model, card, caster)) notes.push({ label, text });
   const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
