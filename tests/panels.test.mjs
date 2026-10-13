@@ -974,6 +974,8 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
     && !/data-table="next\|/.test(table) && !/data-table="window\|/.test(table) && !table.includes('data-set="cardcasting.copyOnCast"'));
   ok('and never shows the card Read the Cards turned up', !table.includes(`data-card="${peeked}"`));
   ok('the table window still has the field: in play, the deck, mana, the piles, the log', ['f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => table.includes(z)));
+  ok('the piles hold the banished under the exile, on the tab and on the table window', sheet.includes('<h3>Banished') && table.includes('<h3>Banished'));
+  ok('and every card offers banishing among its moves', /<option value="banished">banished — until spell points recover<\/option>/.test(hand));
   ok('the hand window has the hand, the controls and the peeked card, and nothing in play', hand.includes(`data-card="${inHand}"`) && /data-table="next\|/.test(hand)
     && hand.includes(`data-card="${peeked}"`) && !hand.includes('f-play') && !hand.includes('f-mana'));
   ok('a card in hand carries its Roll20 text for the window to copy, on the d20 and on Cast',
@@ -993,6 +995,14 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.data.cardcasting.cards.push({ name: 'Spark', qty: 1, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', dice: '', sphere: '', tags: '' });
   c.recompute();
   ok('…and does once a twin exists', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-dice-share="cardcasting.cards|0"'));
+
+  // Sorting the faces: the shared select, bound to the deck; the bindings keep their index.
+  const at = (html, i) => html.indexOf(`data-item="cardcasting.cards|${i}|name"`);
+  const typed = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('the deck offers its sort and shows the faces as typed', typed.includes('data-set="cardcasting.deckSort"') && at(typed, 0) < at(typed, 1) && at(typed, 1) < at(typed, 2));
+  c.set('cardcasting.deckSort', 'cost');
+  const byCost = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('sorted by cost the Mana Point card goes last while every face keeps its binding', at(byCost, 0) < at(byCost, 2) && at(byCost, 2) < at(byCost, 1) && byCost.includes('data-item="cardcasting.cards|1|mana"'));
 }
 
 console.log('\na card with several modes asks on the way in');

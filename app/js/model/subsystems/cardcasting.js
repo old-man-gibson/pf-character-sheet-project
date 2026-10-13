@@ -697,6 +697,8 @@ export function recomputeCardcasting(model) {
   }
   for (const card of p.cards) card.qty = Math.max(0, Math.floor(Number(card.qty ?? 1) || 0));
   p.harrow = !!p.harrow;
+  // How the deck view is ordered: a preference kept with the deck.
+  p.deckSort = DECK_SORTS.some(([k]) => k === p.deckSort) ? p.deckSort : '';
   // Mana Graveyard needs both halves of the ladder; Stagnant Pool and it
   // cannot both be on. Neither is forced off -- the check below says so.
 
@@ -976,23 +978,32 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
  * ------------------------------------------------------------------ */
 
 /** The zones that hold card ids. Mana in play is `{id, tapped}` and kept apart. */
-export const TABLE_ZONES = ['deck', 'hand', 'play', 'discard', 'exile', 'stun', 'wounds', 'death'];
+export const TABLE_ZONES = ['deck', 'hand', 'play', 'discard', 'exile', 'banished', 'stun', 'wounds', 'death'];
 
 /** Lifebound Deck's three piles, in the order a card moves down them. */
 export const LIFEBOUND_PILES = ['stun', 'wounds', 'death'];
 
+/**
+ * The zones a shuffle leaves alone. The exile empties when the encounter
+ * ends; a *banished* card -- exiled until the character rests to regain
+ * spell points, the heavier exile some cards and effects call for -- sits
+ * out every encounter until a new day, as the Lifebound piles do.
+ */
+export const HELD_ZONES = ['banished', ...LIFEBOUND_PILES];
+
 /** Where a card can be moved by hand, and what the move is called. */
 export const TABLE_DESTINATIONS = [
   ['hand', 'hand'], ['play', 'in play'], ['mana', 'mana in play'], ['discard', 'discard'], ['exile', 'exile'],
+  ['banished', 'banished — until spell points recover'],
   ['deckTop', 'top of deck'], ['deckBottom', 'bottom of deck'], ['deck', 'shuffled into deck'],
   ['stun', 'Stun pile'], ['wounds', 'Wounds pile'], ['death', 'Death pile'],
 ];
 
 /** The keywords a card's text can carry, which fire when it is cast: [Draw 2], [Shuffle]… */
-export const CARD_KEYWORDS = ['draw', 'discard', 'shuffle', 'tap', 'untap', 'mill', 'peek', 'wild', 'exile', 'bottom', 'top', 'return', 'deck', 'ante'];
+export const CARD_KEYWORDS = ['draw', 'discard', 'shuffle', 'tap', 'untap', 'mill', 'peek', 'wild', 'exile', 'banish', 'bottom', 'top', 'return', 'deck', 'ante'];
 
 /** What can happen to a card that a trigger tag names: [OnMill], [OnRedraw]… */
-export const CARD_TRIGGERS = ['mill', 'redraw', 'draw', 'discard', 'exile'];
+export const CARD_TRIGGERS = ['mill', 'redraw', 'draw', 'discard', 'exile', 'banish'];
 
 /**
  * A card keyword in text, `[Mill 3]`, or with `triggers` a trigger tag too,
@@ -1007,6 +1018,53 @@ export function cardKeywordPattern({ triggers = false } = {}) {
 export function cardCost(card) {
   const cost = parseInt(String(card?.cost ?? '').trim(), 10);
   return Number.isFinite(cost) ? Math.max(0, cost) : 0;
+}
+
+/** The orders the deck view offers; the first is the order the cards were typed in. */
+export const DECK_SORTS = [
+  ['', 'as entered'], ['color', 'colour (WUBRG)'], ['cost', 'cost'], ['tags', 'tags'], ['sphere', 'sphere'],
+];
+
+/** Colour order for sorting: white, blue, black, red, green. */
+const WUBRG = 'WUBRG';
+
+/**
+ * The indices of `cards` in the order `by` asks for. The cards themselves
+ * stay where they are -- every field on a face is bound by index -- so a
+ * sort is a way of looking, not an edit. Colour runs W U B R G, then
+ * two-colour cards, then colourless, with Mana Point cards after the effect
+ * cards of their colour; cost counts up, Mana Point cards last; tags and
+ * sphere run alphabetically, blanks last. Ties fall through to the next key
+ * and then the name, so a sorted deck reads the same every time.
+ */
+export function deckOrder(cards, by) {
+  const idx = (cards || []).map((_, i) => i);
+  if (!by || !DECK_SORTS.some(([k]) => k === by)) return idx;
+  const rank = (c) => { const n = WUBRG.indexOf(c); return n < 0 ? 9 : n; };
+  const key = (card) => {
+    const colors = String(card.calc?.colors || '').toUpperCase();
+    const color = colors.length === 1 ? [rank(colors), '']
+      : colors.length > 1 ? [5, [...colors].map(rank).sort().join('')] : [6, ''];
+    const mana = String(card.effect || '').trim() ? 0 : 1;
+    const name = String(card.name || card.effect || '').toLowerCase();
+    const word = (f) => { const s = String(card[f] || '').trim().toLowerCase(); return [s ? 0 : 1, s]; };
+    switch (by) {
+      case 'color': return [...color, mana, cardCost(card), name];
+      case 'cost': return [mana, cardCost(card), ...color, name];
+      case 'tags': return [...word('tags'), ...color, name];
+      default: return [...word('sphere'), ...color, name];
+    }
+  };
+  const keys = idx.map((i) => key(cards[i]));
+  return idx.sort((a, b) => {
+    const ka = keys[a];
+    const kb = keys[b];
+    for (let n = 0; n < ka.length; n++) {
+      if (ka[n] < kb[n]) return -1;
+      if (ka[n] > kb[n]) return 1;
+    }
+    return a - b;
+  });
 }
 
 /** Perfect Draw's maximum ante: 2, and 1 more for every 4 levels past 1st. */
@@ -1385,25 +1443,26 @@ export function drawCards(model, n, why = 'draw') {
 /**
  * Initiative: build the deck from every copy, shuffle, draw the opening hand.
  *
- * Every copy but the ones in the Lifebound piles. Those hold until a rest:
- * "When you rest to regain spell points, remove all cards from your Stun,
- * Death, and Wounds piles" -- so a character still hurt from the last fight
- * starts the next one without them. A new encounter used to empty the piles.
+ * Every copy but the ones in the Lifebound piles and the banished. Those
+ * hold until a rest: "When you rest to regain spell points, remove all cards
+ * from your Stun, Death, and Wounds piles" -- so a character still hurt from
+ * the last fight starts the next one without them, and a banished card sits
+ * out the same way. A new encounter used to empty the piles.
  */
 export function tableStart(model) {
   const p = model.data.cardcasting;
   if (!p) return model;
   const t = p.table;
   const k = p.calc;
-  const piles = Object.fromEntries(LIFEBOUND_PILES.map((z) => [z, [...(t[z] || [])]]));
-  const held = new Set(LIFEBOUND_PILES.flatMap((z) => piles[z]));
+  const piles = Object.fromEntries(HELD_ZONES.map((z) => [z, [...(t[z] || [])]]));
+  const held = new Set(HELD_ZONES.flatMap((z) => piles[z]));
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
     ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
-  tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled`);
+  tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled${t.banished.length ? ` (${t.banished.length} banished until spell points recover)` : ''}`);
   drawCards(model, k.openingHand + loaded, `opening hand (${k.openingHand}${loaded ? ` + ${loaded} Loaded Hand` : ''})`);
   return model.recompute();
 }
@@ -1608,6 +1667,7 @@ export function rollFor(model, id, who = null) {
  *   [Tap N]       tap N Mana Point cards    [Wild]      Wild Card: search the deck
  *   [Exile]       this card is exiled       [Bottom]    …goes to the bottom of the deck
  *   [Return]      …returns to the hand      [Top]       …goes on top of the deck
+ *   [Banish]      …is banished: exiled until the character rests to regain spell points
  *
  * The ones that stand in for a deck manipulation want it taken: [Peek] Read
  * the Cards, [Wild] Wild Card, [Exile] Impulse or Control Caster, [Return]
@@ -1650,6 +1710,7 @@ export function tableKeywords(model, id, card) {
       case 'peek': tableLog(model, t, `[Peek ${n}]: ${model.tablePeek(n).map((g) => tableName(model, g)).join(', ') || 'deck is empty'}`); break;
       case 'wild': tableLog(model, t, '[Wild]: search the deck for a card — move it to the hand'); break;
       case 'exile': fate = 'exile'; break;
+      case 'banish': fate = 'banished'; break;
       case 'bottom': fate = 'deckBottom'; break;
       case 'top': fate = 'deckTop'; break;
       case 'return': fate = 'hand'; break;
@@ -1678,7 +1739,7 @@ export function tableKeywords(model, id, card) {
 
 /**
  * A card's trigger tags: [OnMill], [OnRedraw], [OnDraw], [OnDiscard],
- * [OnExile] mark the sentence that applies when that happens to the card.
+ * [OnExile], [OnBanish] mark the sentence that applies when that happens to the card.
  * The table logs it and keeps it in `lastTrigger` for the header.
  */
 export function tableTrigger(model, id, when) {
@@ -1699,6 +1760,7 @@ export function tableSettle(model, id, fate = null) {
   const p = model.data.cardcasting;
   const t = p.table;
   if (fate === 'exile') { t.exile.push(id); tableLog(model, t, `${tableName(model, id)} exiled`); tableTrigger(model, id, 'exile'); return; }
+  if (fate === 'banished') { t.banished.push(id); tableLog(model, t, `${tableName(model, id)} banished until spell points recover`); tableTrigger(model, id, 'banish'); return; }
   if (fate === 'deck') { t.deck = shuffle(model, [...t.deck, id]); return; }
   if (fate === 'deckBottom') { t.deck.push(id); return; }
   if (fate === 'deckTop') { t.deck.unshift(id); return; }
@@ -2203,8 +2265,9 @@ export function shareCardDice(model, list, index) {
 /**
  * Move one card between zones by hand -- discard from the hand (Bleeding
  * Hand, Into Nothing), return from the discard (Recollection, Resupply),
- * exile (Impulse), the Lifebound piles, or just putting right a misclick.
- * `to` is a zone name; 'deck' shuffles it in, 'deckTop' puts it on top.
+ * exile (Impulse), banish (out until spell points recover), the Lifebound
+ * piles, or just putting right a misclick. `to` is a zone name; 'deck'
+ * shuffles it in, 'deckTop' puts it on top.
  */
 export function tableMove(model, id, to) {
   const p = model.data.cardcasting;
@@ -2224,12 +2287,13 @@ export function tableMove(model, id, to) {
   else if (to === 'deckBottom') t.deck.push(id);
   else if (t[to]) t[to].push(id);
   else return model.recompute();
-  tableLog(model, t, `${tableName(model, id)} → ${to === 'deckTop' ? 'top of deck' : to === 'deckBottom' ? 'bottom of deck' : to}`);
+  tableLog(model, t, `${tableName(model, id)} → ${to === 'deckTop' ? 'top of deck' : to === 'deckBottom' ? 'bottom of deck' : to === 'banished' ? 'banished until spell points recover' : to}`);
   // What the move means to the card: off the top of the deck into the
   // discard is a mill, out of the hand into it a discard, and so on.
   if (to === 'discard' && from === 'deck') tableTrigger(model, id, 'mill');
   else if (to === 'discard' && from === 'hand') tableTrigger(model, id, 'discard');
   else if (to === 'exile') tableTrigger(model, id, 'exile');
+  else if (to === 'banished') tableTrigger(model, id, 'banish');
   else if ((to === 'deck' || to === 'deckTop' || to === 'deckBottom') && from === 'hand') tableTrigger(model, id, 'redraw');
   return model.recompute();
 }
@@ -2278,18 +2342,22 @@ export function tablePeek(model, n = 1) {
   return (model.data.cardcasting?.table?.deck || []).slice(0, Math.max(1, n));
 }
 
-/** The encounter ends: everything back into the deck, shuffled. */
+/**
+ * The encounter ends: everything back into the deck, shuffled -- except
+ * what is held out until a rest: the banished and the Lifebound piles.
+ */
 export function tableEnd(model) {
   const p = model.data.cardcasting;
   if (!p?.table) return model;
   const t = p.table;
   const all = [...t.deck, ...t.hand, ...t.play, ...t.discard, ...t.exile, ...t.mana.map((m) => m.id)];
   const exiled = t.exile.length;
+  const banished = (t.banished || []).length;
   Object.assign(t, {
     active: false, round: 0, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
-  tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}`);
+  tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}${banished ? ` — ${banished} banished until spell points recover` : ''}`);
   return model.recompute();
 }

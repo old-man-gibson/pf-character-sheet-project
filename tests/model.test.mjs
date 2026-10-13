@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime, deckOrder } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -11652,6 +11652,31 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('and no issues from it', a.data.cardcasting.calc.issues, []);
 }
 
+console.log('card casting -- the deck view sorts its faces');
+{
+  const cards = [
+    { name: 'Gold', effect: 'x', cost: '3', calc: { colors: 'UB' }, tags: 'Sorcery', sphere: 'Death' },
+    { name: 'Mana', effect: '', mana: 'R', cost: '', calc: { colors: 'R' }, tags: '', sphere: '' },
+    { name: 'Red one', effect: 'x', cost: '1', calc: { colors: 'R' }, tags: 'Blast', sphere: 'Destruction' },
+    { name: 'White', effect: 'x', cost: '2', calc: { colors: 'W' }, tags: '', sphere: 'Life' },
+    { name: 'Plain', effect: 'x', cost: '0', calc: { colors: '' }, tags: 'Blast', sphere: 'Destruction' },
+    { name: 'Blue', effect: 'x', cost: '2', calc: { colors: 'U' }, tags: 'Aura', sphere: 'Mind' },
+  ];
+  const names = (by) => deckOrder(cards, by).map((i) => cards[i].name);
+  check('as entered is the order typed', names(''), ['Gold', 'Mana', 'Red one', 'White', 'Plain', 'Blue']);
+  check('colour runs W U B R G, mana after the effects of its colour, gold next, colourless last', names('color'), ['White', 'Blue', 'Red one', 'Mana', 'Gold', 'Plain']);
+  check('cost counts up with mana cards last', names('cost'), ['Plain', 'Red one', 'White', 'Blue', 'Gold', 'Mana']);
+  check('tags alphabetically, blanks last, ties by colour', names('tags'), ['Blue', 'Red one', 'Plain', 'Gold', 'White', 'Mana']);
+  check('sphere alphabetically, blanks last', names('sphere'), ['Gold', 'Red one', 'Plain', 'White', 'Blue', 'Mana']);
+  check('an order the view does not offer is the typed one', names('bogus'), names(''));
+  check('and so is no order at all', deckOrder([], 'color'), []);
+  const c = new Character(load('nico'));
+  c.set('cardcasting.deckSort', 'color');
+  check('the order is kept with the deck', new Character(c.toJSON()).data.cardcasting.deckSort, 'color');
+  c.set('cardcasting.deckSort', 'bogus');
+  check('and an unknown one is cleaned to the typed order', c.data.cardcasting.deckSort, '');
+}
+
 console.log('card casting -- the table: an encounter played through');
 {
   const c = new Character(load('nico'));
@@ -11749,6 +11774,11 @@ console.log('card casting -- the table: an encounter played through');
   check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped — needs Wild Card/.test(l)), true);
   check('[Exile] is the card\'s own rule and always applies', [gt().exile.includes('0#0'), gt().discard.includes('0#0')], [true, false]);
   check('and being exiled is a trigger event', gt().log.some((l) => /exiled$/.test(l)), true);
+  g.setItem('cardcasting.cards', 1, 'effect', 'Grave Rite [Banish] [OnBanish] Lose 1d6 hit points');
+  g.tableMove('1#0', 'hand');
+  g.tablePlay('1#0', 'cast');
+  check('[Banish] is the heavier exile: the card leaves for the banished', [gt().banished.includes('1#0'), gt().exile.includes('1#0'), gt().discard.includes('1#0')], [true, false, false]);
+  check('and being banished is a trigger event', /⚡ .+ \(banish\): Lose 1d6 hit points/.test(gt().lastTrigger), true);
   const fusedA = gt().hand.find((id) => g.tableCard(id).mana);
   g.tablePlay(fusedA, 'mana');
   const fusedB = gt().hand.find((id) => g.tableCard(id).mana);
@@ -11817,6 +11847,24 @@ console.log('card casting -- the table: an encounter played through');
   check('random exile takes from the discard', [nt().discard.length, nt().exile.length], [1, exiledBefore + 2]);
   n.tableEnd();
   check('the end of the encounter notes the exiled cards\' return', /exiled cards: half return now/.test(nt().log[nt().log.length - 1]), true);
+
+  // Banished: exiled until spell points recover, so out of every encounter until a new day.
+  n.tableStart();
+  const b0 = nt().hand[0];
+  n.tableMove(b0, 'banished');
+  check('a card can be banished by hand', [nt().banished.includes(b0), nt().hand.includes(b0), /banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  n.tableEnd();
+  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /— 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  n.tableStart();
+  check('the next encounter is dealt without it', [[...nt().deck, ...nt().hand].includes(b0), nt().banished.includes(b0), /\(1 banished until spell points recover\)/.test(nt().log[0])], [false, true, true]);
+  n.rest('encounter');
+  check('the end of an encounter does not bring it back', nt().banished.includes(b0), true);
+  n.rest('day');
+  check('a new day, spell points regained, does', nt().banished, []);
+  n.tableEnd();
+  n.tableStart();
+  check('and the next shuffle deals it again', [...nt().deck, ...nt().hand].includes(b0), true);
+  n.tableEnd();
 
   // Spell points: paid from the Spell Points tracker every spherecaster carries.
   const s = new Character(load('nico'));

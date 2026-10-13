@@ -25,7 +25,7 @@ import { trainingSideInUse } from '../edit.js';
 import { restCompanion } from '../rest.js';
 import { AKASHIC_DERIVED } from './akashic.js';
 import { ALT_TRAINING_DERIVED } from './alt-training.js';
-import { CARDCASTING_DERIVED } from './cardcasting.js';
+import { CARDCASTING_DERIVED, HELD_ZONES } from './cardcasting.js';
 import { COMPANION_DERIVED } from './companions.js';
 import { COOKING_COURSES } from './cooking.js';
 import { MANEUVER_DERIVED } from './maneuvers.js';
@@ -115,10 +115,11 @@ export function subsystems() {
       inUse: ({ data }) => !!(data.cardcasting?.cards || []).length || !!data.cardcasting?.enabled,
       // Lifebound Deck: "When you rest to regain spell points, remove all
       // cards from your Stun, Death, and Wounds piles." They are in the deck
-      // again at the next shuffle.
+      // again at the next shuffle, and so is a banished card, which is exiled
+      // until the same rest.
       newDay: ({ data }) => {
         const table = data.cardcasting?.table;
-        if (table) for (const pile of ['stun', 'wounds', 'death']) table[pile] = [];
+        if (table) for (const zone of HELD_ZONES) table[zone] = [];
       },
     },
     { tab: 'techniques', inUse: ({ data }) => !!(data.techniques?.catalogue || []).length },

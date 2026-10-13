@@ -717,6 +717,12 @@ its **sphere's** colour from the land-attuned table; a plain Mana Point card wea
 mana; a Veilweaving card is an **artifact** in blue-grey, being outside sphere magic —
 suit and alignment on the line beneath for a Harrow deck, the art from a
 pasted image link, a *sphere — tags* type line, and the effect in the text box.
+**Sort** in the deck's heading shows the faces by colour (white, blue, black, red,
+green, then two-colour cards, then colourless, Mana Point cards after the effect
+cards of their colour), by cost (Mana Point cards last), by tags or by sphere
+(blanks last); the sideboard follows, and the choice is kept with the deck. The
+cards themselves stay in the order they were typed, since every field is bound
+by its place in the list.
 A card's effect is prose, so `Corpse Bomb — Fort DC {= 10 + floor(level/2) +
 int.mod}` reads **30** on the card and follows Int and level. The deck is in the
 formula scope as `deck.size`, `deck.cam`, `deck.hand`, `deck.handMax`,
@@ -739,7 +745,7 @@ source tab*.
 The tab has two faces: **The deck** (everything above) and **The table**, the
 encounter in play. The table keeps its zones on `cardcasting.table` as card-instance
 ids (`<card>#<copy>`) — deck order, hand, in play, mana in play (with a tapped flag),
-discard, exile and the three Lifebound piles — so an encounter is play state like hit
+discard, exile, the banished and the three Lifebound piles — so an encounter is play state like hit
 points: saved, restored, and a few hundred bytes.
 
 **Dice on a card.** The Dice row under a face's text takes one roll or several with
@@ -812,18 +818,19 @@ on top. The table's notes and the tradition panel both say when the drawback is 
 | **Shuffle discard in** | Cooldown's full-round action. |
 | **Read the cards** | the top card, or three when taken twice; *bottom (1 SP)* buries it for the spell point the rule charges, *discard* is the twice-taken option. |
 | **Retrace** (on a discard row) | casts the card from the discard: its cost + 1 spell point (or a longer casting time — leave the point alone then), it rolls, its keywords fire, and it stays in the discard. |
-| **move…** | on every card, anywhere: hand, in play, mana, discard, exile, top or bottom of the deck, shuffled in, the Stun / Wounds / Death piles — for Bleeding Hand, Into Nothing, Recollection, Resupply, Retrace, Impulse, Lifebound, and misclicks. |
-| **End encounter** | everything back into the deck, shuffled. |
+| **move…** | on every card, anywhere: hand, in play, mana, discard, exile, banished, top or bottom of the deck, shuffled in, the Stun / Wounds / Death piles — for Bleeding Hand, Into Nothing, Recollection, Resupply, Retrace, Impulse, Lifebound, and misclicks. |
+| **Banished** | the heavier exile: a card moved here (or carrying `[Banish]`) sits out the rest of the encounter *and every one after it* until the character rests to regain spell points — **New day** on the sheet empties it, as it does the Lifebound piles. The end of an encounter shuffles the exile back and leaves the banished where they are; the next **Start encounter** builds the deck without them and says how many are out. |
+| **End encounter** | everything back into the deck, shuffled — the banished and the Lifebound piles excepted. |
 
 **Keywords.** Square-bracketed words in a card's text fire when it is cast (or when a
 trap springs): `[Draw 2]`, `[Discard]` (a prompt — you choose), `[Shuffle]` (the
 discard into the deck, or the deck itself), `[Mill 3]`, `[Peek]`, `[Tap 2]`,
-`[Untap]`, `[Wild]`, and for the card itself `[Exile]`, `[Bottom]`, `[Top]`,
-`[Deck]` (shuffled in), `[Return]`. What a card does to itself is its own rule;
+`[Untap]`, `[Wild]`, and for the card itself `[Exile]`, `[Banish]` (exiled until
+spell points recover), `[Bottom]`, `[Top]`, `[Deck]` (shuffled in), `[Return]`. What a card does to itself is its own rule;
 `[Peek]` wants Read the Cards and `[Wild]` Wild Card, and are logged as skipped
 otherwise. They show as chips on the card.
 
-**Triggers.** `[OnMill]`, `[OnRedraw]`, `[OnDraw]`, `[OnDiscard]`, `[OnExile]` mark
+**Triggers.** `[OnMill]`, `[OnRedraw]`, `[OnDraw]`, `[OnDiscard]`, `[OnExile]`, `[OnBanish]` mark
 the sentence that applies when that happens to the card — Infernal Combustion's free
 attack when it is milled off the top, its HP loss when the hand is shuffled back,
 Grave Peril's free cast when drawn to an empty deck and hand. The table logs

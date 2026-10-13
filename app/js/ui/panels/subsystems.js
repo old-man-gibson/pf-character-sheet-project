@@ -50,7 +50,7 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern,
+  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder,
   hasManipulation, manipulationCount, redrawSize, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
@@ -2911,7 +2911,7 @@ function manaZone(s) {
     </section>`;
   }
 
-  /** The discard over the exile. */
+  /** The discard over the exile, and the banished under both. */
 function pilesZone(s) {
     const { model, p, t, has, copyText } = s;
     return `<div class="f-piles">
@@ -2925,6 +2925,11 @@ function pilesZone(s) {
       <section class="panel">
         <h3>Exile <span class="badge">${t.exile.length}</span></h3>
         ${t.exile.length ? `<div class="zonelist">${s.listZone(t.exile, 'exile')}</div>` : '<p class="empty">Nothing exiled.</p>'}
+      </section>
+      <section class="panel">
+        <h3>Banished <span class="badge">${(t.banished || []).length}</span></h3>
+        <p class="hint">The heavier exile: a banished card does not return to the deck until you rest to regain spell points.</p>
+        ${(t.banished || []).length ? `<div class="zonelist">${s.listZone(t.banished, 'banished')}</div>` : '<p class="empty">Nothing banished.</p>'}
       </section>
     </div>`;
   }
@@ -3492,13 +3497,16 @@ function deckTablePanel(model, ctx, p, k) {
         <span class="badge">${k.deckSize ?? 0} cards</span>
         ${p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
         <span class="pair" style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
+          <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The order the faces are shown in — the cards themselves stay where they were typed"' })}</label>
           ${check('cardcasting.harrow', p.harrow, 'Harrow deck — suits & alignments')}
         </span>
       </h3>
       <p class="hint">Cost and its colour sit top right and set the frame colour. The type line is
         sphere — tags. The letters under the text are the mana the card puts on the table when a
         Mana Point card is fused onto it. Leave the effect blank for a plain Mana Point card.
-        ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}</p>
+        ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}
+        Sort shows the faces by colour (white, blue, black, red, green, then gold), by cost, by tags
+        or by sphere; the sideboard follows.</p>
       ${p.harrow && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
         <span class="t">·</span>
@@ -3517,7 +3525,8 @@ function deckTablePanel(model, ctx, p, k) {
 function deckGroups(model, ctx, p, k, list, cards, newCard) {
     const squad = k.squad || [];
     const owners = [{ id: '', name: shortName(model.casterInfo('').name), colors: k.colorsInPlay || 'R', deck: k }, ...squad];
-    const faces = (own) => cards.map((card, i) => (model.cardOwner(card) === own ? cardFace(model, ctx, list, i, card, p) : '')).join('');
+    const order = deckOrder(cards, p.deckSort);
+    const faces = (own) => order.map((i) => (model.cardOwner(cards[i]) === own ? cardFace(model, ctx, list, i, cards[i], p) : '')).join('');
     const adds = (own, colors) => `<div class="pair" style="margin-top:10px">
         ${addButton(list, 'Add effect card', newCard({ owner: own }))}
         ${addButton(list, 'Add mana point card', newCard({ cost: '', mana: (colors || 'R').slice(0, 1), owner: own }))}
@@ -3581,7 +3590,7 @@ function sideboardPanel(model, ctx, p) {
     return `<section class="panel span2">
       <h3>Sideboard <span class="badge">${cards.length}</span></h3>
       <p class="hint">Cards built but not in the deck. The deck can only change when you rest to regain spell points.</p>
-      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
+      ${cards.length ? `<div class="cardgrid">${deckOrder(cards, p.deckSort).map((i) => cardFace(model, ctx, list, i, cards[i], p, { inDeck: false })).join('')}</div>` : ''}
       <div style="margin-top:10px">${addButton(list, 'Add to sideboard', {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',
     save: '', dc: '', range: '', target: '', damage: '',
