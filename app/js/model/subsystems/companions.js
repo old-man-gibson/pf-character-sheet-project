@@ -475,6 +475,7 @@ export function importConjuredCompanion(tab) {
   const lines = (label) => findAll(label)
     .map(([ri, ci]) => text(g.rightOf(ri, ci, 1))).filter(Boolean);
   b.tradition.drawbacks = lines('Drawback');
+  b.tradition.boughtOff = lines('Bought off');
   b.tradition.boons = lines('Boon');
 
   return b;

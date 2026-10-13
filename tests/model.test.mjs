@@ -30,7 +30,7 @@ import {
   gearColumnCount, gearColumnInUse, importAnimalCompanion,
   rowLabel, UNDO_DEPTH, VEIL_TRADITIONS, setSphereCatalogue, skillForwardKey, refreshKind,
   sphereCatalogue, trackSphereNames, altTrainingPrereq, setVeilCatalogue, veilCatalogue, veilsAvailable, maneuverCatalogue,
-  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime } from '../app/js/model.js';
+  hasManipulation, setFeatCatalogue, featCatalogue, sphereTalent, plannedLevels, evaluateAmount, appendDiceText, appendListText, CARD_STAT_FIELDS, stepCastingTime, deckOrder } from '../app/js/model.js';
 import {
   MENTAL_PROWESS_LEVELS, PHYSICAL_PROWESS_LEVELS, ARRAY_SLOTS, ARRAY_LEVELS,
   FORWARD_LATE, FORWARD_STATS,
@@ -1607,6 +1607,13 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   check('and is capped at the boons there are', [k().casting.boonSteps, k().casting.boonSP], [2, 4]);
   c.set('conjured.0.tradition.boonSP', '');
   check('blank is the default again', k().casting.boonSteps, 1);
+  // A drawback feat buys off two drawbacks, as on the character's tradition.
+  c.listAdd('conjured.0.tradition.drawbacks', 'Card Casting');
+  c.listAdd('conjured.0.tradition.boughtOff', 'Rainbow Efficiency [Deck]');
+  check('a drawback feat takes two boons, not one', [k().casting.drawbacks, k().casting.boughtOff, k().casting.boons, k().casting.boonSteps], [3, 1, 1, 0]);
+  c.listRemove('conjured.0.tradition.boughtOff', 0);
+  c.listRemove('conjured.0.tradition.drawbacks', 2);
+  check('and gives them back when removed', k().casting.boons, 2);
   check('a picture is kept by address', (c.set('conjured.0.image', 'https://example.test/orb.png'), c.toJSON().conjured[0].image), 'https://example.test/orb.png');
   // Back to a bare tradition for the checks below.
   c.listRemove('conjured.0.tradition.boons', 0);
@@ -1647,7 +1654,7 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
 
   // Its own casting tradition: a name, and drawbacks and boons as prose.
   check('a companion starts with no tradition: natural casting', c.data.conjured[0].tradition,
-    { name: '', drawbacks: [], boons: [], boonSP: '' });
+    { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
   const chaBefore = k().scores.cha.total;
   c.set('conjured.0.tradition.name', 'Fey Magic');
   c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
@@ -1660,10 +1667,10 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('saved and reopened, tradition and all',
     new Character(saved).data.conjured[0].tradition,
-    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
+    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boughtOff: [], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
   delete saved.conjured[0].tradition;
   check('a companion saved before traditions grows an empty one',
-    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boons: [], boonSP: '' });
+    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
   c.set('conjured.0.archetypes.mage', false);
   c.setItem('conjured.0.talents', 0, 'name', 'Not yet chosen');
   check('the tradition goes quiet when the companion stops casting', k().scores.cha.total, chaBefore);
@@ -11540,7 +11547,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
     [true, true, true, 3, false]);
   check('three colours in play', p.colors, 'RBU');
   check('worth seven drawbacks for boons', k.drawbackValue, 7);
-  check('the deck is legal as imported', k.issues, []);
+  check('the deck is legal as imported, but for the placeholder card with no colour', k.issues, ['1 effect card has no colour (Keep); Colored Mana assigns every effect one.']);
   check('the identical-effect spread is 1 to 4', [k.spreadMin, k.spreadMax], [1, 4]);
   // A fused card: the effect, and the mana it carries, split from one cell.
   const reanimate = p.cards[1];
@@ -11563,7 +11570,7 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('every pick Nico took is known', p.manipulations.every((m) => m.calc.known), true);
   check('and none wants a switch he lacks', p.manipulations.every((m) => !m.calc.unmet.length), true);
   check('ten deck feats between the Feats tab and the tradition', k.deckFeats.length, 10);
-  check('one manipulation each, plus one for Card Shark', k.autoAvailable, 11);
+  check('one manipulation each, and two for Card Shark', k.autoAvailable, 11);
   check('so the sheet\'s 11 is left automatic', p.manipulationsAvailable, null);
   check('Rainbow Efficiency is seen among the deck feats', k.rainbow, 1);
   check('land-attuned spheres by colour', p.colorSpheres.U, ['Illusion', 'Mana', 'Mind', 'Technomancy', 'Time']);
@@ -11584,7 +11591,22 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   check('two colours is within Rainbow Efficiency', c.data.cardcasting.calc.issues.some((i) => /more than/.test(i)), false);
   c.setItem('cardcasting.cards', 0, 'color', 'RUB');
   check('three is not, without Improved', c.data.cardcasting.calc.issues.some((i) => /more than 2 colours/.test(i)), true);
+  // Rainbow Efficiency's discount comes off the typed cost.
+  const cost0 = c.data.cardcasting.cards[0].cost;
+  const card0 = () => c.data.cardcasting.cards[0].calc;
+  c.setItem('cardcasting.cards', 0, 'color', 'RU');
+  c.setItem('cardcasting.cards', 0, 'cost', '3');
+  check('a two-colour card costs one less than typed', [card0().cost, card0().discount], [2, 1]);
+  c.setItem('cardcasting.cards', 0, 'cost', '1');
+  check('to a minimum of one', [card0().cost, card0().discount], [1, 0]);
+  c.setItem('cardcasting.cards', 0, 'cost', '0');
+  check('an at-will card has nothing to take off', card0().cost, 0);
+  c.setItem('cardcasting.cards', 0, 'cost', '5');
+  c.setItem('cardcasting.cards', 0, 'color', 'RUB');
+  check('a third colour is not discounted without Improved', [card0().cost, card0().rainbow], [4, 1]);
   c.setItem('cardcasting.cards', 0, 'color', 'B');
+  check('and a one-colour card costs what it says', [card0().cost, card0().discount], [5, 0]);
+  c.setItem('cardcasting.cards', 0, 'cost', cost0);
   // A manipulation that wants a switch the caster lacks is flagged, not refused.
   c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Trimmed Deck', note: '', count: 1 });
   check('Trimmed Deck without Singleton is flagged', c.data.cardcasting.calc.issues.some((i) => /Trimmed Deck needs Singleton/.test(i)), true);
@@ -11650,6 +11672,31 @@ console.log('card casting -- the deck reads off the Cardcaster Deck tab');
   const a = new Character(load('angou'));
   check('Angou has no deck', [a.data.cardcasting.enabled, a.data.cardcasting.cards.length], [false, 0]);
   check('and no issues from it', a.data.cardcasting.calc.issues, []);
+}
+
+console.log('card casting -- the deck view sorts its faces');
+{
+  const cards = [
+    { name: 'Gold', effect: 'x', cost: '3', calc: { colors: 'UB' }, tags: 'Sorcery', sphere: 'Death' },
+    { name: 'Mana', effect: '', mana: 'R', cost: '', calc: { colors: 'R' }, tags: '', sphere: '' },
+    { name: 'Red one', effect: 'x', cost: '1', calc: { colors: 'R' }, tags: 'Blast', sphere: 'Destruction' },
+    { name: 'White', effect: 'x', cost: '2', calc: { colors: 'W' }, tags: '', sphere: 'Life' },
+    { name: 'Plain', effect: 'x', cost: '0', calc: { colors: '' }, tags: 'Blast', sphere: 'Destruction' },
+    { name: 'Blue', effect: 'x', cost: '2', calc: { colors: 'U' }, tags: 'Aura', sphere: 'Mind' },
+  ];
+  const names = (by) => deckOrder(cards, by).map((i) => cards[i].name);
+  check('as entered is the order typed', names(''), ['Gold', 'Mana', 'Red one', 'White', 'Plain', 'Blue']);
+  check('colour runs W U B R G, mana after the effects of its colour, gold next, colourless last', names('color'), ['White', 'Blue', 'Red one', 'Mana', 'Gold', 'Plain']);
+  check('cost counts up with mana cards last', names('cost'), ['Plain', 'Red one', 'White', 'Blue', 'Gold', 'Mana']);
+  check('tags alphabetically, blanks last, ties by colour', names('tags'), ['Blue', 'Red one', 'Plain', 'Gold', 'White', 'Mana']);
+  check('sphere alphabetically, blanks last', names('sphere'), ['Gold', 'Red one', 'Plain', 'White', 'Blue', 'Mana']);
+  check('an order the view does not offer is the typed one', names('bogus'), names(''));
+  check('and so is no order at all', deckOrder([], 'color'), []);
+  const c = new Character(load('nico'));
+  c.set('cardcasting.deckSort', 'color');
+  check('the order is kept with the deck', new Character(c.toJSON()).data.cardcasting.deckSort, 'color');
+  c.set('cardcasting.deckSort', 'bogus');
+  check('and an unknown one is cleaned to the typed order', c.data.cardcasting.deckSort, '');
 }
 
 console.log('card casting -- the table: an encounter played through');
@@ -11749,6 +11796,11 @@ console.log('card casting -- the table: an encounter played through');
   check('[Wild] is skipped without Wild Card', gt().log.some((l) => /\[wild\] skipped — needs Wild Card/.test(l)), true);
   check('[Exile] is the card\'s own rule and always applies', [gt().exile.includes('0#0'), gt().discard.includes('0#0')], [true, false]);
   check('and being exiled is a trigger event', gt().log.some((l) => /exiled$/.test(l)), true);
+  g.setItem('cardcasting.cards', 1, 'effect', 'Grave Rite [Banish] [OnBanish] Lose 1d6 hit points');
+  g.tableMove('1#0', 'hand');
+  g.tablePlay('1#0', 'cast');
+  check('[Banish] is the heavier exile: the card leaves for the banished', [gt().banished.includes('1#0'), gt().exile.includes('1#0'), gt().discard.includes('1#0')], [true, false, false]);
+  check('and being banished is a trigger event', /⚡ .+ \(banish\): Lose 1d6 hit points/.test(gt().lastTrigger), true);
   const fusedA = gt().hand.find((id) => g.tableCard(id).mana);
   g.tablePlay(fusedA, 'mana');
   const fusedB = gt().hand.find((id) => g.tableCard(id).mana);
@@ -11817,6 +11869,24 @@ console.log('card casting -- the table: an encounter played through');
   check('random exile takes from the discard', [nt().discard.length, nt().exile.length], [1, exiledBefore + 2]);
   n.tableEnd();
   check('the end of the encounter notes the exiled cards\' return', /exiled cards: half return now/.test(nt().log[nt().log.length - 1]), true);
+
+  // Banished: exiled until spell points recover, so out of every encounter until a new day.
+  n.tableStart();
+  const b0 = nt().hand[0];
+  n.tableMove(b0, 'banished');
+  check('a card can be banished by hand', [nt().banished.includes(b0), nt().hand.includes(b0), /banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  n.tableEnd();
+  check('the end of the encounter leaves it banished and says so', [nt().banished.includes(b0), nt().deck.includes(b0), /— 1 banished until spell points recover$/.test(nt().log[nt().log.length - 1])], [true, false, true]);
+  n.tableStart();
+  check('the next encounter is dealt without it', [[...nt().deck, ...nt().hand].includes(b0), nt().banished.includes(b0), /\(1 banished until spell points recover\)/.test(nt().log[0])], [false, true, true]);
+  n.rest('encounter');
+  check('the end of an encounter does not bring it back', nt().banished.includes(b0), true);
+  n.rest('day');
+  check('a new day, spell points regained, does', nt().banished, []);
+  n.tableEnd();
+  n.tableStart();
+  check('and the next shuffle deals it again', [...nt().deck, ...nt().hand].includes(b0), true);
+  n.tableEnd();
 
   // Spell points: paid from the Spell Points tracker every spherecaster carries.
   const s = new Character(load('nico'));
@@ -13589,7 +13659,7 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   let k = p.calc;
   const lira = k.squad.find((m) => m.id === cc.id);
   check('the companion is a squad member: Card Casting, the same switches, its own colours', [lira.ok, lira.why, lira.colors, lira.casts, lira.cl], [true, '', 'WG', true, cc.calc.casting.cl]);
-  check('its deck is checked on its own', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, []]);
+  check('its deck is checked on its own, and two colours is not a Colored Mana the rule allows', [lira.deck.deckSize, lira.deck.effectCards, lira.deck.issues], [24, 20, ['Colored Mana names 2 colours; the rule wants three or five.']]);
   check('the character\'s own figures are the character\'s deck alone', [k.deckSize, k.colorsInPlay], [21, 'RBU']);
   check('a card owned by nobody on the sheet is the character\'s, and said so', [c.cardOwner(p.cards[4]), k.issues.some((i) => /no longer on the sheet/.test(i))], ['', true]);
   check('the combined deck is everything', [k.combined.deckSize, k.combined.colors, k.combined.members], [45, 'RBUWG', 1]);
@@ -13644,6 +13714,91 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   check('when the member leaves, every card of its goes with it', [t.hand.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.deck.some((id) => c.cardOwner(c.tableCard(id)) === cc.id), t.mana.length, t.log.at(-1).startsWith('R1: Lira leaves')], [false, false, 0, true]);
   c.tableSquad(cc.id, true);
   check('and comes back shuffled in when it returns', [t.deck.filter((id) => c.cardOwner(c.tableCard(id)) === cc.id).length > 0, t.log.at(-1)], [true, 'R1: Lira joins: 24 cards shuffled in']);
+
+  // Rainbow Efficiency is read per deck: the member's own feat discounts the
+  // member's cards, the character's feat the character's.
+  cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency', notes: '' }];
+  p.cards.push(
+    { name: 'Dawn', qty: 1, cost: '3', color: 'WG', mana: '', effect: 'Bless', sphere: 'Life', tags: '', dice: '', owner: cc.id },
+    { name: 'Dusk', qty: 1, cost: '2', color: 'RB', mana: '', effect: 'Curse', sphere: 'Death', tags: '', dice: '', owner: '' },
+    { name: 'Ruby', qty: 1, cost: '', color: '', mana: 'R', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+    { name: 'Onyx', qty: 1, cost: '', color: '', mana: 'B', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+    { name: 'Alloy', qty: 1, cost: '', color: '', mana: 'RB', effect: '', sphere: '', tags: '', dice: '', owner: '' },
+  );
+  c.recompute();
+  const dawn = () => p.cards.find((x) => x.name === 'Dawn').calc;
+  const dusk = () => p.cards.find((x) => x.name === 'Dusk').calc;
+  check('the member\'s two-colour card is discounted by its own feat', [p.calc.squad.find((m) => m.id === cc.id).rainbow, dawn().cost, dawn().discount], [1, 2, 1]);
+  check('the character\'s is not, without the feat, and is flagged', [dusk().cost, dusk().rainbow, p.calc.issues.some((i) => /more than 1 colour/.test(i))], [2, 0, true]);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.recompute();
+  check('with the feat the character\'s card costs one less', [dusk().cost, dusk().discount, dusk().rainbow], [1, 1, 1]);
+  p.cards.find((x) => x.name === 'Dusk').color = 'RBU';
+  p.cards.find((x) => x.name === 'Dusk').cost = '5';
+  c.recompute();
+  check('a third colour takes nothing more off without Improved', dusk().cost, 4);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]', 'Rainbow Efficiency, Improved [Deck]'];
+  c.recompute();
+  check('Improved takes one more off per colour past the second', [dusk().cost, dusk().rainbow], [3, 2]);
+  p.cards.find((x) => x.name === 'Dusk').cost = '2';
+  c.recompute();
+  check('to a minimum of one less than the colours', dusk().cost, 2);
+  // At the table: mana of each colour, and under Improved one card a colour.
+  // Terrain Casting's toll is set aside so the cost read is the card's own.
+  p.cards.find((x) => x.name === 'Dusk').color = 'RB';
+  c.data.training.magic.tradition.drawbacks = [];
+  c.recompute();
+  c.tableEnd();
+  c.tableStart();
+  const find = (name) => [...t.deck, ...t.hand, ...t.mana.map((m) => m.id)].find((id) => c.tableCard(id).name === name);
+  const duskId = find('Dusk');
+  c.tableMove(duskId, 'hand');
+  for (const id of [...t.mana.map((m) => m.id)]) c.tableMove(id, 'deck');
+  c.tableMove(find('Alloy'), 'mana');
+  check('one two-colour Mana Point card is not a card for each colour under Improved', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [false, 'needs a Mana Point card for each colour (RB), one colour a card']);
+  c.tableMove(find('Ruby'), 'mana');
+  check('a card for each colour is', [c.castCheck(duskId).ok, c.castCheck(duskId).need, c.castCheck(duskId).why], [true, 1, 'Rainbow Efficiency: 1 off']);
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.recompute();
+  c.tableMove(find('Ruby'), 'deck');
+  check('without Improved the two-colour card covers both colours', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [true, 'Rainbow Efficiency: 1 off']);
+  check('the Roll20 text says what is paid and why', c.cardRollSpec(duskId).notes.find((n) => n.label === 'Cost').text, '1 SP (2 less 1 for Rainbow Efficiency) (Red/Black)');
+
+  // Manipulations are per member: its own picks against its own deck feats,
+  // checked against its own switches, usable at the table while it is there.
+  cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency [Deck]', notes: '' }, { source: '3 HD', name: 'Card Shark [Deck]', notes: '' }];
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Mulligan', note: '', count: 1, owner: cc.id });
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Trimmed Deck', note: '', count: 1, owner: cc.id });
+  const member = () => p.calc.squad.find((m) => m.id === cc.id);
+  check('a member\'s picks count against its own deck feats, and two for Card Shark', [member().manipulationsTaken, member().manipulationsAvailable, member().manipulationsLeft], [2, 3, 1]);
+  cc.feats = [{ source: '3 HD', name: 'Card Shark', notes: '' }];
+  c.recompute();
+  check('Card Shark counts two whether or not it is tagged [Deck]', member().manipulationsAvailable, 2);
+  cc.feats = [{ source: '3 HD', name: 'Card Shark', notes: '' }, { source: '5 HD', name: 'Card Shark [Deck]', notes: '' }, { source: '7 HD', name: 'Card Shark', notes: '' }];
+  c.recompute();
+  check('and two more each further time it is taken', member().manipulationsAvailable, 6);
+  cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency [Deck]', notes: '' }, { source: '3 HD', name: 'Card Shark [Deck]', notes: '' }];
+  c.recompute();
+  check('and not against the character\'s', p.calc.manipulationsTaken, 0);
+  check('a pick wanting a switch the member lacks is the member\'s issue', [p.manipulations.at(-1).calc.unmet, member().deck.issues.some((i) => /Trimmed Deck needs Singleton/.test(i)), p.calc.issues.some((i) => /Trimmed Deck/.test(i))], [['singleton'], true, false]);
+  check('the member\'s Mulligan is usable at the table while it is present', [hasManipulation(c, 'Mulligan'), hasManipulation(c, 'Mulligan', ''), hasManipulation(c, 'Mulligan', cc.id)], [true, false, true]);
+  c.tableSquad(cc.id, false);
+  check('and not once it has left', hasManipulation(c, 'Mulligan'), false);
+  check('the scope reads the character\'s picks alone', c.scope().deck.manip.mulligan, undefined);
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Mulligan', note: '', count: 1, owner: '' });
+  check('the character\'s own Mulligan counts, present member or not', [hasManipulation(c, 'Mulligan'), c.scope().deck.manip.mulligan], [true, 1]);
+  // Each copy of a pick is given on its own: one Fused Cards to the member, two kept.
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Fused Cards', note: '', count: 3, owner: '' });
+  const fused = () => p.manipulations.map((m, i) => ({ m, i })).filter(({ m }) => m.name === 'Fused Cards');
+  c.moveManipulationPick(fused()[0].i, cc.id);
+  check('moving one copy splits the row: two stay, one goes', fused().map(({ m }) => [m.owner, m.count]), [['', 2], [cc.id, 1]]);
+  c.moveManipulationPick(fused()[0].i, cc.id);
+  check('a second copy joins the member\'s row', fused().map(({ m }) => [m.owner, m.count]), [['', 1], [cc.id, 2]]);
+  c.moveManipulationPick(fused()[1].i, '');
+  check('and one back again', fused().map(({ m }) => [m.owner, m.count]), [['', 2], [cc.id, 1]]);
+  c.moveManipulationPick(fused()[1].i, '');
+  check('the last copy of a row joins the owner\'s row and the row goes', fused().map(({ m }) => [m.owner, m.count]), [['', 3]]);
+  check('the member\'s count follows its copies', member().manipulationsTaken, 2);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

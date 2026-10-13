@@ -974,6 +974,8 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
     && !/data-table="next\|/.test(table) && !/data-table="window\|/.test(table) && !table.includes('data-set="cardcasting.copyOnCast"'));
   ok('and never shows the card Read the Cards turned up', !table.includes(`data-card="${peeked}"`));
   ok('the table window still has the field: in play, the deck, mana, the piles, the log', ['f-play', 'f-deck', 'f-mana', 'f-piles', 'f-log'].every((z) => table.includes(z)));
+  ok('the piles hold the banished under the exile, on the tab and on the table window', sheet.includes('<h3>Banished') && table.includes('<h3>Banished'));
+  ok('and every card offers banishing among its moves', /<option value="banished">banished — until spell points recover<\/option>/.test(hand));
   ok('the hand window has the hand, the controls and the peeked card, and nothing in play', hand.includes(`data-card="${inHand}"`) && /data-table="next\|/.test(hand)
     && hand.includes(`data-card="${peeked}"`) && !hand.includes('f-play') && !hand.includes('f-mana'));
   ok('a card in hand carries its Roll20 text for the window to copy, on the d20 and on Cast',
@@ -993,6 +995,78 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.data.cardcasting.cards.push({ name: 'Spark', qty: 1, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', dice: '', sphere: '', tags: '' });
   c.recompute();
   ok('…and does once a twin exists', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-dice-share="cardcasting.cards|0"'));
+
+  // Sorting the faces: the shared select, bound to the deck; the bindings keep their index.
+  const at = (html, i) => html.indexOf(`data-item="cardcasting.cards|${i}|name"`);
+  const typed = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('the deck offers its sort and shows the faces as typed', typed.includes('data-set="cardcasting.deckSort"') && at(typed, 0) < at(typed, 1) && at(typed, 1) < at(typed, 2));
+  c.set('cardcasting.deckSort', 'cost');
+  const byCost = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('sorted by cost the Mana Point card goes last while every face keeps its binding', at(byCost, 0) < at(byCost, 2) && at(byCost, 2) < at(byCost, 1) && byCost.includes('data-item="cardcasting.cards|1|mana"'));
+
+  // The deck and the sideboard fold, the fold kept with the character.
+  ok('the deck and the sideboard offer a fold', byCost.includes('data-collapse="deck:cards"') && byCost.includes('data-collapse="deck:sideboard"'));
+  c.set('uiPrefs.collapsed', { 'deck:cards': true });
+  const shut = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('shut, the deck is its heading alone', !shut.includes('class="cardgrid"') && shut.includes('data-collapse="deck:cards"'));
+  c.set('uiPrefs.collapsed', {});
+
+  // Rainbow Efficiency: the face shows the cost to pay beside the typed one.
+  c.data.cardcasting.mods.coloredMana = 3;
+  c.data.cardcasting.colors = 'RUB';
+  c.data.training.magic.tradition.boughtOff = ['Rainbow Efficiency [Deck]'];
+  c.data.cardcasting.cards[0].color = 'RU';
+  c.data.cardcasting.cards[0].cost = '2';
+  c.recompute();
+  const rainbow = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('a two-colour face shows its discounted cost', /Rainbow Efficiency: 1 off for 2 colours — 1 to cast"[^>]*>→ 1</.test(rainbow));
+  c.tableStart();
+  const bolt = c.data.cardcasting.table.hand.find((id) => id.startsWith('0#')) || c.data.cardcasting.table.deck.find((id) => id.startsWith('0#'));
+  c.tableMove(bolt, 'hand');
+  ok('and the hand shows the cost to pay, the typed one on hover', /title="Typed 2; Rainbow Efficiency takes 1 off">1</.test(subsystems.cardTableView(c, ctx, 'hand')));
+  c.tableEnd();
+}
+
+console.log('\na squad member takes its own deck manipulations');
+{
+  const c = new Character(blankDocument({ name: 'Nico', level: 15 }));
+  const p = c.data.cardcasting;
+  Object.assign(p, { enabled: true, manaPool: true, cooldown: true, colors: 'RBU', castingStat: 'Int' });
+  p.mods.coloredMana = 3;
+  c.addCompanion('conjured');
+  const cc = c.data.conjured.at(-1);
+  Object.assign(cc, { name: 'Lira', archetypes: { mage: true }, talents: [{ name: 'Magical Companion' }], levelSource: 'override', levelOverride: 12 });
+  cc.tradition = { name: 'Fey', drawbacks: ['Card Casting', 'Cooldown', 'Mana Pool', 'Colored Mana (WGB)'], boons: [] };
+  cc.feats = [{ source: '1 HD', name: 'Card Shark [Deck]', notes: '' }];
+  p.manipulations = [{ group: 'General', name: 'Mulligan', note: '', count: 1, owner: cc.id }, { group: 'General', name: 'Fused Cards', note: '', count: 3, owner: '' }];
+  p.cards = [
+    { name: 'Bolt', qty: 20, cost: '1', color: 'R', mana: '', effect: 'Fire Blast', sphere: 'Destruction', tags: '', dice: '' },
+    { name: 'Mend', qty: 10, cost: '1', color: 'W', mana: '', effect: 'Cure', sphere: 'Life', tags: '', dice: '', owner: cc.id },
+  ];
+  c.recompute();
+  const ctx = { ...blankView(), tab: 'cardcasting' };
+  const html = (s, needle) => s.split(needle).length - 1;
+  const mine = subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' });
+  ok('each caster\'s deck has a sub-tab', mine.includes(`data-deck-view="deck:${cc.id}"`) && /Lira’s deck/.test(mine));
+  ok('the character\'s view shows its own cards, rows and picker alone', mine.includes('data-item="cardcasting.cards|0|name"') && !mine.includes('data-item="cardcasting.cards|1|name"')
+    && html(mine, 'data-manip-owner="1"') === 3 && html(mine, 'data-manip-owner="0"') === 0 && mine.includes('class="manip-pick" data-owner=""'));
+  ok('and lists the other deck at the top, with its own counts and a way in', /class="panel span2 otherdecks"/.test(mine) && /<strong>Lira<\/strong>/.test(mine) && /1 of 2 manipulations/.test(mine) && mine.includes(`<button data-deck-view="deck:${cc.id}"`));
+  const hers = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });
+  ok('the member\'s view shows its cards, its rows and a picker that adds for it', hers.includes('data-item="cardcasting.cards|1|name"') && !hers.includes('data-item="cardcasting.cards|0|name"')
+    && html(hers, 'data-manip-owner="0"') === 1 && html(hers, 'data-manip-owner="1"') === 0 && hers.includes(`class="manip-pick" data-owner="${cc.id}"`) && /1 of 2 taken/.test(hers));
+  ok('with the character\'s deck among the others, and no ladder of its own', /<strong>Nico<\/strong>/.test(hers) && !hers.includes('data-set="cardcasting.cooldown"') && !hers.includes('data-set="cardcasting.notes"'));
+  ok('its colours are drawn as chips, not shown as markup', hers.includes('<span class="chip W" title="White">W</span>') && !hers.includes('&lt;span class="chip'));
+  ok('its Harrow toggle is its own', hers.includes(`data-set="cardcasting.harrowBy.${cc.id}"`) && mine.includes('data-set="cardcasting.harrow"'));
+  c.set(`cardcasting.harrowBy.${cc.id}`, true);
+  const harrow = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });
+  ok('switched on for the member, its faces get the suit row and the character\'s do not', harrow.includes('data-item="cardcasting.cards|1|suit"')
+    && !subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-item="cardcasting.cards|0|suit"') && c.data.cardcasting.harrow === false);
+  ok('a member the deck no longer knows falls back to the character\'s view', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck:nobody' }).includes('data-item="cardcasting.cards|0|name"'));
+  const alone = new Character(blankDocument({ name: 'Solo', level: 5 }));
+  alone.data.cardcasting.enabled = true;
+  alone.recompute();
+  const solo = subsystems.cardcastingPanel(alone, { ...ctx, deckView: 'deck' });
+  ok('without a squad there is one deck, no owner picks and no other decks', !solo.includes('data-manip-owner') && !solo.includes('otherdecks') && /The deck/.test(solo));
 }
 
 console.log('\na card with several modes asks on the way in');
@@ -1068,9 +1142,12 @@ console.log('\nthe squad on the deck and at the table');
   const ctx = { ...blankView(), tab: 'cardcasting', deckView: 'deck', rollFormat: 'template' };
   const deck = subsystems.cardcastingPanel(c, ctx);
   ok('the deck view has a squad panel with the member and its deck', deck.includes('Squad — Multi-Headed Play') && deck.includes('<strong>Lira</strong>') && /badge ok[^>]*>combines</.test(deck));
-  ok('the faces are grouped by owner, each group with its own add buttons', deck.includes('Nico’s deck') && deck.includes('Lira’s deck')
-    && (deck.match(/data-add="cardcasting\.cards"/g) || []).length === 4);
-  ok('every face has an owner pick', (deck.match(/data-item="cardcasting\.cards\|\d+\|owner"/g) || []).length === 2 && deck.includes(`<option value="${cc.id}" selected>Lira</option>`));
+  ok('each caster\'s deck is a view of its own: the character\'s faces and add buttons here', deck.includes('Nico’s deck') && deck.includes('Lira’s deck')
+    && (deck.match(/data-add="cardcasting\.cards"/g) || []).length === 2 && deck.includes('data-item="cardcasting.cards|0|name"') && !deck.includes('data-item="cardcasting.cards|1|name"'));
+  const hers = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });
+  ok('and the member\'s on its own, each face with an owner pick that moves it', (hers.match(/data-add="cardcasting\.cards"/g) || []).length === 2
+    && (deck.match(/data-item="cardcasting\.cards\|\d+\|owner"/g) || []).length === 1 && (hers.match(/data-item="cardcasting\.cards\|\d+\|owner"/g) || []).length === 1
+    && hers.includes(`<option value="${cc.id}" selected>Lira</option>`));
 
   ctx.deckView = 'table';
   const shut = subsystems.cardcastingPanel(c, ctx);

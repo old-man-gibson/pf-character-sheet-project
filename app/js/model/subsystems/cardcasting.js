@@ -214,6 +214,11 @@ export function deckSquad(model) {
     const mismatch = SQUAD_SWITCHES.filter(([key]) => !!mine[key] !== !!theirs[key]).map(([key, , label]) => `${label} ${mine[key] ? 'missing' : 'extra'}`);
     const coloured = drawbacks.find((x) => /^colou?red mana/i.test(x));
     const named = coloured ? normalizeColors((/\(([^)]*)\)/.exec(coloured) || [])[1] || '') : '';
+    // Its own deck feats: Rainbow Efficiency among its feats or its bought-off drawbacks.
+    const feats = [...(b.feats || []).map((f) => String(typeof f === 'object' ? f?.name ?? '' : f ?? '')), ...(b.tradition.boughtOff || []).map((x) => String(typeof x === 'object' ? x?.name ?? '' : x ?? ''))];
+    const rainbow = rainbowLevel(feats);
+    // Its deck feats, for the manipulations it may take: one each, and two for Card Shark.
+    const deckFeats = feats.filter((f) => /\[[^\]]*deck/i.test(f));
     const casting = b.calc?.casting || null;
     const mod = Number(b.calc?.scores?.cha?.mod) || 0;
     const cl = Number(casting?.cl) || 0;
@@ -221,7 +226,7 @@ export function deckSquad(model) {
       id: String(b.id), kind, name: String(b.name || '').trim() || String(b.id),
       cardCasting, mismatch, ok: cardCasting && !mismatch.length,
       why: !cardCasting ? 'its tradition does not list Card Casting' : mismatch.length ? `switches differ: ${mismatch.join(', ')}` : '',
-      namedColors: named, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
+      namedColors: named, rainbow, deckFeats, feats, switches: theirs, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
       dc: 10 + Math.floor(cl / 2) + mod, msb: cl, msd: 11 + cl,
       pool: `sp:${b.id}`,
     };
@@ -439,9 +444,9 @@ export function importCardcasting(tab, drawbacks = [], magicClasses = [], deckFe
     }
   }
   const taken = block.manipulations.reduce((n, m) => n + (Number(m.count) || 0), 0);
-  // One manipulation per deck feat, plus Card Shark's extra: when the sheet's
+  // One manipulation per deck feat, two for Card Shark: when the sheet's
   // total is exactly that, leave it automatic so a new deck feat raises it.
-  const auto = deckFeats.length + (deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+  const auto = manipulationsGranted(deckFeats);
   block.manipulationsAvailable = taken + remaining === auto ? null : taken + remaining;
 
   // ---- land-attuned magic: a colour, five spheres, a tick each ----
@@ -697,6 +702,8 @@ export function recomputeCardcasting(model) {
   }
   for (const card of p.cards) card.qty = Math.max(0, Math.floor(Number(card.qty ?? 1) || 0));
   p.harrow = !!p.harrow;
+  // How the deck view is ordered: a preference kept with the deck.
+  p.deckSort = DECK_SORTS.some(([k]) => k === p.deckSort) ? p.deckSort : '';
   // Mana Graveyard needs both halves of the ladder; Stagnant Pool and it
   // cannot both be on. Neither is forced off -- the check below says so.
 
@@ -708,8 +715,7 @@ export function recomputeCardcasting(model) {
 
   // ---- deck feats, and what they bring ----
   const deckFeats = deckFeatNames(c);
-  const rainbow = deckFeats.some((f) => /rainbow efficiency,? improved|improved rainbow/i.test(f)) ? 2
-    : deckFeats.some((f) => /rainbow efficiency/i.test(f)) ? 1 : 0;
+  const rainbow = rainbowLevel(deckFeats);
 
   // A card with no colour of its own takes its sphere's, from the
   // land-attuned table; a plain Mana Point card wears its mana.
@@ -725,6 +731,11 @@ export function recomputeCardcasting(model) {
   // owned by a companion that is gone is the character's again, and said so.
   const squadMembers = deckSquad(model);
   const memberIds = new Set(squadMembers.map((m) => m.id));
+  const memberOf = new Map(squadMembers.map((m) => [m.id, m]));
+  // Whether each member's deck is a Harrow deck: a flag per member, beside
+  // the character's own, so one deck's toggle leaves the others alone.
+  p.harrowBy = Object.fromEntries(Object.entries(p.harrowBy && typeof p.harrowBy === 'object' ? p.harrowBy : {})
+    .filter(([id, on]) => String(id) && on).map(([id]) => [String(id), true]));
   let orphaned = 0;
   for (const card of [...p.cards, ...p.sideboard]) {
     const own = card.color;
@@ -735,7 +746,18 @@ export function recomputeCardcasting(model) {
     card.owner = String(card.owner ?? '');
     const owner = memberIds.has(card.owner) ? card.owner : '';
     if (card.owner && !owner) orphaned++;
-    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact, owner };
+    // Rainbow Efficiency is a deck feat of whoever owns the card's deck: the
+    // character's for the character's cards, a member's own for its. It
+    // wants Mana Pool and Colored Mana, and takes the discount off the
+    // typed cost of a multi-colour effect.
+    const member = owner ? memberOf.get(owner) : null;
+    const ownRainbow = member ? member.rainbow : rainbow;
+    const ownColored = member ? (member.namedColors.length || 3) : (Number(p.mods.coloredMana) || 3);
+    const isEffect = String(card.effect || '').trim() !== '';
+    const price = p.manaPool && p.mods.coloredMana && isEffect
+      ? rainbowCost(cardCost(card), colors, ownRainbow, ownColored)
+      : { cost: cardCost(card), discount: 0 };
+    card.calc = { ...(card.calc || {}), colors, fromSphere: !!fromSphere, artifact, owner, cost: price.cost, discount: price.discount, rainbow: ownRainbow };
   }
 
   // ---- the deck's shape: the character's own cards ----
@@ -751,9 +773,9 @@ export function recomputeCardcasting(model) {
     const cards = p.cards.filter((card) => card.qty > 0 && card.calc.owner === m.id);
     const used = CARD_COLORS.map(([k]) => k).filter((k) => cards.some((card) => card.calc.colors.includes(k) || card.mana.includes(k))).join('');
     const colors = m.namedColors || used;
-    // Its own casting modifier sets its spread; the character's deck feats
-    // do not reach it, so no Rainbow Efficiency.
-    const deck = deckFigures(cards, { cam: m.mod, rainbow: 0, mods: p.mods, colors, coloredCount: colors.length || null });
+    // Its own casting modifier sets its spread, and its own feats bring
+    // Rainbow Efficiency; the character's do not reach it.
+    const deck = deckFigures(cards, { cam: m.mod, rainbow: m.rainbow, mods: p.mods, colors, coloredCount: colors.length || null });
     return { ...m, colors, deck };
   });
   const combined = {
@@ -800,29 +822,52 @@ export function recomputeCardcasting(model) {
   }
 
   // ---- deck manipulations: taken against the number available ----
-  for (const m of p.manipulations) m.count = Math.max(0, Math.floor(Number(m.count) || 0));
-  const manipulationsTaken = p.manipulations.reduce((n, m) => n + m.count, 0);
-  const loadedHand = p.manipulations
+  // Each row is someone's: the character's (blank) or a squad member's,
+  // which takes its own picks against its own deck feats.
+  for (const m of p.manipulations) {
+    m.count = Math.max(0, Math.floor(Number(m.count) || 0));
+    m.owner = String(m.owner ?? '');
+  }
+  const ownerOf = (m) => (memberIds.has(m.owner) ? m.owner : '');
+  const ownRows = (id) => p.manipulations.filter((m) => ownerOf(m) === id);
+  const mine = ownRows('');
+  const manipulationsTaken = mine.reduce((n, m) => n + m.count, 0);
+  const loadedHand = mine
     .filter((m) => isManipulation(m, 'Loaded Hand'))
     .reduce((n, m) => n + m.count, 0);
-  // Available: one per deck feat, plus one for Card Shark -- unless a
-  // number or a formula is written over it.
-  const autoAvailable = deckFeats.length + (deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+  // Available: one per deck feat, two for Card Shark -- unless a number or
+  // a formula is written over it.
+  const autoAvailable = manipulationsGranted(deckFeats, [...featNames(c, { granted: false }), ...(c.training?.magic?.tradition?.boughtOff || []).map((x) => String(x || ''))]);
   const written = p.manipulationsAvailable !== null && p.manipulationsAvailable !== undefined
     && String(p.manipulationsAvailable).trim() !== '';
   const typed = written ? evaluateAmount(p.manipulationsAvailable, model.scope()) : null;
   const manipulationsAvailable = typed && !typed.error ? Math.floor(typed.value) : autoAvailable;
   const manipulationsError = typed?.error ?? null;
-  // What each pick needs, checked against the switches.
-  const flagOn = { cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
-    singleton: mods.singleton, gradualRamp: mods.gradualRamp, notManaGraveyard: !p.manaGraveyard };
+  // What each pick needs, checked against its owner's switches: the
+  // character's, or a squad member's own tradition. A member's shortfall is
+  // the member's issue, listed under its deck.
+  const flagsOf = (sw) => ({ cooldown: !!sw.cooldown, manaPool: !!sw.manaPool, coloredMana: !!sw.coloredMana,
+    singleton: !!sw.singleton, gradualRamp: !!sw.gradualRamp, notManaGraveyard: !sw.manaGraveyard });
+  const flagOn = flagsOf({ cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
+    singleton: mods.singleton, gradualRamp: mods.gradualRamp, manaGraveyard: p.manaGraveyard });
+  const memberIssues = (id) => squad.find((m) => m.id === id)?.deck.issues;
   for (const m of p.manipulations) {
     const entry = manipulationEntry(m);
-    const unmet = entry && m.count > 0 ? entry.requires.filter((r) => !flagOn[r]) : [];
+    const owner = ownerOf(m);
+    const flags = owner ? flagsOf(memberOf.get(owner).switches || {}) : flagOn;
+    const unmet = entry && m.count > 0 ? entry.requires.filter((r) => !flags[r]) : [];
     const overMax = entry && entry.max && m.count > entry.max;
-    m.calc = { known: !!entry, unmet, overMax: !!overMax };
-    if (unmet.length) issues.push(`${m.name} needs ${unmet.map((r) => ({ cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' })[r]).join(' and ')}.`);
+    m.calc = { known: !!entry, unmet, overMax: !!overMax, owner };
+    if (unmet.length) (owner ? memberIssues(owner) || issues : issues).push(`${m.name} needs ${unmet.map((r) => ({ cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' })[r]).join(' and ')}.`);
     if (overMax) issues.push(`${m.name} can only be taken ${entry.max} times.`);
+  }
+  // A member's own count: one per deck feat of its own, two for Card Shark.
+  for (const m of squad) {
+    const rows = ownRows(m.id);
+    m.manipulationsTaken = rows.reduce((n, r) => n + r.count, 0);
+    m.manipulationsAvailable = manipulationsGranted(m.deckFeats, m.feats);
+    m.manipulationsLeft = m.manipulationsAvailable - m.manipulationsTaken;
+    if (m.manipulationsLeft < 0) m.deck.issues.push(`${m.name} has ${m.manipulationsTaken} manipulations taken of ${m.manipulationsAvailable} available.`);
   }
 
   const hpTotal = model.hpMax;
@@ -936,14 +981,27 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
   if (mods.coloredMana) {
     // How many colours this deck's Colored Mana names: the switch's three or
     // five for the character; a squad member's own count, since its colours
-    // are its own.
+    // are its own. The rule allows three or five and nothing else.
     const n = coloredCount ?? mods.coloredMana;
+    if (coloredCount !== null && coloredCount !== 3 && coloredCount !== 5) {
+      issues.push(`Colored Mana names ${coloredCount} colour${coloredCount === 1 ? '' : 's'}; the rule wants three or five.`);
+    }
     // Rainbow Efficiency loosens the balance: ¾ of effects may share a
     // colour with three colours in play, ½ with five.
     const share = n >= 5 ? (rainbow ? 0.5 : 0.25) : (rainbow ? 0.75 : 0.5);
     const named = colorsInPlay.split('').filter(Boolean);
     if (named.length && named.length !== n) {
       issues.push(`Colored Mana names ${n} colours but ${named.length} ${named.length === 1 ? 'is' : 'are'} in play (${named.join(', ')}).`);
+    }
+    const few = (list) => `${list.slice(0, 3).map((x) => x.name || x.effect || 'a card').join(', ')}${list.length > 3 ? '…' : ''}`;
+    // Every effect is assigned a colour, and nothing wears a colour the
+    // deck does not run. (A fused card's mana half may carry two colours:
+    // that is how the sheet's own deck is built, and left alone.)
+    const uncoloured = inDeck.filter((card) => isEffect(card) && !card.calc.colors && !card.calc.artifact);
+    if (uncoloured.length) issues.push(`${uncoloured.length} effect card${uncoloured.length === 1 ? ' has' : 's have'} no colour (${few(uncoloured)}); Colored Mana assigns every effect one.`);
+    if (colors) {
+      const off = inDeck.filter((card) => [...card.calc.colors, ...card.mana].some((k) => !colors.includes(k)));
+      if (off.length) issues.push(`${off.length} card${off.length === 1 ? ' wears' : 's wear'} a colour the deck does not run (${few(off)}); the colours in play are ${named.join(', ')}.`);
     }
     for (const k of named) {
       const t = colorTally[k];
@@ -955,7 +1013,7 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
     }
     // A card may cost as many colours as the feats allow: two with Rainbow
     // Efficiency, up to five with Improved and Colored Mana taken twice.
-    const maxColors = rainbow === 2 ? (n === 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
+    const maxColors = rainbowMaxColors(rainbow, n);
     const over = inDeck.filter((card) => card.color.length > maxColors);
     if (over.length) {
       issues.push(`${over.length} card${over.length === 1 ? ' costs' : 's cost'} more than ${maxColors} colour${maxColors === 1 ? '' : 's'} (${over.slice(0, 3).map((x) => x.name || x.effect).join(', ')}${over.length > 3 ? '…' : ''}); that takes ${rainbow ? 'Improved ' : ''}Rainbow Efficiency.`);
@@ -976,23 +1034,32 @@ function deckFigures(inDeck, { cam, rainbow, mods, colors, coloredCount = null }
  * ------------------------------------------------------------------ */
 
 /** The zones that hold card ids. Mana in play is `{id, tapped}` and kept apart. */
-export const TABLE_ZONES = ['deck', 'hand', 'play', 'discard', 'exile', 'stun', 'wounds', 'death'];
+export const TABLE_ZONES = ['deck', 'hand', 'play', 'discard', 'exile', 'banished', 'stun', 'wounds', 'death'];
 
 /** Lifebound Deck's three piles, in the order a card moves down them. */
 export const LIFEBOUND_PILES = ['stun', 'wounds', 'death'];
 
+/**
+ * The zones a shuffle leaves alone. The exile empties when the encounter
+ * ends; a *banished* card -- exiled until the character rests to regain
+ * spell points, the heavier exile some cards and effects call for -- sits
+ * out every encounter until a new day, as the Lifebound piles do.
+ */
+export const HELD_ZONES = ['banished', ...LIFEBOUND_PILES];
+
 /** Where a card can be moved by hand, and what the move is called. */
 export const TABLE_DESTINATIONS = [
   ['hand', 'hand'], ['play', 'in play'], ['mana', 'mana in play'], ['discard', 'discard'], ['exile', 'exile'],
+  ['banished', 'banished — until spell points recover'],
   ['deckTop', 'top of deck'], ['deckBottom', 'bottom of deck'], ['deck', 'shuffled into deck'],
   ['stun', 'Stun pile'], ['wounds', 'Wounds pile'], ['death', 'Death pile'],
 ];
 
 /** The keywords a card's text can carry, which fire when it is cast: [Draw 2], [Shuffle]… */
-export const CARD_KEYWORDS = ['draw', 'discard', 'shuffle', 'tap', 'untap', 'mill', 'peek', 'wild', 'exile', 'bottom', 'top', 'return', 'deck', 'ante'];
+export const CARD_KEYWORDS = ['draw', 'discard', 'shuffle', 'tap', 'untap', 'mill', 'peek', 'wild', 'exile', 'banish', 'bottom', 'top', 'return', 'deck', 'ante'];
 
 /** What can happen to a card that a trigger tag names: [OnMill], [OnRedraw]… */
-export const CARD_TRIGGERS = ['mill', 'redraw', 'draw', 'discard', 'exile'];
+export const CARD_TRIGGERS = ['mill', 'redraw', 'draw', 'discard', 'exile', 'banish'];
 
 /**
  * A card keyword in text, `[Mill 3]`, or with `triggers` a trigger tag too,
@@ -1007,6 +1074,113 @@ export function cardKeywordPattern({ triggers = false } = {}) {
 export function cardCost(card) {
   const cost = parseInt(String(card?.cost ?? '').trim(), 10);
   return Number.isFinite(cost) ? Math.max(0, cost) : 0;
+}
+
+/** Is this owner's deck a Harrow deck? The character's own flag, or a member's from `harrowBy`. */
+export function harrowFor(p, owner = '') {
+  const id = String(owner ?? '');
+  return id ? !!p?.harrowBy?.[id] : !!p?.harrow;
+}
+
+/** What a card costs to cast: the typed cost less the Rainbow Efficiency discount worked out at recompute. */
+export function effectiveCost(card) {
+  const cost = Number(card?.calc?.cost);
+  return Number.isFinite(cost) ? cost : cardCost(card);
+}
+
+/** 0 without the feat, 1 for Rainbow Efficiency, 2 for Rainbow Efficiency, Improved -- from a list of feat names. */
+export function rainbowLevel(names) {
+  const list = (names || []).map((f) => String(f || ''));
+  if (list.some((f) => /rainbow efficiency,? improved|improved rainbow/i.test(f))) return 2;
+  return list.some((f) => /rainbow efficiency/i.test(f)) ? 1 : 0;
+}
+
+/** How many colours an effect may cost: one; two with Rainbow Efficiency; three with Improved, five with Improved and five-colour Colored Mana. */
+export function rainbowMaxColors(rainbow, coloredCount = 3) {
+  return rainbow === 2 ? (coloredCount >= 5 ? 5 : 3) : rainbow === 1 ? 2 : 1;
+}
+
+/**
+ * Rainbow Efficiency's discount on a multi-colour effect: two colours cost
+ * one less, to a minimum of 1; Improved takes one more off for every colour
+ * past the second, to a minimum of one less than the number of colours (a
+ * five-colour effect costs at least 4). Only as many colours as the feats
+ * allow count, and an at-will card has nothing to take off. Returns the
+ * cost to pay and what came off the typed cost.
+ */
+export function rainbowCost(printed, colors, rainbow, coloredCount = 3) {
+  const n = Math.min(String(colors || '').length, rainbowMaxColors(rainbow, coloredCount));
+  if (printed <= 0 || n < 2) return { cost: printed, discount: 0 };
+  const cost = Math.max(Math.max(1, n - 1), printed - (n - 1));
+  return { cost, discount: printed - cost };
+}
+
+/**
+ * Can each colour be given a Mana Point card of its own? Improved Rainbow
+ * Efficiency: "a single Mana Point Card can only count as providing a single
+ * color". `cards` is the mana each untapped card carries; a card is used once.
+ */
+export function coverColors(colors, cards) {
+  const want = [...String(colors || '')];
+  const used = new Set();
+  const place = (i) => {
+    if (i >= want.length) return true;
+    for (let c = 0; c < cards.length; c++) {
+      if (used.has(c) || !String(cards[c] || '').includes(want[i])) continue;
+      used.add(c);
+      if (place(i + 1)) return true;
+      used.delete(c);
+    }
+    return false;
+  };
+  return place(0);
+}
+
+/** The orders the deck view offers; the first is the order the cards were typed in. */
+export const DECK_SORTS = [
+  ['', 'as entered'], ['color', 'colour (WUBRG)'], ['cost', 'cost'], ['tags', 'tags'], ['sphere', 'sphere'],
+];
+
+/** Colour order for sorting: white, blue, black, red, green. */
+const WUBRG = 'WUBRG';
+
+/**
+ * The indices of `cards` in the order `by` asks for. The cards themselves
+ * stay where they are -- every field on a face is bound by index -- so a
+ * sort is a way of looking, not an edit. Colour runs W U B R G, then
+ * two-colour cards, then colourless, with Mana Point cards after the effect
+ * cards of their colour; cost counts up, Mana Point cards last; tags and
+ * sphere run alphabetically, blanks last. Ties fall through to the next key
+ * and then the name, so a sorted deck reads the same every time.
+ */
+export function deckOrder(cards, by) {
+  const idx = (cards || []).map((_, i) => i);
+  if (!by || !DECK_SORTS.some(([k]) => k === by)) return idx;
+  const rank = (c) => { const n = WUBRG.indexOf(c); return n < 0 ? 9 : n; };
+  const key = (card) => {
+    const colors = String(card.calc?.colors || '').toUpperCase();
+    const color = colors.length === 1 ? [rank(colors), '']
+      : colors.length > 1 ? [5, [...colors].map(rank).sort().join('')] : [6, ''];
+    const mana = String(card.effect || '').trim() ? 0 : 1;
+    const name = String(card.name || card.effect || '').toLowerCase();
+    const word = (f) => { const s = String(card[f] || '').trim().toLowerCase(); return [s ? 0 : 1, s]; };
+    switch (by) {
+      case 'color': return [...color, mana, effectiveCost(card), name];
+      case 'cost': return [mana, effectiveCost(card), ...color, name];
+      case 'tags': return [...word('tags'), ...color, name];
+      default: return [...word('sphere'), ...color, name];
+    }
+  };
+  const keys = idx.map((i) => key(cards[i]));
+  return idx.sort((a, b) => {
+    const ka = keys[a];
+    const kb = keys[b];
+    for (let n = 0; n < ka.length; n++) {
+      if (ka[n] < kb[n]) return -1;
+      if (ka[n] > kb[n]) return 1;
+    }
+    return a - b;
+  });
 }
 
 /** Perfect Draw's maximum ante: 2, and 1 more for every 4 levels past 1st. */
@@ -1096,20 +1270,43 @@ export function recomputeTable(model) {
   };
 }
 
+/**
+ * The deck manipulations a set of feats grants: one per deck feat (tagged
+ * [Deck]), and two for Card Shark each time it is taken, tagged or not,
+ * since the feat itself grants them. `allFeats` is where Card Shark is
+ * looked for; the deck feats when it is left out.
+ */
+export function manipulationsGranted(deckFeats, allFeats = null) {
+  const shark = (f) => /card shark/i.test(String(f || ''));
+  return (deckFeats || []).filter((f) => !shark(f)).length + 2 * (allFeats || deckFeats || []).filter(shark).length;
+}
+
 /** Is a deck feat by that name on the character? */
 export function hasDeckFeat(model, re) {
   return (model.data.cardcasting?.calc?.deckFeats || []).some((f) => re.test(f));
 }
 
-/** How many times a manipulation is taken, across every row naming it. */
-export function manipulationCount(model, name) {
-  return (model.data.cardcasting?.manipulations || [])
-    .filter((m) => isManipulation(m, name)).reduce((n, m) => n + Math.max(0, Number(m.count) || 0), 0);
+/**
+ * How many times a manipulation is taken, across every row naming it. `who`
+ * is whose picks count: '' the character's, a member's id its own, and left
+ * out -- the table's question -- the character's and those of every squad
+ * member at the table, since manipulations stay with whoever has them and
+ * a member present may use its own.
+ */
+export function manipulationCount(model, name, who = undefined) {
+  const p = model.data.cardcasting;
+  const present = new Set(p?.table?.squad || []);
+  const counts = (m) => {
+    const owner = String(m.calc?.owner ?? m.owner ?? '');
+    return who === undefined ? (!owner || present.has(owner)) : owner === String(who);
+  };
+  return (p?.manipulations || [])
+    .filter((m) => counts(m) && isManipulation(m, name)).reduce((n, m) => n + Math.max(0, Number(m.count) || 0), 0);
 }
 
-/** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches. */
-export function hasManipulation(model, name) {
-  return manipulationCount(model, name) > 0;
+/** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches; `who` as for manipulationCount. */
+export function hasManipulation(model, name, who = undefined) {
+  return manipulationCount(model, name, who) > 0;
 }
 
 /** May this card go onto the table as mana right now? */
@@ -1227,7 +1424,7 @@ export function terrainFreedomTracker(model) {
 /** How a plain Cast pays Terrain Casting for this card: the point on a card that costs any, the step on an at-will one; null when the drawback is not in force. */
 export function terrainDefault(model, card) {
   if (!terrainCasting(model)) return null;
-  return cardCost(card) > 0 ? 'sp' : 'step';
+  return effectiveCost(card) > 0 ? 'sp' : 'step';
 }
 
 /** The toll a cast pays: the chooser's pick when it is one of the four, else the card's default. */
@@ -1280,9 +1477,10 @@ export function castCheck(model, id, who = null, terrain = null) {
   // Terrain Casting's point rides on the cost, so the mana it needs and the
   // points it spends both count it.
   const toll = terrainToll(model, card, terrain);
-  const need = cardCost(card) + (toll === 'sp' ? 1 : 0);
+  const need = effectiveCost(card) + (toll === 'sp' ? 1 : 0);
+  const discount = Number(card.calc?.discount) || 0;
   if (!isEffect) return { ok: true, need: 0, have: 0, mana: true, terrain: null };
-  if (!p.manaPool) return { ok: true, need, have: need, terrain: toll };
+  if (!p.manaPool) return { ok: true, need, have: need, discount, terrain: toll };
   const colors = String(card.calc?.colors || '');
   const usable = t.mana.filter((m) => {
     if (m.tapped) return false;
@@ -1296,14 +1494,19 @@ export function castCheck(model, id, who = null, terrain = null) {
   // the character's: a squad member casting gets no such thing.
   const worth = caster === '' && cardAttuned(model, card) ? 2 : 1;
   const spend = Math.ceil(need / worth);
-  // Rainbow Efficiency: a two-colour card needs a mana card of each colour.
+  // Rainbow Efficiency: a multi-colour card needs mana of each of its
+  // colours in play; under Improved a Mana Point card provides one colour
+  // only, so each colour wants a card of its own.
   let ok = usable.length >= spend;
   let why = ok ? (worth > 1 ? 'attuned: each mana card pays two' : '') : `needs ${spend} mana in play${worth > 1 ? ' (attuned: each pays two)' : ''}, has ${usable.length}`;
   if (ok && p.mods.coloredMana && colors.length > 1) {
-    const covered = [...colors].every((c) => t.mana.some((m) => !m.tapped && String(model.tableCard(m.id)?.mana || '').includes(c)));
-    if (!covered) { ok = false; why = `needs mana of each colour (${colors})`; }
+    const untapped = t.mana.filter((m) => !m.tapped).map((m) => String(model.tableCard(m.id)?.mana || ''));
+    const strict = card.calc?.rainbow === 2;
+    const covered = strict ? coverColors(colors, untapped) : [...colors].every((c) => untapped.some((letters) => letters.includes(c)));
+    if (!covered) { ok = false; why = strict ? `needs a Mana Point card for each colour (${colors}), one colour a card` : `needs mana of each colour (${colors})`; }
   }
-  return { ok, need, spend, worth, have: usable.length, why, caster, terrain: toll };
+  if (ok && discount) why = `${why ? `${why}; ` : ''}Rainbow Efficiency: ${discount} off`;
+  return { ok, need, spend, worth, have: usable.length, why, caster, discount, terrain: toll };
 }
 
 /** Is this card's sphere one the land-attuned table ticks, with the feat in force? */
@@ -1385,25 +1588,26 @@ export function drawCards(model, n, why = 'draw') {
 /**
  * Initiative: build the deck from every copy, shuffle, draw the opening hand.
  *
- * Every copy but the ones in the Lifebound piles. Those hold until a rest:
- * "When you rest to regain spell points, remove all cards from your Stun,
- * Death, and Wounds piles" -- so a character still hurt from the last fight
- * starts the next one without them. A new encounter used to empty the piles.
+ * Every copy but the ones in the Lifebound piles and the banished. Those
+ * hold until a rest: "When you rest to regain spell points, remove all cards
+ * from your Stun, Death, and Wounds piles" -- so a character still hurt from
+ * the last fight starts the next one without them, and a banished card sits
+ * out the same way. A new encounter used to empty the piles.
  */
 export function tableStart(model) {
   const p = model.data.cardcasting;
   if (!p) return model;
   const t = p.table;
   const k = p.calc;
-  const piles = Object.fromEntries(LIFEBOUND_PILES.map((z) => [z, [...(t[z] || [])]]));
-  const held = new Set(LIFEBOUND_PILES.flatMap((z) => piles[z]));
+  const piles = Object.fromEntries(HELD_ZONES.map((z) => [z, [...(t[z] || [])]]));
+  const held = new Set(HELD_ZONES.flatMap((z) => piles[z]));
   Object.assign(t, {
     active: true, round: 1, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, model.tableInstances().filter((id) => !held.has(id))), hand: [], play: [], mana: [], discard: [], exile: [],
     ...piles, faceDown: [], targets: {}, log: [], counters: null, lastRoll: null, lastTrigger: '',
   });
   const loaded = 2 * (k.loadedHand || 0);
-  tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled`);
+  tableLog(model, t, `encounter begins — ${t.deck.length} cards shuffled${t.banished.length ? ` (${t.banished.length} banished until spell points recover)` : ''}`);
   drawCards(model, k.openingHand + loaded, `opening hand (${k.openingHand}${loaded ? ` + ${loaded} Loaded Hand` : ''})`);
   return model.recompute();
 }
@@ -1569,7 +1773,7 @@ export function tableRetrace(model, id) {
   const caster = casterFor(model, null);
   const by = casterInfo(model, caster);
   const name = `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`;
-  const cost = cardCost(card);
+  const cost = effectiveCost(card);
   tableLog(model, t, `Retrace: ${name} cast from the discard${cost ? ` for ${cost}` : ''} + 1 spell point`);
   spendSP(model, cost + 1, `${name} (Retrace)`, by.pool);
   rollFor(model, id, caster);
@@ -1608,6 +1812,7 @@ export function rollFor(model, id, who = null) {
  *   [Tap N]       tap N Mana Point cards    [Wild]      Wild Card: search the deck
  *   [Exile]       this card is exiled       [Bottom]    …goes to the bottom of the deck
  *   [Return]      …returns to the hand      [Top]       …goes on top of the deck
+ *   [Banish]      …is banished: exiled until the character rests to regain spell points
  *
  * The ones that stand in for a deck manipulation want it taken: [Peek] Read
  * the Cards, [Wild] Wild Card, [Exile] Impulse or Control Caster, [Return]
@@ -1650,6 +1855,7 @@ export function tableKeywords(model, id, card) {
       case 'peek': tableLog(model, t, `[Peek ${n}]: ${model.tablePeek(n).map((g) => tableName(model, g)).join(', ') || 'deck is empty'}`); break;
       case 'wild': tableLog(model, t, '[Wild]: search the deck for a card — move it to the hand'); break;
       case 'exile': fate = 'exile'; break;
+      case 'banish': fate = 'banished'; break;
       case 'bottom': fate = 'deckBottom'; break;
       case 'top': fate = 'deckTop'; break;
       case 'return': fate = 'hand'; break;
@@ -1678,7 +1884,7 @@ export function tableKeywords(model, id, card) {
 
 /**
  * A card's trigger tags: [OnMill], [OnRedraw], [OnDraw], [OnDiscard],
- * [OnExile] mark the sentence that applies when that happens to the card.
+ * [OnExile], [OnBanish] mark the sentence that applies when that happens to the card.
  * The table logs it and keeps it in `lastTrigger` for the header.
  */
 export function tableTrigger(model, id, when) {
@@ -1699,6 +1905,7 @@ export function tableSettle(model, id, fate = null) {
   const p = model.data.cardcasting;
   const t = p.table;
   if (fate === 'exile') { t.exile.push(id); tableLog(model, t, `${tableName(model, id)} exiled`); tableTrigger(model, id, 'exile'); return; }
+  if (fate === 'banished') { t.banished.push(id); tableLog(model, t, `${tableName(model, id)} banished until spell points recover`); tableTrigger(model, id, 'banish'); return; }
   if (fate === 'deck') { t.deck = shuffle(model, [...t.deck, id]); return; }
   if (fate === 'deckBottom') { t.deck.push(id); return; }
   if (fate === 'deckTop') { t.deck.unshift(id); return; }
@@ -1722,7 +1929,7 @@ export function tableResolve(model, id) {
   if (wasTrap) {
     const caster = casterFor(model, null);
     const by = casterInfo(model, caster);
-    const cost = cardCost(card);
+    const cost = effectiveCost(card);
     if (cost > 0) spendSP(model, cost, `${caster ? `${by.name}: ` : ''}${tableName(model, id)}`, by.pool);
     rollFor(model, id, caster);
   }
@@ -2110,7 +2317,8 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   const colors = String(card.calc?.colors || '');
   if (cost) {
     const words = [...colors].map((c) => (CARD_COLORS.find(([k]) => k === c) || [c, c])[1]).join('/');
-    notes.push({ label: 'Cost', text: `${cost} SP${words ? ` (${words})` : ''}` });
+    const off = Number(card.calc?.discount) || 0;
+    notes.push({ label: 'Cost', text: `${off ? `${effectiveCost(card)} SP (${cost} less ${off} for Rainbow Efficiency)` : `${cost} SP`}${words ? ` (${words})` : ''}` });
   }
   for (const [label, text] of cardStatLines(model, card, caster)) notes.push({ label, text });
   const type = [String(card.sphere || '').trim(), String(card.tags || '').trim()].filter(Boolean).join(' — ');
@@ -2119,7 +2327,7 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   if (effect && !shortEffect) {
     notes.push({ label: 'Effect', text: effect.length > EFFECT_NOTE_MAX ? `${effect.slice(0, EFFECT_NOTE_MAX - 1)}…` : effect });
   }
-  if (p.harrow && (card.suit || card.alignment)) {
+  if (harrowFor(p, card.calc?.owner) && (card.suit || card.alignment)) {
     notes.push({ label: 'Harrow', text: [card.suit, card.alignment].filter(Boolean).join(', ') });
   }
   return { name, rolls, notes, queries: [] };
@@ -2184,6 +2392,33 @@ export function moveCard(model, from, index, to, { copy = false } = {}) {
 }
 
 /**
+ * Give one copy of a manipulation pick to `owner` ('' is the character). A
+ * row taken once just changes hands; a row taken several times loses one
+ * copy, and the owner's own row of the same name and group gains it -- made
+ * beside the source if there is none -- so each copy is given on its own
+ * and the others stay where they were.
+ */
+export function moveManipulationPick(model, index, owner) {
+  const list = model.data.cardcasting?.manipulations;
+  const row = list?.[index];
+  if (!row) return model;
+  const to = String(owner ?? '');
+  if (String(row.owner ?? '') === to) return model;
+  const count = Math.max(0, Math.floor(Number(row.count) || 0));
+  const group = String(row.group || 'General');
+  const twin = list.find((m, i) => i !== index && String(m.owner ?? '') === to && isManipulation(m, row.name) && String(m.group || 'General') === group);
+  if (twin) twin.count = Math.max(0, Number(twin.count) || 0) + 1;
+  if (count <= 1) {
+    // The last copy: the row changes hands, or joins the owner's row and goes.
+    if (twin) list.splice(index, 1); else row.owner = to;
+    return model.recompute();
+  }
+  row.count = count - 1;
+  if (!twin) list.splice(index + 1, 0, { group: row.group, name: row.name, note: '', count: 1, owner: to });
+  return model.recompute();
+}
+
+/**
  * Give this card's Dice field, and its stat line, to every card that shares
  * its effect. Returns how many took it. Cards with one effect have one save,
  * range and damage type as surely as they have one set of dice.
@@ -2203,8 +2438,9 @@ export function shareCardDice(model, list, index) {
 /**
  * Move one card between zones by hand -- discard from the hand (Bleeding
  * Hand, Into Nothing), return from the discard (Recollection, Resupply),
- * exile (Impulse), the Lifebound piles, or just putting right a misclick.
- * `to` is a zone name; 'deck' shuffles it in, 'deckTop' puts it on top.
+ * exile (Impulse), banish (out until spell points recover), the Lifebound
+ * piles, or just putting right a misclick. `to` is a zone name; 'deck'
+ * shuffles it in, 'deckTop' puts it on top.
  */
 export function tableMove(model, id, to) {
   const p = model.data.cardcasting;
@@ -2224,12 +2460,13 @@ export function tableMove(model, id, to) {
   else if (to === 'deckBottom') t.deck.push(id);
   else if (t[to]) t[to].push(id);
   else return model.recompute();
-  tableLog(model, t, `${tableName(model, id)} → ${to === 'deckTop' ? 'top of deck' : to === 'deckBottom' ? 'bottom of deck' : to}`);
+  tableLog(model, t, `${tableName(model, id)} → ${to === 'deckTop' ? 'top of deck' : to === 'deckBottom' ? 'bottom of deck' : to === 'banished' ? 'banished until spell points recover' : to}`);
   // What the move means to the card: off the top of the deck into the
   // discard is a mill, out of the hand into it a discard, and so on.
   if (to === 'discard' && from === 'deck') tableTrigger(model, id, 'mill');
   else if (to === 'discard' && from === 'hand') tableTrigger(model, id, 'discard');
   else if (to === 'exile') tableTrigger(model, id, 'exile');
+  else if (to === 'banished') tableTrigger(model, id, 'banish');
   else if ((to === 'deck' || to === 'deckTop' || to === 'deckBottom') && from === 'hand') tableTrigger(model, id, 'redraw');
   return model.recompute();
 }
@@ -2278,18 +2515,22 @@ export function tablePeek(model, n = 1) {
   return (model.data.cardcasting?.table?.deck || []).slice(0, Math.max(1, n));
 }
 
-/** The encounter ends: everything back into the deck, shuffled. */
+/**
+ * The encounter ends: everything back into the deck, shuffled -- except
+ * what is held out until a rest: the banished and the Lifebound piles.
+ */
 export function tableEnd(model) {
   const p = model.data.cardcasting;
   if (!p?.table) return model;
   const t = p.table;
   const all = [...t.deck, ...t.hand, ...t.play, ...t.discard, ...t.exile, ...t.mana.map((m) => m.id)];
   const exiled = t.exile.length;
+  const banished = (t.banished || []).length;
   Object.assign(t, {
     active: false, round: 0, redraws: 0, manaPlayed: 0,
     deck: shuffle(model, all), hand: [], play: [], mana: [], discard: [], exile: [], faceDown: [], targets: {},
     counters: null, lastRoll: null, lastTrigger: '',
   });
-  tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}`);
+  tableLog(model, t, `encounter over — everything shuffled back${exiled ? ` (${exiled} exiled cards: half return now, the rest one a minute)` : ''}${banished ? ` — ${banished} banished until spell points recover` : ''}`);
   return model.recompute();
 }

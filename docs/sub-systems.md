@@ -702,9 +702,9 @@ derive from it is worked out on load and never saved:
 |---|---|
 | casting ability | casting modifier; **opening hand** = 1 + modifier, at least 2 |
 | the ladder — Cooldown, Mana Pool, Mana Graveyard — and the ten modifications (Bleeding Hand ×1/×2, Colored Mana 3/5, Deckout, Exposed Grip, Gradual Ramp, Lifebound Deck, Singleton, Stagnant Pool, Strikable Assets, Tight Hand) | what the drawback **counts as for boons** (1, +1 for Cooldown or Mana Pool, +1 for both, +1 for Mana Graveyard, +1 per modification, +2 for five-colour Colored Mana — Nico's is 7); prerequisites flagged (Deckout needs Cooldown, Stagnant Pool cannot sit with Mana Graveyard…) |
-| the cards — name, effect, spell point cost and its **colour**, sphere, tags, the **mana** a fused card carries (`UB`), copies, an art link, and suit/alignment on a Harrow deck | deck size; effect / mana / fused counts; distinct effects and copies of each; the **identical-effect spread** against the casting modifier; **colour balance** under Colored Mana (every colour has an effect, none over half or a quarter); Singleton duplicates; the minimum of 20; d100 **draw ranges** per card; suit, alignment, sphere and colour tallies |
-| deck manipulations by group, with a count and the note beside each pick; the number available (blank = automatic, or a number or formula) | one manipulation per **deck feat** (any feat or bought-off drawback tagged `[Deck]`) plus one for Card Shark — Nico's 10 + 1 = 11; each pick's rule text and prerequisites (Cooldown, Mana Pool, Colored Mana, Singleton…) from the catalogue in the deck-manipulations extension pack, read off the wiki's [Card and Deck Feats](http://spheresofpower.wikidot.com/card-and-deck-feats) page; taken vs. left |
-| **Rainbow Efficiency** (seen among the deck feats) | a card may cost two colours — three to five with *Improved* — and the colour balance loosens to ¾ / ½ |
+| the cards — name, effect, spell point cost and its **colour**, sphere, tags, the **mana** a fused card carries (`UB`), copies, an art link, and suit/alignment on a Harrow deck | deck size; effect / mana / fused counts; distinct effects and copies of each; the **identical-effect spread** against the casting modifier; **Colored Mana** as written (three or five colours named; every effect assigned a colour, nothing in a colour the deck does not run; every colour has an effect; none over half of the effects with three colours or a quarter with five); Singleton duplicates; the minimum of 20; d100 **draw ranges** per card; suit, alignment, sphere and colour tallies |
+| deck manipulations by group, with a count and the note beside each pick; the number available (blank = automatic, or a number or formula); with a squad, whose pick each row is | one manipulation per **deck feat** (any feat or bought-off drawback tagged `[Deck]`) and two for Card Shark each time it is taken, tagged or not — Nico's 9 + 2 = 11; a squad member's picks are its own, counted against its own deck feats, checked against its own switches, and usable at the table while it is present; each pick's rule text and prerequisites (Cooldown, Mana Pool, Colored Mana, Singleton…) from the catalogue in the deck-manipulations extension pack, read off the wiki's [Card and Deck Feats](http://spheresofpower.wikidot.com/card-and-deck-feats) page; taken vs. left |
+| **Rainbow Efficiency** (seen among the deck feats) | a card may cost two colours — three to five with *Improved* and five-colour Colored Mana — and the colour balance loosens to ¾ / ½. The **discount is worked out from the typed cost**: two colours cost one less (minimum 1); Improved takes one more off per colour past the second, to a minimum of one less than the number of colours. The face shows *→ 2* beside the typed cost, the hand and the Roll20 text show the cost to pay, and the cast check, the mana spent, Retrace and a springing trap all use it. Each deck's owner brings its own feat: a squad member's cards are discounted by the member's Rainbow Efficiency, not the character's |
 | land-attuned spheres per colour, and which are attuned | cards in the deck per sphere |
 | Lifebound Deck / Tight Hand | Lifebound value = ⌊HP ÷ 3 ÷ deck size⌋ (min 1); hand limit = 3 + Loaded Hand picks |
 
@@ -717,6 +717,12 @@ its **sphere's** colour from the land-attuned table; a plain Mana Point card wea
 mana; a Veilweaving card is an **artifact** in blue-grey, being outside sphere magic —
 suit and alignment on the line beneath for a Harrow deck, the art from a
 pasted image link, a *sphere — tags* type line, and the effect in the text box.
+The Deck panel and the Sideboard **fold** like the panels above them, the fold kept with the character. **Sort** in the deck's heading shows the faces by colour (white, blue, black, red,
+green, then two-colour cards, then colourless, Mana Point cards after the effect
+cards of their colour), by cost (Mana Point cards last), by tags or by sphere
+(blanks last); the sideboard follows, and the choice is kept with the deck. The
+cards themselves stay in the order they were typed, since every field is bound
+by its place in the list.
 A card's effect is prose, so `Corpse Bomb — Fort DC {= 10 + floor(level/2) +
 int.mod}` reads **30** on the card and follows Int and level. The deck is in the
 formula scope as `deck.size`, `deck.cam`, `deck.hand`, `deck.handMax`,
@@ -739,7 +745,7 @@ source tab*.
 The tab has two faces: **The deck** (everything above) and **The table**, the
 encounter in play. The table keeps its zones on `cardcasting.table` as card-instance
 ids (`<card>#<copy>`) — deck order, hand, in play, mana in play (with a tapped flag),
-discard, exile and the three Lifebound piles — so an encounter is play state like hit
+discard, exile, the banished and the three Lifebound piles — so an encounter is play state like hit
 points: saved, restored, and a few hundred bytes.
 
 **Dice on a card.** The Dice row under a face's text takes one roll or several with
@@ -791,7 +797,7 @@ to waive it with a use from a tracker named *Drawback Freedom (Terrain Casting)*
 rides on the cost, so the mana it needs and the points it spends both count it; the step
 names the slower casting time when the card has one (*standard action* → *full-round
 action*); blight is a log line for the GM's map. The **Cost** field stays the card's own
-cost — type a two-colour card at its Rainbow Efficiency price and the terrain point is added
+cost — a two-colour card's Rainbow Efficiency discount comes off first and the terrain point is added
 on top. The table's notes and the tradition panel both say when the drawback is in force.
 
 | Control | What the rules say, and what it does |
@@ -800,10 +806,10 @@ on top. The table's notes and the tradition panel both say when the drawback is 
 | **Redraw hand** | shuffle the hand back and draw one fewer (mana drawn into play at initiative goes back too); the same number the first time with Mulligan; never from a hand of one. |
 | **Next round** | draw one (not under Exposed Grip, which draws by action), untap Stagnant Pool mana, reset the Gradual Ramp count; under Deckout an empty deck says so (4 Con burn a turn). |
 | **Draw a card** | Rapid Fill, Life Draw, Prize Card, Primed Hand — any draw the rules hand you. Tight Hand stops a draw at 3 + Loaded Hand. A dry deck under Cooldown reshuffles the discard first, as a free action, unless Deckout forbids it. |
-| **Cast** / **Ongoing** | on each card in hand. *Cast* resolves at once — the card shuffles back into the deck, or goes to the discard under Cooldown; *Ongoing* keeps it in play until you **Resolve** it. Under Mana Pool the cost is read against mana in play (of the card's colour under Colored Mana; a mana card of each colour for a Rainbow Efficiency cost): Mana Graveyard sends that many Mana Point cards to the discard, Stagnant Pool taps them. The check shows as a badge — *castable* or *2/5 mana* — and never refuses. |
+| **Cast** / **Ongoing** | on each card in hand. *Cast* resolves at once — the card shuffles back into the deck, or goes to the discard under Cooldown; *Ongoing* keeps it in play until you **Resolve** it. Under Mana Pool the cost is read against mana in play (of the card's colour under Colored Mana; mana of each colour for a Rainbow Efficiency cost, and under *Improved* a Mana Point card of its own for each colour, since one card provides one colour): Mana Graveyard sends that many Mana Point cards to the discard, Stagnant Pool taps them. The check shows as a badge — *castable* or *2/5 mana* — and never refuses. |
 | **Cast…** | a card whose Dice field lists several modes (`0 SP: 5d6; boost (1 SP): 7d6; big (3 SP): 11d6`) asks on the way in: which mode, and how many spell points to put in on top of the cost — the field starts at the picked mode's `(N SP)` price. The mode's dice roll, the points come off the tracker, and *Copy for Roll20 on cast* copies that mode alone. The chooser is drawn in the hand window and on the tab alike. |
 | **As mana** | a Mana Point card, or the mana half of a fused card, onto the table. Gradual Ramp allows one a round — the button greys out after it — except a card tagged *Mana Rock* (for a spell point) or *Moxen*. |
-| **Squad** (Multi-Headed Play) | a conjured companion with a casting tradition of its own is a squad candidate; it **combines** when that tradition lists *Card Casting* with the same switches as yours (Cooldown, Mana Pool, the modifications) — its *Colored Mana* colours are its own. Each face has an **owner** pick, and the deck view groups the faces by owner, checks each owner's deck on its own (size, spread against *its* casting modifier, colour balance against *its* colours) and shows the combined total. Under the table's controls a **roster** button per member marks it at the table: pressed, its cards shuffle into the deck (mid-encounter too, as a summoned companion arriving); released, every card of its leaves the zones. You cast by default, whichever deck a card came from, since the pooled decks exist so that the one with the spell points can cast off all of them; a **…** beside Cast (and the many-mode chooser) offers **cast by** a member at the table instead, and then that caster's level, modifier, DC and spell pool are used — write a card's numbers as `caster.level` and `caster.mod` and they follow whoever casts — and the log, the last-roll badge and the Roll20 text name the member. Your deck feats (Land-Attuned Magic's double mana, Rainbow Efficiency) and manipulations stay yours. |
+| **Squad** (Multi-Headed Play) | a conjured companion with a casting tradition of its own is a squad candidate; it **combines** when that tradition lists *Card Casting* with the same switches as yours (Cooldown, Mana Pool, the modifications) — its *Colored Mana* colours are its own. Each caster's deck has a **sub-tab of its own** — *Nico's deck*, *Lira's deck* — with its cards, sideboard and manipulations and the checks of that deck alone (size, spread against *its* casting modifier, colour balance against *its* colours, its own feats); an **Other decks** panel at the top of every deck view lists the rest in a line each (size, colours, legal or not, manipulations, Rainbow Efficiency, at the table) with a button to open one. A face's **owner** pick moves a card to another deck, and the Squad panel on your own view shows the combined total. Under the table's controls a **roster** button per member marks it at the table: pressed, its cards shuffle into the deck (mid-encounter too, as a summoned companion arriving); released, every card of its leaves the zones. You cast by default, whichever deck a card came from, since the pooled decks exist so that the one with the spell points can cast off all of them; a **…** beside Cast (and the many-mode chooser) offers **cast by** a member at the table instead, and then that caster's level, modifier, DC and spell pool are used — write a card's numbers as `caster.level` and `caster.mod` and they follow whoever casts — and the log, the last-roll badge and the Roll20 text name the member. Your deck feats (Land-Attuned Magic's double mana) stay yours; Rainbow Efficiency is read per deck, so a member's own feat discounts the member's cards, and a member takes its own deck manipulations (an owner pick per copy on each row — moving one copy of *Fused Cards* leaves the others — and a *for whom* pick beside the catalogue picker), which the table honours while the member is there. |
 | Land-Attuned Magic | with the feat among the feats (or the bought-off `[Deck]` drawbacks), Terrain Casting or Area Bound in the tradition, and Mana Pool, every Mana Point card in play pays **two** spell points on a card whose sphere is ticked in the land-attuned table: the castable badge reads *castable ×2*, a cost of 4 needs two cards, and Mana Graveyard or Stagnant Pool spends two. The header and the land-attuned panel say whether the rule is in force and, if not, what it is missing. |
 | **Trap** | with the *Trap Card* deck feat: the card goes face down into play; **Spring** casts it then (keywords and all), **Reveal** turns it up. |
 | 🎲 | a cast (or a springing trap, or a Retrace) rolls the card's dice by itself — the **Dice** field (`6d6+int.mod` — the flat part reads the sheet) or the first dice in its text, formulas resolved first — and logs `[5, 1, 3, 3, 5, 5] + 13 = 35`; the header shows the last roll and 🎲 rolls again. |
@@ -812,18 +818,19 @@ on top. The table's notes and the tradition panel both say when the drawback is 
 | **Shuffle discard in** | Cooldown's full-round action. |
 | **Read the cards** | the top card, or three when taken twice; *bottom (1 SP)* buries it for the spell point the rule charges, *discard* is the twice-taken option. |
 | **Retrace** (on a discard row) | casts the card from the discard: its cost + 1 spell point (or a longer casting time — leave the point alone then), it rolls, its keywords fire, and it stays in the discard. |
-| **move…** | on every card, anywhere: hand, in play, mana, discard, exile, top or bottom of the deck, shuffled in, the Stun / Wounds / Death piles — for Bleeding Hand, Into Nothing, Recollection, Resupply, Retrace, Impulse, Lifebound, and misclicks. |
-| **End encounter** | everything back into the deck, shuffled. |
+| **move…** | on every card, anywhere: hand, in play, mana, discard, exile, banished, top or bottom of the deck, shuffled in, the Stun / Wounds / Death piles — for Bleeding Hand, Into Nothing, Recollection, Resupply, Retrace, Impulse, Lifebound, and misclicks. |
+| **Banished** | the heavier exile: a card moved here (or carrying `[Banish]`) sits out the rest of the encounter *and every one after it* until the character rests to regain spell points — **New day** on the sheet empties it, as it does the Lifebound piles. The end of an encounter shuffles the exile back and leaves the banished where they are; the next **Start encounter** builds the deck without them and says how many are out. |
+| **End encounter** | everything back into the deck, shuffled — the banished and the Lifebound piles excepted. |
 
 **Keywords.** Square-bracketed words in a card's text fire when it is cast (or when a
 trap springs): `[Draw 2]`, `[Discard]` (a prompt — you choose), `[Shuffle]` (the
 discard into the deck, or the deck itself), `[Mill 3]`, `[Peek]`, `[Tap 2]`,
-`[Untap]`, `[Wild]`, and for the card itself `[Exile]`, `[Bottom]`, `[Top]`,
-`[Deck]` (shuffled in), `[Return]`. What a card does to itself is its own rule;
+`[Untap]`, `[Wild]`, and for the card itself `[Exile]`, `[Banish]` (exiled until
+spell points recover), `[Bottom]`, `[Top]`, `[Deck]` (shuffled in), `[Return]`. What a card does to itself is its own rule;
 `[Peek]` wants Read the Cards and `[Wild]` Wild Card, and are logged as skipped
 otherwise. They show as chips on the card.
 
-**Triggers.** `[OnMill]`, `[OnRedraw]`, `[OnDraw]`, `[OnDiscard]`, `[OnExile]` mark
+**Triggers.** `[OnMill]`, `[OnRedraw]`, `[OnDraw]`, `[OnDiscard]`, `[OnExile]`, `[OnBanish]` mark
 the sentence that applies when that happens to the card — Infernal Combustion's free
 attack when it is milled off the top, its HP loss when the hand is shuffled back,
 Grave Peril's free cast when drawn to an empty deck and hand. The table logs
@@ -1004,7 +1011,8 @@ master-level penalty took off.
 
 **A conjured companion's casting tradition** follows the character's rule once it casts
 (the Magical Companion talent or the mage archetype): every drawback is a boon ("x2"
-counts two), and a boon taken as spell points is worth its step on the boon ladder, read
+counts two), each drawback feat buys off two of them (the **Bought off with drawback feats**
+list, as on your own tradition), and a boon taken as spell points is worth its step on the boon ladder, read
 at the companion's Hit Dice, and added to its pool. **Boons as spell points** sets how
 many; blank means every drawback without a boon written in the list. The boons written
 are kept as written, and a line can forward what it grants.

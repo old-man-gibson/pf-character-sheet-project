@@ -3836,6 +3836,8 @@
   "harrow": false,
   "notes": "",
   "sourceExtras": [],
+  "deckSort": "",
+  "harrowBy": {},
   "table": {
    "active": false,
    "round": 0,
@@ -3846,6 +3848,7 @@
    "play": [],
    "discard": [],
    "exile": [],
+   "banished": [],
    "stun": [],
    "wounds": [],
    "death": [],
@@ -5388,6 +5391,7 @@
    "tradition": {
     "name": "",
     "drawbacks": [],
+    "boughtOff": [],
     "boons": [],
     "boonSP": ""
    },

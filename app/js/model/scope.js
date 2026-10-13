@@ -396,6 +396,8 @@ export function characterScope(model) {
   for (const m of c.cardcasting?.manipulations || []) {
     const name = String(m.name ?? '').trim();
     if (!name) continue;
+    // A squad member's picks are its own, not the character's.
+    if (String(m.calc?.owner ?? m.owner ?? '')) continue;
     const same = manipulationName(name).toLowerCase().replace(/[^a-z]/g, '');
     if (!manipKey.has(same)) manipKey.set(same, slug(name));
     const key = manipKey.get(same);

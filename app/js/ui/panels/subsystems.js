@@ -50,7 +50,7 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern,
+  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder, harrowFor,
   hasManipulation, manipulationCount, redrawSize, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
@@ -2092,6 +2092,7 @@ function conjuredCastingPanel(model, cc) {
     const cha = k.scores?.cha?.mod ?? 0;
     const tr = b.tradition || {};
     const dlist = `${p}.tradition.drawbacks`;
+    const olist = `${p}.tradition.boughtOff`;
     const blist = `${p}.tradition.boons`;
     return `<section class="panel">
       <h3>Casting <span class="badge">CL ${cast.cl}</span><span class="badge">${cast.spellPoints} sp</span></h3>
@@ -2111,17 +2112,22 @@ function conjuredCastingPanel(model, cc) {
 
       <h4 class="subhead">Casting tradition</h4>
       <label class="fld"><span>Tradition</span>${text(`${p}.tradition.name`, tr.name, 'Natural casting')}</label>
-      <h4 class="subhead">Drawbacks${(tr.drawbacks || []).length ? ` <span class="badge">${tr.drawbacks.length}</span>` : ''}</h4>
+      <h4 class="subhead">Drawbacks${(tr.drawbacks || []).length ? ` <span class="badge">${cast.drawbacks} total</span>` : ''}</h4>
       ${proseList(model, dlist, tr.drawbacks || [], 'drawback')}
       <div>${addButton(dlist, 'Add drawback', '')}</div>
+      <h4 class="subhead">Bought off with drawback feats${(tr.boughtOff || []).length ? ` <span class="badge">${cast.boughtOff}</span>` : ''}</h4>
+      ${proseList(model, olist, tr.boughtOff || [], 'bought-off drawback')}
+      <div>${addButton(olist, 'Add bought-off drawback', '')}</div>
+      ${cast.boughtOff ? `<div class="statline"><span class="label">Effective drawbacks</span>
+        <span class="value">${cast.drawbacks} − 2×${cast.boughtOff} = ${cast.boons}</span></div>` : ''}
       <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
       ${proseList(model, blist, tr.boons || [], 'boon')}
       <div>${addButton(blist, 'Add boon', '')}</div>
       ${cast.boons ? `<label class="fld"><span>Boons as spell points</span>${text(`${p}.tradition.boonSP`, tr.boonSP ?? '', String(cast.boonsDefault))}</label>
-      ${line('Boons', `${cast.boons} (one per drawback)`)}
+      ${line('Boons', `${cast.boons} (one per drawback${cast.boughtOff ? ', two off per drawback feat' : ''})`)}
       ${line(`${cast.boonSteps} as spell points at ${k.hd ?? 0} HD`, `+${cast.boonSP} sp`)}` : ''}
-      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two).
-        A boon taken as spell points is worth its step on the boon ladder, read at this
+      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two), and each
+        drawback feat buys off two of them, as on your own tradition. A boon taken as spell points is worth its step on the boon ladder, read at this
         companion’s Hit Dice, and is added to the pool above. Blank in the box means every
         drawback without a boon written in the list. The boons written here are kept as
         written. A line can forward what it grants, as any note can:
@@ -2451,11 +2457,36 @@ export function cardcastingPanel(model, ctx) {
     const k = p.calc || {};
     const t = p.table || {};
 
+    // Which deck is open: the character's ('deck') or a squad member's
+    // ('deck:<id>'); a member the deck no longer knows falls back to the
+    // character's. Each caster's deck has a view of its own.
+    const squad = k.squad || [];
+    const me = shortName(model.casterInfo('').name);
+    const want = String(ctx.deckView || '');
+    const memberView = want.startsWith('deck:') ? squad.find((m) => m.id === want.slice(5)) || null : null;
+    const own = memberView ? memberView.id : '';
+    const deckBadge = (d) => `<span class="badge">${d.deckSize ?? 0}</span>${d.issues?.length ? ` <span class="badge err" title="${esc(d.issues.join('\n'))}">${d.issues.length}</span>` : ''}`;
     const views = `<nav class="subtabs" role="tablist" aria-label="Cardcasting views">
       <button data-view role="tab" data-deck-view="table" aria-selected="${ctx.deckView === 'table'}">The table${t.active ? ` <span class="badge">round ${t.round}</span>` : ''}</button>
-      <button data-view role="tab" data-deck-view="deck" aria-selected="${ctx.deckView === 'deck'}">The deck <span class="badge">${k.deckSize ?? 0}</span></button>
+      <button data-view role="tab" data-deck-view="deck" aria-selected="${ctx.deckView !== 'table' && !memberView}">${squad.length ? `${esc(me)}’s deck` : 'The deck'} ${deckBadge(k)}</button>
+      ${squad.map((m) => `<button data-view role="tab" data-deck-view="deck:${esc(m.id)}" aria-selected="${memberView?.id === m.id}">${esc(m.name)}’s deck ${deckBadge(m.deck || {})}</button>`).join('')}
     </nav>`;
     if (ctx.deckView === 'table') return `${views}<div class="grid">${tablePanel(model, ctx, p, k)}</div>`;
+
+    // A member's deck: the other decks at a glance, what this one is and how
+    // it checks, its own manipulations, its cards and its sideboard. The
+    // ladder, the land-attuned table and the notes are the character's.
+    if (memberView) {
+      return `${views}<div class="grid">
+      ${otherDecksPanel(model, p, k, own)}
+      ${memberDeckPanel(model, p, k, memberView)}
+      <div class="foldstrip">${deckManipulationsHead(model, p, k, own)}</div>
+      ${deckManipulationsPanel(model, p, k, own)}
+      ${cardDatalists(p)}
+      ${deckTablePanel(model, ctx, p, k, own)}
+      ${sideboardPanel(model, ctx, p, own)}
+    </div>`;
+    }
 
     /*
      * The deck view is long -- the summary, the drawback ladder, four groups
@@ -2473,23 +2504,100 @@ export function cardcastingPanel(model, ctx) {
     // between: it is alone on its row either way, and in a strip it at least
     // shrinks to its header instead of holding a row open.
     return `${views}<div class="grid">
+      ${otherDecksPanel(model, p, k, '')}
       <div class="foldstrip">
         ${wrap('deck-summary', deckSummaryPanel(p, k))}
         ${wrap('deck-drawback', deckLadderPanel(p, k))}
-        ${deckManipulationsHead(model, p, k)}
+        ${deckManipulationsHead(model, p, k, '')}
       </div>
-      ${deckManipulationsPanel(model, p, k)}
+      ${deckManipulationsPanel(model, p, k, '')}
       <div class="foldstrip">${wrap('deck-land', landAttunedPanel(p, k))}</div>
-      ${(k.squad || []).length ? wrap('deck-squad', squadPanel(model, p, k)) : ''}
+      ${squad.length ? wrap('deck-squad', squadPanel(model, p, k)) : ''}
       ${cardDatalists(p)}
-      ${deckTablePanel(model, ctx, p, k)}
-      ${sideboardPanel(model, ctx, p)}
+      ${deckTablePanel(model, ctx, p, k, '')}
+      ${sideboardPanel(model, ctx, p, '')}
       <section class="panel span2">
         <h3>Notes</h3>
         ${prose(model, 'data-set="cardcasting.notes"', p.notes, 3)}
       </section>
       ${systemExtrasPanel(p, 'cardcasting', 'Cardcaster Deck')}
     </div>`;
+  }
+
+  /**
+   * The other decks at a glance, at the top of every deck view when there is
+   * a squad: whose, how big, its colours, whether it is legal, its
+   * manipulations, its Rainbow Efficiency, whether it is at the table -- and
+   * a button that opens it.
+   */
+function otherDecksPanel(model, p, k, own) {
+    const squad = k.squad || [];
+    if (!squad.length) return '';
+    const present = new Set(p.table?.squad || []);
+    const me = {
+      id: '', name: shortName(model.casterInfo('').name), colors: k.colorsInPlay || '', deck: k, rainbow: k.rainbow, ok: true,
+      manipulationsTaken: k.manipulationsTaken, manipulationsAvailable: k.manipulationsAvailable,
+    };
+    const rows = [me, ...squad].filter((o) => o.id !== own);
+    return `<section class="panel span2 otherdecks">
+      <h3>Other decks <span class="badge">${rows.length}</span></h3>
+      ${rows.map((o) => `<div class="squadrow">
+        <div class="what"><strong>${esc(o.name)}</strong>
+          <span class="badge">${o.deck?.deckSize ?? 0} cards</span>
+          ${manaChips(o.colors, '')}
+          ${o.deck?.issues?.length ? `<span class="badge err" title="${esc(o.deck.issues.join('\n'))}">${o.deck.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}
+          <span class="badge">${o.manipulationsTaken ?? 0} of ${o.manipulationsAvailable ?? 0} manipulations</span>
+          ${o.rainbow ? `<span class="badge">${o.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
+          ${o.id ? (o.ok ? (present.has(o.id) ? '<span class="badge ok">at the table</span>' : '') : `<span class="badge err" title="${esc(o.why || '')}">cannot combine</span>`) : ''}
+        </div>
+        <div><button data-deck-view="${o.id ? `deck:${esc(o.id)}` : 'deck'}" title="${esc(`Open ${o.name}'s deck`)}">Open</button></div>
+      </div>`).join('')}
+    </section>`;
+  }
+
+  /**
+   * A squad member's deck at the head of its view: its numbers, its colours
+   * and switches (read off the tradition on its own tab), and how the deck
+   * checks against its own casting modifier, colours and feats.
+   */
+function memberDeckPanel(model, p, k, m) {
+    const d = m.deck || {};
+    const issues = d.issues || [];
+    const tally = d.colorTally || {};
+    const inPlay = String(m.colors || '').split('').filter(Boolean);
+    const sw = m.switches || {};
+    const ladder = [['cooldown', 'Cooldown'], ['manaPool', 'Mana Pool'], ['manaGraveyard', 'Mana Graveyard'], ...CARD_MODIFICATIONS.map((x) => [x.key, x.label])];
+    const taken = ladder.filter(([key]) => sw[key]).map(([, label]) => label);
+    return `<section class="panel span2">
+      <h3>${esc(m.name)}’s deck
+        <span class="badge">${d.deckSize ?? 0} cards</span>
+        ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
+        <span class="badge">opening hand ${Math.max(2, 1 + (Number(m.mod) || 0))}</span>
+        <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches as yours')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
+        <span class="badge ${issues.length ? 'err' : 'ok'}">${issues.length ? `${issues.length} to look at` : 'deck is legal'}</span>
+      </h3>
+      <p class="hint">A squad member’s deck, built here and read against its own casting modifier, colours and feats.
+        Its switches and its colours come from the casting tradition on its own tab${m.kind ? ` (${esc(COMPANION_LABELS[m.kind] || m.kind)})` : ''};
+        its deck feats and Rainbow Efficiency from its feats. It shuffles in with yours while it is at the table.</p>
+      ${lineHtml('Colours', inPlay.length ? manaChips(m.colors, '') : esc('none named — write “Colored Mana (WGB)” on its tradition'))}
+      ${line('Switches', taken.length ? taken.join(', ') : 'none')}
+      ${line('Identical-effect spread', `${d.spreadMin ?? 0}–${d.spreadMax ?? 0} copies (may differ by up to ${Number(m.mod) || 0})`)}
+      ${line('Effect cards', `${d.effectCards ?? 0} — ${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'}`)}
+      ${line('Mana point cards', `${d.manaCards ?? 0}${d.fused ? ` (${d.fused} fused onto an effect)` : ''}`)}
+      ${inPlay.length ? `<div class="tally">${inPlay.map((c) => `<span class="t">${manaChips(c)}
+        <span class="n">${tally[c]?.effects ?? 0}</span> effect${(tally[c]?.effects ?? 0) === 1 ? '' : 's'} ·
+        <span class="n">${tally[c]?.mana ?? 0}</span> mana</span>`).join('')}</div>` : ''}
+      ${issues.length ? `<ul class="deckcheck hint warn" style="margin:8px 0 0 1.1rem;padding:0">
+        ${issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
+    </section>`;
+  }
+
+  /** A card's cost as a zone shows it: the cost to pay, with the typed figure and the Rainbow Efficiency discount on hover. */
+function costMark(card) {
+    const typed = String(card.cost ?? '').trim();
+    if (!typed) return '';
+    const off = Number(card.calc?.discount) || 0;
+    return off ? `<b title="${esc(`Typed ${typed}; Rainbow Efficiency takes ${off} off`)}">${esc(String(card.calc.cost))}</b>` : `<b>${esc(typed)}</b>`;
   }
 
   /**
@@ -2510,7 +2618,7 @@ function cardMini(model, id, { buttons = '', badge = '', tapped = false, open = 
     return `<div class="mcard mini ${frameClass}${tapped ? ' tapped' : ''}${open ? ' open' : ''}" style="${r.artifact ? '' : esc(cardFrameStyle(colors))}" data-card="${esc(id)}">
       <div class="bar title">
         ${ownerTag(model, card)}<span class="name">${esc(card.name || (isMana ? 'Mana Point' : card.effect || 'card'))}</span>
-        <span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}${manaChips(colors, '')}</span>
+        <span class="cost">${costMark(card)}${manaChips(colors, '')}</span>
         ${expandBtn(id, open)}
       </div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
@@ -2753,7 +2861,7 @@ function castPicker(s, id, card, modes, casters = []) {
           </select>
         </label>`;
     return `<div class="mcard mini castpick" data-card="${esc(id)}">
-      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${card.cost ? `<b>${esc(card.cost)}</b>` : ''}</span></div>
+      <div class="bar title"><span class="name">${esc(card.name || card.effect || 'card')}</span><span class="cost">${costMark(card)}</span></div>
       ${String(card.subtitle || '').trim() ? `<div class="bar sub subtitle"><span>${esc(card.subtitle)}</span></div>` : ''}
       ${statsLine(model, card)}
       <div class="text">
@@ -2911,7 +3019,7 @@ function manaZone(s) {
     </section>`;
   }
 
-  /** The discard over the exile. */
+  /** The discard over the exile, and the banished under both. */
 function pilesZone(s) {
     const { model, p, t, has, copyText } = s;
     return `<div class="f-piles">
@@ -2925,6 +3033,11 @@ function pilesZone(s) {
       <section class="panel">
         <h3>Exile <span class="badge">${t.exile.length}</span></h3>
         ${t.exile.length ? `<div class="zonelist">${s.listZone(t.exile, 'exile')}</div>` : '<p class="empty">Nothing exiled.</p>'}
+      </section>
+      <section class="panel">
+        <h3>Banished <span class="badge">${(t.banished || []).length}</span></h3>
+        <p class="hint">The heavier exile: a banished card does not return to the deck until you rest to regain spell points.</p>
+        ${(t.banished || []).length ? `<div class="zonelist">${s.listZone(t.banished, 'banished')}</div>` : '<p class="empty">Nothing banished.</p>'}
       </section>
     </div>`;
   }
@@ -3096,38 +3209,44 @@ function manipulationGroups(p) {
  * -- shutting it puts the picker and the counts away without taking the
  * groups with them, since each of those already folds for itself.
  */
-function deckManipulationsHead(model, p, k) {
+function deckManipulationsHead(model, p, k, own = '') {
     const groups = manipulationGroups(p);
-    const left = k.manipulationsLeft ?? 0;
     const catalogue = deckManipulationCatalogue();
-    const featList = (k.deckFeats || []).map((f) => f.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
     const NEED = MANIPULATION_NEEDS;
+    const squad = k.squad || [];
+    // Whose: the character's figures, or the member's own.
+    const who = own ? squad.find((m) => m.id === own) : null;
+    const f = who
+      ? { taken: who.manipulationsTaken, available: who.manipulationsAvailable, left: who.manipulationsLeft, deckFeats: who.deckFeats || [], rainbow: who.rainbow }
+      : { taken: k.manipulationsTaken ?? 0, available: k.manipulationsAvailable ?? 0, left: k.manipulationsLeft ?? 0, deckFeats: k.deckFeats || [], rainbow: k.rainbow };
+    const left = f.left;
+    const featList = f.deckFeats.map((x) => x.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
-        <span class="badge ${left < 0 ? 'err' : ''}">${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
-        <span class="badge" title="${esc(featList.join(', ') || 'No feat or bought-off drawback is tagged [Deck]')}">${(k.deckFeats || []).length} deck feat${(k.deckFeats || []).length === 1 ? '' : 's'}</span>
-        ${k.rainbow ? `<span class="badge">${k.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
+        <span class="badge ${left < 0 ? 'err' : ''}">${f.taken} of ${f.available} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
+        <span class="badge" title="${esc(featList.join(', ') || 'No feat or bought-off drawback is tagged [Deck]')}">${f.deckFeats.length} deck feat${f.deckFeats.length === 1 ? '' : 's'}</span>
+        ${f.rainbow ? `<span class="badge">${f.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
       </h3>
       <div class="fieldgrid">
-        ${field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
+        ${who ? field('Available', `<span class="badge" title="One per deck feat of its own, and two for Card Shark each time it is taken">${f.available}</span>`) : field('Available', exprField('data-set="cardcasting.manipulationsAvailable"', p.manipulationsAvailable ?? '', {
     // Blank is automatic, so an emptied box has to store nothing rather than 0.
     kind: 'expr-or-null',
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
-    title: 'Blank: one per deck feat, plus one for Card Shark. Or a number, or a formula.',
+    title: 'Blank: one per deck feat, and two for Card Shark each time it is taken. Or a number, or a formula.',
   }))}
-        ${field('Add from the list', `<select class="manip-pick" aria-label="Add a deck manipulation">
+        ${field('Add from the list', `<span class="pair"><select class="manip-pick" data-owner="${esc(own)}" aria-label="Add a deck manipulation">
           <option value="">— pick a manipulation —</option>
           ${groups.map((g) => {
     const opts = catalogue.filter((m) => m.group === g);
     return opts.length ? `<optgroup label="${esc(g)}">${opts.map((m) => `<option value="${esc(m.name)}" title="${esc(m.text)}">${esc(m.name)}${m.needs || m.requires.length ? ` (${[...m.requires.map((r) => NEED[r]), m.needs].filter(Boolean).join(', ')})` : ''}</option>`).join('')}</optgroup>` : '';
   }).join('')}
-        </select>`)}
+        </select></span>`)}
       </div>
-      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), plus one
-        for Card Shark. The Available field overrides that. Hover a name for its rule. Readable as
-        <code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.</p>
+      <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), and two
+        for Card Shark each time it is taken.${who ? '' : ' The Available field overrides that.'}${squad.length ? ` ${who ? 'A member\'s picks are its own, against its own deck feats, and it may use them at the table while it is there' : 'Each caster\'s picks are its own; a member\'s are on its deck\'s view'}. Each row has an owner pick per copy, so one copy can be given to another deck and the rest kept.` : ''} Hover a name for its rule.${who ? '' : ' Readable as'}
+        ${who ? '' : '<code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.'}</p>
     </section>`;
-    return collapsible(model, 'deck-manipulations', head);
+    return collapsible(model, `deck-manipulations${own ? `:${own}` : ''}`, head);
   }
 
   /**
@@ -3142,15 +3261,20 @@ function deckManipulationsHead(model, p, k) {
    * four that come with the system. They need no `foldstrip`: the column
    * layout already packs a folded one against its neighbours.
    */
-function deckManipulationsPanel(model, p, k) {
+function deckManipulationsPanel(model, p, k, own = '') {
     const list = 'cardcasting.manipulations';
-    const items = (p.manipulations || []).map((m, i) => ({ m, i }));
+    // This deck's rows alone: the character's, or the member's whose view this is.
+    const ownerOf = (m) => String(m.calc?.owner ?? '');
+    const items = (p.manipulations || []).map((m, i) => ({ m, i })).filter(({ m }) => ownerOf(m) === own);
     const groups = manipulationGroups(p);
     const NEED = MANIPULATION_NEEDS;
+    // With a squad, each copy of a pick carries an owner pick, to give it to another deck.
+    const squad = k.squad || [];
+    const owners = [{ id: '', name: shortName(model.casterInfo('').name) }, ...squad.map((m) => ({ id: m.id, name: m.name }))];
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
-      return collapsible(model, `deck-manip-${slug(g)}`, `<section class="panel">
+      return collapsible(model, `deck-manip-${slug(g)}${own ? `:${own}` : ''}`, `<section class="panel">
         <h3>${esc(g)} ${taken ? `<span class="badge">${taken} taken</span>` : ''}</h3>
         ${rows.length ? `<div class="tablewrap"><table class="manips"><thead><tr>
           <th>Manipulation · note</th><th style="width:3.4rem">Taken</th><th></th>
@@ -3178,12 +3302,13 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
+              ${squad.length ? Array.from({ length: Math.max(1, Number(m.count) || 0) }, (_, n) => `<select class="movesel" data-manip-owner="${i}" aria-label="Whose copy ${n + 1} is" title="${esc(`Copy ${n + 1} of ${Math.max(1, Number(m.count) || 0)}: whose it is. Moving one copy leaves the others where they are.`)}">${owners.map((o) => `<option value="${esc(o.id)}"${o.id === ownerOf(m) ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`).join('') : ''}
               ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;
   }).join('')}
         </tbody></table></div>` : '<p class="empty">None listed.</p>'}
-        <div style="margin-top:6px">${addButton(list, `Add to ${g}`, { group: g, name: '', note: '', count: 1 })}</div>
+        <div style="margin-top:6px">${addButton(list, `Add to ${g}`, { group: g, name: '', note: '', count: 1, owner: own })}</div>
       </section>`);
     });
     // Fixed columns, not the browser's balancing: opening a row grows its own
@@ -3282,12 +3407,13 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
           <input type="text" class="colorpick" value="${esc(card.color ?? '')}" data-item="${list}|${i}|color" data-kind="text"
             placeholder="${esc(r.fromSphere ? colors : '◌')}" aria-label="Cost colours" title="Colour letters: R B U W G">
           ${manaChips(colors, '')}
+          ${r.discount ? `<span class="badge" title="${esc(`Rainbow Efficiency: ${r.discount} off for ${colors.length} colours — ${r.cost} to cast`)}">→ ${r.cost}</span>` : ''}
         </span>
       </div>
       <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
         <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle — the effect in a few words" aria-label="Subtitle">
       </div>
-      ${p.harrow ? `<div class="bar sub">
+      ${harrowFor(p, model.cardOwner(card)) ? `<div class="bar sub">
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
         <input type="text" value="${esc(card.alignment ?? '')}" data-item="${list}|${i}|alignment" data-kind="text" placeholder="align." aria-label="Alignment">
       </div>` : ''}
@@ -3476,12 +3602,18 @@ function cardDiceRow(model, ctx, list, i, card, p, inDeck) {
     </div>`;
   }
 
-  /** The deck: one face per card. */
-function deckTablePanel(model, ctx, p, k) {
+  /** The deck: one face per card of whoever's view this is. Folds, like the panels above it. */
+function deckTablePanel(model, ctx, p, k, own = '') {
+    return collapsible(model, `deck:cards${own ? `:${own}` : ''}`, deckTableBody(model, ctx, p, k, own));
+  }
+
+function deckTableBody(model, ctx, p, k, own = '') {
     const list = 'cardcasting.cards';
     const cards = p.cards || [];
-    const suitTally = k.suitTally || {};
-    const alignTally = k.alignTally || {};
+    const who = own ? (k.squad || []).find((m) => m.id === own) : null;
+    const d = who ? who.deck || {} : k;
+    const suitTally = d.suitTally || {};
+    const alignTally = d.alignTally || {};
     const newCard = (extra) => ({
       name: '', suit: '', alignment: '', color: '', mana: '', effect: '', cost: '1', sphere: '', tags: '',
       save: '', dc: '', range: '', target: '', damage: '',
@@ -3489,54 +3621,44 @@ function deckTablePanel(model, ctx, p, k) {
     });
     return `<section class="panel span2">
       <h3>Deck
-        <span class="badge">${k.deckSize ?? 0} cards</span>
-        ${p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
+        <span class="badge">${d.deckSize ?? 0} cards</span>
+        ${!who && p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
         <span class="pair" style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
-          ${check('cardcasting.harrow', p.harrow, 'Harrow deck — suits & alignments')}
+          <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The order the faces are shown in — the cards themselves stay where they were typed"' })}</label>
+          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck — suits & alignments')}
         </span>
       </h3>
       <p class="hint">Cost and its colour sit top right and set the frame colour. The type line is
         sphere — tags. The letters under the text are the mana the card puts on the table when a
         Mana Point card is fused onto it. Leave the effect blank for a plain Mana Point card.
-        ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}</p>
-      ${p.harrow && Object.keys(suitTally).length ? `<div class="tally">
+        ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}
+        Sort shows the faces by colour (white, blue, black, red, green, then gold), by cost, by tags
+        or by sphere; the sideboard follows.</p>
+      ${harrowFor(p, own) && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
         <span class="t">·</span>
         ${Object.entries(alignTally).map(([a, n]) => `<span class="t">${esc(a)} <span class="n">${n}</span></span>`).join('')}
       </div>` : ''}
-      ${deckGroups(model, ctx, p, k, list, cards, newCard)}
+      ${deckFaces(model, ctx, p, k, list, cards, newCard, own)}
     </section>`;
   }
 
   /**
-   * The faces, the character's own first and then each squad member's under
-   * its own heading with its own add buttons: a companion's deck is built
-   * here beside the character's and travels with the owner it is given.
-   * With no squad there is one group and no heading.
+   * The faces of one owner's deck, in the sort the deck asks for, with the
+   * add buttons that build for that owner: a companion's deck is built on its
+   * own view and travels with the owner it is given. A face's owner pick
+   * moves a card to another deck.
    */
-function deckGroups(model, ctx, p, k, list, cards, newCard) {
-    const squad = k.squad || [];
-    const owners = [{ id: '', name: shortName(model.casterInfo('').name), colors: k.colorsInPlay || 'R', deck: k }, ...squad];
-    const faces = (own) => cards.map((card, i) => (model.cardOwner(card) === own ? cardFace(model, ctx, list, i, card, p) : '')).join('');
-    const adds = (own, colors) => `<div class="pair" style="margin-top:10px">
+function deckFaces(model, ctx, p, k, list, cards, newCard, own) {
+    const who = own ? (k.squad || []).find((m) => m.id === own) : null;
+    const colors = who ? who.colors : k.colorsInPlay;
+    const mine = deckOrder(cards, p.deckSort).filter((i) => model.cardOwner(cards[i]) === own);
+    const faces = mine.map((i) => cardFace(model, ctx, list, i, cards[i], p)).join('');
+    return `${mine.length ? `<div class="cardgrid">${faces}</div>` : `<p class="empty">${who ? `No cards yet for ${esc(who.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
+      <div class="pair" style="margin-top:10px">
         ${addButton(list, 'Add effect card', newCard({ owner: own }))}
         ${addButton(list, 'Add mana point card', newCard({ cost: '', mana: (colors || 'R').slice(0, 1), owner: own }))}
       </div>`;
-    if (!squad.length) {
-      return `${cards.length ? `<div class="cardgrid">${faces('')}</div>` : '<p class="empty">No cards yet. A deck needs at least 20.</p>'}${adds('', k.colorsInPlay)}`;
-    }
-    return owners.map((o) => {
-      const mine = cards.filter((card) => model.cardOwner(card) === o.id);
-      const d = o.id ? o.deck : k;
-      return `<div class="deckgroup">
-        <h4 class="subhead">${esc(o.name)}’s deck
-          <span class="badge">${d.deckSize ?? 0} cards</span>
-          ${o.id ? `${manaChips(o.colors, '')}${o.ok ? '' : `<span class="badge err" title="${esc(o.why)}">cannot combine</span>`}${d.issues?.length ? `<span class="badge err" title="${esc(d.issues.join('\n'))}">${d.issues.length} to look at</span>` : '<span class="badge ok">legal</span>'}` : ''}
-        </h4>
-        ${mine.length ? `<div class="cardgrid">${faces(o.id)}</div>` : `<p class="empty">${o.id ? `No cards yet for ${esc(o.name)} — 20 to 30 of the spheres you do not run.` : 'No cards yet. A deck needs at least 20.'}</p>`}
-        ${adds(o.id, o.colors)}
-      </div>`;
-    }).join('');
   }
 
   /**
@@ -3555,16 +3677,20 @@ function squadPanel(model, p, k) {
         <span class="badge" title="Every deck together, when every member is at the table">${c.deckSize ?? 0} cards in all</span>
         ${c.colors ? `<span class="pair">${manaChips(c.colors, '')}</span>` : ''}
       </h3>
-      <p class="hint">A squad member's deck is shuffled in with yours while it is at the table (the roster under the table's
+      <p class="hint">A squad member's deck has a view of its own above, and is shuffled in with yours while it is at the table (the roster under the table's
         controls). Any member may cast any card in the hand, using its own caster level, modifier and spell points. Write
         a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
-        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own. Your deck
-        feats and manipulations stay yours.</p>
+        tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own, and so is
+        Rainbow Efficiency: a member's multi-colour cards are discounted by its own feat, yours by yours. A member takes
+        its own deck manipulations against its own deck feats (the owner pick on each row under Deck manipulations) and
+        may use them at the table while it is there. Your other deck feats stay yours.</p>
       ${squad.map((m) => `<div class="squadrow">
         <div class="what"><strong>${esc(m.name)}</strong>
           <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
           ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
           ${manaChips(m.colors, '')}
+          ${m.rainbow ? `<span class="badge" title="Its own deck feat: its multi-colour effects cost less">${m.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
+          <span class="badge ${m.manipulationsLeft < 0 ? 'err' : ''}" title="Its own deck manipulations, against its own deck feats">${m.manipulationsTaken} of ${m.manipulationsAvailable} manipulations</span>
           <span class="badge">${m.deck.deckSize} cards</span>
           ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
           ${!m.ok && m.why ? `<p class="hint">${esc(m.why)}.</p>` : ''}
@@ -3574,17 +3700,18 @@ function squadPanel(model, p, k) {
     </section>`;
   }
 
-  /** Cards kept aside for a swap at rest. */
-function sideboardPanel(model, ctx, p) {
+  /** Cards kept aside for a swap at rest: this owner's. Folds like the deck. */
+function sideboardPanel(model, ctx, p, own = '') {
     const list = 'cardcasting.sideboard';
     const cards = p.sideboard || [];
-    return `<section class="panel span2">
-      <h3>Sideboard <span class="badge">${cards.length}</span></h3>
+    const mine = deckOrder(cards, p.deckSort).filter((i) => model.cardOwner(cards[i]) === own);
+    return collapsible(model, `deck:sideboard${own ? `:${own}` : ''}`, `<section class="panel span2">
+      <h3>Sideboard <span class="badge">${mine.length}</span></h3>
       <p class="hint">Cards built but not in the deck. The deck can only change when you rest to regain spell points.</p>
-      ${cards.length ? `<div class="cardgrid">${cards.map((card, i) => cardFace(model, ctx, list, i, card, p, { inDeck: false })).join('')}</div>` : ''}
+      ${mine.length ? `<div class="cardgrid">${mine.map((i) => cardFace(model, ctx, list, i, cards[i], p, { inDeck: false })).join('')}</div>` : ''}
       <div style="margin-top:10px">${addButton(list, 'Add to sideboard', {
     name: '', suit: '', alignment: '', effect: '', cost: '', sphere: '', tags: '', color: '', mana: '', art: '', notes: '',
-    save: '', dc: '', range: '', target: '', damage: '',
+    save: '', dc: '', range: '', target: '', damage: '', owner: own,
   })}</div>
-    </section>`;
+    </section>`);
   }

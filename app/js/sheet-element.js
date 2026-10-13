@@ -5092,16 +5092,28 @@ export class CharacterSheetElement extends HTMLElement {
     });
 
     // A deck manipulation picked from the catalogue: it lands in its own group
-    // with a count of one, or bumps the count of the row that already has it.
+    // with a count of one, or bumps the count of the row that already has it
+    // -- for whoever's deck view the picker is on, since a squad member takes
+    // its own manipulations.
     root.querySelectorAll('select.manip-pick').forEach((sel) => {
       sel.addEventListener('change', () => {
         const entry = deckManipulation(sel.value);
         sel.value = '';
         if (!entry) return;
+        const owner = sel.dataset.owner || '';
         const list = this.#model.data.cardcasting?.manipulations || [];
-        const idx = list.findIndex((m) => deckManipulation(m.name) === entry);
+        const idx = list.findIndex((m) => deckManipulation(m.name) === entry && String(m.owner || '') === owner);
         if (idx >= 0) this.#model.setItem('cardcasting.manipulations', idx, 'count', (Number(list[idx].count) || 0) + 1);
-        else this.#model.listAdd('cardcasting.manipulations', { group: entry.group, name: entry.name, note: '', count: 1 });
+        else this.#model.listAdd('cardcasting.manipulations', { group: entry.group, name: entry.name, note: '', count: 1, owner });
+        this.#render();
+      });
+    });
+    // One copy of a manipulation pick given to someone else: the row loses
+    // one and the new owner's row of the same name gains it, so each copy is
+    // moved on its own.
+    root.querySelectorAll('select[data-manip-owner]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        this.#model.moveManipulationPick(Number(sel.dataset.manipOwner), sel.value);
         this.#render();
       });
     });
