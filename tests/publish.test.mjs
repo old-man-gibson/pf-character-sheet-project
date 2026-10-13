@@ -112,7 +112,7 @@ check('a published document is still a character the model accepts',
   new Character(published).toJSON().identity.name, richest.doc.identity.name);
 check('publishing twice changes nothing the first pass did not',
   JSON.stringify(publishDocument(published).doc), JSON.stringify(published));
-check('the report says something a button could print', /carrying/.test(describePublish(report)), true);
+check('the report says something a button could print', /carried|no pack text/.test(describePublish(report)), true);
 
 /*  Every entry the character references lands in exactly one bucket. If the
  *  four do not add up to what was referenced, something travelled unreported

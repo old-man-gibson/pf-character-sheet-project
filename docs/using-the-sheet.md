@@ -80,9 +80,11 @@ same bands, panels and rules with less air around them. Three more things give w
 that width. A table sized in percentages stops dividing whatever width it is given and
 takes the width its columns need, scrolling inside its box rather than crushing a feat
 name to six characters. **Defenses** and **Offenses** fold to their labels, like any
-panel, and stay folded. And an explanation longer than a paragraph folds away behind a
-line saying what it is about — **Help — Rule groups** — which opens it and shuts it
-again.
+panel, and stay folded.
+
+**Helper text folds.** At any width, an explanation longer than a caption is folded
+behind a line saying what it is about — **Help — Rule groups** — which opens it and
+shuts it again. Which ones are open lasts until the page is reloaded.
 
 **The lists become cards.** Feats, granted feats, sphere talents, traits and the mythic
 tradition slots stop being tables below 620px: each row is a card with the **name first**,

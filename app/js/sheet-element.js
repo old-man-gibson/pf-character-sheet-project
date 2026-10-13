@@ -2666,9 +2666,9 @@ export class CharacterSheetElement extends HTMLElement {
         <button data-view data-action="export">Export JSON</button>
         ${this.isPublished ? '' : `
         <button data-action="publish"
-          title="Put this character on this site and get a link anyone can open: the read-only view the preview shows, kept until you publish again">Publish</button>
+          title="Upload this character and get a read-only link. Publishing again updates the same link.">Publish</button>
         <button data-action="preview-published"
-          title="Open this character the way someone you send it to would see it: only the pack entries it actually carries, none of your own packs, nothing saved">Preview published</button>
+          title="Open the read-only view a link shows: only the pack entries the character carries, no local packs, nothing saved">Preview published</button>
         <button data-action="import" title="Load a character this app exported, or convert a .xlsx workbook">Import…</button>
         <button data-action="reset" class="danger" aria-expanded="${this.#confirmReset}"
           title="Back to the character as imported. Asks first, and named checkpoints are kept.">Reset</button>`}
@@ -2707,8 +2707,8 @@ export class CharacterSheetElement extends HTMLElement {
           <button data-view data-action="dismiss-history-note" aria-label="Dismiss">×</button>
         </div>` : ''}
         ${this.#publishedLink ? `<div class="histnote pubnote" role="status">
-          <span><strong>Published</strong> as revision ${this.#publishedLink.rev}${this.#publishedLink.summary ? ` — ${esc(this.#publishedLink.summary)}` : '.'}
-            Anyone with this link can open it; publishing again keeps the link and adds a revision.</span>
+          <span><strong>Published</strong> (revision ${this.#publishedLink.rev}). ${this.#publishedLink.summary ? `${esc(this.#publishedLink.summary)} ` : ''}
+            Anyone with the link can open it. Publishing again updates the same link.</span>
           <input readonly value="${esc(this.#publishedLink.url)}" aria-label="Share link">
           <a href="${esc(this.#publishedLink.url)}" target="_blank" rel="noopener">Open</a>
           <button data-view data-action="copy-published-link">${this.#publishedLink.copied === true ? 'Copied'
@@ -4653,10 +4653,13 @@ export class CharacterSheetElement extends HTMLElement {
    * it is asked for. Which are open is element state, so it survives a render
    * and not a reload, which is the right lifetime for something you opened to
    * read once.
+   *
+   * At every width since 2026-10-12, not only on a phone: the helper text at
+   * the foot of a panel is read once and then in the way, on any screen.
    */
   #clampHints() {
     const wrap = this.shadowRoot.querySelector('.wrap');
-    if (!wrap || this.clientWidth > 620) return;
+    if (!wrap) return;
     const long = [...this.shadowRoot.querySelectorAll('.body .hint')]
       .filter((hint) => hint.textContent.trim().length > HELP_LENGTH)
       .map((hint) => ({ hint, key: helpKey(hint), label: helpLabel(hint) }));
