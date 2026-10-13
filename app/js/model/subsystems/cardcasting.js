@@ -217,6 +217,8 @@ export function deckSquad(model) {
     // Its own deck feats: Rainbow Efficiency among its feats or its bought-off drawbacks.
     const feats = [...(b.feats || []).map((f) => String(typeof f === 'object' ? f?.name ?? '' : f ?? '')), ...(b.tradition.boughtOff || []).map((x) => String(typeof x === 'object' ? x?.name ?? '' : x ?? ''))];
     const rainbow = rainbowLevel(feats);
+    // Its deck feats, for the manipulations it may take: one each, plus one for Card Shark.
+    const deckFeats = feats.filter((f) => /\[[^\]]*deck/i.test(f));
     const casting = b.calc?.casting || null;
     const mod = Number(b.calc?.scores?.cha?.mod) || 0;
     const cl = Number(casting?.cl) || 0;
@@ -224,7 +226,7 @@ export function deckSquad(model) {
       id: String(b.id), kind, name: String(b.name || '').trim() || String(b.id),
       cardCasting, mismatch, ok: cardCasting && !mismatch.length,
       why: !cardCasting ? 'its tradition does not list Card Casting' : mismatch.length ? `switches differ: ${mismatch.join(', ')}` : '',
-      namedColors: named, rainbow, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
+      namedColors: named, rainbow, deckFeats, switches: theirs, casts: !!casting, cl, mod, level: Number(b.calc?.level) || 0,
       dc: 10 + Math.floor(cl / 2) + mod, msb: cl, msd: 11 + cl,
       pool: `sp:${b.id}`,
     };
@@ -816,9 +818,17 @@ export function recomputeCardcasting(model) {
   }
 
   // ---- deck manipulations: taken against the number available ----
-  for (const m of p.manipulations) m.count = Math.max(0, Math.floor(Number(m.count) || 0));
-  const manipulationsTaken = p.manipulations.reduce((n, m) => n + m.count, 0);
-  const loadedHand = p.manipulations
+  // Each row is someone's: the character's (blank) or a squad member's,
+  // which takes its own picks against its own deck feats.
+  for (const m of p.manipulations) {
+    m.count = Math.max(0, Math.floor(Number(m.count) || 0));
+    m.owner = String(m.owner ?? '');
+  }
+  const ownerOf = (m) => (memberIds.has(m.owner) ? m.owner : '');
+  const ownRows = (id) => p.manipulations.filter((m) => ownerOf(m) === id);
+  const mine = ownRows('');
+  const manipulationsTaken = mine.reduce((n, m) => n + m.count, 0);
+  const loadedHand = mine
     .filter((m) => isManipulation(m, 'Loaded Hand'))
     .reduce((n, m) => n + m.count, 0);
   // Available: one per deck feat, plus one for Card Shark -- unless a
@@ -829,16 +839,31 @@ export function recomputeCardcasting(model) {
   const typed = written ? evaluateAmount(p.manipulationsAvailable, model.scope()) : null;
   const manipulationsAvailable = typed && !typed.error ? Math.floor(typed.value) : autoAvailable;
   const manipulationsError = typed?.error ?? null;
-  // What each pick needs, checked against the switches.
-  const flagOn = { cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
-    singleton: mods.singleton, gradualRamp: mods.gradualRamp, notManaGraveyard: !p.manaGraveyard };
+  // What each pick needs, checked against its owner's switches: the
+  // character's, or a squad member's own tradition. A member's shortfall is
+  // the member's issue, listed under its deck.
+  const flagsOf = (sw) => ({ cooldown: !!sw.cooldown, manaPool: !!sw.manaPool, coloredMana: !!sw.coloredMana,
+    singleton: !!sw.singleton, gradualRamp: !!sw.gradualRamp, notManaGraveyard: !sw.manaGraveyard });
+  const flagOn = flagsOf({ cooldown: p.cooldown, manaPool: p.manaPool, coloredMana: mods.coloredMana > 0,
+    singleton: mods.singleton, gradualRamp: mods.gradualRamp, manaGraveyard: p.manaGraveyard });
+  const memberIssues = (id) => squad.find((m) => m.id === id)?.deck.issues;
   for (const m of p.manipulations) {
     const entry = manipulationEntry(m);
-    const unmet = entry && m.count > 0 ? entry.requires.filter((r) => !flagOn[r]) : [];
+    const owner = ownerOf(m);
+    const flags = owner ? flagsOf(memberOf.get(owner).switches || {}) : flagOn;
+    const unmet = entry && m.count > 0 ? entry.requires.filter((r) => !flags[r]) : [];
     const overMax = entry && entry.max && m.count > entry.max;
-    m.calc = { known: !!entry, unmet, overMax: !!overMax };
-    if (unmet.length) issues.push(`${m.name} needs ${unmet.map((r) => ({ cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' })[r]).join(' and ')}.`);
+    m.calc = { known: !!entry, unmet, overMax: !!overMax, owner };
+    if (unmet.length) (owner ? memberIssues(owner) || issues : issues).push(`${m.name} needs ${unmet.map((r) => ({ cooldown: 'Cooldown', manaPool: 'Mana Pool', coloredMana: 'Colored Mana', singleton: 'Singleton', gradualRamp: 'Gradual Ramp', notManaGraveyard: 'no Mana Graveyard' })[r]).join(' and ')}.`);
     if (overMax) issues.push(`${m.name} can only be taken ${entry.max} times.`);
+  }
+  // A member's own count: one per deck feat of its own, plus one for Card Shark.
+  for (const m of squad) {
+    const rows = ownRows(m.id);
+    m.manipulationsTaken = rows.reduce((n, r) => n + r.count, 0);
+    m.manipulationsAvailable = m.deckFeats.length + (m.deckFeats.some((f) => /card shark/i.test(f)) ? 1 : 0);
+    m.manipulationsLeft = m.manipulationsAvailable - m.manipulationsTaken;
+    if (m.manipulationsLeft < 0) m.deck.issues.push(`${m.name} has ${m.manipulationsTaken} manipulations taken of ${m.manipulationsAvailable} available.`);
   }
 
   const hpTotal = model.hpMax;
@@ -1240,15 +1265,27 @@ export function hasDeckFeat(model, re) {
   return (model.data.cardcasting?.calc?.deckFeats || []).some((f) => re.test(f));
 }
 
-/** How many times a manipulation is taken, across every row naming it. */
-export function manipulationCount(model, name) {
-  return (model.data.cardcasting?.manipulations || [])
-    .filter((m) => isManipulation(m, name)).reduce((n, m) => n + Math.max(0, Number(m.count) || 0), 0);
+/**
+ * How many times a manipulation is taken, across every row naming it. `who`
+ * is whose picks count: '' the character's, a member's id its own, and left
+ * out -- the table's question -- the character's and those of every squad
+ * member at the table, since manipulations stay with whoever has them and
+ * a member present may use its own.
+ */
+export function manipulationCount(model, name, who = undefined) {
+  const p = model.data.cardcasting;
+  const present = new Set(p?.table?.squad || []);
+  const counts = (m) => {
+    const owner = String(m.calc?.owner ?? m.owner ?? '');
+    return who === undefined ? (!owner || present.has(owner)) : owner === String(who);
+  };
+  return (p?.manipulations || [])
+    .filter((m) => counts(m) && isManipulation(m, name)).reduce((n, m) => n + Math.max(0, Number(m.count) || 0), 0);
 }
 
-/** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches. */
-export function hasManipulation(model, name) {
-  return manipulationCount(model, name) > 0;
+/** Is a manipulation by that name taken? Asked by name, matched as the catalogue matches; `who` as for manipulationCount. */
+export function hasManipulation(model, name, who = undefined) {
+  return manipulationCount(model, name, who) > 0;
 }
 
 /** May this card go onto the table as mana right now? */

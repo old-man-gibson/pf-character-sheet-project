@@ -685,10 +685,12 @@ export const isOtherConjurationTalent = (t) => t?.group === 'other';
 
 /**
  * A casting companion's tradition with nothing chosen: natural casting.
- * `boonSP` is how many of its boons are taken as spell points; '' is the
- * default (every drawback without a boon written against it).
+ * `boughtOff` lists the drawbacks a drawback feat bought off, each costing
+ * two, as on the character's tradition. `boonSP` is how many of its boons
+ * are taken as spell points; '' is the default (every drawback without a
+ * boon written against it).
  */
-const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boons: [], boonSP: '' });
+const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
 
 export const defaultCompanion = (kind) => ({
   familiar: defaultFamiliar,
@@ -731,6 +733,7 @@ export function normalizeCompanion(kind, block) {
       ...emptyCompanionTradition(),
       ...tr,
       drawbacks: Array.isArray(tr.drawbacks) ? tr.drawbacks : [],
+      boughtOff: Array.isArray(tr.boughtOff) ? tr.boughtOff : [],
       boons: Array.isArray(tr.boons) ? tr.boons : [],
     };
   }
@@ -1286,7 +1289,8 @@ export function computeCompanion(kind, block, master, bonuses = null) {
  * where a forwarded bonus puts it into `cha` before this reads it.
  *
  * Its casting tradition follows the character's rule: every drawback ("x2"
- * counts double) is a boon, and a boon can be taken as spell points instead,
+ * counts double) is a boon, each drawback feat buys off two of them, and a
+ * boon can be taken as spell points instead,
  * worth the step it adds on the ladder read at this companion's Hit Dice
  * (its level for the purpose). `tradition.boonSP` says how many are; blank
  * means every drawback not matched by a boon written in the list. One
@@ -1296,7 +1300,9 @@ function conjuredCasting(b, hd, chaMod, mage) {
   const talent = (b.talents || []).some((t) => /\bmagical companion\b/i.test(String(t?.name || '')));
   if (!mage && !talent) return null;
   const tr = b.tradition || {};
-  const boons = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
+  const drawbacks = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
+  const boughtOff = (tr.boughtOff || []).filter((x) => String(x || '').trim()).length;
+  const boons = Math.max(0, drawbacks - 2 * boughtOff);
   const named = (tr.boons || []).filter((x) => String(x || '').trim()).length;
   const typed = tr.boonSP === '' || tr.boonSP === null || tr.boonSP === undefined ? null : Number(tr.boonSP);
   const want = typed === null || !Number.isFinite(typed) ? Math.max(0, boons - named) : typed;
@@ -1309,6 +1315,8 @@ function conjuredCasting(b, hd, chaMod, mage) {
     mage,
     cl: mage ? Math.floor(hd * TYPE_RATES.Mid) : Math.floor(hd / 2),
     base,
+    drawbacks,
+    boughtOff,
     boons,
     boonSteps,
     boonsDefault: Math.max(0, boons - named),

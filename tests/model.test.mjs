@@ -1607,6 +1607,13 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   check('and is capped at the boons there are', [k().casting.boonSteps, k().casting.boonSP], [2, 4]);
   c.set('conjured.0.tradition.boonSP', '');
   check('blank is the default again', k().casting.boonSteps, 1);
+  // A drawback feat buys off two drawbacks, as on the character's tradition.
+  c.listAdd('conjured.0.tradition.drawbacks', 'Card Casting');
+  c.listAdd('conjured.0.tradition.boughtOff', 'Rainbow Efficiency [Deck]');
+  check('a drawback feat takes two boons, not one', [k().casting.drawbacks, k().casting.boughtOff, k().casting.boons, k().casting.boonSteps], [3, 1, 1, 0]);
+  c.listRemove('conjured.0.tradition.boughtOff', 0);
+  c.listRemove('conjured.0.tradition.drawbacks', 2);
+  check('and gives them back when removed', k().casting.boons, 2);
   check('a picture is kept by address', (c.set('conjured.0.image', 'https://example.test/orb.png'), c.toJSON().conjured[0].image), 'https://example.test/orb.png');
   // Back to a bare tradition for the checks below.
   c.listRemove('conjured.0.tradition.boons', 0);
@@ -1647,7 +1654,7 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
 
   // Its own casting tradition: a name, and drawbacks and boons as prose.
   check('a companion starts with no tradition: natural casting', c.data.conjured[0].tradition,
-    { name: '', drawbacks: [], boons: [], boonSP: '' });
+    { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
   const chaBefore = k().scores.cha.total;
   c.set('conjured.0.tradition.name', 'Fey Magic');
   c.listAdd('conjured.0.tradition.drawbacks', 'Verbal Casting');
@@ -1660,10 +1667,10 @@ console.log('companions -- a casting conjured companion keeps its own spell poin
   const saved = JSON.parse(JSON.stringify(c.toJSON()));
   check('saved and reopened, tradition and all',
     new Character(saved).data.conjured[0].tradition,
-    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
+    { name: 'Fey Magic', drawbacks: ['Verbal Casting'], boughtOff: [], boons: ['Easy Focus {conjured.cha.score += 2}'], boonSP: '' });
   delete saved.conjured[0].tradition;
   check('a companion saved before traditions grows an empty one',
-    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boons: [], boonSP: '' });
+    new Character(saved).data.conjured[0].tradition, { name: '', drawbacks: [], boughtOff: [], boons: [], boonSP: '' });
   c.set('conjured.0.archetypes.mage', false);
   c.setItem('conjured.0.talents', 0, 'name', 'Not yet chosen');
   check('the tradition goes quiet when the companion stops casting', k().scores.cha.total, chaBefore);
@@ -13756,6 +13763,22 @@ console.log('\nMulti-Headed Play: a squad member brings its own deck, and casts 
   c.tableMove(find('Ruby'), 'deck');
   check('without Improved the two-colour card covers both colours', [c.castCheck(duskId).ok, c.castCheck(duskId).why], [true, 'Rainbow Efficiency: 1 off']);
   check('the Roll20 text says what is paid and why', c.cardRollSpec(duskId).notes.find((n) => n.label === 'Cost').text, '1 SP (2 less 1 for Rainbow Efficiency) (Red/Black)');
+
+  // Manipulations are per member: its own picks against its own deck feats,
+  // checked against its own switches, usable at the table while it is there.
+  cc.feats = [{ source: '1 HD', name: 'Rainbow Efficiency [Deck]', notes: '' }, { source: '3 HD', name: 'Card Shark [Deck]', notes: '' }];
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Mulligan', note: '', count: 1, owner: cc.id });
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Trimmed Deck', note: '', count: 1, owner: cc.id });
+  const member = () => p.calc.squad.find((m) => m.id === cc.id);
+  check('a member\'s picks count against its own deck feats, plus one for Card Shark', [member().manipulationsTaken, member().manipulationsAvailable, member().manipulationsLeft], [2, 3, 1]);
+  check('and not against the character\'s', p.calc.manipulationsTaken, 0);
+  check('a pick wanting a switch the member lacks is the member\'s issue', [p.manipulations.at(-1).calc.unmet, member().deck.issues.some((i) => /Trimmed Deck needs Singleton/.test(i)), p.calc.issues.some((i) => /Trimmed Deck/.test(i))], [['singleton'], true, false]);
+  check('the member\'s Mulligan is usable at the table while it is present', [hasManipulation(c, 'Mulligan'), hasManipulation(c, 'Mulligan', ''), hasManipulation(c, 'Mulligan', cc.id)], [true, false, true]);
+  c.tableSquad(cc.id, false);
+  check('and not once it has left', hasManipulation(c, 'Mulligan'), false);
+  check('the scope reads the character\'s picks alone', c.scope().deck.manip.mulligan, undefined);
+  c.listAdd('cardcasting.manipulations', { group: 'General', name: 'Mulligan', note: '', count: 1, owner: '' });
+  check('the character\'s own Mulligan counts, present member or not', [hasManipulation(c, 'Mulligan'), c.scope().deck.manip.mulligan], [true, 1]);
 }
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

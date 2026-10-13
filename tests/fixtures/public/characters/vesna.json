@@ -5390,6 +5390,7 @@
    "tradition": {
     "name": "",
     "drawbacks": [],
+    "boughtOff": [],
     "boons": [],
     "boonSP": ""
    },

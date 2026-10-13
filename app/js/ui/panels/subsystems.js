@@ -2092,6 +2092,7 @@ function conjuredCastingPanel(model, cc) {
     const cha = k.scores?.cha?.mod ?? 0;
     const tr = b.tradition || {};
     const dlist = `${p}.tradition.drawbacks`;
+    const olist = `${p}.tradition.boughtOff`;
     const blist = `${p}.tradition.boons`;
     return `<section class="panel">
       <h3>Casting <span class="badge">CL ${cast.cl}</span><span class="badge">${cast.spellPoints} sp</span></h3>
@@ -2111,17 +2112,22 @@ function conjuredCastingPanel(model, cc) {
 
       <h4 class="subhead">Casting tradition</h4>
       <label class="fld"><span>Tradition</span>${text(`${p}.tradition.name`, tr.name, 'Natural casting')}</label>
-      <h4 class="subhead">Drawbacks${(tr.drawbacks || []).length ? ` <span class="badge">${tr.drawbacks.length}</span>` : ''}</h4>
+      <h4 class="subhead">Drawbacks${(tr.drawbacks || []).length ? ` <span class="badge">${cast.drawbacks} total</span>` : ''}</h4>
       ${proseList(model, dlist, tr.drawbacks || [], 'drawback')}
       <div>${addButton(dlist, 'Add drawback', '')}</div>
+      <h4 class="subhead">Bought off with drawback feats${(tr.boughtOff || []).length ? ` <span class="badge">${cast.boughtOff}</span>` : ''}</h4>
+      ${proseList(model, olist, tr.boughtOff || [], 'bought-off drawback')}
+      <div>${addButton(olist, 'Add bought-off drawback', '')}</div>
+      ${cast.boughtOff ? `<div class="statline"><span class="label">Effective drawbacks</span>
+        <span class="value">${cast.drawbacks} − 2×${cast.boughtOff} = ${cast.boons}</span></div>` : ''}
       <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
       ${proseList(model, blist, tr.boons || [], 'boon')}
       <div>${addButton(blist, 'Add boon', '')}</div>
       ${cast.boons ? `<label class="fld"><span>Boons as spell points</span>${text(`${p}.tradition.boonSP`, tr.boonSP ?? '', String(cast.boonsDefault))}</label>
-      ${line('Boons', `${cast.boons} (one per drawback)`)}
+      ${line('Boons', `${cast.boons} (one per drawback${cast.boughtOff ? ', two off per drawback feat' : ''})`)}
       ${line(`${cast.boonSteps} as spell points at ${k.hd ?? 0} HD`, `+${cast.boonSP} sp`)}` : ''}
-      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two).
-        A boon taken as spell points is worth its step on the boon ladder, read at this
+      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two), and each
+        drawback feat buys off two of them, as on your own tradition. A boon taken as spell points is worth its step on the boon ladder, read at this
         companion’s Hit Dice, and is added to the pool above. Blank in the box means every
         drawback without a boon written in the list. The boons written here are kept as
         written. A line can forward what it grants, as any note can:
@@ -3115,9 +3121,12 @@ function deckManipulationsHead(model, p, k) {
     const catalogue = deckManipulationCatalogue();
     const featList = (k.deckFeats || []).map((f) => f.replace(/\s*\[[^\]]*\]\s*/g, '').trim());
     const NEED = MANIPULATION_NEEDS;
+    const squad = k.squad || [];
+    const me = shortName(model.casterInfo('').name);
     const head = `<section class="panel span2 manip-head">
       <h3>Deck manipulations
-        <span class="badge ${left < 0 ? 'err' : ''}">${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
+        <span class="badge ${left < 0 ? 'err' : ''}">${squad.length ? `${esc(me)} ` : ''}${k.manipulationsTaken ?? 0} of ${k.manipulationsAvailable ?? 0} taken${left < 0 ? ` — ${-left} over` : left ? ` — ${left} left` : ''}</span>
+        ${squad.map((m) => `<span class="badge ${m.manipulationsLeft < 0 ? 'err' : ''}" title="${esc(`${m.name}'s own picks, against its ${m.deckFeats.length} deck feat${m.deckFeats.length === 1 ? '' : 's'}`)}">${esc(m.name)} ${m.manipulationsTaken} of ${m.manipulationsAvailable}${m.manipulationsLeft < 0 ? ` — ${-m.manipulationsLeft} over` : ''}</span>`).join('')}
         <span class="badge" title="${esc(featList.join(', ') || 'No feat or bought-off drawback is tagged [Deck]')}">${(k.deckFeats || []).length} deck feat${(k.deckFeats || []).length === 1 ? '' : 's'}</span>
         ${k.rainbow ? `<span class="badge">${k.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
       </h3>
@@ -3128,16 +3137,18 @@ function deckManipulationsHead(model, p, k) {
     width: '7rem', value: k.manipulationsAvailable, error: k.manipulationsError, placeholder: `auto: ${k.autoAvailable ?? 0}`,
     title: 'Blank: one per deck feat, plus one for Card Shark. Or a number, or a formula.',
   }))}
-        ${field('Add from the list', `<select class="manip-pick" aria-label="Add a deck manipulation">
+        ${field('Add from the list', `<span class="pair"><select class="manip-pick" aria-label="Add a deck manipulation">
           <option value="">— pick a manipulation —</option>
           ${groups.map((g) => {
     const opts = catalogue.filter((m) => m.group === g);
     return opts.length ? `<optgroup label="${esc(g)}">${opts.map((m) => `<option value="${esc(m.name)}" title="${esc(m.text)}">${esc(m.name)}${m.needs || m.requires.length ? ` (${[...m.requires.map((r) => NEED[r]), m.needs].filter(Boolean).join(', ')})` : ''}</option>`).join('')}</optgroup>` : '';
   }).join('')}
-        </select>`)}
+        </select>${squad.length ? `<select class="manip-owner" aria-label="For whom" title="Whose pick it is: a squad member takes its own">
+          ${[['', me], ...squad.map((m) => [m.id, m.name])].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}
+        </select>` : ''}</span>`)}
       </div>
       <p class="hint">One manipulation per deck feat (a feat or bought-off drawback tagged [Deck]), plus one
-        for Card Shark. The Available field overrides that. Hover a name for its rule. Readable as
+        for Card Shark. The Available field overrides that.${squad.length ? ' A squad member takes its own picks against its own deck feats, and may use them at the table while it is there; the picker says whose a pick is, and so does each row.' : ''} Hover a name for its rule. Readable as
         <code>deck.manip.&lt;name&gt;</code> (<code>deck.manip.loaded_hand</code>, <code>deck.manip.fused_cards</code>) and <code>deck.feats</code>.</p>
     </section>`;
     return collapsible(model, 'deck-manipulations', head);
@@ -3160,11 +3171,18 @@ function deckManipulationsPanel(model, p, k) {
     const items = (p.manipulations || []).map((m, i) => ({ m, i }));
     const groups = manipulationGroups(p);
     const NEED = MANIPULATION_NEEDS;
+    // With a squad, every row says whose it is and a group's count is per owner.
+    const squad = k.squad || [];
+    const owners = [{ id: '', name: shortName(model.casterInfo('').name) }, ...squad.map((m) => ({ id: m.id, name: m.name }))];
+    const ownerOf = (m) => String(m.calc?.owner ?? '');
     const panels = groups.map((g) => {
       const rows = items.filter(({ m }) => String(m.group || 'General') === g);
       const taken = rows.reduce((n, { m }) => n + (Number(m.count) || 0), 0);
+      const takenBadges = squad.length
+        ? owners.map((o) => { const n = rows.filter(({ m }) => ownerOf(m) === o.id).reduce((t, { m }) => t + (Number(m.count) || 0), 0); return n ? `<span class="badge">${esc(o.name)} ${n}</span>` : ''; }).join('')
+        : taken ? `<span class="badge">${taken} taken</span>` : '';
       return collapsible(model, `deck-manip-${slug(g)}`, `<section class="panel">
-        <h3>${esc(g)} ${taken ? `<span class="badge">${taken} taken</span>` : ''}</h3>
+        <h3>${esc(g)} ${takenBadges}</h3>
         ${rows.length ? `<div class="tablewrap"><table class="manips"><thead><tr>
           <th>Manipulation · note</th><th style="width:3.4rem">Taken</th><th></th>
         </tr></thead><tbody>
@@ -3191,6 +3209,7 @@ function deckManipulationsPanel(model, p, k) {
             </td>
             <td>${itemNum(list, i, 'count', m.count)}</td>
             <td class="tools"><span class="pair">
+              ${squad.length ? `<span title="Whose pick this is">${itemSelect(list, i, 'owner', m.owner || '', owners.map((o) => [o.id, o.name]), null)}</span>` : ''}
               ${removeButton(list, i, { what: 'manipulation' })}
             </span></td>
           </tr>`;
@@ -3578,14 +3597,16 @@ function squadPanel(model, p, k) {
         controls). Any member may cast any card in the hand, using its own caster level, modifier and spell points. Write
         a card's numbers as <code>caster.level</code> and <code>caster.mod</code> and they follow whoever casts it. A member's
         tradition must list Card Casting with the same switches as yours. Its Colored Mana colours are its own, and so is
-        Rainbow Efficiency: a member's multi-colour cards are discounted by its own feat, yours by yours. Your other deck
-        feats and manipulations stay yours.</p>
+        Rainbow Efficiency: a member's multi-colour cards are discounted by its own feat, yours by yours. A member takes
+        its own deck manipulations against its own deck feats (the owner pick on each row under Deck manipulations) and
+        may use them at the table while it is there. Your other deck feats stay yours.</p>
       ${squad.map((m) => `<div class="squadrow">
         <div class="what"><strong>${esc(m.name)}</strong>
           <span class="badge ${m.ok ? 'ok' : 'err'}" title="${esc(m.why || 'Card Casting, with the same switches')}">${m.ok ? 'combines' : m.cardCasting ? 'switches differ' : 'no Card Casting'}</span>
           ${m.casts ? `<span class="badge">CL ${m.cl} · mod ${fmt(m.mod)}</span>` : '<span class="badge err" title="Give it the Magical Companion talent or the mage archetype">does not cast</span>'}
           ${manaChips(m.colors, '')}
           ${m.rainbow ? `<span class="badge" title="Its own deck feat: its multi-colour effects cost less">${m.rainbow === 2 ? 'Improved ' : ''}Rainbow Efficiency</span>` : ''}
+          <span class="badge ${m.manipulationsLeft < 0 ? 'err' : ''}" title="Its own deck manipulations, against its own deck feats">${m.manipulationsTaken} of ${m.manipulationsAvailable} manipulations</span>
           <span class="badge">${m.deck.deckSize} cards</span>
           ${m.deck.issues.length ? `<ul class="hint warn" style="margin:4px 0 0 1.1rem;padding:0">${m.deck.issues.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
           ${!m.ok && m.why ? `<p class="hint">${esc(m.why)}.</p>` : ''}

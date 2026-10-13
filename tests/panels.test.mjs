@@ -1027,6 +1027,28 @@ console.log('\nthe card table has three faces: the tab, a table window, a hand w
   c.tableEnd();
 }
 
+console.log('\na squad member takes its own deck manipulations');
+{
+  const c = new Character(blankDocument({ name: 'Nico', level: 15 }));
+  const p = c.data.cardcasting;
+  Object.assign(p, { enabled: true, manaPool: true, cooldown: true, colors: 'RBU', castingStat: 'Int' });
+  p.mods.coloredMana = 3;
+  c.addCompanion('conjured');
+  const cc = c.data.conjured.at(-1);
+  Object.assign(cc, { name: 'Lira', archetypes: { mage: true }, talents: [{ name: 'Magical Companion' }], levelSource: 'override', levelOverride: 12 });
+  cc.tradition = { name: 'Fey', drawbacks: ['Card Casting', 'Cooldown', 'Mana Pool', 'Colored Mana (WGB)'], boons: [] };
+  cc.feats = [{ source: '1 HD', name: 'Card Shark [Deck]', notes: '' }];
+  p.manipulations = [{ group: 'General', name: 'Mulligan', note: '', count: 1, owner: cc.id }];
+  c.recompute();
+  const html = subsystems.cardcastingPanel(c, { ...blankView(), tab: 'cardcasting', deckView: 'deck' });
+  ok('the picker says for whom, and each row carries its owner', html.includes('class="manip-owner"') && html.includes('data-item="cardcasting.manipulations|0|owner"'));
+  ok('the head counts the member\'s picks against its own feats', /Lira 1 of 2/.test(html));
+  const alone = new Character(blankDocument({ name: 'Solo', level: 5 }));
+  alone.data.cardcasting.enabled = true;
+  alone.recompute();
+  ok('without a squad there is no owner to pick', !subsystems.cardcastingPanel(alone, { ...blankView(), tab: 'cardcasting', deckView: 'deck' }).includes('manip-owner'));
+}
+
 console.log('\na card with several modes asks on the way in');
 {
   const c = new Character(blankDocument({ name: 'Dealer', level: 9 }));
