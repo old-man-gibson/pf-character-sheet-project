@@ -18,7 +18,7 @@ import { emit } from './events.js';
 import { classHasLevel, ownLevelCount } from './progression.js';
 import { forwarded, lazyScope } from './scope.js';
 import { recomputeUnarmed } from './stats/attacks.js';
-import { altTrainingTalents, altTrainingTechnique, grantCount } from './subsystems/alt-training.js';
+import { altTrainingFor, altTrainingTalents, grantCount } from './subsystems/alt-training.js';
 import { featEntry, powerEntry, spellEntry } from './subsystems/catalogues.js';
 import { techniqueTalents } from './subsystems/techniques.js';
 import { veilGrantedSpheres, veilsNamedIn } from './subsystems/akashic.js';
@@ -2008,7 +2008,7 @@ export function sphereRanksBySkill(model) {
   const tally = t.tallyOwn || t.tally || {};
   // A technique may set some skill rows to full level outright -- its pack
   // entry says so (`fullLevelRanks`), matching the rows marked the same way.
-  const fullLevel = !!altTrainingTechnique(model.data.altTraining?.technique)?.fullLevelRanks;
+  const fullLevel = !!altTrainingFor(model).technique?.fullLevelRanks;
   const known = sphereTalentKnowledge(model, t, 'combat');
   const of = (sphere) => known.get(sphere) || { names: [], choices: [], unnamed: 0 };
   const check = {

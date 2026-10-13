@@ -1216,7 +1216,9 @@ export function altTrainingPanel(model) {
         </h3>
         <div class="statbar">
           <label class="minifield">Technique
-            ${select('altTraining.technique', p.technique, altTrainingNames(), '— none —')}</label>
+            ${select('altTraining.technique', p.technique,
+    // A published document names a technique no pack here has; keep it listed.
+    k.cited && k.technique ? [...new Set([...altTrainingNames(), k.technique])] : altTrainingNames(), '— none —')}</label>
           ${totals.map(([label, v, title]) => miniStat(label, v, title)).join('')}
           <span class="statbar-fill"></span>
           ${miniStat('Level', level, 'Grants above this level are planned, not counted')}
@@ -1250,10 +1252,10 @@ export function altTrainingPanel(model) {
     </div>`;
   }
 
-  /** A grant's cite tag, linked where the pack supplied a URL for it. */
-function citeTag(cite) {
+  /** A grant's cite tag, linked where the pack, or the document's own copy, supplied a URL. */
+function citeTag(cite, k = {}) {
     if (!cite) return '';
-    const url = altTrainingLink(cite);
+    const url = altTrainingLink(cite) || k.links?.[cite] || null;
     return url
       ? ` <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(cite)}">[${esc(cite)}]</a>`
       : ` <span class="hint">[${esc(cite)}]</span>`;

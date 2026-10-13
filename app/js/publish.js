@@ -41,6 +41,9 @@ import { featDetails, powerDetails, spellDetails } from './model/subsystems/cata
 import { castingTable } from './model/subsystems/vancian.js';
 import { psionicCurve } from './model/subsystems/psionics.js';
 import { deckManipulation } from './model/subsystems/cardcasting.js';
+import {
+  altTrainingLevels, altTrainingLink, altTrainingRepeatFrom, altTrainingTechnique,
+} from './model/subsystems/alt-training.js';
 import { COMPANION_KINDS, abilityTextKey, companionAbilityText } from './companions.js';
 import { Character } from './model.js';
 
@@ -223,6 +226,42 @@ function publishCompanionAbilities(doc, report) {
 }
 
 /**
+ * The Alternate Training technique the character took, with its ladder.
+ *
+ * The sheet stores the technique's name; its grants, prerequisite, repeat
+ * rule and the ladder shape come from the pack. A reader with no pack would
+ * see a name and an empty ladder, so the whole record travels as
+ * `altTraining.cited`, which the model reads only where no pack answers.
+ * The cite links are kept to the tags this technique uses.
+ */
+function publishAltTraining(doc, report) {
+  const p = doc.altTraining;
+  const name = String(p?.technique || '').trim();
+  if (!name) return;
+  // Published once already, and no pack here: the copy it carries stands.
+  const t = altTrainingTechnique(name)
+    || (p.cited?.technique?.name && String(p.cited.technique.name).trim().toLowerCase() === name.toLowerCase()
+      ? p.cited.technique : null);
+  if (!t) {
+    report.unknown.push(`technique: ${name}`);
+    return;
+  }
+  const cites = new Set();
+  const collect = (g) => { if (g?.cite) cites.add(g.cite); if (g?.alt?.cite) cites.add(g.alt.cite); };
+  for (const grants of Object.values(t.grants || {})) for (const g of grants || []) collect(g);
+  collect(t.repeat);
+  const links = {};
+  for (const cite of cites) {
+    const url = altTrainingLink(cite) || p.cited?.links?.[cite];
+    if (url) links[cite] = url;
+  }
+  p.cited = {
+    technique: clone(t), levels: [...altTrainingLevels()], repeatFrom: altTrainingRepeatFrom(), links,
+  };
+  carry(report, 'technique');
+}
+
+/**
  * Drop what describes a session rather than the character.
  *
  * The card table is an encounter in progress: a deck order, a hand, a round.
@@ -277,6 +316,7 @@ export function publishDocument(doc) {
   publishTables(out, report);
   publishManipulations(out, report);
   publishCompanionAbilities(out, report);
+  publishAltTraining(out, report);
   dropOffered(out, report);
   return { doc: out, report };
 }

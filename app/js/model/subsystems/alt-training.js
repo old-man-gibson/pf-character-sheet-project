@@ -62,13 +62,39 @@ export function altTrainingTechnique(name) {
 }
 
 /**
- * What a technique grants at a level: the fixed list for the early levels,
- * the repeating grant from `repeatFrom` on, and nothing in between.
+ * The rules a character reads: the technique it names, the ladder and the
+ * cite links. The packs' catalogue answers first. Failing that, a published
+ * document carries its own copy under `altTraining.cited` (written by
+ * publish.js), so a reader with no pack sees the same ladder the author did.
+ * `cited` says which answered.
  */
-export function altTrainingGrantsAt(technique, level) {
+export function altTrainingFor(model) {
+  const p = model?.data?.altTraining || {};
+  const name = String(p.technique || '').trim();
+  const fromPack = altTrainingTechnique(name);
+  const own = { ...TABLES, technique: fromPack, cited: false };
+  if (fromPack || !name) return own;
+  const c = p.cited;
+  const t = c?.technique?.name && String(c.technique.name).trim().toLowerCase() === name.toLowerCase()
+    ? c.technique : null;
+  if (!t) return own;
+  const levels = Array.isArray(c.levels) && c.levels.length
+    ? [...new Set(c.levels.map(Number).filter(Number.isFinite))].sort((a, b) => a - b) : TABLES.levels;
+  const repeatFrom = Number.isFinite(Number(c.repeatFrom)) && c.repeatFrom !== null ? Number(c.repeatFrom) : TABLES.repeatFrom;
+  return {
+    technique: t, levels, repeatFrom, links: c.links && typeof c.links === 'object' ? c.links : {}, cited: true,
+  };
+}
+
+/**
+ * What a technique grants at a level: the fixed list for the early levels,
+ * the repeating grant from `repeatFrom` on, and nothing in between. `rules`
+ * is the ladder shape, the packs' unless a document carries its own.
+ */
+export function altTrainingGrantsAt(technique, level, rules = TABLES) {
   const t = typeof technique === 'string' ? altTrainingTechnique(technique) : technique;
-  if (!t || !TABLES.levels.includes(level)) return [];
-  if (level >= TABLES.repeatFrom) return t.repeat ? [t.repeat] : [];
+  if (!t || !rules.levels.includes(level)) return [];
+  if (level >= rules.repeatFrom) return t.repeat ? [t.repeat] : [];
   return t.grants?.[level] || [];
 }
 
@@ -80,8 +106,8 @@ export function altTrainingGrantsAt(technique, level) {
  * feat is one feat, not a feat and a talent. Every reader of the ladder goes
  * through this: the tab's counts, the sphere tally, the talent names.
  */
-export function liveGrantsAt(technique, level, alt = {}) {
-  return altTrainingGrantsAt(technique, level).map((g) => {
+export function liveGrantsAt(technique, level, alt = {}, rules = TABLES) {
+  return altTrainingGrantsAt(technique, level, rules).map((g) => {
     if (!g.alt || !alt?.[level]) return { ...g, base: g, alt: false };
     const {
       talent, feat, spell, power, ...rest
@@ -187,15 +213,16 @@ export function recomputeAltTraining(model) {
     technique: '', picks: {}, alt: {}, notes: '',
   });
   const level = Number(c.identity.level) || 0;
-  const technique = altTrainingTechnique(p.technique);
+  const rules = altTrainingFor(model);
+  const { technique } = rules;
 
   const counts = {
     talent: 0, feat: 0, spell: 0, power: 0, due: 0, planned: 0,
   };
-  const rows = altTrainingLevels().map((lvl) => {
+  const rows = rules.levels.map((lvl) => {
     const reached = lvl <= level;
     // One grant can have two faces; which one is live decides what counts.
-    const grants = liveGrantsAt(technique, lvl, p.alt);
+    const grants = liveGrantsAt(technique, lvl, p.alt, rules);
     const text = String(p.picks[lvl] ?? '');
     const pick = grants.find((g) => g.pick)?.pick || null;
     /*
@@ -221,7 +248,7 @@ export function recomputeAltTraining(model) {
 
     return {
       level: lvl,
-      repeating: lvl >= altTrainingRepeatFrom(),
+      repeating: lvl >= rules.repeatFrom,
       grants,
       pick,
       text,
@@ -242,7 +269,10 @@ export function recomputeAltTraining(model) {
     note: technique?.note || '',
     // Printed once under the ladder, because it lands on seven rows.
     repeat: technique?.repeat || null,
-    repeatFrom: altTrainingRepeatFrom(),
+    repeatFrom: rules.repeatFrom,
+    // Cite links, and whether the document's own copy answered (no pack did).
+    links: rules.links,
+    cited: rules.cited,
     prereq: technique ? { text: technique.prereq?.text || '', ...altTrainingPrereq(model, technique) } : null,
     talents: altTrainingTalents(model),
     counts,
@@ -259,12 +289,13 @@ export function recomputeAltTraining(model) {
  * filled-in picks -- the empty ones are what the ladder reports as owed.
  */
 export function altTrainingTalents(model) {
-  const t = altTrainingTechnique(model.data.altTraining?.technique);
+  const rules = altTrainingFor(model);
+  const t = rules.technique;
   if (!t?.talents) return null;
   const level = Number(model.data.identity.level) || 0;
   const alt = model.data.altTraining?.alt || {};
-  const count = altTrainingLevels()
+  const count = rules.levels
     .filter((l) => l <= level)
-    .reduce((n, l) => n + liveGrantsAt(t, l, alt).reduce((k, g) => k + grantCount(g, 'talent'), 0), 0);
+    .reduce((n, l) => n + liveGrantsAt(t, l, alt, rules).reduce((k, g) => k + grantCount(g, 'talent'), 0), 0);
   return count ? { ...t.talents, count } : null;
 }
