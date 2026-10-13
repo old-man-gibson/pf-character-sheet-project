@@ -24,8 +24,8 @@
  */
 
 import {
-  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, recipePart, recipePlain,
-  saveBase, sizeModifiers, skillTotal, sumParts,
+  ABILITIES, ABILITY_LABELS, STANDARD_SKILLS, TYPE_RATES, abilityMod, abilityOf, boonStep, drawbackWeight,
+  recipePart, recipePlain, saveBase, sizeModifiers, skillTotal, sumParts,
 } from './rules.js';
 import { parse } from './formula.js';
 import {
@@ -683,8 +683,12 @@ export function defaultConjured() {
  */
 export const isOtherConjurationTalent = (t) => t?.group === 'other';
 
-/** A casting companion's tradition with nothing chosen: natural casting. */
-const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boons: [] });
+/**
+ * A casting companion's tradition with nothing chosen: natural casting.
+ * `boonSP` is how many of its boons are taken as spell points; '' is the
+ * default (every drawback without a boon written against it).
+ */
+const emptyCompanionTradition = () => ({ name: '', drawbacks: [], boons: [], boonSP: '' });
 
 export const defaultCompanion = (kind) => ({
   familiar: defaultFamiliar,
@@ -701,6 +705,8 @@ export function normalizeCompanion(kind, block) {
   const base = defaultCompanion(kind);
   const b = block && typeof block === 'object' ? block : {};
   const out = { ...base, ...b };
+  // A picture of it, by address, the way the character's own portrait is kept.
+  out.image = typeof b.image === 'string' ? b.image : '';
   for (const key of ['hp', 'ac', 'saves', 'goodSaves']) {
     if (base[key]) out[key] = { ...base[key], ...(b[key] && typeof b[key] === 'object' ? b[key] : {}) };
   }
@@ -1278,15 +1284,36 @@ export function computeCompanion(kind, block, master, bonuses = null) {
  * level is worth, which is how this sheet reads "considered a Mid-Caster"
  * against the talent's half -- with its Hit Dice added to the pool. The talent's Charisma increase is left to the talent's own note,
  * where a forwarded bonus puts it into `cha` before this reads it.
+ *
+ * Its casting tradition follows the character's rule: every drawback ("x2"
+ * counts double) is a boon, and a boon can be taken as spell points instead,
+ * worth the step it adds on the ladder read at this companion's Hit Dice
+ * (its level for the purpose). `tradition.boonSP` says how many are; blank
+ * means every drawback not matched by a boon written in the list. One
+ * casting source, so nothing is multiplied.
  */
 function conjuredCasting(b, hd, chaMod, mage) {
   const talent = (b.talents || []).some((t) => /\bmagical companion\b/i.test(String(t?.name || '')));
   if (!mage && !talent) return null;
+  const tr = b.tradition || {};
+  const boons = (tr.drawbacks || []).reduce((n, d) => n + drawbackWeight(d), 0);
+  const named = (tr.boons || []).filter((x) => String(x || '').trim()).length;
+  const typed = tr.boonSP === '' || tr.boonSP === null || tr.boonSP === undefined ? null : Number(tr.boonSP);
+  const want = typed === null || !Number.isFinite(typed) ? Math.max(0, boons - named) : typed;
+  const boonSteps = Math.max(0, Math.min(boons, Math.floor(want)));
+  let boonSP = 0;
+  for (let i = 1; i <= boonSteps; i++) boonSP += boonStep(i, hd);
+  const base = (mage ? hd : 0) + chaMod;
   return {
     ability: 'Cha',
     mage,
     cl: mage ? Math.floor(hd * TYPE_RATES.Mid) : Math.floor(hd / 2),
-    spellPoints: Math.max(0, (mage ? hd : 0) + chaMod),
+    base,
+    boons,
+    boonSteps,
+    boonsDefault: Math.max(0, boons - named),
+    boonSP,
+    spellPoints: Math.max(0, base + boonSP),
   };
 }
 

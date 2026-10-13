@@ -1668,11 +1668,15 @@ function companionHeadPanel(model, cc) {
         ${k.penalty ? `<span class="badge">−${k.penalty} master level</span>` : ''}
         ${!k.level ? '<span class="badge">no level yet</span>' : ''}
       </h3>
-      <div class="fieldgrid">
-        ${field('Name', text(`${p}.name`, b.name, `${label} name`))}
-        ${identity}
-        ${field('Size', select(`${p}.size`, b.size, Object.keys(SIZE_MODIFIERS), null))}
-        ${companionLevelControls(model, cc)}
+      <div class="cportrait">
+        ${b.image ? `<img class="portrait" src="${esc(b.image)}" alt="" loading="lazy">` : ''}
+        <div class="fieldgrid">
+          ${field('Name', text(`${p}.name`, b.name, `${label} name`))}
+          ${identity}
+          ${field('Size', select(`${p}.size`, b.size, Object.keys(SIZE_MODIFIERS), null))}
+          ${companionLevelControls(model, cc)}
+          ${field('Portrait URL', text(`${p}.image`, b.image, 'https://…'))}
+        </div>
       </div>
       <div class="bigstats" style="margin-top:10px">
         ${bigStat('HP', { html: w('hp', esc(`${k.hpCurrent ?? 0} / ${k.hpMax ?? 0}`)) }, k.hpTemp ? `+${k.hpTemp} temp` : '')}
@@ -2092,6 +2096,7 @@ function conjuredCastingPanel(model, cc) {
     return `<section class="panel">
       <h3>Casting <span class="badge">CL ${cast.cl}</span><span class="badge">${cast.spellPoints} sp</span></h3>
       ${line('Caster level', cast.cl)}
+      ${cast.boonSP ? `${line('Spell points, base', cast.base)}${line(`Boons as spell points (${cast.boonSteps})`, `+${cast.boonSP}`)}` : ''}
       ${line('Spell points', cast.spellPoints)}
       ${pool ? trackerLine(pool) : ''}
       <p class="hint">${cast.mage
@@ -2112,9 +2117,15 @@ function conjuredCastingPanel(model, cc) {
       <h4 class="subhead">Boons${(tr.boons || []).length ? ` <span class="badge">${tr.boons.length}</span>` : ''}</h4>
       ${proseList(model, blist, tr.boons || [], 'boon')}
       <div>${addButton(blist, 'Add boon', '')}</div>
-      <p class="hint">Blank means natural casting. Drawbacks and boons are kept as written and
-        do not change the spell points above. A line can forward what it grants, as any
-        note can: <code>{${esc(sn)}.cha.score += 2}</code>.</p>
+      ${cast.boons ? `<label class="fld"><span>Boons as spell points</span>${text(`${p}.tradition.boonSP`, tr.boonSP ?? '', String(cast.boonsDefault))}</label>
+      ${line('Boons', `${cast.boons} (one per drawback)`)}
+      ${line(`${cast.boonSteps} as spell points at ${k.hd ?? 0} HD`, `+${cast.boonSP} sp`)}` : ''}
+      <p class="hint">Blank means natural casting. Each drawback is a boon (“x2” counts two).
+        A boon taken as spell points is worth its step on the boon ladder, read at this
+        companion’s Hit Dice, and is added to the pool above. Blank in the box means every
+        drawback without a boon written in the list. The boons written here are kept as
+        written. A line can forward what it grants, as any note can:
+        <code>{${esc(sn)}.cha.score += 2}</code>.</p>
     </section>`;
   }
 

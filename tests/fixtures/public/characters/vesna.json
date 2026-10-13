@@ -4275,7 +4275,8 @@
      "evo": 0,
      "misc": 0
     }
-   }
+   },
+   "image": ""
   }
  ],
  "animalCompanion": [
@@ -4463,7 +4464,8 @@
      "ability": ""
     }
    ],
-   "tricks": []
+   "tricks": [],
+   "image": ""
   }
  ],
  "eidolon": [
@@ -4912,7 +4914,8 @@
    "baseEvolutions": "",
    "dr": "",
    "resistances": "",
-   "immunities": ""
+   "immunities": "",
+   "image": ""
   }
  ],
  "conjured": [
@@ -5378,11 +5381,13 @@
    "tradition": {
     "name": "",
     "drawbacks": [],
-    "boons": []
+    "boons": [],
+    "boonSP": ""
    },
    "dr": "",
    "resistances": "",
-   "immunities": ""
+   "immunities": "",
+   "image": ""
   }
  ],
  "vancian": {
