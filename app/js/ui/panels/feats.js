@@ -17,7 +17,7 @@ import { pickSelect, mythicPickAt } from './stats.js';
 import { featDetails, featCatalogue } from '../../model.js';
 import {
   MYTHIC_BASE_ABILITIES, MYTHIC_PATH_HP, MYTHIC_TIER_GRANTS, MYTHIC_TRADITION_SLOTS, MYTHIC_TIERS, MYTHIC_TIER_LEVEL,
-  mythicTierGrant,
+  effectiveMythicTier, mythicTierGrant,
 } from '../../rules.js';
 
 /** The one feat catalogue list, shared by every name cell on Feats & Mythic. */
@@ -261,13 +261,19 @@ export function renderFeaturesPanel(model, ctx) {
       title: 'From the path; enter a number to override it.', label: 'Bonus hit points per mythic tier',
     }))}
           ${fields.field('Base path ability', fields.text('mythic.basePathAbility', m.basePathAbility))}
+          ${fields.field('Mythic Paragon', `<label class="chk">
+            <input type="checkbox" ${m.paragon ? 'checked' : ''} data-set="mythic.paragon" data-kind="bool">
+            <span>Tier reads +2 for effects${m.paragon && tier ? ` → ${effectiveMythicTier(c)}` : ''}</span></label>`)}
         </div>
         <p class="hint">
           Tier comes from character level: 8→1, 10→2, 12→3, 14→4, then one per level to
           20→10. Bonus HP/tier is ${(Number(model.mythicHp) || 0) / (c.identity.mythicTier || 1)}
           × ${esc(c.identity.mythicTier ?? 0)} = <strong>${model.mythicHp}</strong> hit points. That is
           counted into the maximum on the Hit points panel. Path values: Champion/Guardian 5,
-          Marshal/Trickster 4, Archmage/Hierophant 3.
+          Marshal/Trickster 4, Archmage/Hierophant 3. Mythic Paragon makes every ability, feat
+          and spell that depends on the tier read it 2 higher: <code>mythic.tier</code> in a
+          formula, Amazing Initiative, the power uses and the surge die. The rows reached, the
+          picks and the feat slots still go by the tier itself (<code>mythic.baseTier</code>).
         </p>
         ${rows.collapsibleSub(model, 'mythic-abilities', 'Mythic path abilities', `
           <div class="tablewrap"><table class="mythic stacked">
@@ -367,6 +373,9 @@ export function renderFeaturesPanel(model, ctx) {
  * table for reading without hovering.
  */
 function mythicTierGrantsPanel(model, tier) {
+    // The numbers the character has now read the tier as effects do (Mythic
+    // Paragon's +2 included); the rows are by the tier reached.
+    const eff = effectiveMythicTier(model.data);
     // The rule opens in the sheet's popover on hover (data-tip); the title
     // is the fallback for a browser without one.
     const chip = (name, t) => {
@@ -380,9 +389,10 @@ function mythicTierGrantsPanel(model, tier) {
       <td>${(MYTHIC_TIER_GRANTS[t] || []).map((name) => chip(name, t)).join(' ')}</td>
     </tr>`;
     const now = tier >= 1 ? [
-      `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(tier)}`,
-      `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(tier)}`,
-      tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(tier).replace(' initiative', '')}` : '',
+      eff !== tier ? `Reads as tier ${eff} (Mythic Paragon)` : '',
+      `Mythic power ${MYTHIC_BASE_ABILITIES['Mythic Power'].value(eff)}`,
+      `Surge ${MYTHIC_BASE_ABILITIES.Surge.value(eff)}`,
+      tier >= 2 ? `Initiative ${MYTHIC_BASE_ABILITIES['Amazing Initiative'].value(eff).replace(' initiative', '')}` : '',
       'Death at −(2 × Con)',
     ].filter(Boolean).join(' · ') : 'No mythic tier yet.';
     const names = [...new Set(Object.values(MYTHIC_TIER_GRANTS).flat())];

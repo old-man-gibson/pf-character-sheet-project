@@ -6390,6 +6390,16 @@ console.log('mythic base abilities -- initiative, the death threshold, surge and
   check('the threshold bonus still adds on top', c.hpState.deathAt, -(2 * con() + 5));
   c.set('mythic.tierOverride', null);
   check('tier 10 by level: surge d12, 23 uses', [c.data.identity.mythicTier, c.scope().mythic.surge, c.scope().mythic.power], [10, 12, 23]);
+
+  // Mythic Paragon: effects read the tier 2 higher; what is reached does not move.
+  c.set('mythic.tierOverride', 5);
+  c.set('mythic.paragon', true);
+  check('paragon: formulas, initiative, power and surge read tier 7', [c.scope().mythic.tier, c.scope().mythic.baseTier, init(), c.scope().mythic.power, c.scope().mythic.surge], [7, 5, 7, 17, 10]);
+  check('the tier reached stays 5', c.data.identity.mythicTier, 5);
+  check('the Mythic Power tracker follows', c.trackers.find((t) => t.id === 'mythic_power')?.max, 17);
+  c.set('mythic.paragon', false);
+  check('off again', [c.scope().mythic.tier, init(), c.scope().mythic.power], [5, 5, 13]);
+  check('and saved as a flag', new Character(c.toJSON()).data.mythic.paragon, false);
 }
 
 console.log('training values reach the formula scope');

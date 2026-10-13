@@ -1112,6 +1112,8 @@ export function normalise(model) {
     const imported = Number(d.identity?.mythicTier) || 0;
     d.mythic.tierOverride = imported !== computed ? imported : null;
   }
+  // Mythic Paragon: the tier reads 2 higher for every effect that depends on it.
+  d.mythic.paragon = d.mythic.paragon === true;
   /*
    * Bonus HP per tier is an override over the path's own figure now that hit
    * points are worked out rather than stored, so "not set" has to be sayable

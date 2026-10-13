@@ -62,6 +62,9 @@ and anything downstream recalculates immediately.
   (Hard to Kill, Mythic Power, Surge, Amazing Initiative and the rest) with this
   character's numbers. Amazing Initiative is counted into Initiative from tier 2, Hard
   to Kill into the death threshold, and the Mythic Power tracker is 3 + 2 × tier.
+  A **Mythic Paragon** tick reads the tier 2 higher for every effect that depends on it:
+  `mythic.tier` in formulas, Amazing Initiative, the power uses and the surge die, while
+  the ladder rows and picks still go by the tier reached (`mythic.baseTier`).
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
