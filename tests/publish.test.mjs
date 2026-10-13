@@ -18,6 +18,7 @@ import { Character } from '../app/js/model.js';
 import * as model from '../app/js/model.js';
 import { mergeTables, registerTables } from '../app/js/extensions.js';
 import { describePublish, publishDocument } from '../app/js/publish.js';
+import { setAltTrainingTables } from '../app/js/model/subsystems/alt-training.js';
 import { blankDocument } from '../app/js/convert.js';
 import { COMPANION_KINDS, companionAbilityText as companionText } from '../app/js/companions.js';
 import { fixtureIds, hasFixtures, loadCharacter } from './fixtures.mjs';
@@ -83,6 +84,45 @@ registerTables(mergeTables(bundledPacks()), model);
   registerTables(mergeTables(bundledPacks()), model);
 }
 
+/*  An Alternate Training technique is a name on the sheet and a record in a
+ *  pack. The record travels under `altTraining.cited`, and a sheet with no
+ *  pack reads the ladder from it. A tiny catalogue of our own, so this runs
+ *  whatever the roster holds; the bundled tables are registered again after. */
+{
+  const technique = {
+    name: 'Test Technique',
+    prereq: { key: 'bab', text: 'At least 3/4 BAB progression' },
+    talents: { side: 'combat', sphere: 'Athletics' },
+    grants: {
+      1: [{ text: 'A feat', feat: true, name: 'Some Feat', cite: 'REF' }],
+      3: [{ text: 'A talent', talent: true, name: 'Some Talent' }],
+    },
+    repeat: { text: 'A talent of choice', short: 'A talent', talent: true, pick: { label: 'Talent', placeholder: 'Which?' } },
+  };
+  setAltTrainingTables({ levels: [1, 3, 5, 7, 9], repeatFrom: 7, techniques: [technique], links: { REF: 'https://example.test/ref', UNUSED: 'https://example.test/x' } });
+  const c = new Character(blankDocument({ name: 'Trained', level: 7 }));
+  c.data.altTraining.technique = 'Test Technique';
+  const { doc: out, report: r } = publishDocument(c.toJSON());
+  check('the technique record travels with the document',
+    [out.altTraining.cited?.technique?.name, out.altTraining.cited?.levels, out.altTraining.cited?.repeatFrom],
+    ['Test Technique', [1, 3, 5, 7, 9], 7]);
+  check('only the cite links the technique uses travel', Object.keys(out.altTraining.cited?.links || {}), ['REF']);
+  check('it is counted under its kind', r.carriedBy.technique, 1);
+  // No pack at all now: the ladder still stands, read from the copy.
+  setAltTrainingTables({});
+  const back = new Character(out).data.altTraining.calc;
+  check('with no pack, the published technique is still known', [back.technique, back.unknown, back.cited], ['Test Technique', false, true]);
+  check('and its ladder is the one it carried',
+    back.rows.filter((row) => row.grants.length).map((row) => [row.level, row.grants[0].name || row.grants[0].short]),
+    [[1, 'Some Feat'], [3, 'Some Talent'], [7, 'A talent'], [9, 'A talent']]);
+  check('and its cite link is there', back.links.REF, 'https://example.test/ref');
+  check('publishing it again with no pack keeps the copy', publishDocument(out).doc.altTraining.cited.technique.name, 'Test Technique');
+  const bare = new Character(c.toJSON()).data.altTraining.calc;
+  check('an unpublished sheet with no pack does not know it', [bare.technique, bare.unknown], [null, true]);
+  check('and publishing it reports the technique as not in any pack', publishDocument(c.toJSON()).report.unknown, ['technique: Test Technique']);
+  registerTables(mergeTables(bundledPacks()), model);
+}
+
 if (!hasFixtures()) {
   console.log('publish: skipped -- no roster to read.');
   process.exit(0);
@@ -132,6 +172,8 @@ const referenced = [...(richest.doc.akashic?.slots || []), ...(richest.doc.akash
   + (richest.doc.vancian?.classes || []).filter((c) => model.castingTable(c.slotType)).length
   + (richest.doc.psionics?.classes || []).filter((c) => model.psionicCurve(c.curveTotal)).length
   + named(richest.doc.cardcasting?.manipulations)
+  // The Alternate Training technique, where one is named.
+  + (String(richest.doc.altTraining?.technique || '').trim() ? 1 : 0)
   // Companion abilities with pack text and none of the player's own.
   + (() => {
     const m = new Character(richest.doc);

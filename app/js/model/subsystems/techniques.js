@@ -6,9 +6,7 @@
  * approved, and an export that renders it for the GM.
  */
 
-import {
-  altTrainingLevels, altTrainingTechnique, grantCount, liveGrantsAt,
-} from './alt-training.js';
+import { altTrainingFor, grantCount, liveGrantsAt } from './alt-training.js';
 import { sheetReader } from '../document.js';
 import { emit } from '../events.js';
 import { positionedRows } from '../templates.js';
@@ -505,7 +503,8 @@ export function removeTechnique(model, name) {
  * it is not.
  */
 export function techniqueTalents(model) {
-  const t = altTrainingTechnique(model.data.altTraining?.technique);
+  const rules = altTrainingFor(model);
+  const t = rules.technique;
   const sphere = t?.talents?.sphere;
   if (!sphere) return null;
   const level = Number(model.data.identity.level) || 0;
@@ -513,9 +512,9 @@ export function techniqueTalents(model) {
   const alt = model.data.altTraining?.alt || {};
   const names = [];
   const choices = [];
-  for (const lvl of altTrainingLevels()) {
+  for (const lvl of rules.levels) {
     if (lvl > level) continue;
-    for (const g of liveGrantsAt(t, lvl, alt)) {
+    for (const g of liveGrantsAt(t, lvl, alt, rules)) {
       if (!grantCount(g, 'talent')) continue;
       const pick = String(picks[lvl] ?? '').trim();
       // A grant the player chooses is a choice even where the rules name the
