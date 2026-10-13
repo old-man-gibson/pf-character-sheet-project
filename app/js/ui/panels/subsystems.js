@@ -463,14 +463,13 @@ function veilColumns(model) {
   }
 
   /**
-   * A pinned count as a column count with a width floor kept, so a narrow
-   * window still drops to fewer columns instead of squeezing the cards: the
-   * count used is the smaller of the two.
+   * The pinned count, or 0 for as many as fit. The cards are dealt into that
+   * many columns in reading order by the sheet element after the render
+   * (see #layoutVeils), which also keeps a width floor so a narrow window
+   * drops to fewer columns instead of squeezing the cards.
    */
 function veilGridStyle(model) {
-    const n = veilColumns(model);
-    if (!n) return '';
-    return ` style="column-count:${n};column-width:230px"`;
+    return ` data-cols="${veilColumns(model)}"`;
   }
 
 

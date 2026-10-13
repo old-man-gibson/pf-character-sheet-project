@@ -1786,12 +1786,15 @@ button.mname {
 /* Columns rather than a grid, so that opening one card pushes down only the
    cards under it. A grid row is as tall as its tallest card, and opening a
    veil shoved the whole next row down and left the rest of its own row
-   floating over nothing. The count is pinned inline (see veilGridStyle),
-   and the width floor still drops columns on a narrow window. */
-.veils { column-width: 250px; column-gap: 8px; }
+   floating over nothing. The columns are built by the sheet element
+   (#layoutVeils), which deals the cards into them in reading order: CSS
+   columns balanced them by height, so moving a slot could land it under a
+   different neighbour than the one before it in the list. */
+.veils { display: grid; grid-template-columns: repeat(var(--veil-cols, 1), minmax(0, 1fr)); gap: 0 8px; align-items: start; }
+.veilcol { min-width: 0; }
 /* The card itself is the discipline's (Maneuvers, above); a slot is one of a
    column of them. */
-.veilslot { break-inside: avoid; page-break-inside: avoid; margin: 0 0 8px; }
+.veilslot { margin: 0 0 8px; }
 .veilslot-head select { flex: 1 1 auto; min-width: 0; }
 .veilslot-body { padding: 5px; display: flex; flex-direction: column; gap: 6px; }
 /* A receptacle ticked off for the day: still there, dimmed. */

@@ -581,8 +581,11 @@ states persist with the character.
 **Per row** sets how many cards share a row — *Auto* packs as many as fit, which on a
 wide screen is five and leaves each veil's name and description squeezed; 3 or 4
 trades a column for width per card. A pinned count is a floor, not a promise: a
-narrow window still drops to fewer columns rather than overflowing. The choice
-persists with the character, and the default is 4.
+narrow window still drops to fewer columns rather than overflowing. Cards are dealt
+into the columns in list order, first card to the first column and round again, so
+moving a slot up or down the list moves it the same way on screen, and a card that
+opens pushes down only the cards under it. The choice persists with the character,
+and the default is 4.
 
 **Maneuvers** works the way the table does: knowing a discipline grants everything
 in it, so you **pick the discipline from a dropdown** and every maneuver and stance
