@@ -57,7 +57,19 @@ and anything downstream recalculates immediately.
   deleted. A feat is reordered by dragging it by the grip at the left of its row — up
   and down its own group, or onto another group to move it there — and deleted with the
   × at the right.
-  Also: classes with hit die, saves and skill ranks; mythic path, tier and abilities.
+  Also: classes with hit die, saves and skill ranks; mythic path, tier and abilities,
+  with a **What each tier grants** fold listing the base mythic abilities tier by tier
+  (Hard to Kill, Mythic Power, Surge, Amazing Initiative and the rest) with this
+  character's numbers. Amazing Initiative is counted into Initiative from tier 2, Hard
+  to Kill into the death threshold, and the Mythic Power tracker is 3 + 2 × tier.
+  A **Mythic Paragon** tick reads the tier 2 higher for every effect that depends on it:
+  `mythic.tier` in formulas, Amazing Initiative, the power uses and the surge die, while
+  the ladder rows and picks still go by the tier reached (`mythic.baseTier`).
+  **Flowing Power** (the tradition's tick) gets its controls on the Overview's Buffs panel:
+  an increase up to the tier, applied to every ability score as a buff; **End round**
+  takes the square of the increase off real hit points and the maximum as strain, which
+  only a New day rest heals; **Free rounds** spends one use of mythic power for half the
+  tier in rounds without damage.
 - *Equipment* — every slot with bonuses, weight and cost, plus a running carried-weight
   total against your light load.
 - *Crafting* — speed increases, base costs, cost reductions, projects and their DCs,
@@ -841,8 +853,9 @@ threshold where they die. One point under zero looks nothing like one point from
 death threshold = −(Con + death threshold bonus)
 ```
 
-Death at negative Constitution is the rule; the **death threshold +** field is the room
-some characters buy past it — Death's Door, a mythic tier, a GM's ruling. It is a bonus
+Death at negative Constitution is the rule, and at negative twice it for a mythic
+character (Hard to Kill, from the 1st tier, applied for you); the **death threshold +**
+field is the room some characters buy past that — Death's Door, a GM's ruling. It is a bonus
 rather than an absolute, so the threshold still moves when Con does, including a
 temporary Con from a rage or a potion. The panel states where death is, and how many
 points away it is while dying.

@@ -12,6 +12,8 @@ import {
   ABILITIES, AC_BONUS_TYPES, AC_PENALTY_KEYS, BUFF_MOD_KEYS, CONDITIONS, CONDITION_CHANNELS, SIZE_MODIFIERS,
   abilityMod, abpDefence, armorParts, conditionCount, conditionInfo, conditionTotals, statMod, statModDelta,
 } from '../../rules.js';
+import { deathThreshold, effectiveMythicTier } from '../../rules.js';
+import { MYTHIC_POWER_ID, stepTracker, trackerDrains, trackerShown } from '../trackers.js';
 import { evaluateFormula } from '../../formula.js';
 import {
   METERS, dyingFraction, isDefaultMeterStyle, meterDefaultStyle, normalizeStyle, resolveZones,
@@ -327,6 +329,13 @@ export function conditionState(model) {
     const label = String(b.name || '').trim() || 'Buff';
     buffsOn.push({ name: label, info: { key: `buff:${label}`, label, mods: bmods, ability: bability }, count: 1 });
   }
+  // Flowing Power (mythic tradition): the chosen increase on every ability
+  // score, riding the totals as a buff that is on while the increase is set.
+  const flow = flowingIncrease(c);
+  if (flow > 0) {
+    const ability = Object.fromEntries(ABILITIES.map((k) => [k, flow]));
+    buffsOn.push({ name: 'Flowing Power', info: { key: 'buff:Flowing Power', label: `Flowing Power +${flow}`, mods: {}, ability }, count: 1 });
+  }
   const buffCount = buffsOn.length;
 
   /*
@@ -479,7 +488,67 @@ export function mythicHp(model) {
  * points the character has.
  */
 export function hpMax(model) {
-  return (Number(model.data.hp?.total) || 0) + forwarded(model, 'hp.total');
+  // Flowing Power's strain comes off the maximum: damage no healing but a
+  // night's rest can touch is a maximum that is lower until then.
+  return (Number(model.data.hp?.total) || 0) + forwarded(model, 'hp.total') - (Number(model.data.hp?.strain) || 0);
+}
+
+/* ---------------- Flowing Power (mythic tradition) ---------------- */
+
+/**
+ * The ability increase Flowing Power is set to: up to the tier as effects
+ * read it (Mythic Paragon counts), and nothing without the tradition ability.
+ */
+export function flowingIncrease(c) {
+  if (!c?.mythic?.flowingPower) return 0;
+  const want = Math.floor(Number(c.mythic.flowing?.increase) || 0);
+  return Math.max(0, Math.min(effectiveMythicTier(c), want));
+}
+
+/**
+ * End a round of Flowing Power. A free round, bought below, costs nothing;
+ * otherwise the square of the increase comes off real hit points -- never
+ * temporary ones -- and off the maximum as strain, which only a New day
+ * rest heals (see rest.js). Returns what happened, for the toast.
+ */
+export function flowingRound(model) {
+  const c = model.data;
+  const n = flowingIncrease(c);
+  if (!n) return { taken: 0, free: false, increase: 0, freeLeft: 0 };
+  const f = c.mythic.flowing || (c.mythic.flowing = { increase: 0, freeLeft: 0 });
+  if ((Number(f.freeLeft) || 0) > 0) {
+    f.freeLeft = Number(f.freeLeft) - 1;
+    model.recompute();
+    emit(model, { type: 'quick-action', action: 'flowing', amount: 0 });
+    return { taken: 0, free: true, increase: n, freeLeft: f.freeLeft };
+  }
+  const damage = n * n;
+  const hp = c.hp;
+  const before = model.hpState.baseCurrent;
+  hp.strain = (Number(hp.strain) || 0) + damage;
+  hp.current = before - damage;
+  model.recompute();
+  emit(model, { type: 'quick-action', action: 'flowing', amount: damage });
+  return { taken: damage, free: false, increase: n, freeLeft: 0 };
+}
+
+/**
+ * Spend one use of mythic power for the day's free rounds: half the tier,
+ * rounded down, at least one. Nothing happens without a use to spend.
+ */
+export function flowingFree(model) {
+  const c = model.data;
+  if (!c?.mythic?.flowingPower) return { rounds: 0, spent: false };
+  // The pool drains: what is left is what the row shows, and a use is a step up it.
+  const pool = (model.trackers || []).find((t) => t.id === MYTHIC_POWER_ID);
+  if (!pool || trackerShown(pool) < 1) return { rounds: 0, spent: false };
+  stepTracker(model, MYTHIC_POWER_ID, trackerDrains(pool) ? 1 : -1);
+  const rounds = Math.max(1, Math.floor(effectiveMythicTier(c) / 2));
+  const f = c.mythic.flowing || (c.mythic.flowing = { increase: 0, freeLeft: 0 });
+  f.freeLeft = rounds;
+  model.recompute();
+  emit(model, { type: 'quick-action', action: 'flowing-free', amount: rounds });
+  return { rounds, spent: true };
 }
 
 /**
@@ -534,8 +603,11 @@ export function hpState(model) {
   const conScore = model.data.abilities.con?.workingScore ?? model.data.abilities.con?.tempScore ?? 10;
   const deathBonus = (Number(hp.deathBonusResolved ?? hp.deathBonus) || 0)
     + forwarded(model, 'hp.deathBonus');
-  const deathAt = -(conScore + deathBonus);
+  // Hard to Kill: a mythic character dies at negative twice its Constitution.
+  const tier = Number(model.data.identity?.mythicTier) || 0;
+  const deathAt = deathThreshold(conScore, deathBonus, tier);
   return {
+    hardToKill: tier >= 1,
     max,
     current,
     baseMax,

@@ -818,10 +818,11 @@ for (const id of IDS) {
 console.log('temporary hit points and the death threshold -- rules can move both');
 for (const id of IDS) {
   const c = new Character(load(id));
-  const con = Number(c.data.abilities.con.tempScore) || 10;
+  // Negative Con, or twice that for a mythic character (Hard to Kill).
+  const con = (Number(c.data.abilities.con.tempScore) || 10) * (c.data.identity.mythicTier >= 1 ? 2 : 1);
   // `con.mod` is the permanent modifier -- the working one is `con.tempMod`.
   const conMod = Number(c.scope().con.mod) || 0;
-  check(`${id} death is at negative Con`, c.hpState.deathAt, -con);
+  check(`${id} death is at negative Con, doubled when mythic`, c.hpState.deathAt, -con);
   c.set('hp.deathBonus', 'con.mod');
   check(`${id} the threshold takes a formula`, c.data.hp.deathBonusResolved, conMod);
   check(`${id} and it moves the threshold`, c.hpState.deathAt, -(con + conMod));
@@ -5127,8 +5128,9 @@ console.log('hit points at the table');
 console.log('the death threshold, and how loudly the sheet says so');
 {
   const c = new Character(load('bryva'));
-  const con = c.data.abilities.con.tempScore;
-  check('dead at negative Con by default', c.hpState.deathAt, -con);
+  // Bryva is mythic, so Hard to Kill puts death at negative twice her Con.
+  const con = c.data.abilities.con.tempScore * 2;
+  check('dead at negative twice Con by default, being mythic', c.hpState.deathAt, -con);
   check('and nothing is raising it', c.hpState.deathBonus, 0);
 
   c.set('hp.current', -1);
@@ -5147,7 +5149,8 @@ console.log('the death threshold, and how loudly the sheet says so');
   // A rage or a bull's-strength potion is a temporary Con score, and the
   // threshold is Con's, so it follows without being told.
   c.setBuild('con', 'morale', 4);
-  check('a temporary Con moves the threshold too', c.hpState.deathAt, -(con + 4 + 6));
+  // Doubled, like the score it rides on.
+  check('a temporary Con moves the threshold too', c.hpState.deathAt, -(con + 8 + 6));
 
   c.setBuild('con', 'morale', 0);
   c.set('hp.deathBonus', 0);
@@ -6366,6 +6369,71 @@ console.log('templates -- prose and tables carry inline formulas');
     audited.includes('int.mod + 1'),
     audited.includes('10 + level'),
   ], [true, true, true]);
+}
+
+console.log('mythic base abilities -- initiative, the death threshold, surge and power by tier');
+{
+  const c = new Character(blankDocument({ name: 'Hero', level: 20 }));
+  const con = () => c.data.abilities.con.workingScore ?? c.data.abilities.con.tempScore;
+  const init = () => c.breakdown('initiative').parts.find((p) => /Amazing Initiative/.test(p.label))?.value ?? null;
+  c.set('mythic.tierOverride', 0);
+  check('no tier: death at negative Con, no initiative part',
+    [c.hpState.deathAt, init(), c.scope().mythic.surge, c.scope().mythic.power], [-con(), null, 0, 0]);
+  c.set('mythic.tierOverride', 1);
+  check('tier 1: Hard to Kill doubles the threshold, surge d6, 5 uses, still no initiative bonus',
+    [c.hpState.deathAt, c.scope().hp.death, init(), c.scope().mythic.surge, c.scope().mythic.power], [-2 * con(), -2 * con(), null, 6, 5]);
+  c.set('mythic.tierOverride', 2);
+  check('tier 2: Amazing Initiative adds the tier', [init(), c.data.hp.initiative - (Number(c.scope().dex.tempMod) || 0)], [2, 2]);
+  c.set('mythic.tierOverride', 7);
+  check('tier 7: surge d10, 17 uses, +7 initiative', [c.scope().mythic.surge, c.scope().mythic.power, init()], [10, 17, 7]);
+  c.set('hp.deathBonus', 5);
+  check('the threshold bonus still adds on top', c.hpState.deathAt, -(2 * con() + 5));
+  c.set('mythic.tierOverride', null);
+  check('tier 10 by level: surge d12, 23 uses', [c.data.identity.mythicTier, c.scope().mythic.surge, c.scope().mythic.power], [10, 12, 23]);
+
+  // Mythic Paragon: effects read the tier 2 higher; what is reached does not move.
+  c.set('mythic.tierOverride', 5);
+  c.set('mythic.paragon', true);
+  check('paragon: formulas, initiative, power and surge read tier 7', [c.scope().mythic.tier, c.scope().mythic.baseTier, init(), c.scope().mythic.power, c.scope().mythic.surge], [7, 5, 7, 17, 10]);
+  check('the tier reached stays 5', c.data.identity.mythicTier, 5);
+  check('the Mythic Power tracker follows', c.trackers.find((t) => t.id === 'mythic_power')?.max, 17);
+  c.set('mythic.paragon', false);
+  check('off again', [c.scope().mythic.tier, init(), c.scope().mythic.power], [5, 5, 13]);
+  check('and saved as a flag', new Character(c.toJSON()).data.mythic.paragon, false);
+}
+
+console.log('flowing power -- the increase, its damage, the free rounds and the day');
+{
+  const c = new Character(blankDocument({ name: 'Flow', level: 15 }));
+  c.set('mythic.tierOverride', 5);
+  // The scores with the buffs in: what the sheet shows in red.
+  const str = () => c.conditionState.scores.str;
+  const base = str();
+  const left = () => { const t = c.trackers.find((x) => x.id === 'mythic_power'); return t.max - t.current; };
+  c.set('mythic.flowing.increase', 3);
+  check('without the tradition ability nothing happens', [str(), c.conditionState.buffsOn], [base, 0]);
+  c.set('mythic.flowingPower', true);
+  check('+3 to every score, counted as a buff', [str(), c.conditionState.scores.cha - c.data.abilities.cha.workingScore, c.conditionState.buffsOn], [base + 3, 3, 1]);
+  c.set('mythic.flowing.increase', 9);
+  check('capped at the tier', str(), base + 5);
+  c.set('mythic.paragon', true);
+  check('Paragon raises the cap', str(), base + 7);
+  c.set('mythic.paragon', false);
+  c.set('mythic.flowing.increase', 3);
+  const max = c.hpMax;
+  const cur = c.hpState.current;
+  const r = c.flowingRound();
+  check('a round costs the square of the increase, off real hit points and the maximum', [r.taken, c.hpState.current, c.hpMax, c.data.hp.strain], [9, cur - 9, max - 9, 9]);
+  c.heal(50);
+  check('healing cannot buy the strain back', c.hpState.current, max - 9);
+  const uses = left();
+  const fr = c.flowingFree();
+  check('one use of mythic power buys half the tier in free rounds', [fr.rounds, left(), c.data.mythic.flowing.freeLeft], [2, uses - 1, 2]);
+  const r2 = c.flowingRound();
+  check('a free round costs nothing', [r2.free, r2.taken, c.hpMax, c.data.mythic.flowing.freeLeft], [true, 0, max - 9, 1]);
+  check('a spent pool buys nothing', (() => { for (let i = left(); i > 0; i--) c.stepTracker('mythic_power', 1); return c.flowingFree().spent; })(), false);
+  c.rest('day');
+  check('a new day heals the strain and ends the effect', [c.hpMax, c.hpState.current, c.data.hp.strain, c.data.mythic.flowing.increase, c.data.mythic.flowing.freeLeft], [max, max, 0, 0, 0]);
 }
 
 console.log('training values reach the formula scope');

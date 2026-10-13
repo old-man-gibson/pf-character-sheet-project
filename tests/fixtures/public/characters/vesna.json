@@ -489,6 +489,7 @@
   "initAbility": "Dex",
   "initAbility2": null,
   "initMisc": 0,
+  "strain": 0,
   "base": 120,
   "current": 78,
   "temp": 0,
@@ -2456,6 +2457,11 @@
   "flowingPower": false,
   "basePathAbility": null,
   "tierOverride": 0,
+  "paragon": false,
+  "flowing": {
+   "increase": 0,
+   "freeLeft": 0
+  },
   "bonusHpPerTier": null,
   "computedTier": 3
  },

@@ -1024,6 +1024,95 @@ export function mythicTierGrant(tier) {
   return tier % 2 ? `Feat ${n}` : `RP Power ${n}`;
 }
 
+/**
+ * The tier an effect reads: the character's tier, plus 2 with Mythic Paragon,
+ * which raises the tier for every ability, feat and spell that depends on
+ * it. What the character has reached -- the ladder rows, the picks, the
+ * feat slots -- still goes by `identity.mythicTier`.
+ */
+export const effectiveMythicTier = (c) => {
+  const tier = Number(c?.identity?.mythicTier) || 0;
+  return tier >= 1 && c?.mythic?.paragon ? tier + 2 : tier;
+};
+
+/** Mythic power: uses a day at a tier, 0 for a character with no tier. */
+export const mythicPowerUses = (tier) => (tier >= 1 ? 3 + 2 * tier : 0);
+
+/** The surge die at a tier: d6, d8 from the 4th, d10 from the 7th, d12 at the 10th. */
+export const surgeDie = (tier) => (tier >= 10 ? 12 : tier >= 7 ? 10 : tier >= 4 ? 8 : tier >= 1 ? 6 : 0);
+
+/**
+ * Where death is: negative Constitution, or negative twice it for a mythic
+ * character (Hard to Kill, from the 1st tier), plus whatever the threshold
+ * bonus buys past that.
+ */
+export const deathThreshold = (conScore, deathBonus = 0, tier = 0) => -(
+  (Number(conScore) || 0) * (tier >= 1 ? 2 : 1) + (Number(deathBonus) || 0)
+);
+
+/**
+ * The base mythic abilities, by name: what every mythic character has at a
+ * tier besides its path abilities and the sheet's own feat and power rows.
+ * Each is summarised in a sentence or two; `value` says what the tier makes
+ * of it where there is a number. MYTHIC_TIER_GRANTS lists which arrive, or
+ * improve, at each tier.
+ */
+export const MYTHIC_BASE_ABILITIES = {
+  'Hard to Kill': {
+    text: 'Below 0 hit points you stabilise on your own. Death comes at negative twice your Constitution score, not once. Counted into the death threshold.',
+  },
+  'Mythic Power': {
+    text: 'Uses a day: 3 + 2 × tier. The Mythic Power tracker is this pool.',
+    value: (t) => `${mythicPowerUses(t)}/day`,
+  },
+  Surge: {
+    text: 'Spend one use right after a d20 roll to add the surge die to it. The die is d6, then d8 at tier 4, d10 at 7 and d12 at 10.',
+    value: (t) => `1d${surgeDie(t)}`,
+  },
+  'Mythic Feat': {
+    text: 'A bonus feat, mythic or not, that you qualify for. One at tier 1 and one at every odd tier after it. The Mythic Feats rows below are these.',
+  },
+  'Amazing Initiative': {
+    text: 'A bonus on initiative equal to your tier, counted into Initiative. Also, as a free action on your turn, spend one use for an extra standard action that turn. Not for casting a spell, and once a round at most.',
+    value: (t) => `+${t} initiative`,
+  },
+  'Ability Score': {
+    text: '+2 to one ability score at every even tier. Picked on the path abilities rows below or on the Stats tab.',
+  },
+  Recuperation: {
+    text: 'Full hit points after 8 hours of rest. Or spend one use and rest an hour to regain half your full hit points and the day\'s class features. Mythic power and mythic daily abilities do not refresh that way.',
+  },
+  'Mythic Saving Throws': {
+    text: 'A save you pass against a spell or ability from a non-mythic source has no effect on you at all. A failed save against a mythic source works as normal.',
+  },
+  'Force of Will': {
+    text: 'As an immediate action, spend one use to reroll a d20 you just rolled, or to make a non-mythic creature reroll one, after the result is known. The second roll stands.',
+  },
+  Unstoppable: {
+    text: 'Spend one use as a free action to end one condition on you: bleed, blind, confused, cowering, dazed, dazzled, deafened, entangled, exhausted, fascinated, fatigued, frightened, nauseated, panicked, paralyzed, shaken, sickened, staggered or stunned. Usable at the start of your turn even when the condition would stop you acting.',
+  },
+  Immortal: {
+    text: 'Killed, you return to life 24 hours later, not rested. This does not apply to a coup de grace or critical hit from a mythic creature, or from a weapon that bypasses epic damage reduction. At tier 10 only a coup de grace or critical hit with an artifact kills you.',
+  },
+  'Legendary Hero': {
+    text: 'Mythic power comes back one use an hour, on top of refreshing each day.',
+  },
+};
+
+/** The base abilities each tier brings, or improves, in the order the rules list them. */
+export const MYTHIC_TIER_GRANTS = {
+  1: ['Hard to Kill', 'Mythic Feat', 'Mythic Power', 'Surge'],
+  2: ['Amazing Initiative', 'Ability Score'],
+  3: ['Mythic Feat', 'Recuperation'],
+  4: ['Ability Score', 'Surge'],
+  5: ['Mythic Feat', 'Mythic Saving Throws'],
+  6: ['Ability Score'],
+  7: ['Force of Will', 'Mythic Feat', 'Surge'],
+  8: ['Ability Score', 'Unstoppable'],
+  9: ['Immortal', 'Mythic Feat'],
+  10: ['Ability Score', 'Legendary Hero', 'Surge'],
+};
+
 /** The character level a tier is reached at -- the inverse of tierAtLevel. */
 export const MYTHIC_TIER_LEVEL = (() => {
   const out = {};
@@ -3058,9 +3147,13 @@ export function abilityPart(c, stat1, stat2, { cap = Infinity, label = 'ability'
 
 /** Initiative: the ability the row names -- Dex unless something says otherwise -- and the flat bonus. */
 export function initiativeParts(c) {
+  // Amazing Initiative: a bonus equal to the mythic tier, from the 2nd; the
+  // tier as effects read it, so Mythic Paragon's +2 counts.
+  const tier = Number(c.identity?.mythicTier) || 0;
   return [
     abilityPart(c, c.hp.initAbility || 'Dex', c.hp.initAbility2),
     recipePart('misc', Number(c.hp.initMisc) || 0),
+    ...(tier >= 2 ? [recipePlain('Amazing Initiative', effectiveMythicTier(c), 'mythic tier, from the 2nd')] : []),
   ];
 }
 
