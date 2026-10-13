@@ -50,7 +50,7 @@ const TYPE_ABBREV = {
   Strike: 'Str', Boost: 'Bst', Counter: 'Ctr', Stance: 'Stc', Untyped: 'Unt',
 };
 import {
-  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder,
+  CARD_COLORS, CARD_MODIFICATIONS, CARD_KEYWORDS, DECK_SORTS, LIFEBOUND_PILES, TABLE_DESTINATIONS, cardKeywordPattern, deckOrder, harrowFor,
   hasManipulation, manipulationCount, redrawSize, castingTableNames, manipulationEntry, manipulationFoldKey, deckManipulationCatalogue, MANIPULATION_NEEDS,
   maneuverCatalogue, maneuverDetails, maneuverIsWritten, maneuverOwn, altTrainingLink,
   altTrainingNames, altTrainingRepeatFrom, altTrainingTechniques, psionicCurveTotals, psionicTables,
@@ -2579,8 +2579,8 @@ function memberDeckPanel(model, p, k, m) {
       <p class="hint">A squad member’s deck, built here and read against its own casting modifier, colours and feats.
         Its switches and its colours come from the casting tradition on its own tab${m.kind ? ` (${esc(COMPANION_LABELS[m.kind] || m.kind)})` : ''};
         its deck feats and Rainbow Efficiency from its feats. It shuffles in with yours while it is at the table.</p>
-      ${line('Colours', inPlay.length ? manaChips(m.colors, '') : 'none named — write “Colored Mana (WGB)” on its tradition')}
-      ${line('Switches', taken.length ? esc(taken.join(', ')) : 'none')}
+      ${lineHtml('Colours', inPlay.length ? manaChips(m.colors, '') : esc('none named — write “Colored Mana (WGB)” on its tradition'))}
+      ${line('Switches', taken.length ? taken.join(', ') : 'none')}
       ${line('Identical-effect spread', `${d.spreadMin ?? 0}–${d.spreadMax ?? 0} copies (may differ by up to ${Number(m.mod) || 0})`)}
       ${line('Effect cards', `${d.effectCards ?? 0} — ${(d.effects || []).length} distinct effect${(d.effects || []).length === 1 ? '' : 's'}`)}
       ${line('Mana point cards', `${d.manaCards ?? 0}${d.fused ? ` (${d.fused} fused onto an effect)` : ''}`)}
@@ -3413,7 +3413,7 @@ function cardFace(model, ctx, list, i, card, p, { inDeck = true } = {}) {
       <div class="bar sub subtitle" title="A subtitle: what the card does, in a few words, under a name of its own — Big Sky · Explosive Orb (Fire Blast)">
         <input type="text" value="${esc(card.subtitle ?? '')}" data-item="${list}|${i}|subtitle" data-kind="text" placeholder="subtitle — the effect in a few words" aria-label="Subtitle">
       </div>
-      ${p.harrow ? `<div class="bar sub">
+      ${harrowFor(p, model.cardOwner(card)) ? `<div class="bar sub">
         ${itemSelect(list, i, 'suit', card.suit, ABILITY_LABELS_LIST, 'suit')}
         <input type="text" value="${esc(card.alignment ?? '')}" data-item="${list}|${i}|alignment" data-kind="text" placeholder="align." aria-label="Alignment">
       </div>` : ''}
@@ -3625,7 +3625,7 @@ function deckTableBody(model, ctx, p, k, own = '') {
         ${!who && p.useD100 ? `<span class="badge">d100 — reroll above ${k.deckSize ?? 0}</span>` : ''}
         <span class="pair" style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
           <label class="pair">Sort ${select('cardcasting.deckSort', p.deckSort, DECK_SORTS, null, { attrs: 'aria-label="Sort the deck" title="The order the faces are shown in — the cards themselves stay where they were typed"' })}</label>
-          ${check('cardcasting.harrow', p.harrow, 'Harrow deck — suits & alignments')}
+          ${check(own ? `cardcasting.harrowBy.${own}` : 'cardcasting.harrow', harrowFor(p, own), 'Harrow deck — suits & alignments')}
         </span>
       </h3>
       <p class="hint">Cost and its colour sit top right and set the frame colour. The type line is
@@ -3634,7 +3634,7 @@ function deckTableBody(model, ctx, p, k, own = '') {
         ${p.useD100 ? 'The number bottom right is the card\'s roll on the d100.' : ''}
         Sort shows the faces by colour (white, blue, black, red, green, then gold), by cost, by tags
         or by sphere; the sideboard follows.</p>
-      ${p.harrow && Object.keys(suitTally).length ? `<div class="tally">
+      ${harrowFor(p, own) && Object.keys(suitTally).length ? `<div class="tally">
         ${Object.entries(suitTally).map(([s, n]) => `<span class="t">${esc(s)} <span class="n">${n}</span></span>`).join('')}
         <span class="t">·</span>
         ${Object.entries(alignTally).map(([a, n]) => `<span class="t">${esc(a)} <span class="n">${n}</span></span>`).join('')}

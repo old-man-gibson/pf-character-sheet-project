@@ -1055,6 +1055,12 @@ console.log('\na squad member takes its own deck manipulations');
   ok('the member\'s view shows its cards, its rows and a picker that adds for it', hers.includes('data-item="cardcasting.cards|1|name"') && !hers.includes('data-item="cardcasting.cards|0|name"')
     && html(hers, 'data-manip-owner="0"') === 1 && html(hers, 'data-manip-owner="1"') === 0 && hers.includes(`class="manip-pick" data-owner="${cc.id}"`) && /1 of 2 taken/.test(hers));
   ok('with the character\'s deck among the others, and no ladder of its own', /<strong>Nico<\/strong>/.test(hers) && !hers.includes('data-set="cardcasting.cooldown"') && !hers.includes('data-set="cardcasting.notes"'));
+  ok('its colours are drawn as chips, not shown as markup', hers.includes('<span class="chip W" title="White">W</span>') && !hers.includes('&lt;span class="chip'));
+  ok('its Harrow toggle is its own', hers.includes(`data-set="cardcasting.harrowBy.${cc.id}"`) && mine.includes('data-set="cardcasting.harrow"'));
+  c.set(`cardcasting.harrowBy.${cc.id}`, true);
+  const harrow = subsystems.cardcastingPanel(c, { ...ctx, deckView: `deck:${cc.id}` });
+  ok('switched on for the member, its faces get the suit row and the character\'s do not', harrow.includes('data-item="cardcasting.cards|1|suit"')
+    && !subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck' }).includes('data-item="cardcasting.cards|0|suit"') && c.data.cardcasting.harrow === false);
   ok('a member the deck no longer knows falls back to the character\'s view', subsystems.cardcastingPanel(c, { ...ctx, deckView: 'deck:nobody' }).includes('data-item="cardcasting.cards|0|name"'));
   const alone = new Character(blankDocument({ name: 'Solo', level: 5 }));
   alone.data.cardcasting.enabled = true;

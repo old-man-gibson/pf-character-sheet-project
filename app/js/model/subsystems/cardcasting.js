@@ -732,6 +732,10 @@ export function recomputeCardcasting(model) {
   const squadMembers = deckSquad(model);
   const memberIds = new Set(squadMembers.map((m) => m.id));
   const memberOf = new Map(squadMembers.map((m) => [m.id, m]));
+  // Whether each member's deck is a Harrow deck: a flag per member, beside
+  // the character's own, so one deck's toggle leaves the others alone.
+  p.harrowBy = Object.fromEntries(Object.entries(p.harrowBy && typeof p.harrowBy === 'object' ? p.harrowBy : {})
+    .filter(([id, on]) => String(id) && on).map(([id]) => [String(id), true]));
   let orphaned = 0;
   for (const card of [...p.cards, ...p.sideboard]) {
     const own = card.color;
@@ -1070,6 +1074,12 @@ export function cardKeywordPattern({ triggers = false } = {}) {
 export function cardCost(card) {
   const cost = parseInt(String(card?.cost ?? '').trim(), 10);
   return Number.isFinite(cost) ? Math.max(0, cost) : 0;
+}
+
+/** Is this owner's deck a Harrow deck? The character's own flag, or a member's from `harrowBy`. */
+export function harrowFor(p, owner = '') {
+  const id = String(owner ?? '');
+  return id ? !!p?.harrowBy?.[id] : !!p?.harrow;
 }
 
 /** What a card costs to cast: the typed cost less the Rainbow Efficiency discount worked out at recompute. */
@@ -2317,7 +2327,7 @@ export function cardRollSpec(model, ref, which = null, who = null) {
   if (effect && !shortEffect) {
     notes.push({ label: 'Effect', text: effect.length > EFFECT_NOTE_MAX ? `${effect.slice(0, EFFECT_NOTE_MAX - 1)}…` : effect });
   }
-  if (p.harrow && (card.suit || card.alignment)) {
+  if (harrowFor(p, card.calc?.owner) && (card.suit || card.alignment)) {
     notes.push({ label: 'Harrow', text: [card.suit, card.alignment].filter(Boolean).join(', ') });
   }
   return { name, rolls, notes, queries: [] };
